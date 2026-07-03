@@ -92,9 +92,10 @@ const inboxEmails = [
   {
     sender: "LinkedIn",
     subject: "Your application to Software Engineer Intern at Northline was sent",
-    snippet: "Northline • your profile was submitted to the hiring team.",
+    snippet: "Northline, your profile was submitted to the hiring team.",
     time: "34s ago",
-    rotate: "-rotate-2",
+    unread: true,
+    starred: false,
     tag: "Sent via Role Quick",
   },
   {
@@ -102,21 +103,24 @@ const inboxEmails = [
     subject: "Thank you for your interest in the Product Analyst role",
     snippet: "We confirm receipt of your application and appreciate the time you invested.",
     time: "1m ago",
-    rotate: "rotate-1",
+    unread: true,
+    starred: false,
   },
   {
     sender: "Brightpath Health",
     subject: "Thank you for applying to Brightpath!",
     snippet: "You did it! We've received your application for the Marketing Intern role.",
     time: "2m ago",
-    rotate: "-rotate-1",
+    unread: false,
+    starred: true,
   },
   {
     sender: "Ashworth Robotics",
     subject: "Ashworth Robotics: thank you for your application",
     snippet: "Your application is being reviewed by our recruiting team.",
     time: "3m ago",
-    rotate: "rotate-2",
+    unread: true,
+    starred: false,
     tag: "Sent via Role Quick",
   },
   {
@@ -124,54 +128,111 @@ const inboxEmails = [
     subject: "We have received your application",
     snippet: "Thanks for your interest in the Data Science Intern role at Vela.",
     time: "5m ago",
-    rotate: "rotate-1",
+    unread: false,
+    starred: false,
   },
   {
     sender: "Coreway Talent",
     subject: "Your application to UX Design Intern at Coreway",
-    snippet: "Applied • we'll follow up within two weeks.",
+    snippet: "Applied, we'll follow up within two weeks.",
     time: "9m ago",
-    rotate: "-rotate-2",
+    unread: false,
+    starred: false,
   },
 ];
 
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      className={`h-4 w-4 shrink-0 ${filled ? "fill-warn text-warn" : "fill-none text-border"}`}
+      stroke="currentColor"
+      strokeWidth={filled ? 0 : 1.5}
+    >
+      <path d="M10 1.5l2.6 5.4 5.9.7-4.3 4.1 1.1 5.9L10 14.8l-5.3 2.8 1.1-5.9L1.5 7.6l5.9-.7L10 1.5z" />
+    </svg>
+  );
+}
+
 export function InboxMockup() {
   return (
-    <div className="mx-auto max-w-4xl rounded-[24px] border border-border bg-surface-alt/60 p-2">
-      <div className="flex items-center gap-2 px-4 py-3">
-        <span className="h-2.5 w-2.5 rounded-full bg-border" />
-        <span className="h-2.5 w-2.5 rounded-full bg-border" />
-        <span className="h-2.5 w-2.5 rounded-full bg-border" />
-        <span className="ml-2 text-xs font-medium text-muted">Inbox</span>
+    <div className="mx-auto max-w-3xl overflow-hidden rounded-[20px] border border-border bg-white shadow-[0_1px_2px_rgba(18,18,15,0.04),0_16px_40px_-16px_rgba(18,18,15,0.18)]">
+      {/* Top bar */}
+      <div className="flex items-center gap-4 border-b border-border px-5 py-3">
+        <div className="flex items-center gap-2">
+          <span className="grid h-6 w-6 grid-cols-2 grid-rows-2 gap-[2px]">
+            <span className="rounded-[1px] bg-danger" />
+            <span className="rounded-[1px] bg-warn" />
+            <span className="rounded-[1px] bg-positive" />
+            <span className="rounded-[1px] bg-brand" />
+          </span>
+          <span className="text-[15px] text-muted">Gmail</span>
+        </div>
+        <div className="flex flex-1 items-center gap-2 rounded-full bg-surface-alt px-4 py-1.5 text-xs text-faint">
+          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth={1.6}>
+            <circle cx="8.5" cy="8.5" r="6" />
+            <path d="M17 17l-4.3-4.3" strokeLinecap="round" />
+          </svg>
+          Search mail
+        </div>
+        <span className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand-ink sm:flex">
+          M
+        </span>
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-4 rounded-[18px] bg-surface-alt/60 px-4 py-8 sm:px-8">
-        {inboxEmails.map((e) => (
-          <div
-            key={e.subject}
-            className={`w-full shrink-0 rounded-2xl border border-border bg-white p-4 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_16px_32px_-16px_rgba(18,18,15,0.16)] transition-transform hover:-translate-y-1 hover:rotate-0 sm:w-[300px] ${e.rotate}`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand-ink">
-                  {e.sender[0]}
-                </span>
-                <span className="text-xs font-medium text-ink">{e.sender}</span>
-              </div>
-              <span className="shrink-0 text-[10px] text-faint">{e.time}</span>
-            </div>
-            <p className="mt-2.5 text-[13px] font-semibold leading-snug text-ink">
-              {e.subject}
-            </p>
-            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
-              {e.snippet}
-            </p>
-            {e.tag && (
-              <span className="mt-2.5 inline-block rounded-full bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
-                {e.tag}
-              </span>
-            )}
+
+      <div className="flex">
+        {/* Left rail */}
+        <div className="hidden w-40 shrink-0 border-r border-border px-3 py-4 sm:block">
+          <span className="flex items-center gap-2 rounded-2xl bg-brand-soft px-4 py-2.5 text-sm font-medium text-brand-ink">
+            <svg viewBox="0 0 20 20" className="h-4 w-4 fill-current">
+              <path d="M14.85 2.15a1 1 0 011.41 0l1.59 1.59a1 1 0 010 1.41L7.5 15.5l-4 1 1-4 10.35-10.35z" />
+            </svg>
+            Compose
+          </span>
+          <div className="mt-4 space-y-0.5 text-sm text-muted">
+            <p className="rounded-full bg-surface-alt px-4 py-2 font-medium text-ink">Inbox</p>
+            <p className="px-4 py-2">Starred</p>
+            <p className="px-4 py-2">Sent</p>
           </div>
-        ))}
+        </div>
+
+        {/* Message list */}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-6 border-b border-border px-5 py-2.5 text-xs font-medium text-muted">
+            <span className="border-b-2 border-brand pb-2 -mb-2.5 text-brand-ink">Primary</span>
+            <span className="pb-2">Promotions</span>
+          </div>
+          {inboxEmails.map((e) => (
+            <div
+              key={e.subject}
+              className="flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0 hover:bg-surface-alt"
+            >
+              <span className="h-4 w-4 shrink-0 rounded-sm border border-border" />
+              <StarIcon filled={e.starred} />
+              <span
+                className={`w-28 shrink-0 truncate text-[13px] sm:w-36 ${e.unread ? "font-semibold text-ink" : "text-muted"}`}
+              >
+                {e.sender}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[13px]">
+                <span className={e.unread ? "font-semibold text-ink" : "text-muted"}>
+                  {e.subject}
+                </span>
+                <span className="text-faint"> - {e.snippet}</span>
+              </span>
+              {e.tag && (
+                <span className="hidden shrink-0 rounded-full bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive md:inline-block">
+                  {e.tag}
+                </span>
+              )}
+              <span
+                className={`shrink-0 text-[11px] ${e.unread ? "font-semibold text-ink" : "text-faint"}`}
+              >
+                {e.time}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
