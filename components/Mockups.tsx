@@ -137,8 +137,14 @@ const inboxEmails = [
 
 export function InboxMockup() {
   return (
-    <div className="rounded-[24px] border border-border bg-surface-alt/60 px-4 py-10 sm:px-10">
-      <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-4">
+    <div className="mx-auto max-w-4xl rounded-[24px] border border-border bg-surface-alt/60 p-2">
+      <div className="flex items-center gap-2 px-4 py-3">
+        <span className="h-2.5 w-2.5 rounded-full bg-border" />
+        <span className="h-2.5 w-2.5 rounded-full bg-border" />
+        <span className="h-2.5 w-2.5 rounded-full bg-border" />
+        <span className="ml-2 text-xs font-medium text-muted">Inbox</span>
+      </div>
+      <div className="flex flex-wrap items-center justify-center gap-4 rounded-[18px] bg-surface-alt/60 px-4 py-8 sm:px-8">
         {inboxEmails.map((e) => (
           <div
             key={e.subject}

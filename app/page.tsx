@@ -103,6 +103,9 @@ export default function Home() {
 
         {/* Product mockup: the inbox this fills up */}
         <section id="product" className="px-6 pb-24 pt-12">
+          <p className="mb-6 text-center text-sm font-medium text-muted">
+            What starts showing up in your inbox
+          </p>
           <InboxMockup />
         </section>
 
