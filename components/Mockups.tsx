@@ -78,7 +78,7 @@ export function DraftMockup() {
           <span className="text-ink">Fellow Trojan, 15-min chat?</span>
         </div>
         <p className="pt-1 leading-6 text-muted">
-          Hi Priya — saw you lead recruiting for the SWE team at Acme, and
+          Hi Priya, saw you lead recruiting for the SWE team at Acme, and
           noticed we&apos;re both USC alums. I just wrapped a summer building
           a full-stack analytics tool and the team&apos;s roadmap looks like
           a great fit...

@@ -1,4 +1,4 @@
-# Role Quick website — build plan
+# Role Quick website: build plan
 
 Working name for the product's marketing + web-app surface. The Chrome
 extension and backend remain branded **Volley** internally for now (repos
@@ -19,7 +19,7 @@ Structural family borrowed from Letterstory's console
 - **Shape:** rounded, not sharp. `20px` card radius, full-pill buttons and
   badges. No angular corners anywhere.
 - **Type:** Geist Sans for UI, Geist Mono for structured data (emails,
-  numbers, resume mockup) — same stack as Letterstory.
+  numbers, resume mockup), same stack as Letterstory.
 - **Structure:** Grammarly's marketing pattern (typography-first hero, no
   hero screenshot, then alternating text/mockup feature rows, stat callout,
   numbered how-it-works, comparison pricing) crossed with Wonsulting's
@@ -29,7 +29,7 @@ Structural family borrowed from Letterstory's console
   everything at once.
 - Reusable mockup components in `components/Mockups.tsx`
   (`ContactListMockup`, `DraftMockup`, `ResumeMockup`) are the visual
-  vocabulary for "what the product does" — reuse them (don't screenshot the
+  vocabulary for "what the product does", reuse them (don't screenshot the
   real extension) anywhere the site needs to show product behavior, including
   in the future dashboard's empty states.
 
@@ -45,19 +45,19 @@ where account, billing, and the resume/outreach data the extension produces
 should eventually live and be reviewable. Phased so each phase ships
 independently and the marketing site never breaks while later phases build.
 
-### Phase 1 — Marketing site (DONE)
+### Phase 1: Marketing site (DONE)
 `/`, `/privacy`. Static. Goal: drive Chrome Web Store installs.
 
-### Phase 2 — Auth + account shell
-- `/login`, `/signup` — auth against `student-outreach-backend`'s existing
+### Phase 2: Auth + account shell
+- `/login`, `/signup`: auth against `student-outreach-backend`'s existing
   user model (see `users` table in the PRD's Postgres schema). Reuse
   whatever session mechanism the extension already uses (JWT) so a logged-in
   extension user and a logged-in website user are the same account.
-- `/dashboard` — empty shell + nav (Contacts, Resume, Settings). No real data
+- `/dashboard`: empty shell + nav (Contacts, Resume, Settings). No real data
   yet, just proves the auth round-trip against the live backend.
 
-### Phase 3 — Resume workspace
-- `/dashboard/resume` — upload/replace resume (hits the existing
+### Phase 3: Resume workspace
+- `/dashboard/resume`: upload/replace resume (hits the existing
   `/profile` backend endpoint), preview the parsed profile, and a **live
   version of the `ResumeMockup` visual** rendering the user's actual parsed
   data instead of placeholder text. This is the "what would resume creation
@@ -66,8 +66,8 @@ independently and the marketing site never breaks while later phases build.
   show the keyword diff between the base resume and the tailored version
   before the extension fills a form with it.
 
-### Phase 4 — Outreach dashboard
-- `/dashboard/contacts` — the same `ContactListMockup` visual, live: every
+### Phase 4: Outreach dashboard
+- `/dashboard/contacts`: the same `ContactListMockup` visual, live: every
   resolved contact across all captured postings, filterable by tier/company,
   with the draft text and sent/replied/bounced status (mirrors
   `outreach_events` in the backend schema). This is the "track + follow up"
@@ -76,8 +76,8 @@ independently and the marketing site never breaks while later phases build.
 - One-tap follow-up drafting from here, calling the same `/draft` endpoint
   the extension uses.
 
-### Phase 5 — Billing
-- `/dashboard/settings/billing` — Stripe checkout for the $19.99/mo tier,
+### Phase 5: Billing
+- `/dashboard/settings/billing`: Stripe checkout for the $19.99/mo tier,
   usage meter against the free-tier cap (25-40 verified contacts/mo), pause
   (not cancel) flow per the PRD's anti-churn design (Section 10).
 - Requires deciding the billing provider account and webhook target before

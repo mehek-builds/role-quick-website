@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Privacy — Role Quick",
+  title: "Privacy: Role Quick",
 };
 
 export default function Privacy() {

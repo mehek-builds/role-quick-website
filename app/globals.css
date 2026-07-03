@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* Design tokens: light, editorial, generous whitespace — same structural
+/* Design tokens: light, editorial, generous whitespace, same structural
    family as Letterstory's console (white canvas, near-black ink, warm
    off-white surfaces, hairline borders) with Role Quick's own accent.
    Change here to re-theme everything. */
@@ -16,7 +16,7 @@
   --color-muted: #6b6a64; /* secondary text */
   --color-faint: #a3a19a; /* tertiary / placeholders */
 
-  --color-brand: #2b4bf2; /* Role Quick blue — the signature mark */
+  --color-brand: #2b4bf2; /* Role Quick blue, the signature mark */
   --color-brand-ink: #1c33b0; /* darker, for text-on-light use */
   --color-brand-soft: #eef1fe; /* tint for badges/backgrounds */
 

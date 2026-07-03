@@ -84,7 +84,7 @@ export default function Home() {
               href={STORE_URL}
               className="w-full rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
             >
-              Add to Chrome — it&apos;s free
+              Add to Chrome, it&apos;s free
             </a>
             <a
               href="#how-it-works"
@@ -303,7 +303,7 @@ export default function Home() {
               href={STORE_URL}
               className="mt-8 inline-block rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
-              Add to Chrome — it&apos;s free
+              Add to Chrome, it&apos;s free
             </a>
           </div>
         </section>
