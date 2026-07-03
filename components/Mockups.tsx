@@ -93,7 +93,7 @@ const inboxEmails = [
     sender: "LinkedIn",
     subject: "Your application to Software Engineer Intern at Northline was sent",
     snippet: "Northline, your profile was submitted to the hiring team.",
-    time: "34s ago",
+    time: "10:42 AM",
     unread: true,
     starred: false,
     tag: "Sent via Role Quick",
@@ -102,7 +102,7 @@ const inboxEmails = [
     sender: "Fintra Careers",
     subject: "Thank you for your interest in the Product Analyst role",
     snippet: "We confirm receipt of your application and appreciate the time you invested.",
-    time: "1m ago",
+    time: "10:41 AM",
     unread: true,
     starred: false,
   },
@@ -110,7 +110,7 @@ const inboxEmails = [
     sender: "Brightpath Health",
     subject: "Thank you for applying to Brightpath!",
     snippet: "You did it! We've received your application for the Marketing Intern role.",
-    time: "2m ago",
+    time: "10:39 AM",
     unread: false,
     starred: true,
   },
@@ -118,7 +118,7 @@ const inboxEmails = [
     sender: "Ashworth Robotics",
     subject: "Ashworth Robotics: thank you for your application",
     snippet: "Your application is being reviewed by our recruiting team.",
-    time: "3m ago",
+    time: "10:38 AM",
     unread: true,
     starred: false,
     tag: "Sent via Role Quick",
@@ -127,7 +127,7 @@ const inboxEmails = [
     sender: "Vela",
     subject: "We have received your application",
     snippet: "Thanks for your interest in the Data Science Intern role at Vela.",
-    time: "5m ago",
+    time: "10:35 AM",
     unread: false,
     starred: false,
   },
@@ -135,7 +135,7 @@ const inboxEmails = [
     sender: "Coreway Talent",
     subject: "Your application to UX Design Intern at Coreway",
     snippet: "Applied, we'll follow up within two weeks.",
-    time: "9m ago",
+    time: "10:29 AM",
     unread: false,
     starred: false,
   },
@@ -145,80 +145,151 @@ function StarIcon({ filled }: { filled: boolean }) {
   return (
     <svg
       viewBox="0 0 20 20"
-      className={`h-4 w-4 shrink-0 ${filled ? "fill-warn text-warn" : "fill-none text-border"}`}
+      className={`h-[18px] w-[18px] shrink-0 ${filled ? "fill-warn text-warn" : "fill-none text-[#5f6368]/50"}`}
       stroke="currentColor"
-      strokeWidth={filled ? 0 : 1.5}
+      strokeWidth={filled ? 0 : 1.4}
     >
       <path d="M10 1.5l2.6 5.4 5.9.7-4.3 4.1 1.1 5.9L10 14.8l-5.3 2.8 1.1-5.9L1.5 7.6l5.9-.7L10 1.5z" />
     </svg>
   );
 }
 
+function SidebarIcon({ d }: { d: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px] shrink-0 fill-current">
+      <path d={d} />
+    </svg>
+  );
+}
+
+const ICONS = {
+  inbox: "M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM5 5h14v9h-4l-1.5 2h-3L9 14H5V5zm0 14v-3h3.17l1.5 2h4.66l1.5-2H19v3H5z",
+  star: "M12 2l2.9 6.3 6.9.8-5.1 4.6 1.4 6.8L12 17l-6.1 3.5 1.4-6.8L2.2 9.1l6.9-.8L12 2z",
+  clock: "M12 2a10 10 0 100 20 10 10 0 000-20zm1 10.4V6h-2v7.6l5.2 3.1 1-1.7-4.2-2.6z",
+  send: "M2.5 3l19 9-19 9 4-9-4-9zm4.6 9l-2.6 5.9L18.4 12 4.5 6.1 7.1 12z",
+  draft: "M14.06 4.94l3 3L7.5 17.5H4.5v-3l9.56-9.56zM17.7 3.29a1 1 0 011.41 0l1.6 1.6a1 1 0 010 1.42l-1.34 1.34-3-3 1.33-1.36z",
+};
+
 export function InboxMockup() {
   return (
-    <div className="mx-auto max-w-3xl overflow-hidden rounded-[20px] border border-border bg-white shadow-[0_1px_2px_rgba(18,18,15,0.04),0_16px_40px_-16px_rgba(18,18,15,0.18)]">
+    <div className="mx-auto max-w-3xl overflow-hidden rounded-[20px] border border-border bg-white text-[#202124] shadow-[0_1px_2px_rgba(18,18,15,0.04),0_16px_40px_-16px_rgba(18,18,15,0.2)]">
       {/* Top bar */}
-      <div className="flex items-center gap-4 border-b border-border px-5 py-3">
-        <div className="flex items-center gap-2">
-          <span className="grid h-6 w-6 grid-cols-2 grid-rows-2 gap-[2px]">
-            <span className="rounded-[1px] bg-danger" />
-            <span className="rounded-[1px] bg-warn" />
-            <span className="rounded-[1px] bg-positive" />
-            <span className="rounded-[1px] bg-brand" />
-          </span>
-          <span className="text-[15px] text-muted">Gmail</span>
+      <div className="flex items-center gap-4 px-4 py-2.5">
+        <svg viewBox="0 0 24 24" className="hidden h-5 w-5 shrink-0 fill-[#5f6368] sm:block">
+          <path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z" />
+        </svg>
+        <div className="flex items-center gap-1.5">
+          <svg viewBox="0 0 24 24" className="h-6 w-8 shrink-0">
+            <path fill="#EA4335" d="M2 6.5L12 13l3-2.2V6.5L12 11 3.6 5H2z" />
+            <path fill="#34A853" d="M22 6.5v11a2 2 0 01-2 2h-1V9.3l3-2.8z" />
+            <path fill="#4285F4" d="M2 6.5v11a2 2 0 002 2h1V9.3L2 6.5z" />
+            <path fill="#FBBC05" d="M5 8.2V19h14V8.2l-7 5.1-7-5.1z" />
+            <path fill="#C5221F" d="M5 5h14a2 2 0 012 2v.5l-9 6.5-9-6.5V7a2 2 0 012-2z" />
+          </svg>
+          <span className="hidden text-lg text-[#5f6368] sm:inline">Gmail</span>
         </div>
-        <div className="flex flex-1 items-center gap-2 rounded-full bg-surface-alt px-4 py-1.5 text-xs text-faint">
-          <svg viewBox="0 0 20 20" className="h-3.5 w-3.5 fill-none stroke-current" strokeWidth={1.6}>
+        <div className="flex max-w-lg flex-1 items-center gap-3 rounded-full bg-[#eaf1fb] px-4 py-2 text-sm text-[#5f6368]">
+          <svg viewBox="0 0 20 20" className="h-4 w-4 shrink-0 fill-none stroke-current" strokeWidth={1.7}>
             <circle cx="8.5" cy="8.5" r="6" />
             <path d="M17 17l-4.3-4.3" strokeLinecap="round" />
           </svg>
-          Search mail
+          <span className="truncate">Search mail</span>
         </div>
-        <span className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand-ink sm:flex">
-          M
-        </span>
+        <div className="ml-auto hidden items-center gap-4 text-[#5f6368] sm:flex">
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+            <path d="M11 17h2v-2h-2v2zm1-15a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zm0-13a3 3 0 00-3 3h2a1 1 0 112 0c0 1-1.5 1.4-1.5 3h2c0-1 1.5-1.4 1.5-3a3 3 0 00-3-3z" />
+          </svg>
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+            <path d="M19.4 13a7.7 7.7 0 000-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 00-1.7-1L15 3h-4l-.3 2.9a7.6 7.6 0 00-1.7 1l-2.5-1-2 3.5L6.6 11a7.7 7.7 0 000 2l-2.1 1.6 2 3.5 2.5-1a7.6 7.6 0 001.7 1l.3 2.9h4l.3-2.9a7.6 7.6 0 001.7-1l2.5 1 2-3.5-2.1-1.6zM13 15.5a3.5 3.5 0 110-7 3.5 3.5 0 010 7z" />
+          </svg>
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+            <circle cx="5" cy="5" r="1.6" />
+            <circle cx="12" cy="5" r="1.6" />
+            <circle cx="19" cy="5" r="1.6" />
+            <circle cx="5" cy="12" r="1.6" />
+            <circle cx="12" cy="12" r="1.6" />
+            <circle cx="19" cy="12" r="1.6" />
+            <circle cx="5" cy="19" r="1.6" />
+            <circle cx="12" cy="19" r="1.6" />
+            <circle cx="19" cy="19" r="1.6" />
+          </svg>
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-[12px] font-medium text-white">
+            M
+          </span>
+        </div>
       </div>
 
-      <div className="flex">
+      <div className="flex border-t border-[#e8eaed]">
         {/* Left rail */}
-        <div className="hidden w-40 shrink-0 border-r border-border px-3 py-4 sm:block">
-          <span className="flex items-center gap-2 rounded-2xl bg-brand-soft px-4 py-2.5 text-sm font-medium text-brand-ink">
-            <svg viewBox="0 0 20 20" className="h-4 w-4 fill-current">
-              <path d="M14.85 2.15a1 1 0 011.41 0l1.59 1.59a1 1 0 010 1.41L7.5 15.5l-4 1 1-4 10.35-10.35z" />
+        <div className="hidden w-44 shrink-0 py-3 pl-2 pr-1 sm:block">
+          <button className="flex items-center gap-3 rounded-2xl bg-[#c2e7ff] px-5 py-3.5 text-sm font-medium text-[#001d35] shadow-sm">
+            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-current">
+              <path d={ICONS.draft} />
             </svg>
             Compose
-          </span>
-          <div className="mt-4 space-y-0.5 text-sm text-muted">
-            <p className="rounded-full bg-surface-alt px-4 py-2 font-medium text-ink">Inbox</p>
-            <p className="px-4 py-2">Starred</p>
-            <p className="px-4 py-2">Sent</p>
+          </button>
+          <div className="mt-2 space-y-0.5 text-sm text-[#202124]">
+            <p className="flex items-center gap-3 rounded-r-2xl bg-[#fce8e6] px-4 py-1.5 font-medium text-[#c5221f]">
+              <SidebarIcon d={ICONS.inbox} />
+              Inbox
+            </p>
+            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
+              <SidebarIcon d={ICONS.star} />
+              Starred
+            </p>
+            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
+              <SidebarIcon d={ICONS.clock} />
+              Snoozed
+            </p>
+            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
+              <SidebarIcon d={ICONS.send} />
+              Sent
+            </p>
+            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
+              <SidebarIcon d={ICONS.draft} />
+              Drafts
+            </p>
           </div>
         </div>
 
         {/* Message list */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-6 border-b border-border px-5 py-2.5 text-xs font-medium text-muted">
-            <span className="border-b-2 border-brand pb-2 -mb-2.5 text-brand-ink">Primary</span>
-            <span className="pb-2">Promotions</span>
+        <div className="min-w-0 flex-1 border-l border-[#e8eaed]">
+          <div className="flex items-center gap-6 border-b border-[#e8eaed] px-4 pt-2 text-[13px] font-medium text-[#5f6368]">
+            <span className="border-b-[3px] border-[#c5221f] pb-2.5 text-[#c5221f]">
+              Primary
+            </span>
+            <span className="pb-2.5 text-[#5f6368]">Promotions</span>
+            <span className="pb-2.5 text-[#5f6368]">Social</span>
+          </div>
+          <div className="flex items-center gap-4 border-b border-[#e8eaed] px-4 py-1.5 text-[#5f6368]">
+            <span className="h-[18px] w-[18px] shrink-0 rounded-sm border-2 border-[#5f6368]/40" />
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current">
+              <path d="M17.65 6.35A8 8 0 106 17.65 8 8 0 0017.65 6.35zM12 20a8 8 0 118-8h-2a6 6 0 10-1.76 4.24L18 18l-1.41 1.41-3.18-3.18A7.96 7.96 0 0112 20zm1-13h-2v6l4.28 2.54.72-1.21-3-1.78V7z" />
+            </svg>
+            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current">
+              <circle cx="5" cy="12" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="19" cy="12" r="2" />
+            </svg>
+            <span className="ml-auto hidden text-xs sm:inline">1-6 of 214</span>
           </div>
           {inboxEmails.map((e) => (
             <div
               key={e.subject}
-              className="flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0 hover:bg-surface-alt"
+              className="flex items-center gap-3 border-b border-[#e8eaed] px-4 py-2.5 last:border-b-0 hover:z-10 hover:shadow-[0_1px_3px_rgba(0,0,0,0.15)]"
             >
-              <span className="h-4 w-4 shrink-0 rounded-sm border border-border" />
+              <span className="h-[18px] w-[18px] shrink-0 rounded-sm border-2 border-[#5f6368]/40" />
               <StarIcon filled={e.starred} />
               <span
-                className={`w-28 shrink-0 truncate text-[13px] sm:w-36 ${e.unread ? "font-semibold text-ink" : "text-muted"}`}
+                className={`w-24 shrink-0 truncate text-[13px] sm:w-36 ${e.unread ? "font-bold text-[#202124]" : "text-[#202124]"}`}
               >
                 {e.sender}
               </span>
               <span className="min-w-0 flex-1 truncate text-[13px]">
-                <span className={e.unread ? "font-semibold text-ink" : "text-muted"}>
+                <span className={e.unread ? "font-bold text-[#202124]" : "text-[#202124]"}>
                   {e.subject}
                 </span>
-                <span className="text-faint"> - {e.snippet}</span>
+                <span className="text-[#5f6368]"> - {e.snippet}</span>
               </span>
               {e.tag && (
                 <span className="hidden shrink-0 rounded-full bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive md:inline-block">
@@ -226,7 +297,7 @@ export function InboxMockup() {
                 </span>
               )}
               <span
-                className={`shrink-0 text-[11px] ${e.unread ? "font-semibold text-ink" : "text-faint"}`}
+                className={`shrink-0 text-[12px] ${e.unread ? "font-bold text-[#202124]" : "text-[#5f6368]"}`}
               >
                 {e.time}
               </span>
