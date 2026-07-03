@@ -5,6 +5,7 @@ import {
   ResumeMockup,
   ApplicationFormMockup,
   AtsChips,
+  InboxMockup,
 } from "@/components/Mockups";
 
 const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published
@@ -70,9 +71,7 @@ export default function Home() {
             A Chrome extension that applies with you, not for you
           </p>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-6xl sm:leading-tight">
-            One application open.
-            <br />
-            Three things happen for you.
+            Applying, in minutes.
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-muted">
             Role Quick tailors your resume to the posting, fills out the
@@ -102,9 +101,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Product mockup */}
-        <section id="product" className="mx-auto max-w-lg px-6 pb-24 pt-12">
-          <ApplicationFormMockup />
+        {/* Product mockup: the inbox this fills up */}
+        <section id="product" className="px-6 pb-24 pt-12">
+          <InboxMockup />
         </section>
 
         {/* Trust strip */}

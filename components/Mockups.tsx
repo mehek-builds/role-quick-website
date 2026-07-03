@@ -88,6 +88,89 @@ export function DraftMockup() {
   );
 }
 
+const inboxEmails = [
+  {
+    sender: "LinkedIn",
+    subject: "Your application to Software Engineer Intern at Northline was sent",
+    snippet: "Northline • your profile was submitted to the hiring team.",
+    time: "34s ago",
+    rotate: "-rotate-2",
+    tag: "Sent via Role Quick",
+  },
+  {
+    sender: "Fintra Careers",
+    subject: "Thank you for your interest in the Product Analyst role",
+    snippet: "We confirm receipt of your application and appreciate the time you invested.",
+    time: "1m ago",
+    rotate: "rotate-1",
+  },
+  {
+    sender: "Brightpath Health",
+    subject: "Thank you for applying to Brightpath!",
+    snippet: "You did it! We've received your application for the Marketing Intern role.",
+    time: "2m ago",
+    rotate: "-rotate-1",
+  },
+  {
+    sender: "Ashworth Robotics",
+    subject: "Ashworth Robotics: thank you for your application",
+    snippet: "Your application is being reviewed by our recruiting team.",
+    time: "3m ago",
+    rotate: "rotate-2",
+    tag: "Sent via Role Quick",
+  },
+  {
+    sender: "Vela",
+    subject: "We have received your application",
+    snippet: "Thanks for your interest in the Data Science Intern role at Vela.",
+    time: "5m ago",
+    rotate: "rotate-1",
+  },
+  {
+    sender: "Coreway Talent",
+    subject: "Your application to UX Design Intern at Coreway",
+    snippet: "Applied • we'll follow up within two weeks.",
+    time: "9m ago",
+    rotate: "-rotate-2",
+  },
+];
+
+export function InboxMockup() {
+  return (
+    <div className="rounded-[24px] border border-border bg-surface-alt/60 px-4 py-10 sm:px-10">
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-center gap-4">
+        {inboxEmails.map((e) => (
+          <div
+            key={e.subject}
+            className={`w-full shrink-0 rounded-2xl border border-border bg-white p-4 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_16px_32px_-16px_rgba(18,18,15,0.16)] transition-transform hover:-translate-y-1 hover:rotate-0 sm:w-[300px] ${e.rotate}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-soft text-[11px] font-semibold text-brand-ink">
+                  {e.sender[0]}
+                </span>
+                <span className="text-xs font-medium text-ink">{e.sender}</span>
+              </div>
+              <span className="shrink-0 text-[10px] text-faint">{e.time}</span>
+            </div>
+            <p className="mt-2.5 text-[13px] font-semibold leading-snug text-ink">
+              {e.subject}
+            </p>
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted">
+              {e.snippet}
+            </p>
+            {e.tag && (
+              <span className="mt-2.5 inline-block rounded-full bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive">
+                {e.tag}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const ATS_PLATFORMS = ["Lever", "Greenhouse", "Ashby", "Workday", "LinkedIn"];
 
 export function AtsChips() {
