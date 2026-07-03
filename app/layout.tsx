@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Role Quick — find the right person, send the right email",
+  title: "Role Quick — tailored resume, filled application, real outreach",
   description:
-    "Role Quick finds the recruiters, hiring managers, and alumni behind any job posting, then drafts a personalized email grounded in your resume. One tap, into your Gmail drafts.",
+    "Role Quick tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always review and submit.",
 };
 
 export default function RootLayout({

@@ -1,43 +1,49 @@
 import { Header } from "@/components/Header";
-import { ContactListMockup, DraftMockup, ResumeMockup } from "@/components/Mockups";
+import {
+  ContactListMockup,
+  DraftMockup,
+  ResumeMockup,
+  ApplicationFormMockup,
+  AtsChips,
+} from "@/components/Mockups";
 
 const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published
 
 const steps = [
   {
     n: "01",
-    title: "Land on a role",
-    body: "Open any job posting, or paste the link. Role Quick reads the company and title, nothing else.",
+    title: "Open the application",
+    body: "On Lever, Greenhouse, Ashby, Workday, or LinkedIn. Role Quick detects the real application form, not just the job listing.",
   },
   {
     n: "02",
-    title: "See the right humans",
-    body: "Alumni from your school, near-peers, hiring managers, recruiters, ranked by who actually replies.",
+    title: "Get a tailored resume",
+    body: "Built from your full experience bank, every role and bullet variant, matched to this posting's actual keywords.",
   },
   {
     n: "03",
-    title: "Get a draft that sounds like you",
-    body: "One sentence of real context, a hook grounded in your resume, one clear ask. 100-140 words.",
+    title: "Watch the form fill itself",
+    body: "Name, contact info, links, work authorization, screening questions, the resume file. Every field, every platform.",
   },
   {
     n: "04",
-    title: "Review, then send",
-    body: "It lands as a Gmail draft in your own account. You read it, you send it.",
+    title: "Review, submit, and send",
+    body: "You hit Submit yourself, always. Meanwhile a personalized outreach email to a real contact is already in your Gmail drafts.",
   },
 ];
 
 const principles = [
   {
+    title: "You always hit submit",
+    body: "Role Quick fills every field and stops. It never clicks Submit, never auto-applies, and never touches an SSN, driver's license, or background-check field.",
+  },
+  {
     title: "Real humans, honestly labeled",
     body: "Verified, Likely, or LinkedIn-only. We never say Verified when we mean guessed, and we never say nobody's there when someone is.",
   },
   {
-    title: "Alumni first",
-    body: "A shared school is the single highest-converting opener in cold outreach. Role Quick surfaces your school's alumni before anyone else.",
-  },
-  {
-    title: "You send, always",
-    body: "Every email is queued as a draft in your own Gmail. Nothing is auto-sent, nothing is bulk-blasted from a shared domain.",
+    title: "Legally sensitive fields stay yours",
+    body: "Voluntary EEO disclosures default to decline-to-answer. Work authorization and citizenship are always asked, never inferred from your name or resume.",
   },
 ];
 
@@ -61,17 +67,18 @@ export default function Home() {
         {/* Hero */}
         <section className="mx-auto max-w-3xl px-6 pb-4 pt-20 text-center sm:pt-28">
           <p className="mx-auto mb-6 w-fit rounded-full border border-border bg-surface-alt px-3 py-1 text-xs text-muted">
-            A Chrome extension for job hunting the way that actually works
+            A Chrome extension that applies with you, not for you
           </p>
           <h1 className="text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-6xl sm:leading-tight">
-            Stop applying into the void.
+            One application open.
             <br />
-            Email the right person instead.
+            Three things happen for you.
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-muted">
-            Role Quick finds the recruiters, hiring managers, and alumni behind
-            any job posting, then drafts a short, personalized email grounded
-            in your resume. Into your Gmail drafts in under a minute.
+            Role Quick tailors your resume to the posting, fills out the
+            entire application, and drafts a personalized email to a real
+            recruiter or alum, the moment you open a job. You review, you
+            submit, you send.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <a
@@ -88,13 +95,16 @@ export default function Home() {
             </a>
           </div>
           <p className="mt-4 text-xs text-faint">
-            No credit card. 25-40 verified contacts a month, free, forever.
+            No credit card. Every feature free, capped monthly, uncapped on Pro.
           </p>
+          <div className="mt-8">
+            <AtsChips />
+          </div>
         </section>
 
         {/* Product mockup */}
         <section id="product" className="mx-auto max-w-lg px-6 pb-24 pt-12">
-          <ContactListMockup />
+          <ApplicationFormMockup />
         </section>
 
         {/* Trust strip */}
@@ -102,36 +112,81 @@ export default function Home() {
           <div className="mx-auto max-w-4xl px-6 py-14 text-center">
             <p className="mx-auto max-w-2xl text-xl leading-relaxed text-ink sm:text-2xl">
               The average corporate role gets{" "}
-              <span className="font-semibold">257 applications</span>. Over
-              half of employers <span className="font-semibold">never respond</span>.
-              The students who get interviews aren&apos;t applying more,
-              they&apos;re reaching the right person directly.
+              <span className="font-semibold">257 applications</span>, each
+              one asking for a freshly tailored resume and forty fields
+              re-typed from scratch. Role Quick does the repetitive part so
+              you can spend your time on the one thing it never does for
+              you: deciding to hit submit.
             </p>
           </div>
         </section>
 
-        {/* Feature row A: contacts */}
+        {/* Feature row A: resume */}
         <section className="mx-auto max-w-6xl px-6 py-24">
           <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-                Find the humans
+                Tailor your resume
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
-                See who actually reads applications
+                A resume tuned to this exact posting
+              </h2>
+              <ul className="mt-6 space-y-3">
+                <Check>Built from your full experience bank, every role, project, and bullet variant you've ever written</Check>
+                <Check>Claude selects and lightly rewrites the best-fit subset for this JD's real keywords</Check>
+                <Check>Editable PDF, never locked, review it before it goes anywhere</Check>
+              </ul>
+            </div>
+            <ResumeMockup />
+          </div>
+        </section>
+
+        {/* Feature row B: autofill */}
+        <section className="border-y border-border bg-surface-alt">
+          <div className="mx-auto max-w-6xl px-6 py-24">
+            <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+              <div className="order-2 sm:order-1">
+                <ApplicationFormMockup />
+              </div>
+              <div className="order-1 sm:order-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
+                  Fill the whole application
+                </p>
+                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+                  Every field, across five ATS platforms
+                </h2>
+                <ul className="mt-6 space-y-3">
+                  <Check>Lever, Greenhouse, Ashby, Workday, and LinkedIn Easy Apply</Check>
+                  <Check>Contact info, links, work authorization, and the resume file itself</Check>
+                  <Check>Open-ended questions left blank, never guessed. It stops at Submit, always</Check>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Feature row C: outreach */}
+        <section className="mx-auto max-w-6xl px-6 py-24">
+          <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
+                Reach a real human
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+                While you're filling the form, an email is already drafting
               </h2>
               <ul className="mt-6 space-y-3">
                 <Check>School alumni surfaced first, the highest-reply persona</Check>
                 <Check>A confidence tier on every contact, never a hidden guess</Check>
-                <Check>Recruiters, hiring managers, and team members, ranked by reply rate</Check>
+                <Check>Ready to review and send from your own Gmail, nothing sent for you</Check>
               </ul>
             </div>
             <ContactListMockup />
           </div>
         </section>
 
-        {/* Feature row B: draft */}
-        <section className="border-y border-border bg-surface-alt">
+        {/* Draft detail */}
+        <section className="border-t border-border bg-surface-alt">
           <div className="mx-auto max-w-6xl px-6 py-24">
             <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
               <div className="order-2 sm:order-1">
@@ -154,119 +209,104 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Feature row C: resume */}
-        <section className="mx-auto max-w-6xl px-6 py-24">
-          <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-                Tailor your resume
-              </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
-                A resume tuned to the posting, in seconds
-              </h2>
-              <ul className="mt-6 space-y-3">
-                <Check>Pulls the role&apos;s real keywords into your existing resume</Check>
-                <Check>Fills the application form for you, you review before submit</Check>
-                <Check>Works across Lever, Greenhouse, Ashby, LinkedIn, and Workday</Check>
-              </ul>
-            </div>
-            <ResumeMockup />
+        {/* How it works */}
+        <section id="how-it-works" className="mx-auto max-w-5xl px-6 py-24">
+          <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
+            From open tab to submitted application, in four steps
+          </h2>
+          <div className="mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2">
+            {steps.map((step) => (
+              <div key={step.n} className="flex gap-5">
+                <span className="text-2xl font-semibold text-faint">
+                  {step.n}
+                </span>
+                <div>
+                  <h3 className="text-lg font-medium text-ink">
+                    {step.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-muted">
+                    {step.body}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         </section>
 
-        {/* How it works */}
-        <section id="how-it-works" className="border-t border-border bg-surface-alt">
+        {/* Principles */}
+        <section className="border-t border-border bg-surface-alt">
           <div className="mx-auto max-w-5xl px-6 py-24">
             <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
-              From job posting to sent email, in four steps
+              Built to be trusted, not just used once
             </h2>
-            <div className="mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2">
-              {steps.map((step) => (
-                <div key={step.n} className="flex gap-5">
-                  <span className="text-2xl font-semibold text-faint">
-                    {step.n}
-                  </span>
-                  <div>
-                    <h3 className="text-lg font-medium text-ink">
-                      {step.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-muted">
-                      {step.body}
-                    </p>
-                  </div>
+            <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-3">
+              {principles.map((p) => (
+                <div
+                  key={p.title}
+                  className="rounded-[20px] border border-border bg-surface p-6"
+                >
+                  <h3 className="text-base font-medium text-ink">{p.title}</h3>
+                  <p className="mt-3 text-sm leading-6 text-muted">{p.body}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Principles */}
-        <section className="mx-auto max-w-5xl px-6 py-24">
-          <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
-            Built to be trusted, not just used once
-          </h2>
-          <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {principles.map((p) => (
-              <div
-                key={p.title}
-                className="rounded-[20px] border border-border bg-surface p-6"
-              >
-                <h3 className="text-base font-medium text-ink">{p.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-muted">{p.body}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
         {/* Pricing */}
-        <section id="pricing" className="border-t border-border bg-surface-alt">
-          <div className="mx-auto max-w-4xl px-6 py-24">
-            <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
-              Free to find. Pay only if you outreach a lot.
-            </h2>
-            <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="rounded-[20px] border border-border bg-surface p-8">
-                <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-faint">
-                  Free
-                </h3>
-                <p className="mt-3 text-4xl font-semibold text-ink">$0</p>
-                <ul className="mt-6 space-y-3">
-                  <Check>7 days of full access to start</Check>
-                  <Check>25-40 verified contacts + drafts / month after</Check>
-                  <Check>Alumni, recruiter, and hiring-manager discovery</Check>
-                  <Check>Resume-grounded draft generation</Check>
-                </ul>
-              </div>
-              <div className="rounded-[20px] border-2 border-brand bg-surface p-8">
-                <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-brand-ink">
-                  Unlimited
-                </h3>
-                <p className="mt-3 text-4xl font-semibold text-ink">
-                  $19.99
-                  <span className="text-base font-normal text-faint"> / mo</span>
-                </p>
-                <ul className="mt-6 space-y-3">
-                  <Check>Everything in Free, uncapped</Check>
-                  <Check>Bulk outreach across roles</Check>
-                  <Check>Automated follow-up drafts</Check>
-                  <Check>Deeper alumni-graph targeting</Check>
-                </ul>
-              </div>
+        <section id="pricing" className="mx-auto max-w-4xl px-6 py-24">
+          <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
+            Every feature is free. Pro just removes the caps.
+          </h2>
+          <p className="mx-auto mt-3 max-w-lg text-center text-sm text-muted">
+            No feature is paywalled, ever. Resume tailoring, application
+            autofill, and outreach are all on the free tier, with monthly
+            allowances that reset on the 1st.
+          </p>
+          <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <div className="rounded-[20px] border border-border bg-surface p-8">
+              <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-faint">
+                Free
+              </h3>
+              <p className="mt-3 text-4xl font-semibold text-ink">$0</p>
+              <ul className="mt-6 space-y-3">
+                <Check>30 verified contacts / month</Check>
+                <Check>60 outreach drafts / month</Check>
+                <Check>20 tailored resumes / month</Check>
+                <Check>Full application autofill, all five ATS platforms</Check>
+              </ul>
+            </div>
+            <div className="rounded-[20px] border-2 border-brand bg-surface p-8">
+              <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-brand-ink">
+                Pro
+              </h3>
+              <p className="mt-3 text-4xl font-semibold text-ink">
+                $49.99
+                <span className="text-base font-normal text-faint"> / mo</span>
+              </p>
+              <ul className="mt-6 space-y-3">
+                <Check>500 verified contacts / month</Check>
+                <Check>1,000 outreach drafts / month</Check>
+                <Check>Unlimited tailored resumes</Check>
+                <Check>Everything in Free, uncapped</Check>
+              </ul>
             </div>
           </div>
         </section>
 
         {/* CTA */}
-        <section className="mx-auto max-w-3xl px-6 py-24 text-center">
-          <h2 className="text-3xl font-semibold tracking-tight text-ink">
-            Your next reply is one email away.
-          </h2>
-          <a
-            href={STORE_URL}
-            className="mt-8 inline-block rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            Add to Chrome — it&apos;s free
-          </a>
+        <section className="border-t border-border bg-surface-alt">
+          <div className="mx-auto max-w-3xl px-6 py-24 text-center">
+            <h2 className="text-3xl font-semibold tracking-tight text-ink">
+              Open your next application. Let it do the rest.
+            </h2>
+            <a
+              href={STORE_URL}
+              className="mt-8 inline-block rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            >
+              Add to Chrome — it&apos;s free
+            </a>
+          </div>
         </section>
       </main>
 

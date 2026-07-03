@@ -88,6 +88,69 @@ export function DraftMockup() {
   );
 }
 
+const ATS_PLATFORMS = ["Lever", "Greenhouse", "Ashby", "Workday", "LinkedIn"];
+
+export function AtsChips() {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2">
+      {ATS_PLATFORMS.map((p) => (
+        <span
+          key={p}
+          className="rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-muted"
+        >
+          {p}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function ApplicationFormMockup() {
+  const fields = [
+    { label: "Full name", value: "Alex Rivera" },
+    { label: "Email", value: "alex.rivera@usc.edu" },
+    { label: "Phone", value: "(213) 555-0148" },
+    { label: "Resume", value: "alex-rivera-acme-swe.pdf", isFile: true },
+    { label: "LinkedIn", value: "linkedin.com/in/alexrivera" },
+    { label: "Work authorized?", value: "Yes" },
+  ];
+  return (
+    <Frame>
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Application · Greenhouse
+        </p>
+        <span className="rounded-full bg-positive/10 px-2.5 py-0.5 text-[11px] font-medium text-positive">
+          6 of 6 filled
+        </span>
+      </div>
+      <div className="mt-4 space-y-2.5">
+        {fields.map((f) => (
+          <div
+            key={f.label}
+            className="flex items-center justify-between rounded-xl border border-border px-3.5 py-2.5"
+          >
+            <span className="text-xs text-faint">{f.label}</span>
+            {f.isFile ? (
+              <span className="flex items-center gap-1.5 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink">
+                📎 {f.value}
+              </span>
+            ) : (
+              <span className="text-sm text-ink">{f.value}</span>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex items-center justify-between rounded-xl border-2 border-dashed border-border px-3.5 py-2.5">
+        <span className="text-xs font-medium text-muted">Submit application</span>
+        <span className="text-[11px] font-medium text-faint">
+          Waiting on you
+        </span>
+      </div>
+    </Frame>
+  );
+}
+
 export function ResumeMockup() {
   return (
     <Frame>
