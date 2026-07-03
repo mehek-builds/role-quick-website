@@ -88,58 +88,73 @@ export function DraftMockup() {
   );
 }
 
-const inboxEmails = [
-  {
-    sender: "LinkedIn",
-    subject: "Your application to Software Engineer Intern at Northline was sent",
-    snippet: "Northline, your profile was submitted to the hiring team.",
-    time: "10:42 AM",
-    unread: true,
-    starred: false,
-    tag: "Sent via Role Quick",
-  },
-  {
-    sender: "Fintra Careers",
-    subject: "Thank you for your interest in the Product Analyst role",
-    snippet: "We confirm receipt of your application and appreciate the time you invested.",
-    time: "10:41 AM",
-    unread: true,
-    starred: false,
-  },
-  {
-    sender: "Brightpath Health",
-    subject: "Thank you for applying to Brightpath!",
-    snippet: "You did it! We've received your application for the Marketing Intern role.",
-    time: "10:39 AM",
-    unread: false,
-    starred: true,
-  },
-  {
-    sender: "Ashworth Robotics",
-    subject: "Ashworth Robotics: thank you for your application",
-    snippet: "Your application is being reviewed by our recruiting team.",
-    time: "10:38 AM",
-    unread: true,
-    starred: false,
-    tag: "Sent via Role Quick",
-  },
-  {
-    sender: "Vela",
-    subject: "We have received your application",
-    snippet: "Thanks for your interest in the Data Science Intern role at Vela.",
-    time: "10:35 AM",
-    unread: false,
-    starred: false,
-  },
-  {
-    sender: "Coreway Talent",
-    subject: "Your application to UX Design Intern at Coreway",
-    snippet: "Applied, we'll follow up within two weeks.",
-    time: "10:29 AM",
-    unread: false,
-    starred: false,
-  },
+const inboxTimes = [
+  "11:58 AM", "11:57 AM", "11:56 AM", "11:55 AM", "11:54 AM",
+  "11:53 AM", "11:52 AM", "11:51 AM", "11:50 AM", "11:49 AM",
+  "11:48 AM", "11:47 AM", "11:46 AM", "11:45 AM", "11:44 AM",
+  "11:43 AM", "11:42 AM", "11:41 AM", "11:40 AM", "11:39 AM",
 ];
+
+const inboxCompanies = [
+  { sender: "LinkedIn", company: "Northline", role: "Software Engineer Intern", pattern: "linkedin" },
+  { sender: "Fintra Careers", company: "Fintra", role: "Product Analyst", pattern: "interest" },
+  { sender: "Brightpath Health", company: "Brightpath", role: "Marketing Intern", pattern: "applying" },
+  { sender: "Ashworth Robotics", company: "Ashworth Robotics", role: "Backend Engineer Intern", pattern: "colon" },
+  { sender: "Vela", company: "Vela", role: "Data Science Intern", pattern: "received" },
+  { sender: "Coreway Talent", company: "Coreway", role: "UX Design Intern", pattern: "linkedin" },
+  { sender: "Lumen Analytics", company: "Lumen Analytics", role: "Business Analyst Intern", pattern: "applying" },
+  { sender: "LinkedIn", company: "Parallax Systems", role: "Software Engineer Intern", pattern: "linkedin" },
+  { sender: "Solace Biotech", company: "Solace", role: "Research Intern", pattern: "interest" },
+  { sender: "Meridian Capital", company: "Meridian Capital", role: "Investment Banking Intern", pattern: "colon" },
+  { sender: "Driftwood Media", company: "Driftwood", role: "Content Intern", pattern: "received" },
+  { sender: "Anchorpoint Labs", company: "Anchorpoint", role: "Growth Intern", pattern: "applying" },
+  { sender: "LinkedIn", company: "Cascade Robotics", role: "Mechanical Engineer Intern", pattern: "linkedin" },
+  { sender: "Ionic Health", company: "Ionic Health", role: "Product Design Intern", pattern: "interest" },
+  { sender: "Westbrook Talent", company: "Westbrook", role: "Operations Intern", pattern: "colon" },
+  { sender: "Nimbus Cloud", company: "Nimbus", role: "Cloud Engineer Intern", pattern: "received" },
+  { sender: "Halcyon Finance", company: "Halcyon", role: "Finance Intern", pattern: "applying" },
+  { sender: "LinkedIn", company: "Rowan Dynamics", role: "Systems Engineer Intern", pattern: "linkedin" },
+  { sender: "Tidal Works", company: "Tidal Works", role: "Frontend Engineer Intern", pattern: "interest" },
+  { sender: "Brookline Ventures", company: "Brookline", role: "Venture Intern", pattern: "colon" },
+];
+
+function buildInboxEmail(entry: (typeof inboxCompanies)[number], time: string, i: number) {
+  const { sender, company, role, pattern } = entry;
+  const bySender: Record<string, { subject: string; snippet: string }> = {
+    linkedin: {
+      subject: `Your application to ${role} at ${company} was sent`,
+      snippet: `${company}, your profile was submitted to the hiring team.`,
+    },
+    interest: {
+      subject: `Thank you for your interest in the ${role} role`,
+      snippet: `We confirm receipt of your application and appreciate the time you invested.`,
+    },
+    applying: {
+      subject: `Thank you for applying to ${company}!`,
+      snippet: `You did it! We've received your application for the ${role} role.`,
+    },
+    colon: {
+      subject: `${company}: thank you for your application`,
+      snippet: `Your application is being reviewed by our recruiting team.`,
+    },
+    received: {
+      subject: `We have received your application`,
+      snippet: `Thanks for your interest in the ${role} role at ${company}.`,
+    },
+  };
+  const { subject, snippet } = bySender[pattern];
+  return {
+    sender,
+    subject,
+    snippet,
+    time,
+    unread: i < 8,
+    starred: i === 2 || i === 11,
+    tag: i % 4 === 0 ? "Sent via Role Quick" : undefined,
+  };
+}
+
+const inboxEmails = inboxCompanies.map((c, i) => buildInboxEmail(c, inboxTimes[i], i));
 
 function StarIcon({ filled }: { filled: boolean }) {
   return (
@@ -219,63 +234,26 @@ export function InboxMockup() {
         </div>
       </div>
 
-      <div className="flex border-t border-[#e8eaed]">
-        {/* Left rail */}
-        <div className="hidden w-44 shrink-0 py-3 pl-2 pr-1 sm:block">
-          <button className="flex items-center gap-3 rounded-2xl bg-[#c2e7ff] px-5 py-3.5 text-sm font-medium text-[#001d35] shadow-sm">
-            <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0 fill-current">
-              <path d={ICONS.draft} />
-            </svg>
-            Compose
-          </button>
-          <div className="mt-2 space-y-0.5 text-sm text-[#202124]">
-            <p className="flex items-center gap-3 rounded-r-2xl bg-[#fce8e6] px-4 py-1.5 font-medium text-[#c5221f]">
-              <SidebarIcon d={ICONS.inbox} />
-              Inbox
-            </p>
-            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
-              <SidebarIcon d={ICONS.star} />
-              Starred
-            </p>
-            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
-              <SidebarIcon d={ICONS.clock} />
-              Snoozed
-            </p>
-            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
-              <SidebarIcon d={ICONS.send} />
-              Sent
-            </p>
-            <p className="flex items-center gap-3 px-4 py-1.5 text-[#5f6368]">
-              <SidebarIcon d={ICONS.draft} />
-              Drafts
-            </p>
-          </div>
+      <div className="border-t border-[#e8eaed]">
+        {/* Toolbar */}
+        <div className="flex items-center gap-4 border-b border-[#e8eaed] px-4 py-2 text-[#5f6368]">
+          <span className="h-[18px] w-[18px] shrink-0 rounded-sm border-2 border-[#5f6368]/40" />
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current">
+            <path d="M17.65 6.35A8 8 0 106 17.65 8 8 0 0017.65 6.35zM12 20a8 8 0 118-8h-2a6 6 0 10-1.76 4.24L18 18l-1.41 1.41-3.18-3.18A7.96 7.96 0 0112 20zm1-13h-2v6l4.28 2.54.72-1.21-3-1.78V7z" />
+          </svg>
+          <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current">
+            <circle cx="5" cy="12" r="2" />
+            <circle cx="12" cy="12" r="2" />
+            <circle cx="19" cy="12" r="2" />
+          </svg>
+          <span className="ml-auto hidden text-xs sm:inline">1-20 of 214</span>
         </div>
 
         {/* Message list */}
-        <div className="min-w-0 flex-1 border-l border-[#e8eaed]">
-          <div className="flex items-center gap-6 border-b border-[#e8eaed] px-4 pt-2 text-[13px] font-medium text-[#5f6368]">
-            <span className="border-b-[3px] border-[#c5221f] pb-2.5 text-[#c5221f]">
-              Primary
-            </span>
-            <span className="pb-2.5 text-[#5f6368]">Promotions</span>
-            <span className="pb-2.5 text-[#5f6368]">Social</span>
-          </div>
-          <div className="flex items-center gap-4 border-b border-[#e8eaed] px-4 py-1.5 text-[#5f6368]">
-            <span className="h-[18px] w-[18px] shrink-0 rounded-sm border-2 border-[#5f6368]/40" />
-            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current">
-              <path d="M17.65 6.35A8 8 0 106 17.65 8 8 0 0017.65 6.35zM12 20a8 8 0 118-8h-2a6 6 0 10-1.76 4.24L18 18l-1.41 1.41-3.18-3.18A7.96 7.96 0 0112 20zm1-13h-2v6l4.28 2.54.72-1.21-3-1.78V7z" />
-            </svg>
-            <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 fill-current">
-              <circle cx="5" cy="12" r="2" />
-              <circle cx="12" cy="12" r="2" />
-              <circle cx="19" cy="12" r="2" />
-            </svg>
-            <span className="ml-auto hidden text-xs sm:inline">1-6 of 214</span>
-          </div>
+        <div className="min-w-0">
           {inboxEmails.map((e) => (
             <div
-              key={e.subject}
+              key={`${e.sender}-${e.time}`}
               className="flex items-center gap-3 border-b border-[#e8eaed] px-4 py-2.5 last:border-b-0 hover:z-10 hover:shadow-[0_1px_3px_rgba(0,0,0,0.15)]"
             >
               <span className="h-[18px] w-[18px] shrink-0 rounded-sm border-2 border-[#5f6368]/40" />
