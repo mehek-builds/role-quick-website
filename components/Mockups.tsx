@@ -150,7 +150,6 @@ function buildInboxEmail(entry: (typeof inboxCompanies)[number], time: string, i
     time,
     unread: i < 8,
     starred: i === 2 || i === 11,
-    tag: i % 4 === 0 ? "Sent via Role Quick" : undefined,
   };
 }
 
@@ -269,11 +268,12 @@ export function InboxMockup() {
                 </span>
                 <span className="text-[#5f6368]"> - {e.snippet}</span>
               </span>
-              {e.tag && (
-                <span className="hidden shrink-0 rounded-full bg-positive/10 px-2 py-0.5 text-[10px] font-medium text-positive md:inline-block">
-                  {e.tag}
-                </span>
-              )}
+              <span
+                title="Sent via Role Quick"
+                className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white"
+              >
+                R
+              </span>
               <span
                 className={`shrink-0 text-[12px] ${e.unread ? "font-bold text-[#202124]" : "text-[#5f6368]"}`}
               >
@@ -281,6 +281,12 @@ export function InboxMockup() {
               </span>
             </div>
           ))}
+        </div>
+        <div className="flex items-center justify-center gap-2 border-t border-[#e8eaed] py-2.5 text-[11px] text-[#5f6368]">
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white">
+            R
+          </span>
+          every one of these sent through Role Quick
         </div>
       </div>
     </div>
