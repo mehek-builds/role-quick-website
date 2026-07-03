@@ -2,10 +2,11 @@ import { Header } from "@/components/Header";
 import {
   ContactListMockup,
   DraftMockup,
-  ResumeMockup,
   ApplicationFormMockup,
   AtsChips,
   InboxMockup,
+  ResumeFormatDemo,
+  ResumeMatchDemo,
 } from "@/components/Mockups";
 
 const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published
@@ -125,21 +126,32 @@ export default function Home() {
 
         {/* Feature row A: resume */}
         <section className="mx-auto max-w-6xl px-6 py-24">
-          <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-                Tailor your resume
-              </p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
-                A resume tuned to this exact posting
-              </h2>
-              <ul className="mt-6 space-y-3">
-                <Check>Built from your full experience bank, every role, project, and bullet variant you've ever written</Check>
-                <Check>Claude selects and lightly rewrites the best-fit subset for this JD's real keywords</Check>
-                <Check>Editable PDF, never locked, review it before it goes anywhere</Check>
-              </ul>
-            </div>
-            <ResumeMockup />
+          <div className="mx-auto max-w-2xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
+              Tailor your resume
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+              A resume tuned to this exact posting
+            </h2>
+            <ul className="mt-6 space-y-3 text-left">
+              <Check>Built from your full experience bank, every role, project, and bullet variant you've ever written</Check>
+              <Check>Claude selects and lightly rewrites the best-fit subset for this JD's real keywords</Check>
+              <Check>Editable PDF, never locked, review it before it goes anywhere</Check>
+            </ul>
+          </div>
+
+          <div className="mt-16">
+            <p className="mb-6 text-center text-sm font-medium text-muted">
+              From a messy pasted resume to Role Quick&apos;s format
+            </p>
+            <ResumeFormatDemo />
+          </div>
+
+          <div className="mt-16">
+            <p className="mb-6 text-center text-sm font-medium text-muted">
+              Optimized and ATS-matched to every job description you open
+            </p>
+            <ResumeMatchDemo />
           </div>
         </section>
 

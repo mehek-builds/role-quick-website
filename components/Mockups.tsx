@@ -372,6 +372,206 @@ export function ApplicationFormMockup() {
   );
 }
 
+function ArrowDivider() {
+  return (
+    <div className="flex shrink-0 items-center justify-center py-2 sm:px-2 sm:py-0">
+      <svg
+        viewBox="0 0 24 24"
+        className="h-6 w-6 rotate-90 fill-none stroke-faint sm:rotate-0"
+        strokeWidth={1.8}
+      >
+        <path d="M4 12h15" strokeLinecap="round" />
+        <path d="M13 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  );
+}
+
+export function MessyResumeMockup() {
+  return (
+    <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
+      <div className="flex items-center justify-between px-3 py-2">
+        <span className="rounded-full bg-danger/10 px-2.5 py-0.5 text-[10px] font-medium text-danger">
+          Before
+        </span>
+        <span className="text-[10px] text-faint">alex_resume_FINAL_v3.docx</span>
+      </div>
+      <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-serif text-[11px] leading-5 text-muted">
+        <p className="font-bold text-ink">ALEX RIVERA</p>
+        <p className="text-[10px]">alex.r99@email.com | 213-555-0148 | LA</p>
+        <p className="mt-3 underline">work experience</p>
+        <p className="mt-1">
+          Acme Inc - Software eng intern (summer) did backend stuff and
+          helped with some apis and databases, also worked on a dashboard
+          thing for the team.
+        </p>
+        <p className="mt-2">
+          * Freelance - built websites for a few small clients using
+          different tools, fixed bugs, deployed sites
+        </p>
+        <p className="mt-3 underline">skills</p>
+        <p className="mt-1">python, some react, sql i guess, java (old), css</p>
+        <p className="mt-3 underline">EDUCATION</p>
+        <p className="mt-1">State University, computer science, graduating soon</p>
+      </div>
+    </div>
+  );
+}
+
+export function CleanResumeMockup() {
+  return (
+    <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
+      <div className="flex items-center justify-between px-3 py-2">
+        <span className="rounded-full bg-positive/10 px-2.5 py-0.5 text-[10px] font-medium text-positive">
+          After, Role Quick format
+        </span>
+      </div>
+      <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
+        <p className="text-sm font-semibold text-ink">Alex Rivera</p>
+        <p className="text-[11px] text-faint">alex.rivera@usc.edu · (213) 555-0148 · Los Angeles</p>
+        <div className="mt-3 h-px w-full bg-border" />
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
+          Experience
+        </p>
+        <div className="mt-2 space-y-2 text-[10px] leading-4 text-muted">
+          <p>Software Engineer Intern, Acme Inc</p>
+          <p>Freelance Web Developer, Self-employed</p>
+        </div>
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
+          Skills
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {["Python", "React", "SQL", "AWS"].map((s) => (
+            <span
+              key={s}
+              className="rounded-full bg-brand-soft px-2 py-0.5 text-[9px] font-medium text-brand-ink"
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
+          Education
+        </p>
+        <p className="mt-2 text-[10px] text-muted">
+          B.S. Computer Science, State University
+        </p>
+      </div>
+    </div>
+  );
+}
+
+export function ResumeFormatDemo() {
+  return (
+    <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-stretch sm:justify-center">
+      <MessyResumeMockup />
+      <ArrowDivider />
+      <CleanResumeMockup />
+    </div>
+  );
+}
+
+const jdKeywords = ["Python", "distributed systems", "REST APIs", "AWS", "CI/CD"];
+
+function HighlightedJdText() {
+  const text =
+    "We're looking for a Software Engineer Intern to help build distributed systems that power our platform. You'll work on REST APIs, ship through our CI/CD pipeline, and deploy on AWS. Strong Python fundamentals required.";
+  const pattern = new RegExp(`(${jdKeywords.join("|")})`, "gi");
+  const parts = text.split(pattern);
+  return (
+    <p className="leading-6 text-muted">
+      {parts.map((part, i) =>
+        jdKeywords.some((k) => k.toLowerCase() === part.toLowerCase()) ? (
+          <span key={i} className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
+            {part}
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </p>
+  );
+}
+
+export function JobDescriptionMockup() {
+  return (
+    <div className="sm:w-[320px]">
+      <Frame>
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Job description · Northline
+        </p>
+        <p className="mt-2 text-sm font-semibold text-ink">Software Engineer Intern</p>
+        <div className="mt-3 text-[13px]">
+          <HighlightedJdText />
+        </div>
+      </Frame>
+    </div>
+  );
+}
+
+export function TailoredResumeMockup() {
+  return (
+    <div className="sm:w-[320px]">
+      <Frame>
+      <div className="flex flex-col gap-1.5">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Tailored for this role
+        </p>
+        <span className="w-fit rounded-full bg-positive/10 px-2.5 py-0.5 text-[11px] font-medium text-positive">
+          5/5 keywords matched
+        </span>
+      </div>
+      <div className="mx-auto mt-4 max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
+        <p className="text-sm font-semibold text-ink">Alex Rivera</p>
+        <p className="text-[11px] text-faint">Software Engineer, New Grad</p>
+        <div className="mt-3 h-px w-full bg-border" />
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
+          Experience
+        </p>
+        <p className="mt-2 text-[10px] leading-4 text-muted">
+          Built and shipped{" "}
+          <span className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
+            REST APIs
+          </span>{" "}
+          for internal tools; deployed services on{" "}
+          <span className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
+            AWS
+          </span>{" "}
+          through a{" "}
+          <span className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
+            CI/CD
+          </span>{" "}
+          pipeline.
+        </p>
+        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
+          Skills
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {["Python", "Distributed systems", "AWS", "SQL"].map((s) => (
+            <span
+              key={s}
+              className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[9px] font-medium text-brand-ink"
+            >
+              ✓ {s}
+            </span>
+          ))}
+        </div>
+      </div>
+      </Frame>
+    </div>
+  );
+}
+
+export function ResumeMatchDemo() {
+  return (
+    <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-start sm:justify-center">
+      <JobDescriptionMockup />
+      <ArrowDivider />
+      <TailoredResumeMockup />
+    </div>
+  );
+}
+
 export function ResumeMockup() {
   return (
     <Frame>
