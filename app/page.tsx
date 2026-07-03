@@ -1,4 +1,7 @@
-const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published under this name
+import { Header } from "@/components/Header";
+import { ContactListMockup, DraftMockup, ResumeMockup } from "@/components/Mockups";
+
+const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published
 
 const steps = [
   {
@@ -9,17 +12,17 @@ const steps = [
   {
     n: "02",
     title: "See the right humans",
-    body: "Alumni from your school, near-peers, hiring managers, recruiters, ranked by who actually replies. Each with a confidence tier, never a guess dressed up as certain.",
+    body: "Alumni from your school, near-peers, hiring managers, recruiters, ranked by who actually replies.",
   },
   {
     n: "03",
     title: "Get a draft that sounds like you",
-    body: "One sentence of real context, a hook grounded in your resume, one clear ask. 100-140 words, not a template.",
+    body: "One sentence of real context, a hook grounded in your resume, one clear ask. 100-140 words.",
   },
   {
     n: "04",
     title: "Review, then send",
-    body: "It lands as a Gmail draft in your own account. You read it, you send it. Nothing goes out without you.",
+    body: "It lands as a Gmail draft in your own account. You read it, you send it.",
   },
 ];
 
@@ -30,7 +33,7 @@ const principles = [
   },
   {
     title: "Alumni first",
-    body: "A shared school is the single highest-converting opener in cold outreach. Role Quick surfaces your school's alumni at the company before anyone else.",
+    body: "A shared school is the single highest-converting opener in cold outreach. Role Quick surfaces your school's alumni before anyone else.",
   },
   {
     title: "You send, always",
@@ -38,182 +41,243 @@ const principles = [
   },
 ];
 
+function Check({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-start gap-3 text-sm text-muted">
+      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand-ink">
+        ✓
+      </span>
+      {children}
+    </li>
+  );
+}
+
 export default function Home() {
   return (
     <div className="flex flex-col flex-1">
-      <header className="w-full border-b border-white/10">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <span className="text-sm font-semibold tracking-tight text-white">
-            Role Quick
-          </span>
-          <a
-            href={STORE_URL}
-            className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-neutral-200 transition-colors hover:border-white/30 hover:text-white"
-          >
-            Add to Chrome
-          </a>
-        </div>
-      </header>
+      <Header />
 
       <main className="flex-1">
         {/* Hero */}
-        <section className="mx-auto max-w-5xl px-6 pb-20 pt-24 text-center sm:pt-32">
-          <p className="mx-auto mb-6 w-fit rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-neutral-400">
+        <section className="mx-auto max-w-3xl px-6 pb-4 pt-20 text-center sm:pt-28">
+          <p className="mx-auto mb-6 w-fit rounded-full border border-border bg-surface-alt px-3 py-1 text-xs text-muted">
             A Chrome extension for job hunting the way that actually works
           </p>
-          <h1 className="mx-auto max-w-3xl text-4xl font-semibold leading-tight tracking-tight text-white sm:text-6xl sm:leading-tight">
+          <h1 className="text-4xl font-semibold leading-tight tracking-tight text-ink sm:text-6xl sm:leading-tight">
             Stop applying into the void.
             <br />
             Email the right person instead.
           </h1>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-neutral-400">
+          <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-muted">
             Role Quick finds the recruiters, hiring managers, and alumni behind
             any job posting, then drafts a short, personalized email grounded
-            in your resume. It lands in your Gmail drafts in under a minute.
+            in your resume. Into your Gmail drafts in under a minute.
           </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <a
               href={STORE_URL}
-              className="w-full rounded-full bg-white px-6 py-3 text-sm font-medium text-neutral-950 transition-colors hover:bg-neutral-200 sm:w-auto"
+              className="w-full rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
             >
-              Add to Chrome — it's free
+              Add to Chrome — it&apos;s free
             </a>
             <a
               href="#how-it-works"
-              className="w-full rounded-full border border-white/15 px-6 py-3 text-sm font-medium text-neutral-200 transition-colors hover:border-white/30 hover:text-white sm:w-auto"
+              className="w-full rounded-full border border-border px-6 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
             >
               See how it works
             </a>
           </div>
-          <p className="mt-5 text-xs text-neutral-500">
+          <p className="mt-4 text-xs text-faint">
             No credit card. 25-40 verified contacts a month, free, forever.
           </p>
         </section>
 
-        {/* Problem */}
-        <section className="border-y border-white/10 bg-white/[0.02]">
-          <div className="mx-auto max-w-5xl px-6 py-16 text-center">
-            <p className="mx-auto max-w-2xl text-xl leading-relaxed text-neutral-300 sm:text-2xl">
+        {/* Product mockup */}
+        <section id="product" className="mx-auto max-w-lg px-6 pb-24 pt-12">
+          <ContactListMockup />
+        </section>
+
+        {/* Trust strip */}
+        <section className="border-y border-border bg-surface-alt">
+          <div className="mx-auto max-w-4xl px-6 py-14 text-center">
+            <p className="mx-auto max-w-2xl text-xl leading-relaxed text-ink sm:text-2xl">
               The average corporate role gets{" "}
-              <span className="text-white">257 applications</span>. Over half
-              of employers <span className="text-white">never respond</span>{" "}
-              at all. The students who get interviews aren&apos;t applying
-              more, they&apos;re reaching the right person directly.
+              <span className="font-semibold">257 applications</span>. Over
+              half of employers <span className="font-semibold">never respond</span>.
+              The students who get interviews aren&apos;t applying more,
+              they&apos;re reaching the right person directly.
             </p>
           </div>
         </section>
 
-        {/* How it works */}
-        <section id="how-it-works" className="mx-auto max-w-5xl px-6 py-24">
-          <h2 className="text-center text-3xl font-semibold tracking-tight text-white">
-            From job posting to sent email, in four steps
-          </h2>
-          <div className="mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2">
-            {steps.map((step) => (
-              <div key={step.n} className="flex gap-5">
-                <span className="text-2xl font-semibold text-neutral-600">
-                  {step.n}
-                </span>
-                <div>
-                  <h3 className="text-lg font-medium text-white">
-                    {step.title}
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-neutral-400">
-                    {step.body}
-                  </p>
-                </div>
-              </div>
-            ))}
+        {/* Feature row A: contacts */}
+        <section className="mx-auto max-w-6xl px-6 py-24">
+          <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
+                Find the humans
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+                See who actually reads applications
+              </h2>
+              <ul className="mt-6 space-y-3">
+                <Check>School alumni surfaced first, the highest-reply persona</Check>
+                <Check>A confidence tier on every contact, never a hidden guess</Check>
+                <Check>Recruiters, hiring managers, and team members, ranked by reply rate</Check>
+              </ul>
+            </div>
+            <ContactListMockup />
           </div>
         </section>
 
-        {/* Principles */}
-        <section className="border-t border-white/10 bg-white/[0.02]">
+        {/* Feature row B: draft */}
+        <section className="border-y border-border bg-surface-alt">
+          <div className="mx-auto max-w-6xl px-6 py-24">
+            <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+              <div className="order-2 sm:order-1">
+                <DraftMockup />
+              </div>
+              <div className="order-1 sm:order-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
+                  Draft it for you
+                </p>
+                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+                  A draft that sounds like you, not a template
+                </h2>
+                <ul className="mt-6 space-y-3">
+                  <Check>Grounded in your actual resume, not generic filler</Check>
+                  <Check>100-140 words, one clear ask, no AI throat-clearing</Check>
+                  <Check>Ready to review and send from your own Gmail</Check>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Feature row C: resume */}
+        <section className="mx-auto max-w-6xl px-6 py-24">
+          <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
+                Tailor your resume
+              </p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
+                A resume tuned to the posting, in seconds
+              </h2>
+              <ul className="mt-6 space-y-3">
+                <Check>Pulls the role&apos;s real keywords into your existing resume</Check>
+                <Check>Fills the application form for you, you review before submit</Check>
+                <Check>Works across Lever, Greenhouse, Ashby, LinkedIn, and Workday</Check>
+              </ul>
+            </div>
+            <ResumeMockup />
+          </div>
+        </section>
+
+        {/* How it works */}
+        <section id="how-it-works" className="border-t border-border bg-surface-alt">
           <div className="mx-auto max-w-5xl px-6 py-24">
-            <h2 className="text-center text-3xl font-semibold tracking-tight text-white">
-              Built to be trusted, not just used once
+            <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
+              From job posting to sent email, in four steps
             </h2>
-            <div className="mt-14 grid grid-cols-1 gap-8 sm:grid-cols-3">
-              {principles.map((p) => (
-                <div
-                  key={p.title}
-                  className="rounded-2xl border border-white/10 p-6"
-                >
-                  <h3 className="text-base font-medium text-white">
-                    {p.title}
-                  </h3>
-                  <p className="mt-3 text-sm leading-6 text-neutral-400">
-                    {p.body}
-                  </p>
+            <div className="mt-14 grid grid-cols-1 gap-10 sm:grid-cols-2">
+              {steps.map((step) => (
+                <div key={step.n} className="flex gap-5">
+                  <span className="text-2xl font-semibold text-faint">
+                    {step.n}
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-medium text-ink">
+                      {step.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-muted">
+                      {step.body}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        {/* Pricing */}
-        <section id="pricing" className="mx-auto max-w-5xl px-6 py-24">
-          <h2 className="text-center text-3xl font-semibold tracking-tight text-white">
-            Free to find. Pay only if you outreach a lot.
+        {/* Principles */}
+        <section className="mx-auto max-w-5xl px-6 py-24">
+          <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
+            Built to be trusted, not just used once
           </h2>
-          <div className="mt-14 grid grid-cols-1 gap-8 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 p-8">
-              <h3 className="text-sm font-medium uppercase tracking-wide text-neutral-400">
-                Free
-              </h3>
-              <p className="mt-3 text-4xl font-semibold text-white">$0</p>
-              <ul className="mt-6 space-y-3 text-sm text-neutral-400">
-                <li>7 days of full access to start</li>
-                <li>25-40 verified contacts + drafts / month after</li>
-                <li>Alumni, recruiter, and hiring-manager discovery</li>
-                <li>Resume-grounded draft generation</li>
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-white/20 bg-white/[0.03] p-8">
-              <h3 className="text-sm font-medium uppercase tracking-wide text-neutral-300">
-                Unlimited
-              </h3>
-              <p className="mt-3 text-4xl font-semibold text-white">
-                $19.99
-                <span className="text-base font-normal text-neutral-500">
-                  {" "}
-                  / mo
-                </span>
-              </p>
-              <ul className="mt-6 space-y-3 text-sm text-neutral-300">
-                <li>Everything in Free, uncapped</li>
-                <li>Bulk outreach across roles</li>
-                <li>Automated follow-up drafts</li>
-                <li>Deeper alumni-graph targeting</li>
-              </ul>
+          <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-3">
+            {principles.map((p) => (
+              <div
+                key={p.title}
+                className="rounded-[20px] border border-border bg-surface p-6"
+              >
+                <h3 className="text-base font-medium text-ink">{p.title}</h3>
+                <p className="mt-3 text-sm leading-6 text-muted">{p.body}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Pricing */}
+        <section id="pricing" className="border-t border-border bg-surface-alt">
+          <div className="mx-auto max-w-4xl px-6 py-24">
+            <h2 className="text-center text-3xl font-semibold tracking-tight text-ink">
+              Free to find. Pay only if you outreach a lot.
+            </h2>
+            <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div className="rounded-[20px] border border-border bg-surface p-8">
+                <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-faint">
+                  Free
+                </h3>
+                <p className="mt-3 text-4xl font-semibold text-ink">$0</p>
+                <ul className="mt-6 space-y-3">
+                  <Check>7 days of full access to start</Check>
+                  <Check>25-40 verified contacts + drafts / month after</Check>
+                  <Check>Alumni, recruiter, and hiring-manager discovery</Check>
+                  <Check>Resume-grounded draft generation</Check>
+                </ul>
+              </div>
+              <div className="rounded-[20px] border-2 border-brand bg-surface p-8">
+                <h3 className="text-sm font-medium uppercase tracking-[0.08em] text-brand-ink">
+                  Unlimited
+                </h3>
+                <p className="mt-3 text-4xl font-semibold text-ink">
+                  $19.99
+                  <span className="text-base font-normal text-faint"> / mo</span>
+                </p>
+                <ul className="mt-6 space-y-3">
+                  <Check>Everything in Free, uncapped</Check>
+                  <Check>Bulk outreach across roles</Check>
+                  <Check>Automated follow-up drafts</Check>
+                  <Check>Deeper alumni-graph targeting</Check>
+                </ul>
+              </div>
             </div>
           </div>
         </section>
 
         {/* CTA */}
-        <section className="border-t border-white/10 bg-white/[0.02]">
-          <div className="mx-auto max-w-3xl px-6 py-24 text-center">
-            <h2 className="text-3xl font-semibold tracking-tight text-white">
-              Your next reply is one email away.
-            </h2>
-            <a
-              href={STORE_URL}
-              className="mt-8 inline-block rounded-full bg-white px-6 py-3 text-sm font-medium text-neutral-950 transition-colors hover:bg-neutral-200"
-            >
-              Add to Chrome — it's free
-            </a>
-          </div>
+        <section className="mx-auto max-w-3xl px-6 py-24 text-center">
+          <h2 className="text-3xl font-semibold tracking-tight text-ink">
+            Your next reply is one email away.
+          </h2>
+          <a
+            href={STORE_URL}
+            className="mt-8 inline-block rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Add to Chrome — it&apos;s free
+          </a>
         </section>
       </main>
 
-      <footer className="border-t border-white/10">
-        <div className="mx-auto flex max-w-5xl flex-col items-center justify-between gap-4 px-6 py-8 text-xs text-neutral-500 sm:flex-row">
+      <footer className="border-t border-border">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-xs text-faint sm:flex-row">
           <span>&copy; {new Date().getFullYear()} Role Quick</span>
           <div className="flex gap-6">
-            <a href="/privacy" className="hover:text-neutral-300">
+            <a href="/privacy" className="hover:text-muted">
               Privacy
             </a>
-            <a href="mailto:mehekman@usc.edu" className="hover:text-neutral-300">
+            <a href="mailto:mehekman@usc.edu" className="hover:text-muted">
               Contact
             </a>
           </div>

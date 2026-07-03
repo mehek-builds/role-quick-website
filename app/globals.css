@@ -1,26 +1,55 @@
 @import "tailwindcss";
 
+/* Design tokens: light, editorial, generous whitespace — same structural
+   family as Letterstory's console (white canvas, near-black ink, warm
+   off-white surfaces, hairline borders) with Role Quick's own accent.
+   Change here to re-theme everything. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-alt: #faf9f7; /* warm off-white for section striping */
+  --color-border: #e8e6e1; /* hairline */
+
+  --color-ink: #12120f; /* primary text */
+  --color-muted: #6b6a64; /* secondary text */
+  --color-faint: #a3a19a; /* tertiary / placeholders */
+
+  --color-brand: #2b4bf2; /* Role Quick blue — the signature mark */
+  --color-brand-ink: #1c33b0; /* darker, for text-on-light use */
+  --color-brand-soft: #eef1fe; /* tint for badges/backgrounds */
+
+  --color-positive: #15803d;
+  --color-warn: #b45309;
+  --color-danger: #b91c1c;
+
+  --radius-card: 20px;
+  --radius-control: 999px;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-alt: var(--color-surface-alt);
+  --color-border: var(--color-border);
+  --color-ink: var(--color-ink);
+  --color-muted: var(--color-muted);
+  --color-faint: var(--color-faint);
+  --color-brand: var(--color-brand);
+  --color-brand-ink: var(--color-brand-ink);
+  --color-brand-soft: var(--color-brand-soft);
+  --color-positive: var(--color-positive);
+  --color-warn: var(--color-warn);
+  --color-danger: var(--color-danger);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }

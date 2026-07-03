@@ -5,12 +5,12 @@ export const metadata = {
 export default function Privacy() {
   return (
     <div className="mx-auto max-w-2xl px-6 py-24">
-      <h1 className="text-3xl font-semibold tracking-tight text-white">
+      <h1 className="text-3xl font-semibold tracking-tight text-ink">
         Privacy Policy
       </h1>
-      <p className="mt-4 text-sm text-neutral-500">Draft — placeholder pending v0 launch.</p>
+      <p className="mt-4 text-sm text-faint">Draft, placeholder pending v0 launch.</p>
 
-      <div className="mt-10 space-y-6 text-sm leading-6 text-neutral-400">
+      <div className="mt-10 space-y-6 text-sm leading-6 text-muted">
         <p>
           Role Quick is a Chrome extension that helps you find contacts for a
           job posting and drafts a personalized email. This page will be
@@ -28,7 +28,7 @@ export default function Privacy() {
         </p>
         <p>
           Questions in the meantime:{" "}
-          <a href="mailto:mehekman@usc.edu" className="text-neutral-200 underline">
+          <a href="mailto:mehekman@usc.edu" className="text-ink underline">
             mehekman@usc.edu
           </a>
           .
