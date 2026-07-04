@@ -83,11 +83,12 @@ export default function Home() {
                 <CountUp to={250} />
               </p>
               <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
-                applications per corporate role. We do the repetitive part.
+                apply to the average corporate role. Six get interviews. One
+                gets the job. We make yours the tailored one.
               </p>
               <ApplicantField />
               <p className="mt-10 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
-                Source: Glassdoor research
+                Source: Glassdoor
               </p>
             </Reveal>
           </div>
