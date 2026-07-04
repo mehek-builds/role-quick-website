@@ -713,10 +713,7 @@ export function ResumeFormatDemo() {
 const MATCH_STYLES: Record<string, string> = {
   python: "bg-brand-soft text-brand-ink",
   distributed: "bg-teal-soft text-teal-ink",
-  apis: "bg-coral-soft text-coral-ink",
-  cicd: "bg-warn-soft text-warn",
-  aws: "bg-positive-soft text-positive",
-  own: "bg-surface-alt text-ink",
+  own: "bg-coral-soft text-coral-ink",
 };
 
 function M({ k, children }: { k: keyof typeof MATCH_STYLES; children: React.ReactNode }) {
@@ -728,9 +725,6 @@ function M({ k, children }: { k: keyof typeof MATCH_STYLES; children: React.Reac
 const MATCH_LEGEND: { k: keyof typeof MATCH_STYLES; label: string }[] = [
   { k: "python", label: "Python" },
   { k: "distributed", label: "Distributed systems" },
-  { k: "apis", label: "REST APIs" },
-  { k: "cicd", label: "CI/CD" },
-  { k: "aws", label: "AWS" },
   { k: "own", label: "Ownership" },
 ];
 
@@ -759,11 +753,11 @@ export function JobDescriptionMockup() {
         <ul className="mt-1.5 space-y-1 text-[12px] leading-5 text-muted">
           <li>· Design and ship backend services with the platform team</li>
           <li>
-            · Build <M k="apis">REST APIs</M> in <M k="python">Python</M>{" "}
+            · Build REST APIs in <M k="python">Python</M>{" "}
             alongside senior engineers
           </li>
           <li>
-            · Deploy on <M k="aws">AWS</M> through our <M k="cicd">CI/CD</M>{" "}
+            · Deploy on AWS through our CI/CD{" "}
             pipeline
           </li>
           <li>
@@ -813,11 +807,11 @@ export function TailoredResumeMockup() {
         <CSec title="Experience" />
         <CRow left="Software Engineer Intern, Acme Inc" right="May – Aug 2026" />
         <CBul>
-          Built 4 <M k="apis">REST APIs</M> in <M k="python">Python</M> serving
+          Built 4 REST APIs in <M k="python">Python</M> serving
           40K requests/day; cut p95 latency 30%
         </CBul>
         <CBul>
-          Deployed on <M k="aws">AWS</M> through a <M k="cicd">CI/CD</M>{" "}
+          Deployed on AWS through a CI/CD{" "}
           pipeline; cut release time 60%
         </CBul>
         <CBul>
@@ -826,7 +820,7 @@ export function TailoredResumeMockup() {
         </CBul>
 
         <CRow left="Freelance Web Developer, Self-employed" right="2024 – 2026" />
-        <CBul>Shipped 6 production sites; automated <M k="aws">AWS</M> deploys with zero downtime</CBul>
+        <CBul>Shipped 6 production sites; automated AWS deploys with zero downtime</CBul>
         <CBul>Maintained tested, reviewed code across 6 client stacks; zero shipped regressions</CBul>
         <CBul>Cut average page load 45% by profiling and rewriting render paths</CBul>
 
@@ -840,7 +834,7 @@ export function TailoredResumeMockup() {
           student users in one semester
         </CBul>
         <CBul>
-          Shipped auth, listings search, and checkout on <M k="aws">AWS</M>;
+          Shipped auth, listings search, and checkout on AWS;
           99.9% uptime
         </CBul>
 
@@ -850,8 +844,8 @@ export function TailoredResumeMockup() {
 
         <CSec title="Skills" />
         <p className="mt-0.5 text-[7px] leading-[1.6] text-muted">
-          <M k="python">Python</M>, <M k="apis">REST APIs</M>,{" "}
-          <M k="aws">AWS</M>, <M k="cicd">CI/CD</M>,{" "}
+          <M k="python">Python</M>, REST APIs,{" "}
+          AWS, CI/CD,{" "}
           <M k="distributed">distributed systems</M>, SQL, React, TypeScript,
           Git, Docker
         </p>
