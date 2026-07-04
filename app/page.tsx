@@ -5,6 +5,7 @@ import {
   ResumeMatchDemo,
 } from "@/components/Mockups";
 import { OutreachDemo } from "@/components/OutreachDemo";
+import { ApplicantField } from "@/components/ApplicantField";
 import { HeroBackdrop } from "@/components/HeroBackdrop";
 import { Reveal, CountUp } from "@/components/Motion";
 import { PacketDemo } from "@/components/PacketDemo";
@@ -84,7 +85,8 @@ export default function Home() {
               <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
                 applications per corporate role. We do the repetitive part.
               </p>
-              <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+              <ApplicantField />
+              <p className="mt-10 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
                 Source: Glassdoor research
               </p>
             </Reveal>
