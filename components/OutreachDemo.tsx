@@ -57,8 +57,8 @@ const CONTACTS: Contact[] = [
 ];
 
 const TIER_STYLES: Record<Contact["tier"], string> = {
-  Verified: "bg-positive/10 text-positive",
-  Likely: "bg-warn/10 text-warn",
+  Verified: "bg-positive-soft text-positive",
+  Likely: "bg-warn-soft text-warn",
   LinkedIn: "bg-brand-soft text-brand-ink",
 };
 

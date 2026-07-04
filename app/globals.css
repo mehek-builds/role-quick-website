@@ -18,7 +18,7 @@
   --color-faint: #a3a19a; /* tertiary / placeholders */
 
   --color-brand: #6b84e8; /* RoleQuick signature blue */
-  --color-brand-ink: #4257b8; /* darker, for text-on-light use */
+  --color-brand-ink: #3d51ad; /* darker, for text-on-light use */
   --color-brand-soft: #eef1fe; /* tint for badges/backgrounds */
 
   --color-coral: #dd9273; /* outreach / email pillar */
@@ -26,12 +26,15 @@
   --color-coral-soft: #fbefe8;
 
   --color-teal: #68ad95; /* form-fill / autofill pillar */
-  --color-teal-ink: #457f6c;
+  --color-teal-ink: #3f7d67;
   --color-teal-soft: #eaf5f0;
 
   --color-positive: #15803d;
+  --color-positive-soft: #eaf6ee;
   --color-warn: #b45309;
+  --color-warn-soft: #fdf3e7;
   --color-danger: #b91c1c;
+  --color-danger-soft: #fbeaea;
 
   --radius-card: 20px;
   --radius-control: 999px;
@@ -55,8 +58,11 @@
   --color-teal-ink: var(--color-teal-ink);
   --color-teal-soft: var(--color-teal-soft);
   --color-positive: var(--color-positive);
+  --color-positive-soft: var(--color-positive-soft);
   --color-warn: var(--color-warn);
+  --color-warn-soft: var(--color-warn-soft);
   --color-danger: var(--color-danger);
+  --color-danger-soft: var(--color-danger-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -67,6 +73,18 @@ body {
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Focus ring, per brand deck section 04: 2px blue outline, offset 2px, on
+   every interactive element reached by keyboard. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
 
 /* Shimmer loading state, per brand deck section 07 (review view). Color never

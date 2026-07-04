@@ -1,7 +1,7 @@
 function TierBadge({ tier }: { tier: "Verified" | "Likely" | "LinkedIn" }) {
   const styles: Record<string, string> = {
-    Verified: "bg-positive/10 text-positive",
-    Likely: "bg-warn/10 text-warn",
+    Verified: "bg-positive-soft text-positive",
+    Likely: "bg-warn-soft text-warn",
     LinkedIn: "bg-brand-soft text-brand-ink",
   };
   return (
@@ -473,7 +473,7 @@ export function MessyResumeMockup() {
   return (
     <Paper
       chip="Before · skipped by ATS"
-      chipClass="bg-danger/10 text-danger"
+      chipClass="bg-danger-soft text-danger"
       note="alex_resume_FINAL_v3.docx"
     >
       <div className="font-serif text-[9.5px] leading-[1.55] text-muted">
@@ -560,7 +560,7 @@ export function CleanResumeMockup() {
   return (
     <Paper
       chip="After · ATS-ready"
-      chipClass="bg-positive/10 text-positive"
+      chipClass="bg-positive-soft text-positive"
       note="Alex_Rivera_Acme_Resume.pdf · 1 page"
     >
       <div className="font-sans">
@@ -706,7 +706,7 @@ export function TailoredResumeMockup() {
   return (
     <Paper
       chip="Tailored · 5/5 keywords placed"
-      chipClass="bg-positive/10 text-positive"
+      chipClass="bg-positive-soft text-positive"
       note="Alex_Rivera_Northline_Resume.pdf"
     >
       <div className="font-sans">

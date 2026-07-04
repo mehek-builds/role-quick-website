@@ -131,7 +131,7 @@ export default function Settings() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {savedAt && !saving && <span className="text-xs text-teal-ink">Saved</span>}
+            {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
             <button
               onClick={save}
               disabled={saving}

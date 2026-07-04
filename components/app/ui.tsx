@@ -19,17 +19,18 @@ export function Card({
 }
 
 const CHIP_STYLES: Record<string, string> = {
-  // review-flow statuses (deck 07): Draft -> Generating -> Ready -> Sent
+  // review-flow statuses (deck 07): Draft -> Generating -> Ready -> Sent.
+  // Status runs neutral-to-semantic; pillar color marks artifact type only.
   draft: "bg-surface-alt text-muted",
   generating: "bg-surface-alt text-muted",
+  drafted: "bg-surface-alt text-muted",
   ready: "bg-brand-soft text-brand-ink",
-  sent: "bg-teal-soft text-teal-ink",
-  replied: "bg-teal-soft text-teal-ink",
-  drafted: "bg-coral-soft text-coral-ink",
-  bounced: "bg-surface-alt text-danger",
-  // contact confidence tiers
-  verified: "bg-teal-soft text-teal-ink",
-  likely: "bg-brand-soft text-brand-ink",
+  sent: "bg-positive-soft text-positive",
+  replied: "bg-positive-soft text-positive",
+  bounced: "bg-danger-soft text-danger",
+  // contact confidence tiers (same scale as the marketing mockups)
+  verified: "bg-positive-soft text-positive",
+  likely: "bg-warn-soft text-warn",
   linkedin_only: "bg-surface-alt text-muted",
 };
 
@@ -137,7 +138,7 @@ export function EmptyState({
 
 export function ErrorNote({ message }: { message: string }) {
   return (
-    <p className="rounded-[12px] bg-surface-alt px-4 py-3 text-sm text-danger">
+    <p className="rounded-[12px] bg-danger-soft px-4 py-3 text-sm text-danger">
       {message}
     </p>
   );
