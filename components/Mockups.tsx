@@ -641,25 +641,39 @@ export function JobDescriptionMockup() {
         </p>
         <ul className="mt-1.5 space-y-1 text-[12px] leading-5 text-muted">
           <li>· Design and ship backend services with the platform team</li>
-          <li>· Own features end to end, from spec to production</li>
-          <li>· Write tested, reviewed, production-quality code</li>
+          <li>
+            · <Tl>Own features end to end</Tl>, from spec to production
+          </li>
+          <li>
+            · Write <Tl>tested, reviewed, production-quality code</Tl>
+          </li>
         </ul>
         <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           What we look for
         </p>
         <p className="mt-1.5 text-[12px] leading-5 text-muted">
-          CS fundamentals, ownership, and evidence you ship real things.
+          CS fundamentals, ownership, and <Tl>evidence you ship real things</Tl>.
         </p>
       </Frame>
     </div>
   );
 }
 
-/* Highlight = a JD keyword placed into the resume. Same tint as the JD side
-   so the eye can trace each keyword across the arrow. */
+/* Match highlights, two identities (legend rendered under the demo):
+   blue = a JD keyword placed verbatim; teal = a JD requirement met with
+   evidence. Same tints on both sides of the arrow so each match traces
+   across. Local to this demo; pillar meanings elsewhere are unchanged. */
 function Hl({ children }: { children: React.ReactNode }) {
   return (
     <span className="rounded bg-brand-soft px-0.5 font-medium text-brand-ink">
+      {children}
+    </span>
+  );
+}
+
+function Tl({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded bg-teal-soft px-0.5 font-medium text-teal-ink">
       {children}
     </span>
   );
@@ -677,35 +691,57 @@ export function TailoredResumeMockup() {
           Alex Rivera
         </p>
         <p className="mt-0.5 text-center text-[8px] text-muted">
-          alex.rivera@usc.edu · (213) 555-0148 · github.com/alexrivera
+          alex.rivera@usc.edu · (213) 555-0148 · linkedin.com/in/alexrivera · github.com/alexrivera
+        </p>
+
+        <PdfSection title="Education" />
+        <PdfRow left="University of Southern California" right="Los Angeles, CA" />
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[8px] text-muted">B.S. Computer Science, GPA 3.8</p>
+          <p className="shrink-0 text-[8px] text-muted">Expected May 2027</p>
+        </div>
+        <p className="mt-0.5 text-[8px] leading-[1.5] text-muted">
+          Coursework: Data Structures, <Hl>Distributed Systems</Hl>, Databases,
+          Operating Systems · Dean&apos;s List, 3 semesters
         </p>
 
         <PdfSection title="Experience" />
         <PdfRow left={<>Software Engineer Intern, Acme Inc</>} right="May – Aug 2026" />
         <PdfBullet>
-          Built <Hl>REST APIs</Hl> in <Hl>Python</Hl> serving 40K requests/day
-          across <Hl>distributed systems</Hl>
+          Built 4 <Hl>REST APIs</Hl> in <Hl>Python</Hl> serving 40K
+          requests/day across <Hl>distributed systems</Hl>
         </PdfBullet>
         <PdfBullet>
-          Deployed on <Hl>AWS</Hl> through a <Hl>CI/CD</Hl> pipeline; cut
-          release time 60%
+          Deployed on <Hl>AWS</Hl> through a <Hl>CI/CD</Hl> pipeline;{" "}
+          <Tl>cut release time 60%</Tl>
+        </PdfBullet>
+        <PdfBullet>
+          <Tl>Owned a team metrics dashboard end to end, spec to production</Tl>;
+          12 engineers use it weekly
         </PdfBullet>
 
         <PdfRow left={<>Freelance Web Developer, Self-employed</>} right="2024 – 2026" />
         <PdfBullet>
-          Shipped 6 production sites; automated <Hl>AWS</Hl> deploys with zero
-          downtime
+          <Tl>Shipped 6 production sites</Tl>; automated <Hl>AWS</Hl> deploys
+          with zero downtime
+        </PdfBullet>
+        <PdfBullet>
+          Maintained <Tl>tested, reviewed code</Tl> across client stacks; zero
+          shipped regressions
+        </PdfBullet>
+
+        <PdfSection title="Projects" />
+        <PdfRow left="TrojanMarket, open-source campus marketplace" right="2025" />
+        <PdfBullet>
+          Built with React, <Hl>Python</Hl>, and SQL; <Tl>grew to 800 student
+          users</Tl>
         </PdfBullet>
 
         <PdfSection title="Skills" />
         <p className="mt-1 text-[8px] leading-[1.6] text-muted">
           <Hl>Python</Hl>, <Hl>REST APIs</Hl>, <Hl>AWS</Hl>, <Hl>CI/CD</Hl>,{" "}
-          <Hl>distributed systems</Hl>, SQL, React, Git
+          <Hl>distributed systems</Hl>, SQL, React, TypeScript, Git, Docker
         </p>
-
-        <PdfSection title="Education" />
-        <PdfRow left="University of Southern California" right="May 2027" />
-        <p className="text-[8px] text-muted">B.S. Computer Science, GPA 3.8</p>
       </div>
     </Paper>
   );
@@ -716,9 +752,9 @@ export function BankStrip() {
   const entries = [
     { org: "Acme Inc", picked: true },
     { org: "Freelance", picked: true },
+    { org: "TrojanMarket", picked: true },
     { org: "Robotics Club", picked: false },
     { org: "Campus TA", picked: false },
-    { org: "Hackathons", picked: false },
     { org: "Coffee Shop Lead", picked: false },
   ];
   return (
@@ -727,7 +763,7 @@ export function BankStrip() {
         <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
           Your experience bank
         </span>
-        <span className="font-mono text-[10px] text-faint">2 of 6 entries picked for this JD</span>
+        <span className="font-mono text-[10px] text-faint">3 of 6 entries picked for this JD</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {entries.map((e) => (
@@ -755,6 +791,17 @@ export function ResumeMatchDemo() {
         <JobDescriptionMockup />
         <ArrowDivider />
         <TailoredResumeMockup />
+      </div>
+      {/* Legend: what each match color means, on both sides of the arrow. */}
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[10px] font-medium uppercase tracking-[0.08em]">
+        <span className="flex items-center gap-2 text-muted">
+          <span className="h-2.5 w-2.5 rounded-[3px] bg-brand-soft ring-1 ring-inset ring-brand/40" />
+          Keyword from the JD
+        </span>
+        <span className="flex items-center gap-2 text-muted">
+          <span className="h-2.5 w-2.5 rounded-[3px] bg-teal-soft ring-1 ring-inset ring-teal/40" />
+          Requirement, met with evidence
+        </span>
       </div>
       <BankStrip />
     </div>
