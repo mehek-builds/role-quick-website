@@ -23,11 +23,6 @@ const INBOX = [
   { from: "Lumen Analytics", subject: "Application received: Business Analyst Intern", time: "11:52 AM", unread: false },
   { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Parallax Systems was sent", time: "11:51 AM", unread: true },
   { from: "Solace Biotech", subject: "Application received: Research Intern", time: "11:50 AM", unread: false },
-  { from: "Meridian Capital", subject: "Meridian Capital: application received", time: "11:49 AM", unread: false },
-  { from: "Driftwood Media", subject: "We've received your application", time: "11:48 AM", unread: true },
-  { from: "Anchorpoint Labs", subject: "Your application to Anchorpoint has been received", time: "11:47 AM", unread: false },
-  { from: "LinkedIn", subject: "Your application to Mechanical Engineer Intern at Cascade Robotics was sent", time: "11:46 AM", unread: false },
-  { from: "Nimbus Cloud", subject: "Application received and in review", time: "11:45 AM", unread: true },
 ];
 
 export function HeroBackdrop() {
@@ -81,18 +76,17 @@ export function HeroBackdrop() {
     <div ref={wrapRef} aria-hidden className="absolute inset-0 -z-10 overflow-hidden">
       {/* 1. The inbox, as texture — fades out before the demo below */}
       <div
-        className="absolute inset-x-0 top-0 opacity-[0.45]"
+        className="absolute inset-x-0 top-0 opacity-[0.32]"
         style={{
-          maskImage: "linear-gradient(to bottom, black 30%, transparent 92%)",
-          WebkitMaskImage: "linear-gradient(to bottom, black 30%, transparent 92%)",
+          maskImage: "linear-gradient(to bottom, black 25%, transparent 90%)",
+          WebkitMaskImage: "linear-gradient(to bottom, black 25%, transparent 90%)",
         }}
       >
         {INBOX.map((m) => (
           <div
             key={m.time}
-            className="flex items-center gap-4 border-b border-border/50 px-6 py-2.5 sm:px-10"
+            className="flex items-center gap-4 border-b border-border/50 px-6 py-3 sm:px-10"
           >
-            <span className="hidden text-[13px] text-faint sm:block">☆</span>
             <span
               className={`w-32 shrink-0 truncate text-[12px] sm:w-44 ${
                 m.unread ? "font-semibold text-muted" : "text-faint"

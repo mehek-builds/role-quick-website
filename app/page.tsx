@@ -15,8 +15,6 @@ import { STORE_URL } from "@/lib/config";
    works, tonal pillar bands, motion that settles rather than loops (the
    receipt is the one looping element). */
 
-const ATS_NAMES = ["Lever", "Greenhouse", "Ashby", "Workday", "LinkedIn"];
-
 function PillarLabel({
   children,
   thread,
@@ -43,7 +41,7 @@ export default function Home() {
         {/* Hero + demo share the reactive backdrop */}
         <div className="relative isolate">
         <HeroBackdrop />
-        <section className="mx-auto max-w-3xl px-6 pt-24 text-center sm:pt-32">
+        <section className="mx-auto max-w-3xl px-6 pt-28 text-center sm:pt-40">
           <Reveal>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[76px]">
               Applying, <span className="text-brand-ink">in minutes.</span>
@@ -52,30 +50,19 @@ export default function Home() {
               It tailors your resume, fills the application, drafts the
               outreach. You hit submit.
             </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <div className="mt-10 flex flex-col items-center justify-center gap-6 sm:flex-row">
               <a
                 href={STORE_URL}
-                className="w-full rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Add to Chrome, it&apos;s free
               </a>
               <a
                 href="#product"
-                className="w-full rounded-full border border-border px-6 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
+                className="text-sm font-medium text-muted transition-colors hover:text-ink"
               >
-                See the product
+                See the product ↓
               </a>
-            </div>
-            <p className="mt-4 text-xs text-faint">No credit card.</p>
-            <div className="mt-14 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
-              {ATS_NAMES.map((name) => (
-                <span
-                  key={name}
-                  className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint"
-                >
-                  {name}
-                </span>
-              ))}
             </div>
           </Reveal>
         </section>
