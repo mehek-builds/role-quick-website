@@ -444,11 +444,13 @@ function ArrowDivider() {
    verb-first bullets with numbers, a plain skills line (ATS parsers read
    text, not chips). */
 function Paper({
+  label,
   chip,
   chipClass,
   note,
   children,
 }: {
+  label?: string;
   chip: string;
   chipClass: string;
   note: string;
@@ -456,13 +458,18 @@ function Paper({
 }) {
   return (
     <div className="w-full max-w-[400px]">
+      {label && (
+        <p className="px-1 pb-1.5 font-mono text-[13px] font-semibold uppercase tracking-[0.14em] text-ink">
+          {label}
+        </p>
+      )}
       <div className="flex items-center justify-between gap-3 px-1 pb-2.5">
         <span className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] ${chipClass}`}>
           {chip}
         </span>
         <span className="truncate font-mono text-[9px] text-faint">{note}</span>
       </div>
-      <div className="aspect-[17/22] overflow-hidden rounded-[10px] border border-border bg-white px-7 py-8 shadow-[0_1px_2px_rgba(18,18,15,0.05),0_16px_40px_-20px_rgba(18,18,15,0.18)]">
+      <div className="flex aspect-[17/22] flex-col overflow-hidden rounded-[10px] border border-border bg-white px-7 py-8 shadow-[0_1px_2px_rgba(18,18,15,0.05),0_16px_40px_-20px_rgba(18,18,15,0.18)]">
         {children}
       </div>
     </div>
@@ -472,11 +479,12 @@ function Paper({
 export function MessyResumeMockup() {
   return (
     <Paper
-      chip="Before · skipped by ATS"
+      label="Before"
+      chip="Skipped by ATS"
       chipClass="bg-danger-soft text-danger"
-      note="alex_resume_FINAL_v3.docx"
+      note="alex_resume_FINAL_v3.docx · 1 page"
     >
-      <div className="font-serif text-[9.5px] leading-[1.55] text-muted">
+      <div className="flex h-full flex-col font-serif text-[9.5px] leading-[1.55] text-muted">
         <p className="text-center text-[13px] font-bold tracking-wide text-ink underline">
           ALEX RIVERA
         </p>
@@ -509,14 +517,27 @@ export function MessyResumeMockup() {
           teamwork, hard-working
         </p>
 
+        <p className="mt-3.5 text-[10px] font-bold underline">Projects</p>
+        <p className="mt-1">
+          recipe finder app for a class group project, my personal website
+          (html/css)
+        </p>
+
         <p className="mt-3.5 text-[10px] font-bold underline">Education</p>
         <p className="mt-1">
           State University -- computer science major, graduating soon
           (hopefully 2027), GPA available on request
         </p>
 
-        <p className="mt-5 text-center text-[8.5px] italic">
+        <p className="mt-3.5 text-[10px] font-bold underline">Activities</p>
+        <p className="mt-1">chess club, intramural soccer, coding club member</p>
+
+        <p className="mt-3 text-center text-[8.5px] italic">
           References available upon request
+        </p>
+
+        <p className="mt-auto pt-2 text-center text-[8px] italic text-faint">
+          Page 1 of 1
         </p>
       </div>
     </Paper>
@@ -559,11 +580,12 @@ function PdfBullet({ children }: { children: React.ReactNode }) {
 export function CleanResumeMockup() {
   return (
     <Paper
-      chip="After · ATS-ready"
+      label="After"
+      chip="ATS-ready"
       chipClass="bg-positive-soft text-positive"
       note="Alex_Rivera_Acme_Resume.pdf · 1 page"
     >
-      <div className="font-sans">
+      <div className="flex h-full flex-col font-sans">
         <p className="text-center text-[14px] font-semibold tracking-tight text-ink">
           Alex Rivera
         </p>
@@ -601,9 +623,24 @@ export function CleanResumeMockup() {
           Cut average page load 45% by profiling and rewriting render paths
         </PdfBullet>
 
+        <PdfSection title="Projects" />
+        <PdfRow left="TrojanMarket, open-source campus marketplace" right="2025" />
+        <PdfBullet>
+          Built with React, Python, and SQL; grew to 800 student users
+        </PdfBullet>
+
         <PdfSection title="Skills" />
         <p className="mt-1 text-[8px] leading-[1.5] text-muted">
           Python, React, TypeScript, SQL, AWS, CI/CD, REST APIs, Git, Docker
+        </p>
+
+        <PdfSection title="Activities" />
+        <p className="mt-1 text-[8px] leading-[1.5] text-muted">
+          USC Coding Club · Dean&apos;s List, 3 semesters · HackSC 2025 finalist
+        </p>
+
+        <p className="mt-auto pt-2 text-center font-mono text-[7px] uppercase tracking-[0.1em] text-faint">
+          Page 1 of 1
         </p>
       </div>
     </Paper>

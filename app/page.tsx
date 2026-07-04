@@ -102,7 +102,7 @@ export default function Home() {
                 Messy in. ATS-ready out.
               </h2>
               <p className="mt-4 text-[15px] leading-7 text-muted">
-                Any resume becomes one clean, machine-readable page.
+                One messy page in, one machine-readable page out.
               </p>
             </div>
             <div className="mt-16">
