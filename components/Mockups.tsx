@@ -484,59 +484,77 @@ export function MessyResumeMockup() {
       chipClass="bg-danger-soft text-danger"
       note="alex_resume_FINAL_v3.docx · 1 page"
     >
-      <div className="flex h-full flex-col font-serif text-[9.5px] leading-[1.55] text-muted">
-        <p className="text-center text-[13px] font-bold tracking-wide text-ink underline">
+      <div className="flex h-full flex-col font-serif text-[7.8px] leading-[1.55] text-muted">
+        <p className="text-center text-[12px] font-bold tracking-wide text-ink underline">
           ALEX RIVERA
         </p>
-        <p className="mt-0.5 text-center text-[8.5px] italic">
-          alex.r99@email.com | 213-555-0148 | Los Angeles
+        <p className="mt-0.5 text-center text-[7.2px] italic">
+          alex.r99@email.com | 213-555-0148 | Los Angeles | www.linkedin.com/in/alex-rivera-1997b
         </p>
 
-        <p className="mt-4 text-[10px] font-bold italic underline">Objective</p>
-        <p className="mt-1">
-          Seeking a challenging software position where i can utilize my
-          skills and grow as a professional in a fast paced environment.
+        <p className="mt-2.5 text-[8.5px] font-bold italic underline">Objective</p>
+        <p className="mt-0.5">
+          Seeking a challenging software engineering position where i can
+          utilize my skills and grow as a professional in a fast paced
+          environment.
         </p>
 
-        <p className="mt-3.5 text-[10px] font-bold underline">work experience</p>
-        <p className="mt-1">
+        <p className="mt-2.5 text-[8.5px] font-bold underline">work experience</p>
+        <p className="mt-0.5">
           <span className="font-bold">Acme Inc</span> - software eng intern
-          (summer) did backend stuff and helped with some apis and databases,
-          also worked on a dashboard thing for the team and attended
-          meetings, learned a lot about agile.
+          (summer 2026) did backend stuff and helped with some apis and
+          databases, also worked on a dashboard thing for the team and
+          attended meetings, learned a lot about agile. i also helped with
+          testing sometimes when the team needed it.
         </p>
-        <p className="mt-2">
+        <p className="mt-1.5">
           * Freelance - built websites for a few small clients using
-          different tools and frameworks, fixed bugs, deployed sites,
-          communicated with clients etc
+          different tools and frameworks (react etc), fixed bugs, deployed
+          sites, communicated with clients etc. some sites are still up.
+        </p>
+        <p className="mt-1.5">
+          * grader for CSCI 201 - graded homework assignments for the intro
+          software class and helped students during office hours with
+          debugging their code and other questions
+        </p>
+        <p className="mt-1.5">
+          * USC bookstore (part time) - cashier, handled transactions,
+          restocked inventory, helped customers find things
         </p>
 
-        <p className="mt-3.5 text-[10px] font-bold underline">SKILLS</p>
-        <p className="mt-1">
-          python, some react, sql i guess, java (old), css, microsoft word,
-          teamwork, hard-working
+        <p className="mt-2.5 text-[8.5px] font-bold underline">Projects</p>
+        <p className="mt-0.5">
+          campus marketplace app with friends (trojanmarket) using react and
+          python, a lot of students used it. also a recipe finder app for a
+          class group project, and my personal website (html/css), started
+          learning react native over winter break
         </p>
 
-        <p className="mt-3.5 text-[10px] font-bold underline">Projects</p>
-        <p className="mt-1">
-          recipe finder app for a class group project, my personal website
-          (html/css)
+        <p className="mt-2.5 text-[8.5px] font-bold underline">Education</p>
+        <p className="mt-0.5">
+          University of Southern California -- computer science major,
+          graduating soon (hopefully 2027), GPA available on request. relevant
+          coursework: data structures, databases and some other CS classes
         </p>
 
-        <p className="mt-3.5 text-[10px] font-bold underline">Education</p>
-        <p className="mt-1">
-          State University -- computer science major, graduating soon
-          (hopefully 2027), GPA available on request
+        <p className="mt-2.5 text-[8.5px] font-bold underline">SKILLS</p>
+        <p className="mt-0.5">
+          python, some react, sql i guess, java (from high school), css,
+          html, microsoft word, excel, git (basic), teamwork, communication,
+          hard-working, detail oriented
         </p>
 
-        <p className="mt-3.5 text-[10px] font-bold underline">Activities</p>
-        <p className="mt-1">chess club, intramural soccer, coding club member</p>
+        <p className="mt-2.5 text-[8.5px] font-bold underline">Activities</p>
+        <p className="mt-0.5">
+          chess club, intramural soccer, coding club member, volunteering
+          sometimes at the animal shelter
+        </p>
 
-        <p className="mt-3 text-center text-[8.5px] italic">
+        <p className="mt-2 text-center text-[7.2px] italic">
           References available upon request
         </p>
 
-        <p className="mt-auto pt-2 text-center text-[8px] italic text-faint">
+        <p className="mt-auto pt-1.5 text-center text-[7.2px] italic text-faint">
           Page 1 of 1
         </p>
       </div>
@@ -577,6 +595,37 @@ function PdfBullet({ children }: { children: React.ReactNode }) {
   );
 }
 
+/* Compact variants of the pdf primitives, sized so a full real-density
+   resume (4 roles, projects, leadership, skills) fits the one page. */
+function CSec({ title }: { title: string }) {
+  return (
+    <div className="mt-2.5">
+      <p className="text-[6.8px] font-semibold uppercase tracking-[0.12em] text-ink">
+        {title}
+      </p>
+      <PdfRule />
+    </div>
+  );
+}
+
+function CRow({ left, right }: { left: React.ReactNode; right: string }) {
+  return (
+    <div className="mt-1.5 flex items-baseline justify-between gap-3">
+      <p className="text-[7.2px] font-semibold text-ink">{left}</p>
+      <p className="shrink-0 text-[6.8px] text-muted">{right}</p>
+    </div>
+  );
+}
+
+function CBul({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-0.5 pl-2 text-[7px] leading-[1.5] text-muted">
+      <span className="mr-1">•</span>
+      {children}
+    </p>
+  );
+}
+
 export function CleanResumeMockup() {
   return (
     <Paper
@@ -586,60 +635,58 @@ export function CleanResumeMockup() {
       note="Alex_Rivera_Acme_Resume.pdf · 1 page"
     >
       <div className="flex h-full flex-col font-sans">
-        <p className="text-center text-[14px] font-semibold tracking-tight text-ink">
+        <p className="text-center text-[12.5px] font-semibold tracking-tight text-ink">
           Alex Rivera
         </p>
-        <p className="mt-0.5 text-center text-[8px] text-muted">
+        <p className="mt-0.5 text-center text-[6.8px] text-muted">
           alex.rivera@usc.edu · (213) 555-0148 · linkedin.com/in/alexrivera · github.com/alexrivera
         </p>
 
-        <PdfSection title="Education" />
-        <PdfRow left="University of Southern California" right="Los Angeles, CA" />
+        <CSec title="Education" />
+        <CRow left="University of Southern California" right="Los Angeles, CA" />
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-[8px] text-muted">B.S. Computer Science, GPA 3.8</p>
-          <p className="shrink-0 text-[8px] text-muted">Expected May 2027</p>
+          <p className="text-[7px] text-muted">
+            B.S. Computer Science · Dean&apos;s List, 3 semesters
+          </p>
+          <p className="shrink-0 text-[6.8px] text-muted">Expected May 2027 · GPA 3.8</p>
         </div>
-        <p className="mt-0.5 text-[8px] text-muted">
-          Coursework: Data Structures, Databases, Distributed Systems, Machine Learning
+        <p className="mt-0.5 text-[7px] leading-[1.5] text-muted">
+          Coursework: Data Structures, Databases, Distributed Systems, Machine
+          Learning, Operating Systems
         </p>
 
-        <PdfSection title="Experience" />
-        <PdfRow left={<>Software Engineer Intern, Acme Inc</>} right="May – Aug 2026" />
-        <PdfBullet>
-          Built 4 REST APIs in Python serving 40K requests/day; cut p95 latency 30%
-        </PdfBullet>
-        <PdfBullet>
-          Shipped a React + SQL metrics dashboard adopted by 12 engineers weekly
-        </PdfBullet>
-        <PdfBullet>
-          Automated integration tests in CI/CD, raising coverage from 41% to 78%
-        </PdfBullet>
+        <CSec title="Experience" />
+        <CRow left="Software Engineer Intern, Acme Inc" right="May – Aug 2026" />
+        <CBul>Built 4 REST APIs in Python serving 40K requests/day; cut p95 latency 30%</CBul>
+        <CBul>Shipped a React + SQL metrics dashboard adopted by 12 engineers weekly</CBul>
+        <CBul>Automated integration tests in CI/CD, raising coverage from 41% to 78%</CBul>
 
-        <PdfRow left={<>Freelance Web Developer, Self-employed</>} right="2024 – 2026" />
-        <PdfBullet>
-          Delivered 6 client sites end to end; automated AWS deploys, zero downtime
-        </PdfBullet>
-        <PdfBullet>
-          Cut average page load 45% by profiling and rewriting render paths
-        </PdfBullet>
+        <CRow left="Freelance Web Developer, Self-employed" right="2024 – 2026" />
+        <CBul>Delivered 6 client sites end to end; automated AWS deploys with zero downtime</CBul>
+        <CBul>Cut average page load 45% by profiling and rewriting render paths</CBul>
+        <CBul>Maintained tested, reviewed code across 6 client stacks; zero shipped regressions</CBul>
 
-        <PdfSection title="Projects" />
-        <PdfRow left="TrojanMarket, open-source campus marketplace" right="2025" />
-        <PdfBullet>
-          Built with React, Python, and SQL; grew to 800 student users
-        </PdfBullet>
+        <CRow left="Course Grader, CSCI 201 Software Development" right="Aug 2025 – May 2026" />
+        <CBul>Graded 300+ assignments per semester with 48-hour turnaround for 80 students</CBul>
+        <CBul>Held weekly office hours; cut average student debug time by half</CBul>
 
-        <PdfSection title="Skills" />
-        <p className="mt-1 text-[8px] leading-[1.5] text-muted">
-          Python, React, TypeScript, SQL, AWS, CI/CD, REST APIs, Git, Docker
+        <CSec title="Projects" />
+        <CRow left="TrojanMarket, open-source campus marketplace" right="2025" />
+        <CBul>Built with React, Python, and SQL; grew to 800 student users in one semester</CBul>
+        <CBul>Shipped auth, listings search, and checkout; 99.9% uptime on AWS</CBul>
+
+        <CSec title="Leadership" />
+        <CRow left="Projects Lead, USC Coding Club" right="2025 – Present" />
+        <CBul>Run weekly build nights for 40 members; shipped 5 member projects to production</CBul>
+        <CBul>HackSC 2025 finalist, led a team of 4 from idea to working demo in 36 hours</CBul>
+
+        <CSec title="Skills" />
+        <p className="mt-0.5 text-[7px] leading-[1.5] text-muted">
+          Python, React, TypeScript, SQL, AWS, CI/CD, REST APIs, Git, Docker,
+          Node.js, PostgreSQL
         </p>
 
-        <PdfSection title="Activities" />
-        <p className="mt-1 text-[8px] leading-[1.5] text-muted">
-          USC Coding Club · Dean&apos;s List, 3 semesters · HackSC 2025 finalist
-        </p>
-
-        <p className="mt-auto pt-2 text-center font-mono text-[7px] uppercase tracking-[0.1em] text-faint">
+        <p className="mt-auto pt-1.5 text-center font-mono text-[6.5px] uppercase tracking-[0.1em] text-faint">
           Page 1 of 1
         </p>
       </div>
