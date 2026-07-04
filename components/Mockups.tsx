@@ -310,45 +310,90 @@ export function AtsChips() {
   );
 }
 
+/* A real Greenhouse-shaped form: labels over inputs, dropdowns, the resume
+   attached, screening answered — and the two things deliberately NOT filled
+   (the essay, EEO beyond decline-to-default) shown honestly. Teal = the
+   autofill pillar doing its job. */
+function FormField({
+  label,
+  value,
+  filled = true,
+  select = false,
+}: {
+  label: string;
+  value: string;
+  filled?: boolean;
+  select?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium text-muted">{label}</p>
+      <div
+        className={`mt-1 flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 ${
+          filled ? "border-border bg-white" : "border-dashed border-border bg-surface-alt/60"
+        }`}
+      >
+        <span className={`truncate text-[11.5px] ${filled ? "text-ink" : "italic text-faint"}`}>
+          {value}
+        </span>
+        {select && <span className="text-[9px] text-faint">▾</span>}
+        {filled && !select && <span className="text-[10px] text-teal-ink">✓</span>}
+      </div>
+    </div>
+  );
+}
+
 export function ApplicationFormMockup() {
-  const fields = [
-    { label: "Full name", value: "Alex Rivera" },
-    { label: "Email", value: "alex.rivera@usc.edu" },
-    { label: "Phone", value: "(213) 555-0148" },
-    { label: "Resume", value: "alex-rivera-acme-swe.pdf", isFile: true },
-    { label: "LinkedIn", value: "linkedin.com/in/alexrivera" },
-    { label: "Work authorized?", value: "Yes" },
-  ];
   return (
     <Frame>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Application · Greenhouse
         </p>
-        <span className="rounded-full bg-positive/10 px-2.5 py-0.5 text-[11px] font-medium text-positive">
-          6 of 6 filled
+        <span className="shrink-0 rounded-full bg-teal-soft px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-teal-ink">
+          23 of 25 filled
         </span>
       </div>
-      <div className="mt-4 space-y-2.5">
-        {fields.map((f) => (
-          <div
-            key={f.label}
-            className="flex items-center justify-between rounded-xl border border-border px-3.5 py-2.5"
-          >
-            <span className="text-xs text-faint">{f.label}</span>
-            {f.isFile ? (
-              <span className="flex items-center gap-1.5 rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-ink">
-                📎 {f.value}
-              </span>
-            ) : (
-              <span className="text-sm text-ink">{f.value}</span>
-            )}
-          </div>
-        ))}
+      <p className="mt-2 text-[13px] font-semibold text-ink">
+        Software Engineer Intern — Northline
+      </p>
+
+      <div className="mt-3.5 grid grid-cols-2 gap-2">
+        <FormField label="First name *" value="Alex" />
+        <FormField label="Last name *" value="Rivera" />
       </div>
-      <div className="mt-4 flex items-center justify-between rounded-xl border-2 border-dashed border-border px-3.5 py-2.5">
-        <span className="text-xs font-medium text-muted">Submit application</span>
-        <span className="text-[11px] font-medium text-faint">
+      <div className="mt-2 space-y-2">
+        <FormField label="Email *" value="alex.rivera@usc.edu" />
+        <div className="grid grid-cols-2 gap-2">
+          <FormField label="Phone *" value="(213) 555-0148" />
+          <FormField label="Location *" value="Los Angeles, CA" />
+        </div>
+        <div>
+          <p className="text-[10px] font-medium text-muted">Resume / CV *</p>
+          <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2.5 py-1.5">
+            <span className="flex min-w-0 items-center gap-1.5 truncate rounded-full bg-brand-soft px-2 py-0.5 text-[10.5px] font-medium text-brand-ink">
+              📎 Alex_Rivera_Northline_Resume.pdf
+            </span>
+            <span className="text-[10px] text-teal-ink">✓</span>
+          </div>
+        </div>
+        <FormField label="LinkedIn profile" value="linkedin.com/in/alexrivera" />
+        <div className="grid grid-cols-2 gap-2">
+          <FormField label="Authorized to work in the U.S.? *" value="Yes" select />
+          <FormField label="Require sponsorship? *" value="Yes" select />
+        </div>
+        <FormField label="How did you hear about us?" value="Company careers page" select />
+        <FormField
+          label="Why do you want to work at Northline?"
+          value="Left blank — essays are yours."
+          filled={false}
+        />
+        <FormField label="Voluntary self-identification" value="Decline to self-identify" select />
+      </div>
+
+      <div className="mt-3.5 flex items-center justify-between rounded-lg border-2 border-dashed border-border px-3 py-2">
+        <span className="text-[11.5px] font-medium text-muted">Submit application</span>
+        <span className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
           Waiting on you
         </span>
       </div>

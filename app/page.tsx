@@ -163,6 +163,25 @@ export default function Home() {
                   <p className="mt-4 text-[15px] leading-7 text-muted">
                     All five platforms. Workday included.
                   </p>
+                  {/* Machine voice: what the fill actually does, as data. */}
+                  <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
+                    <p>
+                      <span className="text-teal-ink">Fills</span>
+                      <span className="text-muted"> · contact, links, work auth, screening</span>
+                    </p>
+                    <p>
+                      <span className="text-teal-ink">Attaches</span>
+                      <span className="text-muted"> · the tailored resume PDF</span>
+                    </p>
+                    <p>
+                      <span className="text-teal-ink">Defaults</span>
+                      <span className="text-muted"> · EEO to decline-to-identify</span>
+                    </p>
+                    <p>
+                      <span className="text-teal-ink">Leaves</span>
+                      <span className="text-muted"> · essays and submit to you</span>
+                    </p>
+                  </div>
                 </div>
               </div>
             </Reveal>
