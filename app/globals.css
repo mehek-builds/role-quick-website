@@ -193,7 +193,17 @@ select:focus-visible,
   animation: rq-blink 1s step-end infinite;
 }
 
+/* Anchor jumps (hero pillar chips, receipt rows, nav) travel the page
+   instead of teleporting: the visitor sees the sections between here and
+   there, which is itself the pitch that there's more page. */
+html {
+  scroll-behavior: smooth;
+}
+
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
   .rq-blink {
     animation: none;
     opacity: 0;
