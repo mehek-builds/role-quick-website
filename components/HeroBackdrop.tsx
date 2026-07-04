@@ -10,21 +10,24 @@ import { useEffect, useRef } from "react";
    3. One soft brand glow that lerps toward the cursor. Reactive-to-you,
      never looping. Touch/reduced-motion users get it centered and static. */
 
+/* Every subject reads unambiguously as a submission confirmation —
+   "thank you for your interest" phrasing is banned here, it scans as a
+   rejection opener. */
 const INBOX = [
   { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Northline was sent", time: "11:58 AM", unread: true },
-  { from: "Fintra Careers", subject: "Thank you for your interest in the Product Analyst role", time: "11:57 AM", unread: true },
-  { from: "Brightpath Health", subject: "Thank you for applying to Brightpath!", time: "11:56 AM", unread: false },
-  { from: "Ashworth Robotics", subject: "Ashworth Robotics: thank you for your application", time: "11:55 AM", unread: true },
-  { from: "Vela", subject: "We have received your application", time: "11:54 AM", unread: false },
+  { from: "Fintra Careers", subject: "Application received: Product Analyst", time: "11:57 AM", unread: true },
+  { from: "Brightpath Health", subject: "We've received your application to Brightpath", time: "11:56 AM", unread: false },
+  { from: "Ashworth Robotics", subject: "Application received: Backend Engineer Intern", time: "11:55 AM", unread: true },
+  { from: "Vela", subject: "Your application has been received", time: "11:54 AM", unread: false },
   { from: "Coreway Talent", subject: "Your application to UX Design Intern at Coreway was sent", time: "11:53 AM", unread: true },
-  { from: "Lumen Analytics", subject: "Thank you for applying to Lumen Analytics!", time: "11:52 AM", unread: false },
+  { from: "Lumen Analytics", subject: "Application received: Business Analyst Intern", time: "11:52 AM", unread: false },
   { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Parallax Systems was sent", time: "11:51 AM", unread: true },
-  { from: "Solace Biotech", subject: "Thank you for your interest in the Research Intern role", time: "11:50 AM", unread: false },
-  { from: "Meridian Capital", subject: "Meridian Capital: thank you for your application", time: "11:49 AM", unread: false },
-  { from: "Driftwood Media", subject: "We have received your application", time: "11:48 AM", unread: true },
-  { from: "Anchorpoint Labs", subject: "Thank you for applying to Anchorpoint!", time: "11:47 AM", unread: false },
+  { from: "Solace Biotech", subject: "Application received: Research Intern", time: "11:50 AM", unread: false },
+  { from: "Meridian Capital", subject: "Meridian Capital: application received", time: "11:49 AM", unread: false },
+  { from: "Driftwood Media", subject: "We've received your application", time: "11:48 AM", unread: true },
+  { from: "Anchorpoint Labs", subject: "Your application to Anchorpoint has been received", time: "11:47 AM", unread: false },
   { from: "LinkedIn", subject: "Your application to Mechanical Engineer Intern at Cascade Robotics was sent", time: "11:46 AM", unread: false },
-  { from: "Nimbus Cloud", subject: "Your application is in review", time: "11:45 AM", unread: true },
+  { from: "Nimbus Cloud", subject: "Application received and in review", time: "11:45 AM", unread: true },
 ];
 
 export function HeroBackdrop() {
