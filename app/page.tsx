@@ -5,9 +5,9 @@ import {
   DraftMockup,
   ResumeFormatDemo,
   ResumeMatchDemo,
-  PacketMockup,
 } from "@/components/Mockups";
 import { Reveal, CountUp } from "@/components/Motion";
+import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
 import { STORE_URL } from "@/lib/config";
 
@@ -80,7 +80,7 @@ export default function Home() {
 
         <section id="product" className="px-6 pb-36 pt-16">
           <Reveal delay={150}>
-            <PacketMockup />
+            <PacketDemo />
           </Reveal>
         </section>
 
@@ -116,7 +116,7 @@ export default function Home() {
         </section>
 
         {/* Documents */}
-        <section className="border-t border-border bg-brand-soft/50">
+        <section id="documents" className="scroll-mt-16 border-t border-border bg-brand-soft/50">
           <div className="mx-auto max-w-5xl px-6 py-36">
             <Reveal>
               <div className="mx-auto max-w-[560px] text-center">
@@ -138,7 +138,7 @@ export default function Home() {
         </section>
 
         {/* Autofill */}
-        <section className="border-t border-border bg-teal-soft/50">
+        <section id="autofill" className="scroll-mt-16 border-t border-border bg-teal-soft/50">
           <div className="mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
@@ -179,7 +179,7 @@ export default function Home() {
         </section>
 
         {/* Outreach */}
-        <section className="border-t border-border bg-coral-soft/50">
+        <section id="outreach" className="scroll-mt-16 border-t border-border bg-coral-soft/50">
           <div className="mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">

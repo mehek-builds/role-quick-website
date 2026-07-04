@@ -103,9 +103,13 @@ Calm motion, not decoration:
 - **Scroll reveal:** every marketing section settles in once (`Reveal` in
   `components/Motion.tsx`): 14px rise + fade, 700ms, `cubic-bezier(.16,1,.3,1)`.
   Never replays.
-- **The receipt loops:** packet log rows land one by one on a 9s cycle
-  (`rq-log-row` in globals.css). The ONLY perpetually-moving element — it is
-  the product demo, not an attention device.
+- **The receipt is live and interactive** (`components/PacketDemo.tsx`): a
+  JS state machine assembles the packet row by row with a terminal cursor,
+  the footer flips from ASSEMBLING to READY + 9 SECONDS, holds, restarts.
+  The ONLY perpetually-moving element — it is the product demo, not an
+  attention device. Completed rows are buttons that jump to their pillar
+  section (the receipt doubles as the page's table of contents), with
+  pillar-soft hover tints.
 - **Numbers count up** once on first view (`CountUp`, ~1.2s, cubic ease-out).
 - **Micro:** 150-250ms transitions on hover/state. Loading = `rq-shimmer`.
 - **Hard rules:** no parallax, no marquees, no attention loops beyond the
