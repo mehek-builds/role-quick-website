@@ -37,14 +37,6 @@ function Line({ children }: { children: React.ReactNode }) {
   return <li className="text-[15px] leading-7 text-muted">{children}</li>;
 }
 
-const refusals = [
-  { rule: "NO AUTO-SUBMIT", why: "Sent by you, always." },
-  { rule: "NO STREAKS, NO BADGES", why: "You have enough pressure." },
-  { rule: "NO FAKE DEADLINES", why: "Closing means closing." },
-  { rule: "NO URGENCY COLOR", why: "Color is identity, not a push." },
-  { rule: "NO GUESSED ANSWERS", why: "Blanks stay blank." },
-];
-
 export default function Home() {
   return (
     <div className="flex flex-col flex-1">
@@ -231,37 +223,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Guardrails */}
-        <section className="border-y border-border bg-surface-alt">
-          <div className="mx-auto max-w-2xl px-6 py-36">
-            <Reveal>
-              <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                What we refuse to do.
-              </h2>
-              <div className="mt-12 rounded-[20px] border border-border bg-surface">
-                {refusals.map((r, i) => (
-                  <div
-                    key={r.rule}
-                    className={`flex flex-wrap items-baseline gap-x-4 px-6 py-4 ${
-                      i > 0 ? "border-t border-border" : ""
-                    }`}
-                  >
-                    <span className="font-mono text-[13px] text-faint">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="font-mono text-[13px] tracking-[0.02em] text-ink">
-                      {r.rule}
-                    </span>
-                    <span className="ml-auto text-[13px] text-muted">{r.why}</span>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-          </div>
-        </section>
-
         {/* Pricing */}
-        <section id="pricing" className="mx-auto max-w-4xl px-6 py-36">
+        <section id="pricing" className="border-t border-border">
+          <div className="mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
               Every feature is free.
@@ -315,6 +279,7 @@ export default function Home() {
               </div>
             </div>
           </Reveal>
+          </div>
         </section>
 
         {/* Close */}

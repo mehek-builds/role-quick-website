@@ -136,3 +136,4 @@ up. Color encodes what something is, never how urgently to act.
 | 2026-07-04 | Say-each-point-once voice rule | Mehek: "get rid of all the repetitive stuff" — submit-ownership was stated 5x on one page |
 | 2026-07-04 | Copy floor: one line where one line works (feature rows went 3 bullets → 1 line; refusal whys → ≤5 words) | Mehek: "too much text, as simplistic as possible" |
 | 2026-07-04 | Motion v1.1: scroll-settle reveals + looping receipt + count-up, reduced-motion safe | Mehek: "too static, have moving parts" — movement added without violating calm (nothing loops for attention except the demo) |
+| 2026-07-04 | Refusal-list section REMOVED from the homepage (Mehek's call) | The Guardrails stance itself is unchanged and still load-bearing; it now shows up in the product surfaces themselves (blank essay field, EEO decline default, waiting-on-you submit) instead of a dedicated section |
