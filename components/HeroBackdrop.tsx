@@ -2,10 +2,30 @@
 
 import { useEffect, useRef } from "react";
 
-/* Ambient, reactive hero background: a whisper dot grid plus one soft brand
-   glow that follows the pointer (lerped, never jumpy). Reactive-to-you, not
-   looping-for-attention, which keeps it inside the motion law. Touch and
-   reduced-motion users get a static centered glow. */
+/* Ambient hero background, three layers under the content:
+   1. A whisper-opacity Gmail inbox filling up with application
+     confirmations — the product's outcome as texture, not a screenshot.
+   2. A white radial wash that clears the center so the headline and CTAs
+     stay perfectly legible (clarity beats decoration, always).
+   3. One soft brand glow that lerps toward the cursor. Reactive-to-you,
+     never looping. Touch/reduced-motion users get it centered and static. */
+
+const INBOX = [
+  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Northline was sent", time: "11:58 AM", unread: true },
+  { from: "Fintra Careers", subject: "Thank you for your interest in the Product Analyst role", time: "11:57 AM", unread: true },
+  { from: "Brightpath Health", subject: "Thank you for applying to Brightpath!", time: "11:56 AM", unread: false },
+  { from: "Ashworth Robotics", subject: "Ashworth Robotics: thank you for your application", time: "11:55 AM", unread: true },
+  { from: "Vela", subject: "We have received your application", time: "11:54 AM", unread: false },
+  { from: "Coreway Talent", subject: "Your application to UX Design Intern at Coreway was sent", time: "11:53 AM", unread: true },
+  { from: "Lumen Analytics", subject: "Thank you for applying to Lumen Analytics!", time: "11:52 AM", unread: false },
+  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Parallax Systems was sent", time: "11:51 AM", unread: true },
+  { from: "Solace Biotech", subject: "Thank you for your interest in the Research Intern role", time: "11:50 AM", unread: false },
+  { from: "Meridian Capital", subject: "Meridian Capital: thank you for your application", time: "11:49 AM", unread: false },
+  { from: "Driftwood Media", subject: "We have received your application", time: "11:48 AM", unread: true },
+  { from: "Anchorpoint Labs", subject: "Thank you for applying to Anchorpoint!", time: "11:47 AM", unread: false },
+  { from: "LinkedIn", subject: "Your application to Mechanical Engineer Intern at Cascade Robotics was sent", time: "11:46 AM", unread: false },
+  { from: "Nimbus Cloud", subject: "Your application is in review", time: "11:45 AM", unread: true },
+];
 
 export function HeroBackdrop() {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -56,18 +76,52 @@ export function HeroBackdrop() {
 
   return (
     <div ref={wrapRef} aria-hidden className="absolute inset-0 -z-10 overflow-hidden">
-      {/* Dot grid, faded at the edges */}
+      {/* 1. The inbox, as texture — fades out before the demo below */}
+      <div
+        className="absolute inset-x-0 top-0 opacity-[0.45]"
+        style={{
+          maskImage: "linear-gradient(to bottom, black 30%, transparent 92%)",
+          WebkitMaskImage: "linear-gradient(to bottom, black 30%, transparent 92%)",
+        }}
+      >
+        {INBOX.map((m) => (
+          <div
+            key={m.time}
+            className="flex items-center gap-4 border-b border-border/50 px-6 py-2.5 sm:px-10"
+          >
+            <span className="hidden text-[13px] text-faint sm:block">☆</span>
+            <span
+              className={`w-32 shrink-0 truncate text-[12px] sm:w-44 ${
+                m.unread ? "font-semibold text-muted" : "text-faint"
+              }`}
+            >
+              {m.from}
+            </span>
+            <span
+              className={`min-w-0 flex-1 truncate text-[12px] ${
+                m.unread ? "font-medium text-muted" : "text-faint"
+              }`}
+            >
+              {m.subject}
+            </span>
+            <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand/60 text-[8px] font-semibold text-white">
+              R
+            </span>
+            <span className="shrink-0 text-[11px] text-faint">{m.time}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* 2. The clarity wash — clears the center for the headline and CTAs */}
       <div
         className="absolute inset-0"
         style={{
-          backgroundImage: "radial-gradient(circle, var(--color-border) 1px, transparent 1px)",
-          backgroundSize: "26px 26px",
-          maskImage: "radial-gradient(ellipse 75% 65% at 50% 38%, black 25%, transparent 78%)",
-          WebkitMaskImage: "radial-gradient(ellipse 75% 65% at 50% 38%, black 25%, transparent 78%)",
-          opacity: 0.55,
+          background:
+            "radial-gradient(ellipse 62% 58% at 50% 40%, var(--color-bg) 42%, transparent 100%)",
         }}
       />
-      {/* The glow that follows you */}
+
+      {/* 3. The glow that follows you */}
       <div
         ref={glowRef}
         className="absolute h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand opacity-[0.07] blur-[110px]"
