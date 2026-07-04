@@ -371,84 +371,180 @@ function ArrowDivider() {
   );
 }
 
+/* Real 8.5x11 paper pages, not UI cards. The After page is what the engine
+   actually renders: one column, hairline section rules, dates right-aligned,
+   verb-first bullets with numbers, a plain skills line (ATS parsers read
+   text, not chips). */
+function Paper({
+  chip,
+  chipClass,
+  note,
+  children,
+}: {
+  chip: string;
+  chipClass: string;
+  note: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="w-full max-w-[400px]">
+      <div className="flex items-center justify-between gap-3 px-1 pb-2.5">
+        <span className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] ${chipClass}`}>
+          {chip}
+        </span>
+        <span className="truncate font-mono text-[9px] text-faint">{note}</span>
+      </div>
+      <div className="aspect-[17/22] overflow-hidden rounded-[10px] border border-border bg-white px-7 py-8 shadow-[0_1px_2px_rgba(18,18,15,0.05),0_16px_40px_-20px_rgba(18,18,15,0.18)]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export function MessyResumeMockup() {
   return (
-    <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
-      <div className="flex items-center justify-between gap-3 px-3 py-2">
-        <span className="shrink-0 rounded-full bg-danger/10 px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-danger">
-          Before · skipped by ATS
-        </span>
-        <span className="font-mono text-[9px] text-faint">alex_resume_FINAL_v3.docx</span>
-      </div>
-      <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-serif text-[11px] leading-5 text-muted">
-        <p className="font-bold text-ink">ALEX RIVERA</p>
-        <p className="text-[10px]">alex.r99@email.com | 213-555-0148 | LA</p>
-        <p className="mt-3 underline">work experience</p>
+    <Paper
+      chip="Before · skipped by ATS"
+      chipClass="bg-danger/10 text-danger"
+      note="alex_resume_FINAL_v3.docx"
+    >
+      <div className="font-serif text-[9.5px] leading-[1.55] text-muted">
+        <p className="text-center text-[13px] font-bold tracking-wide text-ink underline">
+          ALEX RIVERA
+        </p>
+        <p className="mt-0.5 text-center text-[8.5px] italic">
+          alex.r99@email.com | 213-555-0148 | Los Angeles
+        </p>
+
+        <p className="mt-4 text-[10px] font-bold italic underline">Objective</p>
         <p className="mt-1">
-          Acme Inc - Software eng intern (summer) did backend stuff and
-          helped with some apis and databases, also worked on a dashboard
-          thing for the team.
+          Seeking a challenging software position where i can utilize my
+          skills and grow as a professional in a fast paced environment.
+        </p>
+
+        <p className="mt-3.5 text-[10px] font-bold underline">work experience</p>
+        <p className="mt-1">
+          <span className="font-bold">Acme Inc</span> - software eng intern
+          (summer) did backend stuff and helped with some apis and databases,
+          also worked on a dashboard thing for the team and attended
+          meetings, learned a lot about agile.
         </p>
         <p className="mt-2">
           * Freelance - built websites for a few small clients using
-          different tools, fixed bugs, deployed sites
+          different tools and frameworks, fixed bugs, deployed sites,
+          communicated with clients etc
         </p>
-        <p className="mt-3 underline">skills</p>
-        <p className="mt-1">python, some react, sql i guess, java (old), css</p>
-        <p className="mt-3 underline">EDUCATION</p>
-        <p className="mt-1">State University, computer science, graduating soon</p>
+
+        <p className="mt-3.5 text-[10px] font-bold underline">SKILLS</p>
+        <p className="mt-1">
+          python, some react, sql i guess, java (old), css, microsoft word,
+          teamwork, hard-working
+        </p>
+
+        <p className="mt-3.5 text-[10px] font-bold underline">Education</p>
+        <p className="mt-1">
+          State University -- computer science major, graduating soon
+          (hopefully 2027), GPA available on request
+        </p>
+
+        <p className="mt-5 text-center text-[8.5px] italic">
+          References available upon request
+        </p>
       </div>
+    </Paper>
+  );
+}
+
+function PdfRule() {
+  return <div className="mt-0.5 h-px w-full bg-ink/20" />;
+}
+
+function PdfSection({ title }: { title: string }) {
+  return (
+    <div className="mt-3.5">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.12em] text-ink">
+        {title}
+      </p>
+      <PdfRule />
     </div>
+  );
+}
+
+function PdfRow({ left, right }: { left: React.ReactNode; right: string }) {
+  return (
+    <div className="mt-1.5 flex items-baseline justify-between gap-3">
+      <p className="text-[8.5px] font-semibold text-ink">{left}</p>
+      <p className="shrink-0 text-[8px] text-muted">{right}</p>
+    </div>
+  );
+}
+
+function PdfBullet({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mt-0.5 pl-2.5 text-[8px] leading-[1.5] text-muted">
+      <span className="mr-1">•</span>
+      {children}
+    </p>
   );
 }
 
 export function CleanResumeMockup() {
   return (
-    <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="rounded-full bg-positive/10 px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-positive">
-          After · ATS-ready
-        </span>
-        <span className="font-mono text-[9px] text-faint">1 page · parses clean</span>
-      </div>
-      <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
-        <p className="text-sm font-semibold text-ink">Alex Rivera</p>
-        <p className="text-[11px] text-faint">alex.rivera@usc.edu · (213) 555-0148 · Los Angeles</p>
-        <div className="mt-3 h-px w-full bg-border" />
-        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
-          Experience
+    <Paper
+      chip="After · ATS-ready"
+      chipClass="bg-positive/10 text-positive"
+      note="Alex_Rivera_Acme_Resume.pdf · 1 page"
+    >
+      <div className="font-sans">
+        <p className="text-center text-[14px] font-semibold tracking-tight text-ink">
+          Alex Rivera
         </p>
-        <div className="mt-2 space-y-2 text-[10px] leading-4 text-muted">
-          <p>Software Engineer Intern, Acme Inc</p>
-          <p>Freelance Web Developer, Self-employed</p>
+        <p className="mt-0.5 text-center text-[8px] text-muted">
+          alex.rivera@usc.edu · (213) 555-0148 · linkedin.com/in/alexrivera · github.com/alexrivera
+        </p>
+
+        <PdfSection title="Education" />
+        <PdfRow left="University of Southern California" right="Los Angeles, CA" />
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[8px] text-muted">B.S. Computer Science, GPA 3.8</p>
+          <p className="shrink-0 text-[8px] text-muted">Expected May 2027</p>
         </div>
-        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
-          Skills
+        <p className="mt-0.5 text-[8px] text-muted">
+          Coursework: Data Structures, Databases, Distributed Systems, Machine Learning
         </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {["Python", "React", "SQL", "AWS"].map((s) => (
-            <span
-              key={s}
-              className="rounded-full bg-brand-soft px-2 py-0.5 text-[9px] font-medium text-brand-ink"
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
-          Education
-        </p>
-        <p className="mt-2 text-[10px] text-muted">
-          B.S. Computer Science, State University
+
+        <PdfSection title="Experience" />
+        <PdfRow left={<>Software Engineer Intern, Acme Inc</>} right="May – Aug 2026" />
+        <PdfBullet>
+          Built 4 REST APIs in Python serving 40K requests/day; cut p95 latency 30%
+        </PdfBullet>
+        <PdfBullet>
+          Shipped a React + SQL metrics dashboard adopted by 12 engineers weekly
+        </PdfBullet>
+        <PdfBullet>
+          Automated integration tests in CI/CD, raising coverage from 41% to 78%
+        </PdfBullet>
+
+        <PdfRow left={<>Freelance Web Developer, Self-employed</>} right="2024 – 2026" />
+        <PdfBullet>
+          Delivered 6 client sites end to end; automated AWS deploys, zero downtime
+        </PdfBullet>
+        <PdfBullet>
+          Cut average page load 45% by profiling and rewriting render paths
+        </PdfBullet>
+
+        <PdfSection title="Skills" />
+        <p className="mt-1 text-[8px] leading-[1.5] text-muted">
+          Python, React, TypeScript, SQL, AWS, CI/CD, REST APIs, Git, Docker
         </p>
       </div>
-    </div>
+    </Paper>
   );
 }
 
 export function ResumeFormatDemo() {
   return (
-    <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-stretch sm:justify-center">
+    <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-center sm:gap-2">
       <MessyResumeMockup />
       <ArrowDivider />
       <CleanResumeMockup />
