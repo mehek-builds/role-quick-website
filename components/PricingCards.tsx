@@ -9,9 +9,10 @@ import { STORE_URL } from "@/lib/config";
    honest or it doesn't ship (Guardrails). */
 
 const MONTHLY = 49.99;
-const YEARLY = 399;
-const SAVE = Math.round(MONTHLY * 12 - YEARLY); // $200
-const SAVE_PCT = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100); // 33%
+const YEARLY_PER_MO = 39.99;
+const YEARLY = +(YEARLY_PER_MO * 12).toFixed(2); // $479.88
+const SAVE = Math.round(MONTHLY * 12 - YEARLY); // $120
+const SAVE_PCT = Math.round((1 - YEARLY / (MONTHLY * 12)) * 100); // 20%
 
 function Line({ children }: { children: React.ReactNode }) {
   return <li className="text-[15px] leading-7 text-muted">{children}</li>;
@@ -84,7 +85,7 @@ export function PricingCards() {
             </span>
           </div>
           <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">
-            ${yearly ? (YEARLY / 12).toFixed(2) : MONTHLY.toFixed(2)}
+            ${yearly ? YEARLY_PER_MO.toFixed(2) : MONTHLY.toFixed(2)}
             <span className="text-base text-muted"> / mo</span>
           </p>
           <p className="mt-1.5 text-[13px] text-muted">
