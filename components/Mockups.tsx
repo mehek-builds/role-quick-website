@@ -484,7 +484,12 @@ export function MessyResumeMockup() {
       chipClass="bg-danger-soft text-danger"
       note="alex_resume_FINAL_v3.docx · 1 page"
     >
-      <div className="flex h-full flex-col font-serif text-[7.8px] leading-[1.55] text-muted">
+      {/* The two tells of a bad resume, on purpose: no sections at all (one
+          run-on wall of paragraphs), and duty-based passive phrasing with
+          zero metrics ("was responsible for", "helped with", "a lot of
+          students"). The After page is the same person, sectioned and
+          verb-first. */}
+      <div className="flex h-full flex-col font-serif text-[7.8px] leading-[1.6] text-muted">
         <p className="text-center text-[12px] font-bold tracking-wide text-ink underline">
           ALEX RIVERA
         </p>
@@ -492,62 +497,72 @@ export function MessyResumeMockup() {
           alex.r99@email.com | 213-555-0148 | Los Angeles | www.linkedin.com/in/alex-rivera-1997b
         </p>
 
-        <p className="mt-2.5 text-[8.5px] font-bold italic underline">Objective</p>
-        <p className="mt-0.5">
-          Seeking a challenging software engineering position where i can
-          utilize my skills and grow as a professional in a fast paced
-          environment.
+        <p className="mt-3">
+          Hi! I am a junior at University of Southern California studying
+          computer science (graduating hopefully 2027, GPA available on
+          request) and I am looking for a software engineering internship
+          where i can utilize my skills and grow as a professional in a fast
+          paced environment.
         </p>
 
-        <p className="mt-2.5 text-[8.5px] font-bold underline">work experience</p>
-        <p className="mt-0.5">
-          <span className="font-bold">Acme Inc</span> - software eng intern
-          (summer 2026) did backend stuff and helped with some apis and
-          databases, also worked on a dashboard thing for the team and
-          attended meetings, learned a lot about agile. i also helped with
-          testing sometimes when the team needed it.
-        </p>
-        <p className="mt-1.5">
-          * Freelance - built websites for a few small clients using
-          different tools and frameworks (react etc), fixed bugs, deployed
-          sites, communicated with clients etc. some sites are still up.
-        </p>
-        <p className="mt-1.5">
-          * grader for CSCI 201 - graded homework assignments for the intro
-          software class and helped students during office hours with
-          debugging their code and other questions
-        </p>
-        <p className="mt-1.5">
-          * USC bookstore (part time) - cashier, handled transactions,
-          restocked inventory, helped customers find things
+        <p className="mt-2">
+          Last summer I was a software engineering intern at Acme Inc where i
+          was responsible for helping the backend team with some apis and
+          databases. I also worked on a dashboard thing for the team,
+          attended meetings and learned a lot about agile. my manager was
+          happy with my work.
         </p>
 
-        <p className="mt-2.5 text-[8.5px] font-bold underline">Projects</p>
-        <p className="mt-0.5">
-          campus marketplace app with friends (trojanmarket) using react and
-          python, a lot of students used it. also a recipe finder app for a
-          class group project, and my personal website (html/css), started
-          learning react native over winter break
+        <p className="mt-2">
+          I also do freelance websites for a few small clients using
+          different tools and frameworks (react etc), my duties include
+          fixing bugs, deploying sites and communicating with clients. some
+          of the sites are still up.
         </p>
 
-        <p className="mt-2.5 text-[8.5px] font-bold underline">Education</p>
-        <p className="mt-0.5">
-          University of Southern California -- computer science major,
-          graduating soon (hopefully 2027), GPA available on request. relevant
-          coursework: data structures, databases and some other CS classes
+        <p className="mt-2">
+          During the school year i am a grader for CSCI 201 where my
+          responsibilities include grading homework assignments and helping
+          students during office hours with debugging their code. i also
+          work at the USC bookstore part time (cashier, restocking inventory,
+          helping customers find things).
         </p>
 
-        <p className="mt-2.5 text-[8.5px] font-bold underline">SKILLS</p>
-        <p className="mt-0.5">
-          python, some react, sql i guess, java (from high school), css,
-          html, microsoft word, excel, git (basic), teamwork, communication,
-          hard-working, detail oriented
+        <p className="mt-2">
+          In my free time me and my friends made a campus marketplace app
+          called trojanmarket using react and python, a lot of students used
+          it. also made a recipe finder app for a class group project and my
+          personal website (html/css).
         </p>
 
-        <p className="mt-2.5 text-[8.5px] font-bold underline">Activities</p>
-        <p className="mt-0.5">
-          chess club, intramural soccer, coding club member, volunteering
-          sometimes at the animal shelter
+        <p className="mt-2">
+          <span className="font-bold underline">SKILLS:</span> python, some
+          react, sql i guess, java (from high school), css, html, microsoft
+          word, excel, git (basic), teamwork, communication, hard-working,
+          detail oriented
+        </p>
+
+        <p className="mt-2">
+          relevant coursework i have taken so far: data structures,
+          databases, discrete math and some other CS classes. i am planning
+          to take machine learning next semester which i am excited about.
+        </p>
+
+        <p className="mt-2">
+          Before USC i went to Jefferson High School where i was in the
+          robotics club and took AP computer science. i also did a summer
+          coding camp one year.
+        </p>
+
+        <p className="mt-2">
+          Outside of school i like playing chess, intramural soccer, video
+          games, going to the gym, and volunteering sometimes at the animal
+          shelter. i am also a member of the coding club.
+        </p>
+
+        <p className="mt-2">
+          I am available for summer 2027 and can start in may. willing to
+          relocate if needed.
         </p>
 
         <p className="mt-2 text-center text-[7.2px] italic">
@@ -678,7 +693,7 @@ export function CleanResumeMockup() {
         <CSec title="Leadership" />
         <CRow left="Projects Lead, USC Coding Club" right="2025 – Present" />
         <CBul>Run weekly build nights for 40 members; shipped 5 member projects to production</CBul>
-        <CBul>HackSC 2025 finalist, led a team of 4 from idea to working demo in 36 hours</CBul>
+        <CBul>Led a team of 4 to a HackSC 2025 finalist finish; idea to working demo in 36 hours</CBul>
 
         <CSec title="Skills" />
         <p className="mt-0.5 text-[7px] leading-[1.5] text-muted">
