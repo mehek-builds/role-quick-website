@@ -123,7 +123,13 @@ export default function Home() {
                   A resume tuned to this posting.
                 </h2>
                 <p className="mt-4 text-[15px] leading-7 text-muted">
-                  Your best-fit bullets, rewritten in the JD&apos;s language.
+                  We read the posting for what matters, then rebuild your page
+                  in its exact language. That is what ATS-optimized actually
+                  means.
+                </p>
+                <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+                  A recruiter&apos;s first look lasts 7.4 seconds · Source:
+                  Ladders eye-tracking study
                 </p>
               </div>
               <div className="mt-16">
