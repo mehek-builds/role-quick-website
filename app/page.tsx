@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import {
   ContactListMockup,
   ApplicationFormMockup,
+  ResumeFormatDemo,
   ResumeMatchDemo,
   PacketMockup,
 } from "@/components/Mockups";
@@ -105,6 +106,23 @@ export default function Home() {
               </p>
             </Reveal>
           </div>
+        </section>
+
+        {/* ATS formatting: mess in, machine-readable out */}
+        <section className="mx-auto max-w-5xl px-6 py-36">
+          <Reveal>
+            <div className="mx-auto max-w-[560px] text-center">
+              <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
+                Messy in. ATS-ready out.
+              </h2>
+              <p className="mt-4 text-[15px] leading-7 text-muted">
+                Any resume becomes one clean, machine-readable page.
+              </p>
+            </div>
+            <div className="mt-16">
+              <ResumeFormatDemo />
+            </div>
+          </Reveal>
         </section>
 
         {/* Documents */}

@@ -374,11 +374,11 @@ function ArrowDivider() {
 export function MessyResumeMockup() {
   return (
     <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
-      <div className="flex items-center justify-between px-3 py-2">
-        <span className="rounded-full bg-danger/10 px-2.5 py-0.5 text-[10px] font-medium text-danger">
-          Before
+      <div className="flex items-center justify-between gap-3 px-3 py-2">
+        <span className="shrink-0 rounded-full bg-danger/10 px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-danger">
+          Before · skipped by ATS
         </span>
-        <span className="text-[10px] text-faint">alex_resume_FINAL_v3.docx</span>
+        <span className="font-mono text-[9px] text-faint">alex_resume_FINAL_v3.docx</span>
       </div>
       <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-serif text-[11px] leading-5 text-muted">
         <p className="font-bold text-ink">ALEX RIVERA</p>
@@ -406,9 +406,10 @@ export function CleanResumeMockup() {
   return (
     <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
       <div className="flex items-center justify-between px-3 py-2">
-        <span className="rounded-full bg-positive/10 px-2.5 py-0.5 text-[10px] font-medium text-positive">
-          After, RoleQuick format
+        <span className="rounded-full bg-positive/10 px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-positive">
+          After · ATS-ready
         </span>
+        <span className="font-mono text-[9px] text-faint">1 page · parses clean</span>
       </div>
       <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
         <p className="text-sm font-semibold text-ink">Alex Rivera</p>
