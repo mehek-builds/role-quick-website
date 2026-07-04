@@ -41,18 +41,46 @@ const FAQ_ITEMS = [
   },
 ];
 
-function PillarLabel({
+/* The one icon set on the site: the brand deck's three pillar pictograms
+   (section 06), line-only, 1.6px stroke, currentColor. Reused in the hero
+   bridge and at the top of every pillar section — one primitive, repeated. */
+const PILLAR_ICONS: Record<string, React.ReactNode> = {
+  resume: (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden>
+      <path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M14 3.5V8h4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M9 12.5h6M9 16h6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  ),
+  autofill: (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden>
+      <rect x="4.5" y="3.5" width="15" height="17" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M8 9.5h8M8 13h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="m8 17 1.6 1.6L13 15" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  outreach: (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden>
+      <rect x="3.5" y="6" width="17" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M4.5 7 12 13l7.5-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+};
+
+function PillarChip({
   children,
-  thread,
+  icon,
+  bg,
   tone,
 }: {
   children: React.ReactNode;
-  thread: string;
+  icon: string;
+  bg: string;
   tone: string;
 }) {
   return (
-    <p className={`flex items-center gap-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] ${tone}`}>
-      <span className={`h-0.5 w-4 rounded-full ${thread}`} />
+    <p className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] ${bg} ${tone}`}>
+      {PILLAR_ICONS[icon]}
       {children}
     </p>
   );
@@ -100,6 +128,32 @@ export default function Home() {
                 Privacy
               </a>
             </p>
+            {/* Hero-to-body bridge: the three pillars as a table of contents,
+                one small first click before the big ask. Pillar color marks
+                the feature it links to, nothing else. */}
+            <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5">
+              <a
+                href="#documents"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
+              >
+                <span className="text-brand-ink">{PILLAR_ICONS.resume}</span>
+                Resume
+              </a>
+              <a
+                href="#autofill"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
+              >
+                <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
+                Autofill
+              </a>
+              <a
+                href="#outreach"
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
+              >
+                <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
+                Outreach
+              </a>
+            </div>
           </div>
         </section>
 
@@ -110,8 +164,9 @@ export default function Home() {
         </section>
         </div>
 
-        {/* The number */}
-        <section className="border-y border-border bg-surface-alt">
+        {/* The number. Background changes mark section boundaries from here
+            down (deep-dive pacing rule) — no hairline dividers between bands. */}
+        <section className="bg-surface-alt">
           <div className="mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
@@ -148,12 +203,12 @@ export default function Home() {
         </section>
 
         {/* Documents */}
-        <section id="documents" className="scroll-mt-16 border-t border-border bg-brand-soft/50">
+        <section id="documents" className="scroll-mt-16 bg-brand-soft/50">
           <div className="mx-auto max-w-5xl px-6 py-36">
             <Reveal>
               <div className="mx-auto max-w-[560px] text-center">
                 <div className="flex justify-center">
-                  <PillarLabel thread="bg-brand" tone="text-brand-ink">01 · Documents</PillarLabel>
+                  <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
                 </div>
                 <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                   A resume tuned to this posting.
@@ -176,7 +231,7 @@ export default function Home() {
         </section>
 
         {/* Autofill */}
-        <section id="autofill" className="scroll-mt-16 border-t border-border bg-teal-soft/50">
+        <section id="autofill" className="scroll-mt-16 bg-teal-soft/50">
           <div className="mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
@@ -184,7 +239,7 @@ export default function Home() {
                   <ApplicationFormMockup />
                 </div>
                 <div className="order-1 sm:order-2">
-                  <PillarLabel thread="bg-teal" tone="text-teal-ink">02 · Autofill</PillarLabel>
+                  <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Autofill</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     Every field, filled.
                   </h2>
@@ -221,12 +276,12 @@ export default function Home() {
         </section>
 
         {/* Outreach */}
-        <section id="outreach" className="scroll-mt-16 border-t border-border bg-coral-soft/50">
+        <section id="outreach" className="scroll-mt-16 bg-coral-soft/50">
           <div className="mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
                 <div>
-                  <PillarLabel thread="bg-coral" tone="text-coral-ink">03 · Outreach</PillarLabel>
+                  <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Outreach</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     A real person, already drafted.
                   </h2>
@@ -260,7 +315,7 @@ export default function Home() {
         </section>
 
         {/* Pricing */}
-        <section id="pricing" className="border-t border-border">
+        <section id="pricing">
           <div className="mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -275,7 +330,7 @@ export default function Home() {
         </section>
 
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
-        <section id="faq" className="scroll-mt-16 border-t border-border bg-surface-alt">
+        <section id="faq" className="scroll-mt-16 bg-surface-alt">
           <div className="mx-auto max-w-2xl px-6 py-36">
             <Reveal>
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -302,7 +357,7 @@ export default function Home() {
         </section>
 
         {/* Close: the finale — signature threads, display type, receipt echo */}
-        <section className="border-t border-border bg-brand-soft/60">
+        <section className="bg-brand-soft/60">
           <div className="mx-auto max-w-3xl px-6 py-40 text-center">
             <Reveal>
               <div className="flex items-center justify-center gap-1.5">
@@ -313,9 +368,6 @@ export default function Home() {
               <h2 className="mt-8 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
                 Open your next application.
               </h2>
-              <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Posting detected → packet ready · 9 seconds
-              </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <a
                   href={STORE_URL}
@@ -330,12 +382,17 @@ export default function Home() {
                   Sign in
                 </a>
               </div>
+              {/* Proof at arm's length from the ask: the one real number,
+                  directly beneath the button it supports. */}
+              <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+                Posting detected → packet ready · 9 seconds
+              </p>
             </Reveal>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border">
+      <footer>
         <div className="mx-auto max-w-6xl px-6 py-14">
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
             <div className="col-span-2 sm:col-span-1">
