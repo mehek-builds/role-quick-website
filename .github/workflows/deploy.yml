@@ -1,0 +1,33 @@
+# Push-to-deploy: every push to main ships to Vercel production.
+# Exists because the Vercel GitHub App isn't installed on this account
+# (native git integration needs a one-time browser approval by Mehek at
+# https://github.com/apps/vercel — if that ever happens, this workflow can
+# be deleted and Vercel will build pushes natively).
+#
+# Auth: VERCEL_TOKEN repo secret. Org/project IDs are not secrets.
+name: Deploy to Vercel
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_0Fjyz6MMpB2jQ9OBDySdm11i
+  VERCEL_PROJECT_ID: prj_nAijw4PLiUTkbTVy4AbMAsmceXGE
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Deploy
+        run: npx vercel@latest deploy --prod --yes --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
