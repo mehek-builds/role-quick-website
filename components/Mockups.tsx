@@ -706,27 +706,33 @@ export function ResumeFormatDemo() {
   );
 }
 
-const jdKeywords = ["Python", "distributed systems", "REST APIs", "AWS", "CI/CD"];
+/* Correlation highlights: each requirement gets its own color, used on
+   BOTH sides of the arrow, in the JD where it is asked for and in the
+   resume where the evidence was placed. Same color = same requirement.
+   Local to this demo; pillar meanings elsewhere are unchanged. */
+const MATCH_STYLES: Record<string, string> = {
+  python: "bg-brand-soft text-brand-ink",
+  distributed: "bg-teal-soft text-teal-ink",
+  apis: "bg-coral-soft text-coral-ink",
+  cicd: "bg-warn-soft text-warn",
+  aws: "bg-positive-soft text-positive",
+  own: "bg-surface-alt text-ink",
+};
 
-function HighlightedJdText() {
-  const text =
-    "We're looking for a Software Engineer Intern to help build distributed systems that power our platform. You'll work on REST APIs, ship through our CI/CD pipeline, and deploy on AWS. Strong Python fundamentals required.";
-  const pattern = new RegExp(`(${jdKeywords.join("|")})`, "gi");
-  const parts = text.split(pattern);
+function M({ k, children }: { k: keyof typeof MATCH_STYLES; children: React.ReactNode }) {
   return (
-    <p className="leading-6 text-muted">
-      {parts.map((part, i) =>
-        jdKeywords.some((k) => k.toLowerCase() === part.toLowerCase()) ? (
-          <span key={i} className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
-            {part}
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        )
-      )}
-    </p>
+    <span className={`rounded px-0.5 font-medium ${MATCH_STYLES[k]}`}>{children}</span>
   );
 }
+
+const MATCH_LEGEND: { k: keyof typeof MATCH_STYLES; label: string }[] = [
+  { k: "python", label: "Python" },
+  { k: "distributed", label: "Distributed systems" },
+  { k: "apis", label: "REST APIs" },
+  { k: "cicd", label: "CI/CD" },
+  { k: "aws", label: "AWS" },
+  { k: "own", label: "Ownership" },
+];
 
 export function JobDescriptionMockup() {
   return (
@@ -742,49 +748,37 @@ export function JobDescriptionMockup() {
           Northline · Los Angeles
         </p>
         <p className="mt-1.5 text-sm font-semibold text-ink">Software Engineer Intern</p>
-        <div className="mt-3 text-[12px]">
-          <HighlightedJdText />
-        </div>
+        <p className="mt-3 text-[12px] leading-6 text-muted">
+          We&apos;re looking for a Software Engineer Intern to help build{" "}
+          <M k="distributed">distributed systems</M> that power our platform.
+          Strong <M k="python">Python</M> fundamentals required.
+        </p>
         <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           What you&apos;ll do
         </p>
         <ul className="mt-1.5 space-y-1 text-[12px] leading-5 text-muted">
           <li>· Design and ship backend services with the platform team</li>
           <li>
-            · <Tl>Own features end to end</Tl>, from spec to production
+            · Build <M k="apis">REST APIs</M> in <M k="python">Python</M>{" "}
+            alongside senior engineers
           </li>
           <li>
-            · Write <Tl>tested, reviewed, production-quality code</Tl>
+            · Deploy on <M k="aws">AWS</M> through our <M k="cicd">CI/CD</M>{" "}
+            pipeline
           </li>
+          <li>
+            · <M k="own">Own features end to end</M>, from spec to production
+          </li>
+          <li>· Write tested, reviewed, production-quality code</li>
         </ul>
         <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           What we look for
         </p>
         <p className="mt-1.5 text-[12px] leading-5 text-muted">
-          CS fundamentals, ownership, and <Tl>evidence you ship real things</Tl>.
+          CS fundamentals, ownership, and evidence you ship real things.
         </p>
       </Frame>
     </div>
-  );
-}
-
-/* Match highlights, two identities (legend rendered under the demo):
-   blue = a JD keyword placed verbatim; teal = a JD requirement met with
-   evidence. Same tints on both sides of the arrow so each match traces
-   across. Local to this demo; pillar meanings elsewhere are unchanged. */
-function Hl({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded bg-brand-soft px-0.5 font-medium text-brand-ink">
-      {children}
-    </span>
-  );
-}
-
-function Tl({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="rounded bg-teal-soft px-0.5 font-medium text-teal-ink">
-      {children}
-    </span>
   );
 }
 
@@ -793,63 +787,77 @@ export function TailoredResumeMockup() {
     <Paper
       chip="Tailored · 5/5 keywords placed"
       chipClass="bg-positive-soft text-positive"
-      note="Alex_Rivera_Northline_Resume.pdf"
+      note="Alex_Rivera_Northline_Resume.pdf · 1 page"
     >
-      <div className="font-sans">
-        <p className="text-center text-[14px] font-semibold tracking-tight text-ink">
+      <div className="flex h-full flex-col font-sans">
+        <p className="text-center text-[12.5px] font-semibold tracking-tight text-ink">
           Alex Rivera
         </p>
-        <p className="mt-0.5 text-center text-[8px] text-muted">
+        <p className="mt-0.5 text-center text-[6.8px] text-muted">
           alex.rivera@usc.edu · (213) 555-0148 · linkedin.com/in/alexrivera · github.com/alexrivera
         </p>
 
-        <PdfSection title="Education" />
-        <PdfRow left="University of Southern California" right="Los Angeles, CA" />
+        <CSec title="Education" />
+        <CRow left="University of Southern California" right="Los Angeles, CA" />
         <div className="flex items-baseline justify-between gap-3">
-          <p className="text-[8px] text-muted">B.S. Computer Science, GPA 3.8</p>
-          <p className="shrink-0 text-[8px] text-muted">Expected May 2027</p>
+          <p className="text-[7px] text-muted">
+            B.S. Computer Science · Dean&apos;s List, 3 semesters
+          </p>
+          <p className="shrink-0 text-[6.8px] text-muted">Expected May 2027 · GPA 3.8</p>
         </div>
-        <p className="mt-0.5 text-[8px] leading-[1.5] text-muted">
-          Coursework: Data Structures, <Hl>Distributed Systems</Hl>, Databases,
-          Operating Systems · Dean&apos;s List, 3 semesters
+        <p className="mt-0.5 text-[7px] leading-[1.5] text-muted">
+          Coursework: Data Structures, <M k="distributed">Distributed Systems</M>,
+          Databases, Operating Systems, Machine Learning
         </p>
 
-        <PdfSection title="Experience" />
-        <PdfRow left={<>Software Engineer Intern, Acme Inc</>} right="May – Aug 2026" />
-        <PdfBullet>
-          Built 4 <Hl>REST APIs</Hl> in <Hl>Python</Hl> serving 40K
-          requests/day across <Hl>distributed systems</Hl>
-        </PdfBullet>
-        <PdfBullet>
-          Deployed on <Hl>AWS</Hl> through a <Hl>CI/CD</Hl> pipeline;{" "}
-          <Tl>cut release time 60%</Tl>
-        </PdfBullet>
-        <PdfBullet>
-          <Tl>Owned a team metrics dashboard end to end, spec to production</Tl>;
+        <CSec title="Experience" />
+        <CRow left="Software Engineer Intern, Acme Inc" right="May – Aug 2026" />
+        <CBul>
+          Built 4 <M k="apis">REST APIs</M> in <M k="python">Python</M> serving
+          40K requests/day; cut p95 latency 30%
+        </CBul>
+        <CBul>
+          Deployed on <M k="aws">AWS</M> through a <M k="cicd">CI/CD</M>{" "}
+          pipeline; cut release time 60%
+        </CBul>
+        <CBul>
+          <M k="own">Owned a team metrics dashboard end to end, spec to production</M>;
           12 engineers use it weekly
-        </PdfBullet>
+        </CBul>
 
-        <PdfRow left={<>Freelance Web Developer, Self-employed</>} right="2024 – 2026" />
-        <PdfBullet>
-          <Tl>Shipped 6 production sites</Tl>; automated <Hl>AWS</Hl> deploys
-          with zero downtime
-        </PdfBullet>
-        <PdfBullet>
-          Maintained <Tl>tested, reviewed code</Tl> across client stacks; zero
-          shipped regressions
-        </PdfBullet>
+        <CRow left="Freelance Web Developer, Self-employed" right="2024 – 2026" />
+        <CBul>Shipped 6 production sites; automated <M k="aws">AWS</M> deploys with zero downtime</CBul>
+        <CBul>Maintained tested, reviewed code across 6 client stacks; zero shipped regressions</CBul>
+        <CBul>Cut average page load 45% by profiling and rewriting render paths</CBul>
 
-        <PdfSection title="Projects" />
-        <PdfRow left="TrojanMarket, open-source campus marketplace" right="2025" />
-        <PdfBullet>
-          Built with React, <Hl>Python</Hl>, and SQL; <Tl>grew to 800 student
-          users</Tl>
-        </PdfBullet>
+        <CRow left="Course Grader, CSCI 201 Software Development" right="Aug 2025 – May 2026" />
+        <CBul>Graded 300+ assignments per semester with 48-hour turnaround for 80 students</CBul>
 
-        <PdfSection title="Skills" />
-        <p className="mt-1 text-[8px] leading-[1.6] text-muted">
-          <Hl>Python</Hl>, <Hl>REST APIs</Hl>, <Hl>AWS</Hl>, <Hl>CI/CD</Hl>,{" "}
-          <Hl>distributed systems</Hl>, SQL, React, TypeScript, Git, Docker
+        <CSec title="Projects" />
+        <CRow left="TrojanMarket, open-source campus marketplace" right="2025" />
+        <CBul>
+          Built with React, <M k="python">Python</M>, and SQL; grew to 800
+          student users in one semester
+        </CBul>
+        <CBul>
+          Shipped auth, listings search, and checkout on <M k="aws">AWS</M>;
+          99.9% uptime
+        </CBul>
+
+        <CSec title="Leadership" />
+        <CRow left="Projects Lead, USC Coding Club" right="2025 – Present" />
+        <CBul>Run weekly build nights for 40 members; shipped 5 member projects to production</CBul>
+
+        <CSec title="Skills" />
+        <p className="mt-0.5 text-[7px] leading-[1.6] text-muted">
+          <M k="python">Python</M>, <M k="apis">REST APIs</M>,{" "}
+          <M k="aws">AWS</M>, <M k="cicd">CI/CD</M>,{" "}
+          <M k="distributed">distributed systems</M>, SQL, React, TypeScript,
+          Git, Docker
+        </p>
+
+        <p className="mt-auto pt-1.5 text-center font-mono text-[6.5px] uppercase tracking-[0.1em] text-faint">
+          Page 1 of 1
         </p>
       </div>
     </Paper>
@@ -901,17 +909,20 @@ export function ResumeMatchDemo() {
         <ArrowDivider />
         <TailoredResumeMockup />
       </div>
-      {/* Legend: what each match color means, on both sides of the arrow. */}
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 font-mono text-[10px] font-medium uppercase tracking-[0.08em]">
-        <span className="flex items-center gap-2 text-muted">
-          <span className="h-2.5 w-2.5 rounded-[3px] bg-brand-soft ring-1 ring-inset ring-brand/40" />
-          Keyword from the JD
-        </span>
-        <span className="flex items-center gap-2 text-muted">
-          <span className="h-2.5 w-2.5 rounded-[3px] bg-teal-soft ring-1 ring-inset ring-teal/40" />
-          Requirement, met with evidence
-        </span>
+      {/* Legend: one color per requirement, same color on both sides. */}
+      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-2 gap-y-1.5">
+        {MATCH_LEGEND.map(({ k, label }) => (
+          <span
+            key={k}
+            className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.05em] ${MATCH_STYLES[k]}`}
+          >
+            {label}
+          </span>
+        ))}
       </div>
+      <p className="mt-2.5 text-center font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+        Same color, same requirement · asked in the posting, placed in the resume
+      </p>
       <BankStrip />
     </div>
   );
