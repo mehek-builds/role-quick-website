@@ -97,11 +97,19 @@ meaning**, not scarcity. Three tonal families, each with a job:
   2. **The refusal list:** Guardrails set like terms of service in mono
      ("What we refuse to do."). Ethics as brand furniture.
 
-## Motion
-- **Approach:** minimal-functional. Nothing moves unless it must.
-- **Easing:** enter ease-out, exit ease-in. **Duration:** 150-250ms.
-- **Loading:** the `rq-shimmer` sweep only. No scroll choreography, no
-  entrance animations on marketing.
+## Motion v1.1 — things settle, one thing loops
+Revised 2026-07-04 (Mehek: "the website's too static, have moving parts").
+Calm motion, not decoration:
+- **Scroll reveal:** every marketing section settles in once (`Reveal` in
+  `components/Motion.tsx`): 14px rise + fade, 700ms, `cubic-bezier(.16,1,.3,1)`.
+  Never replays.
+- **The receipt loops:** packet log rows land one by one on a 9s cycle
+  (`rq-log-row` in globals.css). The ONLY perpetually-moving element — it is
+  the product demo, not an attention device.
+- **Numbers count up** once on first view (`CountUp`, ~1.2s, cubic ease-out).
+- **Micro:** 150-250ms transitions on hover/state. Loading = `rq-shimmer`.
+- **Hard rules:** no parallax, no marquees, no attention loops beyond the
+  receipt, and everything respects `prefers-reduced-motion` (instant, static).
 
 ## Voice (copy rules that are also design rules)
 - Short sentences. Periods. "You hit submit." beats "Empowering your journey."
@@ -126,3 +134,5 @@ up. Color encodes what something is, never how urgently to act.
 | 2026-07-04 | Color v1.1: one-accent scarcity replaced by tonalities-with-jobs (pillar bands, repeating action blue, Pro emphasis surfaces) | Mehek's call + Simplify teardown: their system repeats one action color everywhere and tints feature bands; meaning-consistency beats scarcity |
 | 2026-07-04 | Pro emphasis allowed as the strongest moment per screen (blue-soft surface + solid CTA + caps chip) | Emphasis is honest when it states what you get; urgency mechanics stay banned |
 | 2026-07-04 | Say-each-point-once voice rule | Mehek: "get rid of all the repetitive stuff" — submit-ownership was stated 5x on one page |
+| 2026-07-04 | Copy floor: one line where one line works (feature rows went 3 bullets → 1 line; refusal whys → ≤5 words) | Mehek: "too much text, as simplistic as possible" |
+| 2026-07-04 | Motion v1.1: scroll-settle reveals + looping receipt + count-up, reduced-motion safe | Mehek: "too static, have moving parts" — movement added without violating calm (nothing loops for attention except the demo) |

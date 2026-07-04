@@ -90,3 +90,51 @@ body {
   background-size: 800px 100%;
   animation: rq-shimmer 1.4s linear infinite;
 }
+
+/* Scroll reveal: content settles into place once, 700ms ease-out. */
+.rq-reveal {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.rq-reveal-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* The receipt loop: log rows land one by one, hold, then the cycle restarts.
+   The one element allowed to keep moving — it IS the product demo. */
+@keyframes rq-log-row {
+  0%, 3% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  8%, 88% {
+    opacity: 1;
+    transform: none;
+  }
+  95%, 100% {
+    opacity: 0;
+  }
+}
+.rq-log-row {
+  opacity: 0;
+  animation: rq-log-row 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rq-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .rq-log-row {
+    opacity: 1;
+    animation: none;
+  }
+  .rq-shimmer {
+    animation: none;
+  }
+}

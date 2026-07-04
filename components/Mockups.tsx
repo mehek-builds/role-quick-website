@@ -621,8 +621,12 @@ export function PacketMockup() {
         </span>
       </div>
       <div className="grid gap-3 px-6 py-5">
-        {packetLog.map((row) => (
-          <div key={row.t} className="grid grid-cols-[86px_1fr_auto] items-center gap-4 font-mono text-[12.5px]">
+        {packetLog.map((row, i) => (
+          <div
+            key={row.t}
+            style={{ animationDelay: `${i * 0.7}s` }}
+            className="rq-log-row grid grid-cols-[86px_1fr_auto] items-center gap-4 font-mono text-[12.5px]"
+          >
             <span className="text-faint">{row.t}</span>
             <span className="tracking-[0.02em] text-ink">{row.e}</span>
             <span className={`h-0.5 w-5 rounded-full ${row.thread}`} />
