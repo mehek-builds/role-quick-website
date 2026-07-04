@@ -111,6 +111,10 @@ Calm motion, not decoration:
   section (the receipt doubles as the page's table of contents), with
   pillar-soft hover tints.
 - **Numbers count up** once on first view (`CountUp`, ~1.2s, cubic ease-out).
+- **Reactive hero backdrop** (`components/HeroBackdrop.tsx`): a whisper dot
+  grid (edge-masked, border-color dots) plus one brand glow at 7% opacity
+  that lerps toward the cursor across the hero + demo area. Reactive-to-you,
+  never looping; touch devices get it centered and static.
 - **Micro:** 150-250ms transitions on hover/state. Loading = `rq-shimmer`.
 - **Hard rules:** no parallax, no marquees, no attention loops beyond the
   receipt, and everything respects `prefers-reduced-motion` (instant, static).

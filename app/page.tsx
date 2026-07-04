@@ -6,6 +6,7 @@ import {
   ResumeFormatDemo,
   ResumeMatchDemo,
 } from "@/components/Mockups";
+import { HeroBackdrop } from "@/components/HeroBackdrop";
 import { Reveal, CountUp } from "@/components/Motion";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
@@ -40,7 +41,9 @@ export default function Home() {
       <Header />
 
       <main className="flex-1">
-        {/* Hero */}
+        {/* Hero + demo share the reactive backdrop */}
+        <div className="relative isolate">
+        <HeroBackdrop />
         <section className="mx-auto max-w-3xl px-6 pt-24 text-center sm:pt-32">
           <Reveal>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[76px]">
@@ -83,6 +86,7 @@ export default function Home() {
             <PacketDemo />
           </Reveal>
         </section>
+        </div>
 
         {/* The number */}
         <section className="border-y border-border bg-surface-alt">
