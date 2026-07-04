@@ -6,7 +6,7 @@ function TierBadge({ tier }: { tier: "Verified" | "Likely" | "LinkedIn" }) {
   };
   return (
     <span
-      className={`rounded-full px-2.5 py-0.5 text-[11px] font-medium ${styles[tier]}`}
+      className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] ${styles[tier]}`}
     >
       {tier}
     </span>
@@ -27,34 +27,46 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 const contacts = [
-  { name: "Priya Nair", role: "SWE Recruiter · USC '22", tier: "Verified" as const },
-  { name: "Daniel Cho", role: "Eng Manager", tier: "Verified" as const },
-  { name: "Sam Alvarez", role: "Head of Talent", tier: "Likely" as const },
-  { name: "Rina Okafor", role: "Team Lead", tier: "LinkedIn" as const },
+  { name: "Priya Nair", role: "SWE Recruiter · USC '22", tier: "Verified" as const, alum: true },
+  { name: "Daniel Cho", role: "Eng Manager, Platform", tier: "Verified" as const, alum: false },
+  { name: "Sam Alvarez", role: "Head of Talent", tier: "Likely" as const, alum: false },
+  { name: "Rina Okafor", role: "Team Lead, Infra", tier: "LinkedIn" as const, alum: false },
 ];
 
 export function ContactListMockup() {
   return (
     <Frame>
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-        Hiring team · Acme Inc
-      </p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Hiring team · Northline
+        </p>
+        <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
+          4 found
+        </span>
+      </div>
       <div className="mt-4 space-y-3">
         {contacts.map((c) => (
           <div
             key={c.name}
-            className="flex items-center justify-between rounded-2xl border border-border px-4 py-3"
+            className="flex items-center justify-between gap-2 rounded-2xl border border-border px-4 py-3"
           >
-            <div className="flex items-center gap-3">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-surface-alt text-xs font-medium text-muted">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-alt text-xs font-medium text-muted">
                 {c.name.split(" ").map((n) => n[0]).join("")}
               </span>
-              <div>
-                <p className="text-sm font-medium text-ink">{c.name}</p>
-                <p className="text-xs text-muted">{c.role}</p>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink">{c.name}</p>
+                <p className="truncate text-xs text-muted">{c.role}</p>
               </div>
             </div>
-            <TierBadge tier={c.tier} />
+            <div className="flex shrink-0 items-center gap-1.5">
+              {c.alum && (
+                <span className="rounded-full bg-coral-soft px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-coral-ink">
+                  Alum
+                </span>
+              )}
+              <TierBadge tier={c.tier} />
+            </div>
           </div>
         ))}
       </div>
@@ -65,25 +77,36 @@ export function ContactListMockup() {
 export function DraftMockup() {
   return (
     <Frame>
-      <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-        Draft · Gmail
-      </p>
-      <div className="mt-4 space-y-3 text-sm">
-        <div className="flex gap-2 border-b border-border pb-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          New message · Gmail
+        </p>
+        <span className="shrink-0 rounded-full bg-coral-soft px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-coral-ink">
+          Draft · not sent
+        </span>
+      </div>
+      <div className="mt-4 space-y-2.5 text-[12.5px]">
+        <div className="flex gap-2 border-b border-border pb-2.5">
           <span className="text-faint">To</span>
-          <span className="text-ink">priya.nair@acme.com</span>
+          <span className="text-ink">Priya Nair &lt;priya.nair@northline.com&gt;</span>
         </div>
-        <div className="flex gap-2 border-b border-border pb-3">
+        <div className="flex gap-2 border-b border-border pb-2.5">
           <span className="text-faint">Subject</span>
-          <span className="text-ink">Fellow Trojan, 15-min chat?</span>
+          <span className="text-ink">USC senior, just applied to SWE intern</span>
         </div>
         <p className="pt-1 leading-6 text-muted">
-          Hi Priya, saw you lead recruiting for the SWE team at Acme, and
-          noticed we&apos;re both USC alums. I just wrapped a summer building
-          a full-stack analytics tool and the team&apos;s roadmap looks like
-          a great fit...
+          Hi Priya, fellow Trojan here. I just applied to the SWE intern role
+          and wanted to reach out beyond the pile. Last summer I built REST
+          APIs at Acme serving 40K requests a day, and Northline&apos;s
+          platform work looks like that at real scale. Open to a 15-minute
+          chat?
+          <br />
+          <span className="text-ink">— Alex</span>
         </p>
       </div>
+      <p className="mt-3 border-t border-border pt-3 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
+        Waiting in your drafts
+      </p>
     </Frame>
   );
 }

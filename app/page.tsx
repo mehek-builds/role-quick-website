@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import {
   ContactListMockup,
   ApplicationFormMockup,
+  DraftMockup,
   ResumeFormatDemo,
   ResumeMatchDemo,
   PacketMockup,
@@ -201,8 +202,30 @@ export default function Home() {
                   <p className="mt-4 text-[15px] leading-7 text-muted">
                     Alumni first. Waiting in your Gmail drafts.
                   </p>
+                  {/* Machine voice: what outreach actually does, as data. */}
+                  <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
+                    <p>
+                      <span className="text-coral-ink">Finds</span>
+                      <span className="text-muted"> · recruiters, managers, your alumni</span>
+                    </p>
+                    <p>
+                      <span className="text-coral-ink">Verifies</span>
+                      <span className="text-muted"> · every address, tiered honestly</span>
+                    </p>
+                    <p>
+                      <span className="text-coral-ink">Drafts</span>
+                      <span className="text-muted"> · ~120 words in your voice</span>
+                    </p>
+                    <p>
+                      <span className="text-coral-ink">Leaves</span>
+                      <span className="text-muted"> · send to you</span>
+                    </p>
+                  </div>
                 </div>
-                <ContactListMockup />
+                <div className="space-y-4">
+                  <ContactListMockup />
+                  <DraftMockup />
+                </div>
               </div>
             </Reveal>
           </div>
