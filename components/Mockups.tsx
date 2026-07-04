@@ -576,79 +576,142 @@ function HighlightedJdText() {
 
 export function JobDescriptionMockup() {
   return (
-    <div className="sm:w-[320px]">
+    <div className="w-full sm:w-[340px]">
+      <div className="flex items-center justify-between gap-3 px-1 pb-2.5">
+        <span className="shrink-0 rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-muted">
+          The posting
+        </span>
+        <span className="truncate font-mono text-[9px] text-faint">jobs.lever.co/northline</span>
+      </div>
       <Frame>
         <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Job description · Northline
+          Northline · Los Angeles
         </p>
-        <p className="mt-2 text-sm font-semibold text-ink">Software Engineer Intern</p>
-        <div className="mt-3 text-[13px]">
+        <p className="mt-1.5 text-sm font-semibold text-ink">Software Engineer Intern</p>
+        <div className="mt-3 text-[12px]">
           <HighlightedJdText />
         </div>
+        <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          What you&apos;ll do
+        </p>
+        <ul className="mt-1.5 space-y-1 text-[12px] leading-5 text-muted">
+          <li>· Design and ship backend services with the platform team</li>
+          <li>· Own features end to end, from spec to production</li>
+          <li>· Write tested, reviewed, production-quality code</li>
+        </ul>
+        <p className="mt-3 text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          What we look for
+        </p>
+        <p className="mt-1.5 text-[12px] leading-5 text-muted">
+          CS fundamentals, ownership, and evidence you ship real things.
+        </p>
       </Frame>
     </div>
   );
 }
 
+/* Highlight = a JD keyword placed into the resume. Same tint as the JD side
+   so the eye can trace each keyword across the arrow. */
+function Hl({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="rounded bg-brand-soft px-0.5 font-medium text-brand-ink">
+      {children}
+    </span>
+  );
+}
+
 export function TailoredResumeMockup() {
   return (
-    <div className="sm:w-[320px]">
-      <Frame>
-      <div className="flex flex-col gap-1.5">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Tailored for this role
+    <Paper
+      chip="Tailored · 5/5 keywords placed"
+      chipClass="bg-positive/10 text-positive"
+      note="Alex_Rivera_Northline_Resume.pdf"
+    >
+      <div className="font-sans">
+        <p className="text-center text-[14px] font-semibold tracking-tight text-ink">
+          Alex Rivera
         </p>
-        <span className="w-fit rounded-full bg-positive/10 px-2.5 py-0.5 text-[11px] font-medium text-positive">
-          5/5 keywords matched
+        <p className="mt-0.5 text-center text-[8px] text-muted">
+          alex.rivera@usc.edu · (213) 555-0148 · github.com/alexrivera
+        </p>
+
+        <PdfSection title="Experience" />
+        <PdfRow left={<>Software Engineer Intern, Acme Inc</>} right="May – Aug 2026" />
+        <PdfBullet>
+          Built <Hl>REST APIs</Hl> in <Hl>Python</Hl> serving 40K requests/day
+          across <Hl>distributed systems</Hl>
+        </PdfBullet>
+        <PdfBullet>
+          Deployed on <Hl>AWS</Hl> through a <Hl>CI/CD</Hl> pipeline; cut
+          release time 60%
+        </PdfBullet>
+
+        <PdfRow left={<>Freelance Web Developer, Self-employed</>} right="2024 – 2026" />
+        <PdfBullet>
+          Shipped 6 production sites; automated <Hl>AWS</Hl> deploys with zero
+          downtime
+        </PdfBullet>
+
+        <PdfSection title="Skills" />
+        <p className="mt-1 text-[8px] leading-[1.6] text-muted">
+          <Hl>Python</Hl>, <Hl>REST APIs</Hl>, <Hl>AWS</Hl>, <Hl>CI/CD</Hl>,{" "}
+          <Hl>distributed systems</Hl>, SQL, React, Git
+        </p>
+
+        <PdfSection title="Education" />
+        <PdfRow left="University of Southern California" right="May 2027" />
+        <p className="text-[8px] text-muted">B.S. Computer Science, GPA 3.8</p>
+      </div>
+    </Paper>
+  );
+}
+
+/* The mechanism, made visible: which bank entries were picked for this JD. */
+export function BankStrip() {
+  const entries = [
+    { org: "Acme Inc", picked: true },
+    { org: "Freelance", picked: true },
+    { org: "Robotics Club", picked: false },
+    { org: "Campus TA", picked: false },
+    { org: "Hackathons", picked: false },
+    { org: "Coffee Shop Lead", picked: false },
+  ];
+  return (
+    <div className="mx-auto mt-10 w-full max-w-[640px] rounded-[14px] border border-border bg-surface px-5 py-4">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+          Your experience bank
         </span>
+        <span className="font-mono text-[10px] text-faint">2 of 6 entries picked for this JD</span>
       </div>
-      <div className="mx-auto mt-4 max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
-        <p className="text-sm font-semibold text-ink">Alex Rivera</p>
-        <p className="text-[11px] text-faint">Software Engineer, New Grad</p>
-        <div className="mt-3 h-px w-full bg-border" />
-        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
-          Experience
-        </p>
-        <p className="mt-2 text-[10px] leading-4 text-muted">
-          Built and shipped{" "}
-          <span className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
-            REST APIs
-          </span>{" "}
-          for internal tools; deployed services on{" "}
-          <span className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
-            AWS
-          </span>{" "}
-          through a{" "}
-          <span className="rounded bg-brand-soft px-1 font-medium text-brand-ink">
-            CI/CD
-          </span>{" "}
-          pipeline.
-        </p>
-        <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
-          Skills
-        </p>
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {["Python", "Distributed systems", "AWS", "SQL"].map((s) => (
-            <span
-              key={s}
-              className="flex items-center gap-1 rounded-full bg-brand-soft px-2 py-0.5 text-[9px] font-medium text-brand-ink"
-            >
-              ✓ {s}
-            </span>
-          ))}
-        </div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {entries.map((e) => (
+          <span
+            key={e.org}
+            className={`rounded-full px-2.5 py-1 font-mono text-[10px] font-medium ${
+              e.picked
+                ? "bg-brand-soft text-brand-ink"
+                : "bg-surface-alt text-faint"
+            }`}
+          >
+            {e.picked ? "✓ " : ""}
+            {e.org}
+          </span>
+        ))}
       </div>
-      </Frame>
     </div>
   );
 }
 
 export function ResumeMatchDemo() {
   return (
-    <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-start sm:justify-center">
-      <JobDescriptionMockup />
-      <ArrowDivider />
-      <TailoredResumeMockup />
+    <div>
+      <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:justify-center sm:gap-2">
+        <JobDescriptionMockup />
+        <ArrowDivider />
+        <TailoredResumeMockup />
+      </div>
+      <BankStrip />
     </div>
   );
 }

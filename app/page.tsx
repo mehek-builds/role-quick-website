@@ -137,7 +137,7 @@ export default function Home() {
                   A resume tuned to this posting.
                 </h2>
                 <p className="mt-4 text-[15px] leading-7 text-muted">
-                  Your experience bank, matched to the JD. Editable, always.
+                  Your best-fit bullets, rewritten in the JD&apos;s language.
                 </p>
               </div>
               <div className="mt-16">
