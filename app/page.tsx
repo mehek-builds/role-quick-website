@@ -235,19 +235,35 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Close */}
+        {/* Close: the finale — signature threads, display type, receipt echo */}
         <section className="border-t border-border bg-brand-soft/60">
-          <div className="mx-auto max-w-3xl px-6 py-36 text-center">
+          <div className="mx-auto max-w-3xl px-6 py-40 text-center">
             <Reveal>
-              <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
+              <div className="flex items-center justify-center gap-1.5">
+                <span className="h-0.5 w-6 rounded-full bg-brand" />
+                <span className="h-0.5 w-6 rounded-full bg-teal" />
+                <span className="h-0.5 w-6 rounded-full bg-coral" />
+              </div>
+              <h2 className="mt-8 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
                 Open your next application.
               </h2>
-              <a
-                href={STORE_URL}
-                className="mt-9 inline-block rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
-              >
-                Add to Chrome
-              </a>
+              <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                Posting detected → packet ready · 9 seconds
+              </p>
+              <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                <a
+                  href={STORE_URL}
+                  className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                >
+                  Add to Chrome, it&apos;s free
+                </a>
+                <a
+                  href="/login"
+                  className="w-full rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
+                >
+                  Sign in
+                </a>
+              </div>
             </Reveal>
           </div>
         </section>
