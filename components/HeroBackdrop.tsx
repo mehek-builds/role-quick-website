@@ -14,15 +14,15 @@ import { useEffect, useRef } from "react";
    "thank you for your interest" phrasing is banned here, it scans as a
    rejection opener. */
 const INBOX = [
-  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Northline was sent", time: "11:58 AM", unread: true },
-  { from: "Fintra Careers", subject: "Application received: Product Analyst", time: "11:57 AM", unread: true },
-  { from: "Brightpath Health", subject: "We've received your application to Brightpath", time: "11:56 AM", unread: false },
-  { from: "Ashworth Robotics", subject: "Application received: Backend Engineer Intern", time: "11:55 AM", unread: true },
-  { from: "Vela", subject: "Your application has been received", time: "11:54 AM", unread: false },
-  { from: "Coreway Talent", subject: "Your application to UX Design Intern at Coreway was sent", time: "11:53 AM", unread: true },
-  { from: "Lumen Analytics", subject: "Application received: Business Analyst Intern", time: "11:52 AM", unread: false },
-  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Parallax Systems was sent", time: "11:51 AM", unread: true },
-  { from: "Solace Biotech", subject: "Application received: Research Intern", time: "11:50 AM", unread: false },
+  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Google was sent", time: "11:58 AM", unread: true },
+  { from: "Amazon Jobs", subject: "Application received: Software Development Engineer Intern", time: "11:57 AM", unread: true },
+  { from: "Meta Careers", subject: "We've received your application to Meta", time: "11:56 AM", unread: false },
+  { from: "Goldman Sachs", subject: "Application received: Summer Analyst", time: "11:55 AM", unread: true },
+  { from: "Netflix Jobs", subject: "Your application has been received", time: "11:54 AM", unread: false },
+  { from: "Spotify", subject: "We received your application: UX Design Intern", time: "11:53 AM", unread: true },
+  { from: "Microsoft Careers", subject: "Application received: Business Analyst Intern", time: "11:52 AM", unread: false },
+  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Stripe was sent", time: "11:51 AM", unread: true },
+  { from: "Apple", subject: "We've received your application, Research Intern", time: "11:50 AM", unread: false },
 ];
 
 export function HeroBackdrop() {
