@@ -1,4 +1,4 @@
-const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published
+import { STORE_URL } from "@/lib/config";
 
 export function Header() {
   return (
@@ -9,26 +9,34 @@ export function Header() {
             R
           </span>
           <span className="text-[15px] font-semibold tracking-tight text-ink">
-            Role Quick
+            RoleQuick
           </span>
         </a>
         <nav className="hidden items-center gap-8 text-sm text-muted sm:flex">
-          <a href="#how-it-works" className="hover:text-ink">
+          <a href="/#how-it-works" className="hover:text-ink">
             How it works
           </a>
-          <a href="#product" className="hover:text-ink">
+          <a href="/#product" className="hover:text-ink">
             Product
           </a>
-          <a href="#pricing" className="hover:text-ink">
+          <a href="/#pricing" className="hover:text-ink">
             Pricing
           </a>
         </nav>
-        <a
-          href={STORE_URL}
-          className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-        >
-          Add to Chrome
-        </a>
+        <div className="flex items-center gap-3">
+          <a
+            href="/login"
+            className="rounded-full border border-border px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink"
+          >
+            Sign in
+          </a>
+          <a
+            href={STORE_URL}
+            className="hidden rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:block"
+          >
+            Add to Chrome
+          </a>
+        </div>
       </div>
     </header>
   );

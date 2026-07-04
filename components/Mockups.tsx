@@ -269,7 +269,7 @@ export function InboxMockup() {
                 <span className="text-[#5f6368]"> - {e.snippet}</span>
               </span>
               <span
-                title="Sent via Role Quick"
+                title="Sent via RoleQuick"
                 className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white"
               >
                 R
@@ -286,7 +286,7 @@ export function InboxMockup() {
           <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white">
             R
           </span>
-          every one of these sent through Role Quick
+          every one of these sent through RoleQuick
         </div>
       </div>
     </div>
@@ -407,7 +407,7 @@ export function CleanResumeMockup() {
     <div className="rounded-[20px] border border-border bg-surface p-2 shadow-[0_1px_2px_rgba(18,18,15,0.04),0_12px_32px_-16px_rgba(18,18,15,0.12)]">
       <div className="flex items-center justify-between px-3 py-2">
         <span className="rounded-full bg-positive/10 px-2.5 py-0.5 text-[10px] font-medium text-positive">
-          After, Role Quick format
+          After, RoleQuick format
         </span>
       </div>
       <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">

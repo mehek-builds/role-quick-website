@@ -1,9 +1,9 @@
-# Role Quick website: build plan
+# RoleQuick website: build plan
 
-Working name for the product's marketing + web-app surface. The Chrome
-extension and backend remain branded **Volley** internally for now (repos
-`mehek-builds/volley-extension`, `mehek-builds/volley-backend`); Role Quick is
-the public-facing name until a full rename is decided.
+The product's marketing + web-app surface, publicly branded **RoleQuick**
+(target domain rolequick.com, decided 2026-07-04). The Chrome extension and
+backend remain branded **Volley** internally (repos
+`mehek-builds/volley-extension`, `mehek-builds/volley-backend`).
 
 ## Design system (locked 2026-07-03)
 
@@ -35,8 +35,29 @@ Structural family borrowed from Letterstory's console
 
 ## Current state (this repo)
 
-Marketing site only: `/` (home), `/privacy` (placeholder). Static, no auth,
-no data. Deployed as a plain Next.js app, no backend calls yet.
+Marketing site (`/`, `/privacy`) plus the full in-browser product app, built
+2026-07-04: `/login` (passwordless email-code auth, same JWT account system as
+the extension, with legacy `/auth/session` fallback) and `/dashboard` with
+five views calling `student-outreach-backend` directly from the client
+(`lib/api.ts`, `lib/config.ts`):
+
+- **Overview**: `/me` usage meters (pillar-colored), tier/trial chips, Pro
+  upsell only when the backend returns `upgrade_url`, merged recent activity.
+- **Applications**: the brand deck's unified review view, one packet per job
+  from `/resume/history` with match-score ring (`spec._quality.atsCoverage`),
+  keyword chips, and the company-matched outreach event.
+- **Outreach**: `/track/events` with status filters, persona chips, and
+  expandable drafts.
+- **Resume**: PDF upload (`POST /profile` multipart), parsed-profile preview,
+  full experience-bank editor (`GET/PUT /profile/experience-bank`).
+- **Settings**: account, application-details form
+  (`GET/PUT /profile/application`, save round-trip verified live), plan +
+  usage, data export/delete contact.
+
+Design tokens re-themed to brand guidelines v1.0 (signature blue `#6b84e8`,
+coral = outreach, teal = autofill). Phases 2-4 below are therefore DONE in
+their v1 form; Phase 5 (in-app Stripe billing beyond the payment-link upsell)
+remains open.
 
 ## Where this is going: the robust web app
 

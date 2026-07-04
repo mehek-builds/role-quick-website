@@ -9,13 +9,13 @@ import {
   ResumeMatchDemo,
 } from "@/components/Mockups";
 
-const STORE_URL = "#"; // TODO: swap for the Chrome Web Store listing URL once Role Quick is published
+import { STORE_URL } from "@/lib/config";
 
 const steps = [
   {
     n: "01",
     title: "Open the application",
-    body: "On Lever, Greenhouse, Ashby, Workday, or LinkedIn. Role Quick detects the real application form, not just the job listing.",
+    body: "On Lever, Greenhouse, Ashby, Workday, or LinkedIn. RoleQuick detects the real application form, not just the job listing.",
   },
   {
     n: "02",
@@ -37,7 +37,7 @@ const steps = [
 const principles = [
   {
     title: "You always hit submit",
-    body: "Role Quick fills every field and stops. It never clicks Submit, never auto-applies, and never touches an SSN, driver's license, or background-check field.",
+    body: "RoleQuick fills every field and stops. It never clicks Submit, never auto-applies, and never touches an SSN, driver's license, or background-check field.",
   },
   {
     title: "Real humans, honestly labeled",
@@ -75,7 +75,7 @@ export default function Home() {
             Applying, in minutes.
           </h1>
           <p className="mx-auto mt-6 max-w-xl text-lg leading-8 text-muted">
-            Role Quick tailors your resume to the posting, fills out the
+            RoleQuick tailors your resume to the posting, fills out the
             entire application, and drafts a personalized email to a real
             recruiter or alum, the moment you open a job. You review, you
             submit, you send.
@@ -117,7 +117,7 @@ export default function Home() {
               The average corporate role gets{" "}
               <span className="font-semibold">257 applications</span>, each
               one asking for a freshly tailored resume and forty fields
-              re-typed from scratch. Role Quick does the repetitive part so
+              re-typed from scratch. RoleQuick does the repetitive part so
               you can spend your time on the one thing it never does for
               you: deciding to hit submit.
             </p>
@@ -128,7 +128,7 @@ export default function Home() {
         <section className="mx-auto max-w-6xl px-6 py-24">
           <div className="mx-auto max-w-2xl text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-              Tailor your resume
+              Documents
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
               A resume tuned to this exact posting
@@ -142,7 +142,7 @@ export default function Home() {
 
           <div className="mt-16">
             <p className="mb-6 text-center text-sm font-medium text-muted">
-              From a messy pasted resume to Role Quick&apos;s format
+              From a messy pasted resume to RoleQuick&apos;s format
             </p>
             <ResumeFormatDemo />
           </div>
@@ -163,8 +163,8 @@ export default function Home() {
                 <ApplicationFormMockup />
               </div>
               <div className="order-1 sm:order-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-                  Fill the whole application
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-teal-ink">
+                  Autofill
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
                   Every field, across five ATS platforms
@@ -183,8 +183,8 @@ export default function Home() {
         <section className="mx-auto max-w-6xl px-6 py-24">
           <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-                Reach a real human
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-coral-ink">
+                Outreach
               </p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
                 While you're filling the form, an email is already drafting
@@ -207,8 +207,8 @@ export default function Home() {
                 <DraftMockup />
               </div>
               <div className="order-1 sm:order-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-brand-ink">
-                  Draft it for you
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-coral-ink">
+                  Outreach, drafted
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight text-ink">
                   A draft that sounds like you, not a template
@@ -326,8 +326,11 @@ export default function Home() {
 
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-xs text-faint sm:flex-row">
-          <span>&copy; {new Date().getFullYear()} Role Quick</span>
+          <span>&copy; {new Date().getFullYear()} RoleQuick</span>
           <div className="flex gap-6">
+            <a href="/login" className="hover:text-muted">
+              Sign in
+            </a>
             <a href="/privacy" className="hover:text-muted">
               Privacy
             </a>

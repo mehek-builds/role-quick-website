@@ -1,0 +1,275 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { api, ApplicationProfile, Me } from "@/lib/api";
+import { Card, Chip, Meter, ShimmerRows, ErrorNote } from "@/components/app/ui";
+
+/* Application profile: exactly the fields the backend encrypts and the
+   extension autofills (PRD-v2 Section 4). EEO self-identification is not
+   editable here on purpose: it defaults to decline-to-answer everywhere and
+   is only ever set by an explicit opt-in inside the extension. */
+
+const TRI = [
+  { value: "", label: "Not set" },
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+];
+
+export default function Settings() {
+  const [me, setMe] = useState<Me | null>(null);
+  const [profile, setProfile] = useState<ApplicationProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [meRes, profileRes] = await Promise.all([
+          api<Me>("/me"),
+          api<ApplicationProfile>("/profile/application").catch(() => ({})),
+        ]);
+        if (cancelled) return;
+        setMe(meRes);
+        setProfile(profileRes);
+      } catch (err) {
+        if (!cancelled)
+          setError(err instanceof Error ? err.message : "Could not load settings.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function patch(p: Partial<ApplicationProfile>) {
+    setProfile((prev) => ({ ...(prev ?? {}), ...p }));
+  }
+
+  async function save() {
+    if (!profile) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = { ...profile };
+      // GET echoes back row metadata the PUT schema doesn't accept.
+      delete body.id;
+      delete body.user_id;
+      delete body.created_at;
+      delete body.updated_at;
+      delete body.eeo_prefs;
+      const res = await api<ApplicationProfile>("/profile/application", {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      setProfile(res);
+      setSavedAt(Date.now());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (error && !profile) return <ErrorNote message={error} />;
+  if (!me || profile === null)
+    return (
+      <div className="space-y-6">
+        <div className="rq-shimmer h-8 w-48 rounded-full" />
+        <ShimmerRows rows={3} />
+      </div>
+    );
+
+  const trialActive =
+    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > Date.now();
+
+  return (
+    <div className="space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">Settings</h1>
+        <p className="mt-1 text-sm text-muted">
+          Account, application details, and plan.
+        </p>
+      </div>
+
+      {error && <ErrorNote message={error} />}
+
+      {/* Account */}
+      <Card className="p-6">
+        <h2 className="text-base font-medium text-ink">Account</h2>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-xs text-faint">Email</p>
+            <p className="mt-0.5 font-mono text-sm text-ink">{me.email}</p>
+          </div>
+          <div>
+            <p className="text-xs text-faint">Plan</p>
+            <div className="mt-1">
+              <Chip
+                label={me.tier === "pro" ? "Pro" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
+                kind={me.tier === "pro" ? "ready" : "draft"}
+              />
+              {trialActive && (
+                <span className="ml-2 text-xs text-muted">
+                  trial until {new Date(me.trial_ends_at!).toLocaleDateString()}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Application profile */}
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-medium text-ink">Application details</h2>
+            <p className="mt-1 text-sm text-muted">
+              What autofill types into forms. Phone, location, citizenship,
+              availability, and salary are encrypted at rest.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            {savedAt && !saving && <span className="text-xs text-teal-ink">Saved</span>}
+            <button
+              onClick={save}
+              disabled={saving}
+              className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save changes"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Input label="Phone" value={profile.phone} onChange={(v) => patch({ phone: v })} placeholder="+1 213 555 0100" />
+          <Input label="City" value={profile.address_city} onChange={(v) => patch({ address_city: v })} placeholder="Los Angeles" />
+          <Input label="State / region" value={profile.address_state} onChange={(v) => patch({ address_state: v })} placeholder="CA" />
+          <Input label="ZIP / postal code" value={profile.address_zip} onChange={(v) => patch({ address_zip: v })} placeholder="90007" />
+          <Input label="LinkedIn URL" value={profile.linkedin_url} onChange={(v) => patch({ linkedin_url: v })} placeholder="https://linkedin.com/in/you" />
+          <Input label="GitHub URL" value={profile.github_url} onChange={(v) => patch({ github_url: v })} placeholder="https://github.com/you" />
+          <Input label="Portfolio URL" value={profile.portfolio_url} onChange={(v) => patch({ portfolio_url: v })} placeholder="https://you.dev" />
+          <Input label="Citizenship" value={profile.citizenship} onChange={(v) => patch({ citizenship: v })} placeholder="United States" />
+          <Select
+            label="Authorized to work?"
+            value={profile.work_authorized}
+            onChange={(v) => patch({ work_authorized: v })}
+          />
+          <Select
+            label="Need sponsorship?"
+            value={profile.needs_sponsorship}
+            onChange={(v) => patch({ needs_sponsorship: v })}
+          />
+          <Input label="Available from" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" />
+          <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
+          <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="Company careers page" />
+        </div>
+
+        <p className="mt-5 text-xs leading-5 text-faint">
+          Voluntary EEO self-identification always defaults to decline-to-answer
+          and can only be changed by an explicit opt-in inside the extension.
+          Work authorization is always asked, never inferred.
+        </p>
+      </Card>
+
+      {/* Plan + usage */}
+      <Card className="p-6">
+        <h2 className="text-base font-medium text-ink">Plan and usage</h2>
+        <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-3">
+          <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} accent="bg-coral" />
+          <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} accent="bg-coral" />
+          <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} accent="bg-brand" />
+        </div>
+        {me.upgrade_url ? (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
+            <p className="text-sm text-muted">
+              Pro is $49.99/mo and removes the caps. Canceling takes the same
+              clicks as signing up, from the billing portal linked in your
+              receipt email.
+            </p>
+            <a
+              href={me.upgrade_url}
+              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            >
+              Upgrade to Pro
+            </a>
+          </div>
+        ) : me.tier === "pro" ? (
+          <p className="mt-6 border-t border-border pt-5 text-sm text-muted">
+            You are on Pro. Manage or cancel any time from the billing portal
+            linked in your receipt email, it takes the same clicks as signing
+            up did.
+          </p>
+        ) : null}
+      </Card>
+
+      {/* Data */}
+      <Card className="p-6">
+        <h2 className="text-base font-medium text-ink">Your data</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          Export or delete everything RoleQuick stores about you by emailing{" "}
+          <a href="mailto:mehekman@usc.edu" className="text-ink underline">
+            mehekman@usc.edu
+          </a>{" "}
+          from your account address. Deletion removes your profile, experience
+          bank, contacts, drafts, and generated resumes.
+        </p>
+      </Card>
+    </div>
+  );
+}
+
+function Input({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string | null | undefined;
+  onChange: (v: string | null) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-xs font-medium text-muted">{label}</label>
+      <input
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        placeholder={placeholder}
+        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+      />
+    </div>
+  );
+}
+
+function Select({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null | undefined;
+  onChange: (v: boolean | null) => void;
+}) {
+  const current = value === true ? "yes" : value === false ? "no" : "";
+  return (
+    <div>
+      <label className="block text-xs font-medium text-muted">{label}</label>
+      <select
+        value={current}
+        onChange={(e) =>
+          onChange(e.target.value === "" ? null : e.target.value === "yes")
+        }
+        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+      >
+        {TRI.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}

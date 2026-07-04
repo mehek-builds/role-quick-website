@@ -13,9 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Role Quick: tailored resume, filled application, real outreach",
+  metadataBase: new URL("https://rolequick.com"),
+  title: "RoleQuick: tailored resume, filled application, real outreach",
   description:
-    "Role Quick tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always review and submit.",
+    "RoleQuick tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always review and submit.",
 };
 
 export default function RootLayout({

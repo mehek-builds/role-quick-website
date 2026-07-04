@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Privacy: Role Quick",
+  title: "Privacy: RoleQuick",
 };
 
 export default function Privacy() {
@@ -12,7 +12,7 @@ export default function Privacy() {
 
       <div className="mt-10 space-y-6 text-sm leading-6 text-muted">
         <p>
-          Role Quick is a Chrome extension that helps you find contacts for a
+          RoleQuick is a Chrome extension that helps you find contacts for a
           job posting and drafts a personalized email. This page will be
           replaced with the full policy before the extension is submitted for
           Chrome Web Store review.

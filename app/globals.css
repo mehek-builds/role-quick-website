@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
-/* Design tokens: light, editorial, generous whitespace, same structural
-   family as Letterstory's console (white canvas, near-black ink, warm
-   off-white surfaces, hairline borders) with Role Quick's own accent.
+/* Design tokens: brand guidelines v1.0 (vault: 1-ventures/products/student-outreach/
+   brand-guidelines.html). White canvas, one signature blue, exactly two tonal
+   pillar accents: coral = outreach/email, teal = form-fill/autofill. Cover
+   letter and resume share the blue "documents" pillar (3 pillar accents max).
    Change here to re-theme everything. */
 :root {
   color-scheme: light;
@@ -16,9 +17,17 @@
   --color-muted: #6b6a64; /* secondary text */
   --color-faint: #a3a19a; /* tertiary / placeholders */
 
-  --color-brand: #2b4bf2; /* Role Quick blue, the signature mark */
-  --color-brand-ink: #1c33b0; /* darker, for text-on-light use */
+  --color-brand: #6b84e8; /* RoleQuick signature blue */
+  --color-brand-ink: #4257b8; /* darker, for text-on-light use */
   --color-brand-soft: #eef1fe; /* tint for badges/backgrounds */
+
+  --color-coral: #dd9273; /* outreach / email pillar */
+  --color-coral-ink: #a35f3f;
+  --color-coral-soft: #fbefe8;
+
+  --color-teal: #68ad95; /* form-fill / autofill pillar */
+  --color-teal-ink: #457f6c;
+  --color-teal-soft: #eaf5f0;
 
   --color-positive: #15803d;
   --color-warn: #b45309;
@@ -39,6 +48,12 @@
   --color-brand: var(--color-brand);
   --color-brand-ink: var(--color-brand-ink);
   --color-brand-soft: var(--color-brand-soft);
+  --color-coral: var(--color-coral);
+  --color-coral-ink: var(--color-coral-ink);
+  --color-coral-soft: var(--color-coral-soft);
+  --color-teal: var(--color-teal);
+  --color-teal-ink: var(--color-teal-ink);
+  --color-teal-soft: var(--color-teal-soft);
   --color-positive: var(--color-positive);
   --color-warn: var(--color-warn);
   --color-danger: var(--color-danger);
@@ -52,4 +67,26 @@ body {
   color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+}
+
+/* Shimmer loading state, per brand deck section 07 (review view). Color never
+   encodes urgency; loading is a neutral surface sweep. */
+@keyframes rq-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.rq-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-alt) 25%,
+    #f1efec 50%,
+    var(--color-surface-alt) 75%
+  );
+  background-size: 800px 100%;
+  animation: rq-shimmer 1.4s linear infinite;
 }
