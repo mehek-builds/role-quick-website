@@ -74,12 +74,14 @@ export function HeroBackdrop() {
 
   return (
     <div ref={wrapRef} aria-hidden className="absolute inset-0 -z-10 overflow-hidden">
-      {/* 1. The inbox, as texture — fades out before the demo below */}
+      {/* 1. The inbox — the problem-mirror. The top rows must be readable
+          at a glance (a student should recognize their own inbox before the
+          headline lands); it fades out before the demo below. */}
       <div
-        className="absolute inset-x-0 top-0 opacity-[0.32]"
+        className="absolute inset-x-0 top-0 opacity-[0.45]"
         style={{
-          maskImage: "linear-gradient(to bottom, black 25%, transparent 90%)",
-          WebkitMaskImage: "linear-gradient(to bottom, black 25%, transparent 90%)",
+          maskImage: "linear-gradient(to bottom, black 40%, transparent 90%)",
+          WebkitMaskImage: "linear-gradient(to bottom, black 40%, transparent 90%)",
         }}
       >
         {INBOX.map((m) => (
@@ -109,12 +111,14 @@ export function HeroBackdrop() {
         ))}
       </div>
 
-      {/* 2. The clarity wash — clears the center for the headline and CTAs */}
+      {/* 2. The clarity wash — clears the center for the headline and CTAs.
+          Center sits below the top inbox rows so they stay readable; the
+          headline zone remains fully washed (clarity still wins there). */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 62% 58% at 50% 40%, var(--color-bg) 42%, transparent 100%)",
+            "radial-gradient(ellipse 62% 52% at 50% 46%, var(--color-bg) 42%, transparent 100%)",
         }}
       />
 

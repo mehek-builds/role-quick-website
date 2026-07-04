@@ -51,6 +51,11 @@ export function PricingCards() {
           </button>
         </div>
       </div>
+      {/* The 20% claim, legible at the point you see the toggle. */}
+      <p className="mt-3 text-center text-[13px] text-muted">
+        ${YEARLY_PER_MO.toFixed(2)}/mo billed yearly, ${MONTHLY.toFixed(2)}/mo
+        billed monthly.
+      </p>
 
       <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2">
         {/* Free */}
@@ -59,7 +64,6 @@ export function PricingCards() {
             Free
           </p>
           <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">$0</p>
-          <p className="mt-1.5 text-[13px] text-faint">Free forever. No card.</p>
           <ul className="mt-6 space-y-1">
             <li className="text-[15px] font-medium leading-7 text-ink">
               Apply to 20 jobs / mo
@@ -74,6 +78,10 @@ export function PricingCards() {
           >
             Add to Chrome
           </a>
+          {/* Reassurance lives at the point of action (Guardrails). */}
+          <p className="mt-3 text-center text-[13px] text-muted">
+            Free forever. No card required.
+          </p>
         </div>
 
         {/* Pro */}

@@ -102,7 +102,11 @@ Revised 2026-07-04 (Mehek: "the website's too static, have moving parts").
 Calm motion, not decoration:
 - **Scroll reveal:** every marketing section settles in once (`Reveal` in
   `components/Motion.tsx`): 14px rise + fade, 700ms, `cubic-bezier(.16,1,.3,1)`.
-  Never replays.
+  Never replays. Reveals must never gate content: they pre-trigger half a
+  viewport early, elements already in view at mount appear instantly (deep
+  links, scroll restoration), and the initial viewport (hero + receipt) uses
+  the pure-CSS `rq-enter` entrance so the headline exists at first paint,
+  before hydration.
 - **The receipt is live and interactive** (`components/PacketDemo.tsx`): a
   JS state machine assembles the packet row by row with a terminal cursor,
   the footer flips from ASSEMBLING to READY + 9 SECONDS, holds, restarts.
@@ -112,13 +116,14 @@ Calm motion, not decoration:
   pillar-soft hover tints.
 - **Numbers count up** once on first view (`CountUp`, ~1.2s, cubic ease-out).
 - **Reactive hero backdrop** (`components/HeroBackdrop.tsx`), three layers:
-  a whisper-opacity Gmail inbox of application confirmations (the outcome as
-  texture, bottom-masked before the demo), a white radial clarity wash that
-  keeps the headline/CTAs fully legible, and one brand glow at 7% opacity
-  that lerps toward the cursor. Reactive-to-you, never looping; touch
-  devices get the glow centered and static. Clarity beats decoration: if
-  the inbox ever competes with the headline, lower its opacity, never the
-  wash.
+  a low-opacity Gmail inbox of application confirmations (the problem as
+  texture — the top rows are meant to be READ, 45% opacity, wash center
+  sits below them; bottom-masked before the demo), a white radial clarity
+  wash that keeps the headline/CTAs fully legible, and one brand glow at 7%
+  opacity that lerps toward the cursor. Reactive-to-you, never looping;
+  touch devices get the glow centered and static. Clarity beats decoration:
+  if the inbox ever competes with the headline, lower its opacity, never
+  the wash — but never below glance-readable on the top rows.
 - **Micro:** 150-250ms transitions on hover/state. Loading = `rq-shimmer`.
 - **Hard rules:** no parallax, no marquees, no attention loops beyond the
   receipt, and everything respects `prefers-reduced-motion` (instant, static).
@@ -154,3 +159,6 @@ up. Color encodes what something is, never how urgently to act.
 | 2026-07-04 | Plan limits are expressed as JOBS PER MONTH everywhere (Free = 20, bound by resumes; Pro = 500, bound by contacts), with the raw caps listed beneath | Mehek: users think in jobs applied to, not in resource caps; the caps stay visible per Guardrails |
 | 2026-07-04 | Submit-ownership language softened from absolutes ("You hit submit", "submit stays yours", "never submitted for you") to "You get the final say" / "You review before anything is submitted" | Opt-in auto-submit exists with a 9-second cancelable countdown, so "always yours" was technically false; privacy policy states the countdown explicitly |
 | 2026-07-04 | ATS platform names removed from the autofill section copy (subhead is now a benefit line) | Mehek: users care that it autofills, not which portal; names remain in the SEO meta description and the privacy policy's scope statement |
+| 2026-07-04 | Reveals made non-gating (CSS `rq-enter` for the initial viewport, instant-show when already in view, 50% pre-trigger margin) and ghost inbox raised to 45% opacity with the wash center moved off the top rows | Cold-visitor flow audit gap 3: hero was blank for 1-2s pre-hydration, End-key/anchor jumps landed on unrevealed white, and the problem-mirror inbox was too faint to register as "your inbox" |
+| 2026-07-05 | Simplify-audit pass (vault: simplify-vs-rolequick-competitive-audit-2026-07-05.md), no-scale items only: header CTA goes action blue (v1.1 law, primary reads primary); hero subhead names the mechanism/trigger/audience ("free Chrome extension for students and new grads"); permissions + no-data-sale caption under hero CTA; pain named in ATS + autofill copy; pillars numbered 01/02/03; "defaults are yours to change" caption; source citations promoted faint→muted 11px; 5-item FAQ (details/summary, surface-alt band); pricing toggle shows the $39.99-vs-$49.99 math, "Free forever, no card required" moved to the Free button; footer becomes 4-column sitemap with founder line, X/GitHub, build-date stamp, keyboard-navigation line | Scale-dependent audit items (testimonials, trust logos, install counts, blog) deliberately skipped per the audit's own sequencing: add once the underlying data exists, never faked |
+| 2026-07-04 | Official logo suite cut from the brand's own ingredients: Geist glyph outlines (R at wght 700 for the badge, wordmark at 600 with tracking-tight), signature blue circle mark, ink/blue/reversed lockups. Masters in `public/brand/`; header, login, favicon (static `app/icon.png`), and the extension icons all use the same drawing | One drawing of the R everywhere the brand appears; per the deck's color law the wordmark stays blue/ink and coral/teal never lead |
