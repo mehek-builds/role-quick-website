@@ -54,7 +54,7 @@ export default function OgImage() {
             color: "#12120f",
           }}
         >
-          Applying,&nbsp;<span style={{ color: "#3d51ad" }}>in seconds.</span>
+          Apply&nbsp;<span style={{ color: "#3d51ad" }}>in seconds.</span>
         </div>
         <div
           style={{

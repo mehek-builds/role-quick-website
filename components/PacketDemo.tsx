@@ -22,7 +22,7 @@ const ARTIFACTS = [
   {
     t: "19:42:14",
     label: "Application filled",
-    sub: "27 fields · submit stays yours",
+    sub: "27 fields · nothing sent yet",
     working: "Filling application",
     action: "Review",
     thread: "bg-teal",
@@ -201,7 +201,7 @@ export function PacketDemo() {
                     : "border border-dashed border-border text-faint"
                 }`}
               >
-                {done ? "Review, then submit yourself" : "Assembling packet…"}
+                {done ? "Review, then send" : "Assembling packet…"}
               </span>
             </div>
           </div>

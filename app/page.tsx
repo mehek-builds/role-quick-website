@@ -44,11 +44,11 @@ export default function Home() {
         <section className="mx-auto max-w-3xl px-6 pt-28 text-center sm:pt-40">
           <Reveal>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[76px]">
-              Applying, <span className="text-brand-ink">in seconds.</span>
+              Apply <span className="text-brand-ink">in seconds.</span>
             </h1>
             <p className="mx-auto mt-7 max-w-[440px] text-[17px] leading-[1.65] text-muted">
               It tailors your resume, fills the application, drafts the
-              outreach. You hit submit.
+              outreach. You get the final say.
             </p>
             <div className="mt-10 flex flex-col items-center justify-center gap-6 sm:flex-row">
               <a
@@ -144,7 +144,7 @@ export default function Home() {
                     Every field, filled.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    Greenhouse, Lever, Ashby, Workday, LinkedIn.
+                    You never type your phone number again.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
                   <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
@@ -162,7 +162,7 @@ export default function Home() {
                     </p>
                     <p>
                       <span className="text-teal-ink">Leaves</span>
-                      <span className="text-muted"> · essays and submit to you</span>
+                      <span className="text-muted"> · essays and the final say to you</span>
                     </p>
                   </div>
                 </div>
@@ -218,7 +218,7 @@ export default function Home() {
               Every feature, free every month.
             </h2>
             <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
-              Free allowances reset on the 1st. Pro raises the caps.
+              Free covers 20 jobs a month, resetting on the 1st. Pro covers 500.
             </p>
             <PricingCards />
           </Reveal>

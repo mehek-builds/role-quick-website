@@ -61,9 +61,11 @@ export function PricingCards() {
           <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">$0</p>
           <p className="mt-1.5 text-[13px] text-faint">Free forever. No card.</p>
           <ul className="mt-6 space-y-1">
-            <Line>30 contacts / mo</Line>
-            <Line>60 drafts / mo</Line>
-            <Line>20 resumes / mo</Line>
+            <li className="text-[15px] font-medium leading-7 text-ink">
+              Apply to 20 jobs / mo
+            </li>
+            <Line>20 tailored resumes</Line>
+            <Line>30 contacts, 60 drafts</Line>
             <Line>Full autofill</Line>
           </ul>
           <a
@@ -81,7 +83,7 @@ export function PricingCards() {
               Pro
             </p>
             <span className="rounded-full bg-brand px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
-              Raises every cap
+              500 jobs / mo
             </span>
           </div>
           <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">
@@ -99,9 +101,11 @@ export function PricingCards() {
             )}
           </p>
           <ul className="mt-6 space-y-1">
-            <Line>500 contacts / mo</Line>
-            <Line>1,000 drafts / mo</Line>
+            <li className="text-[15px] font-medium leading-7 text-ink">
+              Apply to 500 jobs / mo
+            </li>
             <Line>Unlimited resumes</Line>
+            <Line>500 contacts, 1,000 drafts</Line>
             <Line>Cancel anytime, same clicks</Line>
           </ul>
           <a

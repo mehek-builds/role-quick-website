@@ -76,10 +76,13 @@ export default function Privacy() {
             never resell contact data.
           </p>
           <p>
-            Sending is always initiated by you, from your own Gmail account.
-            Drafts wait in your drafts folder. Nothing sends itself, and
-            applications are never submitted for you: the submit click is
-            always yours.
+            Outreach emails are sent by you, from your own Gmail account.
+            Drafts wait in your drafts folder and never send themselves.
+          </p>
+          <p>
+            Applications submit only when you click Submit, unless you turn on
+            auto-submit. With auto-submit on, a nine-second countdown runs
+            before the application goes out, and one click cancels it.
           </p>
         </Section>
 

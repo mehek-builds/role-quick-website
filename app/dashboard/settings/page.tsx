@@ -184,7 +184,7 @@ export default function Settings() {
         {me.upgrade_url ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
-              <span className="font-medium text-ink">Pro raises every cap. </span>
+              <span className="font-medium text-ink">Pro covers 500 jobs a month. </span>
               $49.99/mo. Canceling takes the same clicks as signing up, from
               the billing portal linked in your receipt email.
             </p>

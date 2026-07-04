@@ -152,7 +152,7 @@ export default function Applications() {
 
               <p className="mt-4 text-xs text-faint">
                 The resume PDF downloads from the extension at generation time.
-                You always review and hit Submit yourself.
+                You review before anything is submitted.
               </p>
             </Card>
           ))}
