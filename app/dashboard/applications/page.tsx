@@ -131,7 +131,7 @@ export default function Applications() {
               {/* Outreach note preview */}
               {outreach?.draft_text && (
                 <div className="mt-4 rounded-[12px] bg-coral-soft/60 p-4">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-coral-ink">
+                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-coral-ink">
                     Outreach note{outreach.contact?.full_name ? ` to ${outreach.contact.full_name}` : ""}
                   </p>
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-ink">

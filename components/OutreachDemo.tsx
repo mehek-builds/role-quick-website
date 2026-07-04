@@ -77,7 +77,7 @@ export function OutreachDemo() {
         </div>
         <div className="rounded-2xl border border-border bg-white p-4">
           <div className="flex items-center justify-between gap-2 px-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
               Hiring team · Northline
             </p>
             <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
@@ -137,7 +137,7 @@ export function OutreachDemo() {
           {selected.email ? (
             <>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                   New message · Gmail
                 </p>
                 <span className="shrink-0 rounded-full bg-coral-soft px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-coral-ink">
@@ -158,7 +158,7 @@ export function OutreachDemo() {
                 <p className="pt-1 leading-6 text-muted">
                   {selected.body}
                   <br />
-                  <span className="text-ink">— Alex</span>
+                  <span className="text-ink">- Alex</span>
                 </p>
               </div>
               <p className="mt-3 border-t border-border pt-3 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -168,7 +168,7 @@ export function OutreachDemo() {
           ) : (
             <>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                   No draft for {selected.name.split(" ")[0]}
                 </p>
                 <span className="shrink-0 rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-muted">

@@ -174,6 +174,12 @@ export default function Login() {
         One account for the extension and this dashboard. Signing in here shows
         the contacts, drafts, and resumes the extension has already made for you.
       </p>
+      <p className="mt-3 max-w-sm text-center text-xs leading-5 text-faint">
+        Your data is yours: export or delete it anytime.{" "}
+        <a href="/privacy" className="underline hover:text-muted">
+          Privacy
+        </a>
+      </p>
     </div>
   );
 }

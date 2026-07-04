@@ -32,6 +32,8 @@ const CHIP_STYLES: Record<string, string> = {
   verified: "bg-positive-soft text-positive",
   likely: "bg-warn-soft text-warn",
   linkedin_only: "bg-surface-alt text-muted",
+  // persona marks what a contact is: an outreach-pillar artifact, not a status
+  persona: "bg-coral-soft text-coral-ink",
 };
 
 export function Chip({ label, kind }: { label: string; kind?: string }) {

@@ -44,7 +44,7 @@ export default function Home() {
         <section className="mx-auto max-w-3xl px-6 pt-28 text-center sm:pt-40">
           <Reveal>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[76px]">
-              Applying, <span className="text-brand-ink">in minutes.</span>
+              Applying, <span className="text-brand-ink">in seconds.</span>
             </h1>
             <p className="mx-auto mt-7 max-w-[440px] text-[17px] leading-[1.65] text-muted">
               It tailors your resume, fills the application, drafts the
@@ -79,10 +79,13 @@ export default function Home() {
           <div className="mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
-                <CountUp to={257} />
+                <CountUp to={250} />
               </p>
               <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
                 applications per corporate role. We do the repetitive part.
+              </p>
+              <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+                Source: Glassdoor research
               </p>
             </Reveal>
           </div>
@@ -141,7 +144,7 @@ export default function Home() {
                     Every field, filled.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    All five platforms. Workday included.
+                    Greenhouse, Lever, Ashby, Workday, LinkedIn.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
                   <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
@@ -212,10 +215,10 @@ export default function Home() {
           <div className="mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
-              Every feature is free.
+              Every feature, free every month.
             </h2>
             <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
-              Allowances reset on the 1st.
+              Free allowances reset on the 1st. Pro raises the caps.
             </p>
             <PricingCards />
           </Reveal>

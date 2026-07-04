@@ -119,7 +119,7 @@ export default function Outreach() {
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {persona && (
-                      <Chip label={PERSONA_LABELS[persona] ?? persona} kind="likely" />
+                      <Chip label={PERSONA_LABELS[persona] ?? persona} kind="persona" />
                     )}
                     <Chip
                       label={e.status.charAt(0).toUpperCase() + e.status.slice(1)}

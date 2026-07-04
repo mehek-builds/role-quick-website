@@ -135,7 +135,7 @@ export default function Settings() {
             <button
               onClick={save}
               disabled={saving}
-              className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save changes"}
             </button>
@@ -184,7 +184,7 @@ export default function Settings() {
         {me.upgrade_url ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
-              <span className="font-medium text-ink">Pro removes every cap. </span>
+              <span className="font-medium text-ink">Pro raises every cap. </span>
               $49.99/mo. Canceling takes the same clicks as signing up, from
               the billing portal linked in your receipt email.
             </p>

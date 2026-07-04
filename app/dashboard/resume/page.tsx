@@ -187,7 +187,7 @@ export default function ResumeWorkspace() {
             <button
               onClick={saveBank}
               disabled={saving || entries === null}
-              className="rounded-full bg-ink px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {saving ? "Saving..." : "Save changes"}
             </button>

@@ -104,7 +104,7 @@ export function PacketDemo() {
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_340px]">
         {/* The posting underneath */}
         <div className="border-b border-border p-7 sm:border-b-0 sm:border-r">
-          <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             Notion · San Francisco
           </p>
           <p className="mt-2 text-lg font-semibold tracking-tight text-ink">

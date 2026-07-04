@@ -151,7 +151,7 @@ export default function Overview() {
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] bg-brand-soft p-6">
           <div>
             <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-medium text-ink">Go Pro. Remove every cap.</h2>
+              <h2 className="text-base font-medium text-ink">Go Pro. Raise every cap.</h2>
               <span className="rounded-full bg-brand px-2.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
                 $49.99/mo
               </span>

@@ -37,7 +37,7 @@ export function ContactListMockup() {
   return (
     <Frame>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Hiring team · Northline
         </p>
         <span className="font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
@@ -78,7 +78,7 @@ export function DraftMockup() {
   return (
     <Frame>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           New message · Gmail
         </p>
         <span className="shrink-0 rounded-full bg-coral-soft px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-coral-ink">
@@ -101,7 +101,7 @@ export function DraftMockup() {
           platform work looks like that at real scale. Open to a 15-minute
           chat?
           <br />
-          <span className="text-ink">— Alex</span>
+          <span className="text-ink">- Alex</span>
         </p>
       </div>
       <p className="mt-3 border-t border-border pt-3 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -370,7 +370,7 @@ export function ApplicationFormMockup() {
   return (
     <Frame>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Application · Greenhouse
         </p>
         <span className="shrink-0 rounded-full bg-teal-soft px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-teal-ink">
@@ -378,7 +378,7 @@ export function ApplicationFormMockup() {
         </span>
       </div>
       <p className="mt-2 text-[13px] font-semibold text-ink">
-        Software Engineer Intern — Northline
+        Software Engineer Intern · Northline
       </p>
 
       <div className="mt-3.5 grid grid-cols-2 gap-2">
@@ -408,7 +408,7 @@ export function ApplicationFormMockup() {
         <FormField label="How did you hear about us?" value="Company careers page" select />
         <FormField
           label="Why do you want to work at Northline?"
-          value="Left blank — essays are yours."
+          value="Left blank, essays are yours."
           filled={false}
         />
         <FormField label="Voluntary self-identification" value="Decline to self-identify" select />
@@ -652,7 +652,7 @@ export function JobDescriptionMockup() {
         <span className="truncate font-mono text-[9px] text-faint">jobs.lever.co/northline</span>
       </div>
       <Frame>
-        <p className="text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Northline · Los Angeles
         </p>
         <p className="mt-1.5 text-sm font-semibold text-ink">Software Engineer Intern</p>

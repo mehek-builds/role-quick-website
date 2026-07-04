@@ -45,9 +45,11 @@ export function Reveal({
   );
 }
 
-export function CountUp({ to, duration = 1200 }: { to: number; duration?: number }) {
+/* Starts at 80% of the target so a mid-scroll reader never catches a
+   nonsense low value ("0 applications per corporate role"). */
+export function CountUp({ to, duration = 900 }: { to: number; duration?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
-  const [value, setValue] = useState(0);
+  const [value, setValue] = useState(Math.round(to * 0.8));
   const started = useRef(false);
 
   useEffect(() => {
@@ -66,7 +68,7 @@ export function CountUp({ to, duration = 1200 }: { to: number; duration?: number
         const tick = (t: number) => {
           const p = Math.min(1, (t - t0) / duration);
           const eased = 1 - Math.pow(1 - p, 3);
-          setValue(Math.round(to * eased));
+          setValue(Math.round(to * (0.8 + 0.2 * eased)));
           if (p < 1) requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
