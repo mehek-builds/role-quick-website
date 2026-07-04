@@ -598,3 +598,43 @@ export function ResumeMockup() {
     </Frame>
   );
 }
+
+/* The receipt (DESIGN.md signature motif 1): one packet, speed as fact.
+   The mono timestamp gutter is the machine voice; threads are provenance
+   (blue = documents, teal = autofill, coral = outreach). */
+const packetLog = [
+  { t: "19:42:07", e: "POSTING DETECTED", thread: "bg-border" },
+  { t: "19:42:11", e: "RESUME TAILORED", thread: "bg-brand" },
+  { t: "19:42:14", e: "APPLICATION FILLED, 27 FIELDS", thread: "bg-teal" },
+  { t: "19:42:16", e: "OUTREACH DRAFTED, USC ALUM", thread: "bg-coral" },
+];
+
+export function PacketMockup() {
+  return (
+    <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-[20px] border border-border bg-surface text-left">
+      <div className="flex items-baseline justify-between border-b border-border px-6 py-4">
+        <span className="text-sm font-medium text-ink">
+          Software Engineer Intern <span className="font-normal text-muted">· Notion</span>
+        </span>
+        <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Packet
+        </span>
+      </div>
+      <div className="grid gap-3 px-6 py-5">
+        {packetLog.map((row) => (
+          <div key={row.t} className="grid grid-cols-[86px_1fr_auto] items-center gap-4 font-mono text-[12.5px]">
+            <span className="text-faint">{row.t}</span>
+            <span className="tracking-[0.02em] text-ink">{row.e}</span>
+            <span className={`h-0.5 w-5 rounded-full ${row.thread}`} />
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between border-t border-border px-6 py-3.5">
+        <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-teal-ink">
+          Ready for your review
+        </span>
+        <span className="text-xs text-faint">Submit stays yours. Always.</span>
+      </div>
+    </div>
+  );
+}

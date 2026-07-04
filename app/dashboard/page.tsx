@@ -119,15 +119,14 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* Usage: pillar-colored meters. Contacts + drafts = outreach (coral),
-          resumes = documents (blue). Autofill has no cap on any plan. */}
+      {/* Usage meters fill in ink per DESIGN.md: a meter is a quantity, not a
+          pillar. Autofill has no cap on any plan, so it has no meter. */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
         <Card className="p-6">
           <Meter
             label="Verified contacts"
             used={me.usage.contacts.used}
             limit={me.usage.contacts.limit}
-            accent="bg-coral"
           />
         </Card>
         <Card className="p-6">
@@ -135,7 +134,6 @@ export default function Overview() {
             label="Outreach drafts"
             used={me.usage.drafts.used}
             limit={me.usage.drafts.limit}
-            accent="bg-coral"
           />
         </Card>
         <Card className="p-6">
@@ -143,7 +141,6 @@ export default function Overview() {
             label="Tailored resumes"
             used={me.usage.resumes.used}
             limit={me.usage.resumes.limit}
-            accent="bg-brand"
           />
         </Card>
       </div>

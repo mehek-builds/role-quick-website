@@ -13,9 +13,6 @@ export function Header() {
           </span>
         </a>
         <nav className="hidden items-center gap-8 text-sm text-muted sm:flex">
-          <a href="/#how-it-works" className="hover:text-ink">
-            How it works
-          </a>
           <a href="/#product" className="hover:text-ink">
             Product
           </a>
@@ -30,9 +27,11 @@ export function Header() {
           >
             Sign in
           </a>
+          {/* Ink, not blue: the hero CTA is the viewport's one blue element
+              (DESIGN.md one-accent-moment rule). */}
           <a
             href={STORE_URL}
-            className="hidden rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:block"
+            className="hidden rounded-full bg-ink px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:block"
           >
             Add to Chrome
           </a>

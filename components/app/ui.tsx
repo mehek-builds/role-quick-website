@@ -37,23 +37,23 @@ export function Chip({ label, kind }: { label: string; kind?: string }) {
   const style = CHIP_STYLES[kind ?? label.toLowerCase()] ?? "bg-surface-alt text-muted";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${style}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.05em] ${style}`}
     >
       {label}
     </span>
   );
 }
 
+/* Meters fill in ink (DESIGN.md): a meter is a quantity, not a pillar.
+   Color stays reserved for provenance and the one human action. */
 export function Meter({
   label,
   used,
   limit,
-  accent = "bg-brand",
 }: {
   label: string;
   used: number;
   limit: number;
-  accent?: string;
 }) {
   const unlimited = limit <= 0 || limit >= 100000;
   const pct = unlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
@@ -66,10 +66,10 @@ export function Meter({
           {unlimited ? " used" : ` / ${limit}`}
         </span>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-alt">
+      <div className="mt-2 h-0.5 overflow-hidden rounded-full bg-border">
         {!unlimited && (
           <div
-            className={`h-full rounded-full ${accent}`}
+            className="h-full rounded-full bg-ink"
             style={{ width: `${pct}%` }}
           />
         )}

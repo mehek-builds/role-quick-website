@@ -177,9 +177,9 @@ export default function Settings() {
       <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} accent="bg-coral" />
-          <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} accent="bg-coral" />
-          <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} accent="bg-brand" />
+          <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} />
+          <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
+          <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
         {me.upgrade_url ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
