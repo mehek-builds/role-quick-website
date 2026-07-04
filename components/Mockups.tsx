@@ -633,7 +633,7 @@ export function PacketMockup() {
         <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-teal-ink">
           Ready for your review
         </span>
-        <span className="text-xs text-faint">Submit stays yours. Always.</span>
+        <span className="font-mono text-[11px] tracking-[0.08em] text-faint">9 SECONDS</span>
       </div>
     </div>
   );

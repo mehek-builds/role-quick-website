@@ -182,11 +182,11 @@ export default function Settings() {
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
         {me.upgrade_url ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 border-t border-border pt-5">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
-              Pro is $49.99/mo and removes the caps. Canceling takes the same
-              clicks as signing up, from the billing portal linked in your
-              receipt email.
+              <span className="font-medium text-ink">Pro removes every cap. </span>
+              $49.99/mo. Canceling takes the same clicks as signing up, from
+              the billing portal linked in your receipt email.
             </p>
             <a
               href={me.upgrade_url}

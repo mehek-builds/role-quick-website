@@ -7,15 +7,26 @@ import {
 } from "@/components/Mockups";
 import { STORE_URL } from "@/lib/config";
 
-/* Layout law (DESIGN.md): one idea per viewport, headlines are short
-   declarative sentences with periods, blue appears once per viewport,
-   machine facts are set in mono. */
+/* Layout law (DESIGN.md v1.1): one idea per viewport, headlines are short
+   declarative sentences with periods, machine facts are set in mono. Color
+   is tonal with jobs: blue = action + documents, teal = autofill, coral =
+   outreach. Each pillar section sits on its own whisper-tint band; solid
+   blue repeats on every true CTA (consistency, not scarcity). */
 
 const ATS_NAMES = ["Lever", "Greenhouse", "Ashby", "Workday", "LinkedIn"];
 
-function MonoLabel({ children }: { children: React.ReactNode }) {
+function PillarLabel({
+  children,
+  thread,
+  tone,
+}: {
+  children: React.ReactNode;
+  thread: string;
+  tone: string;
+}) {
   return (
-    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+    <p className={`flex items-center gap-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] ${tone}`}>
+      <span className={`h-0.5 w-4 rounded-full ${thread}`} />
       {children}
     </p>
   );
@@ -57,7 +68,7 @@ export default function Home() {
         {/* Hero: the claim, then the receipt. */}
         <section className="mx-auto max-w-3xl px-6 pt-24 text-center sm:pt-32">
           <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[76px]">
-            Applying, in minutes.
+            Applying, <span className="text-brand-ink">in minutes.</span>
           </h1>
           <p className="mx-auto mt-7 max-w-[540px] text-[17px] leading-[1.65] text-muted">
             Open a job posting. RoleQuick tailors your resume, fills the
@@ -78,9 +89,7 @@ export default function Home() {
               See the product
             </a>
           </div>
-          <p className="mt-4 text-xs text-faint">
-            No credit card. Every feature free, capped monthly.
-          </p>
+          <p className="mt-4 text-xs text-faint">No credit card.</p>
           <div className="mt-14 flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
             {ATS_NAMES.map((name) => (
               <span
@@ -105,15 +114,18 @@ export default function Home() {
             </p>
             <p className="mx-auto mt-6 max-w-md text-base leading-7 text-muted">
               applications received by the average corporate role. RoleQuick
-              does the repetitive part. Deciding stays yours.
+              does the repetitive part.
             </p>
           </div>
         </section>
 
-        {/* Documents */}
-        <section className="mx-auto max-w-5xl px-6 py-36">
+        {/* Documents: blue pillar band */}
+        <section className="border-t border-border bg-brand-soft/50">
+          <div className="mx-auto max-w-5xl px-6 py-36">
           <div className="mx-auto max-w-[560px] text-center">
-            <MonoLabel>Documents</MonoLabel>
+            <div className="flex justify-center">
+              <PillarLabel thread="bg-brand" tone="text-brand-ink">Documents</PillarLabel>
+            </div>
             <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
               A resume tuned to this posting.
             </h2>
@@ -126,45 +138,48 @@ export default function Home() {
           <div className="mt-16">
             <ResumeMatchDemo />
           </div>
+          </div>
         </section>
 
-        {/* Autofill */}
-        <section className="border-y border-border bg-surface-alt">
+        {/* Autofill: teal pillar band */}
+        <section className="border-t border-border bg-teal-soft/50">
           <div className="mx-auto max-w-6xl px-6 py-36">
             <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
               <div className="order-2 sm:order-1">
                 <ApplicationFormMockup />
               </div>
               <div className="order-1 sm:order-2">
-                <MonoLabel>Autofill</MonoLabel>
+                <PillarLabel thread="bg-teal" tone="text-teal-ink">Autofill</PillarLabel>
                 <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                   Every field, filled.
                 </h2>
                 <ul className="mt-6 space-y-1">
                   <Line>Contact info, links, work authorization, the resume file itself.</Line>
-                  <Line>Across Lever, Greenhouse, Ashby, Workday, and LinkedIn Easy Apply.</Line>
-                  <Line>It stops at Submit. That click is yours, every time.</Line>
+                  <Line>Even the long ones. Workday included.</Line>
+                  <Line>Screening questions answered from your saved profile.</Line>
                 </ul>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Outreach */}
-        <section className="mx-auto max-w-6xl px-6 py-36">
+        {/* Outreach: coral pillar band */}
+        <section className="border-t border-border bg-coral-soft/50">
+          <div className="mx-auto max-w-6xl px-6 py-36">
           <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
             <div>
-              <MonoLabel>Outreach</MonoLabel>
+              <PillarLabel thread="bg-coral" tone="text-coral-ink">Outreach</PillarLabel>
               <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 A real person, already drafted.
               </h2>
               <ul className="mt-6 space-y-1">
                 <Line>School alumni surfaced first, the persona most likely to reply.</Line>
                 <Line>A confidence tier on every contact, never a hidden guess.</Line>
-                <Line>The draft lands in your Gmail. Sending is yours.</Line>
+                <Line>Waiting in your Gmail drafts, sounding like you.</Line>
               </ul>
             </div>
             <ContactListMockup />
+          </div>
           </div>
         </section>
 
@@ -203,12 +218,14 @@ export default function Home() {
             Every feature is free.
           </h2>
           <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
-            Nothing is paywalled. Free has monthly allowances that reset on the
-            1st. Pro removes the caps.
+            Nothing is paywalled. Free has monthly allowances that reset on
+            the 1st.
           </p>
           <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2">
             <div className="rounded-[20px] border border-border bg-surface p-8">
-              <MonoLabel>Free</MonoLabel>
+              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                Free
+              </p>
               <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">$0</p>
               <ul className="mt-6 space-y-1">
                 <Line>30 verified contacts a month</Line>
@@ -216,11 +233,27 @@ export default function Home() {
                 <Line>20 tailored resumes a month</Line>
                 <Line>Full autofill on all five platforms</Line>
               </ul>
+              <a
+                href={STORE_URL}
+                className="mt-8 block rounded-full border border-border px-5 py-2.5 text-center text-sm font-medium text-ink transition-colors hover:border-ink"
+              >
+                Add to Chrome
+              </a>
             </div>
-            <div className="rounded-[20px] border border-border bg-surface p-8">
-              <MonoLabel>Pro</MonoLabel>
+            {/* Pro gets the emphasis (DESIGN.md v1.1): a blue-soft surface and
+                the page's strongest CTA. Emphasis states what you get, never
+                how fast to decide. */}
+            <div className="rounded-[20px] bg-brand-soft p-8">
+              <div className="flex items-center justify-between">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                  Pro
+                </p>
+                <span className="rounded-full bg-brand px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
+                  Removes all caps
+                </span>
+              </div>
               <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">
-                $49.99<span className="text-base text-faint"> / mo</span>
+                $49.99<span className="text-base text-muted"> / mo</span>
               </p>
               <ul className="mt-6 space-y-1">
                 <Line>500 verified contacts a month</Line>
@@ -228,12 +261,18 @@ export default function Home() {
                 <Line>Unlimited tailored resumes</Line>
                 <Line>Cancel in the same clicks it took to start</Line>
               </ul>
+              <a
+                href="/login"
+                className="mt-8 block rounded-full bg-brand px-5 py-2.5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
+              >
+                Go Pro
+              </a>
             </div>
           </div>
         </section>
 
-        {/* Close */}
-        <section className="border-t border-border bg-surface-alt">
+        {/* Close: the brand-blue tonal band sends you off */}
+        <section className="border-t border-border bg-brand-soft/60">
           <div className="mx-auto max-w-3xl px-6 py-36 text-center">
             <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
               Open your next application. Let it do the rest.
@@ -242,7 +281,7 @@ export default function Home() {
               href={STORE_URL}
               className="mt-9 inline-block rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
-              Add to Chrome, it&apos;s free
+              Add to Chrome
             </a>
           </div>
         </section>

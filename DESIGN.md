@@ -45,24 +45,38 @@ numbers), never claimed with hype.
   - Label: 11px mono, uppercase, +0.08em, weight 500
 - **Loading:** next/font Geist + Geist_Mono (already wired in `app/layout.tsx`).
 
-## Color — 95% ink on white
-Palette is the brand deck's, unchanged. The laws below are what changed.
+## Color v1.1 — tonalities with jobs
+Palette is the brand deck's, unchanged. Revised 2026-07-04 (second pass) after
+Mehek rejected strict one-accent scarcity and a Simplify teardown (home +
+Copilot pages captured live): Simplify repeats ONE action color on every CTA
+and gives each feature row a pale tinted band. The law is **consistency of
+meaning**, not scarcity. Three tonal families, each with a job:
 
-- **Canvas:** `#ffffff` · **Surface-alt:** `#faf9f7` (section striping only)
-- **Border:** `#e8e6e1` hairline, always 1px. No `border-2` emphasis anywhere.
-- **Ink:** `#12120f` · **Muted:** `#6b6a64` · **Faint:** `#a3a19a`
-- **Blue `#6b84e8` (+ ink `#4257b8`, soft `#eef1fe`):** marks **the one action
-  a human takes per screen** (primary CTA, focus ring, the Submit-adjacent
-  thing). One-accent-moment rule: blue appears on exactly one element per
-  viewport. If a second blue thing wants in, one of them is wrong.
-- **Coral `#dd9273` / Teal `#68ad95`:** provenance threads only — which pillar
-  an artifact came from (coral = outreach, teal = autofill, blue = documents).
-  Thin 2px lines, small chips, small text. **Never fills, never section
-  theming, never urgency.** Near-invisible on marketing; data-bearing in app.
+- **Blue family** `#6b84e8` / ink `#4257b8` / soft `#eef1fe` — **action +
+  documents pillar + Pro.** Solid blue may repeat on every true CTA on a page
+  (never on anything that isn't an action). Blue-soft surfaces carry the
+  documents pillar, selected states, the closing band, and **Pro emphasis**
+  (pricing card, dashboard upsell) — the upgrade is allowed to be the
+  strongest moment on its screen.
+- **Teal family** `#68ad95` / ink `#457f6c` / soft `#eaf5f0` — **autofill
+  pillar.** Its feature section sits on a whisper band (`teal-soft/50`);
+  chips, threads, and "filled/done" states in app.
+- **Coral family** `#dd9273` / ink `#a35f3f` / soft `#fbefe8` — **outreach
+  pillar.** Same deployment: whisper band, chips, threads.
+- **Pillar band rule (marketing):** each pillar's feature section sits on its
+  soft tint at ~50%, with its colored thread + mono eyebrow. Tint = identity,
+  structural, never decorative elsewhere.
+- **Headline color rule:** at most one colored phrase in the hero (e.g. "in
+  minutes." in blue-ink). Section headlines stay ink.
+- **Neutrals:** canvas `#ffffff`, surface-alt `#faf9f7` (neutral striping for
+  non-pillar sections), border `#e8e6e1` hairline always 1px, ink `#12120f`,
+  muted `#6b6a64`, faint `#a3a19a`.
 - **Semantic:** positive `#15803d`, warn `#b45309`, danger `#b91c1c` — status
   facts only, never persuasion.
-- **Dark mode:** not shipped. The brand is light. (An exploratory dark token
-  set exists in the preview artifact only.)
+- **Unchanged hard law:** color never encodes urgency. Emphasis states what
+  something is or what you get; it never pushes how fast to decide. Meters
+  stay ink (a meter is a quantity, not a pillar).
+- **Dark mode:** not shipped. The brand is light.
 
 ## Spacing
 - **Base unit:** 8px. **Density:** spacious on marketing, comfortable in app.
@@ -91,6 +105,10 @@ Palette is the brand deck's, unchanged. The laws below are what changed.
 
 ## Voice (copy rules that are also design rules)
 - Short sentences. Periods. "You hit submit." beats "Empowering your journey."
+- **Say each point once, in its strongest spot.** Submit-ownership lives in
+  the hero and the refusal list, nowhere else. The free-tier claim lives in
+  the pricing headline. The cancel-easy line lives on the pricing card and in
+  Settings. Repetition reads as insecurity.
 - No AI-slop vocabulary, no exclamation marks, no urgency framing.
 - Social proof only below the fold, and only when real. Zero fake numbers.
 
@@ -105,3 +123,6 @@ up. Color encodes what something is, never how urgently to act.
 | 2026-07-04 | Initial DESIGN.md via /design-consultation | Live research on Linear/Notion/Stripe/Vercel + independent design voice; memorable thing set to "calm + speed" by Mehek |
 | 2026-07-04 | Blue = one human action per viewport; coral/teal demoted to provenance threads | The one-accent restraint is what makes the reference brands read clean; also makes the Guardrails stance visible |
 | 2026-07-04 | Receipt motif (mono timestamp log) as the hero artifact | Speed shown as fact, not hype — serves "calm + speed" without violating the no-urgency law |
+| 2026-07-04 | Color v1.1: one-accent scarcity replaced by tonalities-with-jobs (pillar bands, repeating action blue, Pro emphasis surfaces) | Mehek's call + Simplify teardown: their system repeats one action color everywhere and tints feature bands; meaning-consistency beats scarcity |
+| 2026-07-04 | Pro emphasis allowed as the strongest moment per screen (blue-soft surface + solid CTA + caps chip) | Emphasis is honest when it states what you get; urgency mechanics stay banned |
+| 2026-07-04 | Say-each-point-once voice rule | Mehek: "get rid of all the repetitive stuff" — submit-ownership was stated 5x on one page |

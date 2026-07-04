@@ -145,14 +145,19 @@ export default function Overview() {
         </Card>
       </div>
 
+      {/* Pro emphasis surface (DESIGN.md v1.1): blue-soft, the screen's
+          strongest moment. States what you get; no urgency mechanics. */}
       {me.upgrade_url && (
-        <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] bg-brand-soft p-6">
           <div>
-            <h2 className="text-base font-medium text-ink">Pro removes the caps</h2>
-            <p className="mt-1 text-sm text-muted">
-              $49.99/mo. 500 contacts, 1,000 drafts, unlimited resumes. Every
-              feature stays free either way, and canceling takes the same
-              clicks as signing up.
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-base font-medium text-ink">Go Pro. Remove every cap.</h2>
+              <span className="rounded-full bg-brand px-2.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
+                $49.99/mo
+              </span>
+            </div>
+            <p className="mt-1.5 text-sm text-muted">
+              500 contacts, 1,000 drafts, unlimited resumes.
             </p>
           </div>
           <a
@@ -161,7 +166,7 @@ export default function Overview() {
           >
             Upgrade to Pro
           </a>
-        </Card>
+        </div>
       )}
 
       <section>
