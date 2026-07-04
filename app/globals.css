@@ -124,6 +124,21 @@ body {
   animation: rq-log-row 9s cubic-bezier(0.16, 1, 0.3, 1) infinite;
 }
 
+/* Content swap (e.g. the outreach draft changing per contact). */
+@keyframes rq-fade {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rq-fade {
+  animation: rq-fade 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 /* Terminal cursor for the live receipt. */
 @keyframes rq-blink {
   0%, 49% {
@@ -141,6 +156,9 @@ body {
   .rq-blink {
     animation: none;
     opacity: 0;
+  }
+  .rq-fade {
+    animation: none;
   }
   .rq-reveal {
     opacity: 1;

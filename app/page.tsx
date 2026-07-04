@@ -1,11 +1,10 @@
 import { Header } from "@/components/Header";
 import {
-  ContactListMockup,
   ApplicationFormMockup,
-  DraftMockup,
   ResumeFormatDemo,
   ResumeMatchDemo,
 } from "@/components/Mockups";
+import { OutreachDemo } from "@/components/OutreachDemo";
 import { HeroBackdrop } from "@/components/HeroBackdrop";
 import { Reveal, CountUp } from "@/components/Motion";
 import { PacketDemo } from "@/components/PacketDemo";
@@ -215,10 +214,7 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div className="space-y-4">
-                  <ContactListMockup />
-                  <DraftMockup />
-                </div>
+                <OutreachDemo />
               </div>
             </Reveal>
           </div>
