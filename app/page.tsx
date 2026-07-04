@@ -8,6 +8,7 @@ import {
   PacketMockup,
 } from "@/components/Mockups";
 import { Reveal, CountUp } from "@/components/Motion";
+import { PricingCards } from "@/components/PricingCards";
 import { STORE_URL } from "@/lib/config";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
@@ -31,10 +32,6 @@ function PillarLabel({
       {children}
     </p>
   );
-}
-
-function Line({ children }: { children: React.ReactNode }) {
-  return <li className="text-[15px] leading-7 text-muted">{children}</li>;
 }
 
 export default function Home() {
@@ -233,51 +230,7 @@ export default function Home() {
             <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
               Allowances reset on the 1st.
             </p>
-            <div className="mt-14 grid grid-cols-1 gap-6 sm:grid-cols-2">
-              <div className="rounded-[20px] border border-border bg-surface p-8">
-                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                  Free
-                </p>
-                <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">$0</p>
-                <ul className="mt-6 space-y-1">
-                  <Line>30 contacts</Line>
-                  <Line>60 drafts</Line>
-                  <Line>20 resumes</Line>
-                  <Line>Full autofill</Line>
-                </ul>
-                <a
-                  href={STORE_URL}
-                  className="mt-8 block rounded-full border border-border px-5 py-2.5 text-center text-sm font-medium text-ink transition-colors hover:border-ink"
-                >
-                  Add to Chrome
-                </a>
-              </div>
-              <div className="rounded-[20px] bg-brand-soft p-8">
-                <div className="flex items-center justify-between">
-                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-                    Pro
-                  </p>
-                  <span className="rounded-full bg-brand px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
-                    Removes all caps
-                  </span>
-                </div>
-                <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">
-                  $49.99<span className="text-base text-muted"> / mo</span>
-                </p>
-                <ul className="mt-6 space-y-1">
-                  <Line>500 contacts</Line>
-                  <Line>1,000 drafts</Line>
-                  <Line>Unlimited resumes</Line>
-                  <Line>Cancel anytime, same clicks</Line>
-                </ul>
-                <a
-                  href="/login"
-                  className="mt-8 block rounded-full bg-brand px-5 py-2.5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
-                >
-                  Go Pro
-                </a>
-              </div>
-            </div>
+            <PricingCards />
           </Reveal>
           </div>
         </section>
