@@ -9,6 +9,7 @@ import { ApplicantField } from "@/components/ApplicantField";
 import { Reveal, CountUp } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
+import { FilmStill } from "@/components/cinema/FilmStill";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
@@ -101,11 +102,18 @@ export default function Home() {
         <CinematicPage />
         <CinematicHero storeUrl={STORE_URL} />
 
-        {/* Hero-to-body bridge: the three pillars as a table of contents,
-            one small first click before the big ask. Pillar color marks
-            the feature it links to, nothing else. */}
-        <section className="px-6 pt-20">
-          <div className="flex flex-wrap items-center justify-center gap-2.5">
+        {/* Chapter: the receipt. The film hands off to the live demo — the
+            chips bridge and the packet assembling in real time. */}
+        <section id="product" className="rq-chapter scroll-mt-16 bg-bg">
+          <FilmStill frame={104} opacity={0.2} />
+          <div className="relative px-6 pt-20">
+          <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+            19:42:07 → 19:42:16
+          </p>
+          {/* Hero-to-body bridge: the three pillars as a table of contents,
+              one small first click before the big ask. Pillar color marks
+              the feature it links to, nothing else. */}
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
             <a
               href="#documents"
               className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
@@ -128,18 +136,17 @@ export default function Home() {
               Outreach
             </a>
           </div>
-        </section>
-
-        <section id="product" className="px-6 pb-36 pt-16">
-          <div className="rq-enter" style={{ animationDelay: "150ms" }}>
+          <div className="pb-36 pt-16">
             <PacketDemo />
+          </div>
           </div>
         </section>
 
         {/* The number. Background changes mark section boundaries from here
             down (deep-dive pacing rule) — no hairline dividers between bands. */}
-        <section id="odds" className="bg-surface-alt">
-          <div className="mx-auto max-w-3xl px-6 py-32 text-center">
+        <section id="odds" className="rq-chapter bg-surface-alt">
+          <FilmStill frame={8} opacity={0.16} />
+          <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
                 <CountUp to={250} />
@@ -157,7 +164,9 @@ export default function Home() {
         </section>
 
         {/* ATS formatting: mess in, machine-readable out */}
-        <section id="formats" className="mx-auto max-w-5xl px-6 py-36">
+        <section id="formats" className="rq-chapter bg-bg">
+          <FilmStill frame={24} opacity={0.18} flip />
+          <div className="relative mx-auto max-w-5xl px-6 py-36">
           <Reveal>
             <div className="mx-auto max-w-[560px] text-center">
               <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -172,14 +181,20 @@ export default function Home() {
               <ResumeFormatDemo />
             </div>
           </Reveal>
+          </div>
         </section>
 
         {/* Documents */}
-        <section id="documents" className="scroll-mt-16 bg-brand-soft/50">
-          <div className="mx-auto max-w-5xl px-6 py-36">
+        <section id="documents" className="rq-chapter scroll-mt-16 bg-bg">
+          <FilmStill frame={30} opacity={0.3} />
+          <div className="absolute inset-0 bg-brand-soft/40" aria-hidden />
+          <div className="relative mx-auto max-w-5xl px-6 py-36">
             <Reveal>
-              <div className="mx-auto max-w-[560px] text-center">
-                <div className="flex justify-center">
+              <div className="rq-glass mx-auto max-w-[600px] px-8 py-9 text-center">
+                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                  19:42:11
+                </p>
+                <div className="mt-3 flex justify-center">
                   <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
                 </div>
                 <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -203,14 +218,20 @@ export default function Home() {
         </section>
 
         {/* Autofill */}
-        <section id="autofill" className="scroll-mt-16 bg-teal-soft/50">
-          <div className="mx-auto max-w-6xl px-6 py-36">
+        <section id="autofill" className="rq-chapter scroll-mt-16 bg-bg">
+          <FilmStill frame={55} opacity={0.3} flip />
+          <div className="absolute inset-0 bg-teal-soft/40" aria-hidden />
+          <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
                 <div className="order-2 sm:order-1" data-parallax="20">
                   <ApplicationFormMockup />
                 </div>
-                <div className="order-1 sm:order-2">
+                <div className="rq-glass order-1 px-7 py-8 sm:order-2">
+                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    19:42:14
+                  </p>
+                  <div className="mt-3" />
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Autofill</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     Every field, filled.
@@ -248,11 +269,17 @@ export default function Home() {
         </section>
 
         {/* Outreach */}
-        <section id="outreach" className="scroll-mt-16 bg-coral-soft/50">
-          <div className="mx-auto max-w-6xl px-6 py-36">
+        <section id="outreach" className="rq-chapter scroll-mt-16 bg-bg">
+          <FilmStill frame={80} opacity={0.3} />
+          <div className="absolute inset-0 bg-coral-soft/40" aria-hidden />
+          <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
-                <div>
+                <div className="rq-glass px-7 py-8">
+                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    19:42:16
+                  </p>
+                  <div className="mt-3" />
                   <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Outreach</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     A real person, already drafted.
@@ -289,8 +316,9 @@ export default function Home() {
         </section>
 
         {/* Pricing */}
-        <section id="pricing">
-          <div className="mx-auto max-w-4xl px-6 py-36">
+        <section id="pricing" className="rq-chapter bg-bg">
+          <FilmStill frame={112} opacity={0.14} />
+          <div className="relative mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
               Every feature, free every month.
@@ -304,8 +332,9 @@ export default function Home() {
         </section>
 
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
-        <section id="faq" className="scroll-mt-16 bg-surface-alt">
-          <div className="mx-auto max-w-2xl px-6 py-36">
+        <section id="faq" className="rq-chapter scroll-mt-16 bg-surface-alt">
+          <FilmStill frame={116} opacity={0.1} flip />
+          <div className="relative mx-auto max-w-2xl px-6 py-36">
             <Reveal>
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 Questions, answered.
@@ -331,7 +360,7 @@ export default function Home() {
         </section>
 
         {/* Close: the finale — the film's last frame returns under the ask */}
-        <section id="close" className="relative overflow-hidden bg-brand-soft/60">
+        <section id="close" className="rq-chapter bg-[#f5f7ff]">
           <div className="pointer-events-none absolute inset-0" aria-hidden>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
