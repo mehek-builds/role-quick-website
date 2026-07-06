@@ -9,6 +9,7 @@ import { ApplicantField } from "@/components/ApplicantField";
 import { Reveal, CountUp } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
+import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
@@ -103,7 +104,8 @@ export default function Home() {
 
         {/* Chapter: the receipt. The film hands off to the live demo — the
             chips bridge and the packet assembling in real time. */}
-        <section id="product" className="rq-chapter scroll-mt-16 bg-white/80 backdrop-blur-md">
+        <section id="product" className="relative scroll-mt-24">
+          <Wash />
           <div className="relative px-6 pt-20">
           <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             19:42:07 → 19:42:16
@@ -142,7 +144,8 @@ export default function Home() {
 
         {/* The number. Background changes mark section boundaries from here
             down (deep-dive pacing rule) — no hairline dividers between bands. */}
-        <section id="odds" className="rq-chapter bg-[#faf9f7]/80 backdrop-blur-md">
+        <section id="odds" className="relative">
+          <Wash tint="warm" />
           <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
@@ -161,7 +164,8 @@ export default function Home() {
         </section>
 
         {/* ATS formatting: mess in, machine-readable out */}
-        <section id="formats" className="rq-chapter bg-white/80 backdrop-blur-md">
+        <section id="formats" className="relative">
+          <Wash />
           <div className="relative mx-auto max-w-5xl px-6 py-36">
           <Reveal>
             <div className="mx-auto max-w-[560px] text-center">
@@ -181,8 +185,8 @@ export default function Home() {
         </section>
 
         {/* Documents */}
-        <section id="documents" className="rq-chapter scroll-mt-16 bg-white/70 backdrop-blur-md">
-          <div className="absolute inset-0 bg-brand-soft/40" aria-hidden />
+        <section id="documents" className="relative scroll-mt-24">
+          <Wash tint="brand" />
           <div className="relative mx-auto max-w-5xl px-6 py-36">
             <Reveal>
               <div className="rq-glass mx-auto max-w-[600px] px-8 py-9 text-center">
@@ -213,8 +217,8 @@ export default function Home() {
         </section>
 
         {/* Autofill */}
-        <section id="autofill" className="rq-chapter scroll-mt-16 bg-white/70 backdrop-blur-md">
-          <div className="absolute inset-0 bg-teal-soft/40" aria-hidden />
+        <section id="autofill" className="relative scroll-mt-24">
+          <Wash tint="teal" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
@@ -263,8 +267,8 @@ export default function Home() {
         </section>
 
         {/* Outreach */}
-        <section id="outreach" className="rq-chapter scroll-mt-16 bg-white/70 backdrop-blur-md">
-          <div className="absolute inset-0 bg-coral-soft/40" aria-hidden />
+        <section id="outreach" className="relative scroll-mt-24">
+          <Wash tint="coral" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
@@ -309,7 +313,8 @@ export default function Home() {
         </section>
 
         {/* Pricing */}
-        <section id="pricing" className="rq-chapter bg-white/85 backdrop-blur-md">
+        <section id="pricing" className="relative">
+          <Wash />
           <div className="relative mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -324,13 +329,14 @@ export default function Home() {
         </section>
 
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
-        <section id="faq" className="rq-chapter scroll-mt-16 bg-[#faf9f7]/85 backdrop-blur-md">
+        <section id="faq" className="relative scroll-mt-24">
+          <Wash tint="warm" />
           <div className="relative mx-auto max-w-2xl px-6 py-36">
             <Reveal>
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 Questions, answered.
               </h2>
-              <div className="mt-12 border-t border-border">
+              <div className="rq-glass mt-12 px-6">
                 {FAQ_ITEMS.map(({ q, a }) => (
                   <details key={q} className="group border-b border-border">
                     <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-left text-[17px] font-medium text-ink [&::-webkit-details-marker]:hidden">
@@ -350,17 +356,9 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Close: the finale — the film's last frame returns under the ask */}
-        <section id="close" className="rq-chapter bg-[#f5f7ff]/70 backdrop-blur-md">
-          <div className="pointer-events-none absolute inset-0" aria-hidden>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/film/frame-0120.webp"
-              alt=""
-              className="h-full w-full object-cover opacity-40"
-            />
-            <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_50%_45%,rgba(255,255,255,0.85)_0%,rgba(255,255,255,0.25)_100%)]" />
-          </div>
+        {/* Close: the finale — by here the live film has collated the book */}
+        <section id="close" className="relative">
+          <Wash />
           <div className="relative mx-auto max-w-3xl px-6 py-40 text-center">
             <Reveal>
               <div className="flex items-center justify-center gap-1.5">
@@ -395,8 +393,9 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="rq-chapter bg-white/85 backdrop-blur-md">
-        <div className="mx-auto max-w-6xl px-6 py-14">
+      <footer className="relative">
+        <Wash />
+        <div className="relative mx-auto max-w-6xl px-6 py-14">
           <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
             <div className="col-span-2 sm:col-span-1">
               <div className="flex items-center gap-2">

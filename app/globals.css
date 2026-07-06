@@ -212,17 +212,6 @@ html {
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
 }
 
-/* Chapter panels: every section below the film is a card in the same reel,
-   rising over the one before it with a rounded lip and a lifted shadow.
-   Each chapter must declare its own solid background. */
-.rq-chapter {
-  position: relative;
-  margin-top: -36px;
-  border-radius: 36px 36px 0 0;
-  box-shadow: 0 -24px 60px rgba(18, 18, 15, 0.07);
-  overflow: hidden;
-}
-
 /* Film grain: SVG turbulence tile jittered in steps. Multiplied over the
    light film it reads as paper tooth, not noise. */
 .rq-grain {

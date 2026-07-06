@@ -191,15 +191,25 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       };
 
       /* the film plays across the WHOLE page: frame index = page progress.
-         No snap — the scroll is never yanked; Lenis alone paces it. */
+         No snap — the scroll is never yanked; Lenis alone paces it.
+         Pacing: the papers keep flying for most of the page (frames 0-74
+         are the swirl) and only collate into the single book at the very
+         end (frames 75-120 compressed into the last 14% of scroll). */
+      const SWIRL_END = 74 / (FRAME_COUNT - 1);
+      const HOLD = 0.86;
+      const filmCurve = (p: number) =>
+        p < HOLD
+          ? (p / HOLD) * SWIRL_END
+          : SWIRL_END + ((p - HOLD) / (1 - HOLD)) * (1 - SWIRL_END);
       ScrollTrigger.create({
         trigger: document.body,
         start: "top top",
         end: "bottom bottom",
         scrub: 0.6,
         onUpdate(self) {
-          progressRef.current = self.progress;
-          drawFrame(Math.round(self.progress * (FRAME_COUNT - 1)));
+          const fp = filmCurve(self.progress);
+          progressRef.current = fp;
+          drawFrame(Math.round(fp * (FRAME_COUNT - 1)));
         },
       });
 
