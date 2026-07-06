@@ -61,6 +61,8 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       if (hi?.complete && hi.naturalWidth) { img = hi; break; }
     }
     if (!img) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
     const { width: cw, height: ch } = canvas;
     /* cover fit */
     const s = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
@@ -188,21 +190,27 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         chapterRef.current = c;
       };
 
+      /* the film plays across the WHOLE page: frame index = page progress.
+         No snap — the scroll is never yanked; Lenis alone paces it. */
+      ScrollTrigger.create({
+        trigger: document.body,
+        start: "top top",
+        end: "bottom bottom",
+        scrub: 0.6,
+        onUpdate(self) {
+          progressRef.current = self.progress;
+          drawFrame(Math.round(self.progress * (FRAME_COUNT - 1)));
+        },
+      });
+
+      /* the opening act: cards, tint and hint follow the hero wrapper */
       ScrollTrigger.create({
         trigger: wrap,
         start: "top top",
         end: "bottom bottom",
-        scrub: 0.85,
-        snap: {
-          snapTo: [0, 0.33, 0.59, 0.82, 1],
-          duration: { min: 0.25, max: 0.7 },
-          delay: 0.12,
-          ease: "power2.inOut",
-        },
+        scrub: 1,
         onUpdate(self) {
           const p = self.progress;
-          progressRef.current = p;
-          drawFrame(Math.round(p * (FRAME_COUNT - 1)));
           setChapter(p);
           /* chapter tint: whisper multiply wash over the film */
           const seg = 1 / (TINTS.length - 1);
@@ -247,7 +255,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           trigger: wrap,
           start: "top top",
           end: "bottom bottom",
-          scrub: 0.85,
+          scrub: 1,
         },
       });
       /* timeline positions are progress fractions (total duration = 1) */
@@ -284,27 +292,30 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   );
 
   return (
-    /* 420svh of scroll = the film's runtime. Reduced motion collapses this
-       to one viewport in CSS (globals.css) and hides the chapter cards. */
-    <div ref={wrapRef} className="rq-cine relative h-[420svh]">
-      <div className="sticky top-0 h-svh w-full overflow-hidden">
-        {/* 1 · the film */}
-        <canvas ref={filmRef} className="absolute inset-0 h-full w-full" aria-hidden />
+    <>
+      {/* THE STAGE: the film and its atmosphere, fixed behind the entire
+          page. Every section floats over this — the animation never ends. */}
+      <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
+        {/* 1 · the film — scrubbed by whole-page progress */}
+        <canvas ref={filmRef} className="absolute inset-0 h-full w-full" />
         {/* 5 · chapter tint (multiply, whisper) */}
-        <div className="rq-cine-tint pointer-events-none absolute inset-0 mix-blend-multiply" aria-hidden />
+        <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
         {/* 2 · paper dust */}
-        <canvas ref={dustRef} className="rq-cine-dust pointer-events-none absolute inset-0 h-full w-full" aria-hidden />
-        {/* 3 · film grain */}
-        <div className="rq-grain pointer-events-none absolute inset-0" aria-hidden />
+        <canvas ref={dustRef} className="rq-cine-dust absolute inset-0 h-full w-full" />
         {/* 4 · vignette — gentle, the brand stays light */}
         <div
-          className="pointer-events-none absolute inset-0"
-          aria-hidden
+          className="absolute inset-0"
           style={{
             background:
               "radial-gradient(120% 90% at 50% 42%, rgba(18,18,15,0) 62%, rgba(18,18,15,0.10) 100%)",
           }}
         />
+      </div>
+
+    {/* 420svh of scroll = the opening act. Reduced motion collapses this
+       to one viewport in CSS (globals.css) and hides the chapter cards. */}
+    <div ref={wrapRef} className="rq-cine relative h-[420svh]">
+      <div className="sticky top-0 h-svh w-full overflow-hidden">
 
         {/* sparse machine-voice captions over the opening frame */}
         <p className="rq-cine-caption rq-enter absolute left-6 top-24 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
@@ -500,5 +511,6 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         </div>
       </div>
     </div>
+    </>
   );
 }

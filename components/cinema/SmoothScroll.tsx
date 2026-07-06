@@ -17,7 +17,8 @@ export function SmoothScroll() {
     const prevBehavior = document.documentElement.style.scrollBehavior;
     document.documentElement.style.scrollBehavior = "auto";
 
-    const lenis = new Lenis({ lerp: 0.09, wheelMultiplier: 0.9 });
+    /* weightier, calmer: lower lerp = longer glide, no sudden stops */
+    const lenis = new Lenis({ lerp: 0.07, wheelMultiplier: 0.85 });
     /* handle for scripted scrolls (QA tooling, console) */
     (window as unknown as { __lenis?: Lenis }).__lenis = lenis;
     lenis.on("scroll", ScrollTrigger.update);

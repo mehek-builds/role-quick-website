@@ -85,20 +85,6 @@ export function CinematicPage() {
       });
     }
 
-    /* chapter panels rise into place as they enter, like the next card of
-       the reel sliding over the last */
-    document.querySelectorAll<HTMLElement>(".rq-chapter").forEach((el) => {
-      gsap.fromTo(
-        el,
-        { y: 44 },
-        {
-          y: 0,
-          ease: "none",
-          scrollTrigger: { trigger: el, start: "top 96%", end: "top 55%", scrub: 0.5 },
-        }
-      );
-    });
-
     /* parallax: mockups drift against the scroll, whisper-deep */
     document.querySelectorAll<HTMLElement>("[data-parallax]").forEach((el) => {
       const amp = Number(el.dataset.parallax) || 28;
@@ -116,9 +102,9 @@ export function CinematicPage() {
 
   return (
     <>
-      {/* site-wide film grain, one tone quieter than the film's own */}
+      {/* site-wide film grain over everything, including the fixed stage */}
       <div
-        className="rq-grain pointer-events-none fixed z-10 opacity-[0.03]"
+        className="rq-grain pointer-events-none fixed z-10 opacity-[0.04]"
         aria-hidden
       />
       {/* the thread: one rail from first frame to footer */}
