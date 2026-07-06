@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RoleQuick website
 
-## Getting Started
+The public site + in-browser product dashboard for **RoleQuick** (the
+public name of the Volley Chrome extension): open a job posting and it
+tailors your resume, fills the application, and drafts the outreach.
 
-First, run the development server:
+- **Live:** https://role-quick-website.vercel.app
+- **Stack:** Next.js 16 (App Router, Turbopack) + Tailwind v4 + GSAP
+  ScrollTrigger + Lenis
+- **This repo is frontend only.** All data comes from the separately
+  deployed Volley backend (`student-outreach-backend.vercel.app`, its own
+  repo). Base URL lives in `lib/config.ts` (`NEXT_PUBLIC_API_URL`
+  override). Backend changes belong in that repo, never here.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Read these before editing
+
+| doc | what it owns |
+| --- | --- |
+| `DESIGN.md` | every visual law + the decision log. Non-negotiable. |
+| `FILM.md` | the scroll film: layer model, all generated clips, exact Higgsfield prompts + job ids, regeneration pipeline, the blend-isolation gotcha |
+| `PLAN.md` | the phased product plan (marketing site → account → workspace → billing) |
+| `AGENTS.md` | agent ground rules (Next.js 16 caveats, DESIGN.md supremacy) |
+
+## Map
+
+```
+app/
+  page.tsx            the homepage: one continuous scroll film (see FILM.md)
+  login/ dashboard/   passwordless auth + 5-view product dashboard (real backend)
+  privacy/            dated privacy policy
+components/
+  cinema/             the film system: CinematicHero (fixed stage + scrub +
+                      sting), CinematicPage (grain + rail), BRoll (shots
+                      printed into the film), Wash, SmoothScroll (Lenis)
+  Mockups.tsx         the product's visual vocabulary: resumes, forms,
+                      inbox, packet receipt. Single source of the demo
+                      content; the film's resume shots are rendered FROM it.
+  Motion.tsx          Reveal / CountUp (scroll-settle; isolates blend modes,
+                      so BRoll shots stay outside it)
+lib/                  config + typed API client for the Volley backend
+public/film/          121-frame base film (webp, canvas-scrubbed)
+public/broll/         6 generated clips + posters (lazy, blended into film)
+scripts/
+  render-stills.mjs   renders the real-resume reference frames for the two
+                      start/end-locked b-roll shots (see FILM.md)
+  render-film.mjs     no-credits local fallback for the base film
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Develop
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run dev     # localhost:3000
+npm run build   # always run before shipping; trust it over the preview
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Registered launch configs (vault `.claude/launch.json`):
+`role-quick-website` (dev, :3500) and `role-quick-website-prod`
+(build + start, :3501).
 
-## Learn More
+## Deploy (manual, auto-deploy is broken)
 
-To learn more about Next.js, take a look at the following resources:
+`git push` does NOT deploy. The GitHub Action's `VERCEL_TOKEN` secret is
+invalid (since 2026-07-05). After pushing:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npx vercel deploy --prod --yes
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+then verify the live HTML actually changed (curl for a new string).
 
-## Deploy on Vercel
+## Open items
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- rolequick.com checked available (~$11/yr) but not purchased or attached.
+- Yearly Pro Stripe link ($479.88/yr) does not exist yet; the site shows the
+  toggle but in-app upgrades only know the $49.99/mo link.
+- Chrome Web Store listing still says "Volley - Student Outreach" while
+  every CTA points at it.
+- Replace the GitHub Action token (or install the Vercel GitHub App) to
+  restore auto-deploy.
