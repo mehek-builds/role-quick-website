@@ -27,7 +27,8 @@ export default function Privacy() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-20">
+      {/* Header is a fixed floating pill now — clear it before content */}
+      <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-20 pt-32">
         <h1 className="text-3xl font-semibold tracking-tight text-ink">
           Privacy Policy
         </h1>
