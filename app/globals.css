@@ -248,7 +248,10 @@ html {
   .rq-cine-card-2,
   .rq-cine-card-3,
   .rq-cine-card-4,
-  .rq-cine-rail,
+  .rq-cine-prop-1,
+  .rq-cine-prop-2,
+  .rq-cine-prop-3,
+  .rq-siterail,
   .rq-cine-hint,
   .rq-cine-dust {
     display: none;

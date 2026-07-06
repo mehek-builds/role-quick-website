@@ -179,18 +179,13 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       const q = gsap.utils.selector(wrap);
 
       const tintEl = q<HTMLElement>(".rq-cine-tint")[0];
-      const railFill = q<HTMLElement>(".rq-cine-railfill")[0];
-      const railLabel = q<HTMLElement>(".rq-cine-raillabel")[0];
       const hint = q<HTMLElement>(".rq-cine-hint")[0];
 
       const setChapter = (p: number) => {
         let c = 0;
         for (let k = CHAPTERS.length - 1; k >= 0; k--)
           if (p >= CHAPTERS[k].at) { c = k; break; }
-        if (c !== chapterRef.current) {
-          chapterRef.current = c;
-          if (railLabel) railLabel.textContent = CHAPTERS[c].label;
-        }
+        chapterRef.current = c;
       };
 
       ScrollTrigger.create({
@@ -219,7 +214,6 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               TINTS[k + 1],
               local
             );
-          if (railFill) railFill.style.transform = `scaleY(${p})`;
           if (hint) hint.style.opacity = String(Math.max(0, 1 - p * 12));
         },
       });
@@ -264,6 +258,27 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       slide(".rq-cine-card-2", 0.5, 0.66, tl);
       slide(".rq-cine-card-3", 0.74, 0.87, tl);
       slide(".rq-cine-card-4", 0.93, null, tl);
+
+      /* film props: the site's real artifacts riding the film at their own
+         depth — enter low, drift up through the chapter, leave high */
+      const prop = (sel: string, enter: number, exit: number) => {
+        const el = q<HTMLElement>(sel)[0];
+        if (!el) return;
+        tl.fromTo(
+          el,
+          { autoAlpha: 0, y: 90 },
+          { autoAlpha: 1, y: 20, duration: 0.05, ease: "power2.out" },
+          enter
+        )
+          .to(el, { y: -30, duration: exit - enter - 0.1, ease: "none" }, enter + 0.05)
+          .to(el, { autoAlpha: 0, y: -90, duration: 0.05, ease: "power2.in" }, exit);
+      };
+      const captions = q<HTMLElement>(".rq-cine-caption");
+      if (captions.length)
+        tl.to(captions, { autoAlpha: 0, y: -24, duration: 0.06, ease: "power2.in" }, 0.12);
+      prop(".rq-cine-prop-1", 0.27, 0.44);
+      prop(".rq-cine-prop-2", 0.53, 0.68);
+      prop(".rq-cine-prop-3", 0.77, 0.89);
     },
     { scope: wrapRef }
   );
@@ -291,15 +306,13 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           }}
         />
 
-        {/* progress rail — machine voice, desktop only */}
-        <div className="rq-cine-rail pointer-events-none absolute right-6 top-1/2 hidden -translate-y-1/2 items-center gap-3 sm:flex" aria-hidden>
-          <p className="rq-cine-raillabel rotate-180 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted [writing-mode:vertical-rl]">
-            00 · Detected
-          </p>
-          <div className="relative h-40 w-px bg-border">
-            <div className="rq-cine-railfill absolute inset-0 origin-top bg-ink" style={{ transform: "scaleY(0)" }} />
-          </div>
-        </div>
+        {/* sparse machine-voice captions over the opening frame */}
+        <p className="rq-cine-caption rq-enter absolute left-6 top-24 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
+          jobs.lever.co/notion/software-engineer-intern
+        </p>
+        <p className="rq-cine-caption rq-enter absolute bottom-24 right-16 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
+          19:42:07 · Posting detected
+        </p>
 
         {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:top-[18svh]">
@@ -382,6 +395,81 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             </h2>
             <p className="mt-3 text-[15px] leading-7 text-muted">
               Alumni first. Waiting in your Gmail drafts.
+            </p>
+          </div>
+        </div>
+
+        {/* film props: the actual artifacts, sparse and real. Desktop only —
+            on mobile the chapter cards carry the story alone. */}
+        <div className="rq-cine-prop-1 invisible absolute right-[9vw] top-[34svh] hidden w-[300px] opacity-0 lg:block" aria-hidden>
+          <div className="rq-glass px-5 py-4">
+            <p className="truncate font-mono text-[10px] font-medium text-muted">
+              Alex_Rivera_Notion_Resume.pdf
+            </p>
+            <div className="mt-2.5 border-l-2 border-brand pl-3">
+              <p className="text-[13px] font-medium text-ink">Alex Rivera</p>
+              <p className="text-[11px] text-muted">Software Engineer Intern</p>
+            </div>
+            <ul className="mt-3 space-y-1.5 text-[11px] leading-4 text-muted">
+              <li>REST APIs serving 40K requests a day</li>
+              <li>Test coverage 41% to 78% in one quarter</li>
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {["React", "TypeScript", "SQL", "AWS"].map((s) => (
+                <span key={s} className="rounded-full bg-brand-soft px-2 py-0.5 font-mono text-[10px] text-brand-ink">
+                  {s}
+                </span>
+              ))}
+            </div>
+            <p className="mt-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+              ATS coverage 92%
+            </p>
+          </div>
+        </div>
+
+        <div className="rq-cine-prop-2 invisible absolute left-[9vw] top-[34svh] hidden w-[300px] opacity-0 lg:block" aria-hidden>
+          <div className="rq-glass px-5 py-4">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+              Application · Notion
+            </p>
+            <div className="mt-2.5 space-y-2 text-[11px]">
+              {[
+                ["Full name", "Alex Rivera"],
+                ["Email", "alex.rivera@usc.edu"],
+                ["Work authorization", "Authorized"],
+                ["EEO", "Decline to identify"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex items-baseline justify-between gap-3">
+                  <span className="text-muted">{k}</span>
+                  <span className="flex items-center gap-1.5 text-ink">
+                    {v}
+                    <svg viewBox="0 0 12 12" className="h-3 w-3 text-teal" aria-hidden>
+                      <path d="m2.5 6.5 2.5 2.5 4.5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-teal-ink">
+              27 fields · nothing sent yet
+            </p>
+          </div>
+        </div>
+
+        <div className="rq-cine-prop-3 invisible absolute right-[9vw] top-[34svh] hidden w-[320px] opacity-0 lg:block" aria-hidden>
+          <div className="rq-glass px-5 py-4">
+            <p className="font-mono text-[10px] font-medium text-muted">
+              To: Priya Nair · USC &apos;22
+            </p>
+            <p className="mt-1.5 text-[12px] font-medium text-ink">
+              USC senior, just applied to SWE intern
+            </p>
+            <p className="mt-2 text-[11px] leading-4 text-muted">
+              Priya, fellow Trojan here. I just applied to the SWE intern role
+              and wanted to reach out beyond the pile…
+            </p>
+            <p className="mt-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-coral-ink">
+              ~120 words · in your voice
             </p>
           </div>
         </div>

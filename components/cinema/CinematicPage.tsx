@@ -1,0 +1,131 @@
+"use client";
+
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useGSAP } from "@gsap/react";
+import { useRef } from "react";
+
+/* Page-wide cinema: the connective tissue that makes the whole site read as
+   one scroll. Owns (a) the site-wide grain, (b) the fixed chapter rail that
+   tracks the reader from the film through every section to the close, and
+   (c) scroll-scrubbed parallax on every [data-parallax] mockup. The film
+   section (CinematicHero) stays its own machine; this component only reads
+   its wrapper's progress for the rail labels. Reduced motion: rail and
+   parallax never initialize, grain is static (globals.css). */
+
+const FILM_CHAPTERS = [
+  { at: 0.0, label: "00 · Detected" },
+  { at: 0.24, label: "01 · Documents" },
+  { at: 0.5, label: "02 · Autofill" },
+  { at: 0.74, label: "03 · Outreach" },
+  { at: 0.92, label: "04 · Packet ready" },
+];
+
+/* Sections below the film, in scroll order. ids live in app/page.tsx. */
+const SECTIONS = [
+  { id: "#product", label: "The receipt" },
+  { id: "#odds", label: "The odds" },
+  { id: "#formats", label: "ATS formats" },
+  { id: "#documents", label: "01 · Documents" },
+  { id: "#autofill", label: "02 · Autofill" },
+  { id: "#outreach", label: "03 · Outreach" },
+  { id: "#pricing", label: "Pricing" },
+  { id: "#faq", label: "Questions" },
+  { id: "#close", label: "Your move" },
+];
+
+export function CinematicPage() {
+  const railLabelRef = useRef<HTMLParagraphElement>(null);
+  const railFillRef = useRef<HTMLDivElement>(null);
+
+  useGSAP(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    gsap.registerPlugin(ScrollTrigger);
+
+    const setLabel = (text: string) => {
+      if (railLabelRef.current && railLabelRef.current.textContent !== text)
+        railLabelRef.current.textContent = text;
+    };
+
+    /* rail fill = whole-page progress */
+    ScrollTrigger.create({
+      trigger: document.body,
+      start: "top top",
+      end: "bottom bottom",
+      scrub: 0.5,
+      onUpdate(self) {
+        if (railFillRef.current)
+          railFillRef.current.style.transform = `scaleY(${self.progress})`;
+      },
+    });
+
+    /* rail label: film chapters while pinned, section names after */
+    const film = document.querySelector(".rq-cine");
+    if (film)
+      ScrollTrigger.create({
+        trigger: film,
+        start: "top top",
+        end: "bottom bottom",
+        onUpdate(self) {
+          let label = FILM_CHAPTERS[0].label;
+          for (const c of FILM_CHAPTERS) if (self.progress >= c.at) label = c.label;
+          setLabel(label);
+        },
+      });
+    for (const s of SECTIONS) {
+      const el = document.querySelector(s.id);
+      if (!el) continue;
+      ScrollTrigger.create({
+        trigger: el,
+        start: "top 55%",
+        end: "bottom 55%",
+        onToggle(self) {
+          if (self.isActive) setLabel(s.label);
+        },
+      });
+    }
+
+    /* parallax: mockups drift against the scroll, whisper-deep */
+    document.querySelectorAll<HTMLElement>("[data-parallax]").forEach((el) => {
+      const amp = Number(el.dataset.parallax) || 28;
+      gsap.fromTo(
+        el,
+        { y: amp },
+        {
+          y: -amp,
+          ease: "none",
+          scrollTrigger: { trigger: el, start: "top bottom", end: "bottom top", scrub: 0.6 },
+        }
+      );
+    });
+  });
+
+  return (
+    <>
+      {/* site-wide film grain, one tone quieter than the film's own */}
+      <div
+        className="rq-grain pointer-events-none fixed z-10 opacity-[0.03]"
+        aria-hidden
+      />
+      {/* the thread: one rail from first frame to footer */}
+      <div
+        className="rq-siterail pointer-events-none fixed right-6 top-1/2 z-10 hidden -translate-y-1/2 items-center gap-3 sm:flex"
+        aria-hidden
+      >
+        <p
+          ref={railLabelRef}
+          className="rotate-180 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted [writing-mode:vertical-rl]"
+        >
+          00 · Detected
+        </p>
+        <div className="relative h-40 w-px bg-border">
+          <div
+            ref={railFillRef}
+            className="absolute inset-0 origin-top bg-ink"
+            style={{ transform: "scaleY(0)" }}
+          />
+        </div>
+      </div>
+    </>
+  );
+}

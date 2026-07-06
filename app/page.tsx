@@ -8,6 +8,7 @@ import { OutreachDemo } from "@/components/OutreachDemo";
 import { ApplicantField } from "@/components/ApplicantField";
 import { Reveal, CountUp } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
+import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
@@ -97,6 +98,7 @@ export default function Home() {
             glass chapter cards, grain, dust, vignette, chapter tints.
             Lenis paces the whole page. */}
         <SmoothScroll />
+        <CinematicPage />
         <CinematicHero storeUrl={STORE_URL} />
 
         {/* Hero-to-body bridge: the three pillars as a table of contents,
@@ -136,7 +138,7 @@ export default function Home() {
 
         {/* The number. Background changes mark section boundaries from here
             down (deep-dive pacing rule) — no hairline dividers between bands. */}
-        <section className="bg-surface-alt">
+        <section id="odds" className="bg-surface-alt">
           <div className="mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
@@ -155,7 +157,7 @@ export default function Home() {
         </section>
 
         {/* ATS formatting: mess in, machine-readable out */}
-        <section className="mx-auto max-w-5xl px-6 py-36">
+        <section id="formats" className="mx-auto max-w-5xl px-6 py-36">
           <Reveal>
             <div className="mx-auto max-w-[560px] text-center">
               <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -166,7 +168,7 @@ export default function Home() {
                 page in, one machine-readable page out.
               </p>
             </div>
-            <div className="mt-16">
+            <div className="mt-16" data-parallax="24">
               <ResumeFormatDemo />
             </div>
           </Reveal>
@@ -193,7 +195,7 @@ export default function Home() {
                   Ladders eye-tracking study
                 </p>
               </div>
-              <div className="mt-16">
+              <div className="mt-16" data-parallax="24">
                 <ResumeMatchDemo />
               </div>
             </Reveal>
@@ -205,7 +207,7 @@ export default function Home() {
           <div className="mx-auto max-w-6xl px-6 py-36">
             <Reveal>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
-                <div className="order-2 sm:order-1">
+                <div className="order-2 sm:order-1" data-parallax="20">
                   <ApplicationFormMockup />
                 </div>
                 <div className="order-1 sm:order-2">
@@ -278,7 +280,9 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <OutreachDemo />
+                <div data-parallax="20">
+                  <OutreachDemo />
+                </div>
               </div>
             </Reveal>
           </div>
@@ -326,9 +330,18 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Close: the finale — signature threads, display type, receipt echo */}
-        <section className="bg-brand-soft/60">
-          <div className="mx-auto max-w-3xl px-6 py-40 text-center">
+        {/* Close: the finale — the film's last frame returns under the ask */}
+        <section id="close" className="relative overflow-hidden bg-brand-soft/60">
+          <div className="pointer-events-none absolute inset-0" aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/film/frame-0120.webp"
+              alt=""
+              className="h-full w-full object-cover opacity-40"
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(90%_70%_at_50%_45%,rgba(255,255,255,0.85)_0%,rgba(255,255,255,0.25)_100%)]" />
+          </div>
+          <div className="relative mx-auto max-w-3xl px-6 py-40 text-center">
             <Reveal>
               <div className="flex items-center justify-center gap-1.5">
                 <span className="h-0.5 w-6 rounded-full bg-brand" />
