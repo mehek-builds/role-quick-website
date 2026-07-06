@@ -9,6 +9,7 @@ import { ApplicantField } from "@/components/ApplicantField";
 import { Reveal, CountUp } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
+import { BRoll } from "@/components/cinema/BRoll";
 import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
@@ -173,9 +174,17 @@ export default function Home() {
                 Messy in. ATS-ready out.
               </h2>
               <p className="mt-4 text-[15px] leading-7 text-muted">
-                Recruiting software skips what it can&apos;t parse. One messy
-                page in, one machine-readable page out.
+                Recruiting software skips what it can&apos;t parse. RoleQuick
+                outputs the layout the parser wants: single column, real
+                headings, no tables.
               </p>
+            </div>
+            <div className="mx-auto mt-14 max-w-3xl" data-parallax="16">
+              <BRoll
+                src="/broll/formats.mp4"
+                poster="/broll/formats.webp"
+                caption="Shot 01 · the re-set"
+              />
             </div>
             <div className="mt-16" data-parallax="24">
               <ResumeFormatDemo />
@@ -197,17 +206,25 @@ export default function Home() {
                   <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
                 </div>
                 <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                  A resume tuned to this posting.
+                  Tuned means rebuilt, not reworded.
                 </h2>
                 <p className="mt-4 text-[15px] leading-7 text-muted">
-                  We read the posting for what matters, then rebuild your page
-                  in its exact language. That is what ATS-optimized actually
-                  means.
+                  RoleQuick pulls the requirements out of the posting, reorders
+                  your story to answer them, and exports a fresh one-page PDF.
+                  That is what ATS-optimized actually means.
                 </p>
                 <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                   A recruiter&apos;s first look lasts 7.4 seconds · Source:
                   Ladders eye-tracking study
                 </p>
+              </div>
+              <div className="mx-auto mt-14 max-w-3xl" data-parallax="16">
+                <BRoll
+                  src="/broll/documents.mp4"
+                  poster="/broll/documents.webp"
+                  caption="Shot 02 · the rebuild"
+                  tint="brand"
+                />
               </div>
               <div className="mt-16" data-parallax="24">
                 <ResumeMatchDemo />
@@ -221,6 +238,14 @@ export default function Home() {
           <Wash tint="teal" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
+              <div className="mx-auto mb-14 max-w-3xl" data-parallax="16">
+                <BRoll
+                  src="/broll/autofill.mp4"
+                  poster="/broll/autofill.webp"
+                  caption="Shot 03 · the fill"
+                  tint="teal"
+                />
+              </div>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
                 <div className="order-2 sm:order-1" data-parallax="20">
                   <ApplicationFormMockup />
@@ -232,11 +257,12 @@ export default function Home() {
                   <div className="mt-3" />
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Autofill</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                    Every field, filled.
+                    You never type your phone number again.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    Stop retyping the same answers into every portal. You never
-                    type your phone number again.
+                    Twenty-seven fields on the average portal, the same answers
+                    every time. RoleQuick answers once, everywhere, then waits
+                    for your review.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
                   <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
@@ -271,6 +297,14 @@ export default function Home() {
           <Wash tint="coral" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
+              <div className="mx-auto mb-14 max-w-3xl" data-parallax="16">
+                <BRoll
+                  src="/broll/outreach.mp4"
+                  poster="/broll/outreach.webp"
+                  caption="Shot 04 · the letter"
+                  tint="coral"
+                />
+              </div>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
                 <div className="rq-glass px-7 py-8">
                   <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -279,10 +313,12 @@ export default function Home() {
                   <div className="mt-3" />
                   <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Outreach</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                    A real person, already drafted.
+                    Applications get filed. Emails get read.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    Alumni first. Waiting in your Gmail drafts.
+                    While the form fills, RoleQuick finds your people at the
+                    company and leaves a draft in Gmail. Alumni answer most, so
+                    alumni come first.
                   </p>
                   {/* Machine voice: what outreach actually does, as data. */}
                   <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
@@ -366,7 +402,14 @@ export default function Home() {
                 <span className="h-0.5 w-6 rounded-full bg-teal" />
                 <span className="h-0.5 w-6 rounded-full bg-coral" />
               </div>
-              <h2 className="mt-8 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
+              <div className="mx-auto mt-10 max-w-2xl" data-parallax="14">
+                <BRoll
+                  src="/broll/close.mp4"
+                  poster="/broll/close.webp"
+                  caption="Final shot · one packet"
+                />
+              </div>
+              <h2 className="mt-10 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
                 Open your next application.
               </h2>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">

@@ -42,6 +42,8 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const filmRef = useRef<HTMLCanvasElement>(null);
   const dustRef = useRef<HTMLCanvasElement>(null);
+  const stingRef = useRef<HTMLVideoElement>(null);
+  const stingDoneRef = useRef(false);
   const progressRef = useRef(0);
   const chapterRef = useRef(0);
 
@@ -107,6 +109,54 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ---- the sting: the generated opening shot plays once over the film's
+     first frame, then dissolves into the scrub. Desktop only (the canvas
+     alone carries mobile), never under reduced motion, and the first
+     scroll always wins — the video src is only ever assigned here. ---- */
+  useEffect(() => {
+    const v = stingRef.current;
+    if (!v) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let raf = 0;
+    const onCanPlay = () => {
+      if (stingDoneRef.current) return;
+      v.style.opacity = "1";
+      v.play().catch(() => {});
+    };
+    const onEnded = () => {
+      if (stingDoneRef.current) return;
+      stingDoneRef.current = true;
+      gsap.to(v, {
+        autoAlpha: 0,
+        duration: 0.9,
+        ease: "power2.inOut",
+        onComplete: () => v.pause(),
+      });
+    };
+    /* wait for a real layout before reading the viewport — during hydration
+       innerWidth can read 0 and wrongly skip the sting. rAF waits for the
+       first paint; the timeout covers throttled/hidden tabs where rAF is
+       frozen. Whichever fires first runs the init once. */
+    let inited = false;
+    const init = () => {
+      if (inited) return;
+      inited = true;
+      const w = window.innerWidth || document.documentElement.clientWidth;
+      if (w && w < 640) return; /* mobile: the canvas alone carries it */
+      v.addEventListener("canplay", onCanPlay);
+      v.addEventListener("ended", onEnded);
+      v.src = "/broll/sting.mp4";
+    };
+    raf = requestAnimationFrame(() => requestAnimationFrame(init));
+    const timeout = setTimeout(init, 300);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(timeout);
+      v.removeEventListener("canplay", onCanPlay);
+      v.removeEventListener("ended", onEnded);
+    };
   }, []);
 
   /* ---- particles: drifting paper dust, tinted by the active chapter ---- */
@@ -222,6 +272,16 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         onUpdate(self) {
           const p = self.progress;
           setChapter(p);
+          /* scrolling dissolves the sting into the scrub, immediately */
+          const sting = stingRef.current;
+          if (sting && !stingDoneRef.current && p > 0) {
+            const o = Math.max(0, 1 - p * 20);
+            sting.style.opacity = String(o);
+            if (o === 0) {
+              stingDoneRef.current = true;
+              sting.pause();
+            }
+          }
           /* chapter tint: whisper multiply wash over the film */
           const seg = 1 / (TINTS.length - 1);
           const k = Math.min(Math.floor(p / seg), TINTS.length - 2);
@@ -308,6 +368,15 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {/* 1 · the film — scrubbed by whole-page progress */}
         <canvas ref={filmRef} className="absolute inset-0 h-full w-full" />
+        {/* 1b · the sting — the generated opening shot, dissolving into 1 */}
+        <video
+          ref={stingRef}
+          muted
+          playsInline
+          preload="auto"
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover opacity-0"
+        />
         {/* 5 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
         {/* 2 · paper dust */}
@@ -401,7 +470,8 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               Every field, filled.
             </h2>
             <p className="mt-3 text-[15px] leading-7 text-muted">
-              Contact, links, work auth, screening. Essays stay yours.
+              The boring eighty percent of every application, done while the
+              page loads.
             </p>
           </div>
         </div>

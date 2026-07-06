@@ -47,7 +47,15 @@ export function CinematicPage() {
         railLabelRef.current.textContent = text;
     };
 
-    /* rail fill = whole-page progress */
+    /* rail fill + label from one whole-page trigger. The label is
+       recomputed from live positions every frame instead of per-section
+       toggles: toggle state seeded during hydration (viewport can read 0)
+       was leaving a stale label at the top of the page. */
+    const film = document.querySelector(".rq-cine");
+    const secEls = SECTIONS.map((s) => ({
+      el: document.querySelector(s.id),
+      label: s.label,
+    })).filter((s): s is { el: Element; label: string } => s.el !== null);
     ScrollTrigger.create({
       trigger: document.body,
       start: "top top",
@@ -56,34 +64,30 @@ export function CinematicPage() {
       onUpdate(self) {
         if (railFillRef.current)
           railFillRef.current.style.transform = `scaleY(${self.progress})`;
+        const vh = window.innerHeight;
+        if (!vh) return;
+        let label = "";
+        for (const s of secEls) {
+          const r = s.el.getBoundingClientRect();
+          if (r.top <= vh * 0.55 && r.bottom > vh * 0.55) {
+            label = s.label;
+            break;
+          }
+        }
+        if (!label && film) {
+          const fr = film.getBoundingClientRect();
+          if (fr.bottom > vh) {
+            const p = Math.min(
+              1,
+              Math.max(0, -fr.top / Math.max(1, fr.height - vh))
+            );
+            label = FILM_CHAPTERS[0].label;
+            for (const c of FILM_CHAPTERS) if (p >= c.at) label = c.label;
+          }
+        }
+        if (label) setLabel(label);
       },
     });
-
-    /* rail label: film chapters while pinned, section names after */
-    const film = document.querySelector(".rq-cine");
-    if (film)
-      ScrollTrigger.create({
-        trigger: film,
-        start: "top top",
-        end: "bottom bottom",
-        onUpdate(self) {
-          let label = FILM_CHAPTERS[0].label;
-          for (const c of FILM_CHAPTERS) if (self.progress >= c.at) label = c.label;
-          setLabel(label);
-        },
-      });
-    for (const s of SECTIONS) {
-      const el = document.querySelector(s.id);
-      if (!el) continue;
-      ScrollTrigger.create({
-        trigger: el,
-        start: "top 55%",
-        end: "bottom 55%",
-        onToggle(self) {
-          if (self.isActive) setLabel(s.label);
-        },
-      });
-    }
 
     /* parallax: mockups drift against the scroll, whisper-deep */
     document.querySelectorAll<HTMLElement>("[data-parallax]").forEach((el) => {
