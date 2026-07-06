@@ -247,10 +247,18 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
          end (frames 75-120 compressed into the last 14% of scroll). */
       const SWIRL_END = 74 / (FRAME_COUNT - 1);
       const HOLD = 0.86;
-      const filmCurve = (p: number) =>
-        p < HOLD
-          ? (p / HOLD) * SWIRL_END
-          : SWIRL_END + ((p - HOLD) / (1 - HOLD)) * (1 - SWIRL_END);
+      /* Paper-flow speed ramp: across the swirl the frame-advance-per-scroll
+         accelerates from 1.0x to 1.2x (ends ~20% faster than it starts) while
+         still landing exactly on SWIRL_END at HOLD. rate(u)=1+0.2u integrates
+         to 1.1, so normalise by 1.1 to preserve the swirl's total range. */
+      const RAMP = 0.2; // end speed relative to start (+20%)
+      const filmCurve = (p: number) => {
+        if (p >= HOLD)
+          return SWIRL_END + ((p - HOLD) / (1 - HOLD)) * (1 - SWIRL_END);
+        const u = p / HOLD; // 0..1 across the swirl
+        const eased = (u + (RAMP / 2) * u * u) / (1 + RAMP / 2);
+        return eased * SWIRL_END;
+      };
       ScrollTrigger.create({
         trigger: document.body,
         start: "top top",
