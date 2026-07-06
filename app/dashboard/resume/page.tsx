@@ -41,7 +41,9 @@ export default function ResumeWorkspace() {
     setError(null);
     try {
       const form = new FormData();
-      form.append("file", file);
+      // The backend multipart handler only reads the part named "resume" (profile.ts);
+      // "file" is silently ignored and the upload 400s.
+      form.append("resume", file);
       const res = await fetch(`${API_URL}/profile`, {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}` },

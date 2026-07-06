@@ -15,11 +15,15 @@ import {
 const FILTERS = ["all", "drafted", "sent", "replied", "bounced"] as const;
 type Filter = (typeof FILTERS)[number];
 
+// Keys MUST match the backend persona union (resolve.ts personaOrder): alumni | near_peer |
+// senior_ic | hiring_manager | recruiter. The old map keyed on "alum"/"team" (which never
+// exist) and omitted near_peer/senior_ic, so most chips fell through to the raw snake_case.
 const PERSONA_LABELS: Record<string, string> = {
-  alum: "Alum",
-  recruiter: "Recruiter",
+  alumni: "Alum",
+  near_peer: "Near-peer",
+  senior_ic: "Senior IC",
   hiring_manager: "Hiring manager",
-  team: "Team",
+  recruiter: "Recruiter",
 };
 
 export default function Outreach() {
