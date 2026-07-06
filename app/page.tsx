@@ -179,13 +179,16 @@ export default function Home() {
                 headings, no tables.
               </p>
             </div>
-            <div className="mx-auto mt-12 max-w-4xl" data-parallax="16">
-              <BRoll
-                src="/broll/formats.mp4"
-                poster="/broll/formats.webp"
-                caption="Shot 01 · the re-set"
-              />
-            </div>
+          </Reveal>
+          {/* outside Reveal: multiply-blend must reach the film behind */}
+          <div className="mx-auto mt-12 max-w-4xl">
+            <BRoll
+              src="/broll/formats.mp4"
+              poster="/broll/formats.webp"
+              caption="Shot 01 · the re-set"
+            />
+          </div>
+          <Reveal>
             <div className="mt-16" data-parallax="24">
               <ResumeFormatDemo />
             </div>
@@ -218,14 +221,16 @@ export default function Home() {
                   Ladders eye-tracking study
                 </p>
               </div>
-              <div className="mx-auto mt-12 max-w-4xl" data-parallax="16">
-                <BRoll
-                  src="/broll/documents.mp4"
-                  poster="/broll/documents.webp"
-                  caption="Shot 02 · the rebuild"
-                  tint="brand"
-                />
-              </div>
+            </Reveal>
+            {/* outside Reveal: multiply-blend must reach the film behind */}
+            <div className="mx-auto mt-12 max-w-4xl">
+              <BRoll
+                src="/broll/documents.mp4"
+                poster="/broll/documents.webp"
+                caption="Shot 02 · the rebuild"
+              />
+            </div>
+            <Reveal>
               <div className="mt-16" data-parallax="24">
                 <ResumeMatchDemo />
               </div>
@@ -237,15 +242,15 @@ export default function Home() {
         <section id="autofill" className="relative scroll-mt-24">
           <Wash tint="teal" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
+            {/* outside Reveal: multiply-blend must reach the film behind */}
+            <div className="mx-auto mb-12 max-w-4xl">
+              <BRoll
+                src="/broll/autofill.mp4"
+                poster="/broll/autofill.webp"
+                caption="Shot 03 · the fill"
+              />
+            </div>
             <Reveal>
-              <div className="mx-auto mb-12 max-w-4xl" data-parallax="16">
-                <BRoll
-                  src="/broll/autofill.mp4"
-                  poster="/broll/autofill.webp"
-                  caption="Shot 03 · the fill"
-                  tint="teal"
-                />
-              </div>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
                 <div className="order-2 sm:order-1" data-parallax="20">
                   <ApplicationFormMockup />
@@ -296,15 +301,15 @@ export default function Home() {
         <section id="outreach" className="relative scroll-mt-24">
           <Wash tint="coral" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
+            {/* outside Reveal: multiply-blend must reach the film behind */}
+            <div className="mx-auto mb-12 max-w-4xl">
+              <BRoll
+                src="/broll/outreach.mp4"
+                poster="/broll/outreach.webp"
+                caption="Shot 04 · the letter"
+              />
+            </div>
             <Reveal>
-              <div className="mx-auto mb-12 max-w-4xl" data-parallax="16">
-                <BRoll
-                  src="/broll/outreach.mp4"
-                  poster="/broll/outreach.webp"
-                  caption="Shot 04 · the letter"
-                  tint="coral"
-                />
-              </div>
               <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
                 <div className="rq-glass px-7 py-8">
                   <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -402,13 +407,16 @@ export default function Home() {
                 <span className="h-0.5 w-6 rounded-full bg-teal" />
                 <span className="h-0.5 w-6 rounded-full bg-coral" />
               </div>
-              <div className="mx-auto mt-8 max-w-3xl" data-parallax="14">
-                <BRoll
-                  src="/broll/close.mp4"
-                  poster="/broll/close.webp"
-                  caption="Final shot · one packet"
-                />
-              </div>
+            </Reveal>
+            {/* outside Reveal: multiply-blend must reach the film behind */}
+            <div className="mx-auto mt-8 max-w-3xl">
+              <BRoll
+                src="/broll/close.mp4"
+                poster="/broll/close.webp"
+                caption="Final shot · one packet"
+              />
+            </div>
+            <Reveal>
               <h2 className="mt-10 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
                 Open your next application.
               </h2>
