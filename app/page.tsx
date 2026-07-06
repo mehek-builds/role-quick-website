@@ -179,7 +179,7 @@ export default function Home() {
                 headings, no tables.
               </p>
             </div>
-            <div className="mx-auto mt-14 max-w-3xl" data-parallax="16">
+            <div className="mx-auto mt-12 max-w-4xl" data-parallax="16">
               <BRoll
                 src="/broll/formats.mp4"
                 poster="/broll/formats.webp"
@@ -218,7 +218,7 @@ export default function Home() {
                   Ladders eye-tracking study
                 </p>
               </div>
-              <div className="mx-auto mt-14 max-w-3xl" data-parallax="16">
+              <div className="mx-auto mt-12 max-w-4xl" data-parallax="16">
                 <BRoll
                   src="/broll/documents.mp4"
                   poster="/broll/documents.webp"
@@ -238,7 +238,7 @@ export default function Home() {
           <Wash tint="teal" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
-              <div className="mx-auto mb-14 max-w-3xl" data-parallax="16">
+              <div className="mx-auto mb-12 max-w-4xl" data-parallax="16">
                 <BRoll
                   src="/broll/autofill.mp4"
                   poster="/broll/autofill.webp"
@@ -297,7 +297,7 @@ export default function Home() {
           <Wash tint="coral" />
           <div className="relative mx-auto max-w-6xl px-6 py-36">
             <Reveal>
-              <div className="mx-auto mb-14 max-w-3xl" data-parallax="16">
+              <div className="mx-auto mb-12 max-w-4xl" data-parallax="16">
                 <BRoll
                   src="/broll/outreach.mp4"
                   poster="/broll/outreach.webp"
@@ -402,7 +402,7 @@ export default function Home() {
                 <span className="h-0.5 w-6 rounded-full bg-teal" />
                 <span className="h-0.5 w-6 rounded-full bg-coral" />
               </div>
-              <div className="mx-auto mt-10 max-w-2xl" data-parallax="14">
+              <div className="mx-auto mt-8 max-w-3xl" data-parallax="14">
                 <BRoll
                   src="/broll/close.mp4"
                   poster="/broll/close.webp"

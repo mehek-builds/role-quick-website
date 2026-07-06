@@ -2,11 +2,14 @@
 
 import { useEffect, useRef } from "react";
 
-/* A b-roll insert: one generated film shot dropped into a chapter, framed
-   like the glass cards. Loads nothing until it nears the viewport
-   (preload=none + IntersectionObserver), plays only while visible, and
-   under reduced motion stays a still (the poster). The site-wide grain
-   layer already sits over it; each shot carries its chapter's tint. */
+/* A b-roll shot dropped into a chapter. No frame, no glass, no shadow —
+   the clip was shot in the same white studio as the page's film, so its
+   edges feather to nothing (the Wash trick) and the footage reads as the
+   storm gathering into a shot, not a video placed on top. Loads nothing
+   until it nears the viewport (preload=none + IntersectionObserver),
+   plays only while visible, and under reduced motion stays a still (the
+   poster). The site-wide grain already sits over it; each shot carries
+   its chapter's tint inside the same feather. */
 
 const TINTS: Record<string, string> = {
   none: "rgba(255,255,255,0)",
@@ -14,6 +17,10 @@ const TINTS: Record<string, string> = {
   teal: "rgba(234,245,240,0.30)",
   coral: "rgba(251,239,232,0.30)",
 };
+
+/* elliptical feather: full footage in the middle, gone at the edges */
+const FEATHER =
+  "radial-gradient(62% 88% at 50% 50%, rgba(0,0,0,1) 42%, rgba(0,0,0,0.55) 68%, rgba(0,0,0,0) 96%)";
 
 export function BRoll({
   src,
@@ -46,34 +53,31 @@ export function BRoll({
   }, []);
 
   return (
-    <figure className={`rq-glass relative overflow-hidden ${className}`}>
-      <video
-        ref={videoRef}
-        src={src}
-        poster={poster}
-        muted
-        loop
-        playsInline
-        preload="none"
-        aria-hidden
-        className="block aspect-[21/9] w-full object-cover"
-      />
-      {/* chapter tint over the shot, same whisper as the film */}
+    <figure className={`relative ${className}`}>
       <div
-        className="pointer-events-none absolute inset-0 mix-blend-multiply"
-        style={{ backgroundColor: TINTS[tint] }}
-        aria-hidden
-      />
-      {/* gentle vignette so the frame reads as film, not embed */}
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(120% 100% at 50% 45%, rgba(18,18,15,0) 64%, rgba(18,18,15,0.12) 100%)",
-        }}
-        aria-hidden
-      />
-      <figcaption className="pointer-events-none absolute bottom-3 left-4 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
+        className="relative"
+        style={{ maskImage: FEATHER, WebkitMaskImage: FEATHER }}
+      >
+        <video
+          ref={videoRef}
+          src={src}
+          poster={poster}
+          muted
+          loop
+          playsInline
+          preload="none"
+          aria-hidden
+          className="block aspect-[21/9] w-full object-cover"
+        />
+        {/* chapter tint over the shot, same whisper as the film */}
+        <div
+          className="pointer-events-none absolute inset-0 mix-blend-multiply"
+          style={{ backgroundColor: TINTS[tint] }}
+          aria-hidden
+        />
+      </div>
+      {/* machine caption in the page's citation voice, not a card label */}
+      <figcaption className="mt-1 text-center font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
         {caption}
       </figcaption>
     </figure>
