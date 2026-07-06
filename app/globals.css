@@ -200,9 +200,61 @@ html {
   scroll-behavior: smooth;
 }
 
+/* ---- The scroll film (components/cinema/) ---- */
+
+/* Frosted glass card riding the film. Brand radius, hairline, real blur. */
+.rq-glass {
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 8px 40px rgba(18, 18, 15, 0.08);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+}
+
+/* Film grain: SVG turbulence tile jittered in steps. Multiplied over the
+   light film it reads as paper tooth, not noise. */
+.rq-grain {
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  opacity: 0.05;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: rq-grain 0.9s steps(8) infinite;
+}
+@keyframes rq-grain {
+  0% { transform: translate(0, 0); }
+  12.5% { transform: translate(-2%, -3%); }
+  25% { transform: translate(1.5%, -1%); }
+  37.5% { transform: translate(-1%, 2.5%); }
+  50% { transform: translate(2.5%, 1%); }
+  62.5% { transform: translate(-2.5%, 0.5%); }
+  75% { transform: translate(1%, -2.5%); }
+  87.5% { transform: translate(2%, 2%); }
+  100% { transform: translate(0, 0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+  /* The film collapses to one static viewport: hero card on the poster
+     frame, no pin, no chapters, no grain movement, no dust. */
+  .rq-cine {
+    height: 100svh;
+  }
+  .rq-cine-card-1,
+  .rq-cine-card-2,
+  .rq-cine-card-3,
+  .rq-cine-card-4,
+  .rq-cine-rail,
+  .rq-cine-hint,
+  .rq-cine-dust {
+    display: none;
+  }
+  .rq-grain {
+    animation: none;
   }
   .rq-blink {
     animation: none;

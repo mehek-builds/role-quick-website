@@ -6,8 +6,9 @@ import {
 } from "@/components/Mockups";
 import { OutreachDemo } from "@/components/OutreachDemo";
 import { ApplicantField } from "@/components/ApplicantField";
-import { HeroBackdrop } from "@/components/HeroBackdrop";
 import { Reveal, CountUp } from "@/components/Motion";
+import { CinematicHero } from "@/components/cinema/CinematicHero";
+import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
 import { STORE_URL } from "@/lib/config";
@@ -92,68 +93,38 @@ export default function Home() {
       <Header />
 
       <main className="flex-1">
-        {/* Hero + demo share the reactive backdrop */}
-        <div className="relative isolate">
-        <HeroBackdrop />
-        {/* Initial viewport uses the CSS-only entrance (rq-enter): the
-            headline must be visible at first paint, before hydration. */}
-        <section className="mx-auto max-w-3xl px-6 pt-28 text-center sm:pt-40">
-          <div className="rq-enter">
-            <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[76px]">
-              Apply <span className="text-brand-ink">in seconds.</span>
-            </h1>
-            <p className="mx-auto mt-7 max-w-[500px] text-[17px] leading-[1.65] text-muted">
-              RoleQuick is a free Chrome extension for students and new grads.
-              Open a job posting and it tailors your resume, fills the
-              application, and drafts the outreach. You get the final say.
-            </p>
-            <div className="mt-10 flex flex-col items-center justify-center gap-6 sm:flex-row">
-              <a
-                href={STORE_URL}
-                className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
-              >
-                Add to Chrome, it&apos;s free
-              </a>
-              <a
-                href="#product"
-                className="text-sm font-medium text-muted transition-colors hover:text-ink"
-              >
-                See the product ↓
-              </a>
-            </div>
-            <p className="mt-6 text-[13px] text-muted">
-              Reads only the posting you&apos;re viewing. Your data is never
-              sold.{" "}
-              <a href="/privacy" className="underline decoration-border underline-offset-2 hover:text-ink">
-                Privacy
-              </a>
-            </p>
-            {/* Hero-to-body bridge: the three pillars as a table of contents,
-                one small first click before the big ask. Pillar color marks
-                the feature it links to, nothing else. */}
-            <div className="mt-12 flex flex-wrap items-center justify-center gap-2.5">
-              <a
-                href="#documents"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
-              >
-                <span className="text-brand-ink">{PILLAR_ICONS.resume}</span>
-                Resume
-              </a>
-              <a
-                href="#autofill"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
-              >
-                <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
-                Autofill
-              </a>
-              <a
-                href="#outreach"
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
-              >
-                <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
-                Outreach
-              </a>
-            </div>
+        {/* The scroll film: pinned canvas scrub of the generated film,
+            glass chapter cards, grain, dust, vignette, chapter tints.
+            Lenis paces the whole page. */}
+        <SmoothScroll />
+        <CinematicHero storeUrl={STORE_URL} />
+
+        {/* Hero-to-body bridge: the three pillars as a table of contents,
+            one small first click before the big ask. Pillar color marks
+            the feature it links to, nothing else. */}
+        <section className="px-6 pt-20">
+          <div className="flex flex-wrap items-center justify-center gap-2.5">
+            <a
+              href="#documents"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
+            >
+              <span className="text-brand-ink">{PILLAR_ICONS.resume}</span>
+              Resume
+            </a>
+            <a
+              href="#autofill"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
+            >
+              <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
+              Autofill
+            </a>
+            <a
+              href="#outreach"
+              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
+            >
+              <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
+              Outreach
+            </a>
           </div>
         </section>
 
@@ -162,7 +133,6 @@ export default function Home() {
             <PacketDemo />
           </div>
         </section>
-        </div>
 
         {/* The number. Background changes mark section boundaries from here
             down (deep-dive pacing rule) — no hairline dividers between bands. */}
