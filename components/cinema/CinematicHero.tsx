@@ -117,7 +117,16 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     };
     resize();
     window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+    /* opened in a background tab: layout can be zero-sized at mount and
+       Chrome fires no resize on activation — re-fit when we become visible */
+    const onVisible = () => {
+      if (document.visibilityState === "visible") resize();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.removeEventListener("resize", resize);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
