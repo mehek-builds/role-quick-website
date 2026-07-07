@@ -182,7 +182,7 @@ after a real layout exists (double-rAF plus a 300ms setTimeout fallback;
 during hydration `innerWidth` can read 0 and would wrongly skip it). The
 sting is a seamless loop (first frame == last) and loops until the first
 scroll, which dissolves the whole opening stage straight into the canvas
-scrub (0.7s). The scrub is already following the scroll underneath, so
+scrub (1.0s). The scrub is already following the scroll underneath, so
 scroll control is immediate. Both worlds are the same white paper studio,
 so the dissolve reads as a lighting change, not a cut. Chrome pauses
 hidden-tab video without resuming it, so visibilitychange + pause

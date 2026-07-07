@@ -159,7 +159,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       stingDoneRef.current = true;
       gsap.to(stage, {
         autoAlpha: 0,
-        duration: 0.7,
+        duration: 1.0,
         ease: "power2.inOut",
         onComplete: () => sting.pause(),
       });
