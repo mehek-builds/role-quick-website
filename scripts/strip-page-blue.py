@@ -19,6 +19,22 @@ from PIL import Image
 HUE_LO, HUE_HI, SAT_MIN = 190, 290, 0.06
 
 
+def _packet_shield(hue: np.ndarray, sat: np.ndarray) -> np.ndarray:
+    """The finale packet keeps its cover marks (Mehek's exception). Its teal
+    bar is the ONLY teal in the swirl, so blue pixels near teal ones are the
+    mark cluster: dilate the teal mask (cheaply, at 1/8 scale) and shield
+    everything under it from the grade."""
+    from PIL import ImageFilter
+    teal = (hue > 140) & (hue < 195) & (sat > 0.25)
+    if not teal.any():
+        return np.zeros_like(teal)
+    h, w = teal.shape
+    small = Image.fromarray((teal * 255).astype(np.uint8)).resize(
+        (max(1, w // 8), max(1, h // 8)), Image.BILINEAR)
+    grown = small.filter(ImageFilter.MaxFilter(9)).resize((w, h), Image.NEAREST)
+    return np.asarray(grown) > 0
+
+
 def degrade(rgb: np.ndarray) -> np.ndarray:
     f = rgb.astype(np.float32) / 255
     mx, mn = f.max(-1), f.min(-1)
@@ -26,6 +42,7 @@ def degrade(rgb: np.ndarray) -> np.ndarray:
     r, g, b = f[..., 0], f[..., 1], f[..., 2]
     hue = np.degrees(np.arctan2(np.sqrt(3) * (g - b), 2 * r - g - b)) % 360
     mask = (hue > HUE_LO) & (hue < HUE_HI) & (sat > SAT_MIN)
+    mask &= ~_packet_shield(hue, sat)
     luma = 0.299 * r + 0.587 * g + 0.114 * b
     out = f.copy()
     for c in range(3):

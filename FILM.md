@@ -29,7 +29,11 @@ turns blue-band ink pixels into luminance gray (frames mode for
 `public/film/`, video mode re-encodes a clip at the crf-26 contract).
 Applied 2026-07-08 to film frames 0000-0080 and to transition.mp4 (from
 its raw original). NEVER run it on frames 0081+ (light washes + packet
-marks live there). The sting was already clean. STILL VIOLATING (both
+marks live there). The script's `_packet_shield` protects the packet's
+cover marks inside 0000-0080: the teal bar is the only teal in the swirl,
+so blue pixels near teal are the mark cluster and are left alone. (The
+first grade pass lacked the shield and grayed the packet's blue bar + dot
+in those frames; fixed with the 2026-07-08 4K re-extraction.) The sting was already clean. STILL VIOLATING (both
 unplaced): documents.mp4 (colored keyword pills) and close.mp4 (colored
 cover marks are on the book, which matches the packet exception, but its
 job predates the rule; re-check before re-placing).
@@ -95,11 +99,21 @@ seedance_2_0, 10s, 1080p, 16:9, silent). Prompt (keep for reshoots):
 > packet. Gentle depth of field, calm, precise, premium, airy. No logos, no
 > watermark, no people.
 
-Extraction contract: `ffmpeg -i film.mp4 -vf fps=12.1,scale=1600:900` →
-webp, same filenames, no code change needed. The collation begins around
-frame 75 and the book is formed by ~85: the pacing curve in
-CinematicHero depends on that; if you reshoot, re-check those frame numbers.
-`scripts/render-film.mjs` is the no-credits local fallback renderer.
+Extraction contract (updated 2026-07-08): frames now come from the 4K
+AI-upscaled master (bytedance_video_upscale job
+`fda903cf-c54c-4506-9174-6f2b5123f9ff`, preset aigc, ~46 credits, source =
+the original job above; raw 1080p source also lives locally as
+`.film-src.mp4`). `ffmpeg -i film-4k.mp4 -vf fps=12.1,scale=2560:1440` →
+png (this machine's ffmpeg has no webp encoder), then PIL webp q72, same
+`frame-0000..0120` filenames, no code change needed. fps=12.1 over
+10.04s yields 122 frames; DROP the last one so indices 0000-0120 line up
+with the previous set. Then re-run the black-and-white grade:
+`python3 scripts/strip-page-blue.py frames public/film 0 80` (its packet
+shield keeps the cover marks colored). Frame payload 2.2MB → 4.3MB for
+the resolution. The collation begins around frame 75 and the book is
+formed by ~85: the pacing curve in CinematicHero depends on that; if you
+reshoot, re-check those frame numbers. `scripts/render-film.mjs` is the
+no-credits local fallback renderer.
 
 ## The six b-roll clips (`public/broll/`, ~2.1MB total)
 
