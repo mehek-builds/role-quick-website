@@ -6,6 +6,24 @@ regenerate or extend any of it. Read DESIGN.md first for the visual laws;
 read this before touching anything under `components/cinema/`, `public/film/`
 or `public/broll/`.
 
+## HARD RULE: resumes are black and white, period (2026-07-08)
+
+Every resume/document in every generated clip is strictly black and white:
+black/gray text on white paper, nothing else. No blue text lines, no blue
+form fields, no colored accent marks, bars, dots or highlight pills on any
+page or packet cover. The canon formatting is the resumes in the opening
+sting. When writing ANY new Higgsfield prompt for this site, strip all
+color-on-paper language (several prompts below predate this rule and still
+contain it; do not copy those phrases) and add an explicit clause:
+"every document is pure black and white, no colored marks of any kind."
+Page-level UI overlays (Wash tints, chapter tints, dust) are a separate
+system and stay; this rule is about the paper itself. KNOWN VIOLATIONS
+still baked into shipped assets: the base film's swirl pages carry blue
+text lines and the frames 75-120 finale packet has blue/teal bars +
+blue/coral dots and teal/coral light sweeps; documents.mp4 (unplaced) has
+colored keyword pills; close.mp4 (unplaced) has colored cover marks.
+Reshoot these before they are ever re-placed.
+
 ## The layer model (the seamless recipe)
 
 The page paints exactly one background. Everything else rides on top of it,
