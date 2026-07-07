@@ -17,12 +17,22 @@ color-on-paper language (several prompts below predate this rule and still
 contain it; do not copy those phrases) and add an explicit clause:
 "every document is pure black and white, no colored marks of any kind."
 Page-level UI overlays (Wash tints, chapter tints, dust) are a separate
-system and stay; this rule is about the paper itself. KNOWN VIOLATIONS
-still baked into shipped assets: the base film's swirl pages carry blue
-text lines and the frames 75-120 finale packet has blue/teal bars +
-blue/coral dots and teal/coral light sweeps; documents.mp4 (unplaced) has
-colored keyword pills; close.mp4 (unplaced) has colored cover marks.
-Reshoot these before they are ever re-placed.
+system and stay; this rule is about the paper itself.
+
+ONE EXCEPTION (Mehek, 2026-07-08): the collated finale packet's cover
+keeps its three pillar accent marks (blue/teal bars + blue/coral dots),
+and the finale light sweeps stay. The packet is the only document allowed
+any color.
+
+Color fixes are a GRADE, not a reshoot: `scripts/strip-page-blue.py`
+turns blue-band ink pixels into luminance gray (frames mode for
+`public/film/`, video mode re-encodes a clip at the crf-26 contract).
+Applied 2026-07-08 to film frames 0000-0080 and to transition.mp4 (from
+its raw original). NEVER run it on frames 0081+ (light washes + packet
+marks live there). The sting was already clean. STILL VIOLATING (both
+unplaced): documents.mp4 (colored keyword pills) and close.mp4 (colored
+cover marks are on the book, which matches the packet exception, but its
+job predates the rule; re-check before re-placing).
 
 ## The layer model (the seamless recipe)
 
