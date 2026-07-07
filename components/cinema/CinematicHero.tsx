@@ -43,12 +43,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const filmRef = useRef<HTMLCanvasElement>(null);
   const dustRef = useRef<HTMLCanvasElement>(null);
   const stingRef = useRef<HTMLVideoElement>(null);
-  const transRef = useRef<HTMLVideoElement>(null);
   const openRef = useRef<HTMLDivElement>(null);
   const stingDoneRef = useRef(false);
-  const transStartedRef = useRef(false);
-  /* set inside the opening effect; the scroll handler calls it to swap the
-     flying-pages sting for the circulating transition on the first scroll */
+  /* set inside the opening effect; the scroll handler calls it to dissolve
+     the looping sting straight into the canvas scrub on the first scroll */
   const beginOpeningRef = useRef<() => void>(() => {});
   const progressRef = useRef(0);
   const chapterRef = useRef(0);
@@ -125,14 +123,17 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
      plain video loop restarts with no visible cut (no rewind snap) — hence a
      single element with `loop`, no crossfade needed.
 
-     The first scroll swaps the loop for the transition clip (papers settling
-     into the circulating orbit), which then dissolves into the scrub. Desktop
-     only (the canvas alone carries mobile), never under reduced motion. ---- */
+     The first scroll dissolves the loop straight into the canvas scrub, which
+     is already live underneath (frame index follows the scroll), so scroll
+     control is immediate and both worlds are the same white studio. (A middle
+     transition clip was cut 2026-07-08: its opening frames were a different
+     scene, and 4s of non-interactive video after the first scroll read as
+     lag. See FILM.md.) Desktop only (the canvas alone carries mobile), never
+     under reduced motion. ---- */
   useEffect(() => {
     const sting = stingRef.current;
-    const trans = transRef.current;
     const stage = openRef.current;
-    if (!sting || !trans || !stage) return;
+    if (!sting || !stage) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const onStingCanPlay = () => {
@@ -143,77 +144,32 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
 
     /* Chrome pauses muted autoplay video whenever the tab is hidden (tab
        switch, minimize, screen lock) and does NOT resume it — without this,
-       returning to the tab leaves the opening frozen on a still frame.
-       Resume whichever video should currently be running. */
+       returning to the tab leaves the opening frozen on a still frame. */
     const resumeOpening = () => {
       if (stingDoneRef.current || document.visibilityState !== "visible") return;
-      if (transStartedRef.current) {
-        if (trans.paused && !trans.ended) trans.play().catch(() => {});
-      } else if (sting.paused) {
-        sting.play().catch(() => {});
-      }
+      if (sting.paused) sting.play().catch(() => {});
     };
     const onVisible = () => resumeOpening();
     /* also covers browser-initiated pauses while visible (power saving) */
     const onStingPause = () => resumeOpening();
-    const onTransPause = () => resumeOpening();
 
-    /* first scroll → hand the baton to the transition. It has been buffering in
-       a second stacked <video>, so it starts instantly, and a short crossfade
-       over the looping sting reads as one continuous shot. */
-    const beginTransition = () => {
-      if (stingDoneRef.current || transStartedRef.current) return;
-      transStartedRef.current = true;
-      gsap.killTweensOf(sting);
-      loadTrans(); /* no-op if already buffering; covers a scroll before the deferred load */
-      trans.currentTime = 0;
-      trans.play().catch(() => {});
-      gsap.to(trans, {
-        opacity: 1,
-        duration: 0.45,
-        ease: "power1.inOut",
-        onComplete: () => {
-          sting.pause();
-          sting.style.opacity = "0";
-        },
-      });
-    };
-    beginOpeningRef.current = beginTransition;
-
-    /* transition done → dissolve the whole opening into the scrub. Its last
-       frame already matches frame 0, so the reveal is seamless. */
-    const onTransEnded = () => {
+    /* first scroll → dissolve the loop into the scrub beneath it */
+    const beginDissolve = () => {
       if (stingDoneRef.current) return;
       stingDoneRef.current = true;
       gsap.to(stage, {
         autoAlpha: 0,
-        duration: 1.1,
+        duration: 0.7,
         ease: "power2.inOut",
-        onComplete: () => {
-          sting.pause();
-          trans.pause();
-        },
+        onComplete: () => sting.pause(),
       });
     };
+    beginOpeningRef.current = beginDissolve;
 
     /* wait for a real layout before reading the viewport — during hydration
        innerWidth can read 0 and wrongly skip the opening. rAF waits for the
        first paint; the timeout covers throttled/hidden tabs where rAF is
        frozen. Whichever fires first runs the init once. */
-    /* the sting gets the network to itself first: the transition only starts
-       buffering once the sting can play through without stalling (or on the
-       fallback timer). beginTransition still works if the user scrolls before
-       then — loadTrans is idempotent and the play() call follows it. */
-    let transLoaded = false;
-    const loadTrans = () => {
-      if (transLoaded) return;
-      transLoaded = true;
-      trans.src = "/broll/transition.mp4";
-      trans.load();
-    };
-    const onStingBuffered = () => loadTrans();
-    let transTimer: ReturnType<typeof setTimeout> | undefined;
-
     let inited = false;
     let startRaf = 0;
     const init = () => {
@@ -223,26 +179,18 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       if (w && w < 640) return; /* mobile: the canvas alone carries it */
       sting.loop = true; /* the clip is a seamless loop (first frame == last) */
       sting.addEventListener("canplay", onStingCanPlay);
-      sting.addEventListener("canplaythrough", onStingBuffered);
       sting.addEventListener("pause", onStingPause);
-      trans.addEventListener("ended", onTransEnded);
-      trans.addEventListener("pause", onTransPause);
       document.addEventListener("visibilitychange", onVisible);
       sting.src = "/broll/sting.mp4";
-      transTimer = setTimeout(loadTrans, 4000); /* fallback on slow networks */
     };
     startRaf = requestAnimationFrame(() => requestAnimationFrame(init));
     const timeout = setTimeout(init, 300);
     return () => {
       cancelAnimationFrame(startRaf);
       clearTimeout(timeout);
-      if (transTimer) clearTimeout(transTimer);
-      gsap.killTweensOf(sting);
+      gsap.killTweensOf(stage);
       sting.removeEventListener("canplay", onStingCanPlay);
-      sting.removeEventListener("canplaythrough", onStingBuffered);
       sting.removeEventListener("pause", onStingPause);
-      trans.removeEventListener("ended", onTransEnded);
-      trans.removeEventListener("pause", onTransPause);
       document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
@@ -368,20 +316,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         onUpdate(self) {
           const p = self.progress;
           setChapter(p);
-          /* the first scroll swaps the looping flying-pages sting for the
-             circulating transition, which then dissolves into the scrub
-             (onTransEnded). If the viewer scrolls deep before the transition
-             finishes, dissolve straight to the film so the opening never lingers. */
-          if (!stingDoneRef.current && p > 0) {
-            beginOpeningRef.current();
-            const stage = openRef.current;
-            if (stage && p > 0.45) {
-              stingDoneRef.current = true;
-              stingRef.current?.pause();
-              transRef.current?.pause();
-              gsap.to(stage, { autoAlpha: 0, duration: 0.4, ease: "power2.out" });
-            }
-          }
+          /* the first scroll dissolves the looping flying-pages sting into
+             the scrub (beginDissolve); the film answers the scroll from the
+             very first notch */
+          if (!stingDoneRef.current && p > 0) beginOpeningRef.current();
           /* chapter tint: whisper multiply wash over the film */
           const seg = 1 / (TINTS.length - 1);
           const k = Math.min(Math.floor(p / seg), TINTS.length - 2);
@@ -451,19 +389,11 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {/* 1 · the film — scrubbed by whole-page progress */}
         <canvas ref={filmRef} className="absolute inset-0 h-full w-full" />
-        {/* 1b · the opening — the resume-storm sting looping seamlessly, then
-            the transition; the whole stage dissolving into 1 (the scrub) */}
+        {/* 1b · the opening — the resume-storm sting looping seamlessly, the
+            whole stage dissolving into 1 (the scrub) on the first scroll */}
         <div ref={openRef} className="absolute inset-0 h-full w-full">
           <video
             ref={stingRef}
-            muted
-            playsInline
-            preload="auto"
-            aria-hidden
-            className="absolute inset-0 h-full w-full object-cover opacity-0"
-          />
-          <video
-            ref={transRef}
             muted
             playsInline
             preload="auto"
