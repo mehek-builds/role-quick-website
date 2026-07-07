@@ -43,7 +43,13 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const filmRef = useRef<HTMLCanvasElement>(null);
   const dustRef = useRef<HTMLCanvasElement>(null);
   const stingRef = useRef<HTMLVideoElement>(null);
+  const transRef = useRef<HTMLVideoElement>(null);
+  const openRef = useRef<HTMLDivElement>(null);
   const stingDoneRef = useRef(false);
+  const transStartedRef = useRef(false);
+  /* set inside the opening effect; the scroll handler calls it to swap the
+     flying-pages sting for the circulating transition on the first scroll */
+  const beginOpeningRef = useRef<() => void>(() => {});
   const progressRef = useRef(0);
   const chapterRef = useRef(0);
 
@@ -111,51 +117,133 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /* ---- the sting: the generated opening shot plays once over the film's
-     first frame, then dissolves into the scrub. Desktop only (the canvas
-     alone carries mobile), never under reduced motion, and the first
-     scroll always wins — the video src is only ever assigned here. ---- */
+  /* ---- the opening: on load the sting (the camera flying forward through an
+     endless studio of floating resume pages) plays as a seamless loop — the
+     pages keep streaming past on every side until the viewer scrolls.
+
+     The clip is generated with its first and last frame locked identical, so a
+     plain video loop restarts with no visible cut (no rewind snap) — hence a
+     single element with `loop`, no crossfade needed.
+
+     The first scroll swaps the loop for the transition clip (papers settling
+     into the circulating orbit), which then dissolves into the scrub. Desktop
+     only (the canvas alone carries mobile), never under reduced motion. ---- */
   useEffect(() => {
-    const v = stingRef.current;
-    if (!v) return;
+    const sting = stingRef.current;
+    const trans = transRef.current;
+    const stage = openRef.current;
+    if (!sting || !trans || !stage) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let raf = 0;
-    const onCanPlay = () => {
+
+    const onStingCanPlay = () => {
       if (stingDoneRef.current) return;
-      v.style.opacity = "1";
-      v.play().catch(() => {});
+      sting.style.opacity = "1";
+      sting.play().catch(() => {});
     };
-    const onEnded = () => {
-      if (stingDoneRef.current) return;
-      stingDoneRef.current = true;
-      gsap.to(v, {
-        autoAlpha: 0,
-        duration: 0.9,
-        ease: "power2.inOut",
-        onComplete: () => v.pause(),
+
+    /* Chrome pauses muted autoplay video whenever the tab is hidden (tab
+       switch, minimize, screen lock) and does NOT resume it — without this,
+       returning to the tab leaves the opening frozen on a still frame.
+       Resume whichever video should currently be running. */
+    const resumeOpening = () => {
+      if (stingDoneRef.current || document.visibilityState !== "visible") return;
+      if (transStartedRef.current) {
+        if (trans.paused && !trans.ended) trans.play().catch(() => {});
+      } else if (sting.paused) {
+        sting.play().catch(() => {});
+      }
+    };
+    const onVisible = () => resumeOpening();
+    /* also covers browser-initiated pauses while visible (power saving) */
+    const onStingPause = () => resumeOpening();
+    const onTransPause = () => resumeOpening();
+
+    /* first scroll → hand the baton to the transition. It has been buffering in
+       a second stacked <video>, so it starts instantly, and a short crossfade
+       over the looping sting reads as one continuous shot. */
+    const beginTransition = () => {
+      if (stingDoneRef.current || transStartedRef.current) return;
+      transStartedRef.current = true;
+      gsap.killTweensOf(sting);
+      loadTrans(); /* no-op if already buffering; covers a scroll before the deferred load */
+      trans.currentTime = 0;
+      trans.play().catch(() => {});
+      gsap.to(trans, {
+        opacity: 1,
+        duration: 0.45,
+        ease: "power1.inOut",
+        onComplete: () => {
+          sting.pause();
+          sting.style.opacity = "0";
+        },
       });
     };
+    beginOpeningRef.current = beginTransition;
+
+    /* transition done → dissolve the whole opening into the scrub. Its last
+       frame already matches frame 0, so the reveal is seamless. */
+    const onTransEnded = () => {
+      if (stingDoneRef.current) return;
+      stingDoneRef.current = true;
+      gsap.to(stage, {
+        autoAlpha: 0,
+        duration: 1.1,
+        ease: "power2.inOut",
+        onComplete: () => {
+          sting.pause();
+          trans.pause();
+        },
+      });
+    };
+
     /* wait for a real layout before reading the viewport — during hydration
-       innerWidth can read 0 and wrongly skip the sting. rAF waits for the
+       innerWidth can read 0 and wrongly skip the opening. rAF waits for the
        first paint; the timeout covers throttled/hidden tabs where rAF is
        frozen. Whichever fires first runs the init once. */
+    /* the sting gets the network to itself first: the transition only starts
+       buffering once the sting can play through without stalling (or on the
+       fallback timer). beginTransition still works if the user scrolls before
+       then — loadTrans is idempotent and the play() call follows it. */
+    let transLoaded = false;
+    const loadTrans = () => {
+      if (transLoaded) return;
+      transLoaded = true;
+      trans.src = "/broll/transition.mp4";
+      trans.load();
+    };
+    const onStingBuffered = () => loadTrans();
+    let transTimer: ReturnType<typeof setTimeout> | undefined;
+
     let inited = false;
+    let startRaf = 0;
     const init = () => {
       if (inited) return;
       inited = true;
       const w = window.innerWidth || document.documentElement.clientWidth;
       if (w && w < 640) return; /* mobile: the canvas alone carries it */
-      v.addEventListener("canplay", onCanPlay);
-      v.addEventListener("ended", onEnded);
-      v.src = "/broll/sting.mp4";
+      sting.loop = true; /* the clip is a seamless loop (first frame == last) */
+      sting.addEventListener("canplay", onStingCanPlay);
+      sting.addEventListener("canplaythrough", onStingBuffered);
+      sting.addEventListener("pause", onStingPause);
+      trans.addEventListener("ended", onTransEnded);
+      trans.addEventListener("pause", onTransPause);
+      document.addEventListener("visibilitychange", onVisible);
+      sting.src = "/broll/sting.mp4";
+      transTimer = setTimeout(loadTrans, 4000); /* fallback on slow networks */
     };
-    raf = requestAnimationFrame(() => requestAnimationFrame(init));
+    startRaf = requestAnimationFrame(() => requestAnimationFrame(init));
     const timeout = setTimeout(init, 300);
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(startRaf);
       clearTimeout(timeout);
-      v.removeEventListener("canplay", onCanPlay);
-      v.removeEventListener("ended", onEnded);
+      if (transTimer) clearTimeout(transTimer);
+      gsap.killTweensOf(sting);
+      sting.removeEventListener("canplay", onStingCanPlay);
+      sting.removeEventListener("canplaythrough", onStingBuffered);
+      sting.removeEventListener("pause", onStingPause);
+      trans.removeEventListener("ended", onTransEnded);
+      trans.removeEventListener("pause", onTransPause);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -280,14 +368,18 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         onUpdate(self) {
           const p = self.progress;
           setChapter(p);
-          /* scrolling dissolves the sting into the scrub, immediately */
-          const sting = stingRef.current;
-          if (sting && !stingDoneRef.current && p > 0) {
-            const o = Math.max(0, 1 - p * 20);
-            sting.style.opacity = String(o);
-            if (o === 0) {
+          /* the first scroll swaps the looping flying-pages sting for the
+             circulating transition, which then dissolves into the scrub
+             (onTransEnded). If the viewer scrolls deep before the transition
+             finishes, dissolve straight to the film so the opening never lingers. */
+          if (!stingDoneRef.current && p > 0) {
+            beginOpeningRef.current();
+            const stage = openRef.current;
+            if (stage && p > 0.45) {
               stingDoneRef.current = true;
-              sting.pause();
+              stingRef.current?.pause();
+              transRef.current?.pause();
+              gsap.to(stage, { autoAlpha: 0, duration: 0.4, ease: "power2.out" });
             }
           }
           /* chapter tint: whisper multiply wash over the film */
@@ -339,32 +431,15 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       /* timeline positions are progress fractions (total duration = 1) */
       tl.to({}, { duration: 1 }); // spine
       const hero = q<HTMLElement>(".rq-cine-card-hero")[0];
-      if (hero) tl.to(hero, { autoAlpha: 0, y: -48, duration: 0.08, ease: "power2.in" }, 0.13);
-      slide(".rq-cine-card-1", 0.24, 0.42, tl);
-      slide(".rq-cine-card-2", 0.5, 0.66, tl);
-      slide(".rq-cine-card-3", 0.74, 0.87, tl);
-      slide(".rq-cine-card-4", 0.93, null, tl);
+      if (hero) tl.to(hero, { autoAlpha: 0, y: -48, duration: 0.08, ease: "power2.in" }, 0.22);
+      /* the opening now hands straight off to the real pinned sections: the
+         hero sets it up, the swirl plays, the packet finale lands, done. The
+         chapter deep-dives live in the sections below, held over this film. */
+      slide(".rq-cine-card-4", 0.68, null, tl);
 
-      /* film props: the site's real artifacts riding the film at their own
-         depth — enter low, drift up through the chapter, leave high */
-      const prop = (sel: string, enter: number, exit: number) => {
-        const el = q<HTMLElement>(sel)[0];
-        if (!el) return;
-        tl.fromTo(
-          el,
-          { autoAlpha: 0, y: 90 },
-          { autoAlpha: 1, y: 20, duration: 0.05, ease: "power2.out" },
-          enter
-        )
-          .to(el, { y: -30, duration: exit - enter - 0.1, ease: "none" }, enter + 0.05)
-          .to(el, { autoAlpha: 0, y: -90, duration: 0.05, ease: "power2.in" }, exit);
-      };
       const captions = q<HTMLElement>(".rq-cine-caption");
       if (captions.length)
-        tl.to(captions, { autoAlpha: 0, y: -24, duration: 0.06, ease: "power2.in" }, 0.12);
-      prop(".rq-cine-prop-1", 0.27, 0.44);
-      prop(".rq-cine-prop-2", 0.53, 0.68);
-      prop(".rq-cine-prop-3", 0.77, 0.89);
+        tl.to(captions, { autoAlpha: 0, y: -24, duration: 0.06, ease: "power2.in" }, 0.16);
     },
     { scope: wrapRef }
   );
@@ -376,15 +451,26 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {/* 1 · the film — scrubbed by whole-page progress */}
         <canvas ref={filmRef} className="absolute inset-0 h-full w-full" />
-        {/* 1b · the sting — the generated opening shot, dissolving into 1 */}
-        <video
-          ref={stingRef}
-          muted
-          playsInline
-          preload="auto"
-          aria-hidden
-          className="absolute inset-0 h-full w-full object-cover opacity-0"
-        />
+        {/* 1b · the opening — the resume-storm sting looping seamlessly, then
+            the transition; the whole stage dissolving into 1 (the scrub) */}
+        <div ref={openRef} className="absolute inset-0 h-full w-full">
+          <video
+            ref={stingRef}
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover opacity-0"
+          />
+          <video
+            ref={transRef}
+            muted
+            playsInline
+            preload="auto"
+            aria-hidden
+            className="absolute inset-0 h-full w-full object-cover opacity-0"
+          />
+        </div>
         {/* 5 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
         {/* 2 · paper dust */}
@@ -399,15 +485,13 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         />
       </div>
 
-    {/* 420svh of scroll = the opening act. Reduced motion collapses this
-       to one viewport in CSS (globals.css) and hides the chapter cards. */}
-    <div ref={wrapRef} className="rq-cine relative h-[420svh]">
+    {/* 200svh of scroll = the opening act: hero → film swirl → packet finale,
+       then it hands off to the real pinned sections. Reduced motion collapses
+       this to one viewport in CSS (globals.css). */}
+    <div ref={wrapRef} className="rq-cine relative h-[200svh]">
       <div className="sticky top-0 h-svh w-full overflow-hidden">
 
-        {/* sparse machine-voice captions over the opening frame */}
-        <p className="rq-cine-caption rq-enter absolute left-6 top-24 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
-          jobs.lever.co/notion/software-engineer-intern
-        </p>
+        {/* sparse machine-voice caption over the opening frame */}
         <p className="rq-cine-caption rq-enter absolute bottom-24 right-16 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
           19:42:07 · Posting detected
         </p>
@@ -452,125 +536,6 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             Scroll
           </p>
           <span className="block h-8 w-px animate-pulse bg-faint" />
-        </div>
-
-        {/* chapter cards — hidden until the timeline brings them in */}
-        <div className="rq-cine-card-1 invisible absolute inset-x-0 top-[22svh] px-6 opacity-0 sm:left-[8vw] sm:right-auto sm:top-[30svh] sm:max-w-md">
-          <div className="rq-glass px-7 py-8">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-              01 · Documents
-            </p>
-            <h2 className="mt-3 text-[28px] font-[450] leading-[1.15] tracking-[-0.02em] text-ink">
-              A resume tuned to this posting.
-            </h2>
-            <p className="mt-3 text-[15px] leading-7 text-muted">
-              Read for what matters. Rebuilt in the posting&apos;s own language.
-            </p>
-          </div>
-        </div>
-
-        <div className="rq-cine-card-2 invisible absolute inset-x-0 top-[22svh] px-6 opacity-0 sm:left-auto sm:right-[8vw] sm:top-[30svh] sm:max-w-md">
-          <div className="rq-glass px-7 py-8">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-teal-ink">
-              02 · Autofill
-            </p>
-            <h2 className="mt-3 text-[28px] font-[450] leading-[1.15] tracking-[-0.02em] text-ink">
-              Every field, filled.
-            </h2>
-            <p className="mt-3 text-[15px] leading-7 text-muted">
-              The boring eighty percent of every application, done while the
-              page loads.
-            </p>
-          </div>
-        </div>
-
-        <div className="rq-cine-card-3 invisible absolute inset-x-0 top-[22svh] px-6 opacity-0 sm:left-[8vw] sm:right-auto sm:top-[30svh] sm:max-w-md">
-          <div className="rq-glass px-7 py-8">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-coral-ink">
-              03 · Outreach
-            </p>
-            <h2 className="mt-3 text-[28px] font-[450] leading-[1.15] tracking-[-0.02em] text-ink">
-              A real person, already drafted.
-            </h2>
-            <p className="mt-3 text-[15px] leading-7 text-muted">
-              Alumni first. Waiting in your Gmail drafts.
-            </p>
-          </div>
-        </div>
-
-        {/* film props: the actual artifacts, sparse and real. Desktop only —
-            on mobile the chapter cards carry the story alone. */}
-        <div className="rq-cine-prop-1 invisible absolute right-[9vw] top-[34svh] hidden w-[300px] opacity-0 lg:block" aria-hidden>
-          <div className="rq-glass px-5 py-4">
-            <p className="truncate font-mono text-[10px] font-medium text-muted">
-              Alex_Rivera_Notion_Resume.pdf
-            </p>
-            <div className="mt-2.5 border-l-2 border-brand pl-3">
-              <p className="text-[13px] font-medium text-ink">Alex Rivera</p>
-              <p className="text-[11px] text-muted">Software Engineer Intern</p>
-            </div>
-            <ul className="mt-3 space-y-1.5 text-[11px] leading-4 text-muted">
-              <li>REST APIs serving 40K requests a day</li>
-              <li>Test coverage 41% to 78% in one quarter</li>
-            </ul>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {["React", "TypeScript", "SQL", "AWS"].map((s) => (
-                <span key={s} className="rounded-full bg-brand-soft px-2 py-0.5 font-mono text-[10px] text-brand-ink">
-                  {s}
-                </span>
-              ))}
-            </div>
-            <p className="mt-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-              ATS coverage 92%
-            </p>
-          </div>
-        </div>
-
-        <div className="rq-cine-prop-2 invisible absolute left-[9vw] top-[34svh] hidden w-[300px] opacity-0 lg:block" aria-hidden>
-          <div className="rq-glass px-5 py-4">
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-              Application · Notion
-            </p>
-            <div className="mt-2.5 space-y-2 text-[11px]">
-              {[
-                ["Full name", "Alex Rivera"],
-                ["Email", "alex.rivera@usc.edu"],
-                ["Work authorization", "Authorized"],
-                ["EEO", "Decline to identify"],
-              ].map(([k, v]) => (
-                <div key={k} className="flex items-baseline justify-between gap-3">
-                  <span className="text-muted">{k}</span>
-                  <span className="flex items-center gap-1.5 text-ink">
-                    {v}
-                    <svg viewBox="0 0 12 12" className="h-3 w-3 text-teal" aria-hidden>
-                      <path d="m2.5 6.5 2.5 2.5 4.5-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="mt-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-teal-ink">
-              27 fields · nothing sent yet
-            </p>
-          </div>
-        </div>
-
-        <div className="rq-cine-prop-3 invisible absolute right-[9vw] top-[34svh] hidden w-[320px] opacity-0 lg:block" aria-hidden>
-          <div className="rq-glass px-5 py-4">
-            <p className="font-mono text-[10px] font-medium text-muted">
-              To: Priya Nair · USC &apos;22
-            </p>
-            <p className="mt-1.5 text-[12px] font-medium text-ink">
-              USC senior, just applied to SWE intern
-            </p>
-            <p className="mt-2 text-[11px] leading-4 text-muted">
-              Priya, fellow Trojan here. I just applied to the SWE intern role
-              and wanted to reach out beyond the pile…
-            </p>
-            <p className="mt-3 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-coral-ink">
-              ~120 words · in your voice
-            </p>
-          </div>
         </div>
 
         <div className="rq-cine-card-4 invisible absolute inset-x-0 bottom-[10svh] px-6 opacity-0 sm:bottom-[12svh]">

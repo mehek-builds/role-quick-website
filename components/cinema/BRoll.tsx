@@ -6,9 +6,12 @@ import { useEffect, useRef } from "react";
    played over it: the video multiply-blends with the page, so the clip's
    white studio becomes the page itself (the wash and the storm beneath)
    and only the subject — pages, ink, shadows, colored highlights — paints
-   on top of the continuous animation. An elliptical feather erases the
-   crop, and a slight brightness lift pushes the clip's near-white studio
-   to pure white so the blend leaves no patch.
+   on top of the continuous animation. The source clips are pre-processed
+   (see public/broll/_orig for the originals): the studio backdrop is
+   whitened to pure white, so it drops to nothing under multiply with no
+   diagonal banding and no rectangular patch — only the resume floats. That
+   means the full 16:9 frame can show (aspect-video, no crop) so the resume's
+   own edges stay in view, and the feather only needs a gentle outer fade.
 
    IMPORTANT: blend modes are isolated by any transformed/filtered/opacity
    ancestor. BRoll must sit OUTSIDE Reveal and [data-parallax] wrappers or
@@ -17,7 +20,7 @@ import { useEffect, useRef } from "react";
    visible; reduced motion stays a still (the poster, same blend). */
 
 const FEATHER =
-  "radial-gradient(68% 92% at 50% 50%, rgba(0,0,0,1) 48%, rgba(0,0,0,0.5) 74%, rgba(0,0,0,0) 97%)";
+  "radial-gradient(86% 96% at 50% 50%, rgba(0,0,0,1) 74%, rgba(0,0,0,0) 100%)";
 
 export function BRoll({
   src,
@@ -58,12 +61,11 @@ export function BRoll({
         playsInline
         preload="none"
         aria-hidden
-        className="block aspect-[21/9] w-full object-cover"
+        className="block aspect-video w-full object-cover"
         style={{
           maskImage: FEATHER,
           WebkitMaskImage: FEATHER,
           mixBlendMode: "multiply",
-          filter: "brightness(1.05)",
         }}
       />
       {/* machine caption in the page's citation voice */}

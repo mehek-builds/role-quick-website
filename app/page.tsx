@@ -9,7 +9,6 @@ import { ApplicantField } from "@/components/ApplicantField";
 import { Reveal, CountUp } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
-import { BRoll } from "@/components/cinema/BRoll";
 import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
@@ -106,7 +105,7 @@ export default function Home() {
         {/* Chapter: the receipt. The film hands off to the live demo — the
             chips bridge and the packet assembling in real time. */}
         <section id="product" className="relative scroll-mt-24">
-          <Wash />
+          <Wash soft />
           <div className="relative px-6 pt-20">
           <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             19:42:07 → 19:42:16
@@ -146,7 +145,7 @@ export default function Home() {
         {/* The number. Background changes mark section boundaries from here
             down (deep-dive pacing rule) — no hairline dividers between bands. */}
         <section id="odds" className="relative">
-          <Wash tint="warm" />
+          <Wash tint="warm" soft />
           <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
@@ -157,16 +156,13 @@ export default function Home() {
                 gets the job. We make yours the tailored one.
               </p>
               <ApplicantField />
-              <p className="mt-10 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                Source: Glassdoor
-              </p>
             </Reveal>
           </div>
         </section>
 
         {/* ATS formatting: mess in, machine-readable out */}
         <section id="formats" className="relative">
-          <Wash />
+          <Wash soft />
           <div className="relative mx-auto max-w-5xl px-6 py-36">
           <Reveal>
             <div className="mx-auto max-w-[560px] text-center">
@@ -180,78 +176,47 @@ export default function Home() {
               </p>
             </div>
           </Reveal>
-          {/* outside Reveal: multiply-blend must reach the film behind */}
-          <div className="mx-auto mt-12 max-w-4xl">
-            <BRoll
-              src="/broll/formats.mp4"
-              poster="/broll/formats.webp"
-              caption="Shot 01 · the re-set"
-            />
-          </div>
           <Reveal>
-            <div className="mt-16" data-parallax="24">
+            <div className="mt-14" data-parallax="24">
               <ResumeFormatDemo />
             </div>
           </Reveal>
           </div>
         </section>
 
-        {/* Documents */}
+        {/* Documents — pinned act: the real rebuild held over the live film */}
         <section id="documents" className="relative scroll-mt-24">
-          <Wash tint="brand" />
-          <div className="relative mx-auto max-w-5xl px-6 py-36">
-            <Reveal>
-              <div className="rq-glass mx-auto max-w-[600px] px-8 py-9 text-center">
-                <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                  19:42:11
-                </p>
-                <div className="mt-3 flex justify-center">
-                  <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
+          <Wash tint="brand" soft />
+          <div className="relative sm:h-[188svh]">
+            <div className="flex min-h-svh flex-col items-center justify-center gap-5 px-6 py-24 sm:sticky sm:top-0 sm:py-0">
+              <Reveal>
+                <div className="mx-auto max-w-[600px] text-center">
+                  <div className="flex justify-center">
+                    <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
+                  </div>
+                  <h2 className="mt-3 text-[28px] font-[450] tracking-[-0.02em] text-ink">
+                    Tuned means rebuilt, not reworded.
+                  </h2>
+                  <p className="mt-2.5 text-[14px] leading-6 text-muted">
+                    RoleQuick pulls the requirements from the posting and reorders
+                    your story to answer them, in its own language.
+                  </p>
                 </div>
-                <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                  Tuned means rebuilt, not reworded.
-                </h2>
-                <p className="mt-4 text-[15px] leading-7 text-muted">
-                  RoleQuick pulls the requirements out of the posting, reorders
-                  your story to answer them, and exports a fresh one-page PDF.
-                  That is what ATS-optimized actually means.
-                </p>
-                <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                  A recruiter&apos;s first look lasts 7.4 seconds · Source:
-                  Ladders eye-tracking study
-                </p>
-              </div>
-            </Reveal>
-            {/* outside Reveal: multiply-blend must reach the film behind */}
-            <div className="mx-auto mt-12 max-w-4xl">
-              <BRoll
-                src="/broll/documents.mp4"
-                poster="/broll/documents.webp"
-                caption="Shot 02 · the rebuild"
-              />
-            </div>
-            <Reveal>
-              <div className="mt-16" data-parallax="24">
+              </Reveal>
+              <div className="w-full max-w-5xl origin-center sm:scale-[0.84]">
                 <ResumeMatchDemo />
               </div>
-            </Reveal>
+            </div>
           </div>
         </section>
 
-        {/* Autofill */}
+        {/* Autofill — pinned act: the real fill held over the live film */}
         <section id="autofill" className="relative scroll-mt-24">
-          <Wash tint="teal" />
-          <div className="relative mx-auto max-w-6xl px-6 py-36">
-            {/* outside Reveal: multiply-blend must reach the film behind */}
-            <div className="mx-auto mb-12 max-w-4xl">
-              <BRoll
-                src="/broll/autofill.mp4"
-                poster="/broll/autofill.webp"
-                caption="Shot 03 · the fill"
-              />
-            </div>
+          <Wash tint="teal" soft />
+          <div className="relative sm:h-[185svh]">
+            <div className="flex min-h-svh items-center px-6 py-24 sm:sticky sm:top-0 sm:py-0">
             <Reveal>
-              <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+              <div className="mx-auto grid w-full max-w-6xl origin-center grid-cols-1 items-center gap-14 sm:scale-[0.92] sm:grid-cols-2">
                 <div className="order-2 sm:order-1" data-parallax="20">
                   <ApplicationFormMockup />
                 </div>
@@ -294,23 +259,17 @@ export default function Home() {
                 </div>
               </div>
             </Reveal>
+            </div>
           </div>
         </section>
 
-        {/* Outreach */}
+        {/* Outreach — pinned act: the real draft held over the live film */}
         <section id="outreach" className="relative scroll-mt-24">
-          <Wash tint="coral" />
-          <div className="relative mx-auto max-w-6xl px-6 py-36">
-            {/* outside Reveal: multiply-blend must reach the film behind */}
-            <div className="mx-auto mb-12 max-w-4xl">
-              <BRoll
-                src="/broll/outreach.mp4"
-                poster="/broll/outreach.webp"
-                caption="Shot 04 · the letter"
-              />
-            </div>
+          <Wash tint="coral" soft />
+          <div className="relative sm:h-[185svh]">
+            <div className="flex min-h-svh items-center px-6 py-24 sm:sticky sm:top-0 sm:py-0">
             <Reveal>
-              <div className="grid grid-cols-1 items-center gap-14 sm:grid-cols-2">
+              <div className="mx-auto grid w-full max-w-6xl origin-center grid-cols-1 items-center gap-14 sm:scale-[0.92] sm:grid-cols-2">
                 <div className="rq-glass px-7 py-8">
                   <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                     19:42:16
@@ -345,17 +304,18 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div data-parallax="20">
+                <div>
                   <OutreachDemo />
                 </div>
               </div>
             </Reveal>
+            </div>
           </div>
         </section>
 
         {/* Pricing */}
         <section id="pricing" className="relative">
-          <Wash />
+          <Wash soft />
           <div className="relative mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -371,7 +331,7 @@ export default function Home() {
 
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
         <section id="faq" className="relative scroll-mt-24">
-          <Wash tint="warm" />
+          <Wash tint="warm" soft />
           <div className="relative mx-auto max-w-2xl px-6 py-36">
             <Reveal>
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
@@ -399,7 +359,7 @@ export default function Home() {
 
         {/* Close: the finale — by here the live film has collated the book */}
         <section id="close" className="relative">
-          <Wash />
+          <Wash soft />
           <div className="relative mx-auto max-w-3xl px-6 py-40 text-center">
             <Reveal>
               <div className="flex items-center justify-center gap-1.5">
@@ -408,16 +368,8 @@ export default function Home() {
                 <span className="h-0.5 w-6 rounded-full bg-coral" />
               </div>
             </Reveal>
-            {/* outside Reveal: multiply-blend must reach the film behind */}
-            <div className="mx-auto mt-8 max-w-3xl">
-              <BRoll
-                src="/broll/close.mp4"
-                poster="/broll/close.webp"
-                caption="Final shot · one packet"
-              />
-            </div>
             <Reveal>
-              <h2 className="mt-10 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
+              <h2 className="mt-8 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
                 Open your next application.
               </h2>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -456,15 +408,6 @@ export default function Home() {
                   RoleQuick
                 </span>
               </div>
-              <p className="mt-4 text-[13px] leading-6 text-muted">
-                Built by Mehek Mandal at USC.
-              </p>
-              <a
-                href="mailto:mehekman@usc.edu"
-                className="mt-1 inline-block text-[13px] text-muted underline decoration-border underline-offset-2 hover:text-ink"
-              >
-                Email Mehek
-              </a>
             </div>
             <div>
               <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
