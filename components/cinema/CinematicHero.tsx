@@ -70,6 +70,9 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       if (hi?.complete && hi.naturalWidth) { img = hi; break; }
     }
     if (!img) return;
+    /* first successful paint dissolves the canvas in (CSS transition on the
+       element) — the load-order pops white → poster → sting read as cuts */
+    if (canvas.style.opacity !== "1") canvas.style.opacity = "1";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     const { width: cw, height: ch } = canvas;
@@ -142,7 +145,9 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
 
     const onStingCanPlay = () => {
       if (stingDoneRef.current) return;
-      sting.style.opacity = "1";
+      /* dissolve in, never pop: this fires at a network-dependent moment
+         over the already-painted film poster, and the two rooms differ */
+      gsap.to(sting, { opacity: 1, duration: 0.8, ease: "power1.inOut" });
       sting.play().catch(() => {});
     };
 
@@ -249,6 +254,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       if (transTimer) clearTimeout(transTimer);
       gsap.killTweensOf(stage);
       gsap.killTweensOf(trans);
+      gsap.killTweensOf(sting);
       sting.removeEventListener("canplay", onStingCanPlay);
       sting.removeEventListener("canplaythrough", onStingBuffered);
       sting.removeEventListener("pause", onStingPause);
@@ -460,8 +466,12 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       {/* THE STAGE: the film and its atmosphere, fixed behind the entire
           page. Every section floats over this — the animation never ends. */}
       <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
-        {/* 1 · the film — scrubbed by whole-page progress */}
-        <canvas ref={filmRef} className="absolute inset-0 h-full w-full" />
+        {/* 1 · the film — scrubbed by whole-page progress. Starts invisible;
+            drawFrame dissolves it in on the first painted frame. */}
+        <canvas
+          ref={filmRef}
+          className="rq-cine-film absolute inset-0 h-full w-full opacity-0 transition-opacity duration-700"
+        />
         {/* 1b · the opening — the resume-storm sting looping seamlessly, then
             the locked transition; the whole stage dissolving into 1 (the
             scrub) */}

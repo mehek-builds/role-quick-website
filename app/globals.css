@@ -253,6 +253,11 @@ html {
   .rq-grain {
     animation: none;
   }
+  /* the film canvas appears instantly (it dissolves in via a transition
+     under full motion) */
+  .rq-cine-film {
+    transition: none;
+  }
   .rq-blink {
     animation: none;
     opacity: 0;
