@@ -103,14 +103,15 @@ Extraction contract (updated 2026-07-08): frames now come from the 4K
 AI-upscaled master (bytedance_video_upscale job
 `fda903cf-c54c-4506-9174-6f2b5123f9ff`, preset aigc, ~46 credits, source =
 the original job above; raw 1080p source also lives locally as
-`.film-src.mp4`). `ffmpeg -i film-4k.mp4 -vf fps=12.1,scale=2560:1440` →
+`.film-src.mp4`). `ffmpeg -i film-4k.mp4 -vf fps=12.1,scale=3200:1800` →
 png (this machine's ffmpeg has no webp encoder), then PIL webp q72, same
 `frame-0000..0120` filenames, no code change needed. fps=12.1 over
 10.04s yields 122 frames; DROP the last one so indices 0000-0120 line up
 with the previous set. Then re-run the black-and-white grade:
 `python3 scripts/strip-page-blue.py frames public/film 0 80` (its packet
-shield keeps the cover marks colored). Frame payload 2.2MB → 4.3MB for
-the resolution. The collation begins around frame 75 and the book is
+shield keeps the cover marks colored). Frame payload is 5.7MB at
+3200x1800 (chosen over full 4K deliberately: 121 decoded 4K bitmaps cause
+scrub hitching and memory pressure on laptops). The collation begins around frame 75 and the book is
 formed by ~85: the pacing curve in CinematicHero depends on that; if you
 reshoot, re-check those frame numbers. `scripts/render-film.mjs` is the
 no-credits local fallback renderer.
@@ -132,7 +133,7 @@ something is off with the shot.
 
 | file | where | dur | job id |
 | --- | --- | --- | --- |
-| sting.mp4 | opening loop at load, fixed stage (rebuilt as a seamless loop 2026-07-07; job id of the loop version not recorded, original in `.assets-orig/`) | 5s | `55b3c7ad-f63c-49c9-935f-73bad2f20864` (first, non-loop version) |
+| sting.mp4 | opening loop at load, fixed stage. Now 2560x1440: the live 6.5s edit is a speed-ramped pick of 156 frames from the 227-frame master `sting-1440p-1783441236.mp4` in `.assets-orig/broll-orig/`; the recovered frame map is `scripts/sting-frame-map.json` (rebuild = pull those indices from the master, encode 24fps crf 26). Loop seam verified: last→first diff below median inter-frame step. | 6.5s | `55b3c7ad-f63c-49c9-935f-73bad2f20864` (first, non-loop version; loop master's job id not recorded) |
 | transition.mp4 | first-scroll handoff, REGENERATED 2026-07-08 start/end-frame LOCKED (start = sting loop-point frame, end = film frame-0000). Take 3: the conversion is choreographed across the whole clip (a page sweeps close past the lens at the midpoint while the light softens, then the papers recede and curve into the orbit). Take 1 opened on a different scene; take 2 (`8c866017`) crammed the room change into the last half-second and read as a cut. Raw original in `.assets-orig/`. Prompt below. | 6s | `fbdccb8a-6e1c-46e1-84d7-6a5b90da7d1c` |
 | formats.mp4 | UNPLACED since pinned-acts rework (was #formats) | 5s | `ff1d02c0-34c2-4e38-bcbb-9276a7443bd0` |
 | documents.mp4 | UNPLACED since pinned-acts rework (was #documents) | 5s | `1d93cd52-3d0b-4929-93a0-db79fc73c164` |
