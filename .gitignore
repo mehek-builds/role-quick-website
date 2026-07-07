@@ -42,3 +42,4 @@ next-env.d.ts
 .film-tmp/
 .film-src.mp4
 .stills-tmp/
+.assets-orig/

@@ -24,7 +24,10 @@ top of the page to the footer:
    `brightness(1.05)` lift makes the clip's white studio become the page
    (wash + storm beneath), and an elliptical `mask-image` feather erases the
    crop. Only the subject, pages, ink, shadows, colored highlights, lands
-   on the animation.
+   on the animation. NOTE: since the pinned-acts rework (`d0b55a0`) no
+   section places a BRoll shot; the live product demos (Mockups) carry the
+   sections instead. The component, the five section clips and their prompts
+   are kept below for reuse.
 4. **Grain** (`CinematicPage.tsx`, `.rq-grain`) sits fixed above everything
    and ties film, shots and UI into one surface.
 
@@ -87,12 +90,17 @@ something is off with the shot.
 
 | file | where | dur | job id |
 | --- | --- | --- | --- |
-| sting.mp4 | plays once at load, fixed stage | 5s | `55b3c7ad-f63c-49c9-935f-73bad2f20864` |
-| formats.mp4 | #formats, "Shot 01 · the re-set" | 5s | `ff1d02c0-34c2-4e38-bcbb-9276a7443bd0` |
-| documents.mp4 | #documents, "Shot 02 · the rebuild" | 5s | `1d93cd52-3d0b-4929-93a0-db79fc73c164` |
-| autofill.mp4 | #autofill, "Shot 03 · the fill" | 4s | `57acf844-b9a4-43e3-909a-f682855cdf2f` |
-| outreach.mp4 | #outreach, "Shot 04 · the letter" | 4s | `963afe9f-434b-4d12-97d3-542dd0c215ca` |
-| close.mp4 | #close, "Final shot · one packet" | 5s | `2be36d17-c7d7-4259-b10a-4efc18c8f921` |
+| sting.mp4 | opening loop at load, fixed stage (rebuilt as a seamless loop 2026-07-07; job id of the loop version not recorded, original in `.assets-orig/`) | 5s | `55b3c7ad-f63c-49c9-935f-73bad2f20864` (first, non-loop version) |
+| transition.mp4 | first scroll: hands the sting off to the canvas scrub (added 2026-07-07; prompt + job id not recorded, reconstruct from Higgsfield history if a reshoot is needed) | ~5s | not recorded |
+| formats.mp4 | UNPLACED since pinned-acts rework (was #formats) | 5s | `ff1d02c0-34c2-4e38-bcbb-9276a7443bd0` |
+| documents.mp4 | UNPLACED since pinned-acts rework (was #documents) | 5s | `1d93cd52-3d0b-4929-93a0-db79fc73c164` |
+| autofill.mp4 | UNPLACED since pinned-acts rework (was #autofill) | 4s | `57acf844-b9a4-43e3-909a-f682855cdf2f` |
+| outreach.mp4 | UNPLACED since pinned-acts rework (was #outreach) | 4s | `963afe9f-434b-4d12-97d3-542dd0c215ca` |
+| close.mp4 | UNPLACED since pinned-acts rework (was #close) | 5s | `2be36d17-c7d7-4259-b10a-4efc18c8f921` |
+
+Uncompressed originals live in `.assets-orig/` (gitignored, never under
+`public/`: they were being deployed and publicly served from
+`/broll/_orig/` until 2026-07-08).
 
 ### Text-to-video prompts (sting, autofill, outreach, close)
 
@@ -167,13 +175,19 @@ pill reading TAILORED. Pages stay perfectly still and flat, camera locked,
 background unchanged. Precise, elegant, premium UI motion design, text sharp
 and legible throughout, no paper distortion.
 
-## The sting's runtime behavior
+## The opening's runtime behavior (sting + transition)
 
 Desktop (≥640px) only, never under reduced motion. Src is assigned only
 after a real layout exists (double-rAF plus a 300ms setTimeout fallback;
-during hydration `innerWidth` can read 0 and would wrongly skip it). Plays
-once; on `ended` GSAP fades it into the canvas scrub; any scroll fades it
-immediately (first scroll always wins). The canvas draws frame 0 underneath,
+during hydration `innerWidth` can read 0 and would wrongly skip it). The
+sting is a seamless loop (first frame == last) and loops until the first
+scroll, which crossfades it into `transition.mp4` (buffered lazily in a
+second stacked video once the sting can play through, or on a 4s fallback
+timer). When the transition ends, or if the viewer scrolls past 45% of the
+hero before it does, the whole opening stage dissolves into the canvas
+scrub. Chrome pauses hidden-tab video without resuming it, so
+visibilitychange + pause listeners restart whichever clip should be
+running. The canvas draws frame 0 underneath,
 so the crossfade lands on the same white-studio world.
 
 ## Verifying changes (what the headless preview can and cannot do)
