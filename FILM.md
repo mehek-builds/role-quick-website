@@ -91,7 +91,7 @@ something is off with the shot.
 | file | where | dur | job id |
 | --- | --- | --- | --- |
 | sting.mp4 | opening loop at load, fixed stage (rebuilt as a seamless loop 2026-07-07; job id of the loop version not recorded, original in `.assets-orig/`) | 5s | `55b3c7ad-f63c-49c9-935f-73bad2f20864` (first, non-loop version) |
-| transition.mp4 | CUT 2026-07-08 (was the first-scroll handoff; its opening frames were a different scene than the sting, so the crossfade read as a jarring cut, and 4s of non-interactive video after the first scroll felt like lag. File kept in `.assets-orig/`; prompt + job id were never recorded) | 4s | not recorded |
+| transition.mp4 | first-scroll handoff, REGENERATED 2026-07-08 start/end-frame LOCKED (start = sting loop-point frame, end = film frame-0000). Take 3: the conversion is choreographed across the whole clip (a page sweeps close past the lens at the midpoint while the light softens, then the papers recede and curve into the orbit). Take 1 opened on a different scene; take 2 (`8c866017`) crammed the room change into the last half-second and read as a cut. Raw original in `.assets-orig/`. Prompt below. | 6s | `fbdccb8a-6e1c-46e1-84d7-6a5b90da7d1c` |
 | formats.mp4 | UNPLACED since pinned-acts rework (was #formats) | 5s | `ff1d02c0-34c2-4e38-bcbb-9276a7443bd0` |
 | documents.mp4 | UNPLACED since pinned-acts rework (was #documents) | 5s | `1d93cd52-3d0b-4929-93a0-db79fc73c164` |
 | autofill.mp4 | UNPLACED since pinned-acts rework (was #autofill) | 4s | `57acf844-b9a4-43e3-909a-f682855cdf2f` |
@@ -175,25 +175,56 @@ pill reading TAILORED. Pages stay perfectly still and flat, camera locked,
 background unchanged. Precise, elegant, premium UI motion design, text sharp
 and legible throughout, no paper distortion.
 
-## The opening's runtime behavior (the sting loop)
+## The opening's runtime behavior (sting loop + locked transition)
 
 Desktop (≥640px) only, never under reduced motion. Src is assigned only
 after a real layout exists (double-rAF plus a 300ms setTimeout fallback;
 during hydration `innerWidth` can read 0 and would wrongly skip it). The
 sting is a seamless loop (first frame == last) and loops until the first
-scroll, which dissolves the whole opening stage straight into the canvas
-scrub (1.0s). The scrub is already following the scroll underneath, so
-scroll control is immediate. Both worlds are the same white paper studio,
-so the dissolve reads as a lighting change, not a cut. Chrome pauses
-hidden-tab video without resuming it, so visibilitychange + pause
-listeners restart the loop while the opening is up.
+scroll. The handoff on first scroll:
 
-A middle `transition.mp4` clip used to sit between the loop and the scrub;
-it was cut 2026-07-08 (see the table above). If a handoff clip is ever
-wanted again, generate it start/end-frame LOCKED with the two-still
-pipeline used for formats/documents: start_image = the sting's loop-point
-frame, end_image = `public/film/frame-0000.webp`, and record the prompt +
-job id here. The canvas draws frame 0 underneath,
+- transition buffered (`readyState >= HAVE_FUTURE_DATA`) → 0.45s crossfade
+  into `transition.mp4`, which opens on the sting's own world (start-frame
+  locked) and ends on film frame 0; on `ended` the whole opening stage
+  dissolves into the canvas scrub (1.0s).
+- transition NOT buffered (early scroll) → skip the clip, dissolve the
+  stage straight into the scrub (1.0s). The handoff never waits on the
+  network and never pops in a half-loaded video.
+- viewer scrolls past 45% of the hero mid-transition → 0.4s emergency
+  dissolve; the opening never lingers.
+
+The transition only starts buffering after the sting fires
+`canplaythrough` (or a 3s fallback timer), so the sting owns the network
+first. Chrome pauses hidden-tab video without resuming it, so
+visibilitychange + pause listeners restart whichever clip should be
+running.
+
+### transition.mp4 prompt (seedance_2_0, 6s, 1080p, std, 16:9, silent,
+start_image = sting loop-point frame, end_image = film frame-0000 upscaled
+to 1920x1080; a preset recommendation fired, declined with
+declined_preset_id 24bae836-2c4a-48e0-89b6-49fcc0b21612). Lesson from the
+rejected takes: with locked frames the model hides the scene change in
+the final frames unless the prompt choreographs WHEN each beat happens
+and bans every dissolve trick by name:
+
+> One continuous single take, camera locked, inside a bright white
+> minimalist studio, starting exactly on the first provided frame and
+> ending exactly on the second. The motion plays out evenly across the
+> full six seconds in three overlapping beats. First: the dozens of white
+> resume pages drifting in the air slow their drift. Second: the pages
+> glide backward, away from the camera, deeper into the room, and while
+> one large page sweeps slowly and gently close past the lens, the light
+> beyond it eases gradually from bright diagonal window light into soft
+> even studio light with delicate long shadows. Third: the receding pages
+> curve into a slow circular orbit around the center of the room,
+> revolving gracefully and settling into the exact arrangement of the
+> final frame. Every page follows one continuous physical flight path
+> through all three beats, always in motion, never teleporting. Strictly
+> no dissolve, no crossfade, no fade to white, no morph, no wipe, no jump
+> cut, no sudden lighting change: the scene changes only through paper
+> motion and gradually shifting light. Faint blue text lines on every
+> page stay soft-focus and illegible. Serene, precise, premium, airy. No
+> people, no logos, no watermark. The canvas draws frame 0 underneath,
 so the crossfade lands on the same white-studio world.
 
 ## Verifying changes (what the headless preview can and cannot do)
