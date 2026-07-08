@@ -40,6 +40,7 @@ const CHAPTERS = [
 
 export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const wrapRef = useRef<HTMLDivElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const filmRef = useRef<HTMLCanvasElement>(null);
   const dustRef = useRef<HTMLCanvasElement>(null);
   const stingRef = useRef<HTMLVideoElement>(null);
@@ -466,6 +467,22 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       const captions = q<HTMLElement>(".rq-cine-caption");
       if (captions.length)
         tl.to(captions, { autoAlpha: 0, y: -24, duration: 0.06, ease: "power2.in" }, 0.16);
+
+      /* the credits: the whole fixed stage bows out as the footer enters, so
+         the collated packet's hard edges never cut through the link columns.
+         Scrubbed, so scrolling back up brings the film straight back. */
+      const footer = document.querySelector("footer");
+      if (footer && stageRef.current)
+        gsap.to(stageRef.current, {
+          opacity: 0,
+          ease: "none",
+          scrollTrigger: {
+            trigger: footer,
+            start: "top 85%",
+            end: "top 35%",
+            scrub: 0.4,
+          },
+        });
     },
     { scope: wrapRef }
   );
@@ -474,7 +491,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     <>
       {/* THE STAGE: the film and its atmosphere, fixed behind the entire
           page. Every section floats over this — the animation never ends. */}
-      <div className="pointer-events-none fixed inset-0 z-0" aria-hidden>
+      <div ref={stageRef} className="pointer-events-none fixed inset-0 z-0" aria-hidden>
         {/* 1 · the film — scrubbed by whole-page progress. Starts invisible;
             drawFrame dissolves it in on the first painted frame. */}
         <canvas
