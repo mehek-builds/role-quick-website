@@ -199,7 +199,7 @@ export default function Home() {
                   <div className="flex justify-center">
                     <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
                   </div>
-                  <h2 className="mt-3 text-[28px] font-[450] tracking-[-0.02em] text-ink">
+                  <h2 className="mt-3 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     Tuned means rebuilt, not reworded.
                   </h2>
                   <p className="mt-2.5 text-[14px] leading-6 text-muted">
