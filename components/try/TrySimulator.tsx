@@ -212,7 +212,7 @@ export function TrySimulator({
               {pageJob.company.slice(0, 1)}
             </span>
             <span className="truncate text-[11.5px] text-ink">
-              {pageJob.company} — {pageJob.title}
+              {pageJob.company} · {pageJob.title}
             </span>
             <span className="shrink-0 text-[11px] text-faint">×</span>
           </div>
@@ -281,7 +281,7 @@ export function TrySimulator({
               {/* caret pointing up to the toolbar icon */}
               <span className="absolute -top-1.5 right-6 hidden h-3 w-3 rotate-45 rounded-[3px] border-l border-t border-border bg-white lg:block" />
 
-              {/* Header — matches the real popup: brand square + name + icons */}
+              {/* Header, matches the real popup: brand square + name + icons */}
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <span className="flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand">
