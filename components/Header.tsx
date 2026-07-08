@@ -1,10 +1,47 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import { STORE_URL } from "@/lib/config";
 
 /* Floating glass pill, not a white bar: the film shows around and through
-   it, so the page reads as one surface from the first pixel. */
+   it, so the page reads as one surface from the first pixel.
+
+   Cinema chrome rule: while the viewer scrolls DOWN through the film the
+   pill retires upward so headlines and cards never collide with it; any
+   scroll UP (or reaching the top) brings it straight back. Reduced motion
+   keeps it parked permanently. */
 export function Header() {
+  const [hidden, setHidden] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const lastY = useRef(0);
+  const menuOpenRef = useRef(false);
+  menuOpenRef.current = menuOpen;
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    lastY.current = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      const dy = y - lastY.current;
+      /* ignore sub-jitter deltas so Lenis easing can't flicker the pill */
+      if (Math.abs(dy) < 6) return;
+      lastY.current = y;
+      if (menuOpenRef.current) return; /* never hide an open menu */
+      if (y < 120) setHidden(false);
+      else setHidden(dy > 0);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const closeMenu = () => setMenuOpen(false);
+
   return (
-    <header className="fixed inset-x-0 top-3 z-30 px-3 sm:top-4 sm:px-6">
+    <header
+      className={`fixed inset-x-0 top-3 z-30 px-3 transition-transform duration-300 ease-out sm:top-4 sm:px-6 ${
+        hidden ? "-translate-y-[130%]" : "translate-y-0"
+      }`}
+    >
       <div className="rq-glass mx-auto flex max-w-5xl items-center justify-between rounded-full py-2 pl-4 pr-2">
         <a href="/" className="flex items-center gap-2">
           {/* The official mark (public/brand/rolequick-mark.svg), not a CSS
@@ -44,8 +81,76 @@ export function Header() {
           >
             Add to Chrome
           </a>
+          {/* Mobile: the film hides the desktop nav, so Pricing and FAQ still
+              need a door. One button, one glass sheet, no hamburger maze. */}
+          <button
+            type="button"
+            aria-expanded={menuOpen}
+            aria-label={menuOpen ? "Close menu" : "Open menu"}
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition-colors hover:bg-white/70 sm:hidden"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+              {menuOpen ? (
+                <path
+                  d="m6 6 12 12M18 6 6 18"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              ) : (
+                <path
+                  d="M4.5 8h15M4.5 16h15"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
+      {menuOpen && (
+        <nav className="rq-glass mx-auto mt-2 max-w-5xl rounded-3xl px-3 py-2 sm:hidden">
+          <a
+            href="/#product"
+            onClick={closeMenu}
+            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+          >
+            Product
+          </a>
+          <a
+            href="/try"
+            onClick={closeMenu}
+            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+          >
+            Try it
+          </a>
+          <a
+            href="/#pricing"
+            onClick={closeMenu}
+            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+          >
+            Pricing
+          </a>
+          <a
+            href="/#faq"
+            onClick={closeMenu}
+            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+          >
+            FAQ
+          </a>
+          <div className="px-1.5 pb-2 pt-2">
+            <a
+              href={STORE_URL}
+              onClick={closeMenu}
+              className="block rounded-full bg-brand px-4 py-3 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
+            >
+              Add to Chrome
+            </a>
+          </div>
+        </nav>
+      )}
     </header>
   );
 }
