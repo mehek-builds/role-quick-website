@@ -51,18 +51,18 @@ export function ApplicantField() {
               style={{ transitionDelay: on ? `${delay}ms` : "0ms" }}
               className={`h-2 w-2 rounded-full transition-all duration-300 ${
                 on ? "scale-100 opacity-100" : "scale-50 opacity-0"
-              } ${hired ? "bg-brand" : interview ? "bg-faint" : "bg-border"}`}
+              } ${hired ? "bg-brand" : interview ? "bg-muted" : "bg-border"}`}
             />
           );
         })}
       </div>
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
         <span className="flex items-center gap-2">
           <span className="h-2 w-2 shrink-0 rounded-full bg-border" />
           250 apply
         </span>
         <span className="flex items-center gap-2">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-faint" />6 get
+          <span className="h-2 w-2 shrink-0 rounded-full bg-muted" />6 get
           interviews
         </span>
         <span className="flex items-center gap-2">
