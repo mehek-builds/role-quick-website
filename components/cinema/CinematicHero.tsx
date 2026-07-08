@@ -478,8 +478,11 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           ease: "none",
           scrollTrigger: {
             trigger: footer,
-            start: "top 85%",
-            end: "top 35%",
+            /* the footer is short: its top rests near 71% of the viewport at
+               full scroll, so the fade must finish above that or it never
+               completes and the packet seam stays half-visible */
+            start: "top 96%",
+            end: "top 74%",
             scrub: 0.4,
           },
         });

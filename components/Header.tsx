@@ -27,8 +27,19 @@ export function Header() {
       if (Math.abs(dy) < 6) return;
       lastY.current = y;
       if (menuOpenRef.current) return; /* never hide an open menu */
-      if (y < 120) setHidden(false);
-      else setHidden(dy > 0);
+      if (y < 120) {
+        setHidden(false);
+        return;
+      }
+      /* the last viewport is the close CTA + footer: the pill stays retired
+         there so it never decapitates the finale headline (Lenis's settle
+         corrections otherwise re-show it at the exact bottom) */
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (max > 600 && y > max - 160) {
+        setHidden(true);
+        return;
+      }
+      setHidden(dy > 0);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
