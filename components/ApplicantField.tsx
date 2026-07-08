@@ -49,7 +49,7 @@ export function ApplicantField() {
             <span
               key={i}
               style={{ transitionDelay: on ? `${delay}ms` : "0ms" }}
-              className={`h-2 w-2 rounded-full transition-all duration-300 ${
+              className={`h-2 w-2 rounded-full transition-[transform,opacity] duration-300 ${
                 on ? "scale-100 opacity-100" : "scale-50 opacity-0"
               } ${hired ? "bg-brand" : interview ? "bg-muted" : "bg-border"}`}
             />
