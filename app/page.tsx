@@ -351,7 +351,7 @@ export default function Home() {
           <div className="relative mx-auto max-w-4xl px-6 py-36">
           <Reveal>
             <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
-              Every feature, free every month.
+              Every feature, free, every month.
             </h2>
             <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
               Free covers 20 jobs a month, resetting on the 1st. Pro covers 500.
