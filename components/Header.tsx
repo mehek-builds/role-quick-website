@@ -111,7 +111,12 @@ export function Header() {
         </div>
       </div>
       {menuOpen && (
-        <nav className="rq-glass mx-auto mt-2 max-w-5xl rounded-3xl px-3 py-2 sm:hidden">
+        <nav
+          className="rq-glass mx-auto mt-2 max-w-5xl rounded-3xl px-3 py-2 sm:hidden"
+          /* near-opaque: the sheet floats over the hero's own glass card, and
+             glass-on-glass leaves the links unreadable */
+          style={{ background: "rgba(255,255,255,0.92)" }}
+        >
           <a
             href="/#product"
             onClick={closeMenu}
