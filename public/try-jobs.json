@@ -1,0 +1,96 @@
+{
+  "refreshed": "2026-07-08",
+  "note": "Daily feed of popular intern-level postings for /try, varied across fields (tech, finance/IB, quant, product, data/business analyst, marketing) - Mehek: not just SWE, the most popular intern roles for college kids. Seeded 2026-07-08 with real open postings (mostly Greenhouse single-req URLs). Meant to be regenerated daily by the try-jobs-refresh task: pull ~10-12 recent, recognizable, varied intern roles, keep them intern-level, spread the titles, and write the full real JD text into `jd`. applyUrl must be the real application URL.",
+  "jobs": [
+    {
+      "id": "affirm-swe-su26",
+      "company": "Affirm",
+      "title": "Software Engineering Intern, Summer 2026",
+      "location": "Remote (US)",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/affirm/jobs/7528020003",
+      "jd": "Software Engineering Intern, Summer 2026. Affirm is building honest financial products. As a contributing member of an engineering team, you will ship real features over a 12-16 week internship, work across the stack, and partner with a mentor. We look for students pursuing a CS degree who have built and shipped projects, write clean code, and communicate clearly. Experience with a modern language (Python, TypeScript, Go, or Kotlin) and comfort with ambiguity expected."
+    },
+    {
+      "id": "deloitte-ib-analyst-su26",
+      "company": "Deloitte",
+      "title": "Investment Banking Summer Analyst, 2026",
+      "location": "New York, NY",
+      "ats": "other",
+      "applyUrl": "https://apply.deloitte.com/careers/JobDetail/Deloitte-Corporate-Finance-Investment-Banking-2026-Summer-Analyst/192703",
+      "jd": "Investment Banking Summer Analyst, 2026 (Deloitte Corporate Finance). Support live M&A and capital-raising engagements: build financial models and valuations, prepare pitch and marketing materials, and research industries and companies alongside analysts and associates. We look for students with strong finance or accounting coursework, high academic standing, fluency in Excel and PowerPoint, attention to detail, and clear written and verbal communication."
+    },
+    {
+      "id": "cloudflare-pm-su26",
+      "company": "Cloudflare",
+      "title": "Product Manager Intern, Summer 2026",
+      "location": "Austin, TX",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/cloudflare/jobs/7362113",
+      "jd": "Product Manager Intern, Summer 2026 (12 weeks). Own a product problem end to end on a Cloudflare product team: talk to users, write specs, prioritize with engineers and designers, and ship. We look for students who have built or shipped something people actually used, think in structured tradeoffs, and communicate crisply. Technical curiosity about the Internet, security, or developer tools is a plus."
+    },
+    {
+      "id": "twosigma-quant-su26",
+      "company": "Two Sigma",
+      "title": "Quantitative Researcher Intern, Summer 2026",
+      "location": "New York, NY",
+      "ats": "other",
+      "applyUrl": "https://careers.twosigma.com/careers/JobDetail/New-York-New-York-United-States-Quantitative-Researcher-Internship-2026-Summer/13257",
+      "jd": "Quantitative Researcher Intern, Summer 2026 (10 weeks, NYC). Partner with a mentor on a single research project applying statistics and machine learning to large financial datasets, culminating in a final presentation. We look for students in a quantitative field (math, statistics, CS, physics, or engineering) with strong programming in Python and solid probability and statistics fundamentals. Research or data-project experience a plus."
+    },
+    {
+      "id": "okta-ba-su26",
+      "company": "Okta",
+      "title": "Business Analyst Intern, Summer 2026",
+      "location": "San Francisco, CA",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/okta/jobs/7617090",
+      "jd": "Business Analyst Intern, Summer 2026. Turn data into decisions for a business team at Okta: pull and analyze data in SQL, build dashboards, and partner with stakeholders on operational questions. We look for students comfortable with SQL and spreadsheets who can turn numbers into a clear recommendation, with at least one project where analysis changed a real decision. Statistics or business coursework a plus."
+    },
+    {
+      "id": "spacex-swe-su26",
+      "company": "SpaceX",
+      "title": "Software Engineering Internship, Summer 2026",
+      "location": "Hawthorne, CA",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/spacex/jobs/8149154002",
+      "jd": "Software Engineering Internship/Co-op, Summer 2026. Join SpaceX to build software that supports the design, manufacture, test, and launch of rockets and spacecraft. Interns own real projects end to end alongside full-time engineers. We seek students working toward a degree in computer science or a related field, with strong fundamentals in data structures and algorithms and hands-on project experience in C++, Python, or JavaScript. US citizenship or permanent residency required by ITAR."
+    },
+    {
+      "id": "point72-sector-analyst-su26",
+      "company": "Point72",
+      "title": "Sector Analyst Intern, Proprietary Research, 2026",
+      "location": "New York, NY",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/point72/jobs/8150902002",
+      "jd": "2026 Summer Internship - Sector Analyst, Proprietary Research (NYC). Support a fundamental research team: build financial models, analyze companies within a sector, and develop investment theses alongside analysts and portfolio managers. We look for students with strong finance and accounting fundamentals, Excel modeling ability, intellectual curiosity about markets, and clear written analysis."
+    },
+    {
+      "id": "cloudflare-ba-marketing-su26",
+      "company": "Cloudflare",
+      "title": "Business Analyst Intern, Marketing, Summer 2026",
+      "location": "Austin, TX",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/cloudflare/jobs/7729700",
+      "jd": "Business Analyst Intern, Marketing, Summer 2026. Transform go-to-market data into actionable insight: build dashboards and data visualizations, analyze funnels and campaigns, and partner with marketing stakeholders. We look for students fluent in SQL and spreadsheets, comfortable turning messy data into a clear story, and curious about how marketing drives growth."
+    },
+    {
+      "id": "aquatic-quant-su26",
+      "company": "Aquatic Capital",
+      "title": "Quantitative Research Intern, Summer 2026",
+      "location": "Chicago, IL",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/aquaticcapitalmanagement/jobs/7985726002",
+      "jd": "Quantitative Research Intern, Summer 2026. Collaborate with researchers to develop and implement quantitative trading signals, models, and strategies from large datasets. We look for students in a quantitative field with strong programming in Python and solid statistics and probability fundamentals. Experience working with data through research or projects is a plus."
+    },
+    {
+      "id": "accuweather-product-analyst-2026",
+      "company": "AccuWeather",
+      "title": "Product Analyst Intern, Spring/Summer 2026",
+      "location": "State College, PA",
+      "ats": "greenhouse",
+      "applyUrl": "https://job-boards.greenhouse.io/accuweather/jobs/7453001",
+      "jd": "Product Analyst Intern, Spring/Summer 2026. Support product decisions with data and research: analyze user behavior, help define requirements, and work with product managers and engineers to ship improvements. We look for structured thinkers who are comfortable with data and can point to a product they have built or studied and explain the decisions behind it."
+    }
+  ]
+}

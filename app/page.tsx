@@ -136,9 +136,14 @@ export default function Home() {
               Outreach
             </a>
           </div>
-          <div className="pb-36 pt-16">
+          <div className="pt-16">
             <PacketDemo />
           </div>
+          <p className="pb-36 pt-6 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            <a href="/try" className="transition-colors hover:text-ink">
+              Or drive it yourself →
+            </a>
+          </p>
           </div>
         </section>
 
@@ -310,6 +315,33 @@ export default function Home() {
               </div>
             </Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* Try it: the reel is the trailer, /try is the demo booth. One settled
+            section, no scrub choreography - the film stage runs behind it. */}
+        <section id="try" className="relative scroll-mt-24">
+          <Wash tint="brand" soft />
+          <div className="relative mx-auto max-w-2xl px-6 py-32 text-center">
+            <Reveal>
+              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                19:42:16 · Packet ready
+              </p>
+              <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
+                Now you drive.
+              </h2>
+              <p className="mx-auto mt-4 max-w-md text-[15px] leading-7 text-muted">
+                You&apos;ve watched the packet assemble. Drive the extension
+                yourself on a simulated posting, or paste your own resume and
+                see your packet, before installing anything.
+              </p>
+              <a
+                href="/try"
+                className="mt-8 inline-block rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink"
+              >
+                Open the demo booth
+              </a>
+            </Reveal>
           </div>
         </section>
 

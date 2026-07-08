@@ -546,6 +546,12 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 Add to Chrome, it&apos;s free
               </a>
               <a
+                href="/try"
+                className="text-sm font-medium text-muted transition-colors hover:text-ink"
+              >
+                Try it first
+              </a>
+              <a
                 href="#product"
                 className="text-sm font-medium text-muted transition-colors hover:text-ink"
               >

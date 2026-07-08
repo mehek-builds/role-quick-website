@@ -19,6 +19,9 @@ export function Header() {
           <a href="/#product" className="transition-colors hover:text-ink">
             Product
           </a>
+          <a href="/try" className="transition-colors hover:text-ink">
+            Try it
+          </a>
           <a href="/#pricing" className="transition-colors hover:text-ink">
             Pricing
           </a>
