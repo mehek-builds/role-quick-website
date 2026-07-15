@@ -121,6 +121,7 @@ export type ApplicationProfile = {
   address_city?: string | null;
   address_state?: string | null;
   address_zip?: string | null;
+  address_country?: string | null;
   linkedin_url?: string | null;
   github_url?: string | null;
   portfolio_url?: string | null;
