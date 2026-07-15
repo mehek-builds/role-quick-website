@@ -983,7 +983,7 @@ export function PacketMockup() {
           Software Engineer Intern <span className="font-normal text-muted">· Notion</span>
         </span>
         <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Packet
+          Application
         </span>
       </div>
       <div className="grid gap-3 px-6 py-5">

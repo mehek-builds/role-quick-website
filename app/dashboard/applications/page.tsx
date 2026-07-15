@@ -65,8 +65,8 @@ export default function Applications() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Applications</h1>
         <p className="mt-1 text-sm text-muted">
-          One packet per job: the tailored resume, the filled application, and
-          the outreach note, reviewed together.
+          Everything for one job in one place: the tailored resume, the filled
+          application, and the outreach note, reviewed together.
         </p>
       </div>
 
@@ -74,8 +74,8 @@ export default function Applications() {
         <ShimmerRows rows={4} />
       ) : packets.length === 0 ? (
         <EmptyState
-          title="No application packets yet"
-          body="When you open a job posting with the extension, RoleQuick builds a tailored resume, fills the application, and drafts an outreach email. Each one lands here as a packet you can review."
+          title="No applications yet"
+          body="When you open a job posting with the extension, RoleQuick builds a tailored resume, fills the application, and drafts an outreach email. Each one lands here for you to review."
         >
           <a
             href={STORE_URL}

@@ -108,13 +108,13 @@ export function TrySimulator({
         setMode("canned");
         setNotice(
           data.reason === "rate_limited"
-            ? "You've used today's live previews. This is Alex's packet."
-            : "Live preview is down. This is Alex's packet.",
+            ? "You've used today's live previews. This is Alex's application."
+            : "Live preview is down. This is Alex's application.",
         );
       }
     } catch {
       setMode("canned");
-      setNotice("Live preview is down. This is Alex's packet.");
+      setNotice("Live preview is down. This is Alex's application.");
     }
     setGenerating(false);
     setPasteOpen(false);
@@ -337,7 +337,7 @@ export function TrySimulator({
                   <>
                     <ReceiptRows step={step} stamps={stamps} mode={mode} />
                     <p className="pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
-                      Assembling your packet<span className="rq-blink">▍</span>
+                      Assembling your application<span className="rq-blink">▍</span>
                     </p>
                   </>
                 )}
@@ -425,7 +425,7 @@ function Chooser({
     return (
       <div className="rounded-xl bg-surface-alt/70 px-4 py-5 text-center">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          Building your packet<span className="rq-blink">▍</span>
+          Building your application<span className="rq-blink">▍</span>
         </p>
         <p className="mt-2 font-mono text-[10px] text-faint">+{elapsed.toFixed(1)}s</p>
       </div>
@@ -525,7 +525,7 @@ function Chooser({
         />
         <div className={resume.trim().length < 200 ? "pointer-events-none opacity-50" : ""}>
           <VerbButton onClick={() => onReal(resume, website)}>
-            Generate my packet
+            Generate my application
           </VerbButton>
         </div>
         <p className="text-[11px] leading-4 text-faint">
@@ -546,8 +546,8 @@ function Chooser({
   return (
     <div className="space-y-2.5">
       <p className="text-[13px] leading-6 text-muted">
-        Upload your resume to build a packet for this role, or watch a sample
-        on Alex&apos;s.
+        Upload your resume to build an application for this role, or watch a
+        sample on Alex&apos;s.
       </p>
       <VerbButton onClick={onCanned}>Watch it on Alex&apos;s resume</VerbButton>
       {/* Real path is desktop-only: phones can't install the extension anyway. */}

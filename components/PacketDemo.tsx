@@ -201,7 +201,7 @@ export function PacketDemo() {
                     : "border border-dashed border-border text-faint"
                 }`}
               >
-                {done ? "Review, then send" : "Assembling packet…"}
+                {done ? "Review, then send" : "Assembling application…"}
               </span>
             </div>
           </div>

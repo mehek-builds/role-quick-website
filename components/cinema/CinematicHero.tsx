@@ -35,7 +35,7 @@ const CHAPTERS = [
   { at: 0.24, label: "01 · Documents" },
   { at: 0.5, label: "02 · Autofill" },
   { at: 0.74, label: "03 · Outreach" },
-  { at: 0.92, label: "04 · Packet ready" },
+  { at: 0.92, label: "04 · Application ready" },
 ];
 
 export function CinematicHero({ storeUrl }: { storeUrl: string }) {
@@ -598,10 +598,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         <div className="rq-cine-card-4 invisible absolute inset-x-0 bottom-[10svh] px-6 opacity-0 sm:bottom-[12svh]">
           <div className="rq-glass mx-auto max-w-xl px-7 py-9 text-center sm:px-10">
             <h2 className="text-[32px] font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
-              One packet. Nine seconds.
+              One application. Nine seconds.
             </h2>
             <p className="mt-3 font-mono text-[11.5px] font-medium uppercase tracking-[0.08em] text-muted">
-              19:42:07 posting detected → 19:42:16 packet ready
+              19:42:07 posting detected → 19:42:16 application ready
             </p>
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a

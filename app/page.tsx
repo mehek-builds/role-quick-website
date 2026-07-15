@@ -23,24 +23,24 @@ import { STORE_URL } from "@/lib/config";
    plainly and only claiming what the product does today (Guardrails). */
 const FAQ_ITEMS = [
   {
-    q: "How is this different from other autofill extensions?",
-    a: "Most tools fill in your saved details. RoleQuick starts a step earlier: it reads the posting, rebuilds your resume in that posting's own language, then fills the application and drafts an outreach note to a real person. Autofill is the middle step, not the whole product.",
+    q: "Will it make up things I haven't done?",
+    a: "No. RoleQuick only uses what is already in your resume and experience bank. It reorders and rewords your real work to match the posting, and it never invents a job, a skill, or a number. Every line is yours, and you can see exactly what changed before it goes anywhere.",
   },
   {
-    q: "Which job sites does it work on?",
-    a: "Any posting you can open in Chrome. Greenhouse, Lever, Ashby, Workday, and LinkedIn have dedicated adapters, and company-hosted forms are filled on demand from the extension. RoleQuick works with the jobs you find, wherever you find them.",
+    q: "Does it apply to jobs for me automatically?",
+    a: "Never. It gets everything ready, the tailored resume, the filled fields, the outreach draft, then stops and waits for you. Nothing is submitted and no email is sent until you read it and click. You apply to one job at a time, on purpose.",
   },
   {
-    q: "Will an autofilled application look like spam?",
-    a: "No. RoleQuick fills the same form you would fill by hand, with your own information, one application at a time. Nothing is mass-submitted, and you review every field before anything goes out.",
+    q: "Will a recruiter be able to tell I used AI?",
+    a: "It reads like an application you wrote carefully, because you did. RoleQuick fills real fields with your real answers, drafts about 120 words in your own voice, and leaves the essays to you. Nothing is mass-blasted, so there is no template smell to catch.",
   },
   {
-    q: "What do you do with my data?",
-    a: "Your resume and answers are used to fill your applications, nothing else. The extension reads only the posting you are viewing, and your data is never sold or shared. RoleQuick makes money from Pro subscriptions, not from you; that is also why Free stays free.",
+    q: "Will this actually help me get interviews?",
+    a: "It fixes the two places applications quietly die. Your resume gets rebuilt in the layout and keywords the ATS actually reads, so it stops getting filtered out, and instead of vanishing into the pile, you reach a real person at the company, alumni first. It cannot promise offers, but it gets you seen.",
   },
   {
-    q: "What happens when I hit the Free cap?",
-    a: "Allowances reset on the 1st of every month. Everything you have already generated stays yours to edit and send. If you need more before the reset, Pro raises the cap to 500 jobs a month.",
+    q: "Is my resume and personal information safe?",
+    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. RoleQuick makes money from Pro subscriptions, not from you; that is also why Free stays free.",
   },
 ];
 
@@ -325,15 +325,15 @@ export default function Home() {
           <div className="relative mx-auto max-w-2xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                19:42:16 · Packet ready
+                19:42:16 · Application ready
               </p>
               <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 Now you drive.
               </h2>
               <p className="mx-auto mt-4 max-w-md text-[15px] leading-7 text-muted">
-                You&apos;ve watched the packet assemble. Drive the extension
-                yourself on a simulated posting, or paste your own resume and
-                see your packet, before installing anything.
+                You&apos;ve watched the application come together. Drive the
+                extension yourself on a simulated posting, or paste your own
+                resume and see your application, before installing anything.
               </p>
               <a
                 href="/try"
@@ -421,7 +421,7 @@ export default function Home() {
               {/* Proof at arm's length from the ask: the one real number,
                   directly beneath the button it supports. */}
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                Posting detected → packet ready · 9 seconds
+                Posting detected → application ready · 9 seconds
               </p>
             </Reveal>
           </div>

@@ -18,7 +18,7 @@ const FILM_CHAPTERS = [
   { at: 0.24, label: "01 · Documents" },
   { at: 0.5, label: "02 · Autofill" },
   { at: 0.74, label: "03 · Outreach" },
-  { at: 0.92, label: "04 · Packet ready" },
+  { at: 0.92, label: "04 · Application ready" },
 ];
 
 /* Sections below the film, in scroll order. ids live in app/page.tsx. */
