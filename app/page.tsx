@@ -32,14 +32,14 @@ const FAQ_ITEMS = [
   },
   {
     q: "Will a recruiter be able to tell I used AI?",
-    a: "It reads like an application you wrote carefully, because you did. RoleQuick fills real fields with your real answers, drafts about 120 words in your own voice, and leaves the essays to you. Nothing is mass-blasted, so there is no template smell to catch.",
+    a: "It reads like an application you wrote carefully, because the words are yours. RoleQuick fills real fields with your real answers and drafts your short responses and outreach in your own voice, then stops for you to read every line. Nothing is mass-blasted, so there is no template smell to catch.",
   },
   {
     q: "Will this actually help me get interviews?",
     a: "It fixes the two places applications quietly die. Your resume gets rebuilt in the layout and keywords the ATS actually reads, so it stops getting filtered out, and instead of vanishing into the pile, you reach a real person at the company, alumni first. It cannot promise offers, but it gets you seen.",
   },
   {
-    q: "Is my resume and personal information safe?",
+    q: "Are my resume and personal information safe?",
     a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. RoleQuick makes money from Pro subscriptions, not from you; that is also why Free stays free.",
   },
 ];

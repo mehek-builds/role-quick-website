@@ -66,7 +66,7 @@ export default function Applications() {
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Applications</h1>
         <p className="mt-1 text-sm text-muted">
           Everything for one job in one place: the tailored resume, the filled
-          application, and the outreach note, reviewed together.
+          fields, and the outreach note, reviewed together.
         </p>
       </div>
 
@@ -75,7 +75,7 @@ export default function Applications() {
       ) : packets.length === 0 ? (
         <EmptyState
           title="No applications yet"
-          body="When you open a job posting with the extension, RoleQuick builds a tailored resume, fills the application, and drafts an outreach email. Each one lands here for you to review."
+          body="When you open a job posting with the extension, RoleQuick builds a tailored resume, fills the fields, and drafts an outreach email. Each one lands here for you to review."
         >
           <a
             href={STORE_URL}
