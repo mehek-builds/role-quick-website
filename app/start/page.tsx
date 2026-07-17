@@ -37,7 +37,16 @@ import { StepRail } from "@/components/start/ui";
 // The web app cannot see the extension (no externally_connectable, and adding it would widen the
 // manifest while the store listing is in review). An autofill_event is proof of install because
 // only a running extension can POST one - so we poll for it while the student is off applying.
-const POLL_MS = 5000;
+//
+// Backs off 5s -> 30s. The event we are waiting for lands somewhere inside a ~12-minute
+// application, so 5s granularity is only useful for the first few seconds and is pure waste after
+// that. It is not free waste either: /onboarding/state is the heaviest read in the API (six
+// queries plus the auth check), and on Vercel the pool is max:1 per instance, so those six run
+// SERIALLY down one connection - six network round-trips to Neon per poll. At a flat 5s, a
+// thousand students sitting on this screen is ~200 req/s of polling alone; backing off cuts that
+// to ~33 req/s at the tail for a delay nobody can perceive against a 12-minute form.
+const POLL_START_MS = 5000;
+const POLL_MAX_MS = 30000;
 
 export default function Start() {
   const router = useRouter();
@@ -81,17 +90,43 @@ export default function Start() {
   useEffect(() => {
     const applying = state?.step === "install" && clickedInstall;
     if (!applying) return;
+
+    let delay = POLL_START_MS;
+    let stopped = false;
+
     const tick = async () => {
+      if (stopped) return;
+      // A backgrounded tab is a student who is off filling the form in another tab - which is
+      // exactly when we are waiting, but also when nobody is looking at this screen. Skip the
+      // request and re-check on the next tick rather than polling a hidden page.
+      if (typeof document !== "undefined" && document.hidden) {
+        timer.current = setTimeout(tick, delay);
+        return;
+      }
       try {
         const s = await refresh();
-        if (s.step !== "install") return; // moved on; effect will tear down
+        if (s.step !== "install") return; // moved on; the effect tears down
       } catch {
         /* transient; keep polling */
       }
-      timer.current = setTimeout(tick, POLL_MS);
+      delay = Math.min(delay * 2, POLL_MAX_MS);
+      timer.current = setTimeout(tick, delay);
     };
-    timer.current = setTimeout(tick, POLL_MS);
+
+    timer.current = setTimeout(tick, delay);
+    // Coming back to the tab is a strong signal they just finished, so check immediately and
+    // reset the backoff rather than making them wait out a 30s tail.
+    const onVisible = () => {
+      if (document.hidden || stopped) return;
+      delay = POLL_START_MS;
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(tick, 0);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
     return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", onVisible);
       if (timer.current) clearTimeout(timer.current);
     };
   }, [state?.step, clickedInstall, refresh]);
