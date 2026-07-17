@@ -65,8 +65,9 @@ export default function Privacy() {
           </p>
           <p>
             Application details that are sensitive (phone, location,
-            citizenship, work authorization, availability, salary) are
-            encrypted at rest.
+            citizenship, date of birth, availability, salary) are encrypted at
+            rest. Your work authorization and sponsorship answers are stored as
+            plain yes/no values, not encrypted.
           </p>
         </Section>
 
