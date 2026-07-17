@@ -33,7 +33,7 @@ export default function Privacy() {
           Privacy Policy
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 4, 2026
+          Last updated: July 17, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           RoleQuick is a Chrome extension and web dashboard. When you open a
@@ -82,7 +82,7 @@ export default function Privacy() {
           </p>
           <p>
             Applications submit only when you click Submit, unless you turn on
-            auto-submit. With auto-submit on, a nine-second countdown runs
+            auto-submit. With auto-submit on, a 15-second countdown runs
             before the application goes out, and one click cancels it.
           </p>
         </Section>
