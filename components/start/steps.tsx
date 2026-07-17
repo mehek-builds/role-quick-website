@@ -414,6 +414,7 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
   major: { label: "Major", placeholder: "Computer Science" },
   desired_salary: { label: "Desired salary", note: "Optional. Left blank on every form unless you set it.", placeholder: "—" },
   desired_salary_currency: { label: "Currency", placeholder: "EUR" },
+  languages: { label: "Which languages are you fluent in?", placeholder: "English, Hindi, Spanish" },
 };
 
 export function GapsStep({
@@ -433,14 +434,20 @@ export function GapsStep({
 
   const showGpa = gaps.includes("gpa") || gaps.includes("gpa_scale");
   const showSalary = gaps.includes("desired_salary") || gaps.includes("desired_salary_currency");
-  const n = [showGpa, gaps.includes("major"), showSalary].filter(Boolean).length;
+  const n = [showGpa, gaps.includes("major"), showSalary, gaps.includes("languages")].filter(Boolean).length;
 
   async function save() {
     setBusy(true);
     setError(null);
     const body: Partial<ApplicationProfile> = {};
     for (const [k, v] of Object.entries(values)) {
-      if (v.trim()) (body as Record<string, string>)[k] = v.trim();
+      if (!v.trim()) continue;
+      if (k === "languages") {
+        // The backend stores languages as a jsonb array of names, not a string.
+        body.languages = v.split(",").map((s) => s.trim()).filter(Boolean);
+      } else {
+        (body as Record<string, string>)[k] = v.trim();
+      }
     }
     try {
       if (Object.keys(body).length > 0) await putApplicationProfile(body);
@@ -493,6 +500,16 @@ export function GapsStep({
         <div className="mb-5">
           <label className="text-[13px] text-ink">Major</label>
           <div className="mt-2">{field("major")}</div>
+        </div>
+      )}
+
+      {gaps.includes("languages") && (
+        <div className="mb-5">
+          <label className="text-[13px] text-ink">Which languages are you fluent in?</label>
+          <p className="mt-1 text-[12px] leading-5 text-faint">
+            Separate them with commas. Forms that ask get exactly this list, nothing inferred.
+          </p>
+          <div className="mt-2">{field("languages")}</div>
         </div>
       )}
 
