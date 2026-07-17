@@ -58,8 +58,11 @@ export default function Privacy() {
           <p>
             Your account email. The profile we parse out of the resume you
             upload, including your experience bank. We read that upload once to
-            build the profile and do not keep the file itself. The application
-            details you choose to save for autofill. The contacts we resolved,
+            build the profile and do not keep the file itself. Your application
+            details, which reach us two ways: values you enter in Settings, and
+            values the extension learns while it watches you fill your first
+            application during onboarding (the next section says exactly how
+            that works and what it will never learn). The contacts we resolved,
             the drafts we wrote, and the tailored resumes we generated, so your
             dashboard can show them back to you.
           </p>
@@ -68,6 +71,40 @@ export default function Privacy() {
             citizenship, date of birth, availability, salary) are encrypted at
             rest. Your work authorization and sponsorship answers are stored as
             plain yes/no values, not encrypted.
+          </p>
+        </Section>
+
+        <Section title="Learning your profile from your first application">
+          <p>
+            Starting with extension version 0.4.0, onboarding works by
+            watching, not asking. The first job application you fill in by
+            hand, on the employer&apos;s own form, teaches RoleQuick your
+            answers: while onboarding is open and you are on a recognized
+            application page, the extension reads what you type into that form
+            and saves it to your profile, so you never type it again. Versions
+            before 0.4.0 do not do this; they only store what you enter in
+            Settings.
+          </p>
+          <p>
+            This learning is passive. It never fills, clicks, or submits
+            anything by itself, and it only records what you yourself typed:
+            values the extension wrote, or a script wrote, are ignored. It can
+            learn at most these seventeen fields: phone, city, state, zip,
+            country, LinkedIn URL, GitHub URL, portfolio URL, citizenship,
+            date of birth, availability date, availability term, desired
+            salary, GPA, GPA scale, major, and how you heard about the role.
+            Anything that is not one of those fields, including anything that
+            looks like an essay, is not recorded.
+          </p>
+          <p>
+            Three promises about it. First, it never learns your work
+            authorization, sponsorship, or self-identification answers. Those
+            questions are refused in the extension, refused again by the
+            server, and there is no place in the learned profile they could
+            even be stored. Second, it never overwrites: a value you entered
+            in Settings always wins over one we watched you type. Third, it
+            ends. Learning stops for good the moment your onboarding
+            completes, and it does not restart.
           </p>
         </Section>
 
@@ -134,9 +171,10 @@ export default function Privacy() {
           </p>
           <p>
             Deletion removes your account, the profile parsed from your resume,
-            your experience bank, your saved application details, your drafts,
-            your autofill history, and every resume we generated for you,
-            including the files. It cannot be undone.
+            your experience bank, your application details, both the ones you
+            saved and the ones learned during onboarding, your drafts, your
+            autofill history, and every resume we generated for you, including
+            the files. It cannot be undone.
           </p>
           <p>
             Contacts are the one exception, and not because we keep them for
