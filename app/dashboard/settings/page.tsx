@@ -164,6 +164,12 @@ export default function Settings() {
             onChange={(v) => patch({ needs_sponsorship: v })}
           />
           <Input label="Major" value={profile.major} onChange={(v) => patch({ major: v })} placeholder="Computer Science" />
+          <LanguagesInput
+            label="Languages you are fluent in"
+            value={profile.languages}
+            onChange={(v) => patch({ languages: v })}
+            placeholder="English, Hindi, Spanish"
+          />
           {/* Value AND scale, both stored (R-005). A bare "3.89" cannot be answered onto a form
               asking for a percentage or a UK classification without knowing what it was earned
               on, and guessing there would be a fabricated academic claim. */}
@@ -258,6 +264,42 @@ function Input({
       <input
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
+        placeholder={placeholder}
+        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+      />
+    </div>
+  );
+}
+
+/* Comma-separated text over a chip widget on purpose: every other field on this
+   page is a plain input, and the backend wants a plain array of language names.
+   Local text state keeps typing natural (a trailing comma is not destroyed by a
+   re-render); the parsed array is what lands in the profile. */
+function LanguagesInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string[] | null | undefined;
+  onChange: (v: string[] | null) => void;
+  placeholder?: string;
+}) {
+  const [text, setText] = useState((value ?? []).join(", "));
+  return (
+    <div>
+      <label className="block text-xs font-medium text-muted">{label}</label>
+      <input
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          const parsed = e.target.value
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean);
+          onChange(parsed.length > 0 ? parsed : null);
+        }}
         placeholder={placeholder}
         className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />

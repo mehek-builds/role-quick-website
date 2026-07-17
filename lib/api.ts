@@ -134,6 +134,8 @@ export type ApplicationProfile = {
   gpa?: string | null;
   gpa_scale?: string | null;
   major?: string | null;
+  /** Language names the student is fluent in, stored as a jsonb array of strings. */
+  languages?: string[] | null;
   referral_source_default?: string | null;
 };
 
