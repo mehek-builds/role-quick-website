@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   OnboardingState,
+  OnboardingStep,
   ParsedProfile,
   api,
   completeOnboarding,
@@ -33,6 +34,7 @@ import {
   getToken,
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
+import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
 import { StepRail } from "@/components/start/ui";
 
@@ -133,7 +135,24 @@ export default function Start() {
     };
   }, [state?.step, clickedInstall, refresh]);
 
-  const later = useCallback(() => router.push("/dashboard"), [router]);
+  // One step_view per step, from the one place that knows every step. Deduped on the step itself
+  // so a refresh() that returns the same step (the install poll fires one every few seconds)
+  // doesn't inflate the denominator and make drop-off look better than it is.
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    if (!state || state.step === seen.current) return;
+    seen.current = state.step;
+    track("onboarding_step_view", { step: state.step });
+  }, [state]);
+
+  // "Finish later" is the exit. Measured separately from a skip, because a skip means the student
+  // stayed and a later means they left - collapsing them would hide which is happening.
+  const later = useCallback(() => {
+    if (state) track("onboarding_step_later", { step: state.step });
+    router.push("/dashboard");
+  }, [router, state]);
+
+  const stepDone = useCallback((step: OnboardingStep) => track("onboarding_step_done", { step }), []);
 
   if (error) {
     return (
@@ -155,13 +174,22 @@ export default function Start() {
 
   switch (state.step) {
     case "focus":
-      return <FocusStep onLater={later} onDone={() => void refresh()} />;
+      return (
+        <FocusStep
+          onLater={later}
+          onDone={() => {
+            stepDone("focus");
+            void refresh();
+          }}
+        />
+      );
 
     case "resume":
       return (
         <ResumeStep
           onLater={later}
           onDone={() => {
+            stepDone("resume");
             void (async () => {
               const s = await refresh();
               if (s.has_resume) {
@@ -177,7 +205,14 @@ export default function Start() {
       return (
         <InstallStep
           phase={clickedInstall ? "apply" : "install"}
-          onInstalled={() => setClickedInstall(true)}
+          onInstalled={() => {
+            // Install and apply are one backend step, so the click is the only boundary we can
+            // see. Without it, a student who installs and then abandons the application is
+            // indistinguishable from one who never installed - and those need different fixes.
+            stepDone("install");
+            track("onboarding_step_view", { step: "apply" });
+            setClickedInstall(true);
+          }}
           onLater={later}
         />
       );
@@ -199,7 +234,11 @@ export default function Start() {
         <GapsStep
           gaps={state.gaps}
           onLater={later}
-          onDone={() => {
+          onDone={(skipped) => {
+            track(skipped ? "onboarding_step_skip" : "onboarding_step_done", {
+              step: "gaps",
+              fields: state.gaps.length,
+            });
             setSkippedGaps(true);
             void refresh();
           }}
@@ -212,7 +251,10 @@ export default function Start() {
           gradYear={profile?.grad_year ?? 0}
           suggestedTitles={profile?.target_roles ?? []}
           onLater={later}
-          onDone={() => void refresh()}
+          onDone={() => {
+            stepDone("targeting");
+            void refresh();
+          }}
         />
       );
 
@@ -224,6 +266,10 @@ export default function Start() {
             // Completing is what turns harvest off, so it is an explicit act the student takes
             // rather than something we infer. Navigate regardless: a failed POST here must not
             // strand them on a screen whose only button no longer works.
+            track("onboarding_complete", {
+              learned: state.learned.length,
+              applied: state.has_applied,
+            });
             void completeOnboarding()
               .catch(() => {})
               .finally(() => router.push("/dashboard"));

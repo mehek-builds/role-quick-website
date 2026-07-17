@@ -422,7 +422,9 @@ export function GapsStep({
   onLater,
 }: {
   gaps: string[];
-  onDone: () => void;
+  /** `skipped` distinguishes "I don't have a GPA handy" from "saved" - both advance, but only one
+   *  is a signal that the question is wrong for this student. */
+  onDone: (skipped: boolean) => void;
   onLater: () => void;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -442,7 +444,7 @@ export function GapsStep({
     }
     try {
       if (Object.keys(body).length > 0) await putApplicationProfile(body);
-      onDone();
+      onDone(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
       setBusy(false);
@@ -514,7 +516,7 @@ export function GapsStep({
         </PrimaryButton>
         <button
           type="button"
-          onClick={onDone}
+          onClick={() => onDone(true)}
           className="px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
         >
           Skip these
