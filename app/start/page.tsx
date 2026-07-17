@@ -7,13 +7,15 @@
  * asking and watch one real application instead, and everything after it takes seconds.
  *
  * PRD-v2 Section 4D splits every field into three buckets. Bucket 1 ("auto-extract, no ask") is
- * what the résumé gives us at step 00. Bucket 3 ("always ask, never attempt extraction") is
+ * what the résumé gives us at step 01. Bucket 3 ("always ask, never attempt extraction") is
  * citizenship, DOB, salary, availability - exactly the questions that are invasive cold and
- * ordinary on an application - so they are harvested at step 02 rather than asked here.
+ * ordinary on an application - so they are harvested at step 03 rather than asked here.
  *
  * Which leaves targeting: the only thing an application cannot teach us, because it is about the
- * next hundred postings rather than the one in front of them. That is why it is last and why it
- * is the only real form in the flow.
+ * next hundred postings rather than the one in front of them. Its five questions split on whether
+ * they need the résumé: category and type do not, so they open the flow at step 00 (where they
+ * cost one tap and earn the upload some goodwill); titles and periods are derived from the parse,
+ * so they close it at step 05.
  *
  * Steps are DERIVED server-side from data that already exists (see routes/onboarding.ts), not
  * stored as a cursor, so "Finish later" and a fresh start are the same code path and neither can
@@ -31,7 +33,7 @@ import {
   getToken,
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
-import { DoneStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
+import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
 import { StepRail } from "@/components/start/ui";
 
 // The web app cannot see the extension (no externally_connectable, and adding it would widen the
@@ -144,7 +146,7 @@ export default function Start() {
   if (!state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
-        <StepRail current="resume" />
+        <StepRail current="focus" />
         <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
         <div className="rq-shimmer mt-6 h-32 rounded-[12px]" />
       </div>
@@ -152,6 +154,9 @@ export default function Start() {
   }
 
   switch (state.step) {
+    case "focus":
+      return <FocusStep onLater={later} onDone={() => void refresh()} />;
+
     case "resume":
       return (
         <ResumeStep

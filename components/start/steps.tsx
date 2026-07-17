@@ -14,16 +14,128 @@ import {
 import { STORE_URL } from "@/lib/config";
 import {
   CATEGORIES,
+  MAX_CATEGORIES,
+  MAX_ROLE_TYPES,
   ROLE_TYPES,
   defaultBackup,
   defaultPrimary,
   periodLabel,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, RefusalList, StartShell } from "./ui";
+import { Chip, FounderNote, LaterLink, PrimaryButton, Receipt, RefusalList, StartShell } from "./ui";
 import { ErrorNote } from "@/components/app/ui";
 
-/* ------------------------------------------------------------------ 00 RÉSUMÉ */
+/* ------------------------------------------------------------------- 00 FOCUS */
+
+/* The two targeting questions that do NOT need the resume, moved in front of it.
+ *
+ * Walking Simplify (2026-07-17): they ask for your resume FOURTH. Two cheap questions come first,
+ * neither of which they need beforehand, and the effect is that you have already said yes twice
+ * before the expensive ask lands. /start used to open on the upload.
+ *
+ * The honest version of that is a reorder, not a manufactured yes. `titles` seed from the parsed
+ * resume and the period options are computed from grad_year, so those three genuinely cannot be
+ * asked yet. Category and type can: a student knows what work they want before they upload
+ * anything. So they move here, where they cost one tap and buy the resume screen some goodwill.
+ *
+ * Both are capped (3 and 2). An uncapped multi-select lets someone tick everything and quietly
+ * destroy their own matching, because "interested in everything" and "hasn't chosen" become the
+ * same answer. The cap is stated up front and the chips visibly disable at the limit, rather than
+ * letting them select a fourth and bounce off a 400.
+ */
+export function FocusStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
+  const [categories, setCategories] = useState<string[]>([]);
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const catFull = categories.length >= MAX_CATEGORIES;
+  const typeFull = roleTypes.length >= MAX_ROLE_TYPES;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await putTargeting({ categories, role_types: roleTypes });
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <StartShell
+      step="focus"
+      title="What are you looking for?"
+      sub="Two taps. It aims everything after this, and it's the last thing we ask before we do some work for you."
+    >
+      {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+
+      <div className="mb-7">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[14px] text-ink">Kind of work</p>
+          <span className="font-mono text-[11px] text-faint">Up to {MAX_CATEGORIES}</span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => {
+            const on = categories.includes(c.slug);
+            return (
+              <Chip
+                key={c.slug}
+                label={c.label}
+                on={on}
+                disabled={!on && catFull}
+                // Functional update: reading `categories` from the closure loses updates when
+                // two clicks land in the same tick, because both see the same stale array.
+                onClick={() =>
+                  setCategories((prev) =>
+                    prev.includes(c.slug) ? prev.filter((x) => x !== c.slug) : [...prev, c.slug],
+                  )
+                }
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[14px] text-ink">Type</p>
+          <span className="font-mono text-[11px] text-faint">Up to {MAX_ROLE_TYPES}</span>
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {ROLE_TYPES.map((r) => {
+            const slug = r.slug as RoleType;
+            const on = roleTypes.includes(slug);
+            return (
+              <Chip
+                key={r.slug}
+                label={r.label}
+                on={on}
+                disabled={!on && typeFull}
+                onClick={() =>
+                  setRoleTypes((prev) =>
+                    prev.includes(slug) ? prev.filter((x) => x !== slug) : [...prev, slug],
+                  )
+                }
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <PrimaryButton onClick={() => void save()} disabled={busy || categories.length === 0}>
+          {busy ? "Saving..." : "Continue"}
+        </PrimaryButton>
+        <LaterLink onClick={onLater} />
+      </div>
+    </StartShell>
+  );
+}
+
+/* ------------------------------------------------------------------ 01 RÉSUMÉ */
 
 export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
   const [file, setFile] = useState<File | null>(null);
@@ -171,7 +283,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   );
 }
 
-/* ------------------------------------------------------ 01 INSTALL + 02 APPLY */
+/* ------------------------------------------------------ 02 INSTALL + 03 APPLY */
 
 type TryJob = { id: string; company: string; title: string; location: string; ats: string; applyUrl: string };
 
@@ -234,6 +346,15 @@ export function InstallStep({
       sub="Fill every field yourself, this once. RoleQuick watches and keeps what it learns, so the next one takes seconds."
       aside={<RefusalList />}
     >
+      {/* The only screen in the flow that carries a voice, because it is the only one whose ask
+          is genuinely hard to justify from the UI alone. */}
+      <div className="mb-6">
+        <FounderNote>
+          I know it&apos;s backwards to ask you to fill one in by hand when the whole point is that
+          RoleQuick fills them. It&apos;s the only way it learns what these forms actually ask you,
+          and I&apos;d rather learn it from a real one than guess. This is the last one you type.
+        </FounderNote>
+      </div>
       <div className="overflow-hidden rounded-[12px] border border-border">
         <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-2.5">
           <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
@@ -285,7 +406,7 @@ export function InstallStep({
   );
 }
 
-/* -------------------------------------------------------------------- 03 GAPS */
+/* -------------------------------------------------------------------- 04 GAPS */
 
 const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: string }> = {
   gpa: { label: "Grade average", placeholder: "3.89" },
@@ -404,8 +525,11 @@ export function GapsStep({
   );
 }
 
-/* ------------------------------------------------------------------ 04 TARGET */
+/* ------------------------------------------------------------------ 05 TARGET */
 
+/* The three questions that NEEDED the resume, and could not have been asked at step 00:
+ * titles are seeded from ParsedProfile.target_roles, and the period options are computed from
+ * grad_year. Category and type were asked up front (see FocusStep). */
 export function TargetStep({
   gradYear,
   suggestedTitles,
@@ -418,26 +542,25 @@ export function TargetStep({
   onLater: () => void;
 }) {
   const periods = useMemo(() => periodsFor(gradYear), [gradYear]);
-  const [categories, setCategories] = useState<string[]>([]);
   const [titles, setTitles] = useState<string[]>(suggestedTitles.slice(0, 6));
-  const [roleTypes, setRoleTypes] = useState<RoleType[]>(["internship"]);
   const [primary, setPrimary] = useState<string | null>(() => defaultPrimary(gradYear));
   const [backup, setBackup] = useState<string | null>(() => defaultBackup(gradYear));
   const [newTitle, setNewTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function toggle<T>(list: T[], v: T, set: (x: T[]) => void) {
-    set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  // Functional updater for the same reason as FocusStep: a stale closure loses rapid toggles.
+  function toggle<T>(_list: T[], v: T, set: React.Dispatch<React.SetStateAction<T[]>>) {
+    set((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
   }
 
   async function save() {
     setBusy(true);
     setError(null);
+    // Partial by omission: categories and role_types were saved at step 00 and must not be
+    // clobbered with null here.
     const body: Partial<Targeting> = {
-      categories: categories.length ? categories : null,
       titles: titles.length ? titles : null,
-      role_types: roleTypes.length ? roleTypes : null,
       primary_period: primary,
       backup_period: backup,
     };
@@ -453,24 +576,10 @@ export function TargetStep({
   return (
     <StartShell
       step="targeting"
-      title="What are you going after?"
-      sub="Last screen. This aims every application after this one."
+      title="Last thing."
+      sub="Your résumé told us most of this. Correct anything that's wrong."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
-
-      <div className="mb-7">
-        <p className="text-[14px] text-ink">Category</p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {CATEGORIES.map((c) => (
-            <Chip
-              key={c.slug}
-              label={c.label}
-              on={categories.includes(c.slug)}
-              onClick={() => toggle(categories, c.slug, setCategories)}
-            />
-          ))}
-        </div>
-      </div>
 
       <div className="mb-7">
         <p className="text-[14px] text-ink">Titles</p>
@@ -500,20 +609,6 @@ export function TargetStep({
             aria-label="Add a title"
             className="w-56 rounded-full border border-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
           />
-        </div>
-      </div>
-
-      <div className="mb-7">
-        <p className="text-[14px] text-ink">Type</p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {ROLE_TYPES.map((r) => (
-            <Chip
-              key={r.slug}
-              label={r.label}
-              on={roleTypes.includes(r.slug as RoleType)}
-              onClick={() => toggle(roleTypes, r.slug as RoleType, setRoleTypes)}
-            />
-          ))}
         </div>
       </div>
 
@@ -563,7 +658,7 @@ export function TargetStep({
   );
 }
 
-/* -------------------------------------------------------------------- 05 DONE */
+/* -------------------------------------------------------------------- 06 DONE */
 
 export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish: () => void }) {
   const [busy, setBusy] = useState(false);

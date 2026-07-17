@@ -90,6 +90,13 @@ export function defaultBackup(gradYear: number, now: Date = new Date()): string 
   return periods[i + 1]?.slug ?? null;
 }
 
+/* Caps, mirrored from the backend's targetingBodySchema. An uncapped multi-select lets a student
+ * tick everything and destroy their own matching: "interested in everything" and "hasn't chosen"
+ * become the same answer. The UI enforces these so the limit is visible before it is hit, rather
+ * than surfacing as a 400 after the fact. */
+export const MAX_CATEGORIES = 3;
+export const MAX_ROLE_TYPES = 2;
+
 /* Categories. A closed, short list on purpose: this steers which postings we surface, and a
  * free-text field here produces 40 spellings of "SWE" that match nothing. */
 export const CATEGORIES: { slug: string; label: string }[] = [
