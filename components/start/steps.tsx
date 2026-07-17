@@ -1,0 +1,629 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ApplicationProfile,
+  OnboardingState,
+  ParsedProfile,
+  RoleType,
+  Targeting,
+  putApplicationProfile,
+  putTargeting,
+  uploadResume,
+} from "@/lib/api";
+import { STORE_URL } from "@/lib/config";
+import {
+  CATEGORIES,
+  ROLE_TYPES,
+  defaultBackup,
+  defaultPrimary,
+  periodLabel,
+  periodsFor,
+} from "@/lib/periods";
+import { Chip, LaterLink, PrimaryButton, Receipt, RefusalList, StartShell } from "./ui";
+import { ErrorNote } from "@/components/app/ui";
+
+/* ------------------------------------------------------------------ 00 RÉSUMÉ */
+
+export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [parsed, setParsed] = useState<ParsedProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function upload(f: File) {
+    if (f.type !== "application/pdf") {
+      setError("That needs to be a PDF. It's the only format we can read reliably.");
+      return;
+    }
+    setError(null);
+    setFile(f);
+    setBusy(true);
+    try {
+      setParsed(await uploadResume(f));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not read that résumé.");
+      setFile(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // The receipt. Times are relative to the upload, so they are a real measurement of this
+  // student's parse rather than decoration.
+  const rows = useMemo(() => {
+    if (!parsed || !file) return [];
+    const kb = Math.max(1, Math.round(file.size / 1024));
+    const exp = parsed.experience?.length ?? 0;
+    const proj = parsed.projects?.length ?? 0;
+    const seeded = parsed.bank_seeded ?? 0;
+    return [
+      { t: "00:00", k: "Received", v: `${file.name} · ${kb} KB` },
+      { t: "00:02", k: "Name", v: parsed.full_name || "—" },
+      { t: "00:02", k: "School", v: parsed.school || "—" },
+      { t: "00:03", k: "Graduation", v: parsed.grad_year ? String(parsed.grad_year) : "not found" },
+      { t: "00:03", k: "Experience", v: `${exp} ${exp === 1 ? "entry" : "entries"}` },
+      { t: "00:04", k: "Projects", v: `${proj} ${proj === 1 ? "entry" : "entries"}` },
+      { t: "00:04", k: "Skills", v: `${parsed.skills?.length ?? 0} tagged` },
+      { t: "00:04", k: "Ready", v: `${seeded} ${seeded === 1 ? "entry" : "entries"} banked`, done: true },
+    ];
+  }, [parsed, file]);
+
+  if (parsed) {
+    // bank_seeded === 0 is the difference between an account that works and one that looks fine
+    // and 400s at apply time. Say so here rather than letting it fail 12 minutes from now.
+    const empty = (parsed.bank_seeded ?? 0) === 0;
+    return (
+      <StartShell
+        step="resume"
+        title="Here's what we read."
+        sub="You won't type any of this again. Anything wrong, fix it in Settings later."
+      >
+        <Receipt rows={rows} />
+        {empty && (
+          <p className="mt-4 rounded-[12px] bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
+            We couldn&apos;t pull any experience out of that file, so tailored résumés won&apos;t
+            work yet. It usually means the PDF is an image rather than text. Try a different
+            export, or carry on and add entries by hand later.
+          </p>
+        )}
+        <div className="mt-6 flex items-center gap-3">
+          <PrimaryButton onClick={onDone}>Looks right</PrimaryButton>
+          <button
+            type="button"
+            onClick={() => {
+              setParsed(null);
+              setFile(null);
+            }}
+            className="px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+          >
+            Upload a different file
+          </button>
+        </div>
+      </StartShell>
+    );
+  }
+
+  return (
+    <StartShell
+      step="resume"
+      title="Start with your résumé."
+      sub="We read it once and pull out everything an application asks for. About ten seconds."
+    >
+      {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => inputRef.current?.click()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            inputRef.current?.click();
+          }
+        }}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const f = e.dataTransfer.files?.[0];
+          if (f) void upload(f);
+        }}
+        className={`cursor-pointer rounded-[12px] border border-dashed border-border bg-surface-alt px-6 py-9 text-center transition-colors hover:border-brand ${
+          busy ? "pointer-events-none" : ""
+        }`}
+      >
+        {busy ? (
+          <>
+            <div className="rq-shimmer mx-auto h-4 w-40 rounded-full" />
+            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+              Reading {file?.name}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm text-ink">Drop your résumé</p>
+            <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+              PDF · 10 MB max
+            </p>
+          </>
+        )}
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) void upload(f);
+        }}
+      />
+
+      <div className="mt-6 flex items-center gap-3">
+        <LaterLink onClick={onLater} />
+      </div>
+      <p className="mt-6 text-[12px] leading-5 text-faint">
+        Your résumé is used to write your own applications. It is never sold and never shown to
+        anyone else.
+      </p>
+    </StartShell>
+  );
+}
+
+/* ------------------------------------------------------ 01 INSTALL + 02 APPLY */
+
+type TryJob = { id: string; company: string; title: string; location: string; ats: string; applyUrl: string };
+
+/** One backend step ("install" until an autofill_event proves the extension exists), two phases
+ *  here: the web app has no way to see the extension, so the click is the only signal we get. */
+export function InstallStep({
+  phase,
+  onInstalled,
+  onLater,
+}: {
+  phase: "install" | "apply";
+  onInstalled: () => void;
+  onLater: () => void;
+}) {
+  const [jobs, setJobs] = useState<TryJob[] | null>(null);
+
+  useEffect(() => {
+    if (phase !== "apply") return;
+    // The same live feed /try uses: real postings, real apply URLs, refreshed daily.
+    fetch("/try-jobs.json")
+      .then((r) => r.json())
+      .then((d) => setJobs((d.jobs ?? []).slice(0, 6)))
+      .catch(() => setJobs([]));
+  }, [phase]);
+
+  if (phase === "install") {
+    return (
+      <StartShell
+        step="install"
+        title="RoleQuick works on the job posting, not here."
+        sub="This page is the record. The extension is what fills the form. Install it, then go apply to one job."
+      >
+        <div className="flex items-center gap-3">
+          <a
+            href={STORE_URL}
+            target="_blank"
+            rel="noreferrer"
+            onClick={onInstalled}
+            className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          >
+            Add to Chrome
+          </a>
+          <LaterLink onClick={onLater} />
+        </div>
+        <button
+          type="button"
+          onClick={onInstalled}
+          className="mt-6 block font-mono text-[11px] uppercase tracking-[0.08em] text-faint underline-offset-4 hover:text-muted hover:underline"
+        >
+          Already installed →
+        </button>
+      </StartShell>
+    );
+  }
+
+  return (
+    <StartShell
+      step="apply"
+      title="Now apply to one job. All the way through."
+      sub="Fill every field yourself, this once. RoleQuick watches and keeps what it learns, so the next one takes seconds."
+      aside={<RefusalList />}
+    >
+      <div className="overflow-hidden rounded-[12px] border border-border">
+        <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+            Live postings
+          </span>
+          <span className="font-mono text-[10px] text-faint">Refreshed daily</span>
+        </div>
+        {jobs === null ? (
+          <div className="space-y-2 p-4">
+            <div className="rq-shimmer h-10 rounded-[8px]" />
+            <div className="rq-shimmer h-10 rounded-[8px]" />
+          </div>
+        ) : jobs.length === 0 ? (
+          <p className="px-4 py-5 text-[13px] text-muted">
+            The feed is empty right now. Open any posting on Lever, Greenhouse, Ashby, Workday, or
+            LinkedIn and RoleQuick will pick it up the same way.
+          </p>
+        ) : (
+          jobs.map((j) => (
+            <a
+              key={j.id}
+              href={j.applyUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-between gap-4 border-t border-border px-4 py-3 transition-colors first:border-t-0 hover:bg-surface-alt"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[14px] text-ink">{j.title}</span>
+                <span className="block truncate text-[12px] text-muted">
+                  {j.company} · {j.location}
+                </span>
+              </span>
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.06em] text-faint">
+                {j.ats}
+              </span>
+            </a>
+          ))
+        )}
+      </div>
+
+      <p className="mt-5 text-[13px] leading-6 text-muted">
+        Or open any posting you already had open. We&apos;ll pick it up either way, and this page
+        moves on by itself once your application lands.
+      </p>
+      <div className="mt-4">
+        <LaterLink onClick={onLater} />
+      </div>
+    </StartShell>
+  );
+}
+
+/* -------------------------------------------------------------------- 03 GAPS */
+
+const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: string }> = {
+  gpa: { label: "Grade average", placeholder: "3.89" },
+  gpa_scale: { label: "Out of", placeholder: "4.0" },
+  major: { label: "Major", placeholder: "Computer Science" },
+  desired_salary: { label: "Desired salary", note: "Optional. Left blank on every form unless you set it.", placeholder: "—" },
+  desired_salary_currency: { label: "Currency", placeholder: "EUR" },
+};
+
+export function GapsStep({
+  gaps,
+  onDone,
+  onLater,
+}: {
+  gaps: string[];
+  onDone: () => void;
+  onLater: () => void;
+}) {
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const showGpa = gaps.includes("gpa") || gaps.includes("gpa_scale");
+  const showSalary = gaps.includes("desired_salary") || gaps.includes("desired_salary_currency");
+  const n = [showGpa, gaps.includes("major"), showSalary].filter(Boolean).length;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const body: Partial<ApplicationProfile> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (v.trim()) (body as Record<string, string>)[k] = v.trim();
+    }
+    try {
+      if (Object.keys(body).length > 0) await putApplicationProfile(body);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that.");
+      setBusy(false);
+    }
+  }
+
+  function field(key: string) {
+    const meta = GAP_LABEL[key];
+    return (
+      <input
+        key={key}
+        value={values[key] ?? ""}
+        onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
+        placeholder={meta.placeholder}
+        aria-label={meta.label}
+        className="w-full rounded-full border border-border bg-surface px-4 py-2.5 font-mono text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+      />
+    );
+  }
+
+  return (
+    <StartShell
+      step="gaps"
+      title={`${n === 1 ? "One thing" : n === 2 ? "Two things" : "A few things"} that job didn't ask.`}
+      sub="Most others will. This is the last of the boring part."
+    >
+      {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+
+      {showGpa && (
+        <div className="mb-5">
+          <label className="text-[13px] text-ink">Grade average</label>
+          {/* R-005: store the value AND the scale, then convert through a disclosed mapping.
+              A bare 3.89 tells a UK form nothing, and guessing 97% would be a lie. */}
+          <p className="mt-1 text-[12px] leading-5 text-faint">
+            Stored as you earned it. When a form wants a percentage or a classification, we convert
+            and show you the mapping first.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            {field("gpa")}
+            {field("gpa_scale")}
+          </div>
+        </div>
+      )}
+
+      {gaps.includes("major") && (
+        <div className="mb-5">
+          <label className="text-[13px] text-ink">Major</label>
+          <div className="mt-2">{field("major")}</div>
+        </div>
+      )}
+
+      {showSalary && (
+        <div className="mb-5">
+          <label className="text-[13px] text-ink">Desired salary</label>
+          <p className="mt-1 text-[12px] leading-5 text-faint">
+            Optional, and left blank on every form unless you set it. We need the currency too, or
+            the number means nothing on a posting priced somewhere else.
+          </p>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            {field("desired_salary")}
+            {field("desired_salary_currency")}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-6 flex items-center gap-3">
+        <PrimaryButton onClick={() => void save()} disabled={busy}>
+          {busy ? "Saving..." : "Save"}
+        </PrimaryButton>
+        <button
+          type="button"
+          onClick={onDone}
+          className="px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+        >
+          Skip these
+        </button>
+        <LaterLink onClick={onLater} />
+      </div>
+    </StartShell>
+  );
+}
+
+/* ------------------------------------------------------------------ 04 TARGET */
+
+export function TargetStep({
+  gradYear,
+  suggestedTitles,
+  onDone,
+  onLater,
+}: {
+  gradYear: number;
+  suggestedTitles: string[];
+  onDone: () => void;
+  onLater: () => void;
+}) {
+  const periods = useMemo(() => periodsFor(gradYear), [gradYear]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [titles, setTitles] = useState<string[]>(suggestedTitles.slice(0, 6));
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>(["internship"]);
+  const [primary, setPrimary] = useState<string | null>(() => defaultPrimary(gradYear));
+  const [backup, setBackup] = useState<string | null>(() => defaultBackup(gradYear));
+  const [newTitle, setNewTitle] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggle<T>(list: T[], v: T, set: (x: T[]) => void) {
+    set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
+  }
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const body: Partial<Targeting> = {
+      categories: categories.length ? categories : null,
+      titles: titles.length ? titles : null,
+      role_types: roleTypes.length ? roleTypes : null,
+      primary_period: primary,
+      backup_period: backup,
+    };
+    try {
+      await putTargeting(body);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <StartShell
+      step="targeting"
+      title="What are you going after?"
+      sub="Last screen. This aims every application after this one."
+    >
+      {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+
+      <div className="mb-7">
+        <p className="text-[14px] text-ink">Category</p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {CATEGORIES.map((c) => (
+            <Chip
+              key={c.slug}
+              label={c.label}
+              on={categories.includes(c.slug)}
+              onClick={() => toggle(categories, c.slug, setCategories)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-7">
+        <p className="text-[14px] text-ink">Titles</p>
+        {/* target_roles has been written by the parser since v0 and read by nothing. First use. */}
+        <p className="mt-0.5 text-[12px] text-faint">
+          {suggestedTitles.length > 0
+            ? "Pulled from your résumé. Drop any that are wrong."
+            : "Add the titles you'd actually accept."}
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {titles.map((t) => (
+            <Chip key={t} label={t} on derived onClick={() => toggle(titles, t, setTitles)} />
+          ))}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <input
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && newTitle.trim()) {
+                e.preventDefault();
+                if (!titles.includes(newTitle.trim())) setTitles([...titles, newTitle.trim()]);
+                setNewTitle("");
+              }
+            }}
+            placeholder="Add a title"
+            aria-label="Add a title"
+            className="w-56 rounded-full border border-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+          />
+        </div>
+      </div>
+
+      <div className="mb-7">
+        <p className="text-[14px] text-ink">Type</p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {ROLE_TYPES.map((r) => (
+            <Chip
+              key={r.slug}
+              label={r.label}
+              on={roleTypes.includes(r.slug as RoleType)}
+              onClick={() => toggle(roleTypes, r.slug as RoleType, setRoleTypes)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-7">
+        <p className="text-[14px] text-ink">Main focus</p>
+        <p className="mt-0.5 text-[12px] text-faint">
+          {gradYear
+            ? `You graduate in ${gradYear}, so this is the one that matters.`
+            : "The term you're aiming at."}
+        </p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {periods.map((p) => (
+            <Chip
+              key={p.slug}
+              label={p.label}
+              on={primary === p.slug}
+              onClick={() => setPrimary(p.slug)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-8">
+        <p className="text-[14px] text-ink">Backup</p>
+        <p className="mt-0.5 text-[12px] text-faint">If the main one doesn&apos;t land.</p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {periods
+            .filter((p) => p.slug !== primary)
+            .map((p) => (
+              <Chip
+                key={p.slug}
+                label={p.label}
+                on={backup === p.slug}
+                onClick={() => setBackup(backup === p.slug ? null : p.slug)}
+              />
+            ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <PrimaryButton onClick={() => void save()} disabled={busy || !primary}>
+          {busy ? "Saving..." : "Done"}
+        </PrimaryButton>
+        <LaterLink onClick={onLater} />
+      </div>
+    </StartShell>
+  );
+}
+
+/* -------------------------------------------------------------------- 05 DONE */
+
+export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const learned = state.learned.length;
+
+  // Three real states, because applying and learning are independent. Someone can skip the
+  // application entirely (Finish later, then come back), and someone can fill one that taught us
+  // nothing new. "0 things learned" is true in the second case and reads as a failure report;
+  // "that was the last long one" is simply false in the first. Claiming a result they did not
+  // get is the fastest way to lose them.
+  const applied = state.has_applied;
+  const title = applied ? "That was the last long one." : "You're set up.";
+  const sub = !applied
+    ? "Open any posting and RoleQuick fills what it can from your résumé. It learns the rest from the first application you fill in."
+    : learned > 0
+      ? `${learned} ${learned === 1 ? "thing" : "things"} learned. Open any posting and the form is already filled by the time you get there.`
+      : "Open any posting and the form is already filled by the time you get there.";
+
+  return (
+    <StartShell step="done" title={title} sub={sub}>
+      {/* The payoff. The contrast is measured on their own application, not claimed in a
+          headline - 14 minutes is real because they just lived it. No confetti, no badge:
+          the Guardrails ban them, and the number is more persuasive anyway. */}
+      {/* The payoff, and it is only earned if they actually filled one. Showing a
+          "first one / every one after" contrast to someone who skipped the first one would be
+          claiming a result they never got. */}
+      {applied && (
+        <div className="overflow-hidden rounded-[12px] border border-border">
+          <div className="grid grid-cols-[100px_minmax(0,1fr)_84px] items-baseline gap-4 px-4 py-3.5">
+            <span className="font-mono text-[10px] tracking-[0.06em] text-faint">FIRST ONE</span>
+            <span className="text-[14px] text-ink">Filled by hand, start to finish</span>
+            <span className="text-right font-mono text-[12.5px] text-muted">once</span>
+          </div>
+          <div className="grid grid-cols-[100px_minmax(0,1fr)_84px] items-baseline gap-4 border-t border-border bg-brand-soft px-4 py-3.5">
+            <span className="font-mono text-[10px] tracking-[0.06em] text-brand-ink">
+              EVERY ONE AFTER
+            </span>
+            <span className="text-[14px] text-brand-ink">Whatever you open next</span>
+            <span className="text-right font-mono text-[12.5px] text-brand-ink">~9 s</span>
+          </div>
+        </div>
+      )}
+
+      <p className="mt-5 text-[13px] leading-6 text-muted">
+        {applied
+          ? "RoleQuick has stopped reading what you type. From here it only fills, and you always hit submit yourself."
+          : "RoleQuick only reads a form while you're setting up. You always hit submit yourself."}
+      </p>
+
+      <div className="mt-6">
+        <PrimaryButton
+          onClick={() => {
+            setBusy(true);
+            onFinish();
+          }}
+          disabled={busy}
+        >
+          {busy ? "Finishing..." : "Go to dashboard"}
+        </PrimaryButton>
+      </div>
+    </StartShell>
+  );
+}

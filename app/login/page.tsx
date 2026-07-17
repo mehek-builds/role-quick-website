@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
-import { setSession, getToken } from "@/lib/api";
+import { setSession, getToken, getOnboardingState } from "@/lib/api";
 
 /* Passwordless sign-in, same account system as the extension: email a 6-digit
    code (/auth/request-code + /auth/verify-code). If code delivery is not
@@ -11,6 +11,20 @@ import { setSession, getToken } from "@/lib/api";
    /auth/session flow, exactly like the extension does. */
 
 type Step = "email" | "code";
+
+/* Where a freshly signed-in student belongs. Onboarding is a STRONG DEFAULT, not a gate: /start
+   sends them on, but every screen there carries a plain "Finish later" and the dashboard stays
+   open. Trapping someone behind a 12-minute wall in front of a product they have not seen work
+   would be the dark pattern the Guardrails exist to prevent.
+   A failed state read must never block sign-in, so anything unexpected lands on the dashboard. */
+async function landingRoute(): Promise<string> {
+  try {
+    const s = await getOnboardingState();
+    return s.step === "done" ? "/dashboard" : "/start";
+  } catch {
+    return "/dashboard";
+  }
+}
 
 export default function Login() {
   const router = useRouter();
@@ -21,7 +35,8 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (getToken()) router.replace("/dashboard");
+    if (!getToken()) return;
+    void landingRoute().then((r) => router.replace(r));
   }, [router]);
 
   async function submitEmail(e: React.FormEvent) {
@@ -47,7 +62,7 @@ export default function Login() {
         const data = await legacy.json().catch(() => null);
         if (legacy.ok && data?.token) {
           setSession(data.token, normalized);
-          router.replace("/dashboard");
+          router.replace(await landingRoute());
         } else {
           setError(data?.error ?? "Could not sign you in. Try again in a minute.");
         }
@@ -75,7 +90,7 @@ export default function Login() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.token) {
         setSession(data.token, email.trim().toLowerCase());
-        router.replace("/dashboard");
+        router.replace(await landingRoute());
       } else {
         setError(data?.error ?? "That code did not work. Request a new one.");
       }

@@ -130,5 +130,98 @@ export type ApplicationProfile = {
   needs_sponsorship?: boolean | null;
   availability_date?: string | null;
   desired_salary?: string | null;
+  desired_salary_currency?: string | null;
+  gpa?: string | null;
+  gpa_scale?: string | null;
+  major?: string | null;
   referral_source_default?: string | null;
 };
+
+// ---- onboarding ----
+
+export type ParsedProfile = {
+  full_name: string;
+  experience: { company: string; title: string; start: string; end: string; description: string }[];
+  skills: string[];
+  projects: { name: string; description: string }[];
+  school: string;
+  grad_year: number;
+  target_roles: string[];
+  // How many experience_bank rows the parse seeded. Zero here on a first upload means
+  // resume-gen will 400 later, so /start surfaces it rather than letting it fail at apply time.
+  bank_seeded?: number;
+};
+
+export type OnboardingStep = "resume" | "install" | "apply" | "gaps" | "targeting" | "done";
+
+export type OnboardingState = {
+  step: OnboardingStep;
+  completed_at: string | null;
+  has_resume: boolean;
+  has_applied: boolean;
+  has_targeting: boolean;
+  learned: string[];
+  gaps: string[];
+  harvest_active: boolean;
+};
+
+export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
+
+export type Targeting = {
+  categories: string[] | null;
+  titles: string[] | null;
+  role_types: RoleType[] | null;
+  primary_period: string | null;
+  backup_period: string | null;
+};
+
+export function getOnboardingState() {
+  return api<OnboardingState>("/onboarding/state");
+}
+
+export function completeOnboarding() {
+  return api<{ ok: true }>("/onboarding/complete", { method: "POST" });
+}
+
+export function getTargeting() {
+  return api<Targeting>("/profile/targeting");
+}
+
+export function putTargeting(body: Partial<Targeting>) {
+  return api<Targeting>("/profile/targeting", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function getApplicationProfile() {
+  // 404 means "never saved", which is a normal state here, not a failure.
+  return api<ApplicationProfile>("/profile/application").catch((e) => {
+    if (e instanceof ApiError && e.status === 404) return {} as ApplicationProfile;
+    throw e;
+  });
+}
+
+export function putApplicationProfile(body: Partial<ApplicationProfile>) {
+  return api<ApplicationProfile>("/profile/application", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Resume upload. Multipart, so it cannot go through `api()` (which sets JSON headers). */
+export async function uploadResume(file: File): Promise<ParsedProfile> {
+  const token = getToken();
+  const form = new FormData();
+  form.append("resume", file);
+  const res = await fetch(`${API_URL}/profile`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? "Could not read that resume.");
+  }
+  return data as ParsedProfile;
+}

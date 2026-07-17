@@ -5,9 +5,12 @@ import Link from "next/link";
 import {
   api,
   Me,
+  OnboardingState,
   OutreachEvent,
   GeneratedResume,
+  getOnboardingState,
 } from "@/lib/api";
+import { STEPS } from "@/components/start/ui";
 import { STORE_URL } from "@/lib/config";
 import {
   Card,
@@ -31,13 +34,14 @@ type Activity = {
 export default function Overview() {
   const [me, setMe] = useState<Me | null>(null);
   const [activity, setActivity] = useState<Activity[] | null>(null);
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [meRes, eventsRes, resumesRes] = await Promise.all([
+        const [meRes, eventsRes, resumesRes, onboardingRes] = await Promise.all([
           api<Me>("/me"),
           api<{ events?: OutreachEvent[] } | OutreachEvent[]>("/track/events").catch(
             () => [] as OutreachEvent[],
@@ -45,9 +49,11 @@ export default function Overview() {
           api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({
             resumes: [] as GeneratedResume[],
           })),
+          getOnboardingState().catch(() => null),
         ]);
         if (cancelled) return;
         setMe(meRes);
+        setOnboarding(onboardingRes);
 
         const events = Array.isArray(eventsRes)
           ? eventsRes
@@ -118,6 +124,31 @@ export default function Overview() {
           )}
         </div>
       </div>
+
+      {/* Setup left unfinished. One mono row, stated as a fact - no progress bar, no
+          percentage, no nag. The Guardrails ban streak/badge mechanics, and a student who
+          chose "Finish later" was told the dashboard stays open. This holds them to that
+          while making the way back obvious. */}
+      {onboarding && onboarding.step !== "done" && (
+        <Link href="/start" className="block">
+          <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-colors hover:border-ink/30">
+            <div className="flex items-baseline gap-3">
+              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+                Setup
+              </span>
+              <span className="text-sm text-ink">
+                {onboarding.has_resume
+                  ? "Pick up where you left off"
+                  : "Add your résumé to get started"}
+              </span>
+            </div>
+            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">
+              {STEPS.find((s) => s.key === onboarding.step)?.act}{" "}
+              {STEPS.find((s) => s.key === onboarding.step)?.label} →
+            </span>
+          </Card>
+        </Link>
+      )}
 
       {/* Usage meters fill in ink per DESIGN.md: a meter is a quantity, not a
           pillar. Autofill has no cap on any plan, so it has no meter. */}
