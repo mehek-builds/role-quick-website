@@ -15,12 +15,13 @@
 import type { OnboardingStep } from "@/lib/api";
 
 export const STEPS: { key: OnboardingStep; act: string; label: string }[] = [
-  { key: "resume", act: "00", label: "Résumé" },
-  { key: "install", act: "01", label: "Install" },
-  { key: "apply", act: "02", label: "Apply" },
-  { key: "gaps", act: "03", label: "Gaps" },
-  { key: "targeting", act: "04", label: "Target" },
-  { key: "done", act: "05", label: "Done" },
+  { key: "focus", act: "00", label: "Focus" },
+  { key: "resume", act: "01", label: "Résumé" },
+  { key: "install", act: "02", label: "Install" },
+  { key: "apply", act: "03", label: "Apply" },
+  { key: "gaps", act: "04", label: "Gaps" },
+  { key: "targeting", act: "05", label: "Target" },
+  { key: "done", act: "06", label: "Done" },
 ];
 
 export function StepRail({ current }: { current: OnboardingStep }) {
@@ -158,27 +159,64 @@ export function LaterLink({ onClick }: { onClick: () => void }) {
   );
 }
 
+/* A note from Mehek, used ONCE, on the screen that asks for the most.
+ *
+ * Walking Simplify (2026-07-17): their founder's face appears on exactly three screens - resume,
+ * category, salary - the three highest-hesitation moments in their flow. It is not decoration;
+ * each quote answers the specific doubt of that specific screen.
+ *
+ * Ours has one such screen. Step 03 asks a student to spend twelve minutes filling a form by hand
+ * to use a product whose entire pitch is that it fills forms for you. That objection is real and
+ * obvious, and no amount of UI copy answers it - only a person explaining the reason does. So this
+ * exists once, there, and nowhere else. Repeating it would make it furniture.
+ *
+ * Not social proof, so it does not violate the "only when real, only below the fold" rule: it is
+ * the founder taking responsibility for the worst thing the product asks of you. */
+export function FounderNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-alt px-4 py-3.5">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/rolequick-mark.svg"
+        alt=""
+        className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-border bg-surface p-1"
+      />
+      <div className="min-w-0">
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+          Mehek, who builds RoleQuick
+        </p>
+        <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>
+      </div>
+    </div>
+  );
+}
+
 export function Chip({
   label,
   on,
   derived,
+  disabled,
   onClick,
 }: {
   label: string;
   on?: boolean;
   derived?: boolean;
+  disabled?: boolean;
   onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       aria-pressed={on}
+      disabled={disabled}
       onClick={onClick}
       className={`rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
         on
           ? "border-brand bg-brand-soft text-brand-ink"
           : "border-border bg-surface text-muted hover:border-ink/30"
-      } ${derived ? "border-dashed" : ""}`}
+      } ${derived ? "border-dashed" : ""} ${
+        disabled ? "cursor-not-allowed opacity-40" : ""
+      }`}
     >
       {label}
     </button>

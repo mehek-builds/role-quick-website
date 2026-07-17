@@ -10,6 +10,35 @@ type TryEvent =
   | "install_click"
   | "send_link_submit";
 
+/* Onboarding funnel (/start).
+ *
+ * This exists to answer ONE question that cannot be answered by looking at the code: where do
+ * students actually stop? The flow was designed against drop-off - it is skippable, four of the
+ * five targeting answers arrive pre-filled, and the hardest screen carries a note explaining
+ * itself - but "designed against" is a hypothesis, not a result. Without these events the honest
+ * answer to "will retention hold?" is "nobody can know", which is not an answer.
+ *
+ * Every event carries `step`, so the funnel is just step_view -> step_done per step. The
+ * difference between those two counts at any step IS the drop-off at that step. Two specific
+ * things this is here to catch:
+ *
+ *   1. Step 03. It asks for ~12 minutes on someone else's form. Drop-off will concentrate here
+ *      and it is the only step whose cost we cannot reduce, only justify. If it bleeds, the
+ *      founder note is the thing to change first.
+ *   2. Whether "Finish later" is an escape hatch or an exit. It is deliberately visible on every
+ *      screen (the Guardrails forbid burying it), so the risk is real and worth measuring rather
+ *      than assuming.
+ *
+ * step_skip vs step_later are distinct on purpose: skipping gaps means "I don't have a GPA handy"
+ * and the student stays; Finish later means they left the flow. Collapsing them would hide which
+ * one is happening. */
+type OnboardingEvent =
+  | "onboarding_step_view"
+  | "onboarding_step_done"
+  | "onboarding_step_skip"
+  | "onboarding_step_later"
+  | "onboarding_complete";
+
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST =
   process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
@@ -20,7 +49,7 @@ function device(): "desktop" | "mobile" {
 }
 
 export function track(
-  event: TryEvent,
+  event: TryEvent | OnboardingEvent,
   props: Record<string, string | number | boolean> = {},
 ) {
   const payload = { ...props, device: device(), path: window.location.pathname };
