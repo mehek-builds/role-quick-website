@@ -213,8 +213,13 @@ export default function Settings() {
           <a href="mailto:mehekman@usc.edu" className="text-ink underline">
             mehekman@usc.edu
           </a>{" "}
-          from your account address. Deletion removes your profile, experience
-          bank, contacts, drafts, and generated resumes.
+          from your account address. Deletion removes your account, profile,
+          experience bank, saved application details, drafts, autofill history,
+          and every resume we generated for you, including the files. See{" "}
+          <a href="/privacy" className="text-ink underline">
+            Privacy
+          </a>{" "}
+          for what that covers and the one thing it does not.
         </p>
       </Card>
     </div>

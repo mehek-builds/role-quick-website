@@ -103,6 +103,20 @@ export default function Privacy() {
           </p>
         </Section>
 
+        <Section title="How long we keep it">
+          <p>
+            Generated resume PDFs are deleted 30 days after we make them. The
+            record of what we tailored for which job stays in your dashboard,
+            but the file itself is gone and any link to it stops working.
+          </p>
+          <p>
+            Links to a resume file are issued to you when you ask for one and
+            expire within minutes, so a link that ends up somewhere it should
+            not be does not stay a working key to your resume. Everything else
+            is kept for as long as your account is open.
+          </p>
+        </Section>
+
         <Section title="Export and deletion">
           <p>
             Email{" "}
@@ -110,8 +124,26 @@ export default function Privacy() {
               mehekman@usc.edu
             </a>{" "}
             from your account address to export or delete everything RoleQuick
-            stores about you. Deletion removes your profile, experience bank,
-            contacts, drafts, and generated resumes.
+            stores about you.
+          </p>
+          <p>
+            Deletion removes your account, the profile parsed from your resume,
+            your experience bank, your saved application details, your drafts,
+            your autofill history, and every resume we generated for you,
+            including the files. It cannot be undone.
+          </p>
+          <p>
+            Contacts are the one exception, and not because we keep them for
+            you. A contact record is a real person at a company. We store it
+            once per company and everyone who looks up that company sees the
+            same record, so it is not yours to delete and removing your account
+            does not remove it. Which contacts you were shown, and what you
+            drafted to them, is yours and does get deleted.
+          </p>
+          <p>
+            We also keep anonymous outcome rows, meaning which kind of intro
+            tends to get a reply, with the link to your account removed so they
+            cannot be traced back to you.
           </p>
         </Section>
 
