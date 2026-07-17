@@ -56,8 +56,9 @@ export default function Privacy() {
 
         <Section title="What we store">
           <p>
-            Your account email. The resume PDF you upload and the profile
-            parsed from it, including your experience bank. The application
+            Your account email. The profile we parse out of the resume you
+            upload, including your experience bank. We read that upload once to
+            build the profile and do not keep the file itself. The application
             details you choose to save for autofill. The contacts we resolved,
             the drafts we wrote, and the tailored resumes we generated, so your
             dashboard can show them back to you.
@@ -110,10 +111,14 @@ export default function Privacy() {
             but the file itself is gone and any link to it stops working.
           </p>
           <p>
-            Links to a resume file are issued to you when you ask for one and
-            expire within minutes, so a link that ends up somewhere it should
-            not be does not stay a working key to your resume. Everything else
-            is kept for as long as your account is open.
+            Links to a resume file expire about an hour after they are issued,
+            so a link that ends up somewhere it should not be does not stay a
+            working key to your resume.
+          </p>
+          <p>
+            The resume you upload is read once to build your profile and is not
+            kept as a file. Everything else described above is kept for as long
+            as your account is open.
           </p>
         </Section>
 
