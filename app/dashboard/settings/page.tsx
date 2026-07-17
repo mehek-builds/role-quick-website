@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api, ApplicationProfile, Me } from "@/lib/api";
 import { Card, Chip, Meter, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -162,8 +163,17 @@ export default function Settings() {
             value={profile.needs_sponsorship}
             onChange={(v) => patch({ needs_sponsorship: v })}
           />
+          <Input label="Major" value={profile.major} onChange={(v) => patch({ major: v })} placeholder="Computer Science" />
+          {/* Value AND scale, both stored (R-005). A bare "3.89" cannot be answered onto a form
+              asking for a percentage or a UK classification without knowing what it was earned
+              on, and guessing there would be a fabricated academic claim. */}
+          <Input label="Grade average" value={profile.gpa} onChange={(v) => patch({ gpa: v })} placeholder="3.89" />
+          <Input label="Grade scale" value={profile.gpa_scale} onChange={(v) => patch({ gpa_scale: v })} placeholder="4.0" />
           <Input label="Available from" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" />
           <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
+          {/* A figure without a unit is not an answer: replaying "80000" from a Munich posting
+              onto a Toronto one states something you never said. Both or neither get filled. */}
+          <Input label="Salary currency" value={profile.desired_salary_currency} onChange={(v) => patch({ desired_salary_currency: v })} placeholder="USD" />
           <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="Company careers page" />
         </div>
 
@@ -173,6 +183,11 @@ export default function Settings() {
           Work authorization is always asked, never inferred.
         </p>
       </Card>
+
+      {/* What they're going after. Set at /start (categories and type at step 00, the rest at
+          step 05) and, before this, editable nowhere - a student finished onboarding and could
+          never change their own targeting again. */}
+      <TargetingCard />
 
       {/* Plan + usage */}
       <Card className="p-6">

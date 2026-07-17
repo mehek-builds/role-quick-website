@@ -152,11 +152,12 @@ export type ParsedProfile = {
   bank_seeded?: number;
 };
 
-export type OnboardingStep = "resume" | "install" | "apply" | "gaps" | "targeting" | "done";
+export type OnboardingStep = "focus" | "resume" | "install" | "apply" | "gaps" | "targeting" | "done";
 
 export type OnboardingState = {
   step: OnboardingStep;
   completed_at: string | null;
+  has_focus: boolean;
   has_resume: boolean;
   has_applied: boolean;
   has_targeting: boolean;
