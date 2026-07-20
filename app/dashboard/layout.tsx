@@ -50,7 +50,7 @@ export default function DashboardLayout({
               R
             </span>
             <span className="text-[15px] font-semibold tracking-tight text-ink">
-              RoleQuick
+              Litos
             </span>
           </Link>
           <div className="flex items-center gap-4">
@@ -91,7 +91,7 @@ export default function DashboardLayout({
       <main className="mx-auto w-full max-w-6xl flex-1 px-6 py-10">{children}</main>
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 text-xs text-faint">
-          <span>&copy; {new Date().getFullYear()} RoleQuick</span>
+          <span>&copy; {new Date().getFullYear()} Litos</span>
           <a href="/privacy" className="hover:text-muted">
             Privacy
           </a>

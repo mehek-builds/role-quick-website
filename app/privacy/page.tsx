@@ -1,7 +1,7 @@
 import { Header } from "@/components/Header";
 
 export const metadata = {
-  title: "Privacy: RoleQuick",
+  title: "Privacy: Litos",
 };
 
 /* The real interim policy. Every statement here matches shipped product
@@ -36,7 +36,7 @@ export default function Privacy() {
           Last updated: July 17, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
-          RoleQuick is a Chrome extension and web dashboard. When you open a
+          Litos is a Chrome extension and web dashboard. When you open a
           job posting, it builds a resume tailored to that posting, fills out
           the application form, and drafts an outreach email to a real person
           at the company. This policy says exactly what that requires us to
@@ -78,7 +78,7 @@ export default function Privacy() {
           <p>
             Starting with extension version 0.4.0, onboarding works by
             watching, not asking. The first job application you fill in by
-            hand, on the employer&apos;s own form, teaches RoleQuick your
+            hand, on the employer&apos;s own form, teaches Litos your
             answers: while onboarding is open and you are on a recognized
             application page, the extension reads what you type into that form
             and saves it to your profile, so you never type it again. Versions
@@ -166,7 +166,7 @@ export default function Privacy() {
             <a href="mailto:mehekman@usc.edu" className="text-ink underline">
               mehekman@usc.edu
             </a>{" "}
-            from your account address to export or delete everything RoleQuick
+            from your account address to export or delete everything Litos
             stores about you.
           </p>
           <p>
@@ -203,7 +203,7 @@ export default function Privacy() {
       </main>
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8 text-xs text-faint">
-          <span>&copy; {new Date().getFullYear()} RoleQuick</span>
+          <span>&copy; {new Date().getFullYear()} Litos</span>
           <a href="/" className="hover:text-muted">
             Home
           </a>

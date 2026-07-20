@@ -313,7 +313,7 @@ export function InstallStep({
     return (
       <StartShell
         step="install"
-        title="RoleQuick works on the job posting, not here."
+        title="Litos works on the job posting, not here."
         sub="This page is the record. The extension is what fills the form. Install it, then go apply to one job."
       >
         <div className="flex items-center gap-3">
@@ -343,7 +343,7 @@ export function InstallStep({
     <StartShell
       step="apply"
       title="Now apply to one job. All the way through."
-      sub="Fill every field yourself, this once. RoleQuick watches and keeps what it learns, so the next one takes seconds."
+      sub="Fill every field yourself, this once. Litos watches and keeps what it learns, so the next one takes seconds."
       aside={<RefusalList />}
     >
       {/* The only screen in the flow that carries a voice, because it is the only one whose ask
@@ -351,7 +351,7 @@ export function InstallStep({
       <div className="mb-6">
         <FounderNote>
           I know it&apos;s backwards to ask you to fill one in by hand when the whole point is that
-          RoleQuick fills them. It&apos;s the only way it learns what these forms actually ask you,
+          Litos fills them. It&apos;s the only way it learns what these forms actually ask you,
           and I&apos;d rather learn it from a real one than guess. This is the last one you type.
         </FounderNote>
       </div>
@@ -370,7 +370,7 @@ export function InstallStep({
         ) : jobs.length === 0 ? (
           <p className="px-4 py-5 text-[13px] text-muted">
             The feed is empty right now. Open any posting on Lever, Greenhouse, Ashby, Workday, or
-            LinkedIn and RoleQuick will pick it up the same way.
+            LinkedIn and Litos will pick it up the same way.
           </p>
         ) : (
           jobs.map((j) => (
@@ -691,7 +691,7 @@ export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish
   const applied = state.has_applied;
   const title = applied ? "That was the last long one." : "You're set up.";
   const sub = !applied
-    ? "Open any posting and RoleQuick fills what it can from your résumé. It learns the rest from the first application you fill in."
+    ? "Open any posting and Litos fills what it can from your résumé. It learns the rest from the first application you fill in."
     : learned > 0
       ? `${learned} ${learned === 1 ? "thing" : "things"} learned. Open any posting and the form is already filled by the time you get there.`
       : "Open any posting and the form is already filled by the time you get there.";
@@ -723,8 +723,8 @@ export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish
 
       <p className="mt-5 text-[13px] leading-6 text-muted">
         {applied
-          ? "RoleQuick has stopped reading what you type. From here it only fills, and you always hit submit yourself."
-          : "RoleQuick only reads a form while you're setting up. You always hit submit yourself."}
+          ? "Litos has stopped reading what you type. From here it only fills, and you always hit submit yourself."
+          : "Litos only reads a form while you're setting up. You always hit submit yourself."}
       </p>
 
       <div className="mt-6">

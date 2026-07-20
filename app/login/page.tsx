@@ -105,8 +105,8 @@ export default function Login() {
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
       <a href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/rolequick-mark.svg" alt="" className="h-7 w-7" />
-        <span className="text-lg font-semibold tracking-tight text-ink">RoleQuick</span>
+        <img src="/brand/litos-mark.svg" alt="" className="h-7 w-7" />
+        <span className="text-lg font-semibold tracking-tight text-ink">Litos</span>
       </a>
 
       <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">

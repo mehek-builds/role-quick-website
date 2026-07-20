@@ -4,9 +4,9 @@ import { TrySimulator } from "@/components/try/TrySimulator";
 import { getJobCards } from "@/lib/try-jobs";
 
 export const metadata: Metadata = {
-  title: "Try RoleQuick without installing",
+  title: "Try Litos without installing",
   description:
-    "Drive the RoleQuick extension on a simulated job posting: detect, generate the resume, fill the application, open the outreach draft. Nothing is sent.",
+    "Drive the Litos extension on a simulated job posting: detect, generate the resume, fill the application, open the outreach draft. Nothing is sent.",
 };
 
 /* Standalone try-it surface (design doc 2026-07-08). Deliberately quiet:

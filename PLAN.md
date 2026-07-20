@@ -1,18 +1,18 @@
-# RoleQuick website: build plan
+# Litos website: build plan
 
-The product's marketing + web-app surface, publicly branded **RoleQuick**
-(canonical domain trylitos.com, updated 2026-07-20). The Chrome extension and
-backend remain branded **Volley** internally (repos
-`mehek-builds/volley-extension`, `mehek-builds/volley-backend`).
+The product's marketing + web-app surface, publicly branded **Litos**
+(canonical domain trylitos.com, updated 2026-07-20). The Chrome extension,
+website, dashboard, and backend all use the Litos product brand. Historical
+repository names remain unchanged until their GitHub repositories are renamed.
 
 ## Design system (locked 2026-07-03)
 
 Structural family borrowed from Letterstory's console
-(`~/Documents/letterstory-outreach/web`), re-themed for Role Quick:
+(`~/Documents/letterstory-outreach/web`), re-themed for Litos:
 
 - **Palette:** white canvas (`--color-bg`), warm off-white section striping
   (`--color-surface-alt`), hairline borders (`--color-border` `#e8e6e1`),
-  near-black ink (`#12120f`), Role Quick blue as the single accent
+  near-black ink (`#12120f`), Litos blue as the single accent
   (`--color-brand` `#2b4bf2`), soft blue tint for badges (`--color-brand-soft`).
   Traffic-light tiers (`positive`/`warn`/`danger`) reused for contact
   confidence (Verified/Likely/LinkedIn), same semantics as the PRD.
@@ -61,7 +61,7 @@ remains open.
 
 ## Where this is going: the robust web app
 
-The extension (Volley/Role Quick) is the capture surface; this website is
+The Litos extension is the capture surface; this website is
 where account, billing, and the resume/outreach data the extension produces
 should eventually live and be reviewable. Phased so each phase ships
 independently and the marketing site never breaks while later phases build.
@@ -112,17 +112,13 @@ independently and the marketing site never breaks while later phases build.
 
 ## Open decisions to revisit before Phase 2
 
-1. **Naming:** does "Role Quick" become the permanent brand (extension +
-   backend repos renamed too), or does the website stay Role Quick while the
-   extension stays Volley? Affects the Chrome Web Store listing name and
-   OAuth app verification (which is tied to a brand name).
-2. **Auth provider:** roll our own JWT (matches the backend's existing
+1. **Auth provider:** roll our own JWT (matches the backend's existing
    session model) vs. an off-the-shelf auth provider (Clerk/Auth.js). Backend
    already has a lightweight JWT session for the extension (PRD Section
    9.11, step 1); reusing it avoids a second auth system, but a hosted
    provider is faster if the account surface grows past just contacts +
    resume.
-3. **Data fetching:** does the website call `student-outreach-backend`
+2. **Data fetching:** does the website call `student-outreach-backend`
    directly (same API the extension uses), or does it need its own
    BFF/API routes? Direct calls are simpler and there's no reason yet to add
    a layer, but revisit if the website needs data shapes the extension API

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /* The product, shown working (hero demo, second thing on the page): a job
-   posting in a browser with the RoleQuick extension panel assembling the
+   posting in a browser with the Litos extension panel assembling the
    packet live. Finished artifacts become actionable Review rows that jump
    to their pillar section. Reduced-motion users get the finished scene. */
 
@@ -133,7 +133,7 @@ export function PacketDemo() {
                   R
                 </span>
                 <span className="text-[13px] font-semibold tracking-tight text-ink">
-                  RoleQuick
+                  Litos
                 </span>
               </span>
               <span className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">

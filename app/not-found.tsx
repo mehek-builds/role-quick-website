@@ -15,7 +15,7 @@ export default function NotFound() {
           href="/"
           className="mt-8 rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
         >
-          Back to RoleQuick
+          Back to Litos
         </a>
       </main>
     </div>

@@ -177,13 +177,13 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
     <div className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-alt px-4 py-3.5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/brand/rolequick-mark.svg"
+        src="/brand/litos-mark.svg"
         alt=""
         className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-border bg-surface p-1"
       />
       <div className="min-w-0">
         <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
-          Mehek, who builds RoleQuick
+          Mehek, who builds Litos
         </p>
         <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>
       </div>

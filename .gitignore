@@ -44,3 +44,5 @@ next-env.d.ts
 .stills-tmp/
 .assets-orig/
 __pycache__/
+
+graphify-out/

@@ -213,7 +213,7 @@ export default function Overview() {
               href={STORE_URL}
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
-              Add RoleQuick to Chrome
+              Add Litos to Chrome
             </a>
           </EmptyState>
         ) : (
