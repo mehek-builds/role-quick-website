@@ -177,7 +177,7 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
     <div className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-alt px-4 py-3.5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/brand/rolequick-mark.svg"
+        src="/brand/litos-mark.svg"
         alt=""
         className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-border bg-surface p-1"
       />

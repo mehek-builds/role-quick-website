@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 /* Social share card: white canvas, the Dart mark, the hero line, the three
    pillar threads. Twitter falls back to this image automatically. */
 
-/* The Dart mark (public/brand/rolequick-mark.svg), inlined as a data URI so
+/* The Dart mark (public/brand/litos-mark.svg), inlined as a data URI so
    Satori rasterizes the real logo rather than a stand-in glyph. */
 const DART_MARK =
   "data:image/svg+xml;base64," +

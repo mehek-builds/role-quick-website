@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-07-20)
 
 ## Corpus Check
-- 45 files · ~269,031 words
+- 45 files · ~267,742 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 131 nodes · 166 edges · 15 communities detected
+- 131 nodes · 167 edges · 15 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -28,27 +28,27 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.06
-Nodes (0):
+Nodes (0): 
 
 ### Community 1 - "Community 1"
-Cohesion: 0.16
+Cohesion: 0.21
 Nodes (12): api(), ApiError, clearSession(), completeOnboarding(), getApplicationProfile(), getOnboardingState(), getProductMeta(), getTargeting() (+4 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.15
-Nodes (0):
+Cohesion: 0.13
+Nodes (0): 
 
 ### Community 3 - "Community 3"
-Cohesion: 0.18
-Nodes (3): extractResumeText(), fromDocx(), fromPdf()
+Cohesion: 0.15
+Nodes (0): 
 
 ### Community 4 - "Community 4"
 Cohesion: 0.18
-Nodes (0):
+Nodes (3): extractResumeText(), fromDocx(), fromPdf()
 
 ### Community 5 - "Community 5"
 Cohesion: 0.25
-Nodes (0):
+Nodes (0): 
 
 ### Community 6 - "Community 6"
 Cohesion: 0.39
@@ -68,23 +68,23 @@ Nodes (3): anonId(), device(), track()
 
 ### Community 10 - "Community 10"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 11 - "Community 11"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 12 - "Community 12"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 13 - "Community 13"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
@@ -105,3 +105,5 @@ _Questions this graph is uniquely positioned to answer:_
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.06 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.13 - nodes in this community are weakly interconnected._

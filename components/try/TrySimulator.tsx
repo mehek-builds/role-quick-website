@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { STORE_URL } from "@/lib/config";
+import { SITE_URL, STORE_URL } from "@/lib/config";
 import { track } from "@/lib/analytics";
 import { extractResumeText } from "@/lib/extract-resume";
 import {
@@ -25,7 +25,7 @@ import type { TryJobCard } from "@/lib/try-jobs";
 type Step = "chooser" | "resume" | "autofill" | "outreach" | "done";
 const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "outreach", "done"];
 
-const INSTALL_URL = "https://role-quick-website.vercel.app/install?src=qr";
+const INSTALL_URL = `${SITE_URL}/install?src=qr`;
 
 function after(step: Step, target: Step) {
   return STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(target);
@@ -234,7 +234,7 @@ export function TrySimulator({
           {/* The Litos toolbar icon the popup hangs off of */}
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-2 ring-brand/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/rolequick-mark.svg" alt="" className="h-5 w-5" />
+            <img src="/brand/litos-mark.svg" alt="" className="h-5 w-5" />
           </span>
           <span className="h-5 w-5 shrink-0 rounded-full bg-surface-alt" />
         </div>
@@ -286,7 +286,7 @@ export function TrySimulator({
                 <span className="flex items-center gap-2">
                   <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/brand/rolequick-mark.svg" alt="" className="h-4 w-4" />
+                    <img src="/brand/litos-mark.svg" alt="" className="h-4 w-4" />
                   </span>
                   <span className="text-[15px] font-bold tracking-tight text-ink">
                     Litos

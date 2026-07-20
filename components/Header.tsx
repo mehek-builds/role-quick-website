@@ -55,10 +55,10 @@ export function Header() {
     >
       <div className="rq-glass mx-auto flex max-w-5xl items-center justify-between rounded-full py-2 pl-4 pr-2">
         <a href="/" className="flex items-center gap-2">
-          {/* The official mark (public/brand/rolequick-mark.svg), not a CSS
+          {/* The official mark (public/brand/litos-mark.svg), not a CSS
               circle: one drawing of the R everywhere the brand appears. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/brand/rolequick-mark.svg" alt="" className="h-6 w-6" />
+          <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
           <span className="text-[15px] font-semibold tracking-tight text-ink">
             Litos
           </span>

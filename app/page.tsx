@@ -435,7 +435,7 @@ export default function Home() {
             <div className="col-span-2 sm:col-span-1">
               <div className="flex items-center gap-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/brand/rolequick-mark.svg" alt="" className="h-5 w-5" />
+                <img src="/brand/litos-mark.svg" alt="" className="h-5 w-5" />
                 <span className="text-sm font-semibold tracking-tight text-ink">
                   Litos
                 </span>

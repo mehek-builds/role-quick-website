@@ -5,10 +5,10 @@ export const WEB_VERSION = "0.1.0";
 export const PRODUCT_FALLBACK = {
   name: PRODUCT_NAME,
   links: {
-    website: "https://role-quick-website.vercel.app",
+    website: "https://trylitos.com",
     install:
       "https://chromewebstore.google.com/detail/bdbedbmkjpfioknfpmhookefabipjaad",
-    privacy: "https://role-quick-website.vercel.app/privacy",
+    privacy: "https://trylitos.com/privacy",
     supportEmail: "hello@rolequick.com",
   },
 } as const;
