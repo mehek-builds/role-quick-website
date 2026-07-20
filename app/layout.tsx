@@ -15,9 +15,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-  title: "RoleQuick: tailored resume, filled application, real outreach",
+  title: "Litos: tailored resume, filled application, real outreach",
   description:
-    "RoleQuick tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always get the final say.",
+    "Litos tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always get the final say.",
 };
 
 export default function RootLayout({

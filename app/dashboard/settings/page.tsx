@@ -230,7 +230,7 @@ export default function Settings() {
       <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Your data</h2>
         <p className="mt-2 text-sm leading-6 text-muted">
-          Export or delete everything RoleQuick stores about you by emailing{" "}
+          Export or delete everything Litos stores about you by emailing{" "}
           <a href="mailto:mehekman@usc.edu" className="text-ink underline">
             mehekman@usc.edu
           </a>{" "}

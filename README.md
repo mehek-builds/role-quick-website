@@ -1,7 +1,6 @@
-# RoleQuick website
+# Litos website
 
-The public site + in-browser product dashboard for **RoleQuick** (the
-public name of the Volley Chrome extension): open a job posting and it
+The public site + in-browser product dashboard for **Litos**: open a job posting and it
 tailors your resume, fills the application, and drafts the outreach.
 
 - **Live:** https://trylitos.com
@@ -9,7 +8,7 @@ tailors your resume, fills the application, and drafts the outreach.
 - **Stack:** Next.js 16 (App Router, Turbopack) + Tailwind v4 + GSAP
   ScrollTrigger + Lenis
 - **This repo is frontend only.** All data comes from the separately
-  deployed Volley backend (`student-outreach-backend.vercel.app`, its own
+  deployed Litos backend (`student-outreach-backend.vercel.app`, its own
   repo). Base URL lives in `lib/config.ts` (`NEXT_PUBLIC_API_URL`
   override). Backend changes belong in that repo, never here.
 
@@ -38,7 +37,7 @@ components/
                       content; the film's resume shots are rendered FROM it.
   Motion.tsx          Reveal / CountUp (scroll-settle; isolates blend modes,
                       so BRoll shots stay outside it)
-lib/                  config + typed API client for the Volley backend
+lib/                  config + typed API client for the Litos backend
 public/film/          121-frame base film (webp, canvas-scrubbed)
 public/broll/         6 generated clips + posters (lazy, blended into film)
 scripts/
@@ -55,7 +54,7 @@ npm run build   # always run before shipping; trust it over the preview
 ```
 
 Registered launch configs (vault `.claude/launch.json`):
-`role-quick-website` (dev, :3500) and `role-quick-website-prod`
+`litos-website` (dev, :3500) and `litos-website-prod`
 (build + start, :3501).
 
 ## Deploy (manual, auto-deploy is broken)
@@ -71,10 +70,10 @@ then verify the live HTML actually changed (curl for a new string).
 
 ## Open items
 
-- trylitos.com purchased on Porkbun and attached to the RoleQuick Vercel project.
+- trylitos.com purchased on Porkbun and attached to the Litos Vercel project.
 - Yearly Pro Stripe link ($479.88/yr) does not exist yet; the site shows the
   toggle but in-app upgrades only know the $49.99/mo link.
-- Chrome Web Store listing still says "Volley - Student Outreach" while
-  every CTA points at it.
+- Publish the prepared Litos name, copy, icon, and screenshots to the existing
+  Chrome Web Store listing.
 - Replace the GitHub Action token (or install the Vercel GitHub App) to
   restore auto-deploy.

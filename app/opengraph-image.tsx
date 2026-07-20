@@ -3,7 +3,7 @@ import { ImageResponse } from "next/og";
 /* Social share card: white canvas, the Dart mark, the hero line, the three
    pillar threads. Twitter falls back to this image automatically. */
 
-/* The Dart mark (public/brand/rolequick-mark.svg), inlined as a data URI so
+/* The Dart mark (public/brand/litos-mark.svg), inlined as a data URI so
    Satori rasterizes the real logo rather than a stand-in glyph. */
 const DART_MARK =
   "data:image/svg+xml;base64," +
@@ -14,7 +14,7 @@ const DART_MARK =
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt =
-  "RoleQuick: tailored resume, filled application, real outreach";
+  "Litos: tailored resume, filled application, real outreach";
 
 export default function OgImage() {
   return new ImageResponse(
@@ -35,7 +35,7 @@ export default function OgImage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={DART_MARK} width={72} height={72} alt="" />
           <div style={{ fontSize: 44, fontWeight: 600, color: "#12120f" }}>
-            RoleQuick
+            Litos
           </div>
         </div>
         <div

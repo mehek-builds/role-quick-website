@@ -13,7 +13,7 @@ import {
   formatDate,
 } from "@/components/app/ui";
 
-/* The unified review view (brand deck section 07): everything RoleQuick made
+/* The unified review view (brand deck section 07): everything Litos made
    for one job, reviewed together under one job header. The resume packet is
    the anchor row; the matching outreach event (same company) rides along. */
 
@@ -75,13 +75,13 @@ export default function Applications() {
       ) : packets.length === 0 ? (
         <EmptyState
           title="No applications yet"
-          body="When you open a job posting with the extension, RoleQuick builds a tailored resume, fills the fields, and drafts an outreach email. Each one lands here for you to review."
+          body="When you open a job posting with the extension, Litos builds a tailored resume, fills the fields, and drafts an outreach email. Each one lands here for you to review."
         >
           <a
             href={STORE_URL}
             className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
-            Add RoleQuick to Chrome
+            Add Litos to Chrome
           </a>
         </EmptyState>
       ) : (

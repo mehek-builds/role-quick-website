@@ -66,7 +66,7 @@ export default function Outreach() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Outreach</h1>
         <p className="mt-1 text-sm text-muted">
-          Every contact RoleQuick found and every draft it wrote. Sending
+          Every contact Litos found and every draft it wrote. Sending
           always happens from your own Gmail, never from here.
         </p>
       </div>
@@ -99,7 +99,7 @@ export default function Outreach() {
               href={STORE_URL}
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
-              Add RoleQuick to Chrome
+              Add Litos to Chrome
             </a>
           )}
         </EmptyState>
