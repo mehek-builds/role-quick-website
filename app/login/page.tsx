@@ -1,19 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { setSession, getToken, getOnboardingState } from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
+import { requestCodeError, verifyCodeError } from "./errors";
 
 /* Passwordless sign-in, same account system as the extension: email a 6-digit
-   code (/auth/request-code + /auth/verify-code). If code delivery is not
-   configured on the backend it answers 503 and we fall back to the legacy
-   /auth/session flow, exactly like the extension does. */
+   code (/auth/request-code + /auth/verify-code). Email ownership must always be
+   verified before the backend issues a session. */
 
 type Step = "email" | "code";
 
-/* Where a freshly signed-in student belongs. Onboarding is a STRONG DEFAULT, not a gate: /start
+/* Where a freshly signed-in person belongs. Onboarding is a STRONG DEFAULT, not a gate: /start
    sends them on, but every screen there carries a plain "Finish later" and the dashboard stays
    open. Trapping someone behind a 12-minute wall in front of a product they have not seen work
    would be the dark pattern the Guardrails exist to prevent.
@@ -53,23 +54,9 @@ export default function Login() {
       });
       if (res.ok) {
         setStep("code");
-      } else if (res.status === 503) {
-        // Verification email not configured: legacy passwordless session.
-        const legacy = await fetch(`${API_URL}/auth/session`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...litosClientHeaders() },
-          body: JSON.stringify({ email: normalized }),
-        });
-        const data = await legacy.json().catch(() => null);
-        if (legacy.ok && data?.token) {
-          setSession(data.token, normalized);
-          router.replace(await landingRoute());
-        } else {
-          setError(data?.error ?? "Could not sign you in. Try again in a minute.");
-        }
       } else {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? "Could not send a code. Try again in a minute.");
+        setError(requestCodeError(res.status, data?.error));
       }
     } catch {
       setError("Network error. Check your connection and try again.");
@@ -93,7 +80,7 @@ export default function Login() {
         setSession(data.token, email.trim().toLowerCase());
         router.replace(await landingRoute());
       } else {
-        setError(data?.error ?? "That code did not work. Request a new one.");
+        setError(verifyCodeError(res.status, data?.error));
       }
     } catch {
       setError("Network error. Check your connection and try again.");
@@ -104,11 +91,11 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
-      <a href="/" className="mb-10 flex items-center gap-2">
+      <Link href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/litos-mark.svg" alt="" className="h-7 w-7" />
         <span className="text-lg font-semibold tracking-tight text-ink">Litos</span>
-      </a>
+      </Link>
 
       <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">
         {step === "email" ? (
@@ -128,7 +115,7 @@ export default function Login() {
               autoFocus
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@school.edu"
+              placeholder="you@example.com"
               className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
             />
             <button
@@ -182,7 +169,11 @@ export default function Login() {
           </form>
         )}
 
-        {error && <p className="mt-4 text-sm text-danger">{error}</p>}
+        {error && (
+          <p className="mt-4 text-sm text-danger" role="alert" aria-live="polite">
+            {error}
+          </p>
+        )}
       </div>
 
       <p className="mt-8 max-w-sm text-center text-xs leading-5 text-faint">
