@@ -53,16 +53,27 @@ export function PacketDemo() {
   const [phase, setPhase] = useState(-2);
   const [reduced, setReduced] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setReduced(true);
-      setPhase(ARTIFACTS.length);
-      return;
+      const raf = requestAnimationFrame(() => {
+        setReduced(true);
+        setPhase(ARTIFACTS.length);
+      });
+      return () => cancelAnimationFrame(raf);
     }
     let cancelled = false;
+    let intersecting = false;
+    let pageVisible = document.visibilityState === "visible";
+    const active = () => intersecting && pageVisible;
+    const stop = () => {
+      if (!timer.current) return;
+      clearTimeout(timer.current);
+      timer.current = null;
+    };
     const advance = (next: number) => {
-      if (cancelled) return;
+      if (cancelled || !active()) return;
       setPhase(next);
       const delay =
         next === -2 ? 500
@@ -74,10 +85,29 @@ export function PacketDemo() {
         delay,
       );
     };
-    advance(-2);
+    const restart = () => {
+      stop();
+      if (active()) {
+        advance(-2);
+      }
+    };
+    const observer = new IntersectionObserver((entries) => {
+      const latest = entries.at(-1);
+      if (!latest) return;
+      intersecting = latest.isIntersecting;
+      restart();
+    }, { rootMargin: "200px 0px" });
+    const onVisibility = () => {
+      pageVisible = document.visibilityState === "visible";
+      restart();
+    };
+    if (root.current) observer.observe(root.current);
+    document.addEventListener("visibilitychange", onVisibility);
     return () => {
       cancelled = true;
-      if (timer.current) clearTimeout(timer.current);
+      observer.disconnect();
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
     };
   }, []);
 
@@ -88,7 +118,7 @@ export function PacketDemo() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl overflow-hidden rounded-[20px] border border-border bg-surface shadow-[0_1px_2px_rgba(18,18,15,0.04),0_20px_48px_-24px_rgba(18,18,15,0.18)]">
+    <div ref={root} className="mx-auto w-full max-w-4xl overflow-hidden rounded-[20px] border border-border bg-surface shadow-[0_1px_2px_rgba(18,18,15,0.04),0_20px_48px_-24px_rgba(18,18,15,0.18)]">
       {/* Browser chrome */}
       <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
         <span className="flex gap-1.5">

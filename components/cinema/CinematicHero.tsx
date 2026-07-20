@@ -17,6 +17,10 @@ import { useGSAP } from "@gsap/react";
    one static viewport (CSS only) with the hero card server-rendered. */
 
 const FRAME_COUNT = 121;
+const MAX_CACHED_FRAMES = 5;
+const FRAME_RETRY_MS = 5_000;
+const MAX_FRAME_ATTEMPTS = 2;
+const FRAME_PREFETCH_OFFSETS = [0, 1, -1, 2, -2] as const;
 const framePath = (i: number) => `/film/frame-${String(i).padStart(4, "0")}.webp`;
 
 /* Chapter tint overlay colors (multiply over the film, whisper-quiet). */
@@ -55,18 +59,20 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const progressRef = useRef(0);
   const chapterRef = useRef(0);
 
-  /* ---- film frames: load 0 first (poster), then everything, draw nearest ---- */
-  const imagesRef = useRef<(HTMLImageElement | null)[]>([]);
+  /* Load a small frame window on demand and draw the nearest decoded frame. */
+  const imagesRef = useRef(new Map<number, HTMLImageElement>());
+  const requestFrameRef = useRef<(index: number) => void>(() => {});
   const drawFrame = (index: number) => {
     const canvas = filmRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    requestFrameRef.current(index);
     const imgs = imagesRef.current;
     /* nearest loaded frame so scrubbing never blanks */
     let img: HTMLImageElement | null = null;
     for (let d = 0; d < FRAME_COUNT; d++) {
-      const lo = imgs[index - d];
-      const hi = imgs[index + d];
+      const lo = imgs.get(index - d);
+      const hi = imgs.get(index + d);
       if (lo?.complete && lo.naturalWidth) { img = lo; break; }
       if (hi?.complete && hi.naturalWidth) { img = hi; break; }
     }
@@ -87,26 +93,83 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
 
   useEffect(() => {
     const imgs = imagesRef.current;
-    const load = (i: number, onload?: () => void) => {
-      if (imgs[i]) return;
+    const failedUntil = new Map<number, number>();
+    const failedAttempts = new Map<number, number>();
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let retryIndex: number | null = null;
+    const cancelRetry = () => {
+      if (retryTimer) clearTimeout(retryTimer);
+      retryTimer = null;
+      retryIndex = null;
+    };
+    const touch = (i: number, img: HTMLImageElement) => {
+      imgs.delete(i);
+      imgs.set(i, img);
+    };
+    const trim = () => {
+      while (imgs.size > MAX_CACHED_FRAMES) {
+        const oldest = imgs.keys().next().value as number | undefined;
+        if (oldest === undefined) return;
+        const img = imgs.get(oldest);
+        imgs.delete(oldest);
+        failedUntil.delete(oldest);
+        failedAttempts.delete(oldest);
+        if (img) {
+          img.onload = null;
+          img.onerror = null;
+          img.src = "";
+        }
+      }
+    };
+    const load = (i: number) => {
+      const existing = imgs.get(i);
+      if (existing) {
+        touch(i, existing);
+        return;
+      }
+      if ((failedUntil.get(i) ?? 0) > Date.now()) return;
+      if ((failedAttempts.get(i) ?? 0) >= MAX_FRAME_ATTEMPTS) return;
       const img = new Image();
+      img.decoding = "async";
+      img.onload = () => {
+        failedUntil.delete(i);
+        failedAttempts.delete(i);
+        const want = Math.round(progressRef.current * (FRAME_COUNT - 1));
+        if (Math.abs(want - i) < 3) drawFrame(want);
+      };
+      img.onerror = () => {
+        if (imgs.get(i) === img) imgs.delete(i);
+        const attempts = (failedAttempts.get(i) ?? 0) + 1;
+        failedAttempts.set(i, attempts);
+        const delay = FRAME_RETRY_MS * attempts;
+        failedUntil.set(i, Date.now() + delay);
+        const want = Math.round(progressRef.current * (FRAME_COUNT - 1));
+        if (want === i && attempts < MAX_FRAME_ATTEMPTS) {
+          cancelRetry();
+          retryIndex = i;
+          retryTimer = setTimeout(() => {
+            const target = retryIndex;
+            retryTimer = null;
+            retryIndex = null;
+            if (target === null) return;
+            failedUntil.delete(target);
+            requestFrameRef.current(target);
+            drawFrame(target);
+          }, delay);
+        }
+      };
+      imgs.set(i, img);
       img.src = framePath(i);
-      if (onload) img.onload = onload;
-      imgs[i] = img;
+      trim();
     };
-    /* poster first, then the rest in soft batches */
-    load(0, () => drawFrame(Math.round(progressRef.current * (FRAME_COUNT - 1))));
-    load(FRAME_COUNT - 1);
-    let i = 0;
-    const batch = () => {
-      for (let k = 0; k < 10 && i < FRAME_COUNT; k++, i++)
-        load(i, () => {
-          const want = Math.round(progressRef.current * (FRAME_COUNT - 1));
-          if (Math.abs(want - i) < 3) drawFrame(want);
-        });
-      if (i < FRAME_COUNT) setTimeout(batch, 80);
+    requestFrameRef.current = (index: number) => {
+      if (retryIndex !== null && retryIndex !== index) cancelRetry();
+      for (const offset of FRAME_PREFETCH_OFFSETS) {
+        const candidate = index + offset;
+        if (candidate >= 0 && candidate < FRAME_COUNT) load(candidate);
+      }
     };
-    batch();
+    requestFrameRef.current(0);
 
     const resize = () => {
       const canvas = filmRef.current;
@@ -125,10 +188,19 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
+      cancelRetry();
+      requestFrameRef.current = () => {};
+      for (const img of imgs.values()) {
+        img.onload = null;
+        img.onerror = null;
+        img.src = "";
+      }
+      imgs.clear();
+      failedUntil.clear();
+      failedAttempts.clear();
       window.removeEventListener("resize", resize);
       document.removeEventListener("visibilitychange", onVisible);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* ---- the opening: on load the sting (the camera flying forward through an
