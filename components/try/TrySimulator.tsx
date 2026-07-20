@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { STORE_URL } from "@/lib/config";
+import { SITE_URL, STORE_URL } from "@/lib/config";
 import { track } from "@/lib/analytics";
 import { extractResumeText } from "@/lib/extract-resume";
 import {
@@ -25,7 +25,7 @@ import type { TryJobCard } from "@/lib/try-jobs";
 type Step = "chooser" | "resume" | "autofill" | "outreach" | "done";
 const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "outreach", "done"];
 
-const INSTALL_URL = "https://role-quick-website.vercel.app/install?src=qr";
+const INSTALL_URL = `${SITE_URL}/install?src=qr`;
 
 function after(step: Step, target: Step) {
   return STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(target);

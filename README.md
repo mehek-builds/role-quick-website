@@ -4,7 +4,8 @@ The public site + in-browser product dashboard for **RoleQuick** (the
 public name of the Volley Chrome extension): open a job posting and it
 tailors your resume, fills the application, and drafts the outreach.
 
-- **Live:** https://role-quick-website.vercel.app
+- **Live:** https://trylitos.com
+- **Vercel fallback:** https://role-quick-website.vercel.app
 - **Stack:** Next.js 16 (App Router, Turbopack) + Tailwind v4 + GSAP
   ScrollTrigger + Lenis
 - **This repo is frontend only.** All data comes from the separately
@@ -70,7 +71,7 @@ then verify the live HTML actually changed (curl for a new string).
 
 ## Open items
 
-- rolequick.com checked available (~$11/yr) but not purchased or attached.
+- trylitos.com purchased on Porkbun and attached to the RoleQuick Vercel project.
 - Yearly Pro Stripe link ($479.88/yr) does not exist yet; the site shows the
   toggle but in-app upgrades only know the $49.99/mo link.
 - Chrome Web Store listing still says "Volley - Student Outreach" while
