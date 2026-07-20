@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { setSession, getToken, getOnboardingState } from "@/lib/api";
+import { litosClientHeaders } from "@/lib/product";
 
 /* Passwordless sign-in, same account system as the extension: email a 6-digit
    code (/auth/request-code + /auth/verify-code). If code delivery is not
@@ -47,7 +48,7 @@ export default function Login() {
     try {
       const res = await fetch(`${API_URL}/auth/request-code`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
         body: JSON.stringify({ email: normalized }),
       });
       if (res.ok) {
@@ -56,7 +57,7 @@ export default function Login() {
         // Verification email not configured: legacy passwordless session.
         const legacy = await fetch(`${API_URL}/auth/session`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...litosClientHeaders() },
           body: JSON.stringify({ email: normalized }),
         });
         const data = await legacy.json().catch(() => null);
@@ -84,7 +85,7 @@ export default function Login() {
     try {
       const res = await fetch(`${API_URL}/auth/verify-code`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
         body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim() }),
       });
       const data = await res.json().catch(() => null);
@@ -106,7 +107,7 @@ export default function Login() {
       <a href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/rolequick-mark.svg" alt="" className="h-7 w-7" />
-        <span className="text-lg font-semibold tracking-tight text-ink">RoleQuick</span>
+        <span className="text-lg font-semibold tracking-tight text-ink">Litos</span>
       </a>
 
       <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">

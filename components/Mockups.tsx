@@ -292,7 +292,7 @@ export function InboxMockup() {
                 <span className="text-[#5f6368]"> - {e.snippet}</span>
               </span>
               <span
-                title="Sent via RoleQuick"
+                title="Sent via Litos"
                 className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white"
               >
                 R
@@ -309,7 +309,7 @@ export function InboxMockup() {
           <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-brand text-[8px] font-bold text-white">
             R
           </span>
-          every one of these sent through RoleQuick
+          every one of these sent through Litos
         </div>
       </div>
     </div>

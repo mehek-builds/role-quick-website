@@ -1,6 +1,7 @@
 "use client";
 
 import { API_URL } from "./config";
+import { litosClientHeaders, type ProductMeta } from "./product";
 
 const TOKEN_KEY = "rq_token";
 const EMAIL_KEY = "rq_email";
@@ -33,7 +34,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Authenticated fetch against the Volley backend. On 401 the session is
+/** Authenticated fetch against the Litos backend. On 401 the session is
  *  cleared and the caller is bounced to /login. */
 export async function api<T>(
   path: string,
@@ -41,6 +42,9 @@ export async function api<T>(
 ): Promise<T> {
   const token = getToken();
   const headers = new Headers(init.headers);
+  for (const [name, value] of Object.entries(litosClientHeaders())) {
+    headers.set(name, value);
+  }
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (init.body && typeof init.body === "string") {
     headers.set("Content-Type", "application/json");
@@ -219,7 +223,10 @@ export async function uploadResume(file: File): Promise<ParsedProfile> {
   form.append("resume", file);
   const res = await fetch(`${API_URL}/profile`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    headers: {
+      ...litosClientHeaders(),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: form,
   });
   const data = await res.json().catch(() => null);
@@ -227,4 +234,16 @@ export async function uploadResume(file: File): Promise<ParsedProfile> {
     throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? "Could not read that resume.");
   }
   return data as ParsedProfile;
+}
+
+let productMetaPromise: Promise<ProductMeta> | null = null;
+
+export function getProductMeta(): Promise<ProductMeta> {
+  if (!productMetaPromise) {
+    productMetaPromise = api<ProductMeta>("/v1/meta").catch((error) => {
+      productMetaPromise = null;
+      throw error;
+    });
+  }
+  return productMetaPromise;
 }

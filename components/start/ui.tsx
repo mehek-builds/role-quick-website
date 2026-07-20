@@ -183,7 +183,7 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
       />
       <div className="min-w-0">
         <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
-          Mehek, who builds RoleQuick
+          Mehek, who builds Litos
         </p>
         <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>
       </div>

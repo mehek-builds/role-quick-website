@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { PRODUCT_NAME } from "@/lib/product";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,9 +15,9 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://rolequick.com"),
-  title: "RoleQuick: tailored resume, filled application, real outreach",
+  title: `${PRODUCT_NAME}: tailored resume, filled application, real outreach`,
   description:
-    "RoleQuick tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always get the final say.",
+    `${PRODUCT_NAME} tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts a personalized outreach email to a real recruiter or alum. One open tab, three things done for you. You always get the final say.`,
 };
 
 export default function RootLayout({

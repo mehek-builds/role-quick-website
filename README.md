@@ -1,6 +1,6 @@
-# RoleQuick website
+# Litos website
 
-The public site + in-browser product dashboard for **RoleQuick** (the
+The public site + in-browser product dashboard for **Litos** (the
 public name of the Volley Chrome extension): open a job posting and it
 tailors your resume, fills the application, and drafts the outreach.
 

@@ -105,7 +105,7 @@ export default function TargetingCard() {
         <div>
           <h2 className="text-base font-medium text-ink">What you&apos;re going after</h2>
           <p className="mt-1 max-w-md text-sm leading-6 text-muted">
-            This aims every application RoleQuick fills. Change it whenever the hunt changes.
+            This aims every application Litos fills. Change it whenever the hunt changes.
           </p>
         </div>
         <div className="flex items-center gap-3">

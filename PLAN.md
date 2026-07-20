@@ -1,6 +1,6 @@
-# RoleQuick website: build plan
+# Litos website: build plan
 
-The product's marketing + web-app surface, publicly branded **RoleQuick**
+The product's marketing + web-app surface, publicly branded **Litos**
 (target domain rolequick.com, decided 2026-07-04). The Chrome extension and
 backend remain branded **Volley** internally (repos
 `mehek-builds/volley-extension`, `mehek-builds/volley-backend`).

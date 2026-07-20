@@ -60,7 +60,7 @@ export function Header() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/rolequick-mark.svg" alt="" className="h-6 w-6" />
           <span className="text-[15px] font-semibold tracking-tight text-ink">
-            RoleQuick
+            Litos
           </span>
         </a>
         <nav className="hidden items-center gap-7 text-sm text-muted sm:flex">

@@ -24,7 +24,7 @@ import { STORE_URL } from "@/lib/config";
 const FAQ_ITEMS = [
   {
     q: "Will it make up things I haven't done?",
-    a: "No. RoleQuick only uses what is already in your resume and experience bank. It reorders and rewords your real work to match the posting, and it never invents a job, a skill, or a number. Every line is yours, and you can see exactly what changed before it goes anywhere.",
+    a: "No. Litos only uses what is already in your resume and experience bank. It reorders and rewords your real work to match the posting, and it never invents a job, a skill, or a number. Every line is yours, and you can see exactly what changed before it goes anywhere.",
   },
   {
     q: "Does it apply to jobs for me automatically?",
@@ -32,7 +32,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Will a recruiter be able to tell I used AI?",
-    a: "It reads like an application you wrote carefully, because the words are yours. RoleQuick fills real fields with your real answers and drafts your short responses and outreach in your own voice, then stops for you to read every line. Nothing is mass-blasted, so there is no template smell to catch.",
+    a: "It reads like an application you wrote carefully, because the words are yours. Litos fills real fields with your real answers and drafts your short responses and outreach in your own voice, then stops for you to read every line. Nothing is mass-blasted, so there is no template smell to catch.",
   },
   {
     q: "Will this actually help me get interviews?",
@@ -40,7 +40,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Are my resume and personal information safe?",
-    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. RoleQuick makes money from Pro subscriptions, not from you; that is also why Free stays free.",
+    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. Litos makes money from Pro subscriptions, not from you; that is also why Free stays free.",
   },
 ];
 
@@ -175,7 +175,7 @@ export default function Home() {
                 Messy in. ATS-ready out.
               </h2>
               <p className="mt-4 text-[15px] leading-7 text-muted">
-                Recruiting software skips what it can&apos;t parse. RoleQuick
+                Recruiting software skips what it can&apos;t parse. Litos
                 outputs the layout the parser wants: single column, real
                 headings, no tables.
               </p>
@@ -203,7 +203,7 @@ export default function Home() {
                     Tuned means rebuilt, not reworded.
                   </h2>
                   <p className="mt-2.5 text-[14px] leading-6 text-muted">
-                    RoleQuick pulls the requirements from the posting and reorders
+                    Litos pulls the requirements from the posting and reorders
                     your story to answer them, in its own language.
                   </p>
                 </div>
@@ -236,7 +236,7 @@ export default function Home() {
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
                     Twenty-seven fields on the average portal, the same answers
-                    every time. RoleQuick answers once, everywhere, then waits
+                    every time. Litos answers once, everywhere, then waits
                     for your review.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
@@ -285,7 +285,7 @@ export default function Home() {
                     Applications get filed. Emails get read.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    While the form fills, RoleQuick finds your people at the
+                    While the form fills, Litos finds your people at the
                     company and leaves a draft in Gmail. Alumni answer most, so
                     alumni come first.
                   </p>
@@ -437,7 +437,7 @@ export default function Home() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/brand/rolequick-mark.svg" alt="" className="h-5 w-5" />
                 <span className="text-sm font-semibold tracking-tight text-ink">
-                  RoleQuick
+                  Litos
                 </span>
               </div>
             </div>
@@ -480,7 +480,7 @@ export default function Home() {
             </div>
           </div>
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
-            <span>&copy; {new Date().getFullYear()} RoleQuick</span>
+            <span>&copy; {new Date().getFullYear()} Litos</span>
             <span>Built to be keyboard-navigable, end to end.</span>
             <span className="font-mono text-[11px] uppercase tracking-[0.08em]">
               Updated{" "}

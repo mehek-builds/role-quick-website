@@ -197,7 +197,7 @@ export function TrySimulator({
       )}
 
       {/* A Mac Chrome window (Mehek, 2026-07-08: simulate a whole Chrome tab on
-          a Mac; the RoleQuick popup is the real extension popup anchored to its
+          a Mac; the Litos popup is the real extension popup anchored to its
           toolbar icon). */}
       <div className="overflow-hidden rounded-[14px] border border-border bg-surface shadow-[0_1px_2px_rgba(18,18,15,0.04),0_30px_60px_-30px_rgba(18,18,15,0.28)]">
         {/* Tab strip + traffic lights */}
@@ -219,7 +219,7 @@ export function TrySimulator({
           <span className="shrink-0 text-sm text-faint">+</span>
         </div>
 
-        {/* Toolbar: nav + omnibox + extensions (RoleQuick icon anchors the popup) */}
+        {/* Toolbar: nav + omnibox + extensions (Litos icon anchors the popup) */}
         <div className="flex items-center gap-2.5 border-b border-border bg-white px-3.5 py-2">
           <span className="flex shrink-0 items-center gap-2.5 text-[15px] text-faint">
             <span>‹</span>
@@ -231,7 +231,7 @@ export function TrySimulator({
             <span className="truncate">{pageJob.url}</span>
           </span>
           <span className="shrink-0 text-[13px] text-faint">🧩</span>
-          {/* The RoleQuick toolbar icon the popup hangs off of */}
+          {/* The Litos toolbar icon the popup hangs off of */}
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-2 ring-brand/30">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/rolequick-mark.svg" alt="" className="h-5 w-5" />
@@ -289,7 +289,7 @@ export function TrySimulator({
                     <img src="/brand/rolequick-mark.svg" alt="" className="h-4 w-4" />
                   </span>
                   <span className="text-[15px] font-bold tracking-tight text-ink">
-                    RoleQuick
+                    Litos
                   </span>
                 </span>
                 <span className="flex items-center gap-1 text-faint">

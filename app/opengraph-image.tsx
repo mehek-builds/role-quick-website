@@ -14,7 +14,7 @@ const DART_MARK =
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 export const alt =
-  "RoleQuick: tailored resume, filled application, real outreach";
+  "Litos: tailored resume, filled application, real outreach";
 
 export default function OgImage() {
   return new ImageResponse(
@@ -35,7 +35,7 @@ export default function OgImage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={DART_MARK} width={72} height={72} alt="" />
           <div style={{ fontSize: 44, fontWeight: 600, color: "#12120f" }}>
-            RoleQuick
+            Litos
           </div>
         </div>
         <div

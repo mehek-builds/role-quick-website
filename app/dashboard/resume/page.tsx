@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, ExperienceEntry, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
+import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, ShimmerRows, ErrorNote } from "@/components/app/ui";
 
 type ParsedProfile = Record<string, unknown>;
@@ -46,7 +47,7 @@ export default function ResumeWorkspace() {
       form.append("resume", file);
       const res = await fetch(`${API_URL}/profile`, {
         method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}` },
+        headers: { Authorization: `Bearer ${getToken()}`, ...litosClientHeaders() },
         body: form,
       });
       const data = await res.json().catch(() => null);

@@ -554,7 +554,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               Apply <span className="text-brand-ink">in seconds.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-[460px] text-[16px] leading-[1.65] text-muted">
-              RoleQuick is a free Chrome extension for students and new grads.
+              Litos is a free Chrome extension for students and new grads.
               Open a posting and it tailors your resume, fills the application,
               and drafts the outreach. You get the final say.
             </p>
