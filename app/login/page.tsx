@@ -35,34 +35,57 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!getToken()) return;
     void landingRoute().then((r) => router.replace(r));
   }, [router]);
 
-  async function submitEmail(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = window.setTimeout(() => setResendCooldown((seconds) => seconds - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  async function requestCode(targetEmail: string, isResend = false): Promise<boolean> {
     setBusy(true);
     setError(null);
-    const normalized = email.trim().toLowerCase();
+    setDeliveryNotice(null);
     try {
       const res = await fetch(`${API_URL}/auth/request-code`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...litosClientHeaders() },
-        body: JSON.stringify({ email: normalized }),
+        body: JSON.stringify({ email: targetEmail }),
       });
       if (res.ok) {
         setStep("code");
-      } else {
-        const data = await res.json().catch(() => null);
-        setError(requestCodeError(res.status, data?.error));
+        setCode("");
+        setResendCooldown(30);
+        setDeliveryNotice(
+          isResend
+            ? "A fresh code was requested. Only the newest code will work."
+            : "Code requested. Check your inbox, spam, and promotions folders.",
+        );
+        return true;
       }
+
+      const data = await res.json().catch(() => null);
+      setError(requestCodeError(res.status, data?.error));
+      return false;
     } catch {
       setError("Network error. Check your connection and try again.");
+      return false;
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitEmail(e: React.FormEvent) {
+    e.preventDefault();
+    const normalized = email.trim().toLowerCase();
+    await requestCode(normalized);
   }
 
   async function submitCode(e: React.FormEvent) {
@@ -130,8 +153,8 @@ export default function Login() {
           <form onSubmit={submitCode}>
             <h1 className="text-xl font-semibold tracking-tight text-ink">Check your email</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
-              We sent a six-digit code to <span className="text-ink">{email}</span>. It
-              expires in 10 minutes.
+              We requested a six-digit code for <span className="text-ink">{email}</span>.
+              It expires in 10 minutes.
             </p>
             <label className="mt-6 block text-xs font-medium text-muted" htmlFor="code">
               Verification code
@@ -157,10 +180,23 @@ export default function Login() {
             </button>
             <button
               type="button"
+              disabled={busy || resendCooldown > 0}
+              onClick={() => void requestCode(email.trim().toLowerCase(), true)}
+              className="mt-3 w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy
+                ? "Requesting a fresh code..."
+                : resendCooldown > 0
+                  ? `Resend code in ${resendCooldown}s`
+                  : "Resend code"}
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 setStep("email");
                 setCode("");
                 setError(null);
+                setDeliveryNotice(null);
               }}
               className="mt-3 w-full text-center text-xs text-muted hover:text-ink"
             >
@@ -172,6 +208,11 @@ export default function Login() {
         {error && (
           <p className="mt-4 text-sm text-danger" role="alert" aria-live="polite">
             {error}
+          </p>
+        )}
+        {deliveryNotice && !error && (
+          <p className="mt-4 text-sm leading-6 text-muted" role="status" aria-live="polite">
+            {deliveryNotice}
           </p>
         )}
       </div>
