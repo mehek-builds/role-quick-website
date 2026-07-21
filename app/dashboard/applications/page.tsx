@@ -9,7 +9,7 @@ import {
   type ResumeSpec,
 } from "@/lib/api";
 import { EXTENSION_ID, STORE_URL } from "@/lib/config";
-import { Card, Chip, EmptyState, ErrorNote, ShimmerRows, formatDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 
 type Screen = "review" | "questions" | "submitting" | "submitted";
 
@@ -203,7 +203,7 @@ export default function Applications() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Application review</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">Review the job and your resume together.</h1>
+          <h1 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the job and your resume together.</h1>
           <p className="mt-1 text-sm text-muted">Litos handles the portal in the background. You stay here through submission.</p>
         </div>
         {selected && review && <Chip label={statusLabel(screen, review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
@@ -250,15 +250,26 @@ export default function Applications() {
               </div>
             </DocumentPane>
 
-            <DocumentPane eyebrow="Tailored resume" title="Your optimized version" meta={`${formatDate(selected.created_at)} · ${extractScore(selected.spec)}% match`}>
+            <DocumentPane
+              eyebrow="Tailored resume"
+              title="Your optimized version"
+              meta={
+                <div className="flex items-center gap-3">
+                  <span className="hidden text-right font-mono text-[10px] leading-4 text-faint sm:block">
+                    {formatDate(selected.created_at)}<br />JD coverage
+                  </span>
+                  <ScoreRing score={extractScore(selected.spec)} />
+                </div>
+              }
+            >
               <ResumeEditor spec={spec} editedTerms={review.edited_terms} onChange={setSpec} onPatchEntry={patchEntry} />
             </DocumentPane>
           </div>
 
-          <div className="sticky bottom-4 z-10 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-white/95 p-4 shadow-[0_10px_40px_rgba(18,18,15,0.08)] backdrop-blur">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
             <div>
               <p className="text-sm font-medium text-ink">Your edits are checked before anything is submitted.</p>
-              <p className="mt-0.5 text-xs text-muted">Blue matches the job. Coral marks wording Litos tailored from your source resume.</p>
+              <p className="mt-0.5 text-xs text-muted">Blue highlights job language. Underlined blue marks wording Litos tailored from your source resume.</p>
             </div>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
@@ -273,14 +284,14 @@ export default function Applications() {
   );
 }
 
-function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; title: string; meta: string; children: React.ReactNode }) {
+function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; title: string; meta: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="overflow-hidden rounded-[20px] border border-border bg-surface">
       <header className="border-b border-border px-6 py-5">
         <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{eyebrow}</p>
-        <div className="mt-1 flex items-baseline justify-between gap-3">
+        <div className="mt-1 flex items-center justify-between gap-3">
           <h2 className="text-base font-medium text-ink">{title}</h2>
-          <span className="font-mono text-[10px] text-faint">{meta}</span>
+          {typeof meta === "string" ? <span className="font-mono text-[10px] text-faint">{meta}</span> : meta}
         </div>
       </header>
       <div className="max-h-[760px] overflow-y-auto p-6">{children}</div>
@@ -341,7 +352,7 @@ function HighlightedText({ text, terms, tone }: { text: string; terms: string[];
   return <>{text.split(/(\s+)/).map((part, index) => {
     const key = part.toLowerCase().replace(/[^a-z0-9+#./-]/g, "");
     const highlighted = key.length > 2 && normalized.has(key);
-    return highlighted ? <mark key={index} className={tone === "edited" ? "rounded bg-coral-soft px-0.5 text-coral-ink" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
+    return highlighted ? <mark key={index} className={tone === "edited" ? "border-b-2 border-brand bg-surface-alt px-0.5 text-brand-ink" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
   })}</>;
 }
 
@@ -350,14 +361,14 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions:
     <div className="mx-auto max-w-3xl space-y-6">
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">← Back to resume</button>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-coral-ink">Portal questions</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-ink">Review the answers that need your voice.</h2>
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Portal questions</p>
+        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the answers that need your voice.</h2>
         <p className="mt-1 text-sm text-muted">This screen appears only when the company portal asks for more than your profile already provides.</p>
       </div>
       {questions.map((question, index) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{question.kind === "essay" ? "Litos draft · edit freely" : "Required by the portal"}</p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">{question.kind === "essay" ? "Litos draft · edit freely" : "Required by the portal"}</p>
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item, i) => (i === index ? { ...item, answer: event.target.value } : item)))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
@@ -367,7 +378,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions:
 }
 
 function CenteredState({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
-  return <Card className="mx-auto max-w-2xl p-12 text-center"><div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${loading ? "rq-shimmer" : "bg-positive-soft text-positive"}`}>{loading ? "" : "✓"}</div><h2 className="mt-5 text-xl font-semibold text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
+  return <Card className="mx-auto max-w-2xl p-12 text-center"><div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${loading ? "rq-shimmer" : "bg-positive-soft text-positive"}`}>{loading ? "" : "✓"}</div><h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
 
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
