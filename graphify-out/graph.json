@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 12
+      "community": 13
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 13
+      "community": 14
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 14
+      "community": 15
     },
     {
       "label": "layout.tsx",
@@ -204,10 +204,34 @@
       "community": 6
     },
     {
+      "label": "errors.ts",
+      "file_type": "code",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L1",
+      "id": "errors",
+      "community": 10
+    },
+    {
+      "label": "requestCodeError()",
+      "file_type": "code",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L3",
+      "id": "errors_requestcodeerror",
+      "community": 10
+    },
+    {
+      "label": "verifyCodeError()",
+      "file_type": "code",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L19",
+      "id": "errors_verifycodeerror",
+      "community": 10
+    },
+    {
       "label": "landingRoute()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L21",
+      "source_location": "L22",
       "id": "page_landingroute",
       "community": 0
     },
@@ -215,7 +239,7 @@
       "label": "Login()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L30",
+      "source_location": "L31",
       "id": "page_login",
       "community": 0
     },
@@ -313,7 +337,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L1",
       "id": "herobackdrop",
-      "community": 10
+      "community": 11
     },
     {
       "label": "onMove()",
@@ -321,7 +345,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L52",
       "id": "herobackdrop_onmove",
-      "community": 10
+      "community": 11
     },
     {
       "label": "tick()",
@@ -329,7 +353,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L59",
       "id": "herobackdrop_tick",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Motion.tsx",
@@ -489,7 +513,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 11
+      "community": 12
     },
     {
       "label": "BRoll()",
@@ -497,7 +521,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 11
+      "community": 12
     },
     {
       "label": "SmoothScroll.tsx",
@@ -1237,7 +1261,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L5",
+      "source_location": "L6",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "config",
@@ -1321,7 +1345,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L6",
+      "source_location": "L7",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "api",
@@ -1405,7 +1429,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L7",
+      "source_location": "L8",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "product",
@@ -1498,10 +1522,22 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L9",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "errors",
+      "source": "page",
+      "target": "errors",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L21",
+      "source_location": "L22",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_landingroute",
@@ -1513,7 +1549,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L30",
+      "source_location": "L31",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_login",
@@ -1615,6 +1651,30 @@
       "_tgt": "route_lookslikeresume",
       "source": "route_lookslikeresume",
       "target": "route_post",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "_src": "errors",
+      "_tgt": "errors_requestcodeerror",
+      "source": "errors",
+      "target": "errors_requestcodeerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L19",
+      "weight": 1.0,
+      "_src": "errors",
+      "_tgt": "errors_verifycodeerror",
+      "source": "errors",
+      "target": "errors_verifycodeerror",
       "confidence_score": 1.0
     },
     {
