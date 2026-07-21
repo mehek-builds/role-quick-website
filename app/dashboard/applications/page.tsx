@@ -79,6 +79,104 @@ const QA_PACKET: GeneratedResume = {
   },
 };
 
+const QA_SCENARIOS: Record<string, GeneratedResume> = {
+  acme: QA_PACKET,
+  stripe: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b02",
+    company: "Stripe",
+    role: "Software Engineering Intern",
+    ats: "Lever",
+    score: 82,
+    jd: "Stripe is hiring a Software Engineering Intern to build reliable TypeScript services and React tools. You will improve payment workflows, write tested code, analyze production performance, and collaborate across engineering and product. Experience with Node.js, PostgreSQL, and accessible interfaces is valued.",
+    title: "Software Engineering Intern",
+    bullets: [
+      "Built reliable TypeScript services that automated 18 operational handoffs and reduced turnaround time by 42%.",
+      "Shipped tested React tools for 6 teams and documented production recovery paths.",
+    ],
+    skills: ["TypeScript", "React", "Node.js", "PostgreSQL", "Software Engineering"],
+    editedTerms: ["reliable", "automated", "tested", "production", "Software Engineering"],
+    questions: [],
+  }),
+  notion: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b03",
+    company: "Notion",
+    role: "Product Design Intern",
+    ats: "Ashby",
+    score: 74,
+    jd: "Notion is looking for a Product Design Intern who can turn complex workflows into calm, accessible product experiences. You will prototype in Figma, partner with engineers, test interaction details, and communicate clear design rationale. Experience designing dashboards and systems for real users is preferred.",
+    title: "Product Designer",
+    bullets: [
+      "Designed accessible workflow dashboards in Figma and React for 6 client teams.",
+      "Tested interaction details with users and reduced handoff turnaround time by 42%.",
+    ],
+    skills: ["Figma", "Product Design", "Design Systems", "React", "User Research"],
+    editedTerms: ["accessible", "Figma", "interaction", "users", "Design Systems"],
+    questions: [
+      {
+        id: "notion-craft",
+        question: "Tell us about a product detail you refined through user feedback.",
+        answer: "While designing a workflow dashboard, I saw that users understood system status but could not recover confidently from a failed handoff. I added visible recovery paths, tested the revised interaction, and used the findings to simplify the surrounding controls.",
+        kind: "essay",
+        required: true,
+      },
+    ],
+  }),
+  figma: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b04",
+    company: "Figma",
+    role: "Data Analyst Intern",
+    ats: "Workday",
+    score: 79,
+    jd: "Figma is hiring a Data Analyst Intern to define product metrics, build trustworthy dashboards, and translate behavioral data into clear recommendations. You will work with SQL, PostgreSQL, experimentation, and cross-functional product teams. Strong communication and careful data validation are required.",
+    title: "Data Analyst",
+    bullets: [
+      "Built trustworthy PostgreSQL dashboards that tracked 18 workflow handoffs across 6 teams.",
+      "Analyzed product metrics and validated reporting changes that reduced turnaround time by 42%.",
+    ],
+    skills: ["SQL", "PostgreSQL", "Product Analytics", "Experimentation", "Data Visualization"],
+    editedTerms: ["trustworthy", "dashboards", "metrics", "validated", "Product Analytics"],
+    questions: [],
+  }),
+  vercel: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b05",
+    company: "Vercel",
+    role: "Developer Advocate Intern",
+    ats: "Greenhouse",
+    score: 77,
+    jd: "Vercel is seeking a Developer Advocate Intern to teach developers through clear technical content, product demos, and community programs. You will build examples with React and TypeScript, explain complex workflows, gather developer feedback, and partner with product engineering. Strong writing and public communication are essential.",
+    title: "Developer Advocate",
+    bullets: [
+      "Built React and TypeScript product demos that explained workflow automation to 6 client teams.",
+      "Translated developer feedback into tested examples and clear implementation guidance.",
+    ],
+    skills: ["TypeScript", "React", "Technical Writing", "Developer Education", "Public Speaking"],
+    editedTerms: ["demos", "explained", "developer", "guidance", "Technical Writing"],
+    questions: [
+      {
+        id: "vercel-teach",
+        question: "What technical concept have you enjoyed teaching others?",
+        answer: "I enjoy teaching state and failure handling because a small, concrete demo can turn an abstract reliability concept into something a developer can immediately apply.",
+        kind: "essay",
+        required: true,
+      },
+      {
+        id: "vercel-community",
+        question: "How would you learn what a developer community needs?",
+        answer: "I would combine direct conversations with support themes, documentation searches, and product feedback, then test a small piece of content before investing in a larger program.",
+        kind: "essay",
+        required: true,
+      },
+      {
+        id: "vercel-why",
+        question: "Why Vercel?",
+        answer: "Vercel sits at the intersection of product engineering and developer education, which matches how I like to work: build the example, understand the friction, and explain the path clearly.",
+        kind: "essay",
+        required: true,
+      },
+    ],
+  }),
+};
+
 export default function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -95,9 +193,10 @@ export default function Applications() {
     const localQa = process.env.NODE_ENV !== "production" && qaScenario !== null;
     if (localQa) {
       queueMicrotask(() => {
-        const packet = qaScenario === "no-questions" ? withoutQuestions(QA_PACKET) : QA_PACKET;
+        const scenario = qaScenario === "1" ? "acme" : qaScenario === "no-questions" ? "stripe" : qaScenario;
+        const packet = QA_SCENARIOS[scenario ?? "acme"] ?? QA_PACKET;
         setQaMode(true);
-        setPackets([packet]);
+        setPackets(Object.values(QA_SCENARIOS));
         selectPacket(packet);
       });
       return;
@@ -385,14 +484,41 @@ function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
   return { school: spec.school ?? "", degree: spec.degree ?? "", grad_date: spec.grad_date ?? "", coursework: spec.coursework ?? "", education_position: spec.education_position, experience: spec.experience ?? [], skills: spec.skills ?? [], skill_source: spec.skill_source };
 }
 
-function withoutQuestions(packet: GeneratedResume): GeneratedResume {
+function qaVariant(packet: GeneratedResume, options: {
+  id: string;
+  company: string;
+  role: string;
+  ats: string;
+  score: number;
+  jd: string;
+  title: string;
+  bullets: string[];
+  skills: string[];
+  editedTerms: string[];
+  questions: ApplicationQuestion[];
+}): GeneratedResume {
   const review = packet.spec._review;
   if (!review) return packet;
   return {
     ...packet,
+    id: options.id,
+    job_context: { company: options.company, role: options.role, jd_hash: `qa-${options.company.toLowerCase()}` },
     spec: {
       ...packet.spec,
-      _review: { ...review, questions: [], status: "ready_to_submit" },
+      experience: packet.spec.experience.map((entry, index) =>
+        index === 0 ? { ...entry, title: options.title, bullets: options.bullets } : entry,
+      ),
+      skills: options.skills,
+      _quality: { ...packet.spec._quality, atsCoverage: options.score },
+      _review: {
+        ...review,
+        jd_text: options.jd,
+        portal_url: `https://jobs.example.com/${options.company.toLowerCase()}/${options.role.toLowerCase().replaceAll(" ", "-")}`,
+        ats_name: options.ats,
+        status: options.questions.length > 0 ? "questions_ready" : "ready_to_submit",
+        edited_terms: options.editedTerms,
+        questions: options.questions,
+      },
     },
   };
 }
