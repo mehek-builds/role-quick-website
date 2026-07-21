@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 15
+      "community": 14
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 16
+      "community": 15
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 17
+      "community": 16
     },
     {
       "label": "layout.tsx",
@@ -118,8 +118,8 @@
     {
       "label": "patch()",
       "file_type": "code",
-      "source_file": "app/dashboard/settings/page.tsx",
-      "source_location": "L47",
+      "source_file": "app/dashboard/applications/page.tsx",
+      "source_location": "L519",
       "id": "page_patch",
       "community": 0
     },
@@ -151,15 +151,23 @@
       "label": "patchEntry()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L238",
+      "source_location": "L331",
       "id": "page_patchentry",
+      "community": 0
+    },
+    {
+      "label": "createApplication()",
+      "file_type": "code",
+      "source_file": "app/dashboard/applications/page.tsx",
+      "source_location": "L262",
+      "id": "page_createapplication",
       "community": 0
     },
     {
       "label": "saveResume()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L246",
+      "source_location": "L339",
       "id": "page_saveresume",
       "community": 0
     },
@@ -167,7 +175,7 @@
       "label": "continueFromResume()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L272",
+      "source_location": "L365",
       "id": "page_continuefromresume",
       "community": 0
     },
@@ -175,7 +183,7 @@
       "label": "submitApplication()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L278",
+      "source_location": "L371",
       "id": "page_submitapplication",
       "community": 0
     },
@@ -377,7 +385,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L1",
       "id": "motion",
-      "community": 12
+      "community": 0
     },
     {
       "label": "Reveal()",
@@ -385,7 +393,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L9",
       "id": "motion_reveal",
-      "community": 12
+      "community": 0
     },
     {
       "label": "CountUp()",
@@ -393,7 +401,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L69",
       "id": "motion_countup",
-      "community": 12
+      "community": 0
     },
     {
       "label": "OutreachDemo.tsx",
@@ -505,7 +513,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L1",
       "id": "cinematichero",
-      "community": 13
+      "community": 12
     },
     {
       "label": "framePath()",
@@ -513,7 +521,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L24",
       "id": "cinematichero_framepath",
-      "community": 13
+      "community": 12
     },
     {
       "label": "CinematicHero()",
@@ -521,7 +529,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L45",
       "id": "cinematichero_cinematichero",
-      "community": 13
+      "community": 12
     },
     {
       "label": "BRoll.tsx",
@@ -529,7 +537,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 14
+      "community": 13
     },
     {
       "label": "BRoll()",
@@ -537,7 +545,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 14
+      "community": 13
     },
     {
       "label": "SmoothScroll.tsx",
@@ -778,6 +786,30 @@
       "source_location": "L23",
       "id": "strip_page_blue_rationale_23",
       "community": 8
+    },
+    {
+      "label": "application-review.ts",
+      "file_type": "code",
+      "source_file": "lib/application-review.ts",
+      "source_location": "L1",
+      "id": "application_review",
+      "community": 0
+    },
+    {
+      "label": "reviewablePackets()",
+      "file_type": "code",
+      "source_file": "lib/application-review.ts",
+      "source_location": "L5",
+      "id": "application_review_reviewablepackets",
+      "community": 0
+    },
+    {
+      "label": "portalName()",
+      "file_type": "code",
+      "source_file": "lib/application-review.ts",
+      "source_location": "L9",
+      "id": "application_review_portalname",
+      "community": 0
     },
     {
       "label": "extract-resume.ts",
@@ -1420,8 +1452,8 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "app/dashboard/settings/page.tsx",
-      "source_location": "L47",
+      "source_file": "app/dashboard/applications/page.tsx",
+      "source_location": "L519",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_patch",
@@ -1481,7 +1513,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L238",
+      "source_location": "L331",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_patchentry",
@@ -1490,10 +1522,34 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app/dashboard/applications/page.tsx",
+      "source_location": "L14",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "application_review",
+      "source": "page",
+      "target": "application_review",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L246",
+      "source_location": "L262",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_createapplication",
+      "source": "page",
+      "target": "page_createapplication",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/dashboard/applications/page.tsx",
+      "source_location": "L339",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_saveresume",
@@ -1505,7 +1561,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L272",
+      "source_location": "L365",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_continuefromresume",
@@ -1517,7 +1573,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L278",
+      "source_location": "L371",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitapplication",
@@ -1625,7 +1681,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L273",
+      "source_location": "L366",
       "weight": 1.0,
       "_src": "page_continuefromresume",
       "_tgt": "page_saveresume",
@@ -1637,7 +1693,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L275",
+      "source_location": "L368",
       "weight": 1.0,
       "_src": "page_continuefromresume",
       "_tgt": "page_submitapplication",
@@ -2531,6 +2587,30 @@
       "_tgt": "strip_page_blue_degrade",
       "source": "strip_page_blue_degrade",
       "target": "strip_page_blue_video",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/application-review.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "_src": "application_review",
+      "_tgt": "application_review_reviewablepackets",
+      "source": "application_review",
+      "target": "application_review_reviewablepackets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/application-review.ts",
+      "source_location": "L9",
+      "weight": 1.0,
+      "_src": "application_review",
+      "_tgt": "application_review_portalname",
+      "source": "application_review",
+      "target": "application_review_portalname",
       "confidence_score": 1.0
     },
     {

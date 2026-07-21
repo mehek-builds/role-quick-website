@@ -3,15 +3,33 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
+  getStoredEmail,
   type ApplicationQuestion,
+  type ApplicationProfile,
   type ApplicationReview,
   type GeneratedResume,
   type ResumeSpec,
 } from "@/lib/api";
-import { EXTENSION_ID, STORE_URL } from "@/lib/config";
 import { Card, Chip, EmptyState, ErrorNote, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
+import { portalName, reviewablePackets as onlyReviewablePackets } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "submitted";
+
+type ResumeGenerationResponse = { resume_id: string };
+type ProfileIdentity = { full_name?: string; email?: string };
+type NewApplicationDraft = {
+  company: string;
+  role: string;
+  portalUrl: string;
+  jobDescription: string;
+};
+
+const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
+  company: "",
+  role: "",
+  portalUrl: "",
+  jobDescription: "",
+};
 
 const QA_PACKET: GeneratedResume = {
   id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b01",
@@ -187,6 +205,9 @@ export default function Applications() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [qaMode, setQaMode] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showNewApplication, setShowNewApplication] = useState(false);
+  const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
 
   const moveToScreen = useCallback((next: Screen) => {
     setScreen(next);
@@ -219,10 +240,11 @@ export default function Applications() {
     api<{ resumes: GeneratedResume[] }>("/resume/history")
       .then((result) => {
         if (cancelled) return;
+        const reviewable = onlyReviewablePackets(result.resumes);
         setPackets(result.resumes);
         const requestedId = new URLSearchParams(window.location.search).get("application");
-        const requested = result.resumes.find((packet) => packet.id === requestedId && packet.spec._review);
-        const first = requested ?? result.resumes.find((packet) => packet.spec._review);
+        const requested = reviewable.find((packet) => packet.id === requestedId);
+        const first = requested ?? reviewable[0];
         if (first) selectPacket(first);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load applications."));
@@ -233,7 +255,78 @@ export default function Applications() {
 
   const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
   const review = selected?.spec._review;
+  const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
+  const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
   const resumeText = useMemo(() => (spec ? resumeCorpus(spec).toLowerCase() : ""), [spec]);
+
+  async function createApplication() {
+    const company = newApplication.company.trim();
+    const role = newApplication.role.trim();
+    const portalUrl = newApplication.portalUrl.trim();
+    const jobDescription = newApplication.jobDescription.trim();
+    if (!company || !role || !portalUrl || jobDescription.length < 20) {
+      setError("Add the company, role, job URL, and full job description before generating the review packet.");
+      return;
+    }
+    try {
+      if (new URL(portalUrl).protocol !== "https:") throw new Error("Job URL must use HTTPS");
+    } catch {
+      setError("Enter a complete job URL beginning with https://.");
+      return;
+    }
+
+    setCreating(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const [identity, applicationProfile] = await Promise.all([
+        api<ProfileIdentity>("/profile"),
+        api<ApplicationProfile>("/profile/application"),
+      ]);
+      const fullName = identity.full_name?.trim();
+      if (!fullName) throw new Error("Your base resume is missing your name. Replace it on the Resume page first.");
+
+      const generated = await api<ResumeGenerationResponse>("/resume/generate", {
+        method: "POST",
+        body: JSON.stringify({
+          company,
+          role,
+          jd_text: jobDescription,
+          contact: {
+            full_name: fullName,
+            email: identity.email?.trim() || getStoredEmail(),
+            phone: applicationProfile.phone || undefined,
+            linkedin_url: applicationProfile.linkedin_url || undefined,
+            github_url: applicationProfile.github_url || undefined,
+            portfolio_url: applicationProfile.portfolio_url || undefined,
+          },
+        }),
+      });
+
+      await api(`/applications/${generated.resume_id}/review`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ats_name: portalName(portalUrl),
+          portal_url: portalUrl,
+          questions: [],
+          skipped_reasons: [],
+        }),
+      });
+
+      const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
+      const created = history.resumes.find((packet) => packet.id === generated.resume_id);
+      setPackets(history.resumes);
+      if (!created?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
+      selectPacket(created);
+      setNewApplication(EMPTY_APPLICATION_DRAFT);
+      setShowNewApplication(false);
+      setNotice("Review packet generated from the job description.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not generate the application review packet.");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   function patchEntry(index: number, patch: Partial<ResumeSpec["experience"][number]>) {
     setSpec((current) =>
@@ -285,11 +378,7 @@ export default function Applications() {
     setError(null);
     try {
       if (!qaMode) {
-        await api(`/applications/${selected.id}/submit-request`, {
-          method: "POST",
-          body: JSON.stringify({ questions: finalQuestions }),
-        });
-        await sendToExtension({ type: "LITOS_SUBMIT_APPLICATION", applicationId: selected.id, questions: finalQuestions });
+        throw new Error("Backend-only portal submission is not connected yet. Your approved packet is saved, but nothing was sent to the employer.");
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
       }
@@ -308,23 +397,36 @@ export default function Applications() {
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Application review</p>
           <h1 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the job and your resume together.</h1>
-          <p className="mt-1 text-sm text-muted">Litos handles the portal in the background. You stay here through submission.</p>
+          <p className="mt-1 text-sm text-muted">Build and review application packets here. Employer submission stays blocked until the backend portal runner is connected.</p>
         </div>
-        {selected && review && <Chip label={statusLabel(screen, review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
+        <div className="flex items-center gap-2">
+          {selected && review && <Chip label={statusLabel(screen, review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
+          <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white">
+            {showNewApplication ? "Close" : "New application"}
+          </button>
+        </div>
       </div>
 
       {error && <ErrorNote message={error} />}
       {notice && <p role="status" className="rounded-[12px] bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
+      {showNewApplication && (
+        <NewApplicationPanel value={newApplication} onChange={setNewApplication} onGenerate={createApplication} creating={creating} />
+      )}
+      {legacyCount > 0 && (
+        <p className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-muted">
+          {legacyCount} older resume{legacyCount === 1 ? "" : "s"} stay in your history, but cannot show a job-description diff because they were created before review packets stored the posting text.
+        </p>
+      )}
 
       {packets === null ? (
         <ShimmerRows rows={4} />
-      ) : packets.length === 0 ? (
-        <EmptyState title="No applications ready" body="When the extension prepares a job in the background, its job description and tailored resume will appear here.">
-          <a href={STORE_URL} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Add Litos to Chrome</a>
+      ) : reviewablePackets.length === 0 ? (
+        <EmptyState title="No review packets yet" body="Start a new application with the job URL and description. Litos will generate the tailored resume in the backend and open the side-by-side review here.">
+          <button type="button" onClick={() => setShowNewApplication(true)} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Start an application</button>
         </EmptyState>
       ) : !selected || !spec || !review ? (
         <div className="grid gap-3">
-          {packets.map((packet) => (
+          {reviewablePackets.map((packet) => (
             <button key={packet.id} onClick={() => selectPacket(packet)} className="rounded-[20px] border border-border bg-surface p-5 text-left hover:border-ink/30">
               <span className="text-sm font-medium text-ink">{packet.job_context.role}</span>
               <span className="ml-2 text-sm text-muted">{packet.job_context.company}</span>
@@ -340,7 +442,7 @@ export default function Applications() {
       ) : (
         <>
           <div className="flex gap-2 overflow-x-auto pb-1">
-            {packets.map((packet) => (
+            {reviewablePackets.map((packet) => (
               <button key={packet.id} onClick={() => selectPacket(packet)} className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
                 {packet.job_context.role} · {packet.job_context.company}
               </button>
@@ -400,6 +502,53 @@ function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; tit
       </header>
       <div className="max-h-[760px] overflow-y-auto p-6">{children}</div>
     </section>
+  );
+}
+
+function NewApplicationPanel({
+  value,
+  onChange,
+  onGenerate,
+  creating,
+}: {
+  value: NewApplicationDraft;
+  onChange: (value: NewApplicationDraft) => void;
+  onGenerate: () => void;
+  creating: boolean;
+}) {
+  const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
+  return (
+    <Card className="p-6">
+      <div className="max-w-2xl">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">New application</p>
+        <h2 className="mt-2 text-xl font-medium text-ink">Build the review packet in Litos.</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">Paste the posting once. The backend generates the tailored resume and stores the job description for the side-by-side review.</p>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+        <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" />
+        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineering Intern" />
+      </div>
+      <div className="mt-4">
+        <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" />
+      </div>
+      <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+      <div className="mt-5 flex justify-end">
+        <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
+          {creating ? "Generating review packet..." : "Generate review packet"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+function ApplicationField({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string }) {
+  const id = `new-application-${label.toLowerCase().replaceAll(" ", "-")}`;
+  return (
+    <div>
+      <label className="block text-xs font-medium text-muted" htmlFor={id}>{label}</label>
+      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1.5 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand" />
+    </div>
   );
 }
 
@@ -541,19 +690,4 @@ function statusLabel(screen: Screen, status: ApplicationReview["status"]): strin
   if (screen === "submitted" || status === "submitted") return "Submitted";
   if (screen === "submitting" || status === "submitting") return "Submitting";
   return "Ready for review";
-}
-
-function sendToExtension(message: unknown): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const runtime = (window as unknown as { chrome?: { runtime?: { sendMessage?: (id: string, message: unknown, callback: (response: unknown) => void) => void; lastError?: { message?: string } } } }).chrome?.runtime;
-    if (!runtime?.sendMessage) {
-      reject(new Error("Litos could not reach the browser extension. Keep the extension installed and try again."));
-      return;
-    }
-    runtime.sendMessage(EXTENSION_ID, message, (response) => {
-      if (runtime.lastError) reject(new Error(runtime.lastError.message ?? "Could not reach the Litos extension."));
-      else if ((response as { error?: string } | null)?.error) reject(new Error((response as { error: string }).error));
-      else resolve(response);
-    });
-  });
 }
