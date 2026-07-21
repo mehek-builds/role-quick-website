@@ -24,3 +24,26 @@ test("known verification-code errors stay actionable", () => {
     "Code expired or not found. Request a new one.",
   );
 });
+
+test("invalid email and request throttling stay specific", () => {
+  assert.equal(requestCodeError(400, "anything"), "Enter a valid email address.");
+  assert.equal(
+    requestCodeError(429, "rate_limited"),
+    "Too many sign-in attempts. Wait a few minutes, then try again.",
+  );
+});
+
+test("verification throttling directs the user to a new code", () => {
+  assert.equal(verifyCodeError(429, "rate_limited"), "Too many attempts. Request a new code.");
+});
+
+test("unknown backend failures never leak implementation details", () => {
+  assert.equal(
+    requestCodeError(500, "database_connection_failed"),
+    "Could not send a sign-in code. Try again in a minute.",
+  );
+  assert.equal(
+    verifyCodeError(500, "JWT_SIGNING_SECRET not configured"),
+    "That code did not work. Request a new one.",
+  );
+});

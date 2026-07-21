@@ -137,7 +137,11 @@ export default function Login() {
               required
               autoFocus
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError(null);
+                setDeliveryNotice(null);
+              }}
               placeholder="you@example.com"
               className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
             />
