@@ -405,8 +405,8 @@ function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; tit
 
 function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: string[]; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
-    <div className="mx-auto max-w-[640px] bg-white px-7 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)]">
-      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-lg font-semibold" />
+    <div className="mx-auto max-w-[640px] bg-white px-4 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)] sm:px-7">
+      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
       <EditableLine value={`${spec.degree} · ${spec.grad_date}`} onChange={(value) => {
         const [degree, grad_date = ""] = value.split(" · ");
         onChange({ ...spec, degree, grad_date });
