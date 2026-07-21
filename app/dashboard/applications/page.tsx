@@ -13,7 +13,8 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 import { portalName, reviewablePackets as onlyReviewablePackets } from "@/lib/application-review";
 
-type Screen = "review" | "questions" | "submitting" | "submitted";
+type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
+type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
 
 type ResumeGenerationResponse = { resume_id: string };
 type ProfileIdentity = { full_name?: string; email?: string };
@@ -208,6 +209,7 @@ export default function Applications() {
   const [creating, setCreating] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
+  const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
 
   const moveToScreen = useCallback((next: Screen) => {
     setScreen(next);
@@ -218,10 +220,28 @@ export default function Applications() {
     setSelectedId(packet.id);
     setSpec(stripMetadata(packet.spec));
     setQuestions(packet.spec._review?.questions ?? []);
-    moveToScreen(packet.spec._review?.status === "submitted" ? "submitted" : "review");
+    const status = packet.spec._review?.status;
+    moveToScreen(status === "submitted" ? "submitted" : ["submit_requested", "preparing", "filling", "submitting"].includes(status ?? "") ? "submitting" : ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "") ? "portal" : "review");
+    setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
     setError(null);
     setNotice(null);
   }, [moveToScreen]);
+
+  const refreshSubmission = useCallback(async () => {
+    if (!selectedId || qaMode) return;
+    const result = await api<SubmissionResponse>(`/applications/${selectedId}/submission`);
+    setSubmission(result);
+    setPackets((current) => current?.map((packet) => packet.id === selectedId ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+    if (result.review.status === "submitted") moveToScreen("submitted");
+    else if (["needs_attention", "ready_for_final_approval", "failed"].includes(result.review.status)) moveToScreen("portal");
+    else moveToScreen("submitting");
+  }, [moveToScreen, qaMode, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
+    const timer = window.setInterval(() => refreshSubmission().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not refresh portal status.")), 2500);
+    return () => window.clearInterval(timer);
+  }, [qaMode, refreshSubmission, screen, selectedId]);
 
   useEffect(() => {
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
@@ -378,14 +398,55 @@ export default function Applications() {
     setError(null);
     try {
       if (!qaMode) {
-        throw new Error("Backend-only portal submission is not connected yet. Your approved packet is saved, but nothing was sent to the employer.");
+        const result = await api<SubmissionResponse>(`/applications/${selected.id}/submit-request`, {
+          method: "POST",
+          body: JSON.stringify({ questions: finalQuestions }),
+        });
+        setSubmission(result);
+        setPackets((current) => current?.map((packet) => packet.id === selected.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
+        setSubmission({ application_id: selected.id, review: { ...review!, status: "ready_for_final_approval", preview_screenshot_url: "/qa/portal-preview.svg", filled_fields: ["name", "email", "resume"] } });
+        moveToScreen("portal");
+        return;
       }
-      moveToScreen("submitted");
     } catch (reason) {
       moveToScreen(finalQuestions.length > 0 ? "questions" : "review");
       setError(reason instanceof Error ? reason.message : "The company portal did not accept the submission.");
+    }
+  }
+
+  async function completeHandoff() {
+    if (!selected || !submission) return;
+    setError(null);
+    try {
+      const result = qaMode
+        ? { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
+        : await api<SubmissionResponse>(`/applications/${selected.id}/submission/handoff-complete`, { method: "POST" });
+      setSubmission(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not confirm the portal handoff.");
+    }
+  }
+
+  async function approveFinalSubmission() {
+    if (!selected || !submission) return;
+    setError(null);
+    moveToScreen("submitting");
+    try {
+      if (qaMode) {
+        await new Promise((resolve) => setTimeout(resolve, 650));
+        const now = new Date().toISOString();
+        const result = { ...submission, review: { ...submission.review, status: "submitted" as const, submitted_at: now, receipt: { confirmation_text: "Thank you. Your controlled test application was received.", final_url: "/qa/portal-submission/success", screenshot_url: "/qa/portal-receipt.svg", captured_at: now, reference_id: "LITOS-QA-2027" } } };
+        setSubmission(result);
+        moveToScreen("submitted");
+      } else {
+        const result = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
+        setSubmission(result);
+      }
+    } catch (reason) {
+      moveToScreen("portal");
+      setError(reason instanceof Error ? reason.message : "Could not approve the final portal submission.");
     }
   }
 
@@ -397,7 +458,7 @@ export default function Applications() {
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Application review</p>
           <h1 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the job and your resume together.</h1>
-          <p className="mt-1 text-sm text-muted">Build and review application packets here. Employer submission stays blocked until the backend portal runner is connected.</p>
+          <p className="mt-1 text-sm text-muted">Build, review, approve, and verify employer submissions from one dashboard.</p>
         </div>
         <div className="flex items-center gap-2">
           {selected && review && <Chip label={statusLabel(screen, review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
@@ -436,9 +497,11 @@ export default function Applications() {
       ) : screen === "questions" ? (
         <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => submitApplication()} />
       ) : screen === "submitting" ? (
-        <CenteredState title="Submitting through the company portal." body="Keep this dashboard open. Litos is applying your approved resume and answers in the background." loading />
+        <CenteredState title={submission?.review.status === "submitting" ? "Submitting through the company portal." : "Preparing the company portal."} body="Litos is filling your approved resume and answers in a secure remote browser. You can leave this page open while the background worker advances." loading />
+      ) : screen === "portal" && submission ? (
+        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} />
       ) : screen === "submitted" ? (
-        <CenteredState title="Application submitted." body={`${selected.job_context.role} at ${selected.job_context.company} is complete. The company portal confirmed receipt.`} />
+        <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
         <>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -630,6 +693,54 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions:
   );
 }
 
+function SubmissionScreen({ submission, onHandoffComplete, onApprove }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void }) {
+  const { review } = submission;
+  const needsAttention = review.status === "needs_attention";
+  return (
+    <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
+      <Card className="p-7">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Secure portal runner</p>
+        <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "The portal is filled and ready."}</h2>
+        <p className="mt-2 text-sm leading-6 text-muted">
+          {needsAttention ? review.attention_reason ?? "Complete the remaining portal step in the secure live browser." : review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form, then give explicit approval for the final submit click."}
+        </p>
+        {review.filled_fields && review.filled_fields.length > 0 && (
+          <div className="mt-6">
+            <p className="text-xs font-medium text-muted">Fields filled by Litos</p>
+            <div className="mt-2 flex flex-wrap gap-2">{review.filled_fields.map((field) => <Chip key={field} label={field.replace("question:", "Answer: ")} kind="ready" />)}</div>
+          </div>
+        )}
+        <div className="mt-7 flex flex-wrap gap-2">
+          {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
+          {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={onApprove} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Approve final submission</button>}
+        </div>
+        <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. A verified receipt is required before the application is marked submitted.</p>
+      </Card>
+      <Card className="overflow-hidden">
+        <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Portal preview captured after filling</p></div>
+        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="Company portal after Litos filled the approved application fields" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">The worker is still capturing the filled portal.</div>}
+      </Card>
+    </div>
+  );
+}
+
+function SubmissionReceipt({ review, role, company }: { review: ApplicationReview; role: string; company: string }) {
+  const receipt = review.receipt;
+  return (
+    <div className="mx-auto max-w-4xl space-y-5">
+      <CenteredState title="Application submitted." body={`${role} at ${company} is complete. The company portal confirmed receipt.`} />
+      {receipt && <Card className="overflow-hidden">
+        <div className="grid gap-5 p-6 sm:grid-cols-2">
+          <div><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-positive">Verified receipt</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
+          <dl className="space-y-3 text-sm"><div><dt className="text-xs text-muted">Captured</dt><dd className="text-ink">{new Date(receipt.captured_at).toLocaleString()}</dd></div>{receipt.reference_id && <div><dt className="text-xs text-muted">Reference</dt><dd className="font-mono text-ink">{receipt.reference_id}</dd></div>}<div><dt className="text-xs text-muted">Final portal URL</dt><dd><a href={receipt.final_url} target="_blank" rel="noreferrer" className="break-all text-brand-ink underline">Open confirmation</a></dd></div></dl>
+        </div>
+        <img src={receipt.screenshot_url} alt="Company portal submission confirmation receipt" className="h-auto w-full border-t border-border" />
+      </Card>}
+    </div>
+  );
+}
+
 function CenteredState({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
   return <Card className="mx-auto max-w-2xl p-12 text-center"><div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${loading ? "rq-shimmer" : "bg-positive-soft text-positive"}`}>{loading ? "" : "✓"}</div><h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
@@ -689,5 +800,8 @@ function extractScore(spec: GeneratedResume["spec"]): number {
 function statusLabel(screen: Screen, status: ApplicationReview["status"]): string {
   if (screen === "submitted" || status === "submitted") return "Submitted";
   if (screen === "submitting" || status === "submitting") return "Submitting";
+  if (status === "needs_attention") return "Needs attention";
+  if (status === "ready_for_final_approval") return "Approval required";
+  if (status === "failed") return "Stopped safely";
   return "Ready for review";
 }

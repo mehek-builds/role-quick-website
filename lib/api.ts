@@ -151,6 +151,10 @@ export type ApplicationReview = {
     | "questions_ready"
     | "ready_to_submit"
     | "submit_requested"
+    | "preparing"
+    | "filling"
+    | "needs_attention"
+    | "ready_for_final_approval"
     | "submitting"
     | "submitted"
     | "failed";
@@ -160,6 +164,21 @@ export type ApplicationReview = {
   updated_at: string;
   submitted_at?: string;
   submission_error?: string;
+  submission_run_id?: string;
+  browser_context_id?: string;
+  browser_session_id?: string;
+  attention_reason?: string;
+  handoff_expires_at?: string;
+  final_approved_at?: string;
+  filled_fields?: string[];
+  preview_screenshot_url?: string;
+  receipt?: {
+    confirmation_text: string;
+    final_url: string;
+    screenshot_url: string;
+    captured_at: string;
+    reference_id?: string;
+  };
 };
 
 export type ExperienceEntry = {
