@@ -56,9 +56,8 @@ export default function DashboardLayout({
       <header className="sticky top-0 z-20 border-b border-border bg-bg/90 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-brand text-[13px] font-semibold text-white">
-              L
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
             <span className="text-[15px] font-semibold tracking-tight text-ink">
               Litos
             </span>
