@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-07-21)
 
 ## Corpus Check
-- 45 files · ~270,444 words
+- 46 files · ~270,704 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 133 nodes · 171 edges · 16 communities detected
+- 136 nodes · 174 edges · 18 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -27,24 +27,24 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.07
+Cohesion: 0.08
 Nodes (3): continueFromResume(), saveResume(), submitApplication()
 
 ### Community 1 - "Community 1"
-Cohesion: 0.16
+Cohesion: 0.21
 Nodes (12): api(), ApiError, clearSession(), completeOnboarding(), getApplicationProfile(), getOnboardingState(), getProductMeta(), getTargeting() (+4 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.15
+Cohesion: 0.13
 Nodes (0): 
 
 ### Community 3 - "Community 3"
-Cohesion: 0.18
-Nodes (3): extractResumeText(), fromDocx(), fromPdf()
+Cohesion: 0.15
+Nodes (0): 
 
 ### Community 4 - "Community 4"
 Cohesion: 0.18
-Nodes (0): 
+Nodes (3): extractResumeText(), fromDocx(), fromPdf()
 
 ### Community 5 - "Community 5"
 Cohesion: 0.25
@@ -75,11 +75,11 @@ Cohesion: 0.67
 Nodes (0): 
 
 ### Community 12 - "Community 12"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 13 - "Community 13"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 14 - "Community 14"
@@ -90,16 +90,24 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 16 - "Community 16"
+Cohesion: 1.0
+Nodes (0): 
+
+### Community 17 - "Community 17"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 12`** (2 nodes): `BRoll.tsx`, `BRoll()`
+- **Thin community `Community 14`** (2 nodes): `BRoll.tsx`, `BRoll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 13`** (1 nodes): `next-env.d.ts`
+- **Thin community `Community 15`** (1 nodes): `next-env.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 14`** (1 nodes): `next.config.ts`
+- **Thin community `Community 16`** (1 nodes): `next.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (1 nodes): `opengraph-image.tsx`
+- **Thin community `Community 17`** (1 nodes): `opengraph-image.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -108,4 +116,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08 - nodes in this community are weakly interconnected._
+- **Should `Community 2` be split into smaller, more focused modules?**
+  _Cohesion score 0.13 - nodes in this community are weakly interconnected._
