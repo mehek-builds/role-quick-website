@@ -18,8 +18,9 @@ Structural family borrowed from Letterstory's console
   confidence (Verified/Likely/LinkedIn), same semantics as the PRD.
 - **Shape:** rounded, not sharp. `20px` card radius, full-pill buttons and
   badges. No angular corners anywhere.
-- **Type:** Geist Sans for UI, Geist Mono for structured data (emails,
-  numbers, resume mockup), same stack as Letterstory.
+- **Type:** Hanken Grotesk for UI, Azeret Mono for structured data (emails,
+  numbers, resume mockup). This distinct pair keeps the interface quiet and
+  editorial without falling into a generic product-template voice.
 - **Structure:** Grammarly's marketing pattern (typography-first hero, no
   hero screenshot, then alternating text/mockup feature rows, stat callout,
   numbered how-it-works, comparison pricing) crossed with Wonsulting's

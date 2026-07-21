@@ -31,10 +31,10 @@ numbers), never claimed with hype.
   stats, hairline dividers), vercel.com (mono microcopy, type-first).
 
 ## Typography — two voices
-- **Human voice:** Geist Sans. Sentence case. Display is weight **450, never
+- **Human voice:** Hanken Grotesk. Sentence case. Display is weight **450, never
   bold** (calm things don't shout). Headlines are short declarative sentences
   ending with a period.
-- **Machine voice:** Geist Mono. Every number, timestamp, filename, ATS name,
+- **Machine voice:** Azeret Mono. Every number, timestamp, filename, ATS name,
   status, and label. When the machine speaks, it speaks in mono.
 - **Scale (deliberate gap — nothing between 20 and 64):**
   - Display: 64-76px / 450 / -0.03em / 1.02
@@ -43,7 +43,8 @@ numbers), never claimed with hype.
   - Small: 13px / 400
   - Machine: 12.5px mono
   - Label: 11px mono, uppercase, +0.08em, weight 500
-- **Loading:** next/font Geist + Geist_Mono (already wired in `app/layout.tsx`).
+- **Loading:** `next/font` Hanken Grotesk + Azeret Mono, wired in
+  `app/layout.tsx` and self-hosted by the production build.
 
 ## Color v1.1 — tonalities with jobs
 Palette is the brand deck's, unchanged. Revised 2026-07-04 (second pass) after
@@ -145,6 +146,7 @@ up. Color encodes what something is, never how urgently to act.
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-07-21 | Global typography moved to Hanken Grotesk for the human voice and Azeret Mono for the machine voice | Keeps the Swiss lab-notebook system while avoiding the default type choices that make product sites feel generated or interchangeable |
 | 2026-07-04 | Initial DESIGN.md via /design-consultation | Live research on Linear/Notion/Stripe/Vercel + independent design voice; memorable thing set to "calm + speed" by Mehek |
 | 2026-07-04 | Blue = one human action per viewport; coral/teal demoted to provenance threads | The one-accent restraint is what makes the reference brands read clean; also makes the Guardrails stance visible |
 | 2026-07-04 | Receipt motif (mono timestamp log) as the hero artifact | Speed shown as fact, not hype — serves "calm + speed" without violating the no-urgency law |
