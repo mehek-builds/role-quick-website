@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api,
   type ApplicationQuestion,
@@ -188,6 +188,20 @@ export default function Applications() {
   const [notice, setNotice] = useState<string | null>(null);
   const [qaMode, setQaMode] = useState(false);
 
+  const moveToScreen = useCallback((next: Screen) => {
+    setScreen(next);
+    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+  }, []);
+
+  const selectPacket = useCallback((packet: GeneratedResume) => {
+    setSelectedId(packet.id);
+    setSpec(stripMetadata(packet.spec));
+    setQuestions(packet.spec._review?.questions ?? []);
+    moveToScreen(packet.spec._review?.status === "submitted" ? "submitted" : "review");
+    setError(null);
+    setNotice(null);
+  }, [moveToScreen]);
+
   useEffect(() => {
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
     const localQa = process.env.NODE_ENV !== "production" && qaScenario !== null;
@@ -215,20 +229,11 @@ export default function Applications() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [selectPacket]);
 
   const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
   const review = selected?.spec._review;
   const resumeText = useMemo(() => (spec ? resumeCorpus(spec).toLowerCase() : ""), [spec]);
-
-  function selectPacket(packet: GeneratedResume) {
-    setSelectedId(packet.id);
-    setSpec(stripMetadata(packet.spec));
-    setQuestions(packet.spec._review?.questions ?? []);
-    setScreen(packet.spec._review?.status === "submitted" ? "submitted" : "review");
-    setError(null);
-    setNotice(null);
-  }
 
   function patchEntry(index: number, patch: Partial<ResumeSpec["experience"][number]>) {
     setSpec((current) =>
@@ -266,7 +271,7 @@ export default function Applications() {
 
   async function continueFromResume() {
     if (!(await saveResume())) return;
-    if (questions.length > 0) setScreen("questions");
+    if (questions.length > 0) moveToScreen("questions");
     else await submitApplication([]);
   }
 
@@ -276,7 +281,7 @@ export default function Applications() {
       setError("Answer every required question before submitting.");
       return;
     }
-    setScreen("submitting");
+    moveToScreen("submitting");
     setError(null);
     try {
       if (!qaMode) {
@@ -288,9 +293,9 @@ export default function Applications() {
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
       }
-      setScreen("submitted");
+      moveToScreen("submitted");
     } catch (reason) {
-      setScreen(finalQuestions.length > 0 ? "questions" : "review");
+      moveToScreen(finalQuestions.length > 0 ? "questions" : "review");
       setError(reason instanceof Error ? reason.message : "The company portal did not accept the submission.");
     }
   }
@@ -327,7 +332,7 @@ export default function Applications() {
           ))}
         </div>
       ) : screen === "questions" ? (
-        <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => setScreen("review")} onSubmit={() => submitApplication()} />
+        <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => submitApplication()} />
       ) : screen === "submitting" ? (
         <CenteredState title="Submitting through the company portal." body="Keep this dashboard open. Litos is applying your approved resume and answers in the background." loading />
       ) : screen === "submitted" ? (
