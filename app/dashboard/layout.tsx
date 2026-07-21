@@ -24,12 +24,21 @@ export default function DashboardLayout({
   const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
+    if (process.env.NODE_ENV !== "production" && new URLSearchParams(window.location.search).has("qa")) {
+      queueMicrotask(() => {
+        setEmail("qa@trylitos.com");
+        setReady(true);
+      });
+      return;
+    }
     if (!getToken()) {
       router.replace("/login");
       return;
     }
-    setEmail(getStoredEmail());
-    setReady(true);
+    queueMicrotask(() => {
+      setEmail(getStoredEmail());
+      setReady(true);
+    });
     void getProductMeta().catch(() => null);
   }, [router]);
 

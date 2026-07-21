@@ -105,9 +105,61 @@ export type OutreachEvent = {
 export type GeneratedResume = {
   id: string;
   job_context: { company?: string; role?: string; jd_hash?: string };
-  spec: Record<string, unknown>;
+  spec: ResumeSpec & {
+    _quality?: Record<string, unknown>;
+    _contact?: Record<string, string | undefined>;
+    _review?: ApplicationReview;
+  };
   resume_object_key: string;
+  download_url?: string;
   created_at: string | null;
+};
+
+export type ResumeEntry = {
+  type?: "job" | "project" | "leadership";
+  org: string;
+  title: string;
+  date_range: string;
+  bullets: string[];
+};
+
+export type ResumeSpec = {
+  school: string;
+  degree: string;
+  grad_date: string;
+  coursework: string;
+  education_position?: "top" | "after_experience";
+  experience: ResumeEntry[];
+  skills: string[];
+  skill_source?: Record<string, string>;
+};
+
+export type ApplicationQuestion = {
+  id: string;
+  question: string;
+  answer: string;
+  kind: "essay" | "required";
+  required: boolean;
+};
+
+export type ApplicationReview = {
+  jd_text: string;
+  portal_url?: string;
+  ats_name?: string;
+  status:
+    | "resume_ready"
+    | "questions_ready"
+    | "ready_to_submit"
+    | "submit_requested"
+    | "submitting"
+    | "submitted"
+    | "failed";
+  edited_terms: string[];
+  questions: ApplicationQuestion[];
+  skipped_reasons: string[];
+  updated_at: string;
+  submitted_at?: string;
+  submission_error?: string;
 };
 
 export type ExperienceEntry = {

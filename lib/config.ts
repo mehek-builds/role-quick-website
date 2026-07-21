@@ -14,3 +14,5 @@ export const SITE_URL = (
 // signed-in extension user and a signed-in website user are the same account.
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "https://student-outreach-backend.vercel.app";
+
+export const EXTENSION_ID = "bdbedbmkjpfioknfpmhookefabipjaad";
