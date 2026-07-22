@@ -1,25 +1,25 @@
-# Graph Report - .  (2026-07-21)
+# Graph Report - .  (2026-07-23)
 
 ## Corpus Check
-- 48 files · ~272,471 words
+- 48 files · ~272,514 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 143 nodes · 181 edges · 18 communities detected
+- 148 nodes · 191 edges · 19 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
 1. `api()` - 10 edges
-2. `periodsFor()` - 5 edges
-3. `degrade()` - 4 edges
-4. `continueFromResume()` - 3 edges
-5. `POST()` - 3 edges
-6. `_packet_shield()` - 3 edges
-7. `extractResumeText()` - 3 edges
-8. `track()` - 3 edges
-9. `defaultPrimary()` - 3 edges
-10. `defaultBackup()` - 3 edges
+2. `restart()` - 5 edges
+3. `periodsFor()` - 5 edges
+4. `degrade()` - 4 edges
+5. `continueFromResume()` - 3 edges
+6. `POST()` - 3 edges
+7. `active()` - 3 edges
+8. `advance()` - 3 edges
+9. `_packet_shield()` - 3 edges
+10. `extractResumeText()` - 3 edges
 
 ## Surprising Connections (you probably didn't know these)
 - None detected - all connections are within the same source files.
@@ -28,7 +28,7 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.06
-Nodes (3): continueFromResume(), saveResume(), submitApplication()
+Nodes (3): continueFromResume(), prepareApplication(), saveResume()
 
 ### Community 1 - "Community 1"
 Cohesion: 0.21
@@ -56,19 +56,19 @@ Nodes (6): bump(), looksLikeResume(), POST(), findJob(), getJobCards(), loadFeed
 
 ### Community 7 - "Community 7"
 Cohesion: 0.52
-Nodes (5): defaultBackup(), defaultPrimary(), ordinal(), periodsFor(), periodSlug()
+Nodes (5): active(), advance(), onVisibility(), restart(), stop()
 
 ### Community 8 - "Community 8"
+Cohesion: 0.52
+Nodes (5): defaultBackup(), defaultPrimary(), ordinal(), periodsFor(), periodSlug()
+
+### Community 9 - "Community 9"
 Cohesion: 0.53
 Nodes (5): degrade(), frames(), _packet_shield(), The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is, video()
 
-### Community 9 - "Community 9"
+### Community 10 - "Community 10"
 Cohesion: 0.83
 Nodes (3): anonId(), device(), track()
-
-### Community 10 - "Community 10"
-Cohesion: 0.67
-Nodes (0): 
 
 ### Community 11 - "Community 11"
 Cohesion: 0.67
@@ -83,7 +83,7 @@ Cohesion: 0.67
 Nodes (0): 
 
 ### Community 14 - "Community 14"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0): 
 
 ### Community 15 - "Community 15"
@@ -98,16 +98,20 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 18 - "Community 18"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 14`** (2 nodes): `BRoll.tsx`, `BRoll()`
+- **Thin community `Community 15`** (2 nodes): `BRoll.tsx`, `BRoll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 15`** (1 nodes): `next-env.d.ts`
+- **Thin community `Community 16`** (1 nodes): `next-env.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 16`** (1 nodes): `next.config.ts`
+- **Thin community `Community 17`** (1 nodes): `next.config.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (1 nodes): `opengraph-image.tsx`
+- **Thin community `Community 18`** (1 nodes): `opengraph-image.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions

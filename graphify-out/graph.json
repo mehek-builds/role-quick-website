@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 15
+      "community": 16
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 16
+      "community": 17
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 17
+      "community": 18
     },
     {
       "label": "layout.tsx",
@@ -127,7 +127,7 @@
       "label": "patch()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L582",
+      "source_location": "L586",
       "id": "page_patch",
       "community": 0
     },
@@ -188,18 +188,18 @@
       "community": 0
     },
     {
-      "label": "submitApplication()",
+      "label": "prepareApplication()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L391",
-      "id": "page_submitapplication",
+      "source_location": "L395",
+      "id": "page_prepareapplication",
       "community": 0
     },
     {
       "label": "completeHandoff()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L419",
+      "source_location": "L423",
       "id": "page_completehandoff",
       "community": 0
     },
@@ -207,7 +207,7 @@
       "label": "approveFinalSubmission()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L432",
+      "source_location": "L436",
       "id": "page_approvefinalsubmission",
       "community": 0
     },
@@ -257,7 +257,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L1",
       "id": "errors",
-      "community": 10
+      "community": 11
     },
     {
       "label": "requestCodeError()",
@@ -265,7 +265,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L3",
       "id": "errors_requestcodeerror",
-      "community": 10
+      "community": 11
     },
     {
       "label": "verifyCodeError()",
@@ -273,7 +273,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L19",
       "id": "errors_verifycodeerror",
-      "community": 10
+      "community": 11
     },
     {
       "label": "landingRoute()",
@@ -297,15 +297,55 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L1",
       "id": "packetdemo",
-      "community": 0
+      "community": 7
     },
     {
-      "label": "PacketDemo()",
+      "label": "active()",
       "file_type": "code",
       "source_file": "components/PacketDemo.tsx",
-      "source_location": "L52",
-      "id": "packetdemo_packetdemo",
-      "community": 0
+      "source_location": "L84",
+      "id": "packetdemo_active",
+      "community": 7
+    },
+    {
+      "label": "stop()",
+      "file_type": "code",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L85",
+      "id": "packetdemo_stop",
+      "community": 7
+    },
+    {
+      "label": "advance()",
+      "file_type": "code",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L90",
+      "id": "packetdemo_advance",
+      "community": 7
+    },
+    {
+      "label": "restart()",
+      "file_type": "code",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L103",
+      "id": "packetdemo_restart",
+      "community": 7
+    },
+    {
+      "label": "onVisibility()",
+      "file_type": "code",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L115",
+      "id": "packetdemo_onvisibility",
+      "community": 7
+    },
+    {
+      "label": "jump()",
+      "file_type": "code",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L131",
+      "id": "packetdemo_jump",
+      "community": 7
     },
     {
       "label": "Mockups.tsx",
@@ -385,7 +425,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L1",
       "id": "herobackdrop",
-      "community": 11
+      "community": 12
     },
     {
       "label": "onMove()",
@@ -393,7 +433,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L52",
       "id": "herobackdrop_onmove",
-      "community": 11
+      "community": 12
     },
     {
       "label": "tick()",
@@ -401,7 +441,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L59",
       "id": "herobackdrop_tick",
-      "community": 11
+      "community": 12
     },
     {
       "label": "Motion.tsx",
@@ -409,7 +449,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L1",
       "id": "motion",
-      "community": 0
+      "community": 13
     },
     {
       "label": "Reveal()",
@@ -417,7 +457,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L9",
       "id": "motion_reveal",
-      "community": 0
+      "community": 13
     },
     {
       "label": "CountUp()",
@@ -425,7 +465,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L69",
       "id": "motion_countup",
-      "community": 0
+      "community": 13
     },
     {
       "label": "OutreachDemo.tsx",
@@ -537,7 +577,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L1",
       "id": "cinematichero",
-      "community": 12
+      "community": 14
     },
     {
       "label": "framePath()",
@@ -545,7 +585,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L24",
       "id": "cinematichero_framepath",
-      "community": 12
+      "community": 14
     },
     {
       "label": "CinematicHero()",
@@ -553,7 +593,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L45",
       "id": "cinematichero_cinematichero",
-      "community": 12
+      "community": 14
     },
     {
       "label": "BRoll.tsx",
@@ -561,7 +601,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 14
+      "community": 15
     },
     {
       "label": "BRoll()",
@@ -569,7 +609,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 14
+      "community": 15
     },
     {
       "label": "SmoothScroll.tsx",
@@ -769,7 +809,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L1",
       "id": "strip_page_blue",
-      "community": 8
+      "community": 9
     },
     {
       "label": "_packet_shield()",
@@ -777,7 +817,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L22",
       "id": "strip_page_blue_packet_shield",
-      "community": 8
+      "community": 9
     },
     {
       "label": "degrade()",
@@ -785,7 +825,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L38",
       "id": "strip_page_blue_degrade",
-      "community": 8
+      "community": 9
     },
     {
       "label": "frames()",
@@ -793,7 +833,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L53",
       "id": "strip_page_blue_frames",
-      "community": 8
+      "community": 9
     },
     {
       "label": "video()",
@@ -801,7 +841,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L61",
       "id": "strip_page_blue_video",
-      "community": 8
+      "community": 9
     },
     {
       "label": "The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is",
@@ -809,7 +849,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L23",
       "id": "strip_page_blue_rationale_23",
-      "community": 8
+      "community": 9
     },
     {
       "label": "application-review.ts",
@@ -817,7 +857,7 @@
       "source_file": "lib/application-review.ts",
       "source_location": "L1",
       "id": "application_review",
-      "community": 13
+      "community": 0
     },
     {
       "label": "reviewablePackets()",
@@ -825,7 +865,7 @@
       "source_file": "lib/application-review.ts",
       "source_location": "L5",
       "id": "application_review_reviewablepackets",
-      "community": 13
+      "community": 0
     },
     {
       "label": "portalName()",
@@ -833,7 +873,7 @@
       "source_file": "lib/application-review.ts",
       "source_location": "L9",
       "id": "application_review_portalname",
-      "community": 13
+      "community": 0
     },
     {
       "label": "extract-resume.ts",
@@ -873,7 +913,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L1",
       "id": "analytics",
-      "community": 9
+      "community": 10
     },
     {
       "label": "device()",
@@ -881,7 +921,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L46",
       "id": "analytics_device",
-      "community": 9
+      "community": 10
     },
     {
       "label": "track()",
@@ -889,7 +929,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L51",
       "id": "analytics_track",
-      "community": 9
+      "community": 10
     },
     {
       "label": "anonId()",
@@ -897,7 +937,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L73",
       "id": "analytics_anonid",
-      "community": 9
+      "community": 10
     },
     {
       "label": "product.ts",
@@ -921,7 +961,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L1",
       "id": "periods",
-      "community": 7
+      "community": 8
     },
     {
       "label": "periodSlug()",
@@ -929,7 +969,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L23",
       "id": "periods_periodslug",
-      "community": 7
+      "community": 8
     },
     {
       "label": "periodLabel()",
@@ -937,7 +977,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L27",
       "id": "periods_periodlabel",
-      "community": 7
+      "community": 8
     },
     {
       "label": "ordinal()",
@@ -945,7 +985,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L34",
       "id": "periods_ordinal",
-      "community": 7
+      "community": 8
     },
     {
       "label": "periodsFor()",
@@ -953,7 +993,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L46",
       "id": "periods_periodsfor",
-      "community": 7
+      "community": 8
     },
     {
       "label": "defaultPrimary()",
@@ -961,7 +1001,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L74",
       "id": "periods_defaultprimary",
-      "community": 7
+      "community": 8
     },
     {
       "label": "defaultBackup()",
@@ -969,7 +1009,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L85",
       "id": "periods_defaultbackup",
-      "community": 7
+      "community": 8
     },
     {
       "label": "api.ts",
@@ -1489,7 +1529,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L582",
+      "source_location": "L586",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_patch",
@@ -1609,19 +1649,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L391",
+      "source_location": "L395",
       "weight": 1.0,
       "_src": "page",
-      "_tgt": "page_submitapplication",
+      "_tgt": "page_prepareapplication",
       "source": "page",
-      "target": "page_submitapplication",
+      "target": "page_prepareapplication",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L419",
+      "source_location": "L423",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_completehandoff",
@@ -1633,7 +1673,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L432",
+      "source_location": "L436",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_approvefinalsubmission",
@@ -1753,12 +1793,12 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L388",
+      "source_location": "L392",
       "weight": 1.0,
       "_src": "page_continuefromresume",
-      "_tgt": "page_submitapplication",
+      "_tgt": "page_prepareapplication",
       "source": "page_continuefromresume",
-      "target": "page_submitapplication",
+      "target": "page_prepareapplication",
       "confidence_score": 1.0
     },
     {
@@ -1861,12 +1901,132 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "components/PacketDemo.tsx",
-      "source_location": "L52",
+      "source_location": "L84",
       "weight": 1.0,
       "_src": "packetdemo",
-      "_tgt": "packetdemo_packetdemo",
+      "_tgt": "packetdemo_active",
       "source": "packetdemo",
-      "target": "packetdemo_packetdemo",
+      "target": "packetdemo_active",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L85",
+      "weight": 1.0,
+      "_src": "packetdemo",
+      "_tgt": "packetdemo_stop",
+      "source": "packetdemo",
+      "target": "packetdemo_stop",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L90",
+      "weight": 1.0,
+      "_src": "packetdemo",
+      "_tgt": "packetdemo_advance",
+      "source": "packetdemo",
+      "target": "packetdemo_advance",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L103",
+      "weight": 1.0,
+      "_src": "packetdemo",
+      "_tgt": "packetdemo_restart",
+      "source": "packetdemo",
+      "target": "packetdemo_restart",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L115",
+      "weight": 1.0,
+      "_src": "packetdemo",
+      "_tgt": "packetdemo_onvisibility",
+      "source": "packetdemo",
+      "target": "packetdemo_onvisibility",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L131",
+      "weight": 1.0,
+      "_src": "packetdemo",
+      "_tgt": "packetdemo_jump",
+      "source": "packetdemo",
+      "target": "packetdemo_jump",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L91",
+      "weight": 1.0,
+      "_src": "packetdemo_advance",
+      "_tgt": "packetdemo_active",
+      "source": "packetdemo_active",
+      "target": "packetdemo_advance",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L105",
+      "weight": 1.0,
+      "_src": "packetdemo_restart",
+      "_tgt": "packetdemo_active",
+      "source": "packetdemo_active",
+      "target": "packetdemo_restart",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L104",
+      "weight": 1.0,
+      "_src": "packetdemo_restart",
+      "_tgt": "packetdemo_stop",
+      "source": "packetdemo_stop",
+      "target": "packetdemo_restart",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L106",
+      "weight": 1.0,
+      "_src": "packetdemo_restart",
+      "_tgt": "packetdemo_advance",
+      "source": "packetdemo_advance",
+      "target": "packetdemo_restart",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "components/PacketDemo.tsx",
+      "source_location": "L117",
+      "weight": 1.0,
+      "_src": "packetdemo_onvisibility",
+      "_tgt": "packetdemo_restart",
+      "source": "packetdemo_restart",
+      "target": "packetdemo_onvisibility",
       "confidence_score": 1.0
     },
     {
