@@ -1,18 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
 /* The product, shown working (hero demo, second thing on the page): a job
    posting in a browser with the Litos extension panel assembling the
    packet live. Finished artifacts become actionable Review rows that jump
    to their pillar section. Reduced-motion users get the finished scene. */
 
-const ARTIFACTS = [
+const ARTIFACTS: {
+  t: string;
+  label: string;
+  sub: string;
+  working: string;
+  orb: OrbState;
+  action: string;
+  thread: string;
+  ink: string;
+  hover: string;
+  target: string;
+}[] = [
   {
     t: "19:42:11",
     label: "Resume tailored",
     sub: "Alex_Rivera_Notion_Resume.pdf",
     working: "Tailoring resume",
+    orb: "composing",
     action: "Review",
     thread: "bg-brand",
     ink: "text-brand-ink",
@@ -24,6 +37,7 @@ const ARTIFACTS = [
     label: "Application filled",
     sub: "27 fields · nothing sent yet",
     working: "Filling application",
+    orb: "solving",
     action: "Review",
     thread: "bg-teal",
     ink: "text-teal-ink",
@@ -35,6 +49,7 @@ const ARTIFACTS = [
     label: "Outreach drafted",
     sub: "To Priya Nair · USC alum",
     working: "Drafting outreach",
+    orb: "shaping",
     action: "Open",
     thread: "bg-coral",
     ink: "text-coral-ink",
@@ -166,10 +181,11 @@ export function PacketDemo() {
                   Litos
                 </span>
               </span>
-              <span className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
+              <span className="flex items-center gap-1.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
                 {phase <= -1 ? (
                   <>
-                    Scanning<span className="rq-blink">▍</span>
+                    <ThinkingOrb state="searching" size={20} />
+                    Scanning
                   </>
                 ) : done ? (
                   "Ready · 9 seconds"
@@ -192,10 +208,9 @@ export function PacketDemo() {
                       key={a.t}
                       className="flex h-[52px] items-center gap-3 rounded-xl bg-surface-alt/70 px-3"
                     >
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-faint" />
+                      <ThinkingOrb state={a.orb} size={20} />
                       <span className="font-mono text-[11px] uppercase tracking-[0.05em] text-muted">
                         {a.working}
-                        <span className="rq-blink ml-0.5">▍</span>
                       </span>
                     </div>
                   );
