@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   api,
   getStoredEmail,
@@ -16,7 +16,7 @@ import { portalName, reviewablePackets as onlyReviewablePackets } from "@/lib/ap
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
 
-type ResumeGenerationResponse = { resume_id: string };
+type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type ProfileIdentity = { full_name?: string; email?: string };
 type NewApplicationDraft = {
   company: string;
@@ -30,170 +30,6 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   role: "",
   portalUrl: "",
   jobDescription: "",
-};
-
-const QA_PACKET: GeneratedResume = {
-  id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b01",
-  job_context: { company: "Acme Labs", role: "Product Engineer", jd_hash: "qa" },
-  resume_object_key: "qa",
-  created_at: "2026-07-21T12:00:00.000Z",
-  download_url: "#",
-  spec: {
-    school: "University of Southern California",
-    degree: "B.S. Computer Science",
-    grad_date: "May 2027",
-    coursework: "Data Structures, Software Engineering",
-    education_position: "top",
-    experience: [
-      {
-        type: "job",
-        org: "Elemental AI",
-        title: "Product Engineer",
-        date_range: "Jan 2026 - Present",
-        bullets: [
-          "Built a TypeScript workflow engine that automated 18 client handoffs and reduced turnaround time by 42%.",
-          "Shipped accessible React dashboards used by 6 teams, with tested empty, loading, and error states.",
-        ],
-      },
-      {
-        type: "project",
-        org: "Litos",
-        title: "Founder and Engineer",
-        date_range: "Jun 2026 - Present",
-        bullets: [
-          "Designed a job-application system that tailors grounded resumes and reviews every answer before submission.",
-        ],
-      },
-    ],
-    skills: ["TypeScript", "React", "Node.js", "PostgreSQL", "Product Engineering"],
-    _quality: { atsCoverage: 76 },
-    _review: {
-      jd_text:
-        "Acme Labs is hiring a Product Engineer to build TypeScript workflow systems and accessible React interfaces. You will partner with product teams, automate operational handoffs, write tested code, and improve application performance. Experience with Node.js, PostgreSQL, and customer-facing product engineering is preferred.",
-      portal_url: "https://jobs.example.com/acme/product-engineer",
-      ats_name: "Greenhouse",
-      status: "questions_ready",
-      edited_terms: ["workflow", "automated", "accessible", "tested", "Product Engineering"],
-      questions: [
-        {
-          id: "why-acme",
-          question: "Why are you interested in building products at Acme Labs?",
-          answer:
-            "I am drawn to Acme Labs because the role combines product judgment with hands-on engineering. I have built workflow systems and customer-facing tools where speed only mattered when the experience stayed clear and reliable.",
-          kind: "essay",
-          required: true,
-        },
-        {
-          id: "example",
-          question: "Describe a workflow you improved.",
-          answer:
-            "At Elemental AI, I built a TypeScript workflow engine that automated 18 client handoffs and reduced turnaround time by 42%. I mapped failure states first, then added visible recovery paths so every handoff remained traceable.",
-          kind: "essay",
-          required: true,
-        },
-      ],
-      skipped_reasons: [],
-      updated_at: "2026-07-21T12:00:00.000Z",
-    },
-  },
-};
-
-const QA_SCENARIOS: Record<string, GeneratedResume> = {
-  acme: QA_PACKET,
-  stripe: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b02",
-    company: "Stripe",
-    role: "Software Engineering Intern",
-    ats: "Lever",
-    score: 82,
-    jd: "Stripe is hiring a Software Engineering Intern to build reliable TypeScript services and React tools. You will improve payment workflows, write tested code, analyze production performance, and collaborate across engineering and product. Experience with Node.js, PostgreSQL, and accessible interfaces is valued.",
-    title: "Software Engineering Intern",
-    bullets: [
-      "Built reliable TypeScript services that automated 18 operational handoffs and reduced turnaround time by 42%.",
-      "Shipped tested React tools for 6 teams and documented production recovery paths.",
-    ],
-    skills: ["TypeScript", "React", "Node.js", "PostgreSQL", "Software Engineering"],
-    editedTerms: ["reliable", "automated", "tested", "production", "Software Engineering"],
-    questions: [],
-  }),
-  notion: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b03",
-    company: "Notion",
-    role: "Product Design Intern",
-    ats: "Ashby",
-    score: 74,
-    jd: "Notion is looking for a Product Design Intern who can turn complex workflows into calm, accessible product experiences. You will prototype in Figma, partner with engineers, test interaction details, and communicate clear design rationale. Experience designing dashboards and systems for real users is preferred.",
-    title: "Product Designer",
-    bullets: [
-      "Designed accessible workflow dashboards in Figma and React for 6 client teams.",
-      "Tested interaction details with users and reduced handoff turnaround time by 42%.",
-    ],
-    skills: ["Figma", "Product Design", "Design Systems", "React", "User Research"],
-    editedTerms: ["accessible", "Figma", "interaction", "users", "Design Systems"],
-    questions: [
-      {
-        id: "notion-craft",
-        question: "Tell us about a product detail you refined through user feedback.",
-        answer: "While designing a workflow dashboard, I saw that users understood system status but could not recover confidently from a failed handoff. I added visible recovery paths, tested the revised interaction, and used the findings to simplify the surrounding controls.",
-        kind: "essay",
-        required: true,
-      },
-    ],
-  }),
-  figma: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b04",
-    company: "Figma",
-    role: "Data Analyst Intern",
-    ats: "Workday",
-    score: 79,
-    jd: "Figma is hiring a Data Analyst Intern to define product metrics, build trustworthy dashboards, and translate behavioral data into clear recommendations. You will work with SQL, PostgreSQL, experimentation, and cross-functional product teams. Strong communication and careful data validation are required.",
-    title: "Data Analyst",
-    bullets: [
-      "Built trustworthy PostgreSQL dashboards that tracked 18 workflow handoffs across 6 teams.",
-      "Analyzed product metrics and validated reporting changes that reduced turnaround time by 42%.",
-    ],
-    skills: ["SQL", "PostgreSQL", "Product Analytics", "Experimentation", "Data Visualization"],
-    editedTerms: ["trustworthy", "dashboards", "metrics", "validated", "Product Analytics"],
-    questions: [],
-  }),
-  vercel: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b05",
-    company: "Vercel",
-    role: "Developer Advocate Intern",
-    ats: "Greenhouse",
-    score: 77,
-    jd: "Vercel is seeking a Developer Advocate Intern to teach developers through clear technical content, product demos, and community programs. You will build examples with React and TypeScript, explain complex workflows, gather developer feedback, and partner with product engineering. Strong writing and public communication are essential.",
-    title: "Developer Advocate",
-    bullets: [
-      "Built React and TypeScript product demos that explained workflow automation to 6 client teams.",
-      "Translated developer feedback into tested examples and clear implementation guidance.",
-    ],
-    skills: ["TypeScript", "React", "Technical Writing", "Developer Education", "Public Speaking"],
-    editedTerms: ["demos", "explained", "developer", "guidance", "Technical Writing"],
-    questions: [
-      {
-        id: "vercel-teach",
-        question: "What technical concept have you enjoyed teaching others?",
-        answer: "I enjoy teaching state and failure handling because a small, concrete demo can turn an abstract reliability concept into something a developer can immediately apply.",
-        kind: "essay",
-        required: true,
-      },
-      {
-        id: "vercel-community",
-        question: "How would you learn what a developer community needs?",
-        answer: "I would combine direct conversations with support themes, documentation searches, and product feedback, then test a small piece of content before investing in a larger program.",
-        kind: "essay",
-        required: true,
-      },
-      {
-        id: "vercel-why",
-        question: "Why Vercel?",
-        answer: "Vercel sits at the intersection of product engineering and developer education, which matches how I like to work: build the example, understand the friction, and explain the path clearly.",
-        kind: "essay",
-        required: true,
-      },
-    ],
-  }),
 };
 
 export default function Applications() {
@@ -212,8 +48,11 @@ export default function Applications() {
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
 
   const moveToScreen = useCallback((next: Screen) => {
-    setScreen(next);
-    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+    setScreen((current) => {
+      if (current === next) return current;
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+      return next;
+    });
   }, []);
 
   const selectPacket = useCallback((packet: GeneratedResume) => {
@@ -230,8 +69,13 @@ export default function Applications() {
   const refreshSubmission = useCallback(async () => {
     if (!selectedId || qaMode) return;
     const result = await api<SubmissionResponse>(`/applications/${selectedId}/submission`);
-    setSubmission(result);
-    setPackets((current) => current?.map((packet) => packet.id === selectedId ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+    setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
+    setPackets((current) => {
+      if (!current) return current;
+      const packet = current.find((item) => item.id === selectedId);
+      if (packet?.spec._review?.updated_at === result.review.updated_at) return current;
+      return current.map((item) => item.id === selectedId ? { ...item, spec: { ...item.spec, _review: result.review } } : item);
+    });
     if (result.review.status === "submitted") moveToScreen("submitted");
     else if (["needs_attention", "ready_for_final_approval", "failed"].includes(result.review.status)) moveToScreen("portal");
     else moveToScreen("submitting");
@@ -239,15 +83,30 @@ export default function Applications() {
 
   useEffect(() => {
     if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
-    const timer = window.setInterval(() => refreshSubmission().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not refresh portal status.")), 2500);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      try {
+        if (document.visibilityState === "visible") await refreshSubmission();
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not refresh portal status.");
+      } finally {
+        if (!cancelled) timer = window.setTimeout(poll, document.visibilityState === "visible" ? 2500 : 10_000);
+      }
+    };
+    timer = window.setTimeout(poll, 2500);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [qaMode, refreshSubmission, screen, selectedId]);
 
   useEffect(() => {
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
     const localQa = process.env.NODE_ENV !== "production" && qaScenario !== null;
     if (localQa) {
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
+        const { QA_PACKET, QA_SCENARIOS } = await import("./qa-data");
         const scenario = qaScenario === "1" ? "acme" : qaScenario === "no-questions" ? "stripe" : qaScenario;
         const packet = QA_SCENARIOS[scenario ?? "acme"] ?? QA_PACKET;
         setQaMode(true);
@@ -277,7 +136,9 @@ export default function Applications() {
   const review = selected?.spec._review;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
-  const resumeText = useMemo(() => (spec ? resumeCorpus(spec).toLowerCase() : ""), [spec]);
+  const deferredSpec = useDeferredValue(spec);
+  const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
+  const editedTerms = useMemo(() => normalizedTerms(review?.edited_terms ?? []), [review?.edited_terms]);
 
   async function createApplication() {
     const company = newApplication.company.trim();
@@ -312,6 +173,10 @@ export default function Applications() {
           company,
           role,
           jd_text: jobDescription,
+          application: {
+            ats_name: portalName(portalUrl),
+            portal_url: portalUrl,
+          },
           contact: {
             full_name: fullName,
             email: identity.email?.trim() || getStoredEmail(),
@@ -323,6 +188,17 @@ export default function Applications() {
         }),
       });
 
+      const created = generated.application;
+      if (created?.spec._review) {
+        setPackets((current) => [created, ...(current ?? []).filter((packet) => packet.id !== created.id)]);
+        selectPacket(created);
+        setNewApplication(EMPTY_APPLICATION_DRAFT);
+        setShowNewApplication(false);
+        setNotice("Review packet generated from the job description.");
+        return;
+      }
+
+      // Compatibility path while an older backend deployment is still serving traffic.
       await api(`/applications/${generated.resume_id}/review`, {
         method: "PUT",
         body: JSON.stringify({
@@ -519,7 +395,7 @@ export default function Applications() {
           <div className="grid min-h-[680px] gap-4 xl:grid-cols-2">
             <DocumentPane eyebrow="Job description" title={`${selected.job_context.role} · ${selected.job_context.company}`} meta={review.ats_name ?? "Company portal"}>
               <div className="prose-copy text-[15px] leading-7 text-ink">
-                <HighlightedText text={review.jd_text} terms={resumeText.split(/\s+/).filter((term) => term.length > 4)} tone="match" />
+                <HighlightedText text={review.jd_text} terms={resumeTerms} tone="match" />
               </div>
             </DocumentPane>
 
@@ -535,7 +411,7 @@ export default function Applications() {
                 </div>
               }
             >
-              <ResumeEditor spec={spec} editedTerms={review.edited_terms} onChange={setSpec} onPatchEntry={patchEntry} />
+              <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
             </DocumentPane>
           </div>
 
@@ -619,7 +495,7 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text" }
   );
 }
 
-function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: string[]; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
+function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
     <div className="mx-auto max-w-[640px] bg-white px-4 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)] sm:px-7">
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
@@ -656,7 +532,7 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
   return <input aria-label="Editable resume text" value={value} onChange={(event) => onChange(event.target.value)} className={`w-full border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${className}`} />;
 }
 
-function EditableHighlight({ value, terms, onChange }: { value: string; terms: string[]; onChange: (value: string) => void }) {
+function EditableHighlight({ value, terms, onChange }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void }) {
   const [editing, setEditing] = useState(false);
   return editing ? (
     <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-[8px] border border-brand bg-white px-2 py-1 outline-none" />
@@ -667,13 +543,17 @@ function EditableHighlight({ value, terms, onChange }: { value: string; terms: s
   );
 }
 
-function HighlightedText({ text, terms, tone }: { text: string; terms: string[]; tone: "match" | "edited" }) {
-  const normalized = new Set(terms.map((term) => term.toLowerCase().replace(/[^a-z0-9+#./-]/g, "")).filter(Boolean));
+const HighlightedText = memo(function HighlightedText({ text, terms, tone }: { text: string; terms: ReadonlySet<string>; tone: "match" | "edited" }) {
   return <>{text.split(/(\s+)/).map((part, index) => {
     const key = part.toLowerCase().replace(/[^a-z0-9+#./-]/g, "");
-    const highlighted = key.length > 2 && normalized.has(key);
+    const highlighted = key.length > 2 && terms.has(key);
     return highlighted ? <mark key={index} className={tone === "edited" ? "border-b-2 border-brand bg-surface-alt px-0.5 text-brand-ink" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
   })}</>;
+});
+
+function normalizedTerms(source: string | readonly string[]): ReadonlySet<string> {
+  const values = typeof source === "string" ? source.split(/\s+/) : source;
+  return new Set(values.map((term) => term.toLowerCase().replace(/[^a-z0-9+#./-]/g, "")).filter((term) => term.length > 2));
 }
 
 function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void }) {
@@ -754,46 +634,6 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
   return { school: spec.school ?? "", degree: spec.degree ?? "", grad_date: spec.grad_date ?? "", coursework: spec.coursework ?? "", education_position: spec.education_position, experience: spec.experience ?? [], skills: spec.skills ?? [], skill_source: spec.skill_source };
 }
-
-function qaVariant(packet: GeneratedResume, options: {
-  id: string;
-  company: string;
-  role: string;
-  ats: string;
-  score: number;
-  jd: string;
-  title: string;
-  bullets: string[];
-  skills: string[];
-  editedTerms: string[];
-  questions: ApplicationQuestion[];
-}): GeneratedResume {
-  const review = packet.spec._review;
-  if (!review) return packet;
-  return {
-    ...packet,
-    id: options.id,
-    job_context: { company: options.company, role: options.role, jd_hash: `qa-${options.company.toLowerCase()}` },
-    spec: {
-      ...packet.spec,
-      experience: packet.spec.experience.map((entry, index) =>
-        index === 0 ? { ...entry, title: options.title, bullets: options.bullets } : entry,
-      ),
-      skills: options.skills,
-      _quality: { ...packet.spec._quality, atsCoverage: options.score },
-      _review: {
-        ...review,
-        jd_text: options.jd,
-        portal_url: `https://jobs.example.com/${options.company.toLowerCase()}/${options.role.toLowerCase().replaceAll(" ", "-")}`,
-        ats_name: options.ats,
-        status: options.questions.length > 0 ? "questions_ready" : "ready_to_submit",
-        edited_terms: options.editedTerms,
-        questions: options.questions,
-      },
-    },
-  };
-}
-
 function resumeCorpus(spec: ResumeSpec): string {
   return [spec.school, spec.degree, spec.coursework, ...spec.experience.flatMap((entry) => [entry.org, entry.title, ...entry.bullets]), ...spec.skills].join(" ");
 }
