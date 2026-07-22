@@ -15,6 +15,7 @@ test("saved answers are prepared automatically and final submit remains a separa
   assert.match(dashboard, /"Prepare application"/);
   assert.match(dashboard, /Nothing reaches the employer until you review the filled portal and click Submit application/);
   assert.match(dashboard, /status === "ready_for_final_approval"[\s\S]*>Submit application</);
+  assert.match(dashboard, /status === "failed"[\s\S]*>Retry preparation</);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);

@@ -503,7 +503,7 @@ export default function Applications() {
       ) : screen === "submitting" ? (
         <CenteredState title={submission?.review.status === "submitting" ? "Submitting through the company portal." : "Preparing the company portal."} body="Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step." loading />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} />
+        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={() => prepareApplication()} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -698,7 +698,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions:
   );
 }
 
-function SubmissionScreen({ submission, onHandoffComplete, onApprove }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void }) {
+function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   return (
@@ -718,6 +718,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove }: { submis
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
+          {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
           {review.status === "ready_for_final_approval" && <button onClick={onApprove} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Submit application</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. A verified receipt is required before the application is marked submitted.</p>
