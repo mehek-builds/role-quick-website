@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError, ExperienceEntry, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { litosClientHeaders } from "@/lib/product";
-import { Card, Chip, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 
 type ParsedProfile = Record<string, unknown>;
 
@@ -122,7 +122,7 @@ export default function ResumeWorkspace() {
             <h2 className="text-base font-medium text-ink">Base resume</h2>
             <p className="mt-1 text-sm text-muted">
               {profile === null
-                ? "Loading..."
+                ? <PendingLabel>Loading...</PendingLabel>
                 : profile === "missing"
                   ? "No resume uploaded yet. Upload a PDF to seed your profile and experience bank."
                   : "Parsed and on file. Uploading a new PDF replaces it."}
@@ -138,7 +138,7 @@ export default function ResumeWorkspace() {
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {uploading
-                ? "Parsing..."
+                ? <PendingLabel state="composing" onColor>Parsing...</PendingLabel>
                 : profile === "missing"
                   ? "Upload resume PDF"
                   : "Replace resume"}
@@ -192,7 +192,7 @@ export default function ResumeWorkspace() {
               disabled={saving || entries === null}
               className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </button>
           </div>
         </div>

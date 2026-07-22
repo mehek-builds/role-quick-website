@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api, ApplicationProfile, Me } from "@/lib/api";
-import { Card, Chip, Meter, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
@@ -138,7 +138,7 @@ export default function Settings() {
               disabled={saving}
               className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {saving ? "Saving..." : "Save changes"}
+              {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </button>
           </div>
         </div>

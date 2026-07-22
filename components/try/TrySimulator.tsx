@@ -14,6 +14,8 @@ import {
   type RealPacket,
 } from "@/lib/try-data";
 import type { TryJobCard } from "@/lib/try-jobs";
+import { ThinkingOrb } from "thinking-orbs";
+import { PendingLabel } from "@/components/app/ui";
 
 /* /try - the drive-it-yourself demo (design doc 2026-07-08).
    The visitor clicks the extension's real verbs: Detect -> Generate ->
@@ -336,8 +338,9 @@ export function TrySimulator({
                 {step !== "chooser" && step !== "done" && (
                   <>
                     <ReceiptRows step={step} stamps={stamps} mode={mode} />
-                    <p className="pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
-                      Assembling your application<span className="rq-blink">▍</span>
+                    <p className="flex items-center justify-center gap-1.5 pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+                      <ThinkingOrb state="working" size={20} />
+                      Assembling your application
                     </p>
                   </>
                 )}
@@ -424,9 +427,12 @@ function Chooser({
   if (generating) {
     return (
       <div className="rounded-xl bg-surface-alt/70 px-4 py-5 text-center">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          Building your application<span className="rq-blink">▍</span>
-        </p>
+        <div className="flex items-center justify-center gap-1.5">
+          <ThinkingOrb state="working" size={20} />
+          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            Building your application
+          </p>
+        </div>
         <p className="mt-2 font-mono text-[10px] text-faint">+{elapsed.toFixed(1)}s</p>
       </div>
     );
@@ -474,7 +480,7 @@ function Chooser({
                 className="w-full rounded-xl border border-dashed border-border bg-surface-alt/40 px-4 py-5 text-center transition-colors hover:border-ink disabled:opacity-60"
               >
                 <span className="block text-[13px] font-medium text-ink">
-                  {extracting ? "Reading your resume…" : "Upload your resume"}
+                  {extracting ? <PendingLabel state="composing">Reading your resume…</PendingLabel> : "Upload your resume"}
                 </span>
                 <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
                   PDF · DOCX · TXT
@@ -571,9 +577,9 @@ function ReceiptRows({
   mode: "canned" | "real";
 }) {
   const rows = [
-    { key: "resume" as Step, label: "Resume tailored", thread: "bg-brand" },
-    { key: "autofill" as Step, label: "Application filled", thread: "bg-teal" },
-    { key: "outreach" as Step, label: mode === "real" ? "Outreach opened" : "Outreach drafted", thread: "bg-coral" },
+    { key: "resume" as Step, label: "Resume tailored", thread: "bg-brand", orb: "composing" as const },
+    { key: "autofill" as Step, label: "Application filled", thread: "bg-teal", orb: "solving" as const },
+    { key: "outreach" as Step, label: mode === "real" ? "Outreach opened" : "Outreach drafted", thread: "bg-coral", orb: "shaping" as const },
   ];
   return (
     <div className="space-y-1">
@@ -593,11 +599,11 @@ function ReceiptRows({
                 {r.label}
               </span>
             </span>
-            <span className="font-mono text-[10px] text-faint">
+            <span className="flex items-center font-mono text-[10px] text-faint">
               {done ? (
                 stamps[r.key] ?? ""
               ) : active ? (
-                <span className="rq-blink">working…</span>
+                <ThinkingOrb state={r.orb} size={20} />
               ) : (
                 ""
               )}
