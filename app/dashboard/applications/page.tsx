@@ -210,10 +210,10 @@ export default function Applications() {
       });
 
       const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
-      const created = history.resumes.find((packet) => packet.id === generated.resume_id);
+      const fallbackCreated = history.resumes.find((packet) => packet.id === generated.resume_id);
       setPackets(history.resumes);
-      if (!created?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
-      selectPacket(created);
+      if (!fallbackCreated?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
+      selectPacket(fallbackCreated);
       setNewApplication(EMPTY_APPLICATION_DRAFT);
       setShowNewApplication(false);
       setNotice("Review packet generated from the job description.");

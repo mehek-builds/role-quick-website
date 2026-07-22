@@ -1,7 +1,7 @@
 # Graph Report - .  (2026-07-23)
 
 ## Corpus Check
-- 49 files · ~272,754 words
+- 49 files · ~272,734 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -40,15 +40,15 @@ Nodes (6): anonId(), device(), track(), extractResumeText(), fromDocx(), fromPdf
 
 ### Community 3 - "Community 3"
 Cohesion: 0.15
-Nodes (0):
+Nodes (0): 
 
 ### Community 4 - "Community 4"
 Cohesion: 0.18
-Nodes (0):
+Nodes (0): 
 
 ### Community 5 - "Community 5"
 Cohesion: 0.25
-Nodes (0):
+Nodes (0): 
 
 ### Community 6 - "Community 6"
 Cohesion: 0.39
@@ -68,35 +68,35 @@ Nodes (5): degrade(), frames(), _packet_shield(), The finale packet keeps its co
 
 ### Community 10 - "Community 10"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 11 - "Community 11"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 12 - "Community 12"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 13 - "Community 13"
 Cohesion: 0.67
-Nodes (0):
+Nodes (0): 
 
 ### Community 14 - "Community 14"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 15 - "Community 15"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 16 - "Community 16"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ### Community 17 - "Community 17"
 Cohesion: 1.0
-Nodes (0):
+Nodes (0): 
 
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
