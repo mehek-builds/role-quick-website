@@ -384,14 +384,18 @@ export default function Applications() {
 
   async function continueFromResume() {
     if (!(await saveResume())) return;
-    if (questions.length > 0) moveToScreen("questions");
-    else await submitApplication([]);
+    const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
+    if (missingRequiredAnswers.length > 0) {
+      moveToScreen("questions");
+      return;
+    }
+    await prepareApplication(questions);
   }
 
-  async function submitApplication(finalQuestions = questions) {
+  async function prepareApplication(finalQuestions = questions) {
     if (!selected) return;
     if (finalQuestions.some((question) => question.required && !question.answer.trim())) {
-      setError("Answer every required question before submitting.");
+      setError("Complete required profile answers before Litos prepares the portal.");
       return;
     }
     moveToScreen("submitting");
@@ -411,8 +415,8 @@ export default function Applications() {
         return;
       }
     } catch (reason) {
-      moveToScreen(finalQuestions.length > 0 ? "questions" : "review");
-      setError(reason instanceof Error ? reason.message : "The company portal did not accept the submission.");
+      moveToScreen("review");
+      setError(reason instanceof Error ? reason.message : "The company portal could not be prepared.");
     }
   }
 
@@ -495,9 +499,9 @@ export default function Applications() {
           ))}
         </div>
       ) : screen === "questions" ? (
-        <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => submitApplication()} />
+        <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => prepareApplication()} />
       ) : screen === "submitting" ? (
-        <CenteredState title={submission?.review.status === "submitting" ? "Submitting through the company portal." : "Preparing the company portal."} body="Litos is filling your approved resume and answers in a secure remote browser. You can leave this page open while the background worker advances." loading />
+        <CenteredState title={submission?.review.status === "submitting" ? "Submitting through the company portal." : "Preparing the company portal."} body="Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step." loading />
       ) : screen === "portal" && submission ? (
         <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} />
       ) : screen === "submitted" ? (
@@ -537,13 +541,13 @@ export default function Applications() {
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
             <div>
-              <p className="text-sm font-medium text-ink">Your edits are checked before anything is submitted.</p>
-              <p className="mt-0.5 text-xs text-muted">Blue highlights job language. Underlined blue marks wording Litos tailored from your source resume.</p>
+              <p className="text-sm font-medium text-ink">Litos enters saved answers before asking for final submission approval.</p>
+              <p className="mt-0.5 text-xs text-muted">Blue highlights job language. Nothing reaches the employer until you review the filled portal and click Submit application.</p>
             </div>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               <button onClick={continueFromResume} disabled={saving} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
-                {saving ? "Checking resume..." : questions.length > 0 ? `Continue to ${questions.length} question${questions.length === 1 ? "" : "s"}` : "Submit application"}
+                {saving ? "Checking resume..." : "Prepare application"}
               </button>
             </div>
           </div>
@@ -673,22 +677,23 @@ function HighlightedText({ text, terms, tone }: { text: string; terms: string[];
 }
 
 function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void }) {
+  const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">← Back to resume</button>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Portal questions</p>
-        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the answers that need your voice.</h2>
-        <p className="mt-1 text-sm text-muted">This screen appears only when the company portal asks for more than your profile already provides.</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Missing portal answers</p>
+        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">Complete only the answers Litos does not know yet.</h2>
+        <p className="mt-1 text-sm text-muted">Saved profile answers and completed drafts are entered automatically. This screen appears only for required blanks.</p>
       </div>
-      {questions.map((question, index) => (
+      {missingQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">{question.kind === "essay" ? "Litos draft · edit freely" : "Required by the portal"}</p>
-          <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item, i) => (i === index ? { ...item, answer: event.target.value } : item)))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Required information missing</p>
+          <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">Submit application</button></div>
+      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">Save answers and prepare application</button></div>
     </div>
   );
 }
@@ -702,7 +707,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove }: { submis
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Secure portal runner</p>
         <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "The portal is filled and ready."}</h2>
         <p className="mt-2 text-sm leading-6 text-muted">
-          {needsAttention ? review.attention_reason ?? "Complete the remaining portal step in the secure live browser." : review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form, then give explicit approval for the final submit click."}
+          {needsAttention ? review.attention_reason ?? "Complete the remaining portal step in the secure live browser." : review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form. The employer receives nothing until you click Submit application below."}
         </p>
         {review.filled_fields && review.filled_fields.length > 0 && (
           <div className="mt-6">
@@ -713,13 +718,13 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove }: { submis
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Approve final submission</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={onApprove} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Submit application</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. A verified receipt is required before the application is marked submitted.</p>
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Portal preview captured after filling</p></div>
-        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="Company portal after Litos filled the approved application fields" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">The worker is still capturing the filled portal.</div>}
+        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="Company portal after Litos filled the saved profile and application fields" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">The worker is still capturing the filled portal.</div>}
       </Card>
     </div>
   );
