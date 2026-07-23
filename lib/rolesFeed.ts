@@ -5,7 +5,7 @@
    where verified (Litos tracker, Jul 2026); seasonal programs are labeled
    as cycles, not faked as "posted today". Statuses are mono machine voice. */
 
-export type Hunt = "intern" | "newgrad" | "asap";
+export type Hunt = "intern" | "newgrad" | "fulltime" | "asap";
 export type Field =
   | "swe"
   | "data"
@@ -17,7 +17,8 @@ export type Region = "us" | "uk" | "mena" | "anywhere";
 
 export const HUNTS: { id: Hunt; label: string; short: string }[] = [
   { id: "intern", label: "Internship · Summer 2027", short: "Summer 2027 internships" },
-  { id: "newgrad", label: "Full-time · new grad", short: "New-grad roles" },
+  { id: "newgrad", label: "New grad · Class of 2027", short: "New-grad roles" },
+  { id: "fulltime", label: "Full-time · experienced", short: "Full-time roles" },
   { id: "asap", label: "Anything open now", short: "Roles open right now" },
 ];
 
@@ -167,7 +168,7 @@ export const ROLES: Role[] = [
   {
     company: "Revolut",
     role: "Data Analyst",
-    hunts: ["newgrad", "asap"],
+    hunts: ["newgrad", "asap", "fulltime"],
     fields: ["data", "finance"],
     regions: ["uk"],
     status: "ROLLING",
@@ -175,8 +176,8 @@ export const ROLES: Role[] = [
   },
   {
     company: "Careem",
-    role: "Data & Engineering Early Careers",
-    hunts: ["intern", "asap"],
+    role: "Data & Engineering roles",
+    hunts: ["intern", "asap", "fulltime"],
     fields: ["data", "swe"],
     regions: ["mena"],
     status: "ROLLING",
@@ -202,8 +203,8 @@ export const ROLES: Role[] = [
   },
   {
     company: "Monzo",
-    role: "Product Designer, early career",
-    hunts: ["newgrad", "asap"],
+    role: "Product Designer",
+    hunts: ["newgrad", "asap", "fulltime"],
     fields: ["design", "product"],
     regions: ["uk"],
     status: "ROLLING",
@@ -238,8 +239,8 @@ export const ROLES: Role[] = [
   },
   {
     company: "L'Oréal",
-    role: "Marketing Early Talent",
-    hunts: ["newgrad", "asap"],
+    role: "Marketing, all levels",
+    hunts: ["newgrad", "asap", "fulltime"],
     fields: ["marketing"],
     regions: ["us", "uk", "mena"],
     status: "ROLLING",
@@ -255,9 +256,45 @@ export const ROLES: Role[] = [
     href: "https://ukcareers.deloitte.co.uk/graduates",
   },
   {
+    company: "Stripe",
+    role: "Software Engineer",
+    hunts: ["fulltime", "asap"],
+    fields: ["swe", "data"],
+    regions: ["us"],
+    status: "ROLLING",
+    href: "https://stripe.com/jobs",
+  },
+  {
+    company: "Notion",
+    role: "Product & Engineering roles",
+    hunts: ["fulltime", "asap"],
+    fields: ["product", "swe"],
+    regions: ["us"],
+    status: "ROLLING",
+    href: "https://www.notion.com/careers",
+  },
+  {
+    company: "Figma",
+    role: "Product Designer",
+    hunts: ["fulltime", "asap"],
+    fields: ["design"],
+    regions: ["us"],
+    status: "ROLLING",
+    href: "https://www.figma.com/careers/",
+  },
+  {
+    company: "Goldman Sachs",
+    role: "Experienced professionals",
+    hunts: ["fulltime"],
+    fields: ["finance"],
+    regions: ["us", "uk"],
+    status: "ROLLING",
+    href: "https://www.goldmansachs.com/careers",
+  },
+  {
     company: "Y Combinator startups",
     role: "Founding engineer & early roles",
-    hunts: ["asap", "newgrad"],
+    hunts: ["asap", "newgrad", "fulltime"],
     fields: ["swe", "product", "data"],
     regions: "global",
     status: "ROLLING",
@@ -270,12 +307,13 @@ export function regionsLabel(r: Role): string {
   return r.regions.map((x) => (x === "us" ? "US" : x === "uk" ? "UK" : "MENA")).join(" + ");
 }
 
-/* Top matches for a profile. Field beats hunt beats region; verified
-   deadlines float; always returns at least one role. */
+/* Top matches for a profile. Craft first: a same-field role outranks a
+   same-level-and-region role from another field. Then hunt, then region;
+   verified deadlines float; always returns at least one role. */
 export function matchRoles(hunt: Hunt, field: Field, region: Region): Role[] {
   const scored = ROLES.map((r) => {
     let s = 0;
-    if (r.fields.includes(field)) s += 4;
+    if (r.fields.includes(field)) s += 7;
     if (r.hunts.includes(hunt)) s += 3;
     const regionOk =
       region === "anywhere" || r.regions === "global" || r.regions.includes(region);
