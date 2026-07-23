@@ -44,9 +44,18 @@ import { ThinkingOrb } from "thinking-orbs";
  * same answer. The cap is stated up front and the chips visibly disable at the limit, rather than
  * letting them select a fourth and bounce off a 400.
  */
-export function FocusStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
-  const [categories, setCategories] = useState<string[]>([]);
-  const [roleTypes, setRoleTypes] = useState<RoleType[]>([]);
+export function FocusStep({
+  onDone,
+  onLater,
+  seed,
+}: {
+  onDone: () => void;
+  onLater: () => void;
+  /* calibration handoff from the homepage card; taps arrive pre-answered */
+  seed?: { categories: string[]; roleTypes: RoleType[] } | null;
+}) {
+  const [categories, setCategories] = useState<string[]>(seed?.categories ?? []);
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>(seed?.roleTypes ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +81,12 @@ export function FocusStep({ onDone, onLater }: { onDone: () => void; onLater: ()
       sub="Two taps. It aims everything after this, and it's the last thing we ask before we do some work for you."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+
+      {seed && (
+        <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Calibrated from your homepage answers · adjust freely
+        </p>
+      )}
 
       <div className="mb-7">
         <div className="flex items-baseline justify-between">

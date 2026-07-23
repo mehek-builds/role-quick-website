@@ -5,7 +5,9 @@ import {
   FIELDS,
   REGIONS,
   matchRoles,
+  focusSeed,
 } from "../lib/rolesFeed.ts";
+import { CATEGORIES, ROLE_TYPES } from "../lib/periods.ts";
 
 /* Every hunt x field x region combination must return at least one match,
    and the top match must share the visitor's field or hunt (never a
@@ -36,4 +38,21 @@ test("field dominates cross-region fallbacks", () => {
       `${hunt}/design/mena got ${m[0].company}`
     );
   }
+});
+
+/* The calibration -> onboarding handoff must always land on real
+   targeting vocabulary, and reject stale or unknown stored values. */
+test("focus seeds map onto the targeting vocabulary", () => {
+  const catSlugs = new Set(CATEGORIES.map((c) => c.slug));
+  const typeSlugs = new Set(ROLE_TYPES.map((r) => r.slug));
+  for (const h of HUNTS) {
+    for (const f of FIELDS) {
+      const s = focusSeed(h.id, f.id);
+      assert.ok(s, `${h.id}/${f.id}: null seed`);
+      for (const c of s.categories) assert.ok(catSlugs.has(c), c);
+      for (const t of s.roleTypes) assert.ok(typeSlugs.has(t), t);
+    }
+  }
+  assert.equal(focusSeed("bogus", "swe"), null);
+  assert.equal(focusSeed("intern", "bogus"), null);
 });

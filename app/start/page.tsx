@@ -36,6 +36,8 @@ import {
 import { ErrorNote } from "@/components/app/ui";
 import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
+import { focusSeed } from "@/lib/rolesFeed";
+import type { RoleType } from "@/lib/api";
 import { StepRail } from "@/components/start/ui";
 
 // The web app cannot see the extension (no externally_connectable, and adding it would widen the
@@ -65,6 +67,29 @@ export default function Start() {
   // empty, so the choice to move on lives here, for this session.
   const [skippedGaps, setSkippedGaps] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Calibration handoff: the homepage card saved hunt/field in
+  // localStorage (litos.profile.v1). Seed the Focus step so its taps
+  // arrive pre-answered; unlike query params this survives the login
+  // round-trip. Computed once; FocusStep only renders after the state
+  // fetch resolves, so there is no SSR/hydration divergence.
+  const [calibSeed] = useState<{
+    categories: string[];
+    roleTypes: RoleType[];
+  } | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = localStorage.getItem("litos.profile.v1");
+      if (!raw) return null;
+      const p = JSON.parse(raw) as { hunt?: string; field?: string };
+      const s = focusSeed(p.hunt ?? "", p.field ?? "");
+      return s
+        ? { categories: s.categories, roleTypes: s.roleTypes as RoleType[] }
+        : null;
+    } catch {
+      return null;
+    }
+  });
 
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
@@ -176,6 +201,7 @@ export default function Start() {
     case "focus":
       return (
         <FocusStep
+          seed={calibSeed}
           onLater={later}
           onDone={() => {
             stepDone("focus");
