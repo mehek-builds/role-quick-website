@@ -572,10 +572,18 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
           third separator silently discarded the tail. R-047 was a mangled degree that could not be
           corrected, so a control that can mangle it again works against the fix. The dot is drawn
           between them rather than stored in either. */}
+      {/* Width comes from these wrappers, never from the textarea itself: an auto-width textarea
+          falls back to its ~20-column default, which squeezed a long joint degree into a narrow
+          stacked column. The degree takes the remaining space and the date gets just what it
+          needs. */}
       <div className="mt-1 flex items-baseline justify-center gap-1.5 text-xs text-muted">
-        <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-center" width="auto" />
+        <span className="min-w-0 flex-1">
+          <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-right" />
+        </span>
         <span aria-hidden>·</span>
-        <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-center" width="auto" />
+        <span className="w-[5.5rem] shrink-0">
+          <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-left" />
+        </span>
       </div>
 
       {/* The section heading used to render inside this map, so four jobs printed "EXPERIENCE" four
@@ -590,8 +598,14 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
               <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
             )}
             <div className="flex items-baseline justify-between gap-4">
-              <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
-              <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="shrink-0 text-right text-xs text-muted" width="auto" />
+              <span className="min-w-0 flex-1">
+                <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
+              </span>
+              {/* Wide enough for the longest real range ("September 2025 - Present") so the date
+                  does not wrap, and fixed so it cannot squeeze the org name beside it. */}
+              <span className="w-[10.5rem] shrink-0">
+                <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="text-right text-xs text-muted" />
+              </span>
             </div>
             <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
             <ul className="mt-2 space-y-1.5">
@@ -615,9 +629,10 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
 // cut off: the education headline stopped at "Marshall School of B" and date ranges at
 // "September 2025 - Presen". The user could not read their own resume, let alone check it. A
 // one-row textarea that grows to its content wraps instead of truncating and keeps the field
-// editable in place. `width="auto"` is for the right-hand date column, which should size to its
-// text rather than stretch and push the org name into a squeeze.
-function EditableLine({ value, onChange, className = "", width = "full" }: { value: string; onChange: (value: string) => void; className?: string; width?: "full" | "auto" }) {
+// editable in place. It is always full-width: sizing belongs to the caller's wrapper, because an
+// auto-width textarea silently falls back to its ~20-column default and squeezes long values into
+// a narrow stacked column.
+function EditableLine({ value, onChange, className = "" }: { value: string; onChange: (value: string) => void; className?: string }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
   const composing = useRef(false);
 
@@ -677,7 +692,7 @@ function EditableLine({ value, onChange, className = "", width = "full" }: { val
         if (composing.current) onChange(event.target.value);
         else commit(event.target.value);
       }}
-      className={`resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${width === "full" ? "w-full" : "w-auto"} ${className}`}
+      className={`w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${className}`}
     />
   );
 }
