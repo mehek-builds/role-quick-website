@@ -21,3 +21,16 @@ test("saved answers are prepared automatically and final submit remains a separa
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
+
+test("application creation uses the single-response packet and polling cannot overlap", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(dashboard, /application:\s*\{\s*ats_name:/);
+  assert.match(dashboard, /const created = generated\.application;[\s\S]*created\?\.spec\._review/);
+  assert.match(dashboard, /window\.setTimeout\(poll/);
+  assert.match(dashboard, /document\.visibilityState/);
+  assert.doesNotMatch(dashboard, /setInterval\(/);
+});

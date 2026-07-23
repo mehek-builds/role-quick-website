@@ -30,6 +30,10 @@ const CHIP_STYLES: Record<string, string> = {
   sent: "bg-positive-soft text-positive",
   replied: "bg-positive-soft text-positive",
   bounced: "bg-danger-soft text-danger",
+  // A run that stopped for the user: needs attention, awaiting approval, or stopped safely. These
+  // previously fell through to the `ready` treatment, so a blocked application looked as calm as a
+  // finished one and the label was the only thing distinguishing them.
+  warn: "bg-warn-soft text-warn",
   // contact confidence tiers (same scale as the marketing mockups)
   verified: "bg-positive-soft text-positive",
   likely: "bg-warn-soft text-warn",

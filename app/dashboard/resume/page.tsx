@@ -158,7 +158,7 @@ export default function ResumeWorkspace() {
         </div>
 
         {profile !== null && profile !== "missing" && (
-          <ProfilePreview profile={profile} />
+          <ProfilePreview profile={profile} onProfileChange={(next) => setProfile(next as ParsedProfile)} />
         )}
       </Card>
 
@@ -312,7 +312,7 @@ function Field({
 
 /* The parse shape has evolved; show the common fields when present and keep
    the full parse inspectable rather than guessing at every key. */
-function ProfilePreview({ profile }: { profile: Record<string, unknown> }) {
+function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, unknown>; onProfileChange: (profile: Record<string, unknown>) => void }) {
   const str = (k: string) =>
     typeof profile[k] === "string" ? (profile[k] as string) : null;
   const list = (k: string) =>
@@ -321,16 +321,25 @@ function ProfilePreview({ profile }: { profile: Record<string, unknown> }) {
       : [];
   const name = str("full_name") ?? str("name");
   const skills = list("skills");
+  const gradYear = profile["grad_year"];
   return (
     <div className="mt-6 border-t border-border pt-5">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {name && <KV label="Name" value={name} />}
         {str("email") && <KV label="Email" value={str("email")!} />}
         {str("phone") && <KV label="Phone" value={str("phone")!} />}
-        {str("school") && <KV label="School" value={str("school")!} />}
-        {str("degree") && <KV label="Degree" value={str("degree")!} />}
-        {str("grad_year") && <KV label="Grad year" value={str("grad_year")!} />}
       </div>
+      {/* R-052: school, degree and graduation date used to render as read-only truncated text, so a
+          mis-parse could only be fixed by producing a new PDF, and the truncation meant the user
+          could not even read the stored value to notice it was wrong. R-047 was exactly that: the
+          parser dropped "Computer Science &" from a joint degree and there was no way to put it
+          back. These three are the education block, so they are edited together. */}
+      <EducationEditor
+        school={str("school") ?? ""}
+        degree={str("degree") ?? ""}
+        gradDate={str("grad_date") ?? (typeof gradYear === "number" ? String(gradYear) : "")}
+        onSaved={(patched) => onProfileChange({ ...profile, ...patched })}
+      />
       {skills.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5">
           {skills.slice(0, 14).map((s) => (
@@ -359,7 +368,81 @@ function KV({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-xs text-faint">{label}</p>
-      <p className="mt-0.5 truncate text-sm text-ink">{value}</p>
+      {/* `truncate` hid the end of every long value, which is how a wrong stored degree stayed
+          invisible. Wrap instead: these cards are read to check the value is right. */}
+      <p className="mt-0.5 break-words text-sm text-ink">{value}</p>
+    </div>
+  );
+}
+
+function EducationEditor({ school, degree, gradDate, onSaved }: { school: string; degree: string; gradDate: string; onSaved: (patch: Record<string, unknown>) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ school, degree, grad_date: gradDate });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function startEditing() {
+    setDraft({ school, degree, grad_date: gradDate });
+    setError(null);
+    setEditing(true);
+  }
+
+  async function save() {
+    if (!draft.school.trim()) {
+      setError("School cannot be empty. Autofill has no fallback for it.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api<Record<string, unknown>>("/profile/education", {
+        method: "PATCH",
+        body: JSON.stringify({ school: draft.school, degree: draft.degree, grad_date: draft.grad_date }),
+      });
+      onSaved(updated);
+      setEditing(false);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save your education.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="mt-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {school && <KV label="School" value={school} />}
+          <KV label="Degree" value={degree || "Not captured from your resume"} />
+          {gradDate && <KV label="Graduation" value={gradDate} />}
+        </div>
+        <button type="button" onClick={startEditing} className="mt-3 text-xs text-brand-ink underline underline-offset-2">
+          Correct education
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-[12px] border border-border bg-surface-alt p-4">
+      <p className="text-xs text-muted">
+        Every tailored resume prints this exactly as written here. Keep a joint degree whole, for example
+        &quot;Bachelor of Science in Computer Science &amp; Business Administration, Finance Emphasis&quot;.
+      </p>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="School" value={draft.school} onChange={(school) => setDraft({ ...draft, school })} placeholder="University of Southern California" />
+        <Field label="Degree" value={draft.degree} onChange={(degree) => setDraft({ ...draft, degree })} placeholder="Bachelor of Science in Computer Science" />
+        <Field label="Graduation" value={draft.grad_date} onChange={(grad_date) => setDraft({ ...draft, grad_date })} placeholder="May 2028" />
+      </div>
+      {error && <p className="mt-2 text-xs text-warn">{error}</p>}
+      <div className="mt-3 flex gap-2">
+        <button type="button" onClick={save} disabled={saving} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
+          {saving ? "Saving..." : "Save education"}
+        </button>
+        <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">
+          Cancel
+        </button>
+      </div>
     </div>
   );
 }

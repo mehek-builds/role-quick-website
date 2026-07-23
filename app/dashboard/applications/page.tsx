@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   getStoredEmail,
@@ -12,12 +12,12 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { portalName, reviewablePackets as onlyReviewablePackets } from "@/lib/application-review";
+import { explicitTerms, isLivePacketStatus, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
 
-type ResumeGenerationResponse = { resume_id: string };
+type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type ProfileIdentity = { full_name?: string; email?: string };
 type NewApplicationDraft = {
   company: string;
@@ -33,173 +33,13 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   jobDescription: "",
 };
 
-const QA_PACKET: GeneratedResume = {
-  id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b01",
-  job_context: { company: "Acme Labs", role: "Product Engineer", jd_hash: "qa" },
-  resume_object_key: "qa",
-  created_at: "2026-07-21T12:00:00.000Z",
-  download_url: "#",
-  spec: {
-    school: "University of Southern California",
-    degree: "B.S. Computer Science",
-    grad_date: "May 2027",
-    coursework: "Data Structures, Software Engineering",
-    education_position: "top",
-    experience: [
-      {
-        type: "job",
-        org: "Elemental AI",
-        title: "Product Engineer",
-        date_range: "Jan 2026 - Present",
-        bullets: [
-          "Built a TypeScript workflow engine that automated 18 client handoffs and reduced turnaround time by 42%.",
-          "Shipped accessible React dashboards used by 6 teams, with tested empty, loading, and error states.",
-        ],
-      },
-      {
-        type: "project",
-        org: "Litos",
-        title: "Founder and Engineer",
-        date_range: "Jun 2026 - Present",
-        bullets: [
-          "Designed a job-application system that tailors grounded resumes and reviews every answer before submission.",
-        ],
-      },
-    ],
-    skills: ["TypeScript", "React", "Node.js", "PostgreSQL", "Product Engineering"],
-    _quality: { atsCoverage: 76 },
-    _review: {
-      jd_text:
-        "Acme Labs is hiring a Product Engineer to build TypeScript workflow systems and accessible React interfaces. You will partner with product teams, automate operational handoffs, write tested code, and improve application performance. Experience with Node.js, PostgreSQL, and customer-facing product engineering is preferred.",
-      portal_url: "https://jobs.example.com/acme/product-engineer",
-      ats_name: "Greenhouse",
-      status: "questions_ready",
-      edited_terms: ["workflow", "automated", "accessible", "tested", "Product Engineering"],
-      questions: [
-        {
-          id: "why-acme",
-          question: "Why are you interested in building products at Acme Labs?",
-          answer:
-            "I am drawn to Acme Labs because the role combines product judgment with hands-on engineering. I have built workflow systems and customer-facing tools where speed only mattered when the experience stayed clear and reliable.",
-          kind: "essay",
-          required: true,
-        },
-        {
-          id: "example",
-          question: "Describe a workflow you improved.",
-          answer:
-            "At Elemental AI, I built a TypeScript workflow engine that automated 18 client handoffs and reduced turnaround time by 42%. I mapped failure states first, then added visible recovery paths so every handoff remained traceable.",
-          kind: "essay",
-          required: true,
-        },
-      ],
-      skipped_reasons: [],
-      updated_at: "2026-07-21T12:00:00.000Z",
-    },
-  },
-};
-
-const QA_SCENARIOS: Record<string, GeneratedResume> = {
-  acme: QA_PACKET,
-  stripe: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b02",
-    company: "Stripe",
-    role: "Software Engineering Intern",
-    ats: "Lever",
-    score: 82,
-    jd: "Stripe is hiring a Software Engineering Intern to build reliable TypeScript services and React tools. You will improve payment workflows, write tested code, analyze production performance, and collaborate across engineering and product. Experience with Node.js, PostgreSQL, and accessible interfaces is valued.",
-    title: "Software Engineering Intern",
-    bullets: [
-      "Built reliable TypeScript services that automated 18 operational handoffs and reduced turnaround time by 42%.",
-      "Shipped tested React tools for 6 teams and documented production recovery paths.",
-    ],
-    skills: ["TypeScript", "React", "Node.js", "PostgreSQL", "Software Engineering"],
-    editedTerms: ["reliable", "automated", "tested", "production", "Software Engineering"],
-    questions: [],
-  }),
-  notion: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b03",
-    company: "Notion",
-    role: "Product Design Intern",
-    ats: "Ashby",
-    score: 74,
-    jd: "Notion is looking for a Product Design Intern who can turn complex workflows into calm, accessible product experiences. You will prototype in Figma, partner with engineers, test interaction details, and communicate clear design rationale. Experience designing dashboards and systems for real users is preferred.",
-    title: "Product Designer",
-    bullets: [
-      "Designed accessible workflow dashboards in Figma and React for 6 client teams.",
-      "Tested interaction details with users and reduced handoff turnaround time by 42%.",
-    ],
-    skills: ["Figma", "Product Design", "Design Systems", "React", "User Research"],
-    editedTerms: ["accessible", "Figma", "interaction", "users", "Design Systems"],
-    questions: [
-      {
-        id: "notion-craft",
-        question: "Tell us about a product detail you refined through user feedback.",
-        answer: "While designing a workflow dashboard, I saw that users understood system status but could not recover confidently from a failed handoff. I added visible recovery paths, tested the revised interaction, and used the findings to simplify the surrounding controls.",
-        kind: "essay",
-        required: true,
-      },
-    ],
-  }),
-  figma: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b04",
-    company: "Figma",
-    role: "Data Analyst Intern",
-    ats: "Workday",
-    score: 79,
-    jd: "Figma is hiring a Data Analyst Intern to define product metrics, build trustworthy dashboards, and translate behavioral data into clear recommendations. You will work with SQL, PostgreSQL, experimentation, and cross-functional product teams. Strong communication and careful data validation are required.",
-    title: "Data Analyst",
-    bullets: [
-      "Built trustworthy PostgreSQL dashboards that tracked 18 workflow handoffs across 6 teams.",
-      "Analyzed product metrics and validated reporting changes that reduced turnaround time by 42%.",
-    ],
-    skills: ["SQL", "PostgreSQL", "Product Analytics", "Experimentation", "Data Visualization"],
-    editedTerms: ["trustworthy", "dashboards", "metrics", "validated", "Product Analytics"],
-    questions: [],
-  }),
-  vercel: qaVariant(QA_PACKET, {
-    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b05",
-    company: "Vercel",
-    role: "Developer Advocate Intern",
-    ats: "Greenhouse",
-    score: 77,
-    jd: "Vercel is seeking a Developer Advocate Intern to teach developers through clear technical content, product demos, and community programs. You will build examples with React and TypeScript, explain complex workflows, gather developer feedback, and partner with product engineering. Strong writing and public communication are essential.",
-    title: "Developer Advocate",
-    bullets: [
-      "Built React and TypeScript product demos that explained workflow automation to 6 client teams.",
-      "Translated developer feedback into tested examples and clear implementation guidance.",
-    ],
-    skills: ["TypeScript", "React", "Technical Writing", "Developer Education", "Public Speaking"],
-    editedTerms: ["demos", "explained", "developer", "guidance", "Technical Writing"],
-    questions: [
-      {
-        id: "vercel-teach",
-        question: "What technical concept have you enjoyed teaching others?",
-        answer: "I enjoy teaching state and failure handling because a small, concrete demo can turn an abstract reliability concept into something a developer can immediately apply.",
-        kind: "essay",
-        required: true,
-      },
-      {
-        id: "vercel-community",
-        question: "How would you learn what a developer community needs?",
-        answer: "I would combine direct conversations with support themes, documentation searches, and product feedback, then test a small piece of content before investing in a larger program.",
-        kind: "essay",
-        required: true,
-      },
-      {
-        id: "vercel-why",
-        question: "Why Vercel?",
-        answer: "Vercel sits at the intersection of product engineering and developer education, which matches how I like to work: build the example, understand the friction, and explain the path clearly.",
-        kind: "essay",
-        required: true,
-      },
-    ],
-  }),
-};
-
 export default function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Mirrors selectedId for in-flight async work to compare against. State reads inside an awaited
+  // callback are the value captured when the callback was created, which is exactly the stale value
+  // a cross-packet race needs to go unnoticed.
+  const selectedIdRef = useRef<string | null>(null);
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   const [screen, setScreen] = useState<Screen>("review");
@@ -213,11 +53,17 @@ export default function Applications() {
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
 
   const moveToScreen = useCallback((next: Screen) => {
-    setScreen(next);
-    requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+    setScreen((current) => {
+      if (current === next) return current;
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+      return next;
+    });
   }, []);
 
   const selectPacket = useCallback((packet: GeneratedResume) => {
+    // Updated synchronously, before any state commit, so an in-flight poll comparing against it
+    // sees the new selection immediately rather than one render later.
+    selectedIdRef.current = packet.id;
     setSelectedId(packet.id);
     setSpec(stripMetadata(packet.spec));
     setQuestions(packet.spec._review?.questions ?? []);
@@ -230,9 +76,28 @@ export default function Applications() {
 
   const refreshSubmission = useCallback(async () => {
     if (!selectedId || qaMode) return;
-    const result = await api<SubmissionResponse>(`/applications/${selectedId}/submission`);
-    setSubmission(result);
-    setPackets((current) => current?.map((packet) => packet.id === selectedId ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+    const requestedId = selectedId;
+    const result = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
+
+    // A poll for packet A can land after the user has switched to packet B: the fetch closes over
+    // the id it asked for, but the poll effect's cleanup cannot reach inside an in-flight request.
+    // Without this guard A's review would be installed while B is selected, so the portal preview,
+    // filled fields and blockers on screen belong to A while the Submit button approves B. That is
+    // an application sent to the wrong employer, so the response is discarded unless it is still
+    // the packet the user is looking at. The ref, not the closure, is the current truth.
+    if (selectedIdRef.current !== requestedId) return;
+
+    setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
+    setPackets((current) => {
+      if (!current) return current;
+      const packet = current.find((item) => item.id === requestedId);
+      if (packet?.spec._review?.updated_at === result.review.updated_at) return current;
+      return current.map((item) => item.id === requestedId ? { ...item, spec: { ...item.spec, _review: result.review } } : item);
+    });
+    // A poll that succeeds clears a stale banner from an earlier transient failure. Without this a
+    // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
+    // run that had since succeeded.
+    setError(null);
     if (result.review.status === "submitted") moveToScreen("submitted");
     else if (["needs_attention", "ready_for_final_approval", "failed"].includes(result.review.status)) moveToScreen("portal");
     else moveToScreen("submitting");
@@ -240,15 +105,50 @@ export default function Applications() {
 
   useEffect(() => {
     if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
-    const timer = window.setInterval(() => refreshSubmission().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not refresh portal status.")), 2500);
-    return () => window.clearInterval(timer);
+    let cancelled = false;
+    let timer: number | undefined;
+    let inFlight = false;
+
+    // A hidden tab skipped the fetch outright and then waited a further 10s before even
+    // reconsidering, so a run that finished while the user was on another tab left the dashboard
+    // frozen on "Preparing" long after the portal had come back with blockers. Backgrounding should
+    // slow the poll, never withhold the terminal state: catch up the moment the tab is visible.
+    const tick = async () => {
+      if (cancelled || inFlight || document.visibilityState !== "visible") return;
+      inFlight = true;
+      try {
+        await refreshSubmission();
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not refresh portal status.");
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const poll = async () => {
+      await tick();
+      if (!cancelled) timer = window.setTimeout(poll, document.visibilityState === "visible" ? 2500 : 10_000);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    timer = window.setTimeout(poll, 2500);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
   }, [qaMode, refreshSubmission, screen, selectedId]);
 
   useEffect(() => {
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
     const localQa = process.env.NODE_ENV !== "production" && qaScenario !== null;
     if (localQa) {
-      queueMicrotask(() => {
+      queueMicrotask(async () => {
+        const { QA_PACKET, QA_SCENARIOS } = await import("./qa-data");
         const scenario = qaScenario === "1" ? "acme" : qaScenario === "no-questions" ? "stripe" : qaScenario;
         const packet = QA_SCENARIOS[scenario ?? "acme"] ?? QA_PACKET;
         setQaMode(true);
@@ -278,7 +178,9 @@ export default function Applications() {
   const review = selected?.spec._review;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
-  const resumeText = useMemo(() => (spec ? resumeCorpus(spec).toLowerCase() : ""), [spec]);
+  const deferredSpec = useDeferredValue(spec);
+  const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
+  const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
 
   async function createApplication() {
     const company = newApplication.company.trim();
@@ -313,6 +215,10 @@ export default function Applications() {
           company,
           role,
           jd_text: jobDescription,
+          application: {
+            ats_name: portalName(portalUrl),
+            portal_url: portalUrl,
+          },
           contact: {
             full_name: fullName,
             email: identity.email?.trim() || getStoredEmail(),
@@ -324,6 +230,17 @@ export default function Applications() {
         }),
       });
 
+      const created = generated.application;
+      if (created?.spec._review) {
+        setPackets((current) => [created, ...(current ?? []).filter((packet) => packet.id !== created.id)]);
+        selectPacket(created);
+        setNewApplication(EMPTY_APPLICATION_DRAFT);
+        setShowNewApplication(false);
+        setNotice("Review packet generated from the job description.");
+        return;
+      }
+
+      // Compatibility path while an older backend deployment is still serving traffic.
       await api(`/applications/${generated.resume_id}/review`, {
         method: "PUT",
         body: JSON.stringify({
@@ -335,10 +252,10 @@ export default function Applications() {
       });
 
       const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
-      const created = history.resumes.find((packet) => packet.id === generated.resume_id);
+      const fallbackCreated = history.resumes.find((packet) => packet.id === generated.resume_id);
       setPackets(history.resumes);
-      if (!created?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
-      selectPacket(created);
+      if (!fallbackCreated?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
+      selectPacket(fallbackCreated);
       setNewApplication(EMPTY_APPLICATION_DRAFT);
       setShowNewApplication(false);
       setNotice("Review packet generated from the job description.");
@@ -466,7 +383,7 @@ export default function Applications() {
           <p className="mt-1 text-sm text-muted">Build, review, approve, and verify employer submissions from one dashboard.</p>
         </div>
         <div className="flex items-center gap-2">
-          {selected && review && <Chip label={statusLabel(screen, review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
+          {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
           <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white">
             {showNewApplication ? "Close" : "New application"}
           </button>
@@ -482,6 +399,26 @@ export default function Applications() {
         <p className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-muted">
           {legacyCount} older resume{legacyCount === 1 ? "" : "s"} stay in your history, but cannot show a job-description diff because they were created before review packets stored the posting text.
         </p>
+      )}
+
+      {/* Rendered above the screen branch, not inside the review branch. Previously a portal run
+          unmounted the switcher, so the user lost access to every other application for the minutes
+          the run took. The run lives on the server, so switching away does not stop it, but the
+          user must be able to find their way back: each chip carries its own status, so a packet
+          mid-run is identifiable rather than lost among the others. */}
+      {selected && reviewablePackets.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {reviewablePackets.map((packet) => (
+            <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
+              <span>{packet.job_context.role} · {packet.job_context.company}</span>
+              {isLivePacketStatus(packet.spec._review?.status) && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${packet.id === selected.id ? "bg-white/20" : "bg-surface-alt text-muted"}`}>
+                  {statusLabel(false, packet.spec._review!.status)}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
       )}
 
       {packets === null ? (
@@ -502,25 +439,17 @@ export default function Applications() {
       ) : screen === "questions" ? (
         <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => prepareApplication()} />
       ) : screen === "submitting" ? (
-        <CenteredState title={submission?.review.status === "submitting" ? "Submitting through the company portal." : "Preparing the company portal."} body="Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step." loading />
+        <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
       ) : screen === "portal" && submission ? (
         <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={() => prepareApplication()} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
         <>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {reviewablePackets.map((packet) => (
-              <button key={packet.id} onClick={() => selectPacket(packet)} className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
-                {packet.job_context.role} · {packet.job_context.company}
-              </button>
-            ))}
-          </div>
-
           <div className="grid min-h-[680px] gap-4 xl:grid-cols-2">
             <DocumentPane eyebrow="Job description" title={`${selected.job_context.role} · ${selected.job_context.company}`} meta={review.ats_name ?? "Company portal"}>
               <div className="prose-copy text-[15px] leading-7 text-ink">
-                <HighlightedText text={review.jd_text} terms={resumeText.split(/\s+/).filter((term) => term.length > 4)} tone="match" />
+                <HighlightedText text={review.jd_text} terms={resumeTerms} tone="match" />
               </div>
             </DocumentPane>
 
@@ -536,14 +465,28 @@ export default function Applications() {
                 </div>
               }
             >
-              <ResumeEditor spec={spec} editedTerms={review.edited_terms} onChange={setSpec} onPatchEntry={patchEntry} />
+              <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
             </DocumentPane>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
+            {/* The old one-line legend described only one of the two marks on screen and named
+                neither pane, so the tailoring diff, the thing this review exists to show, was
+                invisible as a concept. Name both, and render each mark in its own style inline so
+                the legend is read in the same visual language as the panes. */}
             <div>
               <p className="text-sm font-medium text-ink">Litos enters saved answers before asking for final submission approval.</p>
-              <p className="mt-0.5 text-xs text-muted">Blue highlights job language. Nothing reaches the employer until you review the filled portal and click Submit application.</p>
+              <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                <span className="inline-flex items-center gap-1.5">
+                  <mark className="rounded bg-brand-soft px-1 text-brand-ink">highlighted</mark>
+                  in the job description: language your resume already matches
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <mark className="rounded-sm border-b-2 border-positive bg-positive-soft px-1 text-positive">underlined</mark>
+                  in the resume: wording tailoring changed for this posting
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-muted">Nothing reaches the employer until you review the filled portal and click Submit application.</p>
             </div>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
@@ -620,30 +563,45 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text" }
   );
 }
 
-function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: string[]; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
+function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
     <div className="mx-auto max-w-[640px] bg-white px-4 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)] sm:px-7">
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
-      <EditableLine value={`${spec.degree} · ${spec.grad_date}`} onChange={(value) => {
-        const [degree, grad_date = ""] = value.split(" · ");
-        onChange({ ...spec, degree, grad_date });
-      }} className="mt-1 text-center text-xs text-muted" />
+      {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
+          lossy in both directions: a degree legitimately containing " · " split wrong, and any
+          third separator silently discarded the tail. R-047 was a mangled degree that could not be
+          corrected, so a control that can mangle it again works against the fix. The dot is drawn
+          between them rather than stored in either. */}
+      <div className="mt-1 flex items-baseline justify-center gap-1.5 text-xs text-muted">
+        <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-center" width="auto" />
+        <span aria-hidden>·</span>
+        <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-center" width="auto" />
+      </div>
 
-      {spec.experience.map((entry, index) => (
-        <section key={`${entry.org}-${index}`} className="mt-6">
-          <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">{entry.type === "project" ? "Projects" : entry.type === "leadership" ? "Leadership" : "Experience"}</p>
-          <div className="grid grid-cols-[1fr_auto] gap-x-4">
-            <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
-            <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="text-right text-xs text-muted" />
-          </div>
-          <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
-          <ul className="mt-2 space-y-1.5">
-            {entry.bullets.map((bullet, bulletIndex) => (
-              <li key={bulletIndex} className="grid grid-cols-[12px_1fr] gap-1.5"><span>•</span><EditableHighlight value={bullet} terms={editedTerms} onChange={(value) => onPatchEntry(index, { bullets: entry.bullets.map((item, i) => (i === bulletIndex ? value : item)) })} /></li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {/* The section heading used to render inside this map, so four jobs printed "EXPERIENCE" four
+          times down the page. A resume has one Experience section containing four roles. Print the
+          heading only where the section actually changes. */}
+      {spec.experience.map((entry, index) => {
+        const heading = sectionHeading(entry.type);
+        const startsSection = startsNewSection(spec.experience.map((item) => item.type), index);
+        return (
+          <section key={`${entry.org}-${index}`} className={startsSection ? "mt-6" : "mt-4"}>
+            {startsSection && (
+              <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
+            )}
+            <div className="flex items-baseline justify-between gap-4">
+              <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
+              <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="shrink-0 text-right text-xs text-muted" width="auto" />
+            </div>
+            <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
+            <ul className="mt-2 space-y-1.5">
+              {entry.bullets.map((bullet, bulletIndex) => (
+                <li key={bulletIndex} className="grid grid-cols-[12px_1fr] gap-1.5"><span>•</span><EditableHighlight value={bullet} terms={editedTerms} onChange={(value) => onPatchEntry(index, { bullets: entry.bullets.map((item, i) => (i === bulletIndex ? value : item)) })} /></li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
 
       <section className="mt-6">
         <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">Skills</p>
@@ -653,11 +611,78 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
   );
 }
 
-function EditableLine({ value, onChange, className = "" }: { value: string; onChange: (value: string) => void; className?: string }) {
-  return <input aria-label="Editable resume text" value={value} onChange={(event) => onChange(event.target.value)} className={`w-full border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${className}`} />;
+// This was a single-line <input>, which cannot wrap, so any value wider than the column was simply
+// cut off: the education headline stopped at "Marshall School of B" and date ranges at
+// "September 2025 - Presen". The user could not read their own resume, let alone check it. A
+// one-row textarea that grows to its content wraps instead of truncating and keeps the field
+// editable in place. `width="auto"` is for the right-hand date column, which should size to its
+// text rather than stretch and push the org name into a squeeze.
+function EditableLine({ value, onChange, className = "", width = "full" }: { value: string; onChange: (value: string) => void; className?: string; width?: "full" | "auto" }) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+  const composing = useRef(false);
+
+  const resize = useCallback(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight}px`;
+  }, []);
+
+  // useLayoutEffect, not useEffect: measuring after paint made every field flash at one-row height
+  // before growing on first render.
+  useLayoutEffect(resize, [resize, value]);
+
+  // Re-measure on anything that changes the wrap point rather than only on value change. The
+  // element carries overflow-hidden and a JS-set pixel height, so a stale height silently CLIPS
+  // with no scrollbar and no ellipsis, which is worse than the truncation this replaced. Crossing
+  // the xl:grid-cols-2 breakpoint, zooming, and a late-loading webfont all move the wrap point
+  // without touching the value.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => resize());
+    observer.observe(node);
+    if (node.parentElement) observer.observe(node.parentElement);
+    void document.fonts?.ready.then(resize).catch(() => {});
+    return () => observer.disconnect();
+  }, [resize]);
+
+  // These fields were structurally single-line under <input>: an org, a title, a date range and the
+  // school headline cannot contain a newline, and the element guaranteed it. A textarea removes
+  // that guarantee, and the value flows straight into the resume spec, the rendered PDF and the
+  // portal autofill payload, where a newline in a date or org field is a broken line at best and a
+  // mis-parsed ATS field at worst. Wrapping is a presentation need; multi-line content is not.
+  const commit = (raw: string) => onChange(raw.replace(/\s*[\r\n]+\s*/g, " "));
+
+  return (
+    <textarea
+      ref={ref}
+      aria-label="Editable resume text"
+      rows={1}
+      value={value}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.preventDefault();
+      }}
+      // Intermediate IME states (Japanese, Chinese, Korean, dead-key accents) must reach the DOM
+      // untouched: rewriting the value mid-composition drops pre-edit characters and jumps the
+      // caret. Commit the cleaned value once the composition ends.
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={(event) => {
+        composing.current = false;
+        commit(event.currentTarget.value);
+      }}
+      onChange={(event) => {
+        if (composing.current) onChange(event.target.value);
+        else commit(event.target.value);
+      }}
+      className={`resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${width === "full" ? "w-full" : "w-auto"} ${className}`}
+    />
+  );
 }
 
-function EditableHighlight({ value, terms, onChange }: { value: string; terms: string[]; onChange: (value: string) => void }) {
+function EditableHighlight({ value, terms, onChange }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void }) {
   const [editing, setEditing] = useState(false);
   return editing ? (
     <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-[8px] border border-brand bg-white px-2 py-1 outline-none" />
@@ -668,14 +693,16 @@ function EditableHighlight({ value, terms, onChange }: { value: string; terms: s
   );
 }
 
-function HighlightedText({ text, terms, tone }: { text: string; terms: string[]; tone: "match" | "edited" }) {
-  const normalized = new Set(terms.map((term) => term.toLowerCase().replace(/[^a-z0-9+#./-]/g, "")).filter(Boolean));
+const HighlightedText = memo(function HighlightedText({ text, terms, tone }: { text: string; terms: ReadonlySet<string>; tone: "match" | "edited" }) {
   return <>{text.split(/(\s+)/).map((part, index) => {
     const key = part.toLowerCase().replace(/[^a-z0-9+#./-]/g, "");
-    const highlighted = key.length > 2 && normalized.has(key);
-    return highlighted ? <mark key={index} className={tone === "edited" ? "border-b-2 border-brand bg-surface-alt px-0.5 text-brand-ink" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
+    const highlighted = key.length > 2 && terms.has(key);
+    // Both tones were brand-blue and differed only by a border, so a JD keyword match and a
+    // tailoring edit were near-indistinguishable at a glance despite meaning opposite things: one
+    // is what already fit, the other is what was changed. Give the edit its own hue.
+    return highlighted ? <mark key={index} className={tone === "edited" ? "rounded-sm border-b-2 border-positive bg-positive-soft px-0.5 text-positive" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
   })}</>;
-}
+});
 
 function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
@@ -707,9 +734,17 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
       <Card className="p-7">
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Secure portal runner</p>
         <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "The portal is filled and ready."}</h2>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          {needsAttention ? review.attention_reason ?? "Complete the remaining portal step in the secure live browser." : review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form. The employer receives nothing until you click Submit application below."}
-        </p>
+        {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
+            HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
+            is how "CAPTCHA requires your attention ... is required required field is required ..."
+            reached the screen. Each blocker is its own item, because each is its own task. */}
+        {needsAttention ? (
+          <BlockerList reason={review.attention_reason} />
+        ) : (
+          <p className="mt-2 text-sm leading-6 text-muted">
+            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form. The employer receives nothing until you click Submit application below."}
+          </p>
+        )}
         {review.filled_fields && review.filled_fields.length > 0 && (
           <div className="mt-6">
             <p className="text-xs font-medium text-muted">Fields filled by Litos</p>
@@ -752,49 +787,123 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive">✓</div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
 
+function BlockerList({ reason }: { reason?: string }) {
+  const blockers = (reason ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  if (blockers.length === 0) {
+    return <p className="mt-2 text-sm leading-6 text-muted">Complete the remaining portal step in the secure live browser.</p>;
+  }
+  if (blockers.length === 1) {
+    return <p className="mt-2 text-sm leading-6 text-muted">{blockers[0]}</p>;
+  }
+  return (
+    <ul className="mt-3 space-y-1.5">
+      {blockers.map((blocker, index) => (
+        <li key={index} className="grid grid-cols-[14px_1fr] gap-2 text-sm leading-6 text-muted">
+          <span aria-hidden className="mt-[1px] text-faint">•</span>
+          <span>{blocker}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// A real portal run took over two minutes against Greenhouse with no elapsed time, no detail and no
+// timeout, which is indistinguishable from a hung run: the operator's only move was a manual reload,
+// and a user's would be to re-trigger a run that was working fine.
+const PORTAL_SLOW_AFTER_S = 45;
+// Past this the client genuinely cannot claim the run is healthy, only that the last poll returned a
+// non-terminal status. Saying "still running" identically at 45 seconds and at 45 minutes just moves
+// the original defect past the first threshold.
+const PORTAL_STUCK_AFTER_S = 300;
+
+function PortalProgress({ status, startedAt }: { status?: ApplicationReview["status"]; startedAt?: string }) {
+  // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
+  // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
+  // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
+  // Parsing stays pure and returns null when there is no usable timestamp; the effect below picks
+  // the mount-time fallback, because reading the clock during render is both impure
+  // (react-hooks/purity) and a server/client hydration mismatch.
+  const startedMs = useMemo(() => {
+    const parsed = startedAt ? Date.parse(startedAt) : NaN;
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [startedAt]);
+
+  // Starts at 0 rather than reading the clock in the initializer: a useState initializer must be
+  // pure (react-hooks/purity), and Date.now() there also differs between the server render and the
+  // client hydration. The effect corrects it to the true elapsed time on the first tick, which runs
+  // immediately rather than after a second's delay.
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    // Deliberately a self-rescheduling timeout rather than an interval. The repo bans setInterval in
+    // this file (tests/application-submission-gate.test.mjs) so portal polling can never stack
+    // overlapping requests, and a display clock is not worth carving an exception into that rule.
+    let timer: number | undefined;
+    let cancelled = false;
+    const anchor = startedMs ?? Date.now();
+    const tick = () => {
+      if (cancelled) return;
+      setElapsed(Math.max(0, Math.floor((Date.now() - anchor) / 1000)));
+      timer = window.setTimeout(tick, 1000);
+    };
+    tick();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [startedMs]);
+
+  // The old copy asserted "Nothing is submitted during this preparation step" on every status,
+  // including the genuinely-submitting one. That reassurance was false at exactly the moment it
+  // mattered most, so each stage now states only what is true of that stage.
+  const submitting = status === "submitting";
+  const title = submitting ? "Submitting through the company portal." : "Preparing the company portal.";
+  const body = submitting
+    ? "You approved this submission. Litos is completing it in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
+    : "Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step.";
+
+  const milestone =
+    elapsed >= PORTAL_STUCK_AFTER_S
+      ? "This is longer than a portal run usually takes. The run is still open on the server, so leave this page if you want and come back; if it has not moved shortly, prepare the application again."
+      : elapsed >= PORTAL_SLOW_AFTER_S
+        ? "Portal runs regularly take a few minutes. This one is still going."
+        : null;
+
+  return (
+    <div className="space-y-3">
+      <CenteredState title={title} body={body} loading />
+      {/* aria-hidden on the ticking number: as an aria-live region it announced "1s elapsed, 2s
+          elapsed, 3s elapsed" every second for the several minutes a run takes, burying the
+          terminal state under it. The live region belongs on the milestone copy, which changes
+          twice in a run. */}
+      <p className="text-center text-xs text-muted" aria-hidden>
+        {formatElapsed(elapsed)} elapsed
+      </p>
+      {milestone && (
+        <p role="status" className="mx-auto max-w-lg text-center text-xs text-muted">
+          {milestone}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+// "Needs attention" and "Stopped safely" were painted in the same ready/success treatment as
+// "Ready for review", so the label was the only signal anything was wrong.
+function chipKind(status: ApplicationReview["status"]): "sent" | "ready" | "warn" {
+  if (status === "submitted") return "sent";
+  if (status === "needs_attention" || status === "failed" || status === "ready_for_final_approval") return "warn";
+  return "ready";
+}
+
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
   return { school: spec.school ?? "", degree: spec.degree ?? "", grad_date: spec.grad_date ?? "", coursework: spec.coursework ?? "", education_position: spec.education_position, experience: spec.experience ?? [], skills: spec.skills ?? [], skill_source: spec.skill_source };
 }
-
-function qaVariant(packet: GeneratedResume, options: {
-  id: string;
-  company: string;
-  role: string;
-  ats: string;
-  score: number;
-  jd: string;
-  title: string;
-  bullets: string[];
-  skills: string[];
-  editedTerms: string[];
-  questions: ApplicationQuestion[];
-}): GeneratedResume {
-  const review = packet.spec._review;
-  if (!review) return packet;
-  return {
-    ...packet,
-    id: options.id,
-    job_context: { company: options.company, role: options.role, jd_hash: `qa-${options.company.toLowerCase()}` },
-    spec: {
-      ...packet.spec,
-      experience: packet.spec.experience.map((entry, index) =>
-        index === 0 ? { ...entry, title: options.title, bullets: options.bullets } : entry,
-      ),
-      skills: options.skills,
-      _quality: { ...packet.spec._quality, atsCoverage: options.score },
-      _review: {
-        ...review,
-        jd_text: options.jd,
-        portal_url: `https://jobs.example.com/${options.company.toLowerCase()}/${options.role.toLowerCase().replaceAll(" ", "-")}`,
-        ats_name: options.ats,
-        status: options.questions.length > 0 ? "questions_ready" : "ready_to_submit",
-        edited_terms: options.editedTerms,
-        questions: options.questions,
-      },
-    },
-  };
-}
-
 function resumeCorpus(spec: ResumeSpec): string {
   return [spec.school, spec.degree, spec.coursework, ...spec.experience.flatMap((entry) => [entry.org, entry.title, ...entry.bullets]), ...spec.skills].join(" ");
 }
@@ -804,11 +913,3 @@ function extractScore(spec: GeneratedResume["spec"]): number {
   return typeof raw === "number" ? Math.round(raw <= 1 ? raw * 100 : raw) : 0;
 }
 
-function statusLabel(screen: Screen, status: ApplicationReview["status"]): string {
-  if (screen === "submitted" || status === "submitted") return "Submitted";
-  if (screen === "submitting" || status === "submitting") return "Submitting";
-  if (status === "needs_attention") return "Needs attention";
-  if (status === "ready_for_final_approval") return "Approval required";
-  if (status === "failed") return "Stopped safely";
-  return "Ready for review";
-}

@@ -110,7 +110,7 @@ export type GeneratedResume = {
     _contact?: Record<string, string | undefined>;
     _review?: ApplicationReview;
   };
-  resume_object_key: string;
+  resume_object_key?: string;
   download_url?: string;
   created_at: string | null;
 };

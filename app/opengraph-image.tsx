@@ -1,14 +1,15 @@
 import { ImageResponse } from "next/og";
 
-/* Social share card: white canvas, the Dart mark, the hero line, the three
+/* Social share card: white canvas, the mark, the hero line, the three
    pillar threads. Twitter falls back to this image automatically. */
 
-/* The Dart mark (public/brand/litos-mark.svg), inlined as a data URI so
-   Satori rasterizes the real logo rather than a stand-in glyph. */
-const DART_MARK =
+/* The mark (public/brand/litos-mark.svg), inlined as a data URI so Satori
+   rasterizes the real logo rather than a stand-in glyph. Keep this path in
+   sync with scripts/generate-brand-assets.mjs, which owns the artwork. */
+const MARK =
   "data:image/svg+xml;base64," +
   Buffer.from(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="14" fill="#eef1fe"/><path d="M55 10 L9 30 L25 37 Z" fill="#6b84e8"/><path d="M55 10 L25 37 L29 54 Z" fill="#3d51ad"/></svg>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" fill="#ffffff"/><path fill="#000000" d="M32.81 8 L76.01 8 L75.17 16 L31.97 16 Z M27.53 24 L77.93 24 L77.09 32 L26.69 32 Z M22.25 40 L79.85 40 L79.01 48 L21.41 48 Z M16.97 56 L81.77 56 L80.93 64 L16.13 64 Z M11.69 72 L83.69 72 L81.59 92 L9.59 92 Z"/></svg>`,
   ).toString("base64");
 
 export const size = { width: 1200, height: 630 };
@@ -33,7 +34,7 @@ export default function OgImage() {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={DART_MARK} width={72} height={72} alt="" />
+          <img src={MARK} width={72} height={72} alt="" />
           <div style={{ fontSize: 44, fontWeight: 600, color: "#12120f" }}>
             Litos
           </div>
