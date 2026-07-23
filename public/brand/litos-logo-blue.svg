@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 160" role="img" aria-labelledby="title">
-  <title id="title">Litos</title>
-  <g transform="translate(8 8) scale(2.25)">
-    <rect width="64" height="64" rx="14" fill="#eef1fe"/>
-    <path d="M55 10 L9 30 L25 37 Z" fill="#6b84e8"/>
-    <path d="M55 10 L25 37 L29 54 Z" fill="#3d51ad"/>
-  </g>
-  <text x="180" y="112" fill="#3d51ad" font-family="Inter, Arial, sans-serif" font-size="92" font-weight="700" letter-spacing="-3">Litos</text>
-</svg>

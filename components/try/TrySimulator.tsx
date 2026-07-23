@@ -234,7 +234,7 @@ export function TrySimulator({
           </span>
           <span className="shrink-0 text-[13px] text-faint">🧩</span>
           {/* The Litos toolbar icon the popup hangs off of */}
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-2 ring-brand/30">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-2 ring-ink/15">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/litos-mark.svg" alt="" className="h-5 w-5" />
           </span>
@@ -283,12 +283,13 @@ export function TrySimulator({
               {/* caret pointing up to the toolbar icon */}
               <span className="absolute -top-1.5 right-6 hidden h-3 w-3 rotate-45 rounded-[3px] border-l border-t border-border bg-white lg:block" />
 
-              {/* Header, matches the real popup: brand square + name + icons */}
+              {/* Header, matches the real popup: the mark + name + icons. The mark
+                  carries its own white ground, so it sits on no coloured tile. */}
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <span className="flex items-center gap-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-brand">
+                  <span className="flex h-6 w-6 items-center justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src="/brand/litos-mark.svg" alt="" className="h-4 w-4" />
+                    <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
                   </span>
                   <span className="text-[15px] font-bold tracking-tight text-ink">
                     Litos

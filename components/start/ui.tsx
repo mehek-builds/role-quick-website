@@ -175,11 +175,13 @@ export function LaterLink({ onClick }: { onClick: () => void }) {
 export function FounderNote({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-alt px-4 py-3.5">
+      {/* The mark is a square artwork with its own white ground: no rounding and
+          no padding, or the corners of the stack get clipped. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/brand/litos-mark.svg"
         alt=""
-        className="mt-0.5 h-6 w-6 shrink-0 rounded-full border border-border bg-surface p-1"
+        className="mt-0.5 h-6 w-6 shrink-0 border border-border"
       />
       <div className="min-w-0">
         <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
