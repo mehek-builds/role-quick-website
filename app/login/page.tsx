@@ -7,6 +7,7 @@ import { API_URL } from "@/lib/config";
 import { setSession, getToken, getOnboardingState } from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
 import { requestCodeError, verifyCodeError } from "./errors";
+import { PendingLabel } from "@/components/app/ui";
 
 /* Passwordless sign-in, same account system as the extension: email a 6-digit
    code (/auth/request-code + /auth/verify-code). Email ownership must always be
@@ -150,7 +151,7 @@ export default function Login() {
               disabled={busy}
               className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? "Sending code..." : "Continue with email"}
+              {busy ? <PendingLabel onColor>Sending code...</PendingLabel> : "Continue with email"}
             </button>
           </form>
         ) : (
@@ -180,7 +181,7 @@ export default function Login() {
               disabled={busy || code.length !== 6}
               className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {busy ? "Verifying..." : "Sign in"}
+              {busy ? <PendingLabel state="solving" onColor>Verifying...</PendingLabel> : "Sign in"}
             </button>
             <button
               type="button"
@@ -189,7 +190,7 @@ export default function Login() {
               className="mt-3 w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy
-                ? "Requesting a fresh code..."
+                ? <PendingLabel state="searching">Requesting a fresh code...</PendingLabel>
                 : resendCooldown > 0
                   ? `Resend code in ${resendCooldown}s`
                   : "Resend code"}

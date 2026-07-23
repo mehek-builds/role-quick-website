@@ -10,7 +10,8 @@ import {
   type GeneratedResume,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
+import { ThinkingOrb } from "thinking-orbs";
 import { portalName, reviewablePackets as onlyReviewablePackets } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -423,7 +424,7 @@ export default function Applications() {
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               <button onClick={continueFromResume} disabled={saving} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
-                {saving ? "Checking resume..." : "Prepare application"}
+                {saving ? <PendingLabel state="solving" onColor>Checking resume...</PendingLabel> : "Prepare application"}
               </button>
             </div>
           </div>
@@ -478,7 +479,7 @@ function NewApplicationPanel({
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
         <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
-          {creating ? "Generating review packet..." : "Generate review packet"}
+          {creating ? <PendingLabel state="composing" onColor>Generating review packet...</PendingLabel> : "Generate review packet"}
         </button>
       </div>
     </Card>
@@ -628,7 +629,7 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
 }
 
 function CenteredState({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
-  return <Card className="mx-auto max-w-2xl p-12 text-center"><div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${loading ? "rq-shimmer" : "bg-positive-soft text-positive"}`}>{loading ? "" : "✓"}</div><h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
+  return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive">✓</div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
 
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {

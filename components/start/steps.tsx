@@ -23,7 +23,8 @@ import {
   periodsFor,
 } from "@/lib/periods";
 import { Chip, FounderNote, LaterLink, PrimaryButton, Receipt, RefusalList, StartShell } from "./ui";
-import { ErrorNote } from "@/components/app/ui";
+import { ErrorNote, PendingLabel } from "@/components/app/ui";
+import { ThinkingOrb } from "thinking-orbs";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
 
@@ -127,7 +128,7 @@ export function FocusStep({ onDone, onLater }: { onDone: () => void; onLater: ()
 
       <div className="flex items-center gap-3">
         <PrimaryButton onClick={() => void save()} disabled={busy || categories.length === 0}>
-          {busy ? "Saving..." : "Continue"}
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
       </div>
@@ -247,7 +248,9 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       >
         {busy ? (
           <>
-            <div className="rq-shimmer mx-auto h-4 w-40 rounded-full" />
+            <div className="mx-auto flex h-8 w-8 items-center justify-center">
+              <ThinkingOrb state="composing" size={20} />
+            </div>
             <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
               Reading {file?.name}
             </p>
@@ -529,7 +532,7 @@ export function GapsStep({
 
       <div className="mt-6 flex items-center gap-3">
         <PrimaryButton onClick={() => void save()} disabled={busy}>
-          {busy ? "Saving..." : "Save"}
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Save"}
         </PrimaryButton>
         <button
           type="button"
@@ -669,7 +672,7 @@ export function TargetStep({
 
       <div className="flex items-center gap-3">
         <PrimaryButton onClick={() => void save()} disabled={busy || !primary}>
-          {busy ? "Saving..." : "Done"}
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Done"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
       </div>
@@ -735,7 +738,7 @@ export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish
           }}
           disabled={busy}
         >
-          {busy ? "Finishing..." : "Go to dashboard"}
+          {busy ? <PendingLabel state="shaping" onColor>Finishing...</PendingLabel> : "Go to dashboard"}
         </PrimaryButton>
       </div>
     </StartShell>

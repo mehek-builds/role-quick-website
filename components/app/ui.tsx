@@ -1,5 +1,7 @@
 "use client";
 
+import { ThinkingOrb, type OrbState } from "thinking-orbs";
+
 /* Shared in-app primitives, per brand deck sections 04 (shape/surface) and 07
    (review view): 20px cards, pill chips, shimmer loading, match-score ring.
    Color encodes what something is (pillar), never how urgently to act. */
@@ -106,6 +108,42 @@ export function ScoreRing({ score }: { score: number }) {
       <span className="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-semibold text-ink">
         {pct}
       </span>
+    </div>
+  );
+}
+
+/** Inline pending label: a small orb next to button/status text, never wraps.
+   `onColor` is for white-text buttons on a solid brand background, where the
+   orb must render light dots regardless of the page's own light/dark mode. */
+export function PendingLabel({
+  children,
+  state = "working",
+  onColor = false,
+}: {
+  children: React.ReactNode;
+  state?: OrbState;
+  onColor?: boolean;
+}) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+      <ThinkingOrb state={state} size={20} theme={onColor ? "dark" : "auto"} />
+      <span className="whitespace-nowrap">{children}</span>
+    </span>
+  );
+}
+
+/** Section/page-level pending cue: pairs with ShimmerRows, doesn't replace it. */
+export function LoadingOrb({
+  label,
+  state = "working",
+}: {
+  label?: string;
+  state?: OrbState;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <ThinkingOrb state={state} size={20} />
+      {label && <span className="text-sm text-muted">{label}</span>}
     </div>
   );
 }
