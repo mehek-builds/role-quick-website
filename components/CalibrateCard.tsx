@@ -15,9 +15,11 @@ import {
 /* The calibration card. Three taps (hunt, field, region) and the site
    answers with the person's actual market: matched real programs, one
    honest early-applicant stat, and the shortest path into onboarding.
-   Frosted glass, bottom-right, machine voice for labels; it waits until
-   the hero has had its moment (6s or first real scroll), and X respects
-   the visitor forever. Answers live in this browser only. */
+   Frosted glass, bottom-right, machine voice for labels. It never
+   interrupts the opening: the card enters only after three sections are
+   behind the visitor (the hero's rolling tape plus the first two
+   chapters), and X respects them forever. Answers live in this browser
+   only. */
 
 const LS_PROFILE = "litos.profile.v1";
 const LS_DISMISSED = "litos.calibrate.dismissed.v1";
@@ -58,14 +60,34 @@ export function CalibrateCard() {
       shownOnce.current = true;
       setPhase("card");
     };
-    const t = setTimeout(show, 6000);
-    const onScroll = () => {
-      if (window.scrollY > window.innerHeight * 0.6) show();
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
+    /* Only after the visitor has spent the opening: the hero (the rolling
+       tape) plus the receipt and odds chapters. The card enters as the
+       third content section (#formats) reaches the viewport; if that
+       anchor ever disappears, fall back to a four-viewport scroll depth.
+       No timer: someone who stays on the hero is never interrupted. */
+    const target = document.getElementById("formats");
+    let io: IntersectionObserver | null = null;
+    let onScroll: (() => void) | null = null;
+    if (target && typeof IntersectionObserver !== "undefined") {
+      io = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            show();
+            io?.disconnect();
+          }
+        },
+        { rootMargin: "0px 0px -20% 0px" },
+      );
+      io.observe(target);
+    } else {
+      onScroll = () => {
+        if (window.scrollY > window.innerHeight * 4) show();
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
+    }
     return () => {
-      clearTimeout(t);
-      window.removeEventListener("scroll", onScroll);
+      io?.disconnect();
+      if (onScroll) window.removeEventListener("scroll", onScroll);
     };
   }, []);
 
