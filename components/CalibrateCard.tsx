@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ThinkingOrb } from "thinking-orbs";
 import {
   FIELDS,
   HUNTS,
@@ -39,7 +40,17 @@ export function CalibrateCard() {
   const [hunt, setHunt] = useState<Hunt | null>(null);
   const [field, setField] = useState<Field | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  /* the matching beat between the third tap and the reveal */
+  const [matching, setMatching] = useState(false);
+  const matchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const shownOnce = useRef(false);
+
+  useEffect(
+    () => () => {
+      if (matchTimer.current) clearTimeout(matchTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     let saved: Profile | null = null;
@@ -79,6 +90,15 @@ export function CalibrateCard() {
         { rootMargin: "0px 0px -20% 0px" },
       );
       io.observe(target);
+      /* a hard jump (native anchor, restored scroll) can teleport past
+         the section between rendering frames and the observer never sees
+         it intersect; a passive position check catches being at or past
+         the trigger line */
+      onScroll = () => {
+        if (target.getBoundingClientRect().top < window.innerHeight * 0.8)
+          show();
+      };
+      window.addEventListener("scroll", onScroll, { passive: true });
     } else {
       onScroll = () => {
         if (window.scrollY > window.innerHeight * 4) show();
@@ -102,7 +122,10 @@ export function CalibrateCard() {
   }, [phase]);
 
   const dismiss = () => {
+    if (matchTimer.current) clearTimeout(matchTimer.current);
+    setMatching(false);
     if (profile) {
+      setStep(3);
       setPhase("pill");
       return;
     }
@@ -116,10 +139,20 @@ export function CalibrateCard() {
     if (!hunt || !field) return;
     const p: Profile = { hunt, field, region };
     setProfile(p);
-    setStep(3);
     try {
       localStorage.setItem(LS_PROFILE, JSON.stringify(p));
     } catch {}
+    /* one short thinking beat (the dashboard's orb) before the reveal;
+       skipped under reduced motion, and the match itself is instant */
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setStep(3);
+      return;
+    }
+    setMatching(true);
+    matchTimer.current = setTimeout(() => {
+      setMatching(false);
+      setStep(3);
+    }, 1400);
   };
 
   if (phase === "hidden") return null;
@@ -157,13 +190,17 @@ export function CalibrateCard() {
     <aside
       role="dialog"
       aria-label="Find your roles"
+      /* near-opaque: the sections behind this card are dense (mockups,
+         film stills) and the default 55% glass let them collide with
+         the payoff text */
+      style={{ background: "rgba(255, 255, 255, 0.96)" }}
       className={`fixed bottom-4 left-4 right-4 z-40 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] rounded-2xl border border-border rq-glass p-5 shadow-[0_12px_40px_rgba(18,18,15,0.10)] transition-all duration-300 ease-out motion-reduce:transition-none ${
         entered ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0 motion-reduce:translate-y-0"
       }`}
     >
       <div className="flex items-center justify-between">
         <p className={`${monoCls} text-faint`}>
-          {step < 3 ? "Find your roles · 3 taps" : "Calibrated"}
+          {matching ? "Calibrating" : step < 3 ? "Find your roles · 3 taps" : "Calibrated"}
         </p>
         <button
           onClick={dismiss}
@@ -225,7 +262,7 @@ export function CalibrateCard() {
         </>
       )}
 
-      {step === 2 && (
+      {step === 2 && !matching && (
         <>
           <p className="mt-3 text-[17px] font-[450] tracking-[-0.01em] text-ink">
             Where?
@@ -244,7 +281,7 @@ export function CalibrateCard() {
         </>
       )}
 
-      {step < 3 && (
+      {step < 3 && !matching && (
         <div className="mt-4 flex items-center justify-between">
           <p className={`${monoCls} text-faint`}>
             0{step + 1} / 03
@@ -260,27 +297,40 @@ export function CalibrateCard() {
         </div>
       )}
 
-      {step === 3 && profile && top && (
+      {matching && (
+        <div className="flex flex-col items-center py-9">
+          <div className="flex h-8 w-8 items-center justify-center">
+            <ThinkingOrb state="searching" size={20} />
+          </div>
+          <p className={`${monoCls} mt-3 text-faint`}>Matching your market</p>
+        </div>
+      )}
+
+      {step === 3 && !matching && profile && top && (
         <>
-          <p className="mt-3 text-[17px] font-[450] leading-snug tracking-[-0.01em] text-ink">
+          <p className="mt-3 text-[16px] font-[450] leading-snug tracking-[-0.01em] text-ink">
             {hu?.short ?? "Roles"}. {fieldLabel}.{" "}
             {profile.region === "anywhere" ? "Anywhere" : regionShort}.
           </p>
 
-          <div className="mt-3.5 rounded-xl border border-border bg-white/70 p-3.5">
+          <div className="mt-3 rounded-xl border border-border bg-surface p-3.5">
             <div className="flex items-start gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-[15px] font-semibold text-brand-ink">
                 {top.company.slice(0, 1)}
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="truncate text-[13.5px] font-semibold text-ink">
                   {top.role}
                 </p>
-                <p className="text-[12.5px] text-muted">{top.company}</p>
-                <p className={`${monoCls} mt-1.5 text-faint`}>
-                  {regionsLabel(top)} · {top.status}
-                  {top.verified ? ` · Verified ${top.verified}` : ""}
+                <p className="truncate text-[12.5px] text-muted">{top.company}</p>
+                <p className="mt-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] text-ink">
+                  {top.status} · {regionsLabel(top)}
                 </p>
+                {top.verified && (
+                  <p className="mt-0.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint">
+                    Verified {top.verified}
+                  </p>
+                )}
               </div>
               <a
                 href={top.href}
@@ -295,14 +345,13 @@ export function CalibrateCard() {
           </div>
 
           {rest.length > 0 && (
-            <div className="mt-2 space-y-1.5">
+            <div className="mt-2.5 space-y-1">
               {rest.map((r) => (
                 <p
                   key={r.company + r.role}
                   className="truncate text-[12px] text-muted"
                 >
-                  {r.role} · {r.company}{" "}
-                  <span className={`${monoCls} text-faint`}>{r.status}</span>
+                  {r.role} · {r.company}
                 </p>
               ))}
             </div>
@@ -312,7 +361,7 @@ export function CalibrateCard() {
             Nearly 70% of interviews go to people who applied in the first
             week a posting is live. Early is the whole game.
           </p>
-          <p className={`${monoCls} mt-1 text-faint`}>
+          <p className="mt-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
             Source: Lever recruiting benchmarks
           </p>
 
@@ -330,9 +379,8 @@ export function CalibrateCard() {
               Try the demo
             </a>
           </div>
-          <p className="mt-3 text-[11px] text-faint">
-            Saved in this browser only. Litos preps the application; you
-            always click submit.
+          <p className="mt-2.5 text-[11px] text-faint">
+            Saved in this browser only.
           </p>
         </>
       )}
