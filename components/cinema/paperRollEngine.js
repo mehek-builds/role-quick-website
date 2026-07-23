@@ -3216,7 +3216,20 @@ export function createPaperRoll(container) {
           if (pointerActive && !idle) {
             raycaster.setFromCamera(ndc, camera);
             if (raycaster.ray.intersectPlane(floorPlane, hit)) {
-              target.set(hit.x, hit.z);
+              // Calm law: the cursor draws the drum toward it but can never
+              // yank it. Clamp the chase to a wander-sized reach (the
+              // standalone demo keeps full steering; this is the product
+              // hero). Also tames the very far targets the raised lookAt
+              // creates for upper-screen rays.
+              var dxs = hit.x - pos.x;
+              var dzs = hit.z - pos.y;
+              var ds2 = Math.sqrt(dxs * dxs + dzs * dzs);
+              var REACH = 6.0;
+              if (ds2 > REACH) {
+                dxs *= REACH / ds2;
+                dzs *= REACH / ds2;
+              }
+              target.set(pos.x + dxs, pos.y + dzs);
             }
           } else {
             // wandering autopilot - always in motion, never a straight line
