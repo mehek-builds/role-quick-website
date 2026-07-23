@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   getStoredEmail,
@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { portalName, reviewablePackets as onlyReviewablePackets } from "@/lib/application-review";
+import { normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
@@ -86,18 +86,38 @@ export default function Applications() {
     if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
     let cancelled = false;
     let timer: number | undefined;
-    const poll = async () => {
+    let inFlight = false;
+
+    // A hidden tab skipped the fetch outright and then waited a further 10s before even
+    // reconsidering, so a run that finished while the user was on another tab left the dashboard
+    // frozen on "Preparing" long after the portal had come back with blockers. Backgrounding should
+    // slow the poll, never withhold the terminal state: catch up the moment the tab is visible.
+    const tick = async () => {
+      if (cancelled || inFlight || document.visibilityState !== "visible") return;
+      inFlight = true;
       try {
-        if (document.visibilityState === "visible") await refreshSubmission();
+        await refreshSubmission();
       } catch (reason) {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not refresh portal status.");
       } finally {
-        if (!cancelled) timer = window.setTimeout(poll, document.visibilityState === "visible" ? 2500 : 10_000);
+        inFlight = false;
       }
     };
+
+    const poll = async () => {
+      await tick();
+      if (!cancelled) timer = window.setTimeout(poll, document.visibilityState === "visible" ? 2500 : 10_000);
+    };
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     timer = window.setTimeout(poll, 2500);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [qaMode, refreshSubmission, screen, selectedId]);
@@ -342,7 +362,7 @@ export default function Applications() {
           <p className="mt-1 text-sm text-muted">Build, review, approve, and verify employer submissions from one dashboard.</p>
         </div>
         <div className="flex items-center gap-2">
-          {selected && review && <Chip label={statusLabel(screen, review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
+          {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
           <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white">
             {showNewApplication ? "Close" : "New application"}
           </button>
@@ -358,6 +378,19 @@ export default function Applications() {
         <p className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-muted">
           {legacyCount} older resume{legacyCount === 1 ? "" : "s"} stay in your history, but cannot show a job-description diff because they were created before review packets stored the posting text.
         </p>
+      )}
+
+      {/* Rendered above the screen branch, not inside the review branch. Previously a portal run
+          unmounted the switcher, so the user lost access to every other application for the minutes
+          the run took. Switching packets mid-run is safe: the run lives on the server. */}
+      {selected && reviewablePackets.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {reviewablePackets.map((packet) => (
+            <button key={packet.id} onClick={() => selectPacket(packet)} className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
+              {packet.job_context.role} · {packet.job_context.company}
+            </button>
+          ))}
+        </div>
       )}
 
       {packets === null ? (
@@ -378,21 +411,13 @@ export default function Applications() {
       ) : screen === "questions" ? (
         <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => prepareApplication()} />
       ) : screen === "submitting" ? (
-        <CenteredState title={submission?.review.status === "submitting" ? "Submitting through the company portal." : "Preparing the company portal."} body="Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step." loading />
+        <PortalProgress status={submission?.review.status} />
       ) : screen === "portal" && submission ? (
         <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={() => prepareApplication()} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
         <>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {reviewablePackets.map((packet) => (
-              <button key={packet.id} onClick={() => selectPacket(packet)} className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
-                {packet.job_context.role} · {packet.job_context.company}
-              </button>
-            ))}
-          </div>
-
           <div className="grid min-h-[680px] gap-4 xl:grid-cols-2">
             <DocumentPane eyebrow="Job description" title={`${selected.job_context.role} · ${selected.job_context.company}`} meta={review.ats_name ?? "Company portal"}>
               <div className="prose-copy text-[15px] leading-7 text-ink">
@@ -417,9 +442,23 @@ export default function Applications() {
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
+            {/* The old one-line legend described only one of the two marks on screen and named
+                neither pane, so the tailoring diff, the thing this review exists to show, was
+                invisible as a concept. Name both, and render each mark in its own style inline so
+                the legend is read in the same visual language as the panes. */}
             <div>
               <p className="text-sm font-medium text-ink">Litos enters saved answers before asking for final submission approval.</p>
-              <p className="mt-0.5 text-xs text-muted">Blue highlights job language. Nothing reaches the employer until you review the filled portal and click Submit application.</p>
+              <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                <span className="inline-flex items-center gap-1.5">
+                  <mark className="rounded bg-brand-soft px-1 text-brand-ink">highlighted</mark>
+                  in the job description: language your resume already matches
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <mark className="rounded-sm border-b-2 border-positive bg-positive-soft px-1 text-positive">underlined</mark>
+                  in the resume: wording tailoring changed for this posting
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-muted">Nothing reaches the employer until you review the filled portal and click Submit application.</p>
             </div>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
@@ -505,21 +544,30 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
         onChange({ ...spec, degree, grad_date });
       }} className="mt-1 text-center text-xs text-muted" />
 
-      {spec.experience.map((entry, index) => (
-        <section key={`${entry.org}-${index}`} className="mt-6">
-          <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">{entry.type === "project" ? "Projects" : entry.type === "leadership" ? "Leadership" : "Experience"}</p>
-          <div className="grid grid-cols-[1fr_auto] gap-x-4">
-            <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
-            <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="text-right text-xs text-muted" />
-          </div>
-          <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
-          <ul className="mt-2 space-y-1.5">
-            {entry.bullets.map((bullet, bulletIndex) => (
-              <li key={bulletIndex} className="grid grid-cols-[12px_1fr] gap-1.5"><span>•</span><EditableHighlight value={bullet} terms={editedTerms} onChange={(value) => onPatchEntry(index, { bullets: entry.bullets.map((item, i) => (i === bulletIndex ? value : item)) })} /></li>
-            ))}
-          </ul>
-        </section>
-      ))}
+      {/* The section heading used to render inside this map, so four jobs printed "EXPERIENCE" four
+          times down the page. A resume has one Experience section containing four roles. Print the
+          heading only where the section actually changes. */}
+      {spec.experience.map((entry, index) => {
+        const heading = sectionHeading(entry.type);
+        const startsSection = startsNewSection(spec.experience.map((item) => item.type), index);
+        return (
+          <section key={`${entry.org}-${index}`} className={startsSection ? "mt-6" : "mt-4"}>
+            {startsSection && (
+              <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
+            )}
+            <div className="flex items-baseline justify-between gap-4">
+              <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
+              <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="shrink-0 text-right text-xs text-muted" width="auto" />
+            </div>
+            <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
+            <ul className="mt-2 space-y-1.5">
+              {entry.bullets.map((bullet, bulletIndex) => (
+                <li key={bulletIndex} className="grid grid-cols-[12px_1fr] gap-1.5"><span>•</span><EditableHighlight value={bullet} terms={editedTerms} onChange={(value) => onPatchEntry(index, { bullets: entry.bullets.map((item, i) => (i === bulletIndex ? value : item)) })} /></li>
+              ))}
+            </ul>
+          </section>
+        );
+      })}
 
       <section className="mt-6">
         <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">Skills</p>
@@ -529,8 +577,34 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
   );
 }
 
-function EditableLine({ value, onChange, className = "" }: { value: string; onChange: (value: string) => void; className?: string }) {
-  return <input aria-label="Editable resume text" value={value} onChange={(event) => onChange(event.target.value)} className={`w-full border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${className}`} />;
+// This was a single-line <input>, which cannot wrap, so any value wider than the column was simply
+// cut off: the education headline stopped at "Marshall School of B" and date ranges at
+// "September 2025 - Presen". The user could not read their own resume, let alone check it. A
+// one-row textarea that grows to its content wraps instead of truncating and keeps the field
+// editable in place. `width="auto"` is for the right-hand date column, which should size to its
+// text rather than stretch and push the org name into a squeeze.
+function EditableLine({ value, onChange, className = "", width = "full" }: { value: string; onChange: (value: string) => void; className?: string; width?: "full" | "auto" }) {
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  const resize = useCallback(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight}px`;
+  }, []);
+
+  useEffect(resize, [resize, value]);
+
+  return (
+    <textarea
+      ref={ref}
+      aria-label="Editable resume text"
+      rows={1}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={`resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${width === "full" ? "w-full" : "w-auto"} ${className}`}
+    />
+  );
 }
 
 function EditableHighlight({ value, terms, onChange }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void }) {
@@ -548,14 +622,12 @@ const HighlightedText = memo(function HighlightedText({ text, terms, tone }: { t
   return <>{text.split(/(\s+)/).map((part, index) => {
     const key = part.toLowerCase().replace(/[^a-z0-9+#./-]/g, "");
     const highlighted = key.length > 2 && terms.has(key);
-    return highlighted ? <mark key={index} className={tone === "edited" ? "border-b-2 border-brand bg-surface-alt px-0.5 text-brand-ink" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
+    // Both tones were brand-blue and differed only by a border, so a JD keyword match and a
+    // tailoring edit were near-indistinguishable at a glance despite meaning opposite things: one
+    // is what already fit, the other is what was changed. Give the edit its own hue.
+    return highlighted ? <mark key={index} className={tone === "edited" ? "rounded-sm border-b-2 border-positive bg-positive-soft px-0.5 text-positive" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
   })}</>;
 });
-
-function normalizedTerms(source: string | readonly string[]): ReadonlySet<string> {
-  const values = typeof source === "string" ? source.split(/\s+/) : source;
-  return new Set(values.map((term) => term.toLowerCase().replace(/[^a-z0-9+#./-]/g, "")).filter((term) => term.length > 2));
-}
 
 function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
@@ -587,9 +659,17 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
       <Card className="p-7">
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Secure portal runner</p>
         <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "The portal is filled and ready."}</h2>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          {needsAttention ? review.attention_reason ?? "Complete the remaining portal step in the secure live browser." : review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form. The employer receives nothing until you click Submit application below."}
-        </p>
+        {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
+            HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
+            is how "CAPTCHA requires your attention ... is required required field is required ..."
+            reached the screen. Each blocker is its own item, because each is its own task. */}
+        {needsAttention ? (
+          <BlockerList reason={review.attention_reason} />
+        ) : (
+          <p className="mt-2 text-sm leading-6 text-muted">
+            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form. The employer receives nothing until you click Submit application below."}
+          </p>
+        )}
         {review.filled_fields && review.filled_fields.length > 0 && (
           <div className="mt-6">
             <p className="text-xs font-medium text-muted">Fields filled by Litos</p>
@@ -632,6 +712,78 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive">✓</div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
 
+function BlockerList({ reason }: { reason?: string }) {
+  const blockers = (reason ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  if (blockers.length === 0) {
+    return <p className="mt-2 text-sm leading-6 text-muted">Complete the remaining portal step in the secure live browser.</p>;
+  }
+  if (blockers.length === 1) {
+    return <p className="mt-2 text-sm leading-6 text-muted">{blockers[0]}</p>;
+  }
+  return (
+    <ul className="mt-3 space-y-1.5">
+      {blockers.map((blocker, index) => (
+        <li key={index} className="grid grid-cols-[14px_1fr] gap-2 text-sm leading-6 text-muted">
+          <span aria-hidden className="mt-[1px] text-faint">•</span>
+          <span>{blocker}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// A real portal run took over two minutes against Greenhouse with no elapsed time, no detail and no
+// timeout, which is indistinguishable from a hung run: the operator's only move was a manual reload,
+// and a user's would be to re-trigger a run that was working fine. Show the clock, and after a
+// threshold say plainly that this is still normal, so waiting is an informed choice.
+const PORTAL_SLOW_AFTER_S = 45;
+
+function PortalProgress({ status }: { status?: ApplicationReview["status"] }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    // Deliberately a self-rescheduling timeout rather than an interval. The repo bans setInterval in
+    // this file (tests/application-submission-gate.test.mjs) so portal polling can never stack
+    // overlapping requests, and a display clock is not worth carving an exception into that rule.
+    const started = Date.now();
+    let timer: number | undefined;
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+      timer = window.setTimeout(tick, 1000);
+    };
+    timer = window.setTimeout(tick, 1000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
+
+  // The old copy asserted "Nothing is submitted during this preparation step" on every status,
+  // including the genuinely-submitting one. That reassurance was false at exactly the moment it
+  // mattered most, so each stage now states only what is true of that stage.
+  const submitting = status === "submitting";
+  const title = submitting ? "Submitting through the company portal." : "Preparing the company portal.";
+  const body = submitting
+    ? "You approved this submission. Litos is completing it in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
+    : "Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step.";
+
+  return (
+    <div className="space-y-3">
+      <CenteredState title={title} body={body} loading />
+      <p role="status" className="text-center text-xs text-muted">
+        {formatElapsed(elapsed)} elapsed
+        {elapsed >= PORTAL_SLOW_AFTER_S && " · portal runs regularly take a few minutes, this is still running"}
+      </p>
+    </div>
+  );
+}
+
+function formatElapsed(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
   return { school: spec.school ?? "", degree: spec.degree ?? "", grad_date: spec.grad_date ?? "", coursework: spec.coursework ?? "", education_position: spec.education_position, experience: spec.experience ?? [], skills: spec.skills ?? [], skill_source: spec.skill_source };
 }
@@ -644,11 +796,3 @@ function extractScore(spec: GeneratedResume["spec"]): number {
   return typeof raw === "number" ? Math.round(raw <= 1 ? raw * 100 : raw) : 0;
 }
 
-function statusLabel(screen: Screen, status: ApplicationReview["status"]): string {
-  if (screen === "submitted" || status === "submitted") return "Submitted";
-  if (screen === "submitting" || status === "submitting") return "Submitting";
-  if (status === "needs_attention") return "Needs attention";
-  if (status === "ready_for_final_approval") return "Approval required";
-  if (status === "failed") return "Stopped safely";
-  return "Ready for review";
-}
