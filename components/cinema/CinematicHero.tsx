@@ -54,10 +54,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const rollRef = useRef<HTMLDivElement>(null);
   const openRef = useRef<HTMLDivElement>(null);
   const openDoneRef = useRef(false);
-  /* set inside the opening effect; the scroll handler calls it on the first
-     scroll to dissolve the live roll into the canvas scrub (fast = the
-     viewer is already deep, cut quickly) */
-  const beginOpeningRef = useRef<(fast?: boolean) => void>(() => {});
+  /* set inside the opening effect; the scroll handler feeds it the hero
+     progress every tick: any scroll dissolves the live roll into the
+     scrub, and returning to the very top fades it back in and resumes */
+  const syncOpeningRef = useRef<(p: number) => void>(() => {});
   const progressRef = useRef(0);
   const chapterRef = useRef(0);
 
@@ -209,36 +209,59 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
      endless white floor printing the job hunt sheet by sheet - resumes,
      portal forms, invites, rejections, offers - 24 unique documents, so
      nothing repeats on screen. It loops until the viewer scrolls; the
-     first scroll dissolves the live scene into the film scrub (the same
-     handoff contract the sting videos used). Skipped under reduced
-     motion, where the film poster carries the frame instead. ---- */
+     first scroll dissolves the live scene into the film scrub, and
+     scrolling back to the very top brings it back (the drum pauses while
+     hidden, then resumes). Skipped under reduced motion, where the film
+     poster carries the frame instead. ---- */
   useEffect(() => {
     const stage = openRef.current;
     const holder = rollRef.current;
     if (!stage || !holder) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    let roll: { stop: () => void } | null = null;
+    let roll: {
+      pause: () => void;
+      resume: () => void;
+      stop: () => void;
+    } | null = null;
     let inited = false;
     const init = () => {
-      if (inited || openDoneRef.current) return;
+      if (inited) return;
       inited = true;
       roll = createPaperRoll(holder);
       /* the engine prerolls a full paper trail before its first frame, so
          this fires over a fully-laid scene: dissolve in, never pop */
       gsap.to(holder, { opacity: 1, duration: 0.8, ease: "power1.inOut" });
+      /* entered mid-page (anchor link): start hidden and parked */
+      if (window.scrollY > 2) {
+        openDoneRef.current = true;
+        gsap.set(stage, { autoAlpha: 0 });
+        roll.pause();
+      }
     };
-    const dissolve = (fast?: boolean) => {
-      if (openDoneRef.current) return;
-      openDoneRef.current = true;
-      gsap.to(stage, {
-        autoAlpha: 0,
-        duration: fast ? 0.4 : 1.0,
-        ease: fast ? "power2.out" : "power2.inOut",
-        onComplete: () => roll?.stop(),
-      });
+    const sync = (p: number) => {
+      if (!inited || !roll) return;
+      if (p > 0.001 && !openDoneRef.current) {
+        openDoneRef.current = true;
+        gsap.to(stage, {
+          autoAlpha: 0,
+          duration: p > 0.45 ? 0.4 : 1.0,
+          ease: p > 0.45 ? "power2.out" : "power2.inOut",
+          overwrite: true,
+          onComplete: () => roll?.pause(),
+        });
+      } else if (p <= 0.005 && openDoneRef.current) {
+        openDoneRef.current = false;
+        roll.resume();
+        gsap.to(stage, {
+          autoAlpha: 1,
+          duration: 0.7,
+          ease: "power1.inOut",
+          overwrite: true,
+        });
+      }
     };
-    beginOpeningRef.current = dissolve;
+    syncOpeningRef.current = sync;
 
     /* wait for a real layout before sizing the canvas - during hydration
        the stage can read zero-sized. rAF waits for the first paint; the
@@ -251,7 +274,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     return () => {
       cancelAnimationFrame(startRaf);
       clearTimeout(timeout);
-      beginOpeningRef.current = () => {};
+      syncOpeningRef.current = () => {};
       gsap.killTweensOf(stage);
       gsap.killTweensOf(holder);
       roll?.stop();
@@ -379,11 +402,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         onUpdate(self) {
           const p = self.progress;
           setChapter(p);
-          /* the first scroll dissolves the live roll into the scrub; deep
-             fast scrolls cut quickly, the opening never lingers */
-          if (!openDoneRef.current && p > 0) {
-            beginOpeningRef.current(p > 0.45);
-          }
+          /* any scroll dissolves the live roll into the scrub (deep fast
+             scrolls cut quickly); back at the very top it fades in again
+             and resumes rolling */
+          syncOpeningRef.current(p);
           /* chapter tint: whisper multiply wash over the film */
           const seg = 1 / (TINTS.length - 1);
           const k = Math.min(Math.floor(p / seg), TINTS.length - 2);

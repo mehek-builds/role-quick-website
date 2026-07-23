@@ -3280,8 +3280,9 @@ export function createPaperRoll(container) {
         var clock = new THREE.Clock();
         var elapsed = 0;
 
+        var running = false;
         function frame() {
-          if (stopped) return;
+          if (!running || stopped) return;
           requestAnimationFrame(frame);
           var dt = Math.min(clock.getDelta(), 1 / 30);
           elapsed += dt;
@@ -3324,7 +3325,16 @@ export function createPaperRoll(container) {
           ro.observe(container);
         }
 
-        frame();
+        function start() {
+          if (running || stopped) return;
+          running = true;
+          clock.getDelta(); // flush the pause gap so dt stays sane
+          requestAnimationFrame(frame);
+        }
+        function pause() {
+          running = false;
+        }
+        start();
 
         function stop() {
           if (stopped) return;
@@ -3338,5 +3348,5 @@ export function createPaperRoll(container) {
           renderer.dispose();
           if (canvas.parentNode === container) container.removeChild(canvas);
         }
-        return { stop: stop };
+        return { pause: pause, resume: start, stop: stop };
 }
