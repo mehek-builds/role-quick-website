@@ -34,10 +34,12 @@ if (!data?.jobs?.length) throw new Error("tracker data empty: " + TRACKER);
 
 const FIELD_RULES = [
   [/(design|\bux\b|\bui\b)/i, "design"],
-  [/(data|analytics|analyst|machine ?learning|\bml\b|scientist)/i, "data"],
   [/product/i, "product"],
-  [/(market|growth|brand|content|social)/i, "marketing"],
-  [/(finance|trading|quant|invest|consult|business)/i, "finance"],
+  [/(marketing|growth|brand|content|social media)/i, "marketing"],
+  /* finance before data: banking/consulting "Analyst" titles are finance,
+     not data (Summer Analyst, Business Analyst, IB Analyst) */
+  [/(finance|banking|trading|quant|invest|consult|advisory|equity|capital markets|market analyst|business analyst|summer analyst|analyst programme)/i, "finance"],
+  [/(data|analytics|machine ?learning|\bml\b|scientist)/i, "data"],
   [/(engineer|developer|software|\bswe\b|full.?stack|backend|frontend|devops|infra)/i, "swe"],
 ];
 const MENA =
