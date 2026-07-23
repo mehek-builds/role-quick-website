@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { CalibrateCard } from "@/components/CalibrateCard";
 import {
   ApplicationFormMockup,
   ResumeFormatDemo,
@@ -93,6 +94,7 @@ export default function Home() {
   return (
     <div className="flex flex-col flex-1">
       <Header />
+      <CalibrateCard />
 
       <main className="flex-1">
         {/* The scroll film: pinned canvas scrub of the generated film,
