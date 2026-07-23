@@ -8,14 +8,17 @@ import { register } from "node:module";
 // QA on 2026-07-23 against a real Greenhouse posting (Five Rings, Summer Intern 2027).
 
 const lib = await import("../lib/application-review.ts");
-const { normalizedTerms, statusLabel, sectionHeading, startsNewSection, HIGHLIGHT_STOPWORDS } = lib;
+const { normalizedTerms, explicitTerms, statusLabel, sectionHeading, startsNewSection, isLivePacketStatus, HIGHLIGHT_STOPWORDS } = lib;
 
 // ---- R-045: the highlighter matched function words ----
 
 test("function words never become highlight terms", () => {
-  // Observed live: the JD pane highlighted "the" five times plus "and", "with", "business".
-  const terms = normalizedTerms("The team and you will work with our business system");
-  for (const junk of ["the", "and", "you", "will", "work", "with", "our", "business", "system", "team"]) {
+  // Observed live: the JD pane highlighted "the" five times plus "and" and "with". Note this list
+  // is function words ONLY: "business", "system" and "team" were deliberately removed from the
+  // stopword set on review, because suppressing a domain noun the resume genuinely matches is a
+  // worse error than a stray highlight. See the domain-noun test below.
+  const terms = normalizedTerms("The team and you will work with our required qualifications");
+  for (const junk of ["the", "and", "you", "will", "with", "our", "required", "qualifications"]) {
     assert.equal(terms.has(junk), false, `"${junk}" must not be highlightable`);
   }
 });
@@ -27,11 +30,13 @@ test("real skills still survive the filter", () => {
   }
 });
 
-test("short tokens are still dropped, and punctuation is normalized away", () => {
-  const terms = normalizedTerms("Go C R rust, node.js!");
-  assert.equal(terms.has("go"), false); // 2 chars
+test("punctuation is normalized away, and short tokens survive only when high-signal", () => {
+  const terms = normalizedTerms("Go C R rust, node.js! at by");
+  assert.equal(terms.has("go"), true); // short, but a language
   assert.equal(terms.has("rust"), true);
   assert.equal(terms.has("node.js"), true);
+  assert.equal(terms.has("at"), false); // short AND a function word
+  assert.equal(terms.has("by"), false);
 });
 
 test("the array form is filtered identically to the string form", () => {
@@ -40,9 +45,13 @@ test("the array form is filtered identically to the string form", () => {
   assert.deepEqual([...terms].sort(), ["python", "tensorflow"]);
 });
 
-test("the stopword list covers the exact tokens seen highlighted in production", () => {
-  for (const seen of ["the", "and", "with", "business", "system"]) {
+test("the stopword list covers the function words seen highlighted in production", () => {
+  for (const seen of ["the", "and", "with"]) {
     assert.equal(HIGHLIGHT_STOPWORDS.has(seen), true);
+  }
+  // and deliberately does NOT cover the domain nouns an earlier draft included
+  for (const kept of ["business", "system", "product", "development", "time"]) {
+    assert.equal(HIGHLIGHT_STOPWORDS.has(kept), false, `"${kept}" is a skill term`);
   }
 });
 
@@ -101,8 +110,8 @@ test("R-051b: resume fields wrap instead of clipping", () => {
   // A single-line <input> truncated the education headline to "Marshall School of B". EditableLine
   // must stay a growing textarea so long values wrap and stay readable.
   const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
-  assert.match(editableLine.slice(0, 900), /<textarea/);
-  assert.match(editableLine.slice(0, 900), /scrollHeight/);
+  assert.match(editableLine.slice(0, 2600), /<textarea/);
+  assert.match(editableLine.slice(0, 2600), /scrollHeight/);
 });
 
 test("R-049: a tab returning to the foreground refreshes immediately", () => {
@@ -139,5 +148,75 @@ test("R-046: the two highlight tones are visually distinct", () => {
 
 test("the submitting screen no longer claims nothing is submitted while submitting", () => {
   const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
-  assert.match(progress.slice(0, 1600), /You approved this submission/);
+  assert.match(progress.slice(0, 3200), /You approved this submission/);
+});
+
+// ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----
+
+test('an in-flight poll cannot install another packet under the current one', () => {
+  // The worst finding of the review: a poll for packet A landing after the user switched to packet
+  // B would render A's portal preview, filled fields and blockers while the Submit button approved
+  // B, i.e. an application sent to the wrong employer. The guard compares a ref, not the closure.
+  assert.match(dashboard, /selectedIdRef/);
+  assert.match(dashboard, /if \(selectedIdRef\.current !== requestedId\) return;/);
+  assert.match(dashboard, /selectedIdRef\.current = packet\.id;/);
+});
+
+test('resume fields cannot contain a newline', () => {
+  // These were structurally single-line under <input>. The value flows into the resume spec, the
+  // rendered PDF and the portal autofill payload, where a newline in an org or date field is a
+  // broken line at best and a mis-parsed ATS field at worst.
+  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
+  assert.match(editableLine.slice(0, 2600), /event\.key === "Enter"/);
+  assert.match(editableLine.slice(0, 2600), /replace\(\/\\s\*\[\\r\\n\]\+\\s\*\/g, " "\)/);
+});
+
+test('the auto-grow height is re-measured on reflow, not only on value change', () => {
+  // overflow-hidden plus a JS-set pixel height means a stale height CLIPS with no scrollbar and no
+  // ellipsis, which is worse than the truncation this replaced.
+  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
+  assert.match(editableLine.slice(0, 2600), /ResizeObserver/);
+  assert.match(editableLine.slice(0, 2600), /document\.fonts/);
+  assert.match(editableLine.slice(0, 2600), /useLayoutEffect/);
+});
+
+test('IME composition is not rewritten mid-keystroke', () => {
+  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
+  assert.match(editableLine.slice(0, 2600), /onCompositionStart/);
+  assert.match(editableLine.slice(0, 2600), /onCompositionEnd/);
+});
+
+test('degree and graduation date are separate fields, not a separator-joined string', () => {
+  assert.doesNotMatch(dashboard, /value\.split\(" · "\)/);
+});
+
+test('a blocked or failed run is not painted in the ready treatment', () => {
+  assert.match(dashboard, /function chipKind/);
+  assert.match(dashboard, /kind=\{chipKind\(review\.status\)\}/);
+});
+
+test('the elapsed clock is anchored to the server, not to component mount', () => {
+  // A reload during a live run remounted the component; a mount-anchored clock restarted at 0s and
+  // reported "3s elapsed" for a four-minute-old run, defeating the point of showing it.
+  assert.match(dashboard, /startedAt=\{submission\?\.review\.updated_at\}/);
+  assert.match(dashboard, /Date\.parse\(startedAt\)/);
+});
+
+test('the ticking second count is not announced to screen readers', () => {
+  // As an aria-live region it announced every single second for the minutes a run takes.
+  const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
+  // The number itself is aria-hidden; the live region sits on the milestone copy, which changes
+  // twice in a run rather than every second.
+  assert.match(progress.slice(0, 4000), /className="text-center text-xs text-muted" aria-hidden/);
+  assert.match(progress.slice(0, 4000), /\{milestone && \(/);
+});
+
+test('a run that has gone on too long says so instead of claiming it is fine', () => {
+  assert.match(dashboard, /PORTAL_STUCK_AFTER_S/);
+  assert.match(dashboard, /longer than a portal run usually takes/);
+});
+
+test('a successful poll clears a stale error banner', () => {
+  const refresh = dashboard.slice(dashboard.indexOf("const refreshSubmission"));
+  assert.match(refresh.slice(0, 1800), /setError\(null\);/);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   getStoredEmail,
@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { explicitTerms, isLivePacketStatus, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
@@ -36,6 +36,10 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
 export default function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Mirrors selectedId for in-flight async work to compare against. State reads inside an awaited
+  // callback are the value captured when the callback was created, which is exactly the stale value
+  // a cross-packet race needs to go unnoticed.
+  const selectedIdRef = useRef<string | null>(null);
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   const [screen, setScreen] = useState<Screen>("review");
@@ -57,6 +61,9 @@ export default function Applications() {
   }, []);
 
   const selectPacket = useCallback((packet: GeneratedResume) => {
+    // Updated synchronously, before any state commit, so an in-flight poll comparing against it
+    // sees the new selection immediately rather than one render later.
+    selectedIdRef.current = packet.id;
     setSelectedId(packet.id);
     setSpec(stripMetadata(packet.spec));
     setQuestions(packet.spec._review?.questions ?? []);
@@ -69,14 +76,28 @@ export default function Applications() {
 
   const refreshSubmission = useCallback(async () => {
     if (!selectedId || qaMode) return;
-    const result = await api<SubmissionResponse>(`/applications/${selectedId}/submission`);
+    const requestedId = selectedId;
+    const result = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
+
+    // A poll for packet A can land after the user has switched to packet B: the fetch closes over
+    // the id it asked for, but the poll effect's cleanup cannot reach inside an in-flight request.
+    // Without this guard A's review would be installed while B is selected, so the portal preview,
+    // filled fields and blockers on screen belong to A while the Submit button approves B. That is
+    // an application sent to the wrong employer, so the response is discarded unless it is still
+    // the packet the user is looking at. The ref, not the closure, is the current truth.
+    if (selectedIdRef.current !== requestedId) return;
+
     setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
     setPackets((current) => {
       if (!current) return current;
-      const packet = current.find((item) => item.id === selectedId);
+      const packet = current.find((item) => item.id === requestedId);
       if (packet?.spec._review?.updated_at === result.review.updated_at) return current;
-      return current.map((item) => item.id === selectedId ? { ...item, spec: { ...item.spec, _review: result.review } } : item);
+      return current.map((item) => item.id === requestedId ? { ...item, spec: { ...item.spec, _review: result.review } } : item);
     });
+    // A poll that succeeds clears a stale banner from an earlier transient failure. Without this a
+    // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
+    // run that had since succeeded.
+    setError(null);
     if (result.review.status === "submitted") moveToScreen("submitted");
     else if (["needs_attention", "ready_for_final_approval", "failed"].includes(result.review.status)) moveToScreen("portal");
     else moveToScreen("submitting");
@@ -159,7 +180,7 @@ export default function Applications() {
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
-  const editedTerms = useMemo(() => normalizedTerms(review?.edited_terms ?? []), [review?.edited_terms]);
+  const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
 
   async function createApplication() {
     const company = newApplication.company.trim();
@@ -362,7 +383,7 @@ export default function Applications() {
           <p className="mt-1 text-sm text-muted">Build, review, approve, and verify employer submissions from one dashboard.</p>
         </div>
         <div className="flex items-center gap-2">
-          {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={screen === "submitted" ? "sent" : "ready"} />}
+          {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
           <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white">
             {showNewApplication ? "Close" : "New application"}
           </button>
@@ -382,12 +403,19 @@ export default function Applications() {
 
       {/* Rendered above the screen branch, not inside the review branch. Previously a portal run
           unmounted the switcher, so the user lost access to every other application for the minutes
-          the run took. Switching packets mid-run is safe: the run lives on the server. */}
+          the run took. The run lives on the server, so switching away does not stop it, but the
+          user must be able to find their way back: each chip carries its own status, so a packet
+          mid-run is identifiable rather than lost among the others. */}
       {selected && reviewablePackets.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {reviewablePackets.map((packet) => (
-            <button key={packet.id} onClick={() => selectPacket(packet)} className={`whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
-              {packet.job_context.role} · {packet.job_context.company}
+            <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
+              <span>{packet.job_context.role} · {packet.job_context.company}</span>
+              {isLivePacketStatus(packet.spec._review?.status) && (
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${packet.id === selected.id ? "bg-white/20" : "bg-surface-alt text-muted"}`}>
+                  {statusLabel(false, packet.spec._review!.status)}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -411,7 +439,7 @@ export default function Applications() {
       ) : screen === "questions" ? (
         <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => prepareApplication()} />
       ) : screen === "submitting" ? (
-        <PortalProgress status={submission?.review.status} />
+        <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
       ) : screen === "portal" && submission ? (
         <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={() => prepareApplication()} />
       ) : screen === "submitted" ? (
@@ -539,10 +567,16 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
   return (
     <div className="mx-auto max-w-[640px] bg-white px-4 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)] sm:px-7">
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
-      <EditableLine value={`${spec.degree} · ${spec.grad_date}`} onChange={(value) => {
-        const [degree, grad_date = ""] = value.split(" · ");
-        onChange({ ...spec, degree, grad_date });
-      }} className="mt-1 text-center text-xs text-muted" />
+      {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
+          lossy in both directions: a degree legitimately containing " · " split wrong, and any
+          third separator silently discarded the tail. R-047 was a mangled degree that could not be
+          corrected, so a control that can mangle it again works against the fix. The dot is drawn
+          between them rather than stored in either. */}
+      <div className="mt-1 flex items-baseline justify-center gap-1.5 text-xs text-muted">
+        <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-center" width="auto" />
+        <span aria-hidden>·</span>
+        <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-center" width="auto" />
+      </div>
 
       {/* The section heading used to render inside this map, so four jobs printed "EXPERIENCE" four
           times down the page. A resume has one Experience section containing four roles. Print the
@@ -585,6 +619,7 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
 // text rather than stretch and push the org name into a squeeze.
 function EditableLine({ value, onChange, className = "", width = "full" }: { value: string; onChange: (value: string) => void; className?: string; width?: "full" | "auto" }) {
   const ref = useRef<HTMLTextAreaElement | null>(null);
+  const composing = useRef(false);
 
   const resize = useCallback(() => {
     const node = ref.current;
@@ -593,7 +628,31 @@ function EditableLine({ value, onChange, className = "", width = "full" }: { val
     node.style.height = `${node.scrollHeight}px`;
   }, []);
 
-  useEffect(resize, [resize, value]);
+  // useLayoutEffect, not useEffect: measuring after paint made every field flash at one-row height
+  // before growing on first render.
+  useLayoutEffect(resize, [resize, value]);
+
+  // Re-measure on anything that changes the wrap point rather than only on value change. The
+  // element carries overflow-hidden and a JS-set pixel height, so a stale height silently CLIPS
+  // with no scrollbar and no ellipsis, which is worse than the truncation this replaced. Crossing
+  // the xl:grid-cols-2 breakpoint, zooming, and a late-loading webfont all move the wrap point
+  // without touching the value.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new ResizeObserver(() => resize());
+    observer.observe(node);
+    if (node.parentElement) observer.observe(node.parentElement);
+    void document.fonts?.ready.then(resize).catch(() => {});
+    return () => observer.disconnect();
+  }, [resize]);
+
+  // These fields were structurally single-line under <input>: an org, a title, a date range and the
+  // school headline cannot contain a newline, and the element guaranteed it. A textarea removes
+  // that guarantee, and the value flows straight into the resume spec, the rendered PDF and the
+  // portal autofill payload, where a newline in a date or org field is a broken line at best and a
+  // mis-parsed ATS field at worst. Wrapping is a presentation need; multi-line content is not.
+  const commit = (raw: string) => onChange(raw.replace(/\s*[\r\n]+\s*/g, " "));
 
   return (
     <textarea
@@ -601,7 +660,23 @@ function EditableLine({ value, onChange, className = "", width = "full" }: { val
       aria-label="Editable resume text"
       rows={1}
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.preventDefault();
+      }}
+      // Intermediate IME states (Japanese, Chinese, Korean, dead-key accents) must reach the DOM
+      // untouched: rewriting the value mid-composition drops pre-edit characters and jumps the
+      // caret. Commit the cleaned value once the composition ends.
+      onCompositionStart={() => {
+        composing.current = true;
+      }}
+      onCompositionEnd={(event) => {
+        composing.current = false;
+        commit(event.currentTarget.value);
+      }}
+      onChange={(event) => {
+        if (composing.current) onChange(event.target.value);
+        else commit(event.target.value);
+      }}
       className={`resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${width === "full" ? "w-full" : "w-auto"} ${className}`}
     />
   );
@@ -734,30 +809,49 @@ function BlockerList({ reason }: { reason?: string }) {
 
 // A real portal run took over two minutes against Greenhouse with no elapsed time, no detail and no
 // timeout, which is indistinguishable from a hung run: the operator's only move was a manual reload,
-// and a user's would be to re-trigger a run that was working fine. Show the clock, and after a
-// threshold say plainly that this is still normal, so waiting is an informed choice.
+// and a user's would be to re-trigger a run that was working fine.
 const PORTAL_SLOW_AFTER_S = 45;
+// Past this the client genuinely cannot claim the run is healthy, only that the last poll returned a
+// non-terminal status. Saying "still running" identically at 45 seconds and at 45 minutes just moves
+// the original defect past the first threshold.
+const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status }: { status?: ApplicationReview["status"] }) {
+function PortalProgress({ status, startedAt }: { status?: ApplicationReview["status"]; startedAt?: string }) {
+  // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
+  // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
+  // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
+  // Parsing stays pure and returns null when there is no usable timestamp; the effect below picks
+  // the mount-time fallback, because reading the clock during render is both impure
+  // (react-hooks/purity) and a server/client hydration mismatch.
+  const startedMs = useMemo(() => {
+    const parsed = startedAt ? Date.parse(startedAt) : NaN;
+    return Number.isNaN(parsed) ? null : parsed;
+  }, [startedAt]);
+
+  // Starts at 0 rather than reading the clock in the initializer: a useState initializer must be
+  // pure (react-hooks/purity), and Date.now() there also differs between the server render and the
+  // client hydration. The effect corrects it to the true elapsed time on the first tick, which runs
+  // immediately rather than after a second's delay.
   const [elapsed, setElapsed] = useState(0);
+
   useEffect(() => {
     // Deliberately a self-rescheduling timeout rather than an interval. The repo bans setInterval in
     // this file (tests/application-submission-gate.test.mjs) so portal polling can never stack
     // overlapping requests, and a display clock is not worth carving an exception into that rule.
-    const started = Date.now();
     let timer: number | undefined;
     let cancelled = false;
+    const anchor = startedMs ?? Date.now();
     const tick = () => {
       if (cancelled) return;
-      setElapsed(Math.floor((Date.now() - started) / 1000));
+      setElapsed(Math.max(0, Math.floor((Date.now() - anchor) / 1000)));
       timer = window.setTimeout(tick, 1000);
     };
-    timer = window.setTimeout(tick, 1000);
+    tick();
     return () => {
       cancelled = true;
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, []);
+  }, [startedMs]);
 
   // The old copy asserted "Nothing is submitted during this preparation step" on every status,
   // including the genuinely-submitting one. That reassurance was false at exactly the moment it
@@ -768,13 +862,28 @@ function PortalProgress({ status }: { status?: ApplicationReview["status"] }) {
     ? "You approved this submission. Litos is completing it in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
     : "Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step.";
 
+  const milestone =
+    elapsed >= PORTAL_STUCK_AFTER_S
+      ? "This is longer than a portal run usually takes. The run is still open on the server, so leave this page if you want and come back; if it has not moved shortly, prepare the application again."
+      : elapsed >= PORTAL_SLOW_AFTER_S
+        ? "Portal runs regularly take a few minutes. This one is still going."
+        : null;
+
   return (
     <div className="space-y-3">
       <CenteredState title={title} body={body} loading />
-      <p role="status" className="text-center text-xs text-muted">
+      {/* aria-hidden on the ticking number: as an aria-live region it announced "1s elapsed, 2s
+          elapsed, 3s elapsed" every second for the several minutes a run takes, burying the
+          terminal state under it. The live region belongs on the milestone copy, which changes
+          twice in a run. */}
+      <p className="text-center text-xs text-muted" aria-hidden>
         {formatElapsed(elapsed)} elapsed
-        {elapsed >= PORTAL_SLOW_AFTER_S && " · portal runs regularly take a few minutes, this is still running"}
       </p>
+      {milestone && (
+        <p role="status" className="mx-auto max-w-lg text-center text-xs text-muted">
+          {milestone}
+        </p>
+      )}
     </div>
   );
 }
@@ -782,6 +891,14 @@ function PortalProgress({ status }: { status?: ApplicationReview["status"] }) {
 function formatElapsed(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
+}
+
+// "Needs attention" and "Stopped safely" were painted in the same ready/success treatment as
+// "Ready for review", so the label was the only signal anything was wrong.
+function chipKind(status: ApplicationReview["status"]): "sent" | "ready" | "warn" {
+  if (status === "submitted") return "sent";
+  if (status === "needs_attention" || status === "failed" || status === "ready_for_final_approval") return "warn";
+  return "ready";
 }
 
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
