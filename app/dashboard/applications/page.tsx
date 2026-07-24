@@ -3,6 +3,7 @@
 import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
+  ApiError,
   getStoredEmail,
   type ApplicationQuestion,
   type ApplicationProfile,
@@ -48,6 +49,7 @@ export default function Applications() {
   const [notice, setNotice] = useState<string | null>(null);
   const [qaMode, setQaMode] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
@@ -181,6 +183,37 @@ export default function Applications() {
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
+
+  async function fetchJobDescription() {
+    const portalUrl = newApplication.portalUrl.trim();
+    if (!portalUrl) {
+      setError("Add the job URL first, then fetch the description.");
+      return;
+    }
+    try {
+      if (new URL(portalUrl).protocol !== "https:") throw new Error("Job URL must use HTTPS");
+    } catch {
+      setError("Enter a complete job URL beginning with https://.");
+      return;
+    }
+    setExtractingJd(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const extracted = await api<{ jd_text: string; page_title?: string }>("/jobs/extract", {
+        method: "POST",
+        body: JSON.stringify({ job_url: portalUrl }),
+      });
+      setNewApplication((current) => ({ ...current, jobDescription: extracted.jd_text }));
+      setNotice("Pulled the job description from that URL. Skim it before generating - some boards need a manual paste instead.");
+    } catch (err) {
+      // A 502 here is expected for some client-rendered boards (see backend jobExtract.ts) - the
+      // manual textarea right below stays the fallback, this just saves the copy/paste when it works.
+      setError(err instanceof ApiError ? err.message : "Could not fetch that posting. Paste the job description manually below.");
+    } finally {
+      setExtractingJd(false);
+    }
+  }
 
   async function createApplication() {
     const company = newApplication.company.trim();
@@ -393,7 +426,14 @@ export default function Applications() {
       {error && <ErrorNote message={error} />}
       {notice && <p role="status" className="rounded-[12px] bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
       {showNewApplication && (
-        <NewApplicationPanel value={newApplication} onChange={setNewApplication} onGenerate={createApplication} creating={creating} />
+        <NewApplicationPanel
+          value={newApplication}
+          onChange={setNewApplication}
+          onGenerate={createApplication}
+          creating={creating}
+          onFetchJobDescription={fetchJobDescription}
+          extractingJd={extractingJd}
+        />
       )}
       {legacyCount > 0 && (
         <p className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-muted">
@@ -521,11 +561,15 @@ function NewApplicationPanel({
   onChange,
   onGenerate,
   creating,
+  onFetchJobDescription,
+  extractingJd,
 }: {
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
   onGenerate: () => void;
   creating: boolean;
+  onFetchJobDescription: () => void;
+  extractingJd: boolean;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
   return (
@@ -539,11 +583,21 @@ function NewApplicationPanel({
         <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" />
         <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineering Intern" />
       </div>
-      <div className="mt-4">
-        <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" />
+      <div className="mt-4 flex items-end gap-3">
+        <div className="flex-1">
+          <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" />
+        </div>
+        <button
+          type="button"
+          onClick={onFetchJobDescription}
+          disabled={extractingJd || !value.portalUrl.trim()}
+          className="mb-0.5 whitespace-nowrap rounded-full border border-border px-4 py-3 text-sm font-medium text-ink disabled:opacity-50"
+        >
+          {extractingJd ? <PendingLabel state="composing">Fetching...</PendingLabel> : "Fetch from URL"}
+        </button>
       </div>
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
         <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
           {creating ? <PendingLabel state="composing" onColor>Generating review packet...</PendingLabel> : "Generate review packet"}
