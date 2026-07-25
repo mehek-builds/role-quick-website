@@ -1,250 +1,299 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   api,
-  Me,
-  OnboardingState,
-  OutreachEvent,
-  GeneratedResume,
-  getOnboardingState,
+  type Me,
+  type MonitoredJob,
+  type ParsedProfile,
+  type Targeting,
 } from "@/lib/api";
-import { STEPS } from "@/components/start/ui";
-import { STORE_URL } from "@/lib/config";
-import {
-  Card,
-  Chip,
-  Meter,
-  ShimmerRows,
-  EmptyState,
-  ErrorNote,
-  formatDate,
-} from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, ShimmerRows, formatDate } from "@/components/app/ui";
 
-type Activity = {
-  id: string;
-  when: string | null;
-  label: string;
-  detail: string;
-  chip: { label: string; kind: string };
-  href: string;
+type RankedJob = MonitoredJob & {
+  match: number;
+  reasons: string[];
 };
 
-export default function Overview() {
+const QA_JOBS: MonitoredJob[] = [
+  {
+    id: "qa-job-1",
+    company_name: "Acme Labs",
+    title: "Product Engineer",
+    location: "San Francisco, CA",
+    department: "Engineering",
+    employment_type: "Full-time",
+    description: "Build product features with React, TypeScript, APIs, and data systems. Collaborate with product and design teams.",
+    apply_url: "https://boards.greenhouse.io/acme/qa",
+    posting_url: "https://boards.greenhouse.io/acme/qa",
+    remote: false,
+    posted_at: new Date().toISOString(),
+    first_seen_at: new Date().toISOString(),
+    ats_name: "greenhouse",
+  },
+  {
+    id: "qa-job-2",
+    company_name: "Stripe",
+    title: "Software Engineering Intern",
+    location: "New York, NY",
+    department: "Product Engineering",
+    employment_type: "Internship",
+    description: "Ship customer-facing software using React, TypeScript, and backend APIs. Own projects from design through launch.",
+    apply_url: "https://jobs.lever.co/stripe/qa",
+    posting_url: "https://jobs.lever.co/stripe/qa",
+    remote: false,
+    posted_at: new Date().toISOString(),
+    first_seen_at: new Date().toISOString(),
+    ats_name: "lever",
+  },
+  {
+    id: "qa-job-3",
+    company_name: "Deepgram",
+    title: "Software Engineering Intern",
+    location: "Remote, US",
+    department: "Engineering",
+    employment_type: "Full-time",
+    description: "Build reliable voice AI infrastructure and developer tools with TypeScript, Python, APIs, and distributed systems.",
+    apply_url: "https://jobs.ashbyhq.com/deepgram/qa",
+    posting_url: "https://jobs.ashbyhq.com/deepgram/qa",
+    remote: true,
+    posted_at: new Date().toISOString(),
+    first_seen_at: new Date().toISOString(),
+    ats_name: "ashby",
+  },
+];
+
+const QA_ME: Me = {
+  email: "qa@trylitos.com",
+  tier: "pro",
+  trial_ends_at: null,
+  usage: {
+    contacts: { used: 18, limit: 500 },
+    drafts: { used: 11, limit: 1000 },
+    resumes: { used: 7, limit: 100000 },
+  },
+};
+
+const QA_TARGETING: Targeting = {
+  categories: ["Software engineering", "Product engineering"],
+  titles: ["Software Engineer", "Product Engineer"],
+  role_types: ["internship", "new-grad"],
+  primary_period: "Summer 2027",
+  backup_period: null,
+};
+
+const QA_PROFILE: Partial<ParsedProfile> = {
+  skills: ["React", "TypeScript", "APIs", "Product", "Data"],
+  target_roles: ["Software Engineer", "Product Engineer"],
+};
+
+export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
-  const [activity, setActivity] = useState<Activity[] | null>(null);
-  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
+  const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
+  const [targeting, setTargeting] = useState<Targeting | null>(null);
+  const [profile, setProfile] = useState<Partial<ParsedProfile> | null>(null);
+  const [qaMode, setQaMode] = useState(false);
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [meRes, eventsRes, resumesRes, onboardingRes] = await Promise.all([
-          api<Me>("/me"),
-          api<{ events?: OutreachEvent[] } | OutreachEvent[]>("/track/events").catch(
-            () => [] as OutreachEvent[],
-          ),
-          api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({
-            resumes: [] as GeneratedResume[],
-          })),
-          getOnboardingState().catch(() => null),
-        ]);
-        if (cancelled) return;
-        setMe(meRes);
-        setOnboarding(onboardingRes);
+    queueMicrotask(() => setDismissed(readDismissed(dailyDismissalKey())));
+    const qaMode = window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("qa");
+    if (qaMode) {
+      queueMicrotask(() => {
+        setQaMode(true);
+        setMe(QA_ME);
+        setJobs(QA_JOBS);
+        setTargeting(QA_TARGETING);
+        setProfile(QA_PROFILE);
+      });
+      return;
+    }
 
-        const events = Array.isArray(eventsRes)
-          ? eventsRes
-          : (eventsRes.events ?? []);
-        const items: Activity[] = [
-          ...events.map((e) => ({
-            id: `e-${e.id}`,
-            when: e.replied_at ?? e.sent_at ?? null,
-            label: e.contact?.full_name
-              ? `Outreach to ${e.contact.full_name}`
-              : "Outreach draft",
-            detail: e.subject ?? "",
-            chip: { label: cap(e.status), kind: e.status },
-            href: "/dashboard/outreach",
-          })),
-          ...resumesRes.resumes.map((r) => ({
-            id: `r-${r.id}`,
-            when: r.created_at,
-            label: `Resume for ${r.job_context?.role ?? "a role"}`,
-            detail: r.job_context?.company ?? "",
-            chip: { label: "Ready", kind: "ready" },
-            href: "/dashboard/applications",
-          })),
-        ]
-          .sort((a, b) => (b.when ?? "").localeCompare(a.when ?? ""))
-          .slice(0, 6);
-        setActivity(items);
-      } catch (err) {
-        if (!cancelled)
-          setError(err instanceof Error ? err.message : "Could not load your account.");
-      }
-    })();
+    let cancelled = false;
+    Promise.all([
+      api<Me>("/me"),
+      api<{ jobs: MonitoredJob[] }>("/jobs?offset=0"),
+      api<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, primary_period: null, backup_period: null })),
+      api<Partial<ParsedProfile>>("/profile").catch(() => ({ skills: [], target_roles: [] })),
+    ])
+      .then(([meResult, jobsResult, targetingResult, profileResult]) => {
+        if (cancelled) return;
+        setMe(meResult);
+        setJobs(jobsResult.jobs);
+        setTargeting(targetingResult);
+        setProfile(profileResult);
+      })
+      .catch((reason) => {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load today's matches.");
+      });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  if (error) return <ErrorNote message={error} />;
-  if (!me)
-    return (
-      <div className="space-y-6">
-        <div className="rq-shimmer h-8 w-56 rounded-full" />
-        <ShimmerRows rows={3} />
-      </div>
-    );
+  const rankedJobs = useMemo(
+    () => rankJobs(jobs ?? [], targeting, profile).filter((job) => !dismissed.includes(job.id)).slice(0, 5),
+    [dismissed, jobs, profile, targeting],
+  );
 
-  const trialActive =
-    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > Date.now();
-  const trialDays = trialActive
-    ? Math.ceil(
-        (new Date(me.trial_ends_at!).getTime() - Date.now()) / 86400000,
-      )
-    : 0;
+  function dismiss(jobId: string) {
+    const next = [...new Set([...dismissed, jobId])];
+    setDismissed(next);
+    setLastDismissed(jobId);
+    window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
+  }
+
+  function undoDismiss() {
+    if (!lastDismissed) return;
+    const next = dismissed.filter((id) => id !== lastDismissed);
+    setDismissed(next);
+    setLastDismissed(null);
+    window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
+  }
+
+  const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "your target roles";
+
+  if (error && !jobs) return <ErrorNote message={error} />;
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <section className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">Overview</h1>
-          <p className="mt-1 text-sm text-muted">
-            Everything the extension has made for you, in one place.
-          </p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Today</p>
+          <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink sm:text-[40px]">Your best matches.</h1>
+          <p className="mt-2 text-sm text-muted">Ranked from your resume and target roles.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Chip label={me.tier === "pro" ? "Pro" : cap(me.tier)} kind={me.tier === "pro" ? "ready" : "draft"} />
-          {trialActive && (
-            <Chip label={`Trial, ${trialDays} day${trialDays === 1 ? "" : "s"} left`} kind="ready" />
-          )}
-        </div>
-      </div>
-
-      {/* Setup left unfinished. One mono row, stated as a fact - no progress bar, no
-          percentage, no nag. The Guardrails ban streak/badge mechanics, and a student who
-          chose "Finish later" was told the dashboard stays open. This holds them to that
-          while making the way back obvious. */}
-      {onboarding && onboarding.step !== "done" && (
-        <Link href="/start" className="block">
-          <Card className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-colors hover:border-ink/30">
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
-                Setup
-              </span>
-              <span className="text-sm text-ink">
-                {onboarding.has_resume
-                  ? "Pick up where you left off"
-                  : "Add your résumé to get started"}
-              </span>
-            </div>
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">
-              {STEPS.find((s) => s.key === onboarding.step)?.act}{" "}
-              {STEPS.find((s) => s.key === onboarding.step)?.label} →
-            </span>
-          </Card>
+        <Link href="/dashboard/profile" className="rounded-full border border-border px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink">
+          Targeting: {targetLabel}
         </Link>
-      )}
+      </section>
 
-      {/* Usage meters fill in ink per DESIGN.md: a meter is a quantity, not a
-          pillar. Autofill has no cap on any plan, so it has no meter. */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-        <Card className="p-6">
-          <Meter
-            label="Verified contacts"
-            used={me.usage.contacts.used}
-            limit={me.usage.contacts.limit}
-          />
-        </Card>
-        <Card className="p-6">
-          <Meter
-            label="Outreach drafts"
-            used={me.usage.drafts.used}
-            limit={me.usage.drafts.limit}
-          />
-        </Card>
-        <Card className="p-6">
-          <Meter
-            label="Tailored resumes"
-            used={me.usage.resumes.used}
-            limit={me.usage.resumes.limit}
-          />
-        </Card>
-      </div>
-
-      {/* Pro emphasis surface (DESIGN.md v1.1): blue-soft, the screen's
-          strongest moment. States what you get; no urgency mechanics. */}
-      {me.upgrade_url && (
-        <div className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] bg-brand-soft p-6">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-medium text-ink">Go Pro. Apply to 500 jobs a month.</h2>
-              <span className="rounded-full bg-brand px-2.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
-                $49.99/mo
-              </span>
-            </div>
-            <p className="mt-1.5 text-sm text-muted">
-              500 contacts, 1,000 drafts, unlimited resumes.
-            </p>
+      {jobs === null ? (
+        <ShimmerRows rows={4} />
+      ) : rankedJobs.length === 0 ? (
+        <EmptyState
+          title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
+          body={dismissed.length ? "You reviewed every match. New roles will appear after the next job-board scan." : "Complete your profile so Litos can rank roles from the job boards it monitors."}
+        >
+          <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/profile"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+            {dismissed.length ? "Browse all jobs" : "Complete profile"}
+          </Link>
+        </EmptyState>
+      ) : (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-xs text-faint">{rankedJobs.length} READY TO REVIEW</p>
+            <Link href="/dashboard/jobs" className="text-sm text-muted hover:text-ink">See all jobs</Link>
           </div>
-          <a
-            href={me.upgrade_url}
-            className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-          >
-            Upgrade to Pro
-          </a>
+          {rankedJobs.map((job, index) => (
+            <JobMatchCard key={job.id} job={job} rank={index + 1} qaMode={qaMode} onDismiss={() => dismiss(job.id)} />
+          ))}
         </div>
       )}
 
-      <section>
-        <h2 className="mb-4 text-base font-medium text-ink">Recent activity</h2>
-        {activity === null ? (
-          <ShimmerRows />
-        ) : activity.length === 0 ? (
-          <EmptyState
-            title="Nothing here yet"
-            body="Open a job posting on Lever, Greenhouse, Ashby, Workday, or LinkedIn with the extension installed. Your tailored resumes and outreach drafts will show up here."
-          >
-            <a
-              href={STORE_URL}
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
-              Add Litos to Chrome
-            </a>
-          </EmptyState>
-        ) : (
-          <div className="space-y-3">
-            {activity.map((a) => (
-              <Link key={a.id} href={a.href} className="block">
-                <Card className="flex items-center justify-between gap-4 p-4 transition-colors hover:border-ink/30">
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-ink">{a.label}</p>
-                    {a.detail && (
-                      <p className="mt-0.5 truncate text-xs text-muted">{a.detail}</p>
-                    )}
-                  </div>
-                  <div className="flex shrink-0 items-center gap-3">
-                    <Chip label={a.chip.label} kind={a.chip.kind} />
-                    {a.when && (
-                      <span className="hidden font-mono text-xs text-faint sm:block">
-                        {formatDate(a.when)}
-                      </span>
-                    )}
-                  </div>
-                </Card>
-              </Link>
-            ))}
+      {lastDismissed && (
+        <div role="status" className="flex items-center justify-between rounded-[12px] bg-surface-alt px-4 py-3 text-sm text-muted">
+          <span>Passed for today.</span>
+          <button type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
+        </div>
+      )}
+
+      {me && (
+        <section className="border-t border-border pt-7">
+          <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
+            <div>
+              <p className="text-sm font-medium text-ink">This month</p>
+              <p className="mt-1 font-mono text-xs text-faint">
+                {me.usage.resumes.used} applications prepared · {me.usage.drafts.used} outreach drafts
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Link href="/dashboard/applications" className="rounded-full border border-border px-4 py-2 text-sm font-medium text-ink">Applications</Link>
+              <Link href="/dashboard/applications?new=1" className="rounded-full border border-border px-4 py-2 text-sm font-medium text-ink">Add a job URL</Link>
+            </div>
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </div>
   );
 }
 
-function cap(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+function JobMatchCard({ job, rank, qaMode, onDismiss }: { job: RankedJob; rank: number; qaMode: boolean; onDismiss: () => void }) {
+  return (
+    <Card className="overflow-hidden transition-colors hover:border-ink/30">
+      <div className="grid gap-5 p-5 sm:grid-cols-[44px_1fr_auto] sm:items-center sm:p-6">
+        <div className="hidden size-11 items-center justify-center rounded-full bg-brand-soft font-mono text-xs font-medium text-brand-ink sm:flex">
+          {String(rank).padStart(2, "0")}
+        </div>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Chip label={`${job.match}% match`} kind="ready" />
+            {job.remote && <Chip label="Remote" kind="sent" />}
+            <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-faint">Found {formatDate(job.first_seen_at)}</span>
+          </div>
+          <h2 className="mt-3 text-lg font-medium text-ink">{job.title}</h2>
+          <p className="mt-1 text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
+          <p className="mt-2 text-xs text-faint">{job.reasons.join(" · ")}</p>
+        </div>
+        <div className="flex gap-2 sm:justify-end">
+          <button type="button" onClick={onDismiss} aria-label={`Pass on ${job.title} at ${job.company_name}`} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:border-ink hover:text-ink">
+            Pass
+          </button>
+          <Link href={`/dashboard/applications?job=${job.id}${qaMode ? "&qa=1" : ""}`} className="rounded-full bg-brand px-5 py-2.5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+            Approve
+          </Link>
+        </div>
+      </div>
+    </Card>
+  );
 }
+
+function rankJobs(jobs: MonitoredJob[], targeting: Targeting | null, profile: Partial<ParsedProfile> | null): RankedJob[] {
+  const titleTerms = tokens([...(targeting?.titles ?? []), ...(profile?.target_roles ?? [])].join(" "));
+  const skillTerms = tokens([...(profile?.skills ?? []), ...(targeting?.categories ?? [])].join(" "));
+
+  return jobs
+    .map((job) => {
+      const title = tokens(job.title);
+      const corpus = tokens(`${job.title} ${job.department ?? ""} ${job.description}`);
+      const titleMatches = [...titleTerms].filter((term) => title.has(term));
+      const skillMatches = [...skillTerms].filter((term) => corpus.has(term));
+      const match = Math.min(98, 72 + titleMatches.length * 6 + Math.min(14, skillMatches.length * 2));
+      const reasons = [...new Set([...titleMatches, ...skillMatches])].slice(0, 3).map(readableTerm);
+      return {
+        ...job,
+        match,
+        reasons: reasons.length ? reasons : [job.department || job.employment_type || "Role fit"],
+      };
+    })
+    .sort((a, b) => b.match - a.match || (b.posted_at ?? b.first_seen_at).localeCompare(a.posted_at ?? a.first_seen_at));
+}
+
+function tokens(value: string): Set<string> {
+  return new Set(value.toLowerCase().match(/[a-z][a-z0-9+#.]{1,}/g)?.filter((term) => !STOP_WORDS.has(term)) ?? []);
+}
+
+function readableTerm(term: string): string {
+  if (term === "api" || term === "apis") return "API experience";
+  if (term === "typescript") return "TypeScript";
+  if (term === "react") return "React";
+  return term.charAt(0).toUpperCase() + term.slice(1);
+}
+
+function dailyDismissalKey(): string {
+  return `litos-dismissed-${new Date().toISOString().slice(0, 10)}`;
+}
+
+function readDismissed(key: string): string[] {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(key) ?? "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+const STOP_WORDS = new Set(["and", "the", "with", "for", "from", "that", "this", "your", "engineer", "engineering", "intern", "internship", "new", "grad"]);
