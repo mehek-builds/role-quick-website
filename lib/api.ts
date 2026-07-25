@@ -109,10 +109,38 @@ export type GeneratedResume = {
     _quality?: Record<string, unknown>;
     _contact?: Record<string, string | undefined>;
     _review?: ApplicationReview;
+    _cover_letter?: CoverLetter;
   };
   resume_object_key?: string;
   download_url?: string;
+  cover_letter_download_url?: string;
   created_at: string | null;
+};
+
+export type CoverLetter = {
+  body: string;
+  word_count: number;
+  warnings: string[];
+  generated_at: string;
+  object_key: string;
+  file_name: string;
+};
+
+export type MonitoredJob = {
+  id: string;
+  company_name: string;
+  title: string;
+  location: string | null;
+  department: string | null;
+  employment_type: string | null;
+  description: string;
+  apply_url: string;
+  posting_url: string;
+  remote: boolean;
+  posted_at: string | null;
+  first_seen_at: string;
+  ats_name: "greenhouse" | "lever" | "ashby";
+  is_active?: boolean;
 };
 
 export type ResumeEntry = {
@@ -170,6 +198,7 @@ export type ApplicationReview = {
   attention_reason?: string;
   handoff_expires_at?: string;
   final_approved_at?: string;
+  submission_authorized_at?: string;
   filled_fields?: string[];
   preview_screenshot_url?: string;
   receipt?: {

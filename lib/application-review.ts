@@ -103,7 +103,7 @@ export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): 
   if (status === "submitted") return "Submitted";
   if (status === "submitting") return "Submitting";
   if (status === "needs_attention") return "Needs attention";
-  if (status === "ready_for_final_approval") return "Approval required";
+  if (status === "ready_for_final_approval") return "Continue submission";
   if (status === "failed") return "Stopped safely";
   if (onSubmittingScreen || ["submit_requested", "preparing", "filling"].includes(status)) return "Preparing";
   return "Ready for review";
