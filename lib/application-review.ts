@@ -91,7 +91,7 @@ export function explicitTerms(source: readonly string[]): ReadonlySet<string> {
 
 export type ReviewStatus =
   | "resume_ready" | "questions_ready" | "ready_to_submit" | "submit_requested" | "preparing"
-  | "filling" | "needs_attention" | "ready_for_final_approval" | "submitting" | "submitted" | "failed";
+  | "filling" | "needs_attention" | "ready_for_final_approval" | "submitting" | "submission_claimed" | "submitted" | "failed";
 
 /**
  * The chip beside the page title. "Submitting" used to cover the entire preparing/filling stretch,
@@ -101,9 +101,9 @@ export type ReviewStatus =
  */
 export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): string {
   if (status === "submitted") return "Submitted";
-  if (status === "submitting") return "Submitting";
+  if (status === "submitting" || status === "submission_claimed") return "Submitting";
   if (status === "needs_attention") return "Needs attention";
-  if (status === "ready_for_final_approval") return "Approval required";
+  if (status === "ready_for_final_approval") return "Continue submission";
   if (status === "failed") return "Stopped safely";
   if (onSubmittingScreen || ["submit_requested", "preparing", "filling"].includes(status)) return "Preparing";
   return "Ready for review";
@@ -117,7 +117,7 @@ export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): 
 export function isLivePacketStatus(status: string | undefined): boolean {
   return (
     status !== undefined &&
-    ["submit_requested", "preparing", "filling", "submitting", "needs_attention", "ready_for_final_approval", "failed"].includes(status)
+    ["submit_requested", "preparing", "filling", "submitting", "submission_claimed", "needs_attention", "ready_for_final_approval", "failed"].includes(status)
   );
 }
 

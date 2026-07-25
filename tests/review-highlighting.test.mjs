@@ -73,7 +73,7 @@ test("terminal and blocked states outrank the submitting screen", () => {
   // The screen lags the server by up to one poll, so a stale "submitting" screen must not mask a
   // status that needs the user: this is the approval boundary's own label.
   assert.equal(statusLabel(true, "needs_attention"), "Needs attention");
-  assert.equal(statusLabel(true, "ready_for_final_approval"), "Approval required");
+  assert.equal(statusLabel(true, "ready_for_final_approval"), "Continue submission");
   assert.equal(statusLabel(true, "failed"), "Stopped safely");
   assert.equal(statusLabel(true, "submitted"), "Submitted");
 });
@@ -146,9 +146,9 @@ test("R-046: the two highlight tones are visually distinct", () => {
   assert.match(highlight.slice(0, 1200), /tone === "edited" \? "[^"]*positive/);
 });
 
-test("the submitting screen no longer claims nothing is submitted while submitting", () => {
+test("the submitting screen names the dashboard authorization", () => {
   const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
-  assert.match(progress.slice(0, 3200), /You approved this submission/);
+  assert.match(progress.slice(0, 3200), /You authorized this submission from the Litos dashboard/);
 });
 
 // ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----
