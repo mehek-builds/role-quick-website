@@ -1,16 +1,16 @@
 # Graph Report - .  (2026-07-25)
 
 ## Corpus Check
-- 53 files · ~293,451 words
+- 53 files · ~294,503 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 176 nodes · 226 edges · 20 communities detected
+- 183 nodes · 237 edges · 20 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
-1. `api()` - 10 edges
+1. `api()` - 14 edges
 2. `restart()` - 5 edges
 3. `periodsFor()` - 5 edges
 4. `continueFromResume()` - 4 edges
@@ -27,12 +27,12 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.06
+Cohesion: 0.05
 Nodes (9): continueFromResume(), jobParams(), loadMore(), onVisibility(), poll(), prepareApplication(), saveCoverLetter(), saveResume() (+1 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.14
-Nodes (12): api(), ApiError, clearSession(), completeOnboarding(), getApplicationProfile(), getOnboardingState(), getProductMeta(), getTargeting() (+4 more)
+Cohesion: 0.12
+Nodes (16): api(), ApiError, clearSession(), completeOnboarding(), createEmailConnection(), disconnectEmailConnection(), getApplicationProfile(), getEmailConnections() (+8 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.16
@@ -124,6 +124,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.14 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.12 - nodes in this community are weakly interconnected._

@@ -205,6 +205,11 @@ export type ApplicationReview = {
   submission_claimed_at?: string;
   filled_fields?: string[];
   preview_screenshot_url?: string;
+  verification?: {
+    status: "not_needed" | "searching" | "completed" | "handoff";
+    provider?: "gmail" | "outlook";
+    completed_at?: string;
+  };
   receipt?: {
     confirmation_text: string;
     final_url: string;
@@ -274,6 +279,7 @@ export type OnboardingState = {
   learned: string[];
   gaps: string[];
   harvest_active: boolean;
+  automatic_verification_enabled: boolean;
 };
 
 export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
@@ -290,8 +296,43 @@ export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
 }
 
-export function completeOnboarding() {
-  return api<{ ok: true }>("/onboarding/complete", { method: "POST" });
+export function completeOnboarding(automaticVerificationEnabled: boolean) {
+  return api<{ ok: true; automatic_verification_enabled: boolean }>("/onboarding/complete", {
+    method: "POST",
+    body: JSON.stringify({ automatic_verification_enabled: automaticVerificationEnabled }),
+  });
+}
+
+export function setAutomaticVerification(enabled: boolean) {
+  return api<{ automatic_verification_enabled: boolean }>("/onboarding/automation", {
+    method: "PUT",
+    body: JSON.stringify({ automatic_verification_enabled: enabled }),
+  });
+}
+
+export type EmailProvider = "gmail" | "outlook";
+export type EmailConnection = {
+  provider: EmailProvider;
+  connected: boolean;
+  status: "INITIALIZING" | "INITIATED" | "ACTIVE" | "FAILED" | "EXPIRED" | "INACTIVE" | "REVOKED" | "NOT_CONNECTED";
+  connected_at?: string;
+};
+
+export type EmailConnectionsResponse = {
+  configured: boolean;
+  connections: EmailConnection[];
+};
+
+export function getEmailConnections() {
+  return api<EmailConnectionsResponse>("/email-connections");
+}
+
+export function createEmailConnection(provider: EmailProvider) {
+  return api<{ redirect_url: string }>(`/email-connections/${provider}/connect`, { method: "POST" });
+}
+
+export function disconnectEmailConnection(provider: EmailProvider) {
+  return api<{ disconnected: true; removed: number }>(`/email-connections/${provider}`, { method: "DELETE" });
 }
 
 export function getTargeting() {

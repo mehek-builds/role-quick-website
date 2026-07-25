@@ -697,8 +697,15 @@ export function TargetStep({
 
 /* -------------------------------------------------------------------- 06 DONE */
 
-export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish: () => void }) {
+export function DoneStep({
+  state,
+  onFinish,
+}: {
+  state: OnboardingState;
+  onFinish: (automaticVerificationEnabled: boolean) => void;
+}) {
   const [busy, setBusy] = useState(false);
+  const [automaticVerification, setAutomaticVerification] = useState(state.automatic_verification_enabled);
   const learned = state.learned.length;
 
   // Three real states, because applying and learning are independent. Someone can skip the
@@ -739,17 +746,30 @@ export function DoneStep({ state, onFinish }: { state: OnboardingState; onFinish
         </div>
       )}
 
-      <p className="mt-5 text-[13px] leading-6 text-muted">
-        {applied
-          ? "Litos has stopped reading what you type. From here it only fills, and you always hit submit yourself."
-          : "Litos only reads a form while you're setting up. You always hit submit yourself."}
+      <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
+        <input
+          type="checkbox"
+          checked={automaticVerification}
+          onChange={(event) => setAutomaticVerification(event.target.checked)}
+          className="mt-1 size-4 accent-[#6b84e8]"
+        />
+        <span>
+          <span className="block text-[14px] text-ink">Automatically use application verification codes</span>
+          <span className="mt-1 block text-[12px] leading-5 text-muted">
+            With your permission, Litos can use your connected Gmail or Outlook account to find verification codes related to an active application. Codes are used only for that application and are not saved.
+          </span>
+        </span>
+      </label>
+
+      <p className="mt-4 text-[12px] leading-5 text-faint">
+        If a portal requires a CAPTCHA or an unsupported verification step, Litos pauses and opens the secure browser for you.
       </p>
 
       <div className="mt-6">
         <PrimaryButton
           onClick={() => {
             setBusy(true);
-            onFinish();
+            onFinish(automaticVerification);
           }}
           disabled={busy}
         >

@@ -33,7 +33,7 @@ export default function Privacy() {
           Privacy Policy
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 17, 2026
+          Last updated: July 25, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. When you open a
@@ -123,6 +123,33 @@ export default function Privacy() {
             Applications submit only when you click Submit, unless you turn on
             auto-submit. With auto-submit on, a 15-second countdown runs
             before the application goes out, and one click cancels it.
+          </p>
+        </Section>
+
+        <Section title="Application verification">
+          <p>
+            If you turn on automatic verification, Litos can use a Gmail or
+            Outlook account you already connected to look for a verification
+            code while an application is actively waiting for one. Litos only
+            accepts a recent code from a sender domain associated with the job
+            portal you are using. The code is used for that application and is
+            not saved to your Litos profile or application record.
+          </p>
+          <p>
+            This permission is optional and can be turned off in Settings.
+            Turning it off makes Litos pause for you whenever an application
+            needs an email verification code. Litos also pauses for CAPTCHA,
+            MFA that requires your device or identity, and any verification
+            step it cannot complete with high confidence. Litos does not bypass
+            those portal security controls.
+          </p>
+          <p>
+            Gmail and Outlook authentication is handled through Composio&apos;s
+            hosted connection page. Your provider password does not pass
+            through Litos. Composio stores and refreshes the OAuth connection
+            for your Litos account. Disconnecting an account in Settings asks
+            Composio to revoke supported provider tokens and removes the
+            connection from Litos&apos;s Composio project.
           </p>
         </Section>
 

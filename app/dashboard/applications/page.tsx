@@ -954,13 +954,29 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
           </div>
         )}
         {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
+        {review.verification?.status === "completed" && (
+          <div className="mt-4 rounded-[12px] border border-teal/30 bg-teal-soft px-4 py-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Verification completed</p>
+            <p className="mt-1 text-xs text-muted">
+              Litos used the one-time code from your connected {review.verification.provider === "outlook" ? "Outlook" : "Gmail"} account. The code was not saved.
+            </p>
+          </div>
+        )}
+        {review.verification?.status === "handoff" && (
+          <div className="mt-4 rounded-[12px] border border-border bg-surface px-4 py-3">
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">Verification needs you</p>
+            <p className="mt-1 text-xs text-muted">
+              This browser run could not complete the verification step with high confidence. Open the secure portal to finish it.
+            </p>
+          </div>
+        )}
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
           {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
           {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">Submit application</button>}
         </div>
-        <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. A verified receipt is required before the application is marked submitted.</p>
+        <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. Verification codes are used only with your permission, and a verified portal receipt is required before an application is marked submitted.</p>
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Portal preview captured after filling</p></div>

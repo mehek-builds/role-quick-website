@@ -288,7 +288,7 @@ export default function Start() {
       return (
         <DoneStep
           state={state}
-          onFinish={() => {
+          onFinish={(automaticVerificationEnabled) => {
             // Completing is what turns harvest off, so it is an explicit act the student takes
             // rather than something we infer. Navigate regardless: a failed POST here must not
             // strand them on a screen whose only button no longer works.
@@ -296,7 +296,7 @@ export default function Start() {
               learned: state.learned.length,
               applied: state.has_applied,
             });
-            void completeOnboarding()
+            void completeOnboarding(automaticVerificationEnabled)
               .catch(() => {})
               .finally(() => router.push("/dashboard"));
           }}
