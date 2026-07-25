@@ -13,7 +13,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, isLivePacketStatus, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { explicitTerms, isLivePacketStatus, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
@@ -90,6 +90,7 @@ export default function Applications() {
     if (selectedIdRef.current !== requestedId) return;
 
     setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
+    setQuestions((current) => mergeDiscoveredQuestions(current, result.review.questions));
     setPackets((current) => {
       if (!current) return current;
       const packet = current.find((item) => item.id === requestedId);
@@ -384,6 +385,19 @@ export default function Applications() {
     }
   }
 
+  function reviewPortalQuestions() {
+    if (!submission) return;
+    setQuestions((current) => mergeDiscoveredQuestions(current, submission.review.questions));
+    moveToScreen("questions");
+  }
+
+  async function retryPreparation() {
+    if (!submission) return;
+    const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
+    setQuestions(currentQuestions);
+    await prepareApplication(currentQuestions);
+  }
+
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
     setError(null);
@@ -477,11 +491,17 @@ export default function Applications() {
           ))}
         </div>
       ) : screen === "questions" ? (
-        <QuestionsScreen questions={questions} onChange={setQuestions} onBack={() => moveToScreen("review")} onSubmit={() => prepareApplication()} />
+        <QuestionsScreen
+          questions={questions}
+          onChange={setQuestions}
+          onBack={() => moveToScreen(submission?.review.status === "needs_attention" ? "portal" : "review")}
+          onSubmit={() => prepareApplication()}
+          reviewDiscovered={submission?.review.status === "needs_attention"}
+        />
       ) : screen === "submitting" ? (
         <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={() => prepareApplication()} />
+        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -773,31 +793,33 @@ const HighlightedText = memo(function HighlightedText({ text, terms, tone }: { t
   })}</>;
 });
 
-function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void }) {
+function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
+  const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <button onClick={onBack} className="text-sm text-muted hover:text-ink">← Back to resume</button>
+      <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to portal status" : "Back to resume"}</button>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Missing portal answers</p>
-        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">Complete only the answers Litos does not know yet.</h2>
-        <p className="mt-1 text-sm text-muted">Saved profile answers and completed drafts are entered automatically. This screen appears only for required blanks.</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Portal answers" : "Missing portal answers"}</p>
+        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "Review what the employer portal asked." : "Complete only the answers Litos does not know yet."}</h2>
+        <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "These questions were discovered during preparation. Edit every answer that needs your judgment, then retry the same application." : "Saved profile answers and completed drafts are entered automatically. This screen appears only for required blanks."}</p>
       </div>
-      {missingQuestions.map((question) => (
+      {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Required information missing</p>
+          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required information missing" : "Review before retry"}</p>
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">Save answers and prepare application</button></div>
+      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">{reviewDiscovered ? "Save answers and retry preparation" : "Save answers and prepare application"}</button></div>
     </div>
   );
 }
 
-function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void }) {
+function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
+  const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
@@ -822,6 +844,8 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
         )}
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
+          {hasQuestionsToReview && <button onClick={onReviewQuestions} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Review portal answers</button>}
+          {needsAttention && <button onClick={onRetry} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">Retry preparation</button>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
           {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
           {review.status === "ready_for_final_approval" && <button onClick={onApprove} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Submit application</button>}

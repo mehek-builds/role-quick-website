@@ -1,4 +1,4 @@
-import type { ApplicationQuestion, GeneratedResume } from "@/lib/api";
+import type { ApplicationQuestion, ApplicationReview, GeneratedResume } from "@/lib/api";
 
 export const QA_PACKET: GeneratedResume = {
   id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b01",
@@ -157,6 +157,37 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
       },
     ],
   }),
+  deepgram: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b06",
+    company: "Deepgram",
+    role: "Software Engineering Intern",
+    ats: "Ashby",
+    score: 81,
+    jd: "Deepgram is hiring a Software Engineering Intern to build reliable voice AI infrastructure and developer tools with TypeScript, Python, and distributed systems.",
+    title: "Software Engineer",
+    bullets: [
+      "Built reliable TypeScript services that automated 18 operational handoffs.",
+      "Shipped tested developer tools with visible recovery paths for production failures.",
+    ],
+    skills: ["TypeScript", "Python", "Distributed Systems", "Developer Tools", "Voice AI"],
+    editedTerms: ["reliable", "developer", "production", "Distributed Systems", "Voice AI"],
+    status: "needs_attention",
+    attentionReason: "CAPTCHA requires your attention\n\"What excites you about Deepgram?\" needs your review",
+    filledFields: ["name", "email", "phone", "resume"],
+    questions: [{
+      id: "deepgram-why",
+      question: "What excites you about Deepgram?",
+      answer: "Deepgram combines developer infrastructure with applied voice AI, which matches the systems and product work I want to deepen.",
+      kind: "essay",
+      required: true,
+    }, {
+      id: "deepgram-build",
+      question: "What is the most impressive thing you have built or automated with AI?",
+      answer: "",
+      kind: "essay",
+      required: true,
+    }],
+  }),
 };
 
 function qaVariant(packet: GeneratedResume, options: {
@@ -171,6 +202,9 @@ function qaVariant(packet: GeneratedResume, options: {
   skills: string[];
   editedTerms: string[];
   questions: ApplicationQuestion[];
+  status?: ApplicationReview["status"];
+  attentionReason?: string;
+  filledFields?: string[];
 }): GeneratedResume {
   const review = packet.spec._review;
   if (!review) return packet;
@@ -190,9 +224,11 @@ function qaVariant(packet: GeneratedResume, options: {
         jd_text: options.jd,
         portal_url: `https://jobs.example.com/${options.company.toLowerCase()}/${options.role.toLowerCase().replaceAll(" ", "-")}`,
         ats_name: options.ats,
-        status: options.questions.length > 0 ? "questions_ready" : "ready_to_submit",
+        status: options.status ?? (options.questions.length > 0 ? "questions_ready" : "ready_to_submit"),
         edited_terms: options.editedTerms,
         questions: options.questions,
+        attention_reason: options.attentionReason,
+        filled_fields: options.filledFields,
       },
     },
   };

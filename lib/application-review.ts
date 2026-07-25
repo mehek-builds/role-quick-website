@@ -2,8 +2,28 @@ type ReviewPacket = {
   spec?: { _review?: unknown };
 };
 
+type AnsweredQuestion = {
+  id: string;
+  answer: string;
+};
+
 export function reviewablePackets<T extends ReviewPacket>(packets: T[]): T[] {
   return packets.filter((packet) => Boolean(packet.spec?._review));
+}
+
+/**
+ * Incorporate questions discovered by the live portal without erasing an answer the user already
+ * edited in this dashboard session. The portal result is authoritative for labels, required flags,
+ * and newly found controls; a non-empty local answer is authoritative for its text.
+ */
+export function mergeDiscoveredQuestions<T extends AnsweredQuestion>(local: readonly T[], discovered: readonly T[]): T[] {
+  const localById = new Map(local.map((question) => [question.id, question]));
+  const discoveredIds = new Set(discovered.map((question) => question.id));
+  const merged = discovered.map((question) => {
+    const localQuestion = localById.get(question.id);
+    return localQuestion?.answer.trim() ? { ...question, answer: localQuestion.answer } : question;
+  });
+  return [...merged, ...local.filter((question) => !discoveredIds.has(question.id))];
 }
 
 export function portalName(portalUrl: string): string {
