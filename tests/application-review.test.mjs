@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { portalName, reviewablePackets } from "../lib/application-review.ts";
+import { mergeDiscoveredQuestions, portalName, reviewablePackets } from "../lib/application-review.ts";
 
 describe("dashboard application review compatibility", () => {
   test("legacy resumes without review metadata cannot become dead selectable cards", () => {
@@ -15,5 +15,20 @@ describe("dashboard application review compatibility", () => {
     assert.equal(portalName("https://jobs.ashbyhq.com/acme/123"), "Ashby");
     assert.equal(portalName("https://acme.wd1.myworkdayjobs.com/job/123"), "Workday");
     assert.equal(portalName("https://careers.acme.com/jobs/123"), "Company portal");
+  });
+
+  test("adds portal-discovered questions without overwriting an answer already edited locally", () => {
+    const local = [
+      { id: "why-us", question: "Why us?", answer: "My reviewed answer", kind: "essay", required: true },
+    ];
+    const discovered = [
+      { id: "why-us", question: "Why us?", answer: "Server draft", kind: "essay", required: true },
+      { id: "work-auth", question: "Authorized to work?", answer: "", kind: "required", required: true },
+    ];
+
+    assert.deepEqual(mergeDiscoveredQuestions(local, discovered), [
+      { id: "why-us", question: "Why us?", answer: "My reviewed answer", kind: "essay", required: true },
+      { id: "work-auth", question: "Authorized to work?", answer: "", kind: "required", required: true },
+    ]);
   });
 });

@@ -1,11 +1,11 @@
-# Graph Report - .  (2026-07-25)
+# Graph Report - .  (2026-07-26)
 
 ## Corpus Check
-- 53 files · ~294,503 words
+- 53 files · ~294,936 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 183 nodes · 237 edges · 20 communities detected
+- 186 nodes · 241 edges · 20 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -16,10 +16,10 @@
 4. `continueFromResume()` - 4 edges
 5. `degrade()` - 4 edges
 6. `tick()` - 3 edges
-7. `POST()` - 3 edges
-8. `active()` - 3 edges
-9. `advance()` - 3 edges
-10. `_packet_shield()` - 3 edges
+7. `prepareApplication()` - 3 edges
+8. `POST()` - 3 edges
+9. `active()` - 3 edges
+10. `advance()` - 3 edges
 
 ## Surprising Connections (you probably didn't know these)
 - None detected - all connections are within the same source files.
@@ -28,7 +28,7 @@
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
-Nodes (9): continueFromResume(), jobParams(), loadMore(), onVisibility(), poll(), prepareApplication(), saveCoverLetter(), saveResume() (+1 more)
+Nodes (10): continueFromResume(), jobParams(), loadMore(), onVisibility(), poll(), prepareApplication(), retryPreparation(), saveCoverLetter() (+2 more)
 
 ### Community 1 - "Community 1"
 Cohesion: 0.12
@@ -47,7 +47,7 @@ Cohesion: 0.18
 Nodes (0):
 
 ### Community 5 - "Community 5"
-Cohesion: 0.22
+Cohesion: 0.2
 Nodes (2): sectionHeading(), startsNewSection()
 
 ### Community 6 - "Community 6"
