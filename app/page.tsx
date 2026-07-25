@@ -29,11 +29,11 @@ const FAQ_ITEMS = [
   },
   {
     q: "Does it apply to jobs for me automatically?",
-    a: "Never. It gets everything ready, the tailored resume, the filled fields, the outreach draft, then stops and waits for you. Nothing is submitted and no email is sent until you read it and click. You apply to one job at a time, on purpose.",
+    a: "Only if you explicitly turn on automatic submission. Litos can then submit eligible applications you start, after checking that every answer is supported. Missing facts, conflicting answers, sensitive attestations, CAPTCHA, and unsupported portal steps always pause for you. You can turn the permission off in Settings.",
   },
   {
     q: "Will a recruiter be able to tell I used AI?",
-    a: "It reads like an application you wrote carefully, because the words are yours. Litos fills real fields with your real answers and drafts your short responses and outreach in your own voice, then stops for you to read every line. Nothing is mass-blasted, so there is no template smell to catch.",
+    a: "It reads like an application you wrote carefully, because the facts are yours. Litos fills fields from your saved answers and drafts short responses from your grounded experience. Automatic submission is optional, and safety blockers still stop the flow before anything is sent.",
   },
   {
     q: "Will this actually help me get interviews?",

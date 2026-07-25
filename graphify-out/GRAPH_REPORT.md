@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-07-26)
 
 ## Corpus Check
-- 53 files · ~294,936 words
+- 55 files · ~296,091 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 186 nodes · 241 edges · 20 communities detected
+- 189 nodes · 244 edges · 27 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -27,11 +27,11 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.05
-Nodes (10): continueFromResume(), jobParams(), loadMore(), onVisibility(), poll(), prepareApplication(), retryPreparation(), saveCoverLetter() (+2 more)
+Cohesion: 0.07
+Nodes (0):
 
 ### Community 1 - "Community 1"
-Cohesion: 0.12
+Cohesion: 0.15
 Nodes (16): api(), ApiError, clearSession(), completeOnboarding(), createEmailConnection(), disconnectEmailConnection(), getApplicationProfile(), getEmailConnections() (+8 more)
 
 ### Community 2 - "Community 2"
@@ -39,11 +39,11 @@ Cohesion: 0.16
 Nodes (6): anonId(), device(), track(), extractResumeText(), fromDocx(), fromPdf()
 
 ### Community 3 - "Community 3"
-Cohesion: 0.15
+Cohesion: 0.13
 Nodes (0):
 
 ### Community 4 - "Community 4"
-Cohesion: 0.18
+Cohesion: 0.15
 Nodes (0):
 
 ### Community 5 - "Community 5"
@@ -55,12 +55,12 @@ Cohesion: 0.25
 Nodes (0):
 
 ### Community 7 - "Community 7"
-Cohesion: 0.25
-Nodes (0):
-
-### Community 8 - "Community 8"
 Cohesion: 0.39
 Nodes (6): bump(), looksLikeResume(), POST(), findJob(), getJobCards(), loadFeed()
+
+### Community 8 - "Community 8"
+Cohesion: 0.25
+Nodes (0):
 
 ### Community 9 - "Community 9"
 Cohesion: 0.52
@@ -76,10 +76,10 @@ Nodes (5): degrade(), frames(), _packet_shield(), The finale packet keeps its co
 
 ### Community 12 - "Community 12"
 Cohesion: 0.4
-Nodes (0):
+Nodes (5): continueFromResume(), prepareApplication(), retryPreparation(), saveCoverLetter(), saveResume()
 
 ### Community 13 - "Community 13"
-Cohesion: 0.67
+Cohesion: 0.4
 Nodes (0):
 
 ### Community 14 - "Community 14"
@@ -91,12 +91,12 @@ Cohesion: 0.67
 Nodes (0):
 
 ### Community 16 - "Community 16"
-Cohesion: 1.0
+Cohesion: 0.67
 Nodes (0):
 
 ### Community 17 - "Community 17"
-Cohesion: 1.0
-Nodes (0):
+Cohesion: 0.67
+Nodes (3): onVisibility(), poll(), tick()
 
 ### Community 18 - "Community 18"
 Cohesion: 1.0
@@ -104,18 +104,56 @@ Nodes (0):
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
+Nodes (2): jobParams(), loadMore()
+
+### Community 20 - "Community 20"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 21 - "Community 21"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 22 - "Community 22"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 23 - "Community 23"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 24 - "Community 24"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 25 - "Community 25"
+Cohesion: 1.0
+Nodes (0):
+
+### Community 26 - "Community 26"
+Cohesion: 1.0
 Nodes (0):
 
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 16`** (2 nodes): `BRoll.tsx`, `BRoll()`
+- **Thin community `Community 18`** (2 nodes): `SmoothScroll.tsx`, `SmoothScroll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 17`** (1 nodes): `next-env.d.ts`
+- **Thin community `Community 19`** (2 nodes): `jobParams()`, `loadMore()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 18`** (1 nodes): `next.config.ts`
+- **Thin community `Community 20`** (2 nodes): `portal-form.tsx`, `PortalForm()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (1 nodes): `opengraph-image.tsx`
+- **Thin community `Community 21`** (2 nodes): `Wash.tsx`, `Wash()`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 22`** (2 nodes): `CinematicPage.tsx`, `CinematicPage()`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 23`** (2 nodes): `BRoll.tsx`, `BRoll()`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 24`** (1 nodes): `next-env.d.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 25`** (1 nodes): `next.config.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 26`** (1 nodes): `opengraph-image.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -124,6 +162,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.05 - nodes in this community are weakly interconnected._
-- **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.12 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
+- **Should `Community 3` be split into smaller, more focused modules?**
+  _Cohesion score 0.13 - nodes in this community are weakly interconnected._

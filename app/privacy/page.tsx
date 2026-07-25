@@ -120,9 +120,30 @@ export default function Privacy() {
             Drafts wait in your drafts folder and never send themselves.
           </p>
           <p>
-            Applications submit only when you click Submit, unless you turn on
-            auto-submit. With auto-submit on, a 15-second countdown runs
-            before the application goes out, and one click cancels it.
+            Applications submit only when you click Submit, unless you grant
+            standing automatic-submission permission. With that permission,
+            Litos may submit an application you start after checking that its
+            answers are supported and the portal has no safety blocker. The
+            extension shows a cancelable 15-second countdown. A dashboard
+            submission can proceed as soon as those checks pass. Missing or
+            conflicting facts, sensitive attestations, CAPTCHA, unsupported
+            portal behavior, and uncertain confirmation always pause the flow.
+          </p>
+        </Section>
+
+        <Section title="Application verification">
+          <p>
+            If you separately turn on automatic verification, Litos can use a
+            Gmail or Outlook account you already connected to look for a
+            verification code tied to an application that is actively open.
+            It checks the sender and timing before using a code, does not save
+            the code, and does not use this permission to read or send other
+            mail. CAPTCHA, device-based MFA, and unsupported verification
+            steps still pause for you.
+          </p>
+          <p>
+            Automatic submission and automatic verification are separate,
+            optional permissions. You can turn either one off in Settings.
           </p>
         </Section>
 

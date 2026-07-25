@@ -702,9 +702,10 @@ export function DoneStep({
   onFinish,
 }: {
   state: OnboardingState;
-  onFinish: (automaticVerificationEnabled: boolean) => void;
+  onFinish: (settings: { automatic_submission_enabled: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [automaticSubmission, setAutomaticSubmission] = useState(state.automatic_submission_enabled);
   const [automaticVerification, setAutomaticVerification] = useState(state.automatic_verification_enabled);
   const learned = state.learned.length;
 
@@ -746,30 +747,33 @@ export function DoneStep({
         </div>
       )}
 
-      <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
-        <input
-          type="checkbox"
-          checked={automaticVerification}
-          onChange={(event) => setAutomaticVerification(event.target.checked)}
-          className="mt-1 size-4 accent-[#6b84e8]"
-        />
-        <span>
-          <span className="block text-[14px] text-ink">Automatically use application verification codes</span>
-          <span className="mt-1 block text-[12px] leading-5 text-muted">
-            With your permission, Litos can use your connected Gmail or Outlook account to find verification codes related to an active application. Codes are used only for that application and are not saved.
+      <div className="mt-5 space-y-3">
+        <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
+          <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-1 size-4 accent-[#6b84e8]" />
+          <span>
+            <span className="block text-[14px] text-ink">Automatically submit eligible applications</span>
+            <span className="mt-1 block text-[12px] leading-5 text-muted">Litos may submit applications you start after filling them from your saved facts and grounded experience. It pauses for missing or conflicting facts, sensitive attestations, CAPTCHA, and unsupported portal steps.</span>
           </span>
-        </span>
-      </label>
+        </label>
+        <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
+          <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-1 size-4 accent-[#6b84e8]" />
+          <span>
+            <span className="block text-[14px] text-ink">Automatically use application verification codes</span>
+            <span className="mt-1 block text-[12px] leading-5 text-muted">With your permission, Litos may use connected Gmail or Outlook to find a code for an active application. Codes are used only for that application and are not saved.</span>
+          </span>
+        </label>
+      </div>
 
-      <p className="mt-4 text-[12px] leading-5 text-faint">
-        If a portal requires a CAPTCHA or an unsupported verification step, Litos pauses and opens the secure browser for you.
-      </p>
+      <p className="mt-4 text-[12px] leading-5 text-faint">Both permissions are optional and can be turned off in Settings. Litos never bypasses CAPTCHA or signs sensitive declarations for you.</p>
 
       <div className="mt-6">
         <PrimaryButton
           onClick={() => {
             setBusy(true);
-            onFinish(automaticVerification);
+            void onFinish({
+              automatic_submission_enabled: automaticSubmission,
+              automatic_verification_enabled: automaticVerification,
+            }).finally(() => setBusy(false));
           }}
           disabled={busy}
         >
