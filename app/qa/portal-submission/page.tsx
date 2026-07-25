@@ -27,7 +27,7 @@ function PortalForm() {
 }
 
 function GreenhouseFields() {
-  return <><Field id="first_name" label="First name" required /><Field id="last_name" label="Last name" required /><Field id="email" label="Email" type="email" required /><Field id="phone" label="Phone" /><Field id="candidate-location" label="Location" /><FileField id="resume" name="job_application[resume]" /></>;
+  return <><Field name="job_application[first_name]" label="First name" required /><Field name="job_application[last_name]" label="Last name" required /><Field id="email" label="Email" type="email" required /><Field id="phone" label="Phone" /><Field id="candidate-location" label="Location" /><FileField id="resume" name="job_application[resume]" /></>;
 }
 
 function LeverFields() {
