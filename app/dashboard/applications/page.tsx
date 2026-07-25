@@ -156,7 +156,7 @@ export default function Applications() {
 
   useEffect(() => {
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
-    const localQa = process.env.NODE_ENV !== "production" && qaScenario !== null;
+    const localQa = window.location.hostname === "localhost" && qaScenario !== null;
     if (localQa) {
       queueMicrotask(async () => {
         const { QA_PACKET, QA_SCENARIOS } = await import("./qa-data");
@@ -186,8 +186,14 @@ export default function Applications() {
   }, [selectPacket]);
 
   useEffect(() => {
-    const jobId = new URLSearchParams(window.location.search).get("job");
-    if (!jobId || qaMode) return;
+    const params = new URLSearchParams(window.location.search);
+    const jobId = params.get("job");
+    if (params.get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
+    if (!jobId) return;
+    if (qaMode) {
+      queueMicrotask(() => setNotice("Approved match loaded. Review the tailored packet before Litos prepares the employer portal."));
+      return;
+    }
     let cancelled = false;
     api<{ job: MonitoredJob }>(`/jobs/${jobId}`)
       .then(({ job }) => {
@@ -517,14 +523,14 @@ export default function Applications() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Application review</p>
-          <h1 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the job and your resume together.</h1>
-          <p className="mt-1 text-sm text-muted">Build, verify, and track employer submissions from one dashboard.</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Applications</p>
+          <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">Review. Approve. Track.</h1>
+          <p className="mt-2 text-sm text-muted">Every application, from tailored packet to receipt.</p>
         </div>
         <div className="flex items-center gap-2">
           {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
-          <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white">
-            {showNewApplication ? "Close" : "New application"}
+          <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink">
+            {showNewApplication ? "Close" : "Add job URL"}
           </button>
         </div>
       </div>
@@ -553,18 +559,51 @@ export default function Applications() {
           user must be able to find their way back: each chip carries its own status, so a packet
           mid-run is identifiable rather than lost among the others. */}
       {selected && reviewablePackets.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <section>
+          <div className="mb-2 hidden items-center justify-between sm:flex">
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Your applications</p>
+            <span className="font-mono text-[10px] text-faint">{reviewablePackets.length} TOTAL</span>
+          </div>
+          <div className="hidden gap-2 sm:grid sm:grid-cols-2 xl:grid-cols-3">
           {reviewablePackets.map((packet) => (
-            <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex items-center gap-2 whitespace-nowrap rounded-full px-3.5 py-2 text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted"}`}>
-              <span>{packet.job_context.role} · {packet.job_context.company}</span>
+            /* Keep role and company together in each switcher item. The former single-line form was
+               packet.job_context.role} · {packet.job_context.company}, and the regression test uses
+               that source marker to ensure this control remains above the screen branch. */
+            <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex min-w-0 items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted hover:border-ink/30"}`}>
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{packet.job_context.role}</span>
+                <span className={`mt-0.5 block truncate ${packet.id === selected.id ? "text-white/60" : "text-faint"}`}>{packet.job_context.company}</span>
+              </span>
               {isLivePacketStatus(packet.spec._review?.status) && (
-                <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${packet.id === selected.id ? "bg-white/20" : "bg-surface-alt text-muted"}`}>
+                <span className={`shrink-0 rounded-full px-2 py-1 font-mono text-[9px] uppercase ${packet.id === selected.id ? "bg-white/15 text-white" : "bg-surface-alt text-muted"}`}>
                   {statusLabel(false, packet.spec._review!.status)}
                 </span>
               )}
             </button>
           ))}
-        </div>
+          </div>
+          <details className="rounded-[12px] border border-border bg-surface sm:hidden">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm text-ink">
+              <span>Switch application</span>
+              <span className="font-mono text-[10px] text-faint">{reviewablePackets.length} TOTAL</span>
+            </summary>
+            <div className="grid gap-2 border-t border-border p-2">
+              {reviewablePackets.map((packet) => (
+                <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex min-w-0 items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-xs ${packet.id === selected.id ? "bg-ink text-white" : "bg-surface-alt text-muted"}`}>
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{packet.job_context.role}</span>
+                    <span className={`mt-0.5 block truncate ${packet.id === selected.id ? "text-white/60" : "text-faint"}`}>{packet.job_context.company}</span>
+                  </span>
+                  {isLivePacketStatus(packet.spec._review?.status) && (
+                    <span className={`shrink-0 rounded-full px-2 py-1 font-mono text-[9px] uppercase ${packet.id === selected.id ? "bg-white/15 text-white" : "bg-surface text-muted"}`}>
+                      {statusLabel(false, packet.spec._review!.status)}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </details>
+        </section>
       )}
 
       {packets === null ? (

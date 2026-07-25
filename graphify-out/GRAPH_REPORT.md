@@ -1,11 +1,11 @@
 # Graph Report - .  (2026-07-26)
 
 ## Corpus Check
-- 55 files · ~296,091 words
+- 56 files · ~297,358 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 189 nodes · 244 edges · 27 communities detected
+- 192 nodes · 247 edges · 27 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
@@ -27,7 +27,7 @@
 ## Communities
 
 ### Community 0 - "Community 0"
-Cohesion: 0.07
+Cohesion: 0.06
 Nodes (0):
 
 ### Community 1 - "Community 1"
@@ -104,7 +104,7 @@ Nodes (0):
 
 ### Community 19 - "Community 19"
 Cohesion: 1.0
-Nodes (2): jobParams(), loadMore()
+Nodes (0):
 
 ### Community 20 - "Community 20"
 Cohesion: 1.0
@@ -116,7 +116,7 @@ Nodes (0):
 
 ### Community 22 - "Community 22"
 Cohesion: 1.0
-Nodes (0):
+Nodes (2): jobParams(), loadMore()
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
@@ -137,15 +137,15 @@ Nodes (0):
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 18`** (2 nodes): `SmoothScroll.tsx`, `SmoothScroll()`
+- **Thin community `Community 18`** (2 nodes): `Wash.tsx`, `Wash()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 19`** (2 nodes): `jobParams()`, `loadMore()`
+- **Thin community `Community 19`** (2 nodes): `SmoothScroll.tsx`, `SmoothScroll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (2 nodes): `portal-form.tsx`, `PortalForm()`
+- **Thin community `Community 20`** (2 nodes): `CinematicPage.tsx`, `CinematicPage()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 21`** (2 nodes): `Wash.tsx`, `Wash()`
+- **Thin community `Community 21`** (2 nodes): `portal-form.tsx`, `PortalForm()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (2 nodes): `CinematicPage.tsx`, `CinematicPage()`
+- **Thin community `Community 22`** (2 nodes): `jobParams()`, `loadMore()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 23`** (2 nodes): `BRoll.tsx`, `BRoll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
@@ -162,6 +162,6 @@ _Questions this graph is uniquely positioned to answer:_
 - **What connects `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is` to the rest of the system?**
   _1 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
-  _Cohesion score 0.07 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
   _Cohesion score 0.13 - nodes in this community are weakly interconnected._
