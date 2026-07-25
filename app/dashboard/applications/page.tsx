@@ -292,14 +292,9 @@ export default function Applications() {
       if (created?.spec._review) {
         setPackets((current) => [created, ...(current ?? []).filter((packet) => packet.id !== created.id)]);
         selectPacket(created);
-        try {
-          await generateCoverLetter(created.id);
-        } catch {
-          setNotice("Review packet generated. The cover letter needs a retry before submission.");
-        }
         setNewApplication(EMPTY_APPLICATION_DRAFT);
         setShowNewApplication(false);
-        setNotice((current) => current ?? "Review packet and tailored cover letter generated from the job description.");
+        setNotice("Review packet generated. Litos will check the employer portal for a cover-letter attachment when you submit.");
         return;
       }
 
@@ -319,14 +314,9 @@ export default function Applications() {
       setPackets(history.resumes);
       if (!fallbackCreated?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
       selectPacket(fallbackCreated);
-      try {
-        await generateCoverLetter(fallbackCreated.id);
-      } catch {
-        setNotice("Review packet generated. The cover letter needs a retry before submission.");
-      }
       setNewApplication(EMPTY_APPLICATION_DRAFT);
       setShowNewApplication(false);
-      setNotice((current) => current ?? "Review packet and tailored cover letter generated from the job description.");
+      setNotice("Review packet generated. Litos will check the employer portal for a cover-letter attachment when you submit.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not generate the application review packet.");
     } finally {
@@ -596,7 +586,7 @@ export default function Applications() {
             </DocumentPane>
           </div>
 
-          <Card className="p-6">
+          {review.cover_letter_supported === true ? <Card className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Tailored cover letter</p>
@@ -610,7 +600,15 @@ export default function Applications() {
               </div>
             </div>
             <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
-          </Card>
+          </Card> : <Card className="p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Cover letter on demand</p>
+            <h2 className="mt-2 text-lg font-medium text-ink">{review.cover_letter_supported === false ? "No cover-letter attachment was found." : "Litos will check the employer portal first."}</h2>
+            <p className="mt-1 text-sm leading-6 text-muted">
+              {review.cover_letter_supported === false
+                ? "This application will continue without manufacturing a cover letter."
+                : "If the application includes a cover-letter file attachment, Litos will generate and attach a tailored letter. It will do this even when the field is marked optional."}
+            </p>
+          </Card>}
 
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
             {/* The old one-line legend described only one of the two marks on screen and named

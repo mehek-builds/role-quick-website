@@ -199,6 +199,7 @@ export type ApplicationReview = {
   handoff_expires_at?: string;
   final_approved_at?: string;
   submission_authorized_at?: string;
+  cover_letter_supported?: boolean;
   filled_fields?: string[];
   preview_screenshot_url?: string;
   receipt?: {

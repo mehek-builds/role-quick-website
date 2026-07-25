@@ -25,7 +25,7 @@ test("one dashboard click authorizes preparation and employer-portal submission"
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
-test("application packets generate and expose an editable tailored cover letter", async () => {
+test("cover letters wait for a detected attachment field, including optional fields", async () => {
   const dashboard = await readFile(
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),
     "utf8",
@@ -35,6 +35,11 @@ test("application packets generate and expose an editable tailored cover letter"
   assert.match(dashboard, /Tailored cover letter/);
   assert.match(dashboard, /saveCoverLetter/);
   assert.match(dashboard, /coverLetterDownloadUrl/);
+  assert.match(dashboard, /review\.cover_letter_supported === true/);
+  assert.match(dashboard, /even when the field is marked optional/);
+  const creation = dashboard.slice(dashboard.indexOf("async function createApplication"), dashboard.indexOf("async function generateCoverLetter"));
+  assert.doesNotMatch(creation, /\/cover-letter/);
+  assert.doesNotMatch(creation, /generateCoverLetter/);
 });
 
 test("application creation uses the single-response packet and polling cannot overlap", async () => {
