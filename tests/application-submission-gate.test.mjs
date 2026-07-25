@@ -61,7 +61,10 @@ test("application creation uses the single-response packet and polling cannot ov
 });
 
 test("the controlled portal mirrors every supported adapter without an employer destination", async () => {
-  const portal = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
+  const portal = await readFile(new URL("../app/qa/portal-submission/portal-form.tsx", import.meta.url), "utf8");
+  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
+  assert.doesNotMatch(page, /useSearchParams|Suspense/);
   assert.match(portal, /type Board = "greenhouse" \| "lever" \| "ashby" \| "smartrecruiters"/);
   assert.match(portal, /name="job_application\[resume\]"/);
   assert.match(portal, /name="job_application\[first_name\]"/);
