@@ -18,7 +18,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, isLivePacketStatus, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
-type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string; configured?: boolean };
+type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean };
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type CoverLetterResponse = { cover_letter: CoverLetter; download_url: string };
@@ -78,7 +78,7 @@ export default function Applications() {
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
     setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
     const status = packet.spec._review?.status;
-    moveToScreen(status === "submitted" ? "submitted" : ["submit_requested", "preparing", "filling", "submitting"].includes(status ?? "") ? "submitting" : ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "") ? "portal" : "review");
+    moveToScreen(status === "submitted" ? "submitted" : ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status ?? "") ? "submitting" : ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "") ? "portal" : "review");
     setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
     setError(null);
     setNotice(null);
@@ -350,12 +350,23 @@ export default function Applications() {
   }
 
   async function saveCoverLetter(): Promise<boolean> {
-    if (!selected || !coverLetterBody.trim()) return false;
+    if (!selected) return false;
     setCoverLetterBusy(true);
     setError(null);
     try {
       if (!qaMode) {
         const applicationId = selected.id;
+        if (!coverLetterBody.trim()) {
+          if (selected.spec._cover_letter) {
+            await api(`/applications/${applicationId}/cover-letter`, { method: "DELETE" });
+            setPackets((current) => current?.map((packet) => packet.id === applicationId
+              ? { ...packet, cover_letter_download_url: undefined, spec: { ...packet.spec, _cover_letter: undefined } }
+              : packet) ?? current);
+            if (selectedIdRef.current === applicationId) setCoverLetterDownloadUrl(null);
+            setNotice("Cover letter removed from this application.");
+          }
+          return true;
+        }
         const result = await api<CoverLetterResponse>(`/applications/${selected.id}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
         if (selectedIdRef.current === applicationId) {
@@ -408,8 +419,12 @@ export default function Applications() {
   }
 
   async function continueFromResume() {
+    if (coverLetterBusy) {
+      setError("Wait for the cover letter check to finish before preparing the application.");
+      return;
+    }
     if (!(await saveResume())) return;
-    if (coverLetterBody.trim() && !qaMode && !(await saveCoverLetter())) return;
+    if (!qaMode && !(await saveCoverLetter())) return;
     const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
     if (missingRequiredAnswers.length > 0) {
       moveToScreen("questions");
@@ -452,10 +467,10 @@ export default function Applications() {
     setError(null);
     try {
       const result = qaMode
-        ? { ...submission, review: { ...submission.review, status: "submitting" as const, attention_reason: undefined } }
+        ? { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
         : await api<SubmissionResponse>(`/applications/${selected.id}/submission/handoff-complete`, { method: "POST" });
       setSubmission(result);
-      moveToScreen("submitting");
+      moveToScreen("portal");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not confirm the portal handoff.");
     }
@@ -594,12 +609,17 @@ export default function Applications() {
                 <p className="mt-1 text-sm text-muted">Litos maps the job requirements to evidence already present in your profile, resume, and experience bank.</p>
               </div>
               <div className="flex gap-2">
-                {coverLetterDownloadUrl && <a href={coverLetterDownloadUrl} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
-                <button type="button" onClick={() => void generateCoverLetter()} disabled={coverLetterBusy} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink disabled:opacity-50">{coverLetterBody ? "Regenerate" : "Generate"}</button>
-                <button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || !coverLetterBody.trim()} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50">{coverLetterBusy ? "Checking..." : "Save cover letter"}</button>
+                {coverLetterDownloadUrl && <a href={coverLetterDownloadUrl} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">View PDF</a>}
+                <button type="button" onClick={() => void generateCoverLetter()} disabled={coverLetterBusy} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">{coverLetterBody ? "Regenerate" : "Generate"}</button>
+                <button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || (!coverLetterBody.trim() && !selected.spec._cover_letter)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">{coverLetterBusy ? "Checking..." : coverLetterBody.trim() ? "Save cover letter" : "Remove cover letter"}</button>
               </div>
             </div>
             <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
+            {(selected.spec._cover_letter?.warnings?.length ?? 0) > 0 && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-warn">
+                {selected.spec._cover_letter!.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
           </Card> : <Card className="p-6">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Cover letter on demand</p>
             <h2 className="mt-2 text-lg font-medium text-ink">{review.cover_letter_supported === false ? "No cover-letter attachment was found." : "Litos will check the employer portal first."}</h2>
@@ -616,7 +636,7 @@ export default function Applications() {
                 invisible as a concept. Name both, and render each mark in its own style inline so
                 the legend is read in the same visual language as the panes. */}
             <div>
-              <p className="text-sm font-medium text-ink">Your click authorizes Litos to complete this application on the employer portal.</p>
+              <p className="text-sm font-medium text-ink">Prepare the employer portal, then review the filled form before final submission.</p>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                 <span className="inline-flex items-center gap-1.5">
                   <mark className="rounded bg-brand-soft px-1 text-brand-ink">highlighted</mark>
@@ -631,8 +651,8 @@ export default function Applications() {
             </div>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
-              <button onClick={continueFromResume} disabled={saving} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
-                {saving ? <PendingLabel state="solving" onColor>Checking application...</PendingLabel> : "Submit application"}
+              <button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
+                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Checking application...</PendingLabel> : "Prepare application"}
               </button>
             </div>
           </div>
@@ -899,11 +919,12 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit }: { questions:
 function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
+  const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Secure portal runner</p>
-        <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "Continue your authorized submission."}</h2>
+        <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "Review the filled portal before submitting."}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
@@ -912,7 +933,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
           <BlockerList reason={review.attention_reason} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Your original dashboard click already authorized submission. Continue only if this packet was created by an older Litos flow."}
+            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Nothing has been sent to the employer yet. Submit only after checking the preview below."}
           </p>
         )}
         {review.filled_fields && review.filled_fields.length > 0 && (
@@ -921,11 +942,23 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
             <div className="mt-2 flex flex-wrap gap-2">{review.filled_fields.map((field) => <Chip key={field} label={field.replace("question:", "Answer: ")} kind="ready" />)}</div>
           </div>
         )}
+        {submission.cover_letter && (
+          <div className="mt-6 rounded-[14px] border border-border bg-surface-alt p-4">
+            <p className="text-xs font-medium text-muted">Cover letter included with final submission</p>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.cover_letter.body}</p>
+            {submission.cover_letter.warnings.length > 0 && (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-warn">
+                {submission.cover_letter.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+        {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
           {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Continue authorized submission</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">Submit application</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. A verified receipt is required before the application is marked submitted.</p>
       </Card>
@@ -1026,11 +1059,11 @@ function PortalProgress({ status, startedAt }: { status?: ApplicationReview["sta
   // The old copy asserted "Nothing is submitted during this preparation step" on every status,
   // including the genuinely-submitting one. That reassurance was false at exactly the moment it
   // mattered most, so each stage now states only what is true of that stage.
-  const submitting = status === "submitting";
+  const submitting = status === "submitting" || status === "submission_claimed";
   const title = submitting ? "Submitting through the company portal." : "Preparing the company portal.";
   const body = submitting
     ? "You authorized this submission from the Litos dashboard. Litos is completing it in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
-    : "Litos is entering your saved profile answers, tailored resume, and cover letter in a secure remote browser. Your dashboard click authorizes submission as soon as the employer portal is ready.";
+    : "Litos is entering your saved profile answers, tailored resume, and approved cover letter in a secure remote browser. Nothing is sent until you review the filled portal and submit.";
 
   const milestone =
     elapsed >= PORTAL_STUCK_AFTER_S
