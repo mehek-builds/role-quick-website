@@ -59,3 +59,13 @@ test("application creation uses the single-response packet and polling cannot ov
   assert.match(dashboard, /document\.visibilityState/);
   assert.doesNotMatch(dashboard, /setInterval\(/);
 });
+
+test("the controlled portal mirrors every supported adapter without an employer destination", async () => {
+  const portal = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
+  assert.match(portal, /type Board = "greenhouse" \| "lever" \| "ashby" \| "smartrecruiters"/);
+  assert.match(portal, /name="job_application\[resume\]"/);
+  assert.match(portal, /name="urls\[LinkedIn\]"/);
+  assert.match(portal, /name="_systemfield_name"/);
+  assert.match(portal, /id="confirm-email-input"/);
+  assert.match(portal, /No employer received this application/);
+});
