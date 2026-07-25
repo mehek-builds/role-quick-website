@@ -170,8 +170,19 @@ export type ApplicationReview = {
   attention_reason?: string;
   handoff_expires_at?: string;
   final_approved_at?: string;
+  submission_authorization?: {
+    source: "standing_consent" | "per_application_approval";
+    authorized_at: string;
+    consented_at?: string;
+    consent_version?: string;
+  };
   filled_fields?: string[];
   preview_screenshot_url?: string;
+  verification?: {
+    status: "not_needed" | "searching" | "completed" | "handoff";
+    provider?: "gmail" | "outlook";
+    completed_at?: string;
+  };
   receipt?: {
     confirmation_text: string;
     final_url: string;
@@ -241,6 +252,10 @@ export type OnboardingState = {
   learned: string[];
   gaps: string[];
   harvest_active: boolean;
+  automatic_submission_enabled: boolean;
+  automatic_submission_consented_at: string | null;
+  automatic_submission_consent_version: string | null;
+  automatic_verification_enabled: boolean;
 };
 
 export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
@@ -257,8 +272,23 @@ export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
 }
 
-export function completeOnboarding() {
-  return api<{ ok: true }>("/onboarding/complete", { method: "POST" });
+export type AutomationSettings = {
+  automatic_submission_enabled: boolean;
+  automatic_verification_enabled: boolean;
+};
+
+export function completeOnboarding(settings: AutomationSettings) {
+  return api<{ ok: true } & AutomationSettings>("/onboarding/complete", {
+    method: "POST",
+    body: JSON.stringify(settings),
+  });
+}
+
+export function setAutomationSettings(settings: Partial<AutomationSettings>) {
+  return api<AutomationSettings & { automatic_submission_consent_version: string | null }>("/onboarding/automation", {
+    method: "PUT",
+    body: JSON.stringify(settings),
+  });
 }
 
 export function getTargeting() {

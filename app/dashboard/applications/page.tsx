@@ -413,7 +413,7 @@ export default function Applications() {
         <div>
           <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Application review</p>
           <h1 className="mt-2 text-2xl font-medium tracking-tight text-ink">Review the job and your resume together.</h1>
-          <p className="mt-1 text-sm text-muted">Build, review, approve, and verify employer submissions from one dashboard.</p>
+          <p className="mt-1 text-sm text-muted">Build, verify, and track employer submissions from one dashboard.</p>
         </div>
         <div className="flex items-center gap-2">
           {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
@@ -515,7 +515,7 @@ export default function Applications() {
                 invisible as a concept. Name both, and render each mark in its own style inline so
                 the legend is read in the same visual language as the panes. */}
             <div>
-              <p className="text-sm font-medium text-ink">Litos enters saved answers before asking for final submission approval.</p>
+              <p className="text-sm font-medium text-ink">Litos enters saved answers, checks the portal, and follows your automation permission.</p>
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                 <span className="inline-flex items-center gap-1.5">
                   <mark className="rounded bg-brand-soft px-1 text-brand-ink">highlighted</mark>
@@ -526,7 +526,7 @@ export default function Applications() {
                   in the resume: wording tailoring changed for this posting
                 </span>
               </p>
-              <p className="mt-1 text-xs text-muted">Nothing reaches the employer until you review the filled portal and click Submit application.</p>
+              <p className="mt-1 text-xs text-muted">With automatic submission on, an eligible application proceeds without another approval. Safety blockers always pause for you.</p>
             </div>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
@@ -811,7 +811,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry }:
           <BlockerList reason={review.attention_reason} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Review the captured form. The employer receives nothing until you click Submit application below."}
+            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Automatic submission is off or was revoked. Review the captured form, then approve this application if you want it sent."}
           </p>
         )}
         {review.filled_fields && review.filled_fields.length > 0 && (
@@ -928,7 +928,7 @@ function PortalProgress({ status, startedAt }: { status?: ApplicationReview["sta
   const submitting = status === "submitting";
   const title = submitting ? "Submitting through the company portal." : "Preparing the company portal.";
   const body = submitting
-    ? "You approved this submission. Litos is completing it in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
+    ? "Litos is completing the authorized submission in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
     : "Litos is entering your saved profile answers and resume in a secure remote browser. Nothing is submitted during this preparation step.";
 
   const milestone =
@@ -981,4 +981,3 @@ function extractScore(spec: GeneratedResume["spec"]): number {
   const raw = spec._quality?.atsCoverage;
   return typeof raw === "number" ? Math.round(raw <= 1 ? raw * 100 : raw) : 0;
 }
-

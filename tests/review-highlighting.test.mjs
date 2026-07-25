@@ -148,7 +148,7 @@ test("R-046: the two highlight tones are visually distinct", () => {
 
 test("the submitting screen no longer claims nothing is submitted while submitting", () => {
   const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
-  assert.match(progress.slice(0, 3200), /You approved this submission/);
+  assert.match(progress.slice(0, 3200), /completing the authorized submission/);
 });
 
 // ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----

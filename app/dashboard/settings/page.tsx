@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ApplicationProfile, Me } from "@/lib/api";
+import { api, ApplicationProfile, getOnboardingState, Me, setAutomationSettings } from "@/lib/api";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import TargetingCard from "@/components/app/TargetingCard";
 
@@ -22,18 +22,24 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
+  const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
+  const [savingAutomation, setSavingAutomation] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [meRes, profileRes] = await Promise.all([
+        const [meRes, profileRes, onboardingRes] = await Promise.all([
           api<Me>("/me"),
           api<ApplicationProfile>("/profile/application").catch(() => ({})),
+          getOnboardingState(),
         ]);
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
+        setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
+        setAutomaticVerification(onboardingRes.automatic_verification_enabled);
       } catch (err) {
         if (!cancelled)
           setError(err instanceof Error ? err.message : "Could not load settings.");
@@ -46,6 +52,27 @@ export default function Settings() {
 
   function patch(p: Partial<ApplicationProfile>) {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
+  }
+
+  async function saveAutomation(patch: Partial<{ automatic_submission_enabled: boolean; automatic_verification_enabled: boolean }>) {
+    if (automaticSubmission === null || automaticVerification === null) return;
+    const previousSubmission = automaticSubmission;
+    const previousVerification = automaticVerification;
+    if (patch.automatic_submission_enabled !== undefined) setAutomaticSubmission(patch.automatic_submission_enabled);
+    if (patch.automatic_verification_enabled !== undefined) setAutomaticVerification(patch.automatic_verification_enabled);
+    setSavingAutomation(true);
+    setError(null);
+    try {
+      const result = await setAutomationSettings(patch);
+      setAutomaticSubmission(result.automatic_submission_enabled);
+      setAutomaticVerification(result.automatic_verification_enabled);
+    } catch (err) {
+      setAutomaticSubmission(previousSubmission);
+      setAutomaticVerification(previousVerification);
+      setError(err instanceof Error ? err.message : "Could not update automation permissions.");
+    } finally {
+      setSavingAutomation(false);
+    }
   }
 
   async function save() {
@@ -74,7 +101,7 @@ export default function Settings() {
   }
 
   if (error && !profile) return <ErrorNote message={error} />;
-  if (!me || profile === null)
+  if (!me || profile === null || automaticSubmission === null || automaticVerification === null)
     return (
       <div className="space-y-6">
         <div className="rq-shimmer h-8 w-48 rounded-full" />
@@ -119,6 +146,22 @@ export default function Settings() {
             </div>
           </div>
         </div>
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="text-base font-medium text-ink">Application automation</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">These permissions are separate and can be revoked at any time. A revocation is checked again before a final portal submission.</p>
+        <div className="mt-5 space-y-4">
+          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+            <span><span className="block text-sm font-medium text-ink">Automatic submission</span><span className="mt-1 block text-xs leading-5 text-muted">Submit applications you start when all answers are supported and the portal has no safety blocker.</span></span>
+            <input aria-label="Automatic submission" type="checkbox" checked={automaticSubmission} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
+          </label>
+          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+            <span><span className="block text-sm font-medium text-ink">Application verification codes</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
+            <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
+          </label>
+        </div>
+        <p className="mt-4 text-xs leading-5 text-faint">Litos still pauses for missing or contradictory facts, sensitive attestations, CAPTCHA, unsupported portal behavior, and uncertain confirmation.</p>
       </Card>
 
       {/* Application profile */}

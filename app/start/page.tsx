@@ -179,7 +179,7 @@ export default function Start() {
 
   const stepDone = useCallback((step: OnboardingStep) => track("onboarding_step_done", { step }), []);
 
-  if (error) {
+  if (error && !state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <ErrorNote message={error} />
@@ -286,21 +286,24 @@ export default function Start() {
 
     case "done":
       return (
+        <>
+        {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
         <DoneStep
           state={state}
-          onFinish={() => {
-            // Completing is what turns harvest off, so it is an explicit act the student takes
-            // rather than something we infer. Navigate regardless: a failed POST here must not
-            // strand them on a screen whose only button no longer works.
-            track("onboarding_complete", {
-              learned: state.learned.length,
-              applied: state.has_applied,
-            });
-            void completeOnboarding()
-              .catch(() => {})
-              .finally(() => router.push("/dashboard"));
+          onFinish={async (settings) => {
+            try {
+              await completeOnboarding(settings);
+              track("onboarding_complete", {
+                learned: state.learned.length,
+                applied: state.has_applied,
+              });
+              router.push("/dashboard");
+            } catch (reason) {
+              setError(reason instanceof Error ? reason.message : "Could not save your automation permissions.");
+            }
           }}
         />
+        </>
       );
   }
 }
