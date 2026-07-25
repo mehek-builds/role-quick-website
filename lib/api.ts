@@ -109,10 +109,39 @@ export type GeneratedResume = {
     _quality?: Record<string, unknown>;
     _contact?: Record<string, string | undefined>;
     _review?: ApplicationReview;
+    _cover_letter?: CoverLetter;
   };
   resume_object_key?: string;
   download_url?: string;
+  cover_letter_download_url?: string;
   created_at: string | null;
+};
+
+export type CoverLetter = {
+  body: string;
+  word_count: number;
+  warnings: string[];
+  generated_at: string;
+  approved_at?: string;
+  object_key: string;
+  file_name: string;
+};
+
+export type MonitoredJob = {
+  id: string;
+  company_name: string;
+  title: string;
+  location: string | null;
+  department: string | null;
+  employment_type: string | null;
+  description: string;
+  apply_url: string;
+  posting_url: string;
+  remote: boolean;
+  posted_at: string | null;
+  first_seen_at: string;
+  ats_name: "greenhouse" | "lever" | "ashby";
+  is_active?: boolean;
 };
 
 export type ResumeEntry = {
@@ -156,6 +185,7 @@ export type ApplicationReview = {
     | "needs_attention"
     | "ready_for_final_approval"
     | "submitting"
+    | "submission_claimed"
     | "submitted"
     | "failed";
   edited_terms: string[];
@@ -176,6 +206,9 @@ export type ApplicationReview = {
     consented_at?: string;
     consent_version?: string;
   };
+  submission_authorized_at?: string;
+  cover_letter_supported?: boolean;
+  submission_claimed_at?: string;
   filled_fields?: string[];
   preview_screenshot_url?: string;
   verification?: {
@@ -289,6 +322,31 @@ export function setAutomationSettings(settings: Partial<AutomationSettings>) {
     method: "PUT",
     body: JSON.stringify(settings),
   });
+}
+
+export type EmailProvider = "gmail" | "outlook";
+export type EmailConnection = {
+  provider: EmailProvider;
+  connected: boolean;
+  status: "INITIALIZING" | "INITIATED" | "ACTIVE" | "FAILED" | "EXPIRED" | "INACTIVE" | "REVOKED" | "NOT_CONNECTED";
+  connected_at?: string;
+};
+
+export type EmailConnectionsResponse = {
+  configured: boolean;
+  connections: EmailConnection[];
+};
+
+export function getEmailConnections() {
+  return api<EmailConnectionsResponse>("/email-connections");
+}
+
+export function createEmailConnection(provider: EmailProvider) {
+  return api<{ redirect_url: string }>(`/email-connections/${provider}/connect`, { method: "POST" });
+}
+
+export function disconnectEmailConnection(provider: EmailProvider) {
+  return api<{ disconnected: true; removed: number }>(`/email-connections/${provider}`, { method: "DELETE" });
 }
 
 export function getTargeting() {

@@ -759,7 +759,7 @@ export function DoneStep({
           <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-1 size-4 accent-[#6b84e8]" />
           <span>
             <span className="block text-[14px] text-ink">Automatically use application verification codes</span>
-            <span className="mt-1 block text-[12px] leading-5 text-muted">Litos may use your connected Gmail or Outlook account to find a code for an active application. Codes are not saved.</span>
+            <span className="mt-1 block text-[12px] leading-5 text-muted">With your permission, Litos may use connected Gmail or Outlook to find a code for an active application. Codes are used only for that application and are not saved.</span>
           </span>
         </label>
       </div>

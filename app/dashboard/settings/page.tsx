@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api, ApplicationProfile, getOnboardingState, Me, setAutomationSettings } from "@/lib/api";
+import {
+  api,
+  ApplicationProfile,
+  createEmailConnection,
+  disconnectEmailConnection,
+  type EmailConnectionsResponse,
+  type EmailProvider,
+  getEmailConnections,
+  getOnboardingState,
+  Me,
+  setAutomationSettings,
+} from "@/lib/api";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import TargetingCard from "@/components/app/TargetingCard";
 
@@ -25,21 +36,45 @@ export default function Settings() {
   const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
   const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
   const [savingAutomation, setSavingAutomation] = useState(false);
+  const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
+  const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [meRes, profileRes, onboardingRes] = await Promise.all([
+        const callbackProvider = new URLSearchParams(window.location.search).get("connection") as EmailProvider | null;
+        const callbackStatus = new URLSearchParams(window.location.search).get("status");
+        const [meRes, profileRes, onboardingRes, initialConnections] = await Promise.all([
           api<Me>("/me"),
           api<ApplicationProfile>("/profile/application").catch(() => ({})),
           getOnboardingState(),
+          getEmailConnections(),
         ]);
+        let connectionRes = initialConnections;
+        if (callbackStatus === "success" && callbackProvider) {
+          for (let attempt = 0; attempt < 4 && !connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected); attempt += 1) {
+            await new Promise((resolve) => window.setTimeout(resolve, 750));
+            connectionRes = await getEmailConnections();
+          }
+        }
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setAutomaticVerification(onboardingRes.automatic_verification_enabled);
+        setEmailConnections(connectionRes);
+        if (callbackProvider && callbackStatus) {
+          const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
+          const connected = connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected);
+          setConnectionNotice(callbackStatus === "success" && connected ? `${label} connected.` : `${label} connection was not completed.`);
+          const cleanUrl = new URL(window.location.href);
+          cleanUrl.searchParams.delete("connection");
+          cleanUrl.searchParams.delete("status");
+          cleanUrl.searchParams.delete("connected_account_id");
+          window.history.replaceState({}, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
+        }
       } catch (err) {
         if (!cancelled)
           setError(err instanceof Error ? err.message : "Could not load settings.");
@@ -100,8 +135,36 @@ export default function Settings() {
     }
   }
 
+  async function connectProvider(provider: EmailProvider) {
+    setConnectionBusy(provider);
+    setError(null);
+    try {
+      const result = await createEmailConnection(provider);
+      window.location.assign(result.redirect_url);
+    } catch (err) {
+      setConnectionBusy(null);
+      setError(err instanceof Error ? err.message : "Could not start the email connection.");
+    }
+  }
+
+  async function disconnectProvider(provider: EmailProvider) {
+    const label = provider === "gmail" ? "Gmail" : "Outlook";
+    if (!window.confirm(`Disconnect ${label}? Litos will no longer be able to read verification codes from this account.`)) return;
+    setConnectionBusy(provider);
+    setError(null);
+    try {
+      await disconnectEmailConnection(provider);
+      setEmailConnections(await getEmailConnections());
+      setConnectionNotice(`${label} disconnected.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Could not disconnect ${label}.`);
+    } finally {
+      setConnectionBusy(null);
+    }
+  }
+
   if (error && !profile) return <ErrorNote message={error} />;
-  if (!me || profile === null || automaticSubmission === null || automaticVerification === null)
+  if (!me || profile === null || automaticSubmission === null || automaticVerification === null || emailConnections === null)
     return (
       <div className="space-y-6">
         <div className="rq-shimmer h-8 w-48 rounded-full" />
@@ -122,6 +185,11 @@ export default function Settings() {
       </div>
 
       {error && <ErrorNote message={error} />}
+      {connectionNotice && (
+        <div className="rounded-[12px] border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-ink">
+          {connectionNotice}
+        </div>
+      )}
 
       {/* Account */}
       <Card className="p-6">
@@ -145,6 +213,32 @@ export default function Settings() {
               )}
             </div>
           </div>
+        </div>
+        <p className="mt-5 text-xs font-medium text-muted">Email connections</p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {(["gmail", "outlook"] as const).map((provider) => {
+            const connection = emailConnections.connections.find((item) => item.provider === provider);
+            const connected = connection?.connected === true;
+            const label = provider === "gmail" ? "Gmail" : "Outlook";
+            return (
+              <div key={provider} className="flex items-center justify-between rounded-[12px] border border-border bg-surface px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-ink">{label}</p>
+                  <p className="mt-0.5 text-xs text-faint">
+                    {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!emailConnections.configured || connectionBusy !== null}
+                  onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider))}
+                  className={connected ? "rounded-full border border-border px-4 py-2 text-xs font-medium text-ink disabled:opacity-50" : "rounded-full bg-brand px-4 py-2 text-xs font-medium text-white disabled:opacity-50"}
+                >
+                  {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </Card>
 

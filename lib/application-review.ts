@@ -2,8 +2,28 @@ type ReviewPacket = {
   spec?: { _review?: unknown };
 };
 
+type AnsweredQuestion = {
+  id: string;
+  answer: string;
+};
+
 export function reviewablePackets<T extends ReviewPacket>(packets: T[]): T[] {
   return packets.filter((packet) => Boolean(packet.spec?._review));
+}
+
+/**
+ * Incorporate questions discovered by the live portal without erasing an answer the user already
+ * edited in this dashboard session. The portal result is authoritative for labels, required flags,
+ * and newly found controls; a non-empty local answer is authoritative for its text.
+ */
+export function mergeDiscoveredQuestions<T extends AnsweredQuestion>(local: readonly T[], discovered: readonly T[]): T[] {
+  const localById = new Map(local.map((question) => [question.id, question]));
+  const discoveredIds = new Set(discovered.map((question) => question.id));
+  const merged = discovered.map((question) => {
+    const localQuestion = localById.get(question.id);
+    return localQuestion?.answer.trim() ? { ...question, answer: localQuestion.answer } : question;
+  });
+  return [...merged, ...local.filter((question) => !discoveredIds.has(question.id))];
 }
 
 export function portalName(portalUrl: string): string {
@@ -91,7 +111,7 @@ export function explicitTerms(source: readonly string[]): ReadonlySet<string> {
 
 export type ReviewStatus =
   | "resume_ready" | "questions_ready" | "ready_to_submit" | "submit_requested" | "preparing"
-  | "filling" | "needs_attention" | "ready_for_final_approval" | "submitting" | "submitted" | "failed";
+  | "filling" | "needs_attention" | "ready_for_final_approval" | "submitting" | "submission_claimed" | "submitted" | "failed";
 
 /**
  * The chip beside the page title. "Submitting" used to cover the entire preparing/filling stretch,
@@ -101,9 +121,9 @@ export type ReviewStatus =
  */
 export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): string {
   if (status === "submitted") return "Submitted";
-  if (status === "submitting") return "Submitting";
+  if (status === "submitting" || status === "submission_claimed") return "Submitting";
   if (status === "needs_attention") return "Needs attention";
-  if (status === "ready_for_final_approval") return "Approval required";
+  if (status === "ready_for_final_approval") return "Continue submission";
   if (status === "failed") return "Stopped safely";
   if (onSubmittingScreen || ["submit_requested", "preparing", "filling"].includes(status)) return "Preparing";
   return "Ready for review";
@@ -117,7 +137,7 @@ export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): 
 export function isLivePacketStatus(status: string | undefined): boolean {
   return (
     status !== undefined &&
-    ["submit_requested", "preparing", "filling", "submitting", "needs_attention", "ready_for_final_approval", "failed"].includes(status)
+    ["submit_requested", "preparing", "filling", "submitting", "submission_claimed", "needs_attention", "ready_for_final_approval", "failed"].includes(status)
   );
 }
 

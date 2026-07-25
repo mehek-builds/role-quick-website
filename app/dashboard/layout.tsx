@@ -7,6 +7,7 @@ import { clearSession, getProductMeta, getStoredEmail, getToken } from "@/lib/ap
 
 const NAV = [
   { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/jobs", label: "Jobs" },
   { href: "/dashboard/applications", label: "Applications" },
   { href: "/dashboard/outreach", label: "Outreach" },
   { href: "/dashboard/resume", label: "Resume" },
