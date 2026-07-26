@@ -10,7 +10,9 @@ import {
   getOnboardingState,
   getOrCreateGuestKey,
   hasLitosHistory,
+  createCheckout,
 } from "@/lib/api";
+import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
 import { litosClientHeaders } from "@/lib/product";
 import { googleSignInError, requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
@@ -248,20 +250,16 @@ export default function Login() {
         }
         setSession(data.token, email.trim().toLowerCase());
         const next = new URLSearchParams(window.location.search).get("next");
-        const upgradeUrl = window.sessionStorage.getItem("litos_pending_upgrade_url");
-        if (next === "upgrade" && upgradeUrl) {
+        if (next === "upgrade") {
           try {
-            const parsed = new URL(upgradeUrl);
-            if (
-              parsed.protocol === "https:"
-              && (parsed.hostname === "buy.stripe.com" || parsed.hostname.endsWith(".stripe.com"))
-            ) {
-              window.sessionStorage.removeItem("litos_pending_upgrade_url");
-              window.location.assign(parsed.toString());
+            const checkout = await createCheckout();
+            if (isLemonSqueezyCheckoutUrl(checkout.url)) {
+              window.location.assign(checkout.url);
               return;
             }
           } catch {
-            window.sessionStorage.removeItem("litos_pending_upgrade_url");
+            router.replace("/dashboard/settings?billing=unavailable");
+            return;
           }
         }
         router.replace(await landingRoute());

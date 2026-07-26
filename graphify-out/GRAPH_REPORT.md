@@ -1,16 +1,16 @@
 # Graph Report - .  (2026-07-26)
 
 ## Corpus Check
-- 59 files · ~301,619 words
+- 60 files · ~302,119 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 209 nodes · 276 edges · 30 communities detected
+- 212 nodes · 280 edges · 31 communities detected
 - Extraction: 100% EXTRACTED · 0% INFERRED · 0% AMBIGUOUS
 - Token cost: 0 input · 0 output
 
 ## God Nodes (most connected - your core abstractions)
-1. `api()` - 14 edges
+1. `api()` - 15 edges
 2. `restart()` - 5 edges
 3. `periodsFor()` - 5 edges
 4. `continueFromResume()` - 4 edges
@@ -31,8 +31,8 @@ Cohesion: 0.06
 Nodes (0): 
 
 ### Community 1 - "Community 1"
-Cohesion: 0.13
-Nodes (16): api(), ApiError, clearSession(), completeOnboarding(), createEmailConnection(), disconnectEmailConnection(), getApplicationProfile(), getEmailConnections() (+8 more)
+Cohesion: 0.12
+Nodes (17): api(), ApiError, clearSession(), completeOnboarding(), createCheckout(), createEmailConnection(), disconnectEmailConnection(), getApplicationProfile() (+9 more)
 
 ### Community 2 - "Community 2"
 Cohesion: 0.17
@@ -120,11 +120,11 @@ Nodes (0):
 
 ### Community 23 - "Community 23"
 Cohesion: 1.0
-Nodes (0): 
+Nodes (2): jobParams(), loadMore()
 
 ### Community 24 - "Community 24"
 Cohesion: 1.0
-Nodes (2): jobParams(), loadMore()
+Nodes (0): 
 
 ### Community 25 - "Community 25"
 Cohesion: 1.0
@@ -146,30 +146,36 @@ Nodes (0):
 Cohesion: 1.0
 Nodes (0): 
 
+### Community 30 - "Community 30"
+Cohesion: 1.0
+Nodes (0): 
+
 ## Knowledge Gaps
 - **1 isolated node(s):** `The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is`
   These have ≤1 connection - possible missing edges or undocumented components.
-- **Thin community `Community 19`** (2 nodes): `portal-form.tsx`, `PortalForm()`
+- **Thin community `Community 19`** (2 nodes): `SmoothScroll.tsx`, `SmoothScroll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 20`** (2 nodes): `google-session.ts`, `completeGoogleSession()`
+- **Thin community `Community 20`** (2 nodes): `billing.ts`, `isLemonSqueezyCheckoutUrl()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 21`** (2 nodes): `GoogleSignInButton.tsx`, `GoogleSignInButton()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 22`** (2 nodes): `CinematicPage.tsx`, `CinematicPage()`
+- **Thin community `Community 22`** (2 nodes): `portal-form.tsx`, `PortalForm()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 23`** (2 nodes): `SmoothScroll.tsx`, `SmoothScroll()`
+- **Thin community `Community 23`** (2 nodes): `jobParams()`, `loadMore()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 24`** (2 nodes): `jobParams()`, `loadMore()`
+- **Thin community `Community 24`** (2 nodes): `CinematicPage.tsx`, `CinematicPage()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 - **Thin community `Community 25`** (2 nodes): `Wash.tsx`, `Wash()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 26`** (2 nodes): `BRoll.tsx`, `BRoll()`
+- **Thin community `Community 26`** (2 nodes): `google-session.ts`, `completeGoogleSession()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 27`** (1 nodes): `next-env.d.ts`
+- **Thin community `Community 27`** (2 nodes): `BRoll.tsx`, `BRoll()`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 28`** (1 nodes): `next.config.ts`
+- **Thin community `Community 28`** (1 nodes): `next-env.d.ts`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
-- **Thin community `Community 29`** (1 nodes): `opengraph-image.tsx`
+- **Thin community `Community 29`** (1 nodes): `next.config.ts`
+  Too small to be a meaningful cluster - may be noise or needs more connections extracted.
+- **Thin community `Community 30`** (1 nodes): `opengraph-image.tsx`
   Too small to be a meaningful cluster - may be noise or needs more connections extracted.
 
 ## Suggested Questions
@@ -180,4 +186,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.06 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
-  _Cohesion score 0.13 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.12 - nodes in this community are weakly interconnected._

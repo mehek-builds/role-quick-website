@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 27
+      "community": 28
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 28
+      "community": 29
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 29
+      "community": 30
     },
     {
       "label": "layout.tsx",
@@ -129,7 +129,7 @@
       "source_file": "app/qa/portal-submission/portal-form.tsx",
       "source_location": "L1",
       "id": "portal_form",
-      "community": 19
+      "community": 22
     },
     {
       "label": "PortalForm()",
@@ -137,7 +137,7 @@
       "source_file": "app/qa/portal-submission/portal-form.tsx",
       "source_location": "L7",
       "id": "portal_form_portalform",
-      "community": 19
+      "community": 22
     },
     {
       "label": "ControlledPortalCase()",
@@ -223,7 +223,7 @@
       "label": "Settings()",
       "file_type": "code",
       "source_file": "app/dashboard/settings/page.tsx",
-      "source_location": "L36",
+      "source_location": "L38",
       "id": "page_settings",
       "community": 0
     },
@@ -393,7 +393,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L8",
       "id": "page_jobparams",
-      "community": 24
+      "community": 23
     },
     {
       "label": "loadMore()",
@@ -401,7 +401,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L46",
       "id": "page_loadmore",
-      "community": 24
+      "community": 23
     },
     {
       "label": "TryPage()",
@@ -497,7 +497,7 @@
       "source_file": "app/login/google-session.ts",
       "source_location": "L1",
       "id": "google_session",
-      "community": 20
+      "community": 26
     },
     {
       "label": "completeGoogleSession()",
@@ -505,13 +505,13 @@
       "source_file": "app/login/google-session.ts",
       "source_location": "L12",
       "id": "google_session_completegooglesession",
-      "community": 20
+      "community": 26
     },
     {
       "label": "landingRoute()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L29",
+      "source_location": "L31",
       "id": "page_landingroute",
       "community": 10
     },
@@ -519,7 +519,7 @@
       "label": "requestCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L77",
+      "source_location": "L79",
       "id": "page_requestcode",
       "community": 10
     },
@@ -527,7 +527,7 @@
       "label": "passwordProblem()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L110",
+      "source_location": "L112",
       "id": "page_passwordproblem",
       "community": 10
     },
@@ -535,7 +535,7 @@
       "label": "submitCredentials()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L114",
+      "source_location": "L116",
       "id": "page_submitcredentials",
       "community": 10
     },
@@ -543,7 +543,7 @@
       "label": "setVerifiedPassword()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L151",
+      "source_location": "L153",
       "id": "page_setverifiedpassword",
       "community": 10
     },
@@ -551,7 +551,7 @@
       "label": "continueAsGuest()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L171",
+      "source_location": "L173",
       "id": "page_continueasguest",
       "community": 0
     },
@@ -559,7 +559,7 @@
       "label": "submitCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L222",
+      "source_location": "L224",
       "id": "page_submitcode",
       "community": 10
     },
@@ -567,7 +567,7 @@
       "label": "submitNewPassword()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L278",
+      "source_location": "L276",
       "id": "page_submitnewpassword",
       "community": 10
     },
@@ -913,7 +913,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 26
+      "community": 27
     },
     {
       "label": "BRoll()",
@@ -921,7 +921,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 26
+      "community": 27
     },
     {
       "label": "SmoothScroll.tsx",
@@ -929,7 +929,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L1",
       "id": "smoothscroll",
-      "community": 23
+      "community": 19
     },
     {
       "label": "SmoothScroll()",
@@ -937,7 +937,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L11",
       "id": "smoothscroll_smoothscroll",
-      "community": 23
+      "community": 19
     },
     {
       "label": "paperRollEngine.js",
@@ -961,7 +961,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L1",
       "id": "cinematicpage",
-      "community": 22
+      "community": 24
     },
     {
       "label": "CinematicPage()",
@@ -969,7 +969,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L38",
       "id": "cinematicpage_cinematicpage",
-      "community": 22
+      "community": 24
     },
     {
       "label": "Wash.tsx",
@@ -1428,10 +1428,18 @@
       "community": 1
     },
     {
+      "label": "createCheckout()",
+      "file_type": "code",
+      "source_file": "lib/api.ts",
+      "source_location": "L117",
+      "id": "api_createcheckout",
+      "community": 1
+    },
+    {
       "label": "getOnboardingState()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L333",
+      "source_location": "L343",
       "id": "api_getonboardingstate",
       "community": 1
     },
@@ -1439,7 +1447,7 @@
       "label": "completeOnboarding()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L342",
+      "source_location": "L352",
       "id": "api_completeonboarding",
       "community": 1
     },
@@ -1447,7 +1455,7 @@
       "label": "setAutomationSettings()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L349",
+      "source_location": "L359",
       "id": "api_setautomationsettings",
       "community": 1
     },
@@ -1455,7 +1463,7 @@
       "label": "getEmailConnections()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L369",
+      "source_location": "L379",
       "id": "api_getemailconnections",
       "community": 1
     },
@@ -1463,7 +1471,7 @@
       "label": "createEmailConnection()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L373",
+      "source_location": "L383",
       "id": "api_createemailconnection",
       "community": 1
     },
@@ -1471,7 +1479,7 @@
       "label": "disconnectEmailConnection()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L377",
+      "source_location": "L387",
       "id": "api_disconnectemailconnection",
       "community": 1
     },
@@ -1479,7 +1487,7 @@
       "label": "getTargeting()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L381",
+      "source_location": "L391",
       "id": "api_gettargeting",
       "community": 1
     },
@@ -1487,7 +1495,7 @@
       "label": "putTargeting()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L385",
+      "source_location": "L395",
       "id": "api_puttargeting",
       "community": 1
     },
@@ -1495,7 +1503,7 @@
       "label": "getApplicationProfile()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L392",
+      "source_location": "L402",
       "id": "api_getapplicationprofile",
       "community": 1
     },
@@ -1503,7 +1511,7 @@
       "label": "putApplicationProfile()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L400",
+      "source_location": "L410",
       "id": "api_putapplicationprofile",
       "community": 1
     },
@@ -1511,7 +1519,7 @@
       "label": "uploadResume()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L408",
+      "source_location": "L418",
       "id": "api_uploadresume",
       "community": 1
     },
@@ -1519,7 +1527,7 @@
       "label": "getProductMeta()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L429",
+      "source_location": "L439",
       "id": "api_getproductmeta",
       "community": 1
     },
@@ -1642,6 +1650,22 @@
       "source_location": "L1",
       "id": "config",
       "community": 4
+    },
+    {
+      "label": "billing.ts",
+      "file_type": "code",
+      "source_file": "lib/billing.ts",
+      "source_location": "L1",
+      "id": "billing",
+      "community": 20
+    },
+    {
+      "label": "isLemonSqueezyCheckoutUrl()",
+      "file_type": "code",
+      "source_file": "lib/billing.ts",
+      "source_location": "L1",
+      "id": "billing_islemonsqueezycheckouturl",
+      "community": 20
     },
     {
       "label": "try-jobs.ts",
@@ -1969,7 +1993,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L16",
+      "source_location": "L18",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "ui",
@@ -2173,7 +2197,19 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L14",
+      "source_location": "L15",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "billing",
+      "source": "page",
+      "target": "billing",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L16",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "product",
@@ -2185,7 +2221,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/settings/page.tsx",
-      "source_location": "L36",
+      "source_location": "L38",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_settings",
@@ -2497,7 +2533,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L15",
+      "source_location": "L17",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "errors",
@@ -2509,7 +2545,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L17",
+      "source_location": "L19",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "googlesigninbutton",
@@ -2521,7 +2557,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L18",
+      "source_location": "L20",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "google_session",
@@ -2533,7 +2569,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L29",
+      "source_location": "L31",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_landingroute",
@@ -2545,7 +2581,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L77",
+      "source_location": "L79",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_requestcode",
@@ -2557,7 +2593,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L110",
+      "source_location": "L112",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_passwordproblem",
@@ -2569,7 +2605,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L114",
+      "source_location": "L116",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitcredentials",
@@ -2581,7 +2617,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L151",
+      "source_location": "L153",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_setverifiedpassword",
@@ -2593,7 +2629,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L171",
+      "source_location": "L173",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_continueasguest",
@@ -2605,7 +2641,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L222",
+      "source_location": "L224",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitcode",
@@ -2617,7 +2653,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L278",
+      "source_location": "L276",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitnewpassword",
@@ -2905,7 +2941,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L143",
+      "source_location": "L145",
       "weight": 1.0,
       "_src": "page_submitcredentials",
       "_tgt": "page_landingroute",
@@ -2917,7 +2953,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L167",
+      "source_location": "L169",
       "weight": 1.0,
       "_src": "page_setverifiedpassword",
       "_tgt": "page_landingroute",
@@ -2929,7 +2965,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L267",
+      "source_location": "L265",
       "weight": 1.0,
       "_src": "page_submitcode",
       "_tgt": "page_landingroute",
@@ -2941,7 +2977,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L125",
+      "source_location": "L127",
       "weight": 1.0,
       "_src": "page_submitcredentials",
       "_tgt": "page_requestcode",
@@ -2953,7 +2989,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L119",
+      "source_location": "L121",
       "weight": 1.0,
       "_src": "page_submitcredentials",
       "_tgt": "page_passwordproblem",
@@ -2965,7 +3001,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L280",
+      "source_location": "L278",
       "weight": 1.0,
       "_src": "page_submitnewpassword",
       "_tgt": "page_passwordproblem",
@@ -2977,7 +3013,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L239",
+      "source_location": "L241",
       "weight": 1.0,
       "_src": "page_submitcode",
       "_tgt": "page_setverifiedpassword",
@@ -2989,7 +3025,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L292",
+      "source_location": "L290",
       "weight": 1.0,
       "_src": "page_submitnewpassword",
       "_tgt": "page_setverifiedpassword",
@@ -4429,7 +4465,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L333",
+      "source_location": "L117",
+      "weight": 1.0,
+      "_src": "api",
+      "_tgt": "api_createcheckout",
+      "source": "api",
+      "target": "api_createcheckout",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/api.ts",
+      "source_location": "L343",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getonboardingstate",
@@ -4441,7 +4489,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L342",
+      "source_location": "L352",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_completeonboarding",
@@ -4453,7 +4501,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L349",
+      "source_location": "L359",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_setautomationsettings",
@@ -4465,7 +4513,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L369",
+      "source_location": "L379",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getemailconnections",
@@ -4477,7 +4525,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L373",
+      "source_location": "L383",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_createemailconnection",
@@ -4489,7 +4537,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L377",
+      "source_location": "L387",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_disconnectemailconnection",
@@ -4501,7 +4549,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L381",
+      "source_location": "L391",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_gettargeting",
@@ -4513,7 +4561,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L385",
+      "source_location": "L395",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_puttargeting",
@@ -4525,7 +4573,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L392",
+      "source_location": "L402",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getapplicationprofile",
@@ -4537,7 +4585,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L400",
+      "source_location": "L410",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_putapplicationprofile",
@@ -4549,7 +4597,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L408",
+      "source_location": "L418",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_uploadresume",
@@ -4561,7 +4609,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L429",
+      "source_location": "L439",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getproductmeta",
@@ -4597,7 +4645,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L409",
+      "source_location": "L419",
       "weight": 1.0,
       "_src": "api_uploadresume",
       "_tgt": "api_gettoken",
@@ -4633,7 +4681,19 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L334",
+      "source_location": "L118",
+      "weight": 1.0,
+      "_src": "api_createcheckout",
+      "_tgt": "api_api",
+      "source": "api_api",
+      "target": "api_createcheckout",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/api.ts",
+      "source_location": "L344",
       "weight": 1.0,
       "_src": "api_getonboardingstate",
       "_tgt": "api_api",
@@ -4645,7 +4705,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L343",
+      "source_location": "L353",
       "weight": 1.0,
       "_src": "api_completeonboarding",
       "_tgt": "api_api",
@@ -4657,7 +4717,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L350",
+      "source_location": "L360",
       "weight": 1.0,
       "_src": "api_setautomationsettings",
       "_tgt": "api_api",
@@ -4669,7 +4729,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L370",
+      "source_location": "L380",
       "weight": 1.0,
       "_src": "api_getemailconnections",
       "_tgt": "api_api",
@@ -4681,7 +4741,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L374",
+      "source_location": "L384",
       "weight": 1.0,
       "_src": "api_createemailconnection",
       "_tgt": "api_api",
@@ -4693,7 +4753,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L378",
+      "source_location": "L388",
       "weight": 1.0,
       "_src": "api_disconnectemailconnection",
       "_tgt": "api_api",
@@ -4705,7 +4765,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L382",
+      "source_location": "L392",
       "weight": 1.0,
       "_src": "api_gettargeting",
       "_tgt": "api_api",
@@ -4717,7 +4777,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L386",
+      "source_location": "L396",
       "weight": 1.0,
       "_src": "api_puttargeting",
       "_tgt": "api_api",
@@ -4729,7 +4789,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L394",
+      "source_location": "L404",
       "weight": 1.0,
       "_src": "api_getapplicationprofile",
       "_tgt": "api_api",
@@ -4741,7 +4801,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L401",
+      "source_location": "L411",
       "weight": 1.0,
       "_src": "api_putapplicationprofile",
       "_tgt": "api_api",
@@ -4753,7 +4813,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L431",
+      "source_location": "L441",
       "weight": 1.0,
       "_src": "api_getproductmeta",
       "_tgt": "api_api",
@@ -4927,6 +4987,18 @@
       "_tgt": "daily_matches_portalname",
       "source": "daily_matches_resumegenerationbody",
       "target": "daily_matches_portalname",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/billing.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "billing",
+      "_tgt": "billing_islemonsqueezycheckouturl",
+      "source": "billing",
+      "target": "billing_islemonsqueezycheckouturl",
       "confidence_score": 1.0
     },
     {

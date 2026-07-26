@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.3] - 2026-07-26
+
+### Fixed
+
+- Public pricing and dashboard settings now consistently state the 1,000-resume Pro allowance.
+
 ## [0.1.2] - 2026-07-26
 
 ### Added
