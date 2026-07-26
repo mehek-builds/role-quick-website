@@ -312,17 +312,22 @@ export type ParsedProfile = {
   bank_seeded?: number;
 };
 
-export type OnboardingStep = "focus" | "resume" | "install" | "apply" | "gaps" | "targeting" | "done";
+export type OnboardingStep = "focus" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
 
 export type OnboardingState = {
   step: OnboardingStep;
   completed_at: string | null;
   has_focus: boolean;
   has_resume: boolean;
+  has_base_resume: boolean;
   has_applied: boolean;
   has_targeting: boolean;
   learned: string[];
   gaps: string[];
+  /** Page count of the uploaded file, measured at parse time. 0 when never measured. */
+  source_pages: number;
+  /** The original upload, for the side-by-side. NULL is normal: storing it is best-effort. */
+  source_resume_url: string | null;
   harvest_active: boolean;
   automatic_submission_enabled: boolean;
   automatic_submission_consented_at: string | null;

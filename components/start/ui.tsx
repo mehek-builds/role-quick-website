@@ -15,10 +15,12 @@
 import type { OnboardingStep } from "@/lib/api";
 
 /* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
-   screens, and "Résumé" was the only place in the product that spelled it with accents. */
+   screens, and the resume step was the only place in the product that accented the word. It is
+   "resume" everywhere we write it, in every surface, with no exceptions. */
 export const STEPS: { key: OnboardingStep; label: string }[] = [
   { key: "focus", label: "What you want" },
   { key: "resume", label: "Your resume" },
+  { key: "base", label: "Your one page" },
   { key: "install", label: "Add to Chrome" },
   { key: "apply", label: "One application" },
   { key: "gaps", label: "A few details" },
@@ -59,22 +61,42 @@ export function StartShell({
   sub,
   children,
   aside,
+  /* One screen in the flow is a two-column document view rather than a form, and a 2xl column
+     cannot hold a legible sheet of paper beside a build log. Opt-in rather than automatic: every
+     other step is a single question and gets narrower measure on purpose. */
+  wide = false,
 }: {
   step: OnboardingStep;
-  title: React.ReactNode;
+  /* Optional so a step can place its own heading inside its layout. The document-review step needs
+     the title BESIDE the paper rather than above it: stacked, the heading block pushes a full sheet
+     below the fold, and a one-page resume you cannot see in one screen argues against itself. */
+  title?: React.ReactNode;
   sub?: React.ReactNode;
   children: React.ReactNode;
   aside?: React.ReactNode;
+  wide?: boolean;
 }) {
   return (
-    <main className="mx-auto w-full min-w-0 max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
+    <main
+      className={`mx-auto w-full min-w-0 px-4 sm:px-6 ${
+        // The wide step has a full sheet of paper to fit on screen, so it buys that room back from
+        // the chrome around it rather than from the document.
+        wide ? "max-w-5xl py-8 sm:py-10" : "max-w-2xl py-10 sm:py-16"
+      }`}
+    >
       <StepRail current={step} />
       {/* Display type: weight 450, never bold. Calm things don't shout. */}
-      <h1 className="mt-8 max-w-full text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:mt-10 sm:text-[34px]">
-        {title}
-      </h1>
+      {title && (
+        <h1
+          className={`max-w-full text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:text-[34px] ${
+            wide ? "mt-6 sm:mt-7" : "mt-8 sm:mt-10"
+          }`}
+        >
+          {title}
+        </h1>
+      )}
       {sub && <p className="mt-3 max-w-[46ch] text-[15px] leading-7 text-muted">{sub}</p>}
-      <div className="mt-8 min-w-0">{children}</div>
+      <div className={`min-w-0 ${title || sub ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}>{children}</div>
       {aside && <div className="mt-8">{aside}</div>}
     </main>
   );

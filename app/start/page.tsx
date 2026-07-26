@@ -7,13 +7,13 @@
  * asking and watch one real application instead, and everything after it takes seconds.
  *
  * PRD-v2 Section 4D splits every field into three buckets. Bucket 1 ("auto-extract, no ask") is
- * what the résumé gives us at step 01. Bucket 3 ("always ask, never attempt extraction") is
+ * what the resume gives us at step 01. Bucket 3 ("always ask, never attempt extraction") is
  * citizenship, DOB, salary, availability - exactly the questions that are invasive cold and
  * ordinary on an application - so they are harvested at step 03 rather than asked here.
  *
  * Which leaves targeting: the only thing an application cannot teach us, because it is about the
  * next hundred postings rather than the one in front of them. Its five questions split on whether
- * they need the résumé: category and type do not, so they open the flow at step 00 (where they
+ * they need the resume: category and type do not, so they open the flow at step 00 (where they
  * cost one tap and earn the upload some goodwill); titles and periods are derived from the parse,
  * so they close it at step 05.
  *
@@ -25,17 +25,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  ApplicationProfile,
   OnboardingState,
   OnboardingStep,
   ParsedProfile,
   api,
   completeOnboarding,
+  getApplicationProfile,
   getOnboardingState,
+  getStoredEmail,
   getToken,
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
 import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
+import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { focusSeed } from "@/lib/rolesFeed";
 import type { RoleType } from "@/lib/api";
 import { StepRail } from "@/components/start/ui";
@@ -64,6 +68,10 @@ export default function Start() {
   const router = useRouter();
   const [state, setState] = useState<OnboardingState | null>(null);
   const [profile, setProfile] = useState<ParsedProfile | null>(null);
+  // Only the base step needs this, and only to fill the resume's contact line. Most of it is still
+  // empty at this point in the flow (harvest has not run yet), which is correct rather than a bug:
+  // the contact line fills in as the first application teaches us, and the student can see that.
+  const [appProfile, setAppProfile] = useState<ApplicationProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Client-side sub-step: the backend's "install" step covers both installing and applying,
   // since it cannot tell them apart. The click is the only signal we get.
@@ -79,6 +87,9 @@ export default function Start() {
   // arrive pre-answered; unlike query params this survives the login
   // round-trip. Computed once; FocusStep only renders after the state
   // fetch resolves, so there is no SSR/hydration divergence.
+  // Set once, alongside the QA state stub below, so the base step can replay a canned build.
+  const [qaDemo, setQaDemo] = useState(false);
+
   const [calibSeed] = useState<{
     categories: string[];
     roleTypes: RoleType[];
@@ -114,10 +125,16 @@ export default function Start() {
           completed_at: null,
           has_focus: true,
           has_resume: true,
+          has_base_resume: false,
           has_applied: false,
           has_targeting: false,
           learned: [],
           gaps: ["gpa", "gpa_scale", "major", "languages"],
+          // Multi-page on purpose: the comparison's whole argument is 3 pages against 1, so a
+          // 1 here would make the step's signature moment unreviewable in QA.
+          source_pages: 3,
+          // No stored file in QA, so the comparison pane exercises its own empty state.
+          source_resume_url: null,
           harvest_active: false,
           automatic_submission_enabled: false,
           automatic_submission_consented_at: null,
@@ -125,7 +142,13 @@ export default function Start() {
           automatic_verification_enabled: false,
         };
         setState(state);
-        setProfile({ grad_year: 2027, target_roles: ["Software Engineer", "Product Engineer"] } as ParsedProfile);
+        setProfile({
+          full_name: "Mehek Mandal",
+          school: "University of Southern California",
+          grad_year: 2028,
+          target_roles: ["Software Engineer", "Product Engineer"],
+        } as ParsedProfile);
+        setQaDemo(true);
         return;
       }
     }
@@ -137,8 +160,10 @@ export default function Start() {
       try {
         const s = await refresh();
         if (s.has_resume) {
-          // Only needed for the targeting screen's derived defaults.
+          // Needed by the targeting screen's derived defaults and by the base screen's education
+          // block, which takes school/degree/grad date from the parse rather than from the model.
           setProfile(await api<ParsedProfile>("/profile").catch(() => null as unknown as ParsedProfile));
+          setAppProfile(await getApplicationProfile().catch(() => null));
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not load your setup.");
@@ -251,8 +276,26 @@ export default function Start() {
               const s = await refresh();
               if (s.has_resume) {
                 setProfile(await api<ParsedProfile>("/profile").catch(() => null as unknown as ParsedProfile));
+                setAppProfile(await getApplicationProfile().catch(() => null));
               }
             })();
+          }}
+        />
+      );
+
+    case "base":
+      return (
+        <BaseResumeStep
+          parsed={profile}
+          profile={appProfile}
+          email={getStoredEmail()}
+          sourcePages={state.source_pages}
+          sourceUrl={state.source_resume_url}
+          demo={qaDemo}
+          onLater={later}
+          onDone={() => {
+            stepDone("base");
+            void refresh();
           }}
         />
       );

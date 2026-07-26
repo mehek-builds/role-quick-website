@@ -37,6 +37,10 @@ type OnboardingEvent =
   | "onboarding_step_done"
   | "onboarding_step_skip"
   | "onboarding_step_later"
+  // The moment on the base step where the student picks the rebuilt resume over their upload.
+  // Measured separately from onboarding_step_done: choosing and finishing are different acts, and
+  // the gap between them is how long they spent editing.
+  | "onboarding_base_chosen"
   | "onboarding_complete";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;

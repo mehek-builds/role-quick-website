@@ -145,6 +145,40 @@ select:focus-visible,
   animation: rq-enter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* A line of the base resume arriving on the page as the model decides it (/start, base step).
+   Opacity and transform ONLY: resumes in this product are black and white, and those are the two
+   properties that cannot smuggle a color in. Shorter and smaller than .rq-enter (a resume line is
+   a smaller event than a hero), same settle curve so it belongs to the same system. */
+@keyframes rq-paper-line {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.rq-paper-line {
+  animation: rq-paper-line 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* The source stack collapsing to one page: the 2nd and 3rd sheets slide under the 1st and fade.
+   Runs once, on arrival at the base step, and only when there really were multiple pages. */
+@keyframes rq-page-collapse {
+  from {
+    opacity: 0.4;
+    transform: translate(var(--rq-page-x), var(--rq-page-y)) rotate(var(--rq-page-r));
+  }
+  to {
+    opacity: 0;
+    transform: none;
+  }
+}
+.rq-page-collapse {
+  animation: rq-page-collapse 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* The receipt loop: log rows land one by one, hold, then the cycle restarts.
    The one element allowed to keep moving — it IS the product demo. */
 @keyframes rq-log-row {
@@ -315,5 +349,16 @@ html {
   }
   .rq-shimmer {
     animation: none;
+  }
+  /* The base resume still builds line by line under reduced motion - the lines just appear
+     instead of rising. The information is the point; the movement was only ever the flourish. */
+  .rq-paper-line {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .rq-page-collapse {
+    animation: none;
+    opacity: 0;
   }
 }
