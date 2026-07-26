@@ -106,7 +106,7 @@ export default function ResumeWorkspace() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Resume</h1>
+        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Resume</h1>
         <p className="mt-1 text-sm text-muted">
           Your base resume and experience bank. Every tailored resume is built
           from what lives here, so the richer it is, the better the fit.

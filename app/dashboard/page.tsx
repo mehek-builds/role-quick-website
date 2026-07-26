@@ -14,7 +14,7 @@ import {
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatDate, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import {
   DAILY_PREPARED_RESUME_LIMIT,
   packetMatchesJob,
@@ -249,6 +249,9 @@ export default function Home() {
     const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
     return { ready, submitted, needsAction };
   }, [packets]);
+  /* Each summary block gates on its own total, so a student with emails but no applications is
+     not shown a row of application zeros to prove it (and vice versa). */
+  const applicationTotal = applicationSummary.ready + applicationSummary.submitted + applicationSummary.needsAction;
   const outreachSummary = useMemo(() => ({
     drafted: outreach.filter((event) => event.status === "drafted").length,
     sent: outreach.filter((event) => ["sent", "replied"].includes(event.status)).length,
@@ -366,6 +369,9 @@ export default function Home() {
     setDismissed(next);
     setLastDismissed(jobId);
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
+    // Undo is a second chance, not furniture. It used to sit there until you skipped something
+    // else, so a status message stayed on screen for the rest of the session.
+    window.setTimeout(() => setLastDismissed((current) => (current === jobId ? null : current)), 8000);
   }
 
   function undoDismiss() {
@@ -434,7 +440,6 @@ export default function Home() {
     }
   }
 
-  const hasHistory = packets.length > 0 || outreach.length > 0;
   const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "your target roles";
   const trialActive = Boolean(
     me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
@@ -492,7 +497,9 @@ export default function Home() {
 
       {/* On day one every one of these counters is 0, and six zeros is a worse first screen than
           no counters at all. They appear once there is something to count. */}
-      {hasHistory && (
+      {/* Each group gates on its OWN total. Sharing one `hasHistory` flag meant a student with two
+          emails and no applications was shown a row of application zeros to prove it. */}
+      {applicationTotal > 0 && (
       <section aria-labelledby="applications-summary">
         <div className="flex items-center justify-between gap-4">
           <h2 id="applications-summary" className="text-base font-medium text-ink">Applications</h2>
@@ -501,9 +508,11 @@ export default function Home() {
         {/* Every metric is a filter link. A number you cannot act on is decoration, and the
             old "Action needed" panel below restated these same counts a second and third time. */}
         <dl className="mt-4 grid grid-cols-3 border-y border-border">
+          {/* "Applied", not "Sent". The Emails group below also has a "Sent" and the two sat a
+              hundred pixels apart meaning two different things. */}
           <SummaryMetric label="Ready" value={applicationSummary.ready} href="/dashboard/applications?state=ready" />
           <SummaryMetric label="Needs you" value={applicationSummary.needsAction} href="/dashboard/applications?state=action" />
-          <SummaryMetric label="Sent" value={applicationSummary.submitted} href="/dashboard/applications?state=submitted" />
+          <SummaryMetric label="Applied" value={applicationSummary.submitted} href="/dashboard/applications?state=submitted" />
         </dl>
       </section>
       )}
@@ -519,7 +528,7 @@ export default function Home() {
       {outreach.length > 0 && (
       <section aria-labelledby="outreach-summary">
         <div className="flex items-center justify-between gap-4">
-          <h2 id="outreach-summary" className="text-base font-medium text-ink">Outreach</h2>
+          <h2 id="outreach-summary" className="text-base font-medium text-ink">Emails</h2>
           <Link href="/dashboard/outreach" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
         </div>
         <dl className="mt-4 grid grid-cols-3 border-y border-border">
@@ -640,15 +649,27 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
                 "Remote, US · Remote". */}
             {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
           </p>
-          <p className="mt-2 text-xs text-faint">{job.reasons.join(" · ")}</p>
+          {/* The ranker's reasons used to be dumped raw at 12px with nothing saying what they
+              were. One word of framing turns a list of nouns into a sentence. */}
+          {job.reasons.length > 0 && (
+            <p className="mt-2 text-xs text-faint">Matches your {job.reasons.join(", ")}</p>
+          )}
         </div>
-        <div className="flex gap-2 sm:justify-end">
+        {/* While Litos is still working there is nothing to click, so the primary slot holds a
+            plain line of text rather than a greyed-out button that reads as broken. And the
+            waiting state says "Getting ready" here too: the chip and the button used to call the
+            same moment two different things. */}
+        <div className="flex items-center gap-2 sm:justify-end">
           <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Skip
           </button>
-          <button type="button" onClick={prepared ? onReview : onRetry} disabled={!prepared && !preparationFailed} aria-label={`${prepared ? "Review" : preparationFailed ? "Retry preparation for" : "Preparing"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:bg-surface-strong disabled:text-faint">
-            {prepared ? "Review" : preparationFailed ? "Retry" : "Preparing"}
-          </button>
+          {prepared || preparationFailed ? (
+            <button type="button" onClick={prepared ? onReview : onRetry} aria-label={`${prepared ? "Review" : "Try again for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+              {prepared ? "Review" : "Try again"}
+            </button>
+          ) : (
+            <span className="flex min-h-11 items-center px-3 text-sm text-muted">Getting ready</span>
+          )}
         </div>
       </div>
     </Card>
@@ -692,15 +713,15 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
   const inProgress = status ? ACTIVE_SUBMISSION_STATUSES.has(status) : false;
   const needsAttention = ["needs_attention", "failed"].includes(status ?? "");
   const canSubmit = Boolean(packet && review && missingAnswers.length === 0 && !submitted && !inProgress && !needsAttention);
-  const buttonLabel = submitting
-    ? "Submitting..."
+  /* One word per state, and no two states that differ only by an ellipsis. "Submitting..." and
+     "Submitting" were separate labels for the same thing. */
+  const buttonLabel = submitting || inProgress
+    ? "Sending..."
     : status === "ready_for_final_approval"
-      ? "Approve submission"
+      ? "Approve and send"
       : submitted
-        ? "Submitted"
-        : inProgress
-          ? "Submitting"
-      : "Submit application";
+        ? "Sent"
+        : "Send application";
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -730,7 +751,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
       <aside role="dialog" aria-modal="true" aria-labelledby="review-title" onKeyDown={containFocus} className="dashboard-drawer absolute inset-y-0 right-0 flex w-full max-w-[1120px] flex-col border-l border-border bg-white">
         <header className="flex items-start justify-between gap-6 border-b border-border px-5 py-5 sm:px-8">
           <div className="min-w-0">
-            <p className="text-xs text-faint">Review job</p>
+            <p className="text-xs text-faint">Check before you send</p>
             <h2 id="review-title" className="mt-1 truncate text-xl font-medium tracking-[-0.02em] text-ink">{job.title}</h2>
             <p className="mt-1 truncate text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
           </div>
@@ -765,7 +786,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
           {missingAnswers.length > 0 && <p className="mb-3 text-sm text-warn">{missingAnswers.length} answer{missingAnswers.length === 1 ? "" : "s"} needed.</p>}
           {needsAttention && <p className="mb-3 text-sm text-warn">This application needs you.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted">Litos stops if it needs you.</p>
+            <p className="text-xs text-muted">If anything is missing, Litos stops and asks you first.</p>
             <div className="flex items-center gap-2">
               {(missingAnswers.length > 0 || needsAttention) && packet && (
                 <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Finish your answers</Link>
@@ -786,7 +807,7 @@ function ResumePreview({ packet }: { packet: GeneratedResume }) {
   return (
     <article className="mt-6 rounded-[20px] border border-border bg-white p-5 sm:p-7">
       <div className="border-b border-ink pb-4">
-        <h4 className="text-lg font-semibold tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
+        <h4 className="text-lg font-medium tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
         <p className="mt-1 text-xs text-muted">{packet.job_context.company}</p>
       </div>
       <ResumeSection title="Education">

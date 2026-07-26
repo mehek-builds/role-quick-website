@@ -71,7 +71,7 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Profile</h1>
+        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Profile</h1>
         <p className="mt-1 text-sm text-muted">Resume, targeting, and saved answers.</p>
       </div>
 
@@ -98,7 +98,7 @@ export default function ProfilePage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Application details</p>
-                <h2 className="mt-2 text-lg font-medium text-ink">Reusable answers.</h2>
+                <h2 className="mt-2 text-lg font-medium text-ink">Reusable answers</h2>
                 <p className="mt-1 text-sm text-muted">Contact, eligibility, links, and defaults.</p>
               </div>
               <span className="font-mono text-xs text-faint">{completedFields}/7 CORE</span>
@@ -119,7 +119,7 @@ export default function ProfilePage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Job targeting</p>
-              <h2 className="mt-2 text-lg font-medium text-ink">Software engineering.</h2>
+              <h2 className="mt-2 text-lg font-medium text-ink">Software engineering</h2>
               <p className="mt-1 text-sm text-muted">Internships and new-grad roles · Summer 2027</p>
             </div>
             <button type="button" className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white">Save changes</button>

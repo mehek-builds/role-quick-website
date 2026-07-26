@@ -13,7 +13,7 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 import { packetMatchesJob } from "@/lib/daily-matches";
@@ -247,12 +247,6 @@ export default function Applications() {
       ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
   }, [applicationFilter, applicationSort, reviewablePackets]);
-  // True when every visible row would print the identical status chip, which is the common case
-  // and makes that whole column dead weight.
-  const uniformStatus = useMemo(() => {
-    const labels = new Set(visiblePackets.map((packet) => packet.spec._review ? statusLabel(false, packet.spec._review.status) : ""));
-    return labels.size <= 1;
-  }, [visiblePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
@@ -599,16 +593,16 @@ export default function Applications() {
         <section aria-labelledby="application-ledger-heading" className="border-y border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-baseline gap-2">
-              <h2 id="application-ledger-heading" className="text-sm font-medium text-ink">Applications</h2>
+              <h2 id="application-ledger-heading" className="sr-only">Your applications</h2>
               <span className="font-mono text-[10px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
             </div>
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="application-filter">Filter applications</label>
               <select id="application-filter" value={applicationFilter} onChange={(event) => setApplicationFilter(event.target.value as ApplicationFilter)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
-                <option value="all">All states</option>
-                <option value="action">Needs action</option>
+                <option value="all">Everything</option>
+                <option value="action">Needs you</option>
                 <option value="ready">Ready</option>
-                <option value="submitted">Submitted</option>
+                <option value="submitted">Applied</option>
               </select>
               <label className="sr-only" htmlFor="application-sort">Sort applications</label>
               <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
@@ -630,7 +624,7 @@ export default function Applications() {
                   <span>Role</span>
                   <span>Company</span>
                   <span>Last updated</span>
-                  <span>{uniformStatus ? "" : "Status"}</span>
+                  <span>Status</span>
                 </div>
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
@@ -640,7 +634,7 @@ export default function Applications() {
                       <time className="hidden text-xs text-faint sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
                       {/* A column where every cell reads the same carries no information and costs
                           a fifth of the row. It only renders when the rows actually differ. */}
-                      {!uniformStatus && packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
+                      {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
                     </button>
                   ))}
                 </div>
@@ -696,7 +690,7 @@ export default function Applications() {
               meta={
                 <div className="flex items-center gap-3">
                   <span className="hidden text-right text-[11px] leading-4 text-faint sm:block">
-                    {formatRelativeDate(selected.created_at)}<br />words matched
+                    {formatRelativeDate(selected.created_at)}<br />match
                   </span>
                   <ScoreRing score={extractScore(selected.spec)} />
                 </div>
@@ -727,7 +721,7 @@ export default function Applications() {
             )}
           </Card> : <Card className="p-6">
             <p className="text-xs text-muted">Cover letter on demand</p>
-            <h2 className="mt-2 text-lg font-medium text-ink">{review.cover_letter_supported === false ? "No cover-letter attachment was found." : "Litos will check the employer portal first."}</h2>
+            <h2 className="mt-2 text-lg font-medium text-ink">{review.cover_letter_supported === false ? "This company does not take a cover letter." : "Litos will check the company's form first."}</h2>
             <p className="mt-1 text-sm leading-6 text-muted">
               {review.cover_letter_supported === false
                 ? "This application will continue without manufacturing a cover letter."
@@ -828,7 +822,7 @@ function NewApplicationPanel({
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
         <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
-          {creating ? <PendingLabel state="composing" onColor>Generating resume...</PendingLabel> : "Generate tailored resume"}
+          {creating ? <PendingLabel state="composing" onColor>Generating resume...</PendingLabel> : "Build my resume"}
         </button>
       </div>
     </Card>
@@ -982,7 +976,7 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
 function EditableHighlight({ value, terms, onChange }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void }) {
   const [editing, setEditing] = useState(false);
   return editing ? (
-    <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-[8px] border border-brand bg-white px-2 py-1 outline-none" />
+    <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-[12px] border border-brand bg-white px-2 py-1 outline-none" />
   ) : (
     <button type="button" onClick={() => setEditing(true)} className="text-left leading-5 hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30">
       <HighlightedText text={value} terms={terms} tone="edited" />
@@ -1009,7 +1003,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to portal status" : "Back to resume"}</button>
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Portal answers" : "Missing portal answers"}</p>
-        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "Review what the employer portal asked." : "Only the answers we could not work out."}</h2>
+        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "The company asked for these." : "A few answers we could not work out."}</h2>
         <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "The form asked for things we did not know. Answer them, then try again." : "Everything we already knew is filled in. This page only shows the blanks."}</p>
       </div>
       {visibleQuestions.map((question) => (
@@ -1019,7 +1013,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">{reviewDiscovered ? "Save answers and retry preparation" : "Save answers and prepare application"}</button></div>
+      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">{reviewDiscovered ? "Save answers and try again" : "Save answers and build my application"}</button></div>
     </div>
   );
 }
@@ -1033,7 +1027,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
         <p className="text-xs text-muted">Secure portal runner</p>
-        <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "Review the filled portal before submitting."}</h2>
+        <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "This one needs you." : review.status === "failed" ? "Litos stopped before sending." : "Check it over before it goes."}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
@@ -1042,7 +1036,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           <BlockerList reason={review.attention_reason} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed" ? review.submission_error ?? "The portal did not accept the prepared packet." : "Automatic submission is off or was revoked. Review the captured form, then approve this application if you want it sent."}
+            {review.status === "failed" ? review.submission_error ?? "The company's form would not accept it." : "You asked to check every application first. Look it over, then send it when you are happy."}
           </p>
         )}
         {review.filled_fields && review.filled_fields.length > 0 && (
@@ -1052,7 +1046,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           </div>
         )}
         {submission.cover_letter && (
-          <div className="mt-6 rounded-[14px] border border-border bg-surface-alt p-4">
+          <div className="mt-6 rounded-[12px] border border-border bg-surface-alt p-4">
             <p className="text-xs font-medium text-muted">Cover letter included with final submission</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.cover_letter.body}</p>
             {submission.cover_letter.warnings.length > 0 && (
@@ -1064,7 +1058,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
         )}
         {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
         {review.verification?.status === "completed" && (
-          <div className="mt-4 rounded-[12px] border border-teal/30 bg-teal-soft px-4 py-3">
+          <div className="mt-4 rounded-[12px] border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Verification completed</p>
             <p className="mt-1 text-xs text-muted">
               Litos used the one-time code from your connected {review.verification.provider === "outlook" ? "Outlook" : "Gmail"} account. The code was not saved.
@@ -1081,10 +1075,10 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
         )}
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
-          {hasQuestionsToReview && <button onClick={onReviewQuestions} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Review portal answers</button>}
-          {needsAttention && <button onClick={onRetry} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">Retry preparation</button>}
-          {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
-          {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
+          {hasQuestionsToReview && <button onClick={onReviewQuestions} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Check the answers</button>}
+          {needsAttention && <button onClick={onRetry} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">Try again</button>}
+          {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I finished it myself</button>}
+          {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Try again</button>}
           {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Submit application</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. Verification codes are used only with your permission, and a verified portal receipt is required before an application is marked submitted.</p>
@@ -1114,7 +1108,7 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
 }
 
 function CenteredState({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
-  return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive">✓</div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
+  return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
 
 function BlockerList({ reason }: { reason?: string }) {

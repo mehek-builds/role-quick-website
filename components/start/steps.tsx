@@ -158,6 +158,8 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   const [busy, setBusy] = useState(false);
   const [parsed, setParsed] = useState<ParsedProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /* Measured, not decorated. See the receipt comment below. */
+  const [parseSeconds, setParseSeconds] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function upload(f: File) {
@@ -172,8 +174,11 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     setError(null);
     setFile(f);
     setBusy(true);
+    const startedAt = Date.now();
     try {
-      setParsed(await uploadResume(f));
+      const result = await uploadResume(f);
+      setParseSeconds((Date.now() - startedAt) / 1000);
+      setParsed(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read that resume.");
       setFile(null);
@@ -182,25 +187,34 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     }
   }
 
-  // The receipt. Times are relative to the upload, so they are a real measurement of this
-  // student's parse rather than decoration.
+  /* The receipt (DESIGN.md signature motif #1): speed shown as a fact, never claimed.
+   *
+   * The timestamp column used to be the literals "00:00", "00:02", "00:03", "00:04" while the
+   * comment here claimed they were a real measurement. They were not: they were the same eight
+   * strings for every student, on the one component whose entire job is to be a receipt. A brand
+   * that stakes itself on not claiming speed cannot fake the number that proves it.
+   *
+   * So there is now one time, and it is measured: how long this student's parse actually took.
+   * Per-row timings would need per-row instrumentation the API does not expose, and inventing
+   * them again is exactly the thing being fixed. */
   const rows = useMemo(() => {
     if (!parsed || !file) return [];
     const kb = Math.max(1, Math.round(file.size / 1024));
     const exp = parsed.experience?.length ?? 0;
     const proj = parsed.projects?.length ?? 0;
     const seeded = parsed.bank_seeded ?? 0;
+    const elapsed = parseSeconds === null ? "" : `${parseSeconds.toFixed(1)}s`;
     return [
-      { t: "00:00", k: "Received", v: `${file.name} · ${kb} KB` },
-      { t: "00:02", k: "Name", v: parsed.full_name || "—" },
-      { t: "00:02", k: "School", v: parsed.school || "—" },
-      { t: "00:03", k: "Graduation", v: parsed.grad_year ? String(parsed.grad_year) : "not found" },
-      { t: "00:03", k: "Experience", v: `${exp} ${exp === 1 ? "entry" : "entries"}` },
-      { t: "00:04", k: "Projects", v: `${proj} ${proj === 1 ? "entry" : "entries"}` },
-      { t: "00:04", k: "Skills", v: `${parsed.skills?.length ?? 0} tagged` },
-      { t: "00:04", k: "Ready", v: `${seeded} ${seeded === 1 ? "entry" : "entries"} banked`, done: true },
+      { k: "Received", v: `${file.name} · ${kb} KB` },
+      { k: "Name", v: parsed.full_name || "not found" },
+      { k: "School", v: parsed.school || "not found" },
+      { k: "Graduation", v: parsed.grad_year ? String(parsed.grad_year) : "not found" },
+      { k: "Experience", v: `${exp} ${exp === 1 ? "entry" : "entries"}` },
+      { k: "Projects", v: `${proj} ${proj === 1 ? "entry" : "entries"}` },
+      { k: "Skills", v: `${parsed.skills?.length ?? 0} tagged` },
+      { t: elapsed, k: "Ready in", v: `${seeded} ${seeded === 1 ? "entry" : "entries"} banked`, done: true },
     ];
-  }, [parsed, file]);
+  }, [parsed, file, parseSeconds]);
 
   if (parsed) {
     // bank_seeded === 0 is the difference between an account that works and one that looks fine
@@ -221,7 +235,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           </p>
         )}
         <div className="mt-6 flex items-center gap-3">
-          <PrimaryButton onClick={onDone}>Looks right</PrimaryButton>
+          <PrimaryButton onClick={onDone}>Continue</PrimaryButton>
           <button
             type="button"
             onClick={() => {
@@ -294,12 +308,15 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         }}
       />
 
-      <div className="mt-6 flex items-center gap-3">
-        <LaterLink onClick={onLater} />
-      </div>
       <p className="mt-6 max-w-[46ch] text-[14px] leading-6 text-muted">
         Used only for your applications. Never sold.
       </p>
+      <div className="mt-6 flex items-center gap-3">
+        <PrimaryButton onClick={() => inputRef.current?.click()} disabled={busy}>
+          {busy ? <PendingLabel onColor>Reading...</PendingLabel> : "Choose a file"}
+        </PrimaryButton>
+        <LaterLink onClick={onLater} />
+      </div>
     </StartShell>
   );
 }
@@ -334,15 +351,16 @@ export function InstallStep({
     return (
       <StartShell
         step="install"
-        title="Litos works on the job posting, not here."
-        sub="This page is the record. The extension is what fills the form. Install it, then go apply to one job."
+        title="Add Litos to Chrome."
+        sub="Litos does its work on the job posting itself. Add it to Chrome, then apply to one job as normal."
       >
         <div className="flex items-center gap-3">
+          {/* Opening the store is not installing. This used to advance the flow from its own
+              onClick, so closing the store tab straight away still moved you to step 04. */}
           <a
             href={STORE_URL}
             target="_blank"
             rel="noreferrer"
-            onClick={onInstalled}
             className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             Add to Chrome
@@ -356,7 +374,7 @@ export function InstallStep({
             onClick={onInstalled}
             className="flex min-h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink"
           >
-            I already have it
+            I have added it
           </button>
           <LaterLink onClick={onLater} />
         </div>
@@ -437,7 +455,7 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
   gpa: { label: "Grade average", placeholder: "3.89" },
   gpa_scale: { label: "Out of", placeholder: "4.0" },
   major: { label: "Major", placeholder: "Computer Science" },
-  desired_salary: { label: "Desired salary", note: "Optional. Left blank on every form unless you set it.", placeholder: "—" },
+  desired_salary: { label: "Desired salary", note: "Optional. Left blank on every form unless you set it.", placeholder: "Leave blank" },
   desired_salary_currency: { label: "Currency", placeholder: "EUR" },
   languages: { label: "Which languages are you fluent in?", placeholder: "English, Hindi, Spanish" },
 };
@@ -483,15 +501,18 @@ export function GapsStep({
     }
   }
 
+  /* Every visible label is tied to its input by id. These were bare <label> elements with no
+     htmlFor and an aria-label on the input, so the label was announced twice and clicking it
+     focused nothing. */
   function field(key: string) {
     const meta = GAP_LABEL[key];
     return (
       <input
         key={key}
+        id={`gap-${key}`}
         value={values[key] ?? ""}
         onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
         placeholder={meta.placeholder}
-        aria-label={meta.label}
         className="w-full rounded-full border border-border bg-surface px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     );
@@ -507,7 +528,7 @@ export function GapsStep({
 
       {showGpa && (
         <div className="mb-5">
-          <label className="text-[13px] text-ink">Grade average</label>
+          <label htmlFor="gap-gpa" className="text-[13px] text-ink">Grade average</label>
           {/* R-005: store the value AND the scale, then convert through a disclosed mapping.
               A bare 3.89 tells a UK form nothing, and guessing 97% would be a lie. */}
           <p className="mt-1 text-[12px] leading-5 text-faint">
@@ -523,14 +544,14 @@ export function GapsStep({
 
       {gaps.includes("major") && (
         <div className="mb-5">
-          <label className="text-[13px] text-ink">Major</label>
+          <label htmlFor="gap-major" className="text-[13px] text-ink">Major</label>
           <div className="mt-2">{field("major")}</div>
         </div>
       )}
 
       {gaps.includes("languages") && (
         <div className="mb-5">
-          <label className="text-[13px] text-ink">Which languages are you fluent in?</label>
+          <label htmlFor="gap-languages" className="text-[13px] text-ink">Which languages are you fluent in?</label>
           <p className="mt-1 text-[12px] leading-5 text-faint">
             Separate them with commas. Forms that ask get exactly this list, nothing inferred.
           </p>
@@ -540,7 +561,7 @@ export function GapsStep({
 
       {showSalary && (
         <div className="mb-5">
-          <label className="text-[13px] text-ink">Desired salary</label>
+          <label htmlFor="gap-desired_salary" className="text-[13px] text-ink">Desired salary</label>
           <p className="mt-1 text-[12px] leading-5 text-faint">
             Optional, and left blank on every form unless you set it. We need the currency too, or
             the number means nothing on a posting priced somewhere else.
@@ -554,7 +575,7 @@ export function GapsStep({
 
       <div className="mt-6 flex items-center gap-3">
         <PrimaryButton onClick={() => void save()} disabled={busy}>
-          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Save"}
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <button
           type="button"
@@ -694,7 +715,7 @@ export function TargetStep({
 
       <div className="flex items-center gap-3">
         <PrimaryButton onClick={() => void save()} disabled={busy || !primary}>
-          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Done"}
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
       </div>
@@ -724,7 +745,7 @@ export function DoneStep({
     >
       <div className="divide-y divide-border border-y border-border">
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
-          <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
+          <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
           <span>
             <span className="block text-[16px] text-ink">Send an application without asking me again</span>
             <span className="mt-1 block text-[14px] leading-6 text-muted">
@@ -733,7 +754,7 @@ export function DoneStep({
           </span>
         </label>
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
-          <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
+          <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
           <span>
             <span className="block text-[16px] text-ink">Read the code a company emails me</span>
             <span className="mt-1 block text-[14px] leading-6 text-muted">

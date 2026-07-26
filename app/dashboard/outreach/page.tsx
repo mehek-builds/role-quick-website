@@ -9,10 +9,27 @@ import {
   ShimmerRows,
   EmptyState,
   ErrorNote,
-  formatDate,
+  formatRelativeDate,
 } from "@/components/app/ui";
 
 const FILTERS = ["all", "drafted", "sent", "replied", "bounced"] as const;
+
+/* The same four words the extension uses (src/lib/outreach-status.ts). The page used to print
+   whatever the status column happened to hold, with a capital letter bolted on. */
+const STATUS_LABELS: Record<string, string> = {
+  drafted: "Written",
+  sent: "Sent",
+  replied: "They replied",
+  bounced: "Did not arrive",
+};
+
+const FILTER_LABELS: Record<string, string> = {
+  all: "All",
+  drafted: "Written",
+  sent: "Sent",
+  replied: "Replied",
+  bounced: "Did not arrive",
+};
 type Filter = (typeof FILTERS)[number];
 
 // Keys MUST match the backend persona union (resolve.ts personaOrder): alumni | near_peer |
@@ -26,13 +43,54 @@ const PERSONA_LABELS: Record<string, string> = {
   recruiter: "Recruiter",
 };
 
+const QA_EVENTS: OutreachEvent[] = [
+  {
+    id: "qa-1", channel: "gmail", subject: "USC student interested in Acme",
+    draft_text: "Hi Jordan, I am a USC student interested in Acme's product engineering work. I built a scheduling tool used by 300 classmates last term and would value ten minutes to hear how your team thinks about onboarding.",
+    sent_at: new Date().toISOString(), opened_at: null, replied_at: new Date().toISOString(),
+    bounced: false, follow_up_count: 0, status: "replied",
+    contact: { id: "c1", full_name: "Jordan Lee", title: "Product Engineer", persona: "alumni", company_domain: "acme.com" },
+  },
+  {
+    id: "qa-2", channel: "gmail", subject: "Stripe engineering internship",
+    draft_text: "Hi Sam, I would value your perspective on Stripe's internship program.",
+    sent_at: new Date(Date.now() - 86_400_000).toISOString(), opened_at: null, replied_at: null,
+    bounced: false, follow_up_count: 1, status: "sent",
+    contact: { id: "c2", full_name: "Sam Chen", title: "Software Engineer", persona: "near_peer", company_domain: "stripe.com" },
+  },
+  {
+    id: "qa-3", channel: "gmail", subject: "Notion product design internship",
+    draft_text: "Hi Priya, I am applying to the product design internship and wanted to introduce myself.",
+    sent_at: null, opened_at: null, replied_at: null,
+    bounced: false, follow_up_count: 0, status: "drafted",
+    contact: { id: "c3", full_name: "Priya Sharma", title: "Recruiter", persona: "recruiter", company_domain: "notion.so" },
+  },
+];
+
 export default function Outreach() {
   const [events, setEvents] = useState<OutreachEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copyDraft(id: string, text: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(id);
+      window.setTimeout(() => setCopied((current) => (current === id ? null : current)), 2000);
+    } catch {
+      /* clipboard blocked; the draft is on screen to copy by hand */
+    }
+  }
 
   useEffect(() => {
+    // Same localhost-only QA bypass Home and Applications already use, so this page can be
+    // reviewed without a live account. It was the one dashboard view with no fixture.
+    if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("qa")) {
+      setEvents(QA_EVENTS);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
@@ -43,7 +101,7 @@ export default function Outreach() {
         setEvents(Array.isArray(res) ? res : (res.events ?? []));
       } catch (err) {
         if (!cancelled)
-          setError(err instanceof Error ? err.message : "Could not load outreach.");
+          setError(err instanceof Error ? err.message : "We could not load your emails. Reload the page.");
       }
     })();
     return () => {
@@ -64,8 +122,8 @@ export default function Outreach() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Outreach</h1>
-        <p className="mt-1 text-sm text-muted">Drafts, sends, and replies.</p>
+        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Emails</h1>
+        <p className="mt-1 text-sm text-muted">People you wrote to, and who wrote back.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -75,11 +133,11 @@ export default function Outreach() {
             onClick={() => setFilter(f)}
             className={`rounded-full px-3.5 py-1.5 text-sm transition-colors ${
               filter === f
-                ? "bg-ink text-white"
+                ? "bg-surface-alt font-medium text-ink"
                 : "border border-border text-muted hover:text-ink"
             }`}
           >
-            {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+            {FILTER_LABELS[f] ?? f}
           </button>
         ))}
       </div>
@@ -88,8 +146,8 @@ export default function Outreach() {
         <ShimmerRows rows={4} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title={filter === "all" ? "No outreach yet" : `Nothing ${filter} yet`}
-          body="When the extension resolves a recruiter, hiring manager, or alum for a posting, the contact and its draft land here so you can track who you have written to and who replied."
+          title={filter === "all" ? "No emails yet" : `Nothing ${filter} yet`}
+          body="Litos finds someone worth writing to and drafts the email. Every one you send shows up here, with whether they wrote back."
         >
           {filter === "all" && (
             <a
@@ -122,13 +180,10 @@ export default function Outreach() {
                     {persona && (
                       <Chip label={PERSONA_LABELS[persona] ?? persona} kind="persona" />
                     )}
-                    <Chip
-                      label={e.status.charAt(0).toUpperCase() + e.status.slice(1)}
-                      kind={e.status}
-                    />
+                    <Chip label={STATUS_LABELS[e.status] ?? e.status} kind={e.status} />
                     {e.sent_at && (
                       <span className="font-mono text-xs text-faint">
-                        {formatDate(e.sent_at)}
+                        {formatRelativeDate(e.sent_at)}
                       </span>
                     )}
                   </div>
@@ -149,7 +204,7 @@ export default function Outreach() {
                     {e.draft_text.length > 160 && (
                       <button
                         onClick={() => setOpen(open === e.id ? null : e.id)}
-                        className="mt-2 text-xs font-medium text-coral-ink hover:underline"
+                        className="mt-2 text-xs font-medium text-ink underline underline-offset-4"
                       >
                         {open === e.id ? "Show less" : "Show full draft"}
                       </button>
@@ -161,6 +216,21 @@ export default function Outreach() {
                   <p className="mt-3 text-xs text-faint">
                     {e.follow_up_count} follow-up{e.follow_up_count === 1 ? "" : "s"} sent
                   </p>
+                )}
+
+                {/* Copy is the one action this endpoint can actually support: /track/events
+                    returns no contact email, so an "Open in Gmail" link here could not address
+                    itself. Wiring that needs the email on OutreachContact first. */}
+                {e.draft_text && (
+                  <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
+                    <button
+                      type="button"
+                      onClick={() => void copyDraft(e.id, e.draft_text ?? "")}
+                      className="flex min-h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink"
+                    >
+                      {copied === e.id ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                 )}
               </Card>
             );

@@ -297,7 +297,7 @@ export default function Settings() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-ink">Settings</h1>
+        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Account</h1>
         <p className="mt-1 text-sm text-muted">
           Account, application details, and plan.
         </p>
@@ -305,7 +305,7 @@ export default function Settings() {
 
       {error && <ErrorNote message={error} />}
       {connectionNotice && (
-        <div className="rounded-[12px] border border-teal/30 bg-teal-soft px-4 py-3 text-sm text-teal-ink">
+        <div className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-ink">
           {connectionNotice}
         </div>
       )}
@@ -427,11 +427,11 @@ export default function Settings() {
         <h2 className="text-base font-medium text-ink">Application automation</h2>
         <p className="mt-1 text-sm leading-6 text-muted">These permissions are separate and can be revoked at any time. A revocation is checked again before a final portal submission.</p>
         <div className="mt-5 space-y-4">
-          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+          <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
             <span><span className="block text-sm font-medium text-ink">Automatic submission</span><span className="mt-1 block text-xs leading-5 text-muted">Submit applications you start when all answers are supported and the portal has no safety blocker.</span></span>
             <input aria-label="Automatic submission" type="checkbox" checked={automaticSubmission} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
-          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+          <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
             <span><span className="block text-sm font-medium text-ink">Application verification codes</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
             <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
@@ -517,7 +517,7 @@ export default function Settings() {
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
         {me.checkout_available && !trialActive ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[12px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
               <span className="font-medium text-ink">Pro covers 1,000 resumes a month. </span>
               $49.99/mo. Canceling takes the same clicks as signing up, from

@@ -40,12 +40,15 @@ export function StepRail({ current }: { current: OnboardingStep }) {
         <span className="text-ink">{activeStep.label}</span>
         <span className="text-faint">Step {step} of {STEPS.length}</span>
       </div>
+      {/* One segment marked, not a filled fraction. Filling every segment up to the current one
+          is a progress bar by another name, and it promised a finish line these steps cannot
+          keep: step 03 is a twelve-minute application and step 06 is a single tap. */}
       <ol className="mt-3 flex gap-1.5">
         {STEPS.map((s, index) => (
           <li
             key={s.key}
             aria-hidden="true"
-            className={`h-0.5 flex-1 rounded-full ${index < step ? "bg-ink" : "bg-border"}`}
+            className={`h-0.5 flex-1 rounded-full ${index === step - 1 ? "bg-ink" : "bg-border"}`}
           />
         ))}
       </ol>
