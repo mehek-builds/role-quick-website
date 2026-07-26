@@ -33,7 +33,7 @@ export default function Privacy() {
           Privacy Policy
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 25, 2026
+          Last updated: July 26, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. When you open a
@@ -126,24 +126,29 @@ export default function Privacy() {
             answers are supported and the portal has no safety blocker. The
             extension shows a cancelable 15-second countdown. A dashboard
             submission can proceed as soon as those checks pass. Missing or
-            conflicting facts, sensitive attestations, CAPTCHA, unsupported
-            portal behavior, and uncertain confirmation always pause the flow.
+            conflicting facts, sensitive attestations, unsupported portal
+            behavior, uncertain confirmation, and unresolved CAPTCHAs stop the
+            flow without submission.
           </p>
         </Section>
 
-        <Section title="Application verification">
+        <Section title="CAPTCHA pause and resume">
           <p>
-            If you separately turn on automatic verification, Litos can use a
-            Gmail or Outlook account you already connected to look for a
-            verification code tied to an application that is actively open.
-            It checks the sender and timing before using a code, does not save
-            the code, and does not use this permission to read or send other
-            mail. CAPTCHA, device-based MFA, and unsupported verification
-            steps still pause for you.
+            If you separately turn on resume-after-CAPTCHA, Litos may wait in
+            your current portal tab while you complete a challenge, then resume
+            the normal submission flow. This permission is off by default.
+            Litos does not click, solve, outsource, or bypass the challenge. If
+            it remains unresolved, the flow stops without submitting.
           </p>
           <p>
-            Automatic submission and automatic verification are separate,
-            optional permissions. You can turn either one off in Settings.
+            Automatic submission, CAPTCHA pause-and-resume, and automatic verification
+            are separate, optional permissions. You can turn any of them off
+            in Settings.
+          </p>
+          <p>
+            Litos observes only whether the portal has installed a completed
+            response. It does not store CAPTCHA response tokens. Portal previews
+            and submission metadata follow the retention rules described below.
           </p>
         </Section>
 
@@ -159,10 +164,11 @@ export default function Privacy() {
           <p>
             This permission is optional and can be turned off in Settings.
             Turning it off makes Litos pause for you whenever an application
-            needs an email verification code. Litos also pauses for CAPTCHA,
-            MFA that requires your device or identity, and any verification
-            step it cannot complete with high confidence. Litos does not bypass
-            those portal security controls.
+            needs an email verification code. Litos also pauses for MFA that
+            requires your device or identity and any verification step it
+            cannot complete with high confidence. A separately authorized
+            CAPTCHA must be completed by you, and an unresolved challenge stops
+            the run without submission. Litos does not bypass portal security controls.
           </p>
           <p>
             Gmail and Outlook authentication is handled through Composio&apos;s

@@ -195,6 +195,7 @@ export type ApplicationReview = {
   submitted_at?: string;
   submission_error?: string;
   submission_run_id?: string;
+  submission_channel?: "browser" | "greenhouse_job_board_api";
   browser_context_id?: string;
   browser_session_id?: string;
   attention_reason?: string;
@@ -215,6 +216,13 @@ export type ApplicationReview = {
     status: "not_needed" | "searching" | "completed" | "handoff";
     provider?: "gmail" | "outlook";
     completed_at?: string;
+  };
+  captcha?: {
+    authorized: boolean;
+    provider_requested: boolean;
+    unresolved: boolean;
+    consented_at?: string;
+    consent_version?: string;
   };
   receipt?: {
     confirmation_text: string;
@@ -289,6 +297,9 @@ export type OnboardingState = {
   automatic_submission_consented_at: string | null;
   automatic_submission_consent_version: string | null;
   automatic_verification_enabled: boolean;
+  automatic_captcha_enabled: boolean;
+  automatic_captcha_consented_at: string | null;
+  automatic_captcha_consent_version: string | null;
 };
 
 export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
@@ -308,6 +319,7 @@ export function getOnboardingState() {
 export type AutomationSettings = {
   automatic_submission_enabled: boolean;
   automatic_verification_enabled: boolean;
+  automatic_captcha_enabled: boolean;
 };
 
 export function completeOnboarding(settings: AutomationSettings) {
@@ -318,7 +330,10 @@ export function completeOnboarding(settings: AutomationSettings) {
 }
 
 export function setAutomationSettings(settings: Partial<AutomationSettings>) {
-  return api<AutomationSettings & { automatic_submission_consent_version: string | null }>("/onboarding/automation", {
+  return api<AutomationSettings & {
+    automatic_submission_consent_version: string | null;
+    automatic_captcha_consent_version: string | null;
+  }>("/onboarding/automation", {
     method: "PUT",
     body: JSON.stringify(settings),
   });

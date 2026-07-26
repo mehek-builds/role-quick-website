@@ -1000,7 +1000,10 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
           {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">Submit application</button>}
         </div>
-        <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. Verification codes are used only with your permission, and a verified portal receipt is required before an application is marked submitted.</p>
+        {review.captcha?.provider_requested && !review.captcha.unresolved && (
+          <p className="mt-5 font-mono text-[11px] text-positive">CAPTCHA was completed in the applicant portal before Litos resumed.</p>
+        )}
+        <p className="mt-5 text-xs leading-5 text-faint">Litos never clicks or solves CAPTCHAs. With your separate permission, it can resume after you complete one in the current portal tab. It does not bypass MFA, login, or legal declarations. Verification codes are used only with your permission, and a verified portal receipt is required before an application is marked submitted.</p>
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Portal preview captured after filling</p></div>

@@ -35,6 +35,7 @@ export default function Settings() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
   const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
+  const [automaticCaptcha, setAutomaticCaptcha] = useState<boolean | null>(null);
   const [savingAutomation, setSavingAutomation] = useState(false);
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
@@ -64,6 +65,7 @@ export default function Settings() {
         setProfile(profileRes);
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setAutomaticVerification(onboardingRes.automatic_verification_enabled);
+        setAutomaticCaptcha(onboardingRes.automatic_captcha_enabled);
         setEmailConnections(connectionRes);
         if (callbackProvider && callbackStatus) {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
@@ -89,21 +91,25 @@ export default function Settings() {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
   }
 
-  async function saveAutomation(patch: Partial<{ automatic_submission_enabled: boolean; automatic_verification_enabled: boolean }>) {
-    if (automaticSubmission === null || automaticVerification === null) return;
+  async function saveAutomation(patch: Partial<{ automatic_submission_enabled: boolean; automatic_verification_enabled: boolean; automatic_captcha_enabled: boolean }>) {
+    if (automaticSubmission === null || automaticVerification === null || automaticCaptcha === null) return;
     const previousSubmission = automaticSubmission;
     const previousVerification = automaticVerification;
+    const previousCaptcha = automaticCaptcha;
     if (patch.automatic_submission_enabled !== undefined) setAutomaticSubmission(patch.automatic_submission_enabled);
     if (patch.automatic_verification_enabled !== undefined) setAutomaticVerification(patch.automatic_verification_enabled);
+    if (patch.automatic_captcha_enabled !== undefined) setAutomaticCaptcha(patch.automatic_captcha_enabled);
     setSavingAutomation(true);
     setError(null);
     try {
       const result = await setAutomationSettings(patch);
       setAutomaticSubmission(result.automatic_submission_enabled);
       setAutomaticVerification(result.automatic_verification_enabled);
+      setAutomaticCaptcha(result.automatic_captcha_enabled);
     } catch (err) {
       setAutomaticSubmission(previousSubmission);
       setAutomaticVerification(previousVerification);
+      setAutomaticCaptcha(previousCaptcha);
       setError(err instanceof Error ? err.message : "Could not update automation permissions.");
     } finally {
       setSavingAutomation(false);
@@ -164,7 +170,7 @@ export default function Settings() {
   }
 
   if (error && !profile) return <ErrorNote message={error} />;
-  if (!me || profile === null || automaticSubmission === null || automaticVerification === null || emailConnections === null)
+  if (!me || profile === null || automaticSubmission === null || automaticVerification === null || automaticCaptcha === null || emailConnections === null)
     return (
       <div className="space-y-6">
         <div className="rq-shimmer h-8 w-48 rounded-full" />
@@ -254,8 +260,12 @@ export default function Settings() {
             <span><span className="block text-sm font-medium text-ink">Application verification codes</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
             <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
+          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+            <span><span className="block text-sm font-medium text-ink">Resume after I solve a CAPTCHA</span><span className="mt-1 block text-xs leading-5 text-muted">Litos never clicks or solves the challenge. It waits in your current portal tab and resumes only after the portal provides a completed response.</span></span>
+            <input aria-label="Resume after I solve a CAPTCHA" type="checkbox" checked={automaticCaptcha} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_captcha_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
+          </label>
         </div>
-        <p className="mt-4 text-xs leading-5 text-faint">Litos still pauses for missing or contradictory facts, sensitive attestations, CAPTCHA, unsupported portal behavior, and uncertain confirmation.</p>
+        <p className="mt-4 text-xs leading-5 text-faint">Litos still pauses for missing or contradictory facts, sensitive attestations, unsupported portal behavior, uncertain confirmation, and any CAPTCHA you have not completed.</p>
       </Card>
 
       {/* Application profile */}

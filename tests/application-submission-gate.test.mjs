@@ -21,7 +21,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I completed the portal step/);
-  assert.match(dashboard, /will not bypass CAPTCHA, MFA, login, or legal declarations/);
+  assert.match(dashboard, /never clicks or solves CAPTCHAs/);
+  assert.match(dashboard, /resume after you complete one in the current portal tab/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
@@ -31,7 +32,9 @@ test("automation settings send field-specific updates so stale clients cannot re
   const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
   assert.match(settings, /saveAutomation\(\{ automatic_submission_enabled: event\.target\.checked \}\)/);
   assert.match(settings, /saveAutomation\(\{ automatic_verification_enabled: event\.target\.checked \}\)/);
+  assert.match(settings, /saveAutomation\(\{ automatic_captcha_enabled: event\.target\.checked \}\)/);
   assert.match(api, /setAutomationSettings\(settings: Partial<AutomationSettings>\)/);
+  assert.match(api, /automatic_captcha_enabled: boolean/);
 });
 
 test("a failed onboarding permission save keeps the consent controls available for retry", async () => {
@@ -43,11 +46,19 @@ test("a failed onboarding permission save keeps the consent controls available f
   assert.match(steps, /\.finally\(\(\) => setBusy\(false\)\)/);
 });
 
-test("privacy disclosure covers both standing submission and verification-code access", async () => {
+test("CAPTCHA consent is separate, optional, and disclosed across onboarding, settings, and privacy", async () => {
   const privacy = await readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8");
+  const start = await readFile(new URL("../components/start/steps.tsx", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
   assert.match(privacy, /standing automatic-submission permission/);
-  assert.match(privacy, /Gmail or Outlook account/);
+  assert.match(privacy, /Gmail or[\s\S]*Outlook account/);
   assert.match(privacy, /separate,[\s\S]*optional permissions/);
+  assert.match(privacy, /does not click, solve, outsource, or bypass the challenge/);
+  assert.match(privacy, /remains unresolved[\s\S]*stops without submitting/);
+  assert.match(start, /useState\(state\.automatic_captcha_enabled\)/);
+  assert.match(start, /automatic_captcha_enabled: automaticCaptcha/);
+  assert.match(start, /Resume after I solve a CAPTCHA/);
+  assert.match(settings, /Resume after I solve a CAPTCHA/);
 });
 
 test("cover letters wait for a detected attachment field, including optional fields", async () => {
@@ -89,7 +100,7 @@ test("the controlled portal mirrors every supported adapter without an employer 
   const page = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
   const casePage = await readFile(new URL("../app/qa/portal-submission/[board]/[case]/page.tsx", import.meta.url), "utf8");
   const portal = await readFile(new URL("../app/qa/portal-submission/portal-form.tsx", import.meta.url), "utf8");
-  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
+  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} captcha=\{captcha\} \/>/);
   assert.doesNotMatch(page, /useSearchParams|Suspense/);
   assert.match(casePage, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
   assert.match(portal, /type Board = "greenhouse" \| "lever" \| "ashby" \| "smartrecruiters"/);
@@ -100,4 +111,13 @@ test("the controlled portal mirrors every supported adapter without an employer 
   assert.match(portal, /name="_systemfield_name"/);
   assert.match(portal, /id="confirm-email-input"/);
   assert.match(portal, /No employer received this application/);
+});
+
+test("the controlled portal exposes unresolved and applicant-solved CAPTCHA fixtures", async () => {
+  const route = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
+  const form = await readFile(new URL("../app/qa/portal-submission/portal-form.tsx", import.meta.url), "utf8");
+  assert.match(route, /captcha === "solved"/);
+  assert.match(route, /captcha === "unresolved"/);
+  assert.match(form, /data-litos-captcha-fixture/);
+  assert.match(form, /controlled-applicant-token/);
 });

@@ -29,7 +29,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Does it apply to jobs for me automatically?",
-    a: "Only if you explicitly turn on automatic submission. Litos can then submit eligible applications you start, after checking that every answer is supported. Missing facts, conflicting answers, sensitive attestations, CAPTCHA, and unsupported portal steps always pause for you. You can turn the permission off in Settings.",
+    a: "Only if you explicitly turn on automatic submission. Litos can then submit eligible applications you start after checking that every answer is supported. If a CAPTCHA appears, Litos never solves or clicks it. With a separate permission, it can wait for you to complete the challenge in the current tab and then resume. You can turn either permission off in Settings.",
   },
   {
     q: "Will a recruiter be able to tell I used AI?",

@@ -4,7 +4,9 @@ import { createElement, useState } from "react";
 
 export type Board = "greenhouse" | "lever" | "ashby" | "smartrecruiters";
 
-export function PortalForm({ board, caseId }: { board: Board; caseId: string }) {
+export type CaptchaFixture = "none" | "unresolved" | "solved";
+
+export function PortalForm({ board, caseId, captcha = "none" }: { board: Board; caseId: string; captcha?: CaptchaFixture }) {
   const confirmationId = `LITOS-QA-${caseId.toUpperCase()}`;
   const [submitted, setSubmitted] = useState(false);
 
@@ -12,7 +14,11 @@ export function PortalForm({ board, caseId }: { board: Board; caseId: string }) 
     return <main className="min-h-screen bg-[#f7f7f3] px-6 py-16"><section className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-10 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5e9] text-2xl text-[#24713b]">✓</div><h1 className="mt-5 text-3xl font-semibold text-[#151512]">Thank you. Your application was received.</h1><p className="mt-3 text-[#63635d]">This is a controlled Litos verification portal. No employer received this application.</p><p className="mt-5 font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p></section></main>;
   }
 
-  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}</div><button type="submit" className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
+  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}</div>{captcha !== "none" && <ControlledCaptcha solved={captcha === "solved"} />}<button type="submit" className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
+}
+
+function ControlledCaptcha({ solved }: { solved: boolean }) {
+  return <section data-litos-captcha-fixture={solved ? "solved" : "unresolved"} className="g-recaptcha mt-6 rounded-xl border border-[#cfcfc6] bg-[#fafaf7] p-4"><p className="text-sm text-[#31312d]">Controlled CAPTCHA fixture</p><p className="mt-1 font-mono text-xs text-[#63635d]">{solved ? "Applicant response installed" : "Awaiting applicant response"}</p><textarea name="g-recaptcha-response" value={solved ? "controlled-applicant-token" : ""} readOnly hidden /></section>;
 }
 
 function GreenhouseFields() {
