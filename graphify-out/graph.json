@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 24
+      "community": 28
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 25
+      "community": 29
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 26
+      "community": 30
     },
     {
       "label": "layout.tsx",
@@ -103,7 +103,7 @@
       "label": "Section()",
       "file_type": "code",
       "source_file": "app/privacy/page.tsx",
-      "source_location": "L11",
+      "source_location": "L12",
       "id": "page_section",
       "community": 0
     },
@@ -225,7 +225,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L133",
       "id": "page_tick",
-      "community": 17
+      "community": 15
     },
     {
       "label": "poll()",
@@ -233,7 +233,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L145",
       "id": "page_poll",
-      "community": 17
+      "community": 15
     },
     {
       "label": "onVisibility()",
@@ -241,7 +241,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L150",
       "id": "page_onvisibility",
-      "community": 17
+      "community": 15
     },
     {
       "label": "fetchJobDescription()",
@@ -361,7 +361,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L8",
       "id": "page_jobparams",
-      "community": 18
+      "community": 23
     },
     {
       "label": "loadMore()",
@@ -369,7 +369,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L46",
       "id": "page_loadmore",
-      "community": 18
+      "community": 23
     },
     {
       "label": "TryPage()",
@@ -436,20 +436,76 @@
       "community": 14
     },
     {
+      "label": "googleSignInError()",
+      "file_type": "code",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L31",
+      "id": "errors_googlesigninerror",
+      "community": 14
+    },
+    {
+      "label": "GoogleSignInButton.tsx",
+      "file_type": "code",
+      "source_file": "app/login/GoogleSignInButton.tsx",
+      "source_location": "L1",
+      "id": "googlesigninbutton",
+      "community": 26
+    },
+    {
+      "label": "GoogleSignInButton()",
+      "file_type": "code",
+      "source_file": "app/login/GoogleSignInButton.tsx",
+      "source_location": "L44",
+      "id": "googlesigninbutton_googlesigninbutton",
+      "community": 26
+    },
+    {
+      "label": "google-session.ts",
+      "file_type": "code",
+      "source_file": "app/login/google-session.ts",
+      "source_location": "L1",
+      "id": "google_session",
+      "community": 20
+    },
+    {
+      "label": "completeGoogleSession()",
+      "file_type": "code",
+      "source_file": "app/login/google-session.ts",
+      "source_location": "L12",
+      "id": "google_session_completegooglesession",
+      "community": 20
+    },
+    {
       "label": "landingRoute()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L23",
+      "source_location": "L25",
       "id": "page_landingroute",
-      "community": 0
+      "community": 19
     },
     {
-      "label": "Login()",
+      "label": "requestCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L32",
-      "id": "page_login",
-      "community": 0
+      "source_location": "L57",
+      "id": "page_requestcode",
+      "community": 21
+    },
+    {
+      "label": "submitEmail()",
+      "file_type": "code",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L90",
+      "id": "page_submitemail",
+      "community": 21
+    },
+    {
+      "label": "submitCode()",
+      "file_type": "code",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L124",
+      "id": "page_submitcode",
+      "community": 19
     },
     {
       "label": "PacketDemo.tsx",
@@ -585,7 +641,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L1",
       "id": "herobackdrop",
-      "community": 15
+      "community": 16
     },
     {
       "label": "onMove()",
@@ -593,7 +649,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L52",
       "id": "herobackdrop_onmove",
-      "community": 15
+      "community": 16
     },
     {
       "label": "tick()",
@@ -601,7 +657,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L59",
       "id": "herobackdrop_tick",
-      "community": 15
+      "community": 16
     },
     {
       "label": "Motion.tsx",
@@ -609,7 +665,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L1",
       "id": "motion",
-      "community": 16
+      "community": 17
     },
     {
       "label": "Reveal()",
@@ -617,7 +673,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L9",
       "id": "motion_reveal",
-      "community": 16
+      "community": 17
     },
     {
       "label": "CountUp()",
@@ -625,7 +681,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L69",
       "id": "motion_countup",
-      "community": 16
+      "community": 17
     },
     {
       "label": "OutreachDemo.tsx",
@@ -793,7 +849,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 23
+      "community": 27
     },
     {
       "label": "BRoll()",
@@ -801,7 +857,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 23
+      "community": 27
     },
     {
       "label": "SmoothScroll.tsx",
@@ -809,7 +865,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L1",
       "id": "smoothscroll",
-      "community": 21
+      "community": 25
     },
     {
       "label": "SmoothScroll()",
@@ -817,7 +873,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L11",
       "id": "smoothscroll_smoothscroll",
-      "community": 21
+      "community": 25
     },
     {
       "label": "paperRollEngine.js",
@@ -841,7 +897,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L1",
       "id": "cinematicpage",
-      "community": 19
+      "community": 24
     },
     {
       "label": "CinematicPage()",
@@ -849,7 +905,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L38",
       "id": "cinematicpage_cinematicpage",
-      "community": 19
+      "community": 24
     },
     {
       "label": "Wash.tsx",
@@ -857,7 +913,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L1",
       "id": "wash",
-      "community": 20
+      "community": 18
     },
     {
       "label": "Wash()",
@@ -865,7 +921,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L14",
       "id": "wash_wash",
-      "community": 20
+      "community": 18
     },
     {
       "label": "steps.tsx",
@@ -1801,7 +1857,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/privacy/page.tsx",
-      "source_location": "L11",
+      "source_location": "L12",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_section",
@@ -2314,10 +2370,34 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L11",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "googlesigninbutton",
+      "source": "page",
+      "target": "googlesigninbutton",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "google_session",
+      "source": "page",
+      "target": "google_session",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L23",
+      "source_location": "L25",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_landingroute",
@@ -2329,12 +2409,36 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L32",
+      "source_location": "L57",
       "weight": 1.0,
       "_src": "page",
-      "_tgt": "page_login",
+      "_tgt": "page_requestcode",
       "source": "page",
-      "target": "page_login",
+      "target": "page_requestcode",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L90",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_submitemail",
+      "source": "page",
+      "target": "page_submitemail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L124",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_submitcode",
+      "source": "page",
+      "target": "page_submitcode",
       "confidence_score": 1.0
     },
     {
@@ -2575,6 +2679,66 @@
       "_tgt": "errors_verifycodeerror",
       "source": "errors",
       "target": "errors_verifycodeerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/errors.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "_src": "errors",
+      "_tgt": "errors_googlesigninerror",
+      "source": "errors",
+      "target": "errors_googlesigninerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/GoogleSignInButton.tsx",
+      "source_location": "L44",
+      "weight": 1.0,
+      "_src": "googlesigninbutton",
+      "_tgt": "googlesigninbutton_googlesigninbutton",
+      "source": "googlesigninbutton",
+      "target": "googlesigninbutton_googlesigninbutton",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/google-session.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_src": "google_session",
+      "_tgt": "google_session_completegooglesession",
+      "source": "google_session",
+      "target": "google_session_completegooglesession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L137",
+      "weight": 1.0,
+      "_src": "page_submitcode",
+      "_tgt": "page_landingroute",
+      "source": "page_landingroute",
+      "target": "page_submitcode",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L93",
+      "weight": 1.0,
+      "_src": "page_submitemail",
+      "_tgt": "page_requestcode",
+      "source": "page_requestcode",
+      "target": "page_submitemail",
       "confidence_score": 1.0
     },
     {
