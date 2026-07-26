@@ -53,14 +53,26 @@ npm run dev     # localhost:3000
 npm run build   # always run before shipping; trust it over the preview
 ```
 
+Google sign-in uses the checked-in public OAuth web client ID by default. Either
+deployment can override it when rotating the client:
+
+```env
+# Website project
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+
+# Backend project
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+Add `https://trylitos.com` and the Vercel preview origin to that client's authorized JavaScript origins.
+
 Registered launch configs (vault `.claude/launch.json`):
 `litos-website` (dev, :3500) and `litos-website-prod`
 (build + start, :3501).
 
-## Deploy (manual, auto-deploy is broken)
+## Deploy
 
-`git push` does NOT deploy. The GitHub Action's `VERCEL_TOKEN` secret is
-invalid (since 2026-07-05). After pushing:
+Deploy the website from its Vercel project after merging to `main`:
 
 ```bash
 npx vercel deploy --prod --yes
@@ -75,5 +87,3 @@ then verify the live HTML actually changed (curl for a new string).
   toggle but in-app upgrades only know the $49.99/mo link.
 - Publish the prepared Litos name, copy, icon, and screenshots to the existing
   Chrome Web Store listing.
-- Replace the GitHub Action token (or install the Vercel GitHub App) to
-  restore auto-deploy.

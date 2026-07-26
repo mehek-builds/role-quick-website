@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { requestCodeError, verifyCodeError } from "./errors.ts";
+import { googleSignInError, requestCodeError, verifyCodeError } from "./errors.ts";
 
 test("a verification provider outage never exposes backend error tokens", () => {
   const message = requestCodeError(503, "verification_unavailable");
@@ -45,5 +45,20 @@ test("unknown backend failures never leak implementation details", () => {
   assert.equal(
     verifyCodeError(500, "JWT_SIGNING_SECRET not configured"),
     "That code did not work. Request a new one.",
+  );
+});
+
+test("Google sign-in errors provide safe recovery paths", () => {
+  assert.equal(
+    googleSignInError(409, "google_email_requires_verification"),
+    "For this Google account, confirm your address with an email code instead.",
+  );
+  assert.equal(
+    googleSignInError(503, "google_auth_unavailable"),
+    "Google sign-in is temporarily unavailable. Continue with email.",
+  );
+  assert.equal(
+    googleSignInError(500, "database details"),
+    "Could not sign in with Google. Try again or continue with email.",
   );
 });

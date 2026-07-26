@@ -235,6 +235,20 @@ html {
   100% { transform: translate(0, 0); }
 }
 
+@media (max-width: 639px) {
+  .dashboard-shell main button,
+  .dashboard-shell main select,
+  .dashboard-shell main input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+    min-height: 44px;
+  }
+
+  .dashboard-shell main a.rounded-full {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;

@@ -27,3 +27,17 @@ export function verifyCodeError(status: number, error?: unknown): string {
 
   return "That code did not work. Request a new one.";
 }
+
+export function googleSignInError(status: number, error?: unknown): string {
+  if (status === 409 && error === "google_email_requires_verification") {
+    return "For this Google account, confirm your address with an email code instead.";
+  }
+  if (status === 503 && error === "google_auth_unavailable") {
+    return "Google sign-in is temporarily unavailable. Continue with email.";
+  }
+  if (status === 401 || error === "invalid_google_credential") {
+    return "Google could not verify this sign-in. Try again.";
+  }
+  if (status === 429) return "Too many sign-in attempts. Wait a moment and try again.";
+  return "Could not sign in with Google. Try again or continue with email.";
+}

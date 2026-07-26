@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   api,
   ApplicationProfile,
+  clearSession,
   createEmailConnection,
   disconnectEmailConnection,
   type EmailConnectionsResponse,
@@ -11,10 +13,9 @@ import {
   getEmailConnections,
   getOnboardingState,
   Me,
-  setAutomaticVerification,
+  setAutomationSettings,
 } from "@/lib/api";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
-import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -28,17 +29,20 @@ const TRI = [
 ];
 
 export default function Settings() {
+  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  const [automaticVerification, setAutomaticVerificationState] = useState<boolean | null>(null);
-  const [savingVerification, setSavingVerification] = useState(false);
+  const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
+  const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
+  const [savingAutomation, setSavingAutomation] = useState(false);
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
-  const [loadedAt, setLoadedAt] = useState(0);
+  const [mountedAt] = useState(() => Date.now());
+  const [dataBusy, setDataBusy] = useState<"export" | "delete" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,9 +65,9 @@ export default function Settings() {
         }
         if (cancelled) return;
         setMe(meRes);
-        setLoadedAt(Date.now());
         setProfile(profileRes);
-        setAutomaticVerificationState(onboardingRes.automatic_verification_enabled);
+        setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
+        setAutomaticVerification(onboardingRes.automatic_verification_enabled);
         setEmailConnections(connectionRes);
         if (callbackProvider && callbackStatus) {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
@@ -89,6 +93,27 @@ export default function Settings() {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
   }
 
+  async function saveAutomation(patch: Partial<{ automatic_submission_enabled: boolean; automatic_verification_enabled: boolean }>) {
+    if (automaticSubmission === null || automaticVerification === null) return;
+    const previousSubmission = automaticSubmission;
+    const previousVerification = automaticVerification;
+    if (patch.automatic_submission_enabled !== undefined) setAutomaticSubmission(patch.automatic_submission_enabled);
+    if (patch.automatic_verification_enabled !== undefined) setAutomaticVerification(patch.automatic_verification_enabled);
+    setSavingAutomation(true);
+    setError(null);
+    try {
+      const result = await setAutomationSettings(patch);
+      setAutomaticSubmission(result.automatic_submission_enabled);
+      setAutomaticVerification(result.automatic_verification_enabled);
+    } catch (err) {
+      setAutomaticSubmission(previousSubmission);
+      setAutomaticVerification(previousVerification);
+      setError(err instanceof Error ? err.message : "Could not update automation permissions.");
+    } finally {
+      setSavingAutomation(false);
+    }
+  }
+
   async function save() {
     if (!profile) return;
     setSaving(true);
@@ -111,22 +136,6 @@ export default function Settings() {
       setError(err instanceof Error ? err.message : "Could not save.");
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function changeAutomaticVerification(enabled: boolean) {
-    const previous = automaticVerification;
-    setAutomaticVerificationState(enabled);
-    setSavingVerification(true);
-    setError(null);
-    try {
-      const result = await setAutomaticVerification(enabled);
-      setAutomaticVerificationState(result.automatic_verification_enabled);
-    } catch (err) {
-      setAutomaticVerificationState(previous);
-      setError(err instanceof Error ? err.message : "Could not update verification permission.");
-    } finally {
-      setSavingVerification(false);
     }
   }
 
@@ -158,8 +167,49 @@ export default function Settings() {
     }
   }
 
+  async function exportAccount() {
+    setDataBusy("export");
+    setError(null);
+    try {
+      const account = await api<Record<string, unknown>>("/account/export");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(account, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `litos-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not export your data.");
+    } finally {
+      setDataBusy(null);
+    }
+  }
+
+  async function deleteAccount() {
+    if (!me?.email) {
+      setError("Save this guest workspace with an email before deleting the account.");
+      return;
+    }
+    const confirmation = window.prompt(`Type ${me.email} to delete your account.`);
+    if (!me || confirmation === null) return;
+    if (confirmation.trim().toLowerCase() !== me.email.toLowerCase()) {
+      setError("Email did not match. Nothing was deleted.");
+      return;
+    }
+    setDataBusy("delete");
+    setError(null);
+    try {
+      await api("/account", { method: "DELETE", body: JSON.stringify({ confirm_email: me.email }) });
+      clearSession();
+      router.replace("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete your account.");
+      setDataBusy(null);
+    }
+  }
+
   if (error && !profile) return <ErrorNote message={error} />;
-  if (!me || profile === null || automaticVerification === null || emailConnections === null)
+  if (!me || profile === null || automaticSubmission === null || automaticVerification === null || emailConnections === null)
     return (
       <div className="space-y-6">
         <div className="rq-shimmer h-8 w-48 rounded-full" />
@@ -168,7 +218,7 @@ export default function Settings() {
     );
 
   const trialActive =
-    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > loadedAt;
+    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
 
   return (
     <div className="space-y-8">
@@ -188,7 +238,10 @@ export default function Settings() {
 
       {/* Account */}
       <Card className="p-6">
-        <h2 className="text-base font-medium text-ink">Account</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-base font-medium text-ink">Account</h2>
+          <button type="button" onClick={() => { clearSession(); router.replace("/"); }} className="min-h-11 px-2 text-sm text-muted hover:text-ink">Sign out</button>
+        </div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-faint">Email</p>
@@ -238,27 +291,19 @@ export default function Settings() {
       </Card>
 
       <Card className="p-6">
-        <div className="flex items-start justify-between gap-6">
-          <div>
-            <h2 className="text-base font-medium text-ink">Application verification</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted">
-              With your permission, Litos can use your connected Gmail or Outlook account to find verification codes related to an active application. Codes are used only for that application and are not saved.
-            </p>
-            <p className="mt-2 text-xs leading-5 text-faint">
-              Connect Gmail or Outlook above. Authentication is handled by Composio. CAPTCHA and unsupported verification steps still pause for you in the secure browser.
-            </p>
-          </div>
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              checked={automaticVerification}
-              disabled={savingVerification}
-              onChange={(event) => void changeAutomaticVerification(event.target.checked)}
-              className="size-4 accent-[#6b84e8]"
-            />
-            {savingVerification ? "Saving..." : "Allowed"}
+        <h2 className="text-base font-medium text-ink">Application automation</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">These permissions are separate and can be revoked at any time. A revocation is checked again before a final portal submission.</p>
+        <div className="mt-5 space-y-4">
+          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+            <span><span className="block text-sm font-medium text-ink">Automatic submission</span><span className="mt-1 block text-xs leading-5 text-muted">Submit applications you start when all answers are supported and the portal has no safety blocker.</span></span>
+            <input aria-label="Automatic submission" type="checkbox" checked={automaticSubmission} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
+          </label>
+          <label className="flex items-start justify-between gap-5 rounded-[14px] border border-border p-4">
+            <span><span className="block text-sm font-medium text-ink">Application verification codes</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
+            <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
         </div>
+        <p className="mt-4 text-xs leading-5 text-faint">Litos still pauses for missing or contradictory facts, sensitive attestations, CAPTCHA, unsupported portal behavior, and uncertain confirmation.</p>
       </Card>
 
       {/* Application profile */}
@@ -330,11 +375,6 @@ export default function Settings() {
         </p>
       </Card>
 
-      {/* What they're going after. Set at /start (categories and type at step 00, the rest at
-          step 05) and, before this, editable nowhere - a student finished onboarding and could
-          never change their own targeting again. */}
-      <TargetingCard />
-
       {/* Plan + usage */}
       <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
@@ -343,7 +383,7 @@ export default function Settings() {
           <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
-        {me.upgrade_url ? (
+        {me.upgrade_url && !trialActive ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
               <span className="font-medium text-ink">Pro covers 500 jobs a month. </span>
@@ -351,7 +391,12 @@ export default function Settings() {
               the billing portal linked in your receipt email.
             </p>
             <a
-              href={me.upgrade_url}
+              href={me.is_guest ? "/login?claim=1&next=upgrade" : me.upgrade_url}
+              onClick={() => {
+                if (me.is_guest && me.upgrade_url) {
+                  window.sessionStorage.setItem("litos_pending_upgrade_url", me.upgrade_url);
+                }
+              }}
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Upgrade to Pro
@@ -369,19 +414,12 @@ export default function Settings() {
       {/* Data */}
       <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Your data</h2>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Export or delete everything Litos stores about you by emailing{" "}
-          <a href="mailto:mehekman@usc.edu" className="text-ink underline">
-            mehekman@usc.edu
-          </a>{" "}
-          from your account address. Deletion removes your account, profile,
-          experience bank, saved application details, drafts, autofill history,
-          and every resume we generated for you, including the files. See{" "}
-          <a href="/privacy" className="text-ink underline">
-            Privacy
-          </a>{" "}
-          for what that covers and the one thing it does not.
-        </p>
+        <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
+        <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
+          <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
+          <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
+          <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
+        </div>
       </Card>
     </div>
   );

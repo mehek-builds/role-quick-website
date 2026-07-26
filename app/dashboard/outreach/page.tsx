@@ -65,10 +65,7 @@ export default function Outreach() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">Outreach</h1>
-        <p className="mt-1 text-sm text-muted">
-          Every contact Litos found and every draft it wrote. Sending
-          always happens from your own Gmail, never from here.
-        </p>
+        <p className="mt-1 text-sm text-muted">Drafts, sends, and replies.</p>
       </div>
 
       <div className="flex flex-wrap gap-2">

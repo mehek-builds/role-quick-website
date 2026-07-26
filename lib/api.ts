@@ -229,6 +229,12 @@ export type ApplicationReview = {
   attention_reason?: string;
   handoff_expires_at?: string;
   final_approved_at?: string;
+  submission_authorization?: {
+    source: "standing_consent" | "per_application_approval";
+    authorized_at: string;
+    consented_at?: string;
+    consent_version?: string;
+  };
   submission_authorized_at?: string;
   cover_letter_supported?: boolean;
   submission_claimed_at?: string;
@@ -308,6 +314,9 @@ export type OnboardingState = {
   learned: string[];
   gaps: string[];
   harvest_active: boolean;
+  automatic_submission_enabled: boolean;
+  automatic_submission_consented_at: string | null;
+  automatic_submission_consent_version: string | null;
   automatic_verification_enabled: boolean;
 };
 
@@ -325,17 +334,22 @@ export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
 }
 
-export function completeOnboarding(automaticVerificationEnabled: boolean) {
-  return api<{ ok: true; automatic_verification_enabled: boolean }>("/onboarding/complete", {
+export type AutomationSettings = {
+  automatic_submission_enabled: boolean;
+  automatic_verification_enabled: boolean;
+};
+
+export function completeOnboarding(settings: AutomationSettings) {
+  return api<{ ok: true } & AutomationSettings>("/onboarding/complete", {
     method: "POST",
-    body: JSON.stringify({ automatic_verification_enabled: automaticVerificationEnabled }),
+    body: JSON.stringify(settings),
   });
 }
 
-export function setAutomaticVerification(enabled: boolean) {
-  return api<{ automatic_verification_enabled: boolean }>("/onboarding/automation", {
+export function setAutomationSettings(settings: Partial<AutomationSettings>) {
+  return api<AutomationSettings & { automatic_submission_consent_version: string | null }>("/onboarding/automation", {
     method: "PUT",
-    body: JSON.stringify({ automatic_verification_enabled: enabled }),
+    body: JSON.stringify(settings),
   });
 }
 
