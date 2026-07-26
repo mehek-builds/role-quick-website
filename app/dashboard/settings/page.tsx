@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   api,
   ApplicationProfile,
+  clearSession,
   createEmailConnection,
   disconnectEmailConnection,
   type EmailConnectionsResponse,
@@ -14,7 +16,6 @@ import {
   setAutomationSettings,
 } from "@/lib/api";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
-import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -28,6 +29,7 @@ const TRI = [
 ];
 
 export default function Settings() {
+  const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,8 @@ export default function Settings() {
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
+  const [mountedAt] = useState(() => Date.now());
+  const [dataBusy, setDataBusy] = useState<"export" | "delete" | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -163,6 +167,43 @@ export default function Settings() {
     }
   }
 
+  async function exportAccount() {
+    setDataBusy("export");
+    setError(null);
+    try {
+      const account = await api<Record<string, unknown>>("/account/export");
+      const url = URL.createObjectURL(new Blob([JSON.stringify(account, null, 2)], { type: "application/json" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `litos-export-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not export your data.");
+    } finally {
+      setDataBusy(null);
+    }
+  }
+
+  async function deleteAccount() {
+    const confirmation = window.prompt(`Type ${me?.email ?? "your email"} to delete your account.`);
+    if (!me || confirmation === null) return;
+    if (confirmation.trim().toLowerCase() !== me.email.toLowerCase()) {
+      setError("Email did not match. Nothing was deleted.");
+      return;
+    }
+    setDataBusy("delete");
+    setError(null);
+    try {
+      await api("/account", { method: "DELETE", body: JSON.stringify({ confirm_email: me.email }) });
+      clearSession();
+      router.replace("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete your account.");
+      setDataBusy(null);
+    }
+  }
+
   if (error && !profile) return <ErrorNote message={error} />;
   if (!me || profile === null || automaticSubmission === null || automaticVerification === null || emailConnections === null)
     return (
@@ -173,7 +214,7 @@ export default function Settings() {
     );
 
   const trialActive =
-    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > Date.now();
+    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
 
   return (
     <div className="space-y-8">
@@ -193,7 +234,10 @@ export default function Settings() {
 
       {/* Account */}
       <Card className="p-6">
-        <h2 className="text-base font-medium text-ink">Account</h2>
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-base font-medium text-ink">Account</h2>
+          <button type="button" onClick={() => { clearSession(); router.replace("/"); }} className="min-h-11 px-2 text-sm text-muted hover:text-ink">Sign out</button>
+        </div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-faint">Email</p>
@@ -327,11 +371,6 @@ export default function Settings() {
         </p>
       </Card>
 
-      {/* What they're going after. Set at /start (categories and type at step 00, the rest at
-          step 05) and, before this, editable nowhere - a student finished onboarding and could
-          never change their own targeting again. */}
-      <TargetingCard />
-
       {/* Plan + usage */}
       <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
@@ -366,19 +405,12 @@ export default function Settings() {
       {/* Data */}
       <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Your data</h2>
-        <p className="mt-2 text-sm leading-6 text-muted">
-          Export or delete everything Litos stores about you by emailing{" "}
-          <a href="mailto:mehekman@usc.edu" className="text-ink underline">
-            mehekman@usc.edu
-          </a>{" "}
-          from your account address. Deletion removes your account, profile,
-          experience bank, saved application details, drafts, autofill history,
-          and every resume we generated for you, including the files. See{" "}
-          <a href="/privacy" className="text-ink underline">
-            Privacy
-          </a>{" "}
-          for what that covers and the one thing it does not.
-        </p>
+        <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
+        <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
+          <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
+          <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
+          <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
+        </div>
       </Card>
     </div>
   );

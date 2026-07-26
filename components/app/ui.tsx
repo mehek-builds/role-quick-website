@@ -3,7 +3,7 @@
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
 /* Shared in-app primitives, per brand deck sections 04 (shape/surface) and 07
-   (review view): 20px cards, pill chips, shimmer loading, match-score ring.
+   (review view): quiet surfaces, pill chips, shimmer loading, match-score ring.
    Color encodes what something is (pillar), never how urgently to act. */
 
 export function Card({
@@ -14,7 +14,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-[20px] border border-border bg-surface ${className}`}>
+    <div className={`rounded-[12px] border border-border bg-surface ${className}`}>
       {children}
     </div>
   );
@@ -154,9 +154,9 @@ export function LoadingOrb({
 
 export function ShimmerRows({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="space-y-3">
+    <div className="divide-y divide-border border-y border-border">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="rq-shimmer h-16 rounded-[20px]" />
+        <div key={i} className="rq-shimmer h-16" />
       ))}
     </div>
   );
@@ -172,11 +172,11 @@ export function EmptyState({
   children?: React.ReactNode;
 }) {
   return (
-    <Card className="p-10 text-center">
+    <div className="border-y border-border py-10 text-center">
       <h3 className="text-base font-medium text-ink">{title}</h3>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">{body}</p>
       {children && <div className="mt-6 flex justify-center">{children}</div>}
-    </Card>
+    </div>
   );
 }
 

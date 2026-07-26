@@ -74,7 +74,7 @@ test("terminal and blocked states outrank the submitting screen", () => {
   // status that needs the user: this is the approval boundary's own label.
   assert.equal(statusLabel(true, "needs_attention"), "Needs attention");
   assert.equal(statusLabel(true, "ready_for_final_approval"), "Continue submission");
-  assert.equal(statusLabel(true, "failed"), "Stopped safely");
+  assert.equal(statusLabel(true, "failed"), "Needs attention");
   assert.equal(statusLabel(true, "submitted"), "Submitted");
 });
 

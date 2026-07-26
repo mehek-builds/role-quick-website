@@ -19,6 +19,8 @@ import { explicitTerms, mergeDiscoveredQuestions, normalizedTerms, portalName, r
 import { packetMatchesJob } from "@/lib/daily-matches";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
+type ApplicationFilter = "all" | "action" | "ready" | "submitted";
+type ApplicationSort = "recent" | "company";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean };
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
@@ -61,6 +63,8 @@ export default function Applications() {
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>("all");
+  const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const moveToScreen = useCallback((next: Screen) => {
     setScreen((current) => {
@@ -225,6 +229,18 @@ export default function Applications() {
   const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
   const review = selected?.spec._review;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
+  const visiblePackets = useMemo(() => {
+    const filtered = reviewablePackets.filter((packet) => {
+      const status = packet.spec._review?.status;
+      if (applicationFilter === "action") return ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "");
+      if (applicationFilter === "ready") return ["resume_ready", "questions_ready", "ready_to_submit"].includes(status ?? "");
+      if (applicationFilter === "submitted") return status === "submitted";
+      return true;
+    });
+    return [...filtered].sort((a, b) => applicationSort === "company"
+      ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
+      : packetTimestamp(b).localeCompare(packetTimestamp(a)));
+  }, [applicationFilter, applicationSort, reviewablePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
@@ -537,9 +553,8 @@ export default function Applications() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Applications</p>
-          <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">Review. Approve. Track.</h1>
-          <p className="mt-2 text-sm text-muted">Every application, from tailored packet to receipt.</p>
+          <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Applications</h1>
+          <p className="mt-1 text-sm text-muted">Review and track.</p>
         </div>
         <div className="flex items-center gap-2">
           {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
@@ -562,60 +577,58 @@ export default function Applications() {
         />
       )}
       {legacyCount > 0 && (
-        <p className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-muted">
-          {legacyCount} older resume{legacyCount === 1 ? "" : "s"} stay in your history, but cannot show a job-description diff because they were created before review packets stored the posting text.
+        <p className="border-y border-border py-3 text-sm text-muted">
+          {legacyCount} saved resume{legacyCount === 1 ? "" : "s"} · Add a job URL to turn one into a reviewable application.
         </p>
       )}
 
-      {/* Rendered above the screen branch, not inside the review branch. Previously a portal run
-          unmounted the switcher, so the user lost access to every other application for the minutes
-          the run took. The run lives on the server, so switching away does not stop it, but the
-          user must be able to find their way back: each chip carries its own status, so a packet
-          mid-run is identifiable rather than lost among the others. */}
       {selected && reviewablePackets.length > 1 && (
-        <section>
-          <div className="mb-2 hidden items-center justify-between sm:flex">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Your applications</p>
-            <span className="font-mono text-[10px] text-faint">{reviewablePackets.length} TOTAL</span>
-          </div>
-          <div className="hidden gap-2 sm:grid sm:grid-cols-2 xl:grid-cols-3">
-          {reviewablePackets.map((packet) => (
-            /* Keep role and company together in each switcher item. The former single-line form was
-               packet.job_context.role} · {packet.job_context.company}, and the regression test uses
-               that source marker to ensure this control remains above the screen branch. */
-            <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex min-w-0 items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left text-xs transition-colors ${applicationCardClasses(packet, packet.id === selected.id)}`}>
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{packet.job_context.role}</span>
-                <span className="mt-0.5 block truncate opacity-65">{packet.job_context.company}</span>
-              </span>
-              {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
-            </button>
-          ))}
-          </div>
-          <details className="rounded-[12px] border border-border bg-surface sm:hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm text-ink">
-              <span>Switch application</span>
-              <span className="font-mono text-[10px] text-faint">{reviewablePackets.length} TOTAL</span>
-            </summary>
-            <div className="grid gap-2 border-t border-border p-2">
-              {reviewablePackets.map((packet) => (
-                <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex min-w-0 items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-xs transition-colors ${applicationCardClasses(packet, packet.id === selected.id)}`}>
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{packet.job_context.role}</span>
-                    <span className="mt-0.5 block truncate opacity-65">{packet.job_context.company}</span>
-                  </span>
-                  {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
-                </button>
-              ))}
+        /* Keep the switcher above every screen branch. Historical marker for the invariant:
+           packet.job_context.role} · {packet.job_context.company} */
+        <section aria-labelledby="application-ledger-heading" className="border-y border-border">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="flex items-baseline gap-2">
+              <h2 id="application-ledger-heading" className="text-sm font-medium text-ink">Applications</h2>
+              <span className="font-mono text-[10px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
             </div>
-          </details>
+            <div className="flex gap-2">
+              <label className="sr-only" htmlFor="application-filter">Filter applications</label>
+              <select id="application-filter" value={applicationFilter} onChange={(event) => setApplicationFilter(event.target.value as ApplicationFilter)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
+                <option value="all">All states</option>
+                <option value="action">Needs action</option>
+                <option value="ready">Ready</option>
+                <option value="submitted">Submitted</option>
+              </select>
+              <label className="sr-only" htmlFor="application-sort">Sort applications</label>
+              <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
+                <option value="recent">Recent first</option>
+                <option value="company">Company A-Z</option>
+              </select>
+            </div>
+          </div>
+          <div className="max-h-72 overflow-y-auto border-t border-border">
+            {visiblePackets.length === 0 ? (
+              <p className="py-5 text-sm text-muted">No applications in this view.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {visiblePackets.map((packet) => (
+                  <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
+                    <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
+                    <time className="hidden font-mono text-[10px] text-faint sm:block">{formatDate(packetTimestamp(packet))}</time>
+                    {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       )}
 
       {packets === null ? (
         <ShimmerRows rows={4} />
       ) : reviewablePackets.length === 0 ? (
-        <EmptyState title="No review packets yet" body="Start a new application with the job URL and description. Litos will generate the tailored resume in the backend and open the side-by-side review here.">
+        <EmptyState title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to create your first reviewable application." : "Add a job URL. Litos will prepare the resume and review."}>
           <button type="button" onClick={() => setShowNewApplication(true)} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Start an application</button>
         </EmptyState>
       ) : !selected || !spec || !review ? (
@@ -740,6 +753,10 @@ function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; tit
       <div className="max-h-[760px] overflow-y-auto p-6">{children}</div>
     </section>
   );
+}
+
+function packetTimestamp(packet: GeneratedResume): string {
+  return packet.spec._review?.updated_at ?? packet.created_at ?? "";
 }
 
 function NewApplicationPanel({
