@@ -356,7 +356,7 @@ export default function Home() {
               Every feature, free, every month.
             </h2>
             <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
-              Free covers 20 jobs a month, resetting on the 1st. Pro covers 500.
+              Free covers 20 resumes a month, resetting on the 1st. Pro covers 1,000.
             </p>
             <PricingCards />
           </Reveal>

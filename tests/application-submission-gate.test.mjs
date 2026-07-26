@@ -53,6 +53,18 @@ test("overview keeps three application states and reviews matches in a right-sid
   assert.match(styles, /dashboard-drawer-in/);
 });
 
+test("every paid-plan surface states the 1,000-resume allowance", async () => {
+  const pricing = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const cards = await readFile(new URL("../components/PricingCards.tsx", import.meta.url), "utf8");
+  const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
+  const paidCopy = `${pricing}\n${cards}\n${settings}`;
+
+  assert.doesNotMatch(paidCopy, /Pro covers 500|Unlimited resumes/);
+  assert.match(pricing, /Pro covers 1,000/);
+  assert.match(cards, /1,000 tailored resumes \/ mo/);
+  assert.match(settings, /Pro covers 1,000 resumes a month/);
+});
+
 test("automation settings send field-specific updates so stale clients cannot restore another permission", async () => {
   const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
