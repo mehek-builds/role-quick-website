@@ -26,6 +26,33 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
+test("overview keeps three application states and reviews matches in a right-side drawer", async () => {
+  const overview = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
+  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(overview, /label="Ready"/);
+  assert.match(overview, /label="Needs action"/);
+  assert.match(overview, /label="Submitted"/);
+  assert.doesNotMatch(overview, /label="Prepared"/);
+  assert.doesNotMatch(overview, /Recent activity/);
+  assert.doesNotMatch(overview, /Daily resume preparation/);
+  assert.match(overview, /MONTHLY_PRO_APPLICATION_LIMIT = 1_000/);
+  assert.match(overview, /return me\.usage\.resumes\.limit/);
+  assert.match(overview, /role="dialog"/);
+  assert.match(overview, /Job description/);
+  assert.match(overview, /Tailored resume/);
+  assert.match(overview, /Submit application/);
+  assert.match(overview, /\/submit-request/);
+  assert.match(overview, /\/submission`/);
+  assert.match(overview, /window\.setTimeout\(tick, 2_500\)/);
+  assert.match(overview, /reviewTriggerRef\.current\?\.focus\(\)/);
+  assert.match(overview, /closeButtonRef\.current\?\.focus\(\)/);
+  assert.match(overview, /onKeyDown=\{containFocus\}/);
+  assert.match(overview, /preparationFailed \? "Retry"/);
+  assert.match(overview, /activeReviewJobIdRef\.current === submittedJobId/);
+  assert.match(styles, /dashboard-drawer-in/);
+});
+
 test("automation settings send field-specific updates so stale clients cannot restore another permission", async () => {
   const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
