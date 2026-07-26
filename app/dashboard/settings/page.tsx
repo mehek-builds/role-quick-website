@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   api,
@@ -22,6 +22,7 @@ import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { API_URL } from "@/lib/config";
 import { passwordFormProblem } from "@/app/login/password-form";
+import { updatePasswordSession } from "@/app/login/password-session";
 import { litosClientHeaders } from "@/lib/product";
 
 /* Application profile: exactly the fields the backend encrypts and the
@@ -56,6 +57,8 @@ export default function Settings() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const passwordErrorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -213,43 +216,44 @@ export default function Settings() {
 
   async function changePassword(event: React.FormEvent) {
     event.preventDefault();
+    const reportPasswordError = (message: string) => {
+      setPasswordError(message);
+      queueMicrotask(() => passwordErrorRef.current?.focus());
+    };
     const passwordProblem = passwordFormProblem(newPassword, confirmPassword);
     if (passwordProblem) {
-      setError(passwordProblem);
+      reportPasswordError(passwordProblem);
       return;
     }
     setPasswordBusy(true);
     setPasswordNotice(null);
-    setError(null);
+    setPasswordError(null);
     try {
-      const res = await fetch(`${API_URL}/auth/password`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${getToken() ?? ""}`,
-          ...litosClientHeaders(),
-        },
-        body: JSON.stringify({
-          password: newPassword,
-          ...(currentPassword ? { current_password: currentPassword } : {}),
-        }),
+      const result = await updatePasswordSession({
+        apiUrl: API_URL,
+        token: getToken() ?? "",
+        password: newPassword,
+        currentPassword,
+        headers: litosClientHeaders(),
       });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.token) {
-        if (data?.code === "recent_verification_required") {
-          setError("Verify your email from the sign-in page, then choose a password.");
-        } else {
-          setError(data?.error ?? "Could not update your password.");
-        }
+      if (result.kind === "recovery_required") {
+        clearSession();
+        router.replace("/login?flow=recovery&reason=password-state");
         return;
       }
-      setSession(data.token, data.email ?? me?.email ?? null);
+      if (result.kind === "rejected") {
+        reportPasswordError(result.code === "recent_verification_required"
+          ? "Verify your email from the sign-in page, then choose a password."
+          : result.error);
+        return;
+      }
+      setSession(result.token, result.email ?? me?.email ?? null);
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
       setPasswordNotice("Password updated. Older sessions have been signed out.");
     } catch {
-      setError("Network error. Check your connection and try again.");
+      reportPasswordError("Could not confirm the password update. Verify your email and try again.");
     } finally {
       setPasswordBusy(false);
     }
@@ -369,7 +373,7 @@ export default function Settings() {
                 type="password"
                 autoComplete="current-password"
                 value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
+                onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
                 placeholder="Current password"
                 aria-label="Current password"
                 className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
@@ -377,11 +381,9 @@ export default function Settings() {
               <input
                 type="password"
                 required
-                minLength={15}
-                maxLength={128}
                 autoComplete="new-password"
                 value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
+                onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
                 placeholder="New password"
                 aria-label="New password"
                 className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
@@ -389,16 +391,25 @@ export default function Settings() {
               <input
                 type="password"
                 required
-                minLength={15}
-                maxLength={128}
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
                 placeholder="Confirm new password"
                 aria-label="Confirm new password"
                 className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
               />
             </div>
+            {passwordError && (
+              <p
+                ref={passwordErrorRef}
+                tabIndex={-1}
+                className="mt-3 text-sm text-danger outline-none"
+                role="alert"
+                aria-live="assertive"
+              >
+                {passwordError}
+              </p>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-4">
               <button type="submit" disabled={passwordBusy} className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
                 {passwordBusy ? "Updating..." : "Update password"}

@@ -11,6 +11,7 @@ test("password form enforces the API length boundaries", () => {
 
 test("password form counts normalized Unicode and requires confirmation", () => {
   const decomposed = "Cafe\u0301 private phrase";
-  assert.equal(passwordFormProblem(decomposed, decomposed), null);
+  const composed = "Caf\u00e9 private phrase";
+  assert.equal(passwordFormProblem(decomposed, composed), null);
   assert.equal(passwordFormProblem(decomposed, "different private phrase"), "Passwords do not match.");
 });

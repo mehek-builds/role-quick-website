@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import {
   setSession,
+  clearSession,
   getToken,
   getOnboardingState,
   getOrCreateGuestKey,
@@ -19,6 +20,7 @@ import { PendingLabel } from "@/components/app/ui";
 import { GoogleSignInButton } from "./GoogleSignInButton";
 import { completeGoogleSession } from "./google-session";
 import { passwordFormProblem } from "./password-form";
+import { updatePasswordSession } from "./password-session";
 
 type Step = "credentials" | "code" | "new-password";
 type Flow = "signin" | "signup" | "recovery" | "email-code";
@@ -58,6 +60,7 @@ export default function Login() {
   useEffect(() => {
     const claiming = new URLSearchParams(window.location.search).get("claim") === "1";
     const requestedFlow = new URLSearchParams(window.location.search).get("flow");
+    const reason = new URLSearchParams(window.location.search).get("reason");
     if (getToken() && !claiming) {
       void landingRoute().then((r) => router.replace(r));
       return;
@@ -66,6 +69,9 @@ export default function Login() {
       setClaimMode(claiming);
       if (claiming) setFlow("email-code");
       else if (requestedFlow === "recovery") setFlow("recovery");
+      if (reason === "password-state") {
+        setError("Your password may have changed, but the confirmation was interrupted. Verify your email to recover access safely.");
+      }
       setGuestEligible(!hasLitosHistory());
     });
   }, [router]);
@@ -150,24 +156,39 @@ export default function Login() {
     }
   }
 
-  async function setVerifiedPassword(token: string, newPassword: string): Promise<boolean> {
-    const res = await fetch(`${API_URL}/auth/password`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        ...litosClientHeaders(),
-      },
-      body: JSON.stringify({ password: newPassword }),
+  function enterPasswordRecovery() {
+    clearSession();
+    setVerificationToken(null);
+    setPassword("");
+    setConfirmPassword("");
+    setCode("");
+    setFlow("recovery");
+    setStep("credentials");
+    setError("Your password may have changed, but the confirmation was interrupted. Verify your email to recover access safely.");
+    router.replace("/login?flow=recovery&reason=password-state");
+  }
+
+  async function setVerifiedPassword(
+    token: string,
+    newPassword: string,
+  ): Promise<"success" | "rejected" | "recovery_required"> {
+    const result = await updatePasswordSession({
+      apiUrl: API_URL,
+      token,
+      password: newPassword,
+      headers: litosClientHeaders(),
     });
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.token) {
-      setError(data?.error ?? "Could not save your password.");
-      return false;
+    if (result.kind === "recovery_required") {
+      enterPasswordRecovery();
+      return "recovery_required";
     }
-    setSession(data.token, email.trim().toLowerCase());
+    if (result.kind === "rejected") {
+      setError(result.error);
+      return "rejected";
+    }
+    setSession(result.token, result.email ?? email.trim().toLowerCase());
     router.replace(await landingRoute());
-    return true;
+    return "success";
   }
 
   async function continueAsGuest() {
@@ -238,7 +259,11 @@ export default function Login() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.token) {
         if (flow === "signup") {
-          await setVerifiedPassword(data.token, password);
+          const passwordResult = await setVerifiedPassword(data.token, password);
+          if (passwordResult === "rejected") {
+            setVerificationToken(data.token);
+            setStep("new-password");
+          }
           return;
         }
         if (flow === "recovery") {
@@ -375,8 +400,6 @@ export default function Login() {
                     id="password"
                     type="password"
                     required
-                    minLength={flow === "signup" ? 15 : undefined}
-                    maxLength={128}
                     autoComplete={flow === "signup" ? "new-password" : "current-password"}
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
@@ -393,8 +416,6 @@ export default function Login() {
                     id="confirm-password"
                     type="password"
                     required
-                    minLength={15}
-                    maxLength={128}
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
@@ -535,8 +556,6 @@ export default function Login() {
               id="new-password"
               type="password"
               required
-              minLength={15}
-              maxLength={128}
               autoComplete="new-password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(null); }}
@@ -549,8 +568,6 @@ export default function Login() {
               id="confirm-new-password"
               type="password"
               required
-              minLength={15}
-              maxLength={128}
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
