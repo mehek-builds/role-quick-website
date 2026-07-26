@@ -91,7 +91,7 @@ export function PricingCards() {
               Pro
             </p>
             <span className="rounded-full bg-brand px-2.5 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-white">
-              500 jobs / mo
+              1,000 resumes / mo
             </span>
           </div>
           <p className="mt-4 font-mono text-4xl tracking-[-0.02em] text-ink">
@@ -110,9 +110,9 @@ export function PricingCards() {
           </p>
           <ul className="mt-6 space-y-1">
             <li className="text-[15px] font-medium leading-7 text-ink">
-              Apply to 500 jobs / mo
+              1,000 tailored resumes / mo
             </li>
-            <Line>Unlimited resumes</Line>
+            <Line>Automatic form filling</Line>
             <Line>500 contacts, 1,000 drafts</Line>
             <Line>Cancel anytime, same clicks</Line>
           </ul>

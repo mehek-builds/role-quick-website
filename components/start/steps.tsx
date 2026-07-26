@@ -78,7 +78,7 @@ export function FocusStep({
     <StartShell
       step="focus"
       title="What are you looking for?"
-      sub="Two taps. It aims everything after this, and it's the last thing we ask before we do some work for you."
+      sub="Choose what you want next."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -89,9 +89,13 @@ export function FocusStep({
       )}
 
       <div className="mb-7">
-        <div className="flex items-baseline justify-between">
+        <div className="flex min-h-5 items-baseline justify-between">
           <p className="text-[14px] text-ink">Kind of work</p>
-          <span className="font-mono text-[11px] text-faint">Up to {MAX_CATEGORIES}</span>
+          {categories.length > 0 && (
+            <span className="font-mono text-[11px] text-faint">
+              {categories.length} of {MAX_CATEGORIES} selected
+            </span>
+          )}
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => {
@@ -116,9 +120,13 @@ export function FocusStep({
       </div>
 
       <div className="mb-8">
-        <div className="flex items-baseline justify-between">
+        <div className="flex min-h-5 items-baseline justify-between">
           <p className="text-[14px] text-ink">Type</p>
-          <span className="font-mono text-[11px] text-faint">Up to {MAX_ROLE_TYPES}</span>
+          {roleTypes.length > 0 && (
+            <span className="font-mono text-[11px] text-faint">
+              {roleTypes.length} of {MAX_ROLE_TYPES} selected
+            </span>
+          )}
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
@@ -161,8 +169,12 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function upload(f: File) {
-    if (f.type !== "application/pdf") {
-      setError("That needs to be a PDF. It's the only format we can read reliably.");
+    const isPdf = f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
+    const isDocx =
+      f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      f.name.toLowerCase().endsWith(".docx");
+    if (!isPdf && !isDocx) {
+      setError("Use a PDF or DOCX file.");
       return;
     }
     setError(null);
@@ -237,7 +249,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     <StartShell
       step="resume"
       title="Start with your résumé."
-      sub="We read it once and pull out everything an application asks for. About ten seconds."
+      sub="We pull out the facts applications need."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -257,24 +269,24 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           const f = e.dataTransfer.files?.[0];
           if (f) void upload(f);
         }}
-        className={`cursor-pointer rounded-[12px] border border-dashed border-border bg-surface-alt px-6 py-9 text-center transition-colors hover:border-brand ${
+        className={`flex min-h-28 w-full min-w-0 cursor-pointer items-center justify-between gap-5 rounded-[12px] border border-dashed border-border bg-surface-alt px-5 py-5 text-left transition-colors hover:border-brand sm:px-6 ${
           busy ? "pointer-events-none" : ""
         }`}
       >
         {busy ? (
           <>
-            <div className="mx-auto flex h-8 w-8 items-center justify-center">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center">
               <ThinkingOrb state="composing" size={20} />
             </div>
-            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+            <p className="min-w-0 truncate font-mono text-[12px] text-muted">
               Reading {file?.name}
             </p>
           </>
         ) : (
           <>
-            <p className="text-sm text-ink">Drop your résumé</p>
-            <p className="mt-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
-              PDF · 10 MB max
+            <p className="text-[16px] text-ink">Choose your résumé</p>
+            <p className="shrink-0 text-right font-mono text-[12px] text-muted">
+              PDF or DOCX<br />10 MB max
             </p>
           </>
         )}
@@ -282,7 +294,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf"
+        accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
@@ -293,9 +305,8 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       <div className="mt-6 flex items-center gap-3">
         <LaterLink onClick={onLater} />
       </div>
-      <p className="mt-6 text-[12px] leading-5 text-faint">
-        Your résumé is used to write your own applications. It is never sold and never shown to
-        anyone else.
+      <p className="mt-6 max-w-[46ch] text-[14px] leading-6 text-muted">
+        Used only for your applications. Never sold.
       </p>
     </StartShell>
   );
@@ -709,74 +720,48 @@ export function DoneStep({
   }) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
-  const [automaticSubmission, setAutomaticSubmission] = useState(state.automatic_submission_enabled);
+  const [automaticSubmission, setAutomaticSubmission] = useState(
+    state.automatic_submission_consented_at ? state.automatic_submission_enabled : false,
+  );
   const [automaticVerification, setAutomaticVerification] = useState(state.automatic_verification_enabled);
   const [automaticCaptcha, setAutomaticCaptcha] = useState(state.automatic_captcha_enabled);
-  const learned = state.learned.length;
-
-  // Three real states, because applying and learning are independent. Someone can skip the
-  // application entirely (Finish later, then come back), and someone can fill one that taught us
-  // nothing new. "0 things learned" is true in the second case and reads as a failure report;
-  // "that was the last long one" is simply false in the first. Claiming a result they did not
-  // get is the fastest way to lose them.
-  const applied = state.has_applied;
-  const title = applied ? "That was the last long one." : "You're set up.";
-  const sub = !applied
-    ? "Open any posting and Litos fills what it can from your résumé. It learns the rest from the first application you fill in."
-    : learned > 0
-      ? `${learned} ${learned === 1 ? "thing" : "things"} learned. Open any posting and the form is already filled by the time you get there.`
-      : "Open any posting and the form is already filled by the time you get there.";
-
   return (
-    <StartShell step="done" title={title} sub={sub}>
-      {/* The payoff. The contrast is measured on their own application, not claimed in a
-          headline - 14 minutes is real because they just lived it. No confetti, no badge:
-          the Guardrails ban them, and the number is more persuasive anyway. */}
-      {/* The payoff, and it is only earned if they actually filled one. Showing a
-          "first one / every one after" contrast to someone who skipped the first one would be
-          claiming a result they never got. */}
-      {applied && (
-        <div className="overflow-hidden rounded-[12px] border border-border">
-          <div className="grid grid-cols-[100px_minmax(0,1fr)_84px] items-baseline gap-4 px-4 py-3.5">
-            <span className="font-mono text-[10px] tracking-[0.06em] text-faint">FIRST ONE</span>
-            <span className="text-[14px] text-ink">Filled by hand, start to finish</span>
-            <span className="text-right font-mono text-[12.5px] text-muted">once</span>
-          </div>
-          <div className="grid grid-cols-[100px_minmax(0,1fr)_84px] items-baseline gap-4 border-t border-border bg-brand-soft px-4 py-3.5">
-            <span className="font-mono text-[10px] tracking-[0.06em] text-brand-ink">
-              EVERY ONE AFTER
+    <StartShell
+      step="done"
+      title="Setup complete."
+      sub="Choose what Litos may do automatically."
+    >
+      <div className="divide-y divide-border border-y border-border">
+        <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
+          <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
+          <span>
+            <span className="block text-[16px] text-ink">Submit eligible applications</span>
+            <span className="mt-1 block text-[14px] leading-6 text-muted">
+              Uses a cancelable review countdown. Pauses when facts are missing.
             </span>
-            <span className="text-[14px] text-brand-ink">Whatever you open next</span>
-            <span className="text-right font-mono text-[12.5px] text-brand-ink">~9 s</span>
-          </div>
-        </div>
-      )}
-
-      <div className="mt-5 space-y-3">
-        <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
-          <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-1 size-4 accent-[#6b84e8]" />
-          <span>
-            <span className="block text-[14px] text-ink">Automatically submit eligible applications</span>
-            <span className="mt-1 block text-[12px] leading-5 text-muted">Litos may submit applications you start after filling them from your saved facts and grounded experience. It pauses for missing or conflicting facts, sensitive attestations, unsupported portal steps, and unresolved CAPTCHAs.</span>
           </span>
         </label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
-          <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-1 size-4 accent-[#6b84e8]" />
+        <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
+          <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
           <span>
-            <span className="block text-[14px] text-ink">Automatically use application verification codes</span>
-            <span className="mt-1 block text-[12px] leading-5 text-muted">With your permission, Litos may use connected Gmail or Outlook to find a code for an active application. Codes are used only for that application and are not saved.</span>
+            <span className="block text-[16px] text-ink">Use application verification codes</span>
+            <span className="mt-1 block text-[14px] leading-6 text-muted">
+              Reads a code only while an application is active. Never saves it.
+            </span>
           </span>
         </label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-[12px] border border-border bg-white px-4 py-4">
-          <input type="checkbox" checked={automaticCaptcha} onChange={(event) => setAutomaticCaptcha(event.target.checked)} className="mt-1 size-4 accent-[#6b84e8]" />
+        <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
+          <input type="checkbox" checked={automaticCaptcha} onChange={(event) => setAutomaticCaptcha(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
           <span>
-            <span className="block text-[14px] text-ink">Resume after I solve a CAPTCHA</span>
-            <span className="mt-1 block text-[12px] leading-5 text-muted">Litos never clicks or solves a CAPTCHA. It can wait in your current portal tab and resume only after you complete the challenge. If it remains unresolved, nothing is submitted.</span>
+            <span className="block text-[16px] text-ink">Resume after I solve a CAPTCHA</span>
+            <span className="mt-1 block text-[14px] leading-6 text-muted">Litos never clicks or solves it. It waits in this portal tab and resumes only after you complete the challenge.</span>
           </span>
         </label>
       </div>
 
-      <p className="mt-4 text-[12px] leading-5 text-faint">All three permissions are optional and can be turned off in Settings. Litos never signs sensitive declarations for you.</p>
+      <p className="mt-4 text-[13px] leading-5 text-muted">
+        Optional. Change anytime in Settings. CAPTCHA solving and sensitive declarations always stay with you.
+      </p>
 
       <div className="mt-6">
         <PrimaryButton
