@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
 import { setSession, getToken, getOnboardingState } from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
-import { requestCodeError, verifyCodeError } from "./errors";
+import { googleSignInError, requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
+import { GoogleSignInButton } from "./GoogleSignInButton";
 
 /* Passwordless sign-in, same account system as the extension: email a 6-digit
    code (/auth/request-code + /auth/verify-code). Email ownership must always be
@@ -31,6 +32,7 @@ async function landingRoute(): Promise<string> {
 
 export default function Login() {
   const router = useRouter();
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim() ?? "";
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -89,6 +91,29 @@ export default function Login() {
     await requestCode(normalized);
   }
 
+  const submitGoogleCredential = useCallback(async (credential: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/auth/google`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
+        body: JSON.stringify({ credential }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok && data?.token && data?.email) {
+        setSession(data.token, data.email);
+        router.replace(data.is_new_user === true ? "/start" : await landingRoute());
+        return;
+      }
+      setError(googleSignInError(res.status, data?.error));
+    } catch {
+      setError("Network error. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }, [router]);
+
   async function submitCode(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -123,37 +148,60 @@ export default function Login() {
 
       <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">
         {step === "email" ? (
-          <form onSubmit={submitEmail}>
+          <div>
             <h1 className="text-xl font-semibold tracking-tight text-ink">Sign in</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
-              No password. We email you a six-digit code, new accounts are
-              created on first sign-in.
+              {googleClientId
+                ? "Use Google or a six-digit email code. New accounts are created on first sign-in."
+                : "No password. We email you a six-digit code, new accounts are created on first sign-in."}
             </p>
-            <label className="mt-6 block text-xs font-medium text-muted" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              autoFocus
-              value={email}
-              onChange={(e) => {
-                setEmail(e.target.value);
-                setError(null);
-                setDeliveryNotice(null);
-              }}
-              placeholder="you@example.com"
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-            />
-            <button
-              type="submit"
-              disabled={busy}
-              className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {busy ? <PendingLabel onColor>Sending code...</PendingLabel> : "Continue with email"}
-            </button>
-          </form>
+            {googleClientId && (
+              <>
+                <div className="mt-6">
+                  <GoogleSignInButton
+                    clientId={googleClientId}
+                    busy={busy}
+                    onCredential={submitGoogleCredential}
+                    onLoadError={() => setError("Google sign-in could not load. Continue with email.")}
+                  />
+                </div>
+                <div className="my-5 flex items-center gap-3" aria-hidden="true">
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="text-xs text-faint">or</span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+              </>
+            )}
+            <form onSubmit={submitEmail}>
+              <label
+                className={googleClientId ? "block text-xs font-medium text-muted" : "mt-6 block text-xs font-medium text-muted"}
+                htmlFor="email"
+              >
+                Email
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                autoFocus={!googleClientId}
+                value={email}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  setError(null);
+                  setDeliveryNotice(null);
+                }}
+                placeholder="you@example.com"
+                className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+              />
+              <button
+                type="submit"
+                disabled={busy}
+                className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? <PendingLabel onColor>Signing in...</PendingLabel> : "Continue with email"}
+              </button>
+            </form>
+          </div>
         ) : (
           <form onSubmit={submitCode}>
             <h1 className="text-xl font-semibold tracking-tight text-ink">Check your email</h1>

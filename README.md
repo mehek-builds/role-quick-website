@@ -53,6 +53,18 @@ npm run dev     # localhost:3000
 npm run build   # always run before shipping; trust it over the preview
 ```
 
+Google sign-in uses the same OAuth web client ID in both deployments:
+
+```env
+# Website project
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+
+# Backend project
+GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
+```
+
+Add `https://trylitos.com` and the Vercel preview origin to that client's authorized JavaScript origins.
+
 Registered launch configs (vault `.claude/launch.json`):
 `litos-website` (dev, :3500) and `litos-website-prod`
 (build + start, :3501).

@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import Link from "next/link";
 
 export const metadata = {
   title: "Privacy: Litos",
@@ -33,7 +34,7 @@ export default function Privacy() {
           Privacy Policy
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 25, 2026
+          Last updated: July 26, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. When you open a
@@ -56,7 +57,10 @@ export default function Privacy() {
 
         <Section title="What we store">
           <p>
-            Your account email. The profile we parse out of the resume you
+            Your account email and, if you use Google to sign in, the stable
+            Google account identifier used to recognize that login. We do not
+            receive your Google password or access to your Google files or
+            inbox from sign-in. The profile we parse out of the resume you
             upload, including your experience bank. We read that upload once to
             build the profile and do not keep the file itself. Your application
             details, which reach us two ways: values you enter in Settings, and
@@ -252,9 +256,9 @@ export default function Privacy() {
       <footer className="border-t border-border">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8 text-xs text-faint">
           <span>&copy; {new Date().getFullYear()} Litos</span>
-          <a href="/" className="hover:text-muted">
+          <Link href="/" className="hover:text-muted">
             Home
-          </a>
+          </Link>
         </div>
       </footer>
     </div>
