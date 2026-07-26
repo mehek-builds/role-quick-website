@@ -71,9 +71,8 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Profile</p>
-        <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">What Litos applies with.</h1>
-        <p className="mt-2 text-sm text-muted">Resume, targeting, and application answers.</p>
+        <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Profile</h1>
+        <p className="mt-1 text-sm text-muted">Resume, targeting, and saved answers.</p>
       </div>
 
       {!profile || !applicationProfile ? (

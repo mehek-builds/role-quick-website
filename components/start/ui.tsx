@@ -26,24 +26,26 @@ export const STEPS: { key: OnboardingStep; act: string; label: string }[] = [
 
 export function StepRail({ current }: { current: OnboardingStep }) {
   const i = STEPS.findIndex((s) => s.key === current);
+  const activeStep = STEPS[Math.max(0, i)];
+  const progress = ((Math.max(0, i) + 1) / STEPS.length) * 100;
   return (
-    <nav aria-label="Setup progress" className="flex flex-wrap items-center gap-x-5 gap-y-2">
-      {STEPS.map((s, idx) => {
-        const done = idx < i;
-        const active = idx === i;
-        return (
-          <span
-            key={s.key}
-            aria-current={active ? "step" : undefined}
-            className={`font-mono text-[11px] font-medium uppercase tracking-[0.08em] ${
-              active ? "text-ink" : done ? "text-muted" : "text-faint"
-            }`}
-          >
-            <span className={active ? "text-brand-ink" : ""}>{s.act}</span> {s.label}
-          </span>
-        );
-      })}
-    </nav>
+    <div aria-label={`Setup progress: step ${i + 1} of ${STEPS.length}, ${activeStep.label}`}>
+      <div className="flex items-center justify-between gap-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
+        <span className="text-ink">
+          <span className="text-brand-ink">{activeStep.act}</span> {activeStep.label}
+        </span>
+        <span className="text-faint">{i + 1} of {STEPS.length}</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuemin={1}
+        aria-valuemax={STEPS.length}
+        aria-valuenow={i + 1}
+        className="mt-3 h-px overflow-hidden bg-border"
+      >
+        <div className="h-full bg-brand transition-[width] duration-300" style={{ width: `${progress}%` }} />
+      </div>
+    </div>
   );
 }
 
@@ -61,16 +63,16 @@ export function StartShell({
   aside?: React.ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-2xl px-6 py-16">
+    <main className="mx-auto w-full min-w-0 max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
       <StepRail current={step} />
       {/* Display type: weight 450, never bold. Calm things don't shout. */}
-      <h1 className="mt-10 text-[34px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">
+      <h1 className="mt-8 max-w-full text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:mt-10 sm:text-[34px]">
         {title}
       </h1>
       {sub && <p className="mt-3 max-w-[46ch] text-[15px] leading-7 text-muted">{sub}</p>}
-      <div className="mt-8">{children}</div>
+      <div className="mt-8 min-w-0">{children}</div>
       {aside && <div className="mt-8">{aside}</div>}
-    </div>
+    </main>
   );
 }
 
@@ -149,13 +151,18 @@ export function PrimaryButton({
    exit would be the dark pattern the Guardrails exist to prevent. */
 export function LaterLink({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
-    >
-      Finish later
-    </button>
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onClick}
+        className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+      >
+        Exit setup
+      </button>
+      <span className="font-mono text-[12px] text-faint">
+        Completed steps stay saved
+      </span>
+    </div>
   );
 }
 

@@ -15,9 +15,12 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, isLivePacketStatus, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { explicitTerms, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { packetMatchesJob } from "@/lib/daily-matches";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
+type ApplicationFilter = "all" | "action" | "ready" | "submitted";
+type ApplicationSort = "recent" | "company";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean };
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
@@ -55,10 +58,13 @@ export default function Applications() {
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
+  const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>("all");
+  const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const moveToScreen = useCallback((next: Screen) => {
     setScreen((current) => {
@@ -190,17 +196,12 @@ export default function Applications() {
     const jobId = params.get("job");
     if (params.get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
     if (!jobId) return;
-    if (qaMode) {
-      queueMicrotask(() => setNotice("Approved match loaded. Review the tailored packet before Litos prepares the employer portal."));
-      return;
-    }
+    if (qaMode) return;
     let cancelled = false;
     api<{ job: MonitoredJob }>(`/jobs/${jobId}`)
       .then(({ job }) => {
         if (cancelled) return;
-        setNewApplication({ company: job.company_name, role: job.title, portalUrl: job.apply_url, jobDescription: job.description });
-        setShowNewApplication(true);
-        setNotice("Loaded this monitored role into a new application packet.");
+        setPendingJob(job);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load that monitored role."));
     return () => {
@@ -208,9 +209,38 @@ export default function Applications() {
     };
   }, [qaMode]);
 
+  useEffect(() => {
+    if (!pendingJob || packets === null) return;
+    const existing = onlyReviewablePackets(packets).find((packet) => packetMatchesJob(packet, pendingJob));
+    queueMicrotask(() => {
+      if (existing) {
+        selectPacket(existing);
+        setShowNewApplication(false);
+        setNotice("Resume ready. Review the job description and tailored version side by side.");
+      } else {
+        setNewApplication({ company: pendingJob.company_name, role: pendingJob.title, portalUrl: pendingJob.apply_url, jobDescription: pendingJob.description });
+        setShowNewApplication(true);
+        setNotice("This role is outside the ready queue. Generate its tailored resume when you are ready.");
+      }
+      setPendingJob(null);
+    });
+  }, [packets, pendingJob, selectPacket]);
+
   const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
   const review = selected?.spec._review;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
+  const visiblePackets = useMemo(() => {
+    const filtered = reviewablePackets.filter((packet) => {
+      const status = packet.spec._review?.status;
+      if (applicationFilter === "action") return ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "");
+      if (applicationFilter === "ready") return ["resume_ready", "questions_ready", "ready_to_submit"].includes(status ?? "");
+      if (applicationFilter === "submitted") return status === "submitted";
+      return true;
+    });
+    return [...filtered].sort((a, b) => applicationSort === "company"
+      ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
+      : packetTimestamp(b).localeCompare(packetTimestamp(a)));
+  }, [applicationFilter, applicationSort, reviewablePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
@@ -523,9 +553,8 @@ export default function Applications() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Applications</p>
-          <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">Review. Approve. Track.</h1>
-          <p className="mt-2 text-sm text-muted">Every application, from tailored packet to receipt.</p>
+          <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Applications</h1>
+          <p className="mt-1 text-sm text-muted">Review and track.</p>
         </div>
         <div className="flex items-center gap-2">
           {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
@@ -548,76 +577,66 @@ export default function Applications() {
         />
       )}
       {legacyCount > 0 && (
-        <p className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-muted">
-          {legacyCount} older resume{legacyCount === 1 ? "" : "s"} stay in your history, but cannot show a job-description diff because they were created before review packets stored the posting text.
+        <p className="border-y border-border py-3 text-sm text-muted">
+          {legacyCount} saved resume{legacyCount === 1 ? "" : "s"} · Add a job URL to turn one into a reviewable application.
         </p>
       )}
 
-      {/* Rendered above the screen branch, not inside the review branch. Previously a portal run
-          unmounted the switcher, so the user lost access to every other application for the minutes
-          the run took. The run lives on the server, so switching away does not stop it, but the
-          user must be able to find their way back: each chip carries its own status, so a packet
-          mid-run is identifiable rather than lost among the others. */}
       {selected && reviewablePackets.length > 1 && (
-        <section>
-          <div className="mb-2 hidden items-center justify-between sm:flex">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Your applications</p>
-            <span className="font-mono text-[10px] text-faint">{reviewablePackets.length} TOTAL</span>
-          </div>
-          <div className="hidden gap-2 sm:grid sm:grid-cols-2 xl:grid-cols-3">
-          {reviewablePackets.map((packet) => (
-            /* Keep role and company together in each switcher item. The former single-line form was
-               packet.job_context.role} · {packet.job_context.company}, and the regression test uses
-               that source marker to ensure this control remains above the screen branch. */
-            <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex min-w-0 items-center justify-between gap-3 rounded-[12px] px-4 py-3 text-left text-xs ${packet.id === selected.id ? "bg-ink text-white" : "border border-border bg-surface text-muted hover:border-ink/30"}`}>
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{packet.job_context.role}</span>
-                <span className={`mt-0.5 block truncate ${packet.id === selected.id ? "text-white/60" : "text-faint"}`}>{packet.job_context.company}</span>
-              </span>
-              {isLivePacketStatus(packet.spec._review?.status) && (
-                <span className={`shrink-0 rounded-full px-2 py-1 font-mono text-[9px] uppercase ${packet.id === selected.id ? "bg-white/15 text-white" : "bg-surface-alt text-muted"}`}>
-                  {statusLabel(false, packet.spec._review!.status)}
-                </span>
-              )}
-            </button>
-          ))}
-          </div>
-          <details className="rounded-[12px] border border-border bg-surface sm:hidden">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm text-ink">
-              <span>Switch application</span>
-              <span className="font-mono text-[10px] text-faint">{reviewablePackets.length} TOTAL</span>
-            </summary>
-            <div className="grid gap-2 border-t border-border p-2">
-              {reviewablePackets.map((packet) => (
-                <button key={packet.id} onClick={() => selectPacket(packet)} className={`flex min-w-0 items-center justify-between gap-3 rounded-[10px] px-3 py-2.5 text-left text-xs ${packet.id === selected.id ? "bg-ink text-white" : "bg-surface-alt text-muted"}`}>
-                  <span className="min-w-0">
-                    <span className="block truncate font-medium">{packet.job_context.role}</span>
-                    <span className={`mt-0.5 block truncate ${packet.id === selected.id ? "text-white/60" : "text-faint"}`}>{packet.job_context.company}</span>
-                  </span>
-                  {isLivePacketStatus(packet.spec._review?.status) && (
-                    <span className={`shrink-0 rounded-full px-2 py-1 font-mono text-[9px] uppercase ${packet.id === selected.id ? "bg-white/15 text-white" : "bg-surface text-muted"}`}>
-                      {statusLabel(false, packet.spec._review!.status)}
-                    </span>
-                  )}
-                </button>
-              ))}
+        /* Keep the switcher above every screen branch. Historical marker for the invariant:
+           packet.job_context.role} · {packet.job_context.company} */
+        <section aria-labelledby="application-ledger-heading" className="border-y border-border">
+          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div className="flex items-baseline gap-2">
+              <h2 id="application-ledger-heading" className="text-sm font-medium text-ink">Applications</h2>
+              <span className="font-mono text-[10px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
             </div>
-          </details>
+            <div className="flex gap-2">
+              <label className="sr-only" htmlFor="application-filter">Filter applications</label>
+              <select id="application-filter" value={applicationFilter} onChange={(event) => setApplicationFilter(event.target.value as ApplicationFilter)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
+                <option value="all">All states</option>
+                <option value="action">Needs action</option>
+                <option value="ready">Ready</option>
+                <option value="submitted">Submitted</option>
+              </select>
+              <label className="sr-only" htmlFor="application-sort">Sort applications</label>
+              <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
+                <option value="recent">Recent first</option>
+                <option value="company">Company A-Z</option>
+              </select>
+            </div>
+          </div>
+          <div className="max-h-72 overflow-y-auto border-t border-border">
+            {visiblePackets.length === 0 ? (
+              <p className="py-5 text-sm text-muted">No applications in this view.</p>
+            ) : (
+              <div className="divide-y divide-border">
+                {visiblePackets.map((packet) => (
+                  <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
+                    <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
+                    <time className="hidden font-mono text-[10px] text-faint sm:block">{formatDate(packetTimestamp(packet))}</time>
+                    {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </section>
       )}
 
       {packets === null ? (
         <ShimmerRows rows={4} />
       ) : reviewablePackets.length === 0 ? (
-        <EmptyState title="No review packets yet" body="Start a new application with the job URL and description. Litos will generate the tailored resume in the backend and open the side-by-side review here.">
+        <EmptyState title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to create your first reviewable application." : "Add a job URL. Litos will prepare the resume and review."}>
           <button type="button" onClick={() => setShowNewApplication(true)} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Start an application</button>
         </EmptyState>
       ) : !selected || !spec || !review ? (
         <div className="grid gap-3">
           {reviewablePackets.map((packet) => (
-            <button key={packet.id} onClick={() => selectPacket(packet)} className="rounded-[20px] border border-border bg-surface p-5 text-left hover:border-ink/30">
-              <span className="text-sm font-medium text-ink">{packet.job_context.role}</span>
-              <span className="ml-2 text-sm text-muted">{packet.job_context.company}</span>
+            <button key={packet.id} onClick={() => selectPacket(packet)} className={`rounded-[20px] p-5 text-left ${applicationCardClasses(packet, false)}`}>
+              <span className="text-sm font-medium">{packet.job_context.role}</span>
+              <span className="ml-2 text-sm opacity-65">{packet.job_context.company}</span>
             </button>
           ))}
         </div>
@@ -736,6 +755,10 @@ function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; tit
   );
 }
 
+function packetTimestamp(packet: GeneratedResume): string {
+  return packet.spec._review?.updated_at ?? packet.created_at ?? "";
+}
+
 function NewApplicationPanel({
   value,
   onChange,
@@ -756,8 +779,8 @@ function NewApplicationPanel({
     <Card className="p-6">
       <div className="max-w-2xl">
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">New application</p>
-        <h2 className="mt-2 text-xl font-medium text-ink">Build the review packet in Litos.</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">Paste the posting once. The backend generates the tailored resume and stores the job description for the side-by-side review.</p>
+        <h2 className="mt-2 text-xl font-medium text-ink">Generate the tailored resume.</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" />
@@ -780,7 +803,7 @@ function NewApplicationPanel({
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
         <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
-          {creating ? <PendingLabel state="composing" onColor>Generating review packet...</PendingLabel> : "Generate review packet"}
+          {creating ? <PendingLabel state="composing" onColor>Generating resume...</PendingLabel> : "Generate tailored resume"}
         </button>
       </div>
     </Card>
@@ -1037,7 +1060,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           {needsAttention && <button onClick={onRetry} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">Retry preparation</button>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I completed the portal step</button>}
           {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Retry preparation</button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">Submit application</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Submit application</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. Verification codes are used only with your permission, and a verified portal receipt is required before an application is marked submitted.</p>
       </Card>
@@ -1177,10 +1200,21 @@ function formatElapsed(seconds: number): string {
 
 // "Needs attention" and "Stopped safely" were painted in the same ready/success treatment as
 // "Ready for review", so the label was the only signal anything was wrong.
-function chipKind(status: ApplicationReview["status"]): "sent" | "ready" | "warn" {
+function chipKind(status: ApplicationReview["status"]): "sent" | "ready" | "warn" | "bounced" {
   if (status === "submitted") return "sent";
-  if (status === "needs_attention" || status === "failed" || status === "ready_for_final_approval") return "warn";
+  if (status === "needs_attention" || status === "failed") return "bounced";
+  if (status === "ready_for_final_approval") return "warn";
   return "ready";
+}
+
+function applicationCardClasses(packet: GeneratedResume, selected: boolean): string {
+  const status = packet.spec._review?.status;
+  const semantic = status === "submitted"
+    ? "border border-positive/20 bg-positive-soft text-positive"
+    : status === "needs_attention" || status === "failed"
+      ? "border border-danger/20 bg-danger-soft text-danger"
+      : "border border-border bg-surface text-ink hover:border-brand/35 hover:bg-brand-soft/35";
+  return selected ? `${semantic} ring-2 ring-brand ring-offset-2` : semantic;
 }
 
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
