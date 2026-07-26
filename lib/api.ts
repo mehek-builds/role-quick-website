@@ -106,7 +106,17 @@ export type Me = {
   guest_expires_at?: string | null;
   usage: { contacts: Usage; drafts: Usage; resumes: Usage };
   upgrade_url?: string;
+  billing_provider?: "lemonsqueezy";
+  checkout_available?: boolean;
+  billing_status?: string | null;
+  billing_renews_at?: string | null;
+  billing_ends_at?: string | null;
+  billing_portal_url?: string | null;
 };
+
+export function createCheckout() {
+  return api<{ provider: "lemonsqueezy"; url: string }>("/billing/checkout", { method: "POST" });
+}
 
 export type OutreachContact = {
   id: string;

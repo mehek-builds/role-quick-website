@@ -6,6 +6,7 @@ import {
   api,
   ApplicationProfile,
   clearSession,
+  createCheckout,
   createEmailConnection,
   disconnectEmailConnection,
   type EmailConnectionsResponse,
@@ -15,6 +16,7 @@ import {
   Me,
   setAutomationSettings,
 } from "@/lib/api";
+import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 
 /* Application profile: exactly the fields the backend encrypts and the
@@ -40,6 +42,7 @@ export default function Settings() {
   const [savingAutomation, setSavingAutomation] = useState(false);
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [mountedAt] = useState(() => Date.now());
   const [dataBusy, setDataBusy] = useState<"export" | "delete" | null>(null);
@@ -164,6 +167,19 @@ export default function Settings() {
       setError(err instanceof Error ? err.message : `Could not disconnect ${label}.`);
     } finally {
       setConnectionBusy(null);
+    }
+  }
+
+  async function startCheckout() {
+    setCheckoutBusy(true);
+    setError(null);
+    try {
+      const checkout = await createCheckout();
+      if (!isLemonSqueezyCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
+      window.location.assign(checkout.url);
+    } catch (checkoutError) {
+      setError(checkoutError instanceof Error ? checkoutError.message : "Checkout is temporarily unavailable.");
+      setCheckoutBusy(false);
     }
   }
 
@@ -383,31 +399,31 @@ export default function Settings() {
           <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
-        {me.upgrade_url && !trialActive ? (
+        {me.checkout_available && !trialActive ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
               <span className="font-medium text-ink">Pro covers 1,000 resumes a month. </span>
               $49.99/mo. Canceling takes the same clicks as signing up, from
               the billing portal linked in your receipt email.
             </p>
-            <a
-              href={me.is_guest ? "/login?claim=1&next=upgrade" : me.upgrade_url}
-              onClick={() => {
-                if (me.is_guest && me.upgrade_url) {
-                  window.sessionStorage.setItem("litos_pending_upgrade_url", me.upgrade_url);
-                }
-              }}
+            {me.is_guest ? <a
+              href="/login?claim=1&next=upgrade"
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Upgrade to Pro
-            </a>
+            </a> : <button
+              type="button"
+              disabled={checkoutBusy}
+              onClick={() => void startCheckout()}
+              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {checkoutBusy ? "Opening checkout..." : "Upgrade to Pro"}
+            </button>}
           </div>
         ) : me.tier === "pro" ? (
-          <p className="mt-6 border-t border-border pt-5 text-sm text-muted">
-            You are on Pro. Manage or cancel any time from the billing portal
-            linked in your receipt email, it takes the same clicks as signing
-            up did.
-          </p>
+          <div className="mt-6 border-t border-border pt-5 text-sm text-muted">
+            You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel in Lemon Squeezy</a> : "Use the billing portal linked in your receipt email to manage or cancel."}
+          </div>
         ) : null}
       </Card>
 
