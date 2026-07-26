@@ -5,11 +5,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { getProductMeta, getToken } from "@/lib/api";
 
+/* One noun per destination, and the two that a student kept confusing are now told apart by the
+   word itself rather than by a subtitle they have to find: "Jobs" is everything we found, and
+   "Applications" is the subset you are actually working on. "Outreach" was the brand's word for
+   sending an email to a human, so it says Emails. */
 const NAV = [
   { href: "/dashboard", label: "Home" },
   { href: "/dashboard/jobs", label: "Jobs" },
   { href: "/dashboard/applications", label: "Applications" },
-  { href: "/dashboard/outreach", label: "Outreach" },
+  { href: "/dashboard/outreach", label: "Emails" },
   { href: "/dashboard/profile", label: "Profile" },
 ];
 
@@ -53,8 +57,10 @@ export default function DashboardLayout({
         </header>
         <main className="mx-auto max-w-6xl px-6 py-10">
           <div className="rq-shimmer h-9 w-40" />
-          <div className="mt-10 grid grid-cols-4 border-y border-border py-6">
-            {Array.from({ length: 4 }).map((_, index) => <div key={index} className="rq-shimmer h-12 border-l border-border first:border-0" />)}
+          {/* Three, matching the real metric grid. A four-column skeleton meant the first thing a
+              new user saw was a layout that then rearranged under them. */}
+          <div className="mt-10 grid grid-cols-3 border-y border-border py-6">
+            {Array.from({ length: 3 }).map((_, index) => <div key={index} className="rq-shimmer h-12 border-l border-border first:border-0" />)}
           </div>
         </main>
       </div>
@@ -68,7 +74,8 @@ export default function DashboardLayout({
           <Link href="/" className="flex items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
-            <span className="text-[15px] font-semibold tracking-tight text-ink">
+            {/* DESIGN.md: display weight is 450, never bold. This was 600. */}
+            <span className="text-[15px] font-medium tracking-tight text-ink">
               Litos
             </span>
           </Link>
@@ -82,9 +89,12 @@ export default function DashboardLayout({
               <Link
                 key={item.href}
                 href={qaMode ? `${item.href}?qa=1` : item.href}
+                /* A filled pill is how this page says "do this" (the blue CTA). Where you are is
+                   not an action, so it reads as a quiet surface instead of a second filled pill
+                   competing with the real one. */
                 className={`whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm transition-colors ${
                   active
-                    ? "bg-ink text-white"
+                    ? "bg-surface-alt font-medium text-ink"
                     : "text-muted hover:bg-surface-alt hover:text-ink"
                 }`}
               >
@@ -93,7 +103,9 @@ export default function DashboardLayout({
             );
           })}
           </nav>
-          <Link href="/dashboard/settings" aria-label="Account settings" className="ml-auto flex min-h-10 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink transition-colors hover:border-ink">Account</Link>
+          {/* One control, one name. This link said "Account", announced "Account settings", and
+              landed on a page headed "Settings". It is Account in all three places now. */}
+          <Link href="/dashboard/settings" className="ml-auto flex min-h-10 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink transition-colors hover:border-ink">Account</Link>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 pb-24 sm:px-6 sm:py-10">{children}</main>
@@ -104,21 +116,17 @@ export default function DashboardLayout({
             <Link
               key={item.href}
               href={qaMode ? `${item.href}?qa=1` : item.href}
-              className={`min-h-11 px-0.5 py-2 text-center text-[11px] font-medium ${active ? "text-ink" : "text-muted"}`}
+              /* 12px, not 11px, and the active item gets a surface rather than relying on a
+                 colour difference two shades apart at the smallest size in the product. */
+              className={`min-h-11 rounded-full px-0.5 py-2 text-center text-[12px] ${active ? "bg-surface-alt font-medium text-ink" : "text-muted"}`}
             >
               {item.label}
             </Link>
           );
         })}
       </nav>
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6 text-xs text-faint">
-          <span>&copy; {new Date().getFullYear()} Litos</span>
-          <a href="/privacy" className="hover:text-muted">
-            Privacy
-          </a>
-        </div>
-      </footer>
+      {/* No marketing footer inside the product. Linear, Notion and Stripe (the stated
+          references) all drop it once you are logged in; Privacy lives in Account. */}
     </div>
   );
 }

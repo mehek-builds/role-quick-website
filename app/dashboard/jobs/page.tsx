@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type MonitoredJob } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, ShimmerRows, formatDate } from "@/components/app/ui";
+import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 
 function jobParams(query: string, location: string, remoteOnly: boolean, offset: number) {
   const params = new URLSearchParams({ offset: String(offset) });
@@ -65,9 +65,8 @@ export default function JobsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">All jobs</p>
-        <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">Jobs</h1>
-        <p className="mt-2 text-sm text-muted">Active roles collected across supported job boards.</p>
+        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Jobs</h1>
+        <p className="mt-2 text-sm text-muted">Every role Litos has found for you.</p>
       </div>
 
       <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto]">
@@ -79,31 +78,31 @@ export default function JobsPage() {
         </label>
       </Card>
 
-      {jobs && <p className="font-mono text-xs text-faint">{jobs.length} loaded active roles across {companies} companies{hasMore ? ", more available" : ""}</p>}
+      {jobs && <p className="text-xs text-muted">{jobs.length} role{jobs.length === 1 ? "" : "s"} at {companies} compan{companies === 1 ? "y" : "ies"}{hasMore ? ", and more to load" : ""}</p>}
       {error && <ErrorNote message={error} />}
       {jobs === null ? <ShimmerRows rows={5} /> : jobs.length === 0 ? (
-        <EmptyState title="No matching roles" body="Try a broader keyword or location. Monitored roles will appear here after the next career-page check." />
+        <EmptyState title="No matching roles" body="Try a shorter search, or clear the location. New roles show up here as Litos finds them." />
       ) : (
         <div className="grid gap-3">
           {jobs.map((job) => (
             <Card key={job.id} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
-                  {job.remote && <Chip label="Remote" kind="sent" />}
+                  
                   <h2 className="mt-3 text-lg font-medium text-ink">{job.title}</h2>
-                  <p className="mt-1 text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
-                  <p className="mt-2 font-mono text-[11px] text-faint">Found {formatDate(job.first_seen_at)}{job.department ? ` · ${job.department}` : ""}</p>
+                  <p className="mt-1 text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}{job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}</p>
+                  <p className="mt-2 font-mono text-[11px] text-faint">Found {formatRelativeDate(job.first_seen_at)}{job.department ? ` · ${job.department}` : ""}</p>
                 </div>
                 <div className="flex gap-2">
                   <a href={job.posting_url} target="_blank" rel="noreferrer" className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View posting</a>
-                  <Link href={`/dashboard/applications?job=${job.id}`} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Generate resume</Link>
+                  <Link href={`/dashboard/applications?job=${job.id}`} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Get my resume</Link>
                 </div>
               </div>
             </Card>
           ))}
           {hasMore && (
             <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="mx-auto mt-2 rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
-              {loadingMore ? "Loading..." : "Load more roles"}
+              {loadingMore ? "Loading..." : "Show more roles"}
             </button>
           )}
         </div>
