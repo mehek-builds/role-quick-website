@@ -45,12 +45,13 @@ const STAGE_COPY: Record<BuildStage, { label: string; orb: "searching" | "solvin
   reading: { label: "Reading what you uploaded", orb: "searching" },
   selecting: { label: "Choosing what earns a place", orb: "solving" },
   writing: { label: "Writing it in the ATS format", orb: "composing" },
+  polishing: { label: "Sharpening how each line opens", orb: "composing" },
   fitting: { label: "Fitting it to one page", orb: "shaping" },
   done: { label: "Done", orb: "shaping" },
   failed: { label: "Stopped", orb: "shaping" },
 };
 
-const STAGE_ORDER: BuildStage[] = ["reading", "selecting", "writing", "fitting"];
+const STAGE_ORDER: BuildStage[] = ["reading", "selecting", "writing", "polishing", "fitting"];
 
 /* Sheet width caps, which set the sheet HEIGHT: the page is 612/792, so a width of N svh renders
  * about 1.29N svh tall. Capping width rather than height keeps the ratio honest on narrow screens,
@@ -127,6 +128,11 @@ export function BaseResumeStep({
           if (frame.stage !== "done" && frame.stage !== "failed") {
             note(STAGE_COPY[frame.stage].label);
           }
+          break;
+        case "restart":
+          // A retry is rewriting weak openers. Clear the painted entries so a shorter second pass
+          // cannot leave stale ones behind - the client paints positionally.
+          setSpec((s) => ({ ...s, experience: [] }));
           break;
         case "source":
           note(

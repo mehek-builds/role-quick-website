@@ -13,11 +13,21 @@ import { litosClientHeaders } from "./product";
  * the token where it belongs.
  */
 
-export type BuildStage = "reading" | "selecting" | "writing" | "fitting" | "done" | "failed";
+export type BuildStage =
+  | "reading"
+  | "selecting"
+  | "writing"
+  | "polishing"
+  | "fitting"
+  | "done"
+  | "failed";
 
 export type BuildFrame =
   | { event: "stage"; stage: BuildStage; detail?: string }
   | { event: "source"; bank_entries: number; source_pages: number; declared_skills: number }
+  // The build is rewriting weak openers: clear what is painted so the retry's pass, which may
+  // be shorter, cannot leave stale entries behind.
+  | { event: "restart" }
   | { event: "piece"; type: "education"; education_position: "top" | "after_experience" }
   | { event: "piece"; type: "entry"; index: number; entry: ResumeEntry }
   | { event: "piece"; type: "skills"; skills: string[] }

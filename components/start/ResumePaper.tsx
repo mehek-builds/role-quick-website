@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeSpec, ResumeEntry } from "@/lib/api";
+import { startsWithStrongVerb } from "@/lib/strong-verbs";
 
 /* The base resume, drawn as paper.
  *
@@ -417,6 +418,19 @@ function Entry({
           >
             <span aria-hidden="true">•</span>
             <span className="flex items-baseline">
+              {/* The hard rule, shown while they type. Advisory, never blocking: a marker in the
+                  margin, monochrome like everything else on the sheet, that says this line opens
+                  weakly. It is the same rule the server enforces on what it generates, so a bullet
+                  the student writes by hand is held to the bullets around it. */}
+              {editing && bullet.trim() && !startsWithStrongVerb(bullet) && (
+                <span
+                  title="Start with a strong action verb, like the other bullets"
+                  aria-label="Weak opening verb"
+                  className="mr-1 shrink-0 select-none font-bold text-black/40"
+                >
+                  !
+                </span>
+              )}
               {editing ? (
                 <Editable
                   value={bullet}
