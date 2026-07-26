@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   api,
   getStoredEmail,
+  type ApplicationReview,
   type ApplicationProfile,
   type GeneratedResume,
   type Me,
@@ -15,7 +16,6 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ShimmerRows, formatDate } from "@/components/app/ui";
 import {
-  countPreparedJobs,
   DAILY_PREPARED_RESUME_LIMIT,
   packetMatchesJob,
   rankJobs,
@@ -23,6 +23,17 @@ import {
   type ProfileIdentity,
   type RankedJob,
 } from "@/lib/daily-matches";
+
+type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
+
+const MONTHLY_PRO_APPLICATION_LIMIT = 1_000;
+const ACTIVE_SUBMISSION_STATUSES = new Set<ApplicationReview["status"]>([
+  "submit_requested",
+  "preparing",
+  "filling",
+  "submitting",
+  "submission_claimed",
+]);
 
 const QA_JOBS: MonitoredJob[] = [
   {
@@ -79,7 +90,7 @@ const QA_ME: Me = {
   usage: {
     contacts: { used: 18, limit: 500 },
     drafts: { used: 11, limit: 1000 },
-    resumes: { used: 7, limit: 100000 },
+    resumes: { used: 7, limit: MONTHLY_PRO_APPLICATION_LIMIT },
   },
 };
 
@@ -162,9 +173,14 @@ export default function Home() {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [prewarmError, setPrewarmError] = useState<string | null>(null);
-  const [preparingCount, setPreparingCount] = useState(0);
+  const [reviewJob, setReviewJob] = useState<RankedJob | null>(null);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [prewarmFailures, setPrewarmFailures] = useState<string[]>([]);
+  const [prewarmRetry, setPrewarmRetry] = useState(0);
   const prewarmStarted = useRef(false);
+  const reviewTriggerRef = useRef<HTMLElement | null>(null);
+  const activeReviewJobIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => setDismissed(readDismissed(dailyDismissalKey())));
@@ -222,45 +238,79 @@ export default function Home() {
     () => rankedJobs.filter((job) => !dismissed.includes(job.id)).slice(0, 5),
     [dismissed, rankedJobs],
   );
-  const preparedCount = useMemo(() => countPreparedJobs(dailyJobs, packets), [dailyJobs, packets]);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
     const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
     const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
-    return { prepared: packets.length, ready, submitted, needsAction };
+    return { ready, submitted, needsAction };
   }, [packets]);
   const outreachSummary = useMemo(() => ({
     drafted: outreach.filter((event) => event.status === "drafted").length,
     sent: outreach.filter((event) => ["sent", "replied"].includes(event.status)).length,
     replied: outreach.filter((event) => event.status === "replied").length,
   }), [outreach]);
-  const recentActivity = useMemo(() => {
-    const applications = packets.map((packet) => ({
-      id: `application-${packet.id}`,
-      label: packet.spec._review?.status === "submitted" ? "Application submitted" : "Resume prepared",
-      detail: [packet.job_context.role, packet.job_context.company].filter(Boolean).join(" at ") || "Application",
-      date: packet.spec._review?.updated_at ?? packet.created_at,
-    }));
-    const messages = outreach.map((event) => ({
-      id: `outreach-${event.id}`,
-      label: event.status === "replied" ? "Reply received" : event.status === "drafted" ? "Draft prepared" : "Message sent",
-      detail: event.contact?.full_name ?? event.contact?.company_domain ?? "Outreach",
-      date: event.replied_at ?? event.sent_at,
-    }));
-    return [...applications, ...messages]
-      .filter((item) => item.date)
-      .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
-      .slice(0, 4);
-  }, [outreach, packets]);
+  const reviewPacket = useMemo(
+    () => reviewJob ? packets.find((packet) => packetMatchesJob(packet, reviewJob)) ?? null : null,
+    [packets, reviewJob],
+  );
+
+  useEffect(() => {
+    if (!reviewJob) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        activeReviewJobIdRef.current = null;
+        setReviewSubmitting(false);
+        setReviewJob(null);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+      reviewTriggerRef.current?.focus();
+    };
+  }, [reviewJob]);
+
+  useEffect(() => {
+    const packetId = reviewPacket?.id;
+    const status = reviewPacket?.spec._review?.status;
+    if (qaMode || !packetId || !status || !ACTIVE_SUBMISSION_STATUSES.has(status)) return;
+
+    let cancelled = false;
+    let timer: number | undefined;
+    const tick = async () => {
+      try {
+        const result = await api<SubmissionResponse>(`/applications/${packetId}/submission`);
+        if (cancelled) return;
+        setPackets((current) => current.map((packet) => packet.id === packetId
+          ? { ...packet, spec: { ...packet.spec, _review: result.review } }
+          : packet));
+        setReviewError(null);
+        if (ACTIVE_SUBMISSION_STATUSES.has(result.review.status)) {
+          timer = window.setTimeout(tick, 2_500);
+        }
+      } catch (reason) {
+        if (cancelled) return;
+        setReviewError(reason instanceof Error ? reason.message : "Could not refresh submission status.");
+        timer = window.setTimeout(tick, 5_000);
+      }
+    };
+
+    timer = window.setTimeout(tick, 2_500);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [qaMode, reviewPacket?.id, reviewPacket?.spec._review?.status]);
 
   useEffect(() => {
     if (qaMode || prewarmStarted.current || !me || !identity || !applicationProfile || dailyJobs.length === 0) return;
     if (!identity.full_name?.trim()) return;
     prewarmStarted.current = true;
 
-    const remainingQuota = me.usage.resumes.limit >= 100000
-      ? DAILY_PREPARED_RESUME_LIMIT
-      : Math.max(0, me.usage.resumes.limit - me.usage.resumes.used);
+    const remainingQuota = Math.max(0, applicationLimit(me) - me.usage.resumes.used);
     const missing = dailyJobs
       .filter((job) => !packets.some((packet) => packetMatchesJob(packet, job)))
       .slice(0, remainingQuota);
@@ -269,8 +319,6 @@ export default function Home() {
     let cancelled = false;
     let cursor = 0;
     let halted = false;
-    queueMicrotask(() => setPreparingCount(missing.length));
-
     const worker = async () => {
       while (!cancelled && !halted) {
         const job = missing[cursor++];
@@ -278,7 +326,6 @@ export default function Home() {
         const lockKey = prewarmLockKey(job.id);
         const existingLock = Number(window.localStorage.getItem(lockKey));
         if (existingLock && Date.now() - existingLock < 10 * 60 * 1000) {
-          setPreparingCount((count) => Math.max(0, count - 1));
           continue;
         }
         window.localStorage.setItem(lockKey, String(Date.now()));
@@ -290,17 +337,15 @@ export default function Home() {
           });
           if (generated.application && !cancelled) {
             setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
+            setPrewarmFailures((current) => current.filter((jobId) => jobId !== job.id));
           }
         } catch (reason) {
           window.localStorage.removeItem(lockKey);
+          if (!cancelled) setPrewarmFailures((current) => [...new Set([...current, job.id])]);
           const message = reason instanceof Error ? reason.message : "Resume preparation paused.";
           if (/limit|quota|slow down|temporarily unavailable/i.test(message)) {
             halted = true;
-            setPreparingCount(0);
           }
-          if (!cancelled) setPrewarmError(message);
-        } finally {
-          if (!cancelled) setPreparingCount((count) => Math.max(0, count - 1));
         }
       }
     };
@@ -309,7 +354,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [applicationProfile, dailyJobs, identity, me, packets, qaMode]);
+  }, [applicationProfile, dailyJobs, identity, me, packets, prewarmRetry, qaMode]);
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];
@@ -324,6 +369,64 @@ export default function Home() {
     setDismissed(next);
     setLastDismissed(null);
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
+  }
+
+  function openReview(job: RankedJob) {
+    reviewTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    activeReviewJobIdRef.current = job.id;
+    setReviewSubmitting(false);
+    setReviewError(null);
+    setReviewJob(job);
+  }
+
+  function closeReview() {
+    activeReviewJobIdRef.current = null;
+    setReviewSubmitting(false);
+    setReviewJob(null);
+  }
+
+  function retryPreparation(jobId: string) {
+    window.localStorage.removeItem(prewarmLockKey(jobId));
+    setPrewarmFailures((current) => current.filter((id) => id !== jobId));
+    prewarmStarted.current = false;
+    setPrewarmRetry((current) => current + 1);
+  }
+
+  async function submitFromDrawer() {
+    if (!reviewPacket || reviewSubmitting) return;
+    const submittedJobId = reviewJob?.id ?? null;
+    const review = reviewPacket.spec._review;
+    if (!review) return;
+    setReviewSubmitting(true);
+    setReviewError(null);
+    try {
+      if (qaMode) {
+        await new Promise((resolve) => window.setTimeout(resolve, 550));
+        const nextReview: ApplicationReview = {
+          ...review,
+          status: "submitted",
+          submitted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        setPackets((current) => current.map((packet) => packet.id === reviewPacket.id ? { ...packet, spec: { ...packet.spec, _review: nextReview } } : packet));
+        return;
+      }
+
+      const endpoint = review.status === "ready_for_final_approval"
+        ? `/applications/${reviewPacket.id}/submission/approve`
+        : `/applications/${reviewPacket.id}/submit-request`;
+      const result = await api<SubmissionResponse>(endpoint, {
+        method: "POST",
+        body: endpoint.endsWith("submit-request") ? JSON.stringify({ questions: review.questions }) : undefined,
+      });
+      setPackets((current) => current.map((packet) => packet.id === reviewPacket.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet));
+    } catch (reason) {
+      if (activeReviewJobIdRef.current === submittedJobId) {
+        setReviewError(reason instanceof Error ? reason.message : "Could not submit this application.");
+      }
+    } finally {
+      if (activeReviewJobIdRef.current === submittedJobId) setReviewSubmitting(false);
+    }
   }
 
   const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "your target roles";
@@ -347,8 +450,7 @@ export default function Home() {
           <h2 id="applications-summary" className="text-base font-medium text-ink">Applications</h2>
           <Link href="/dashboard/applications" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
         </div>
-        <dl className="mt-4 grid grid-cols-2 border-y border-border sm:grid-cols-4">
-          <SummaryMetric label="Prepared" value={applicationSummary.prepared} />
+        <dl className="mt-4 grid grid-cols-3 border-y border-border">
           <SummaryMetric label="Ready" value={applicationSummary.ready} />
           <SummaryMetric label="Needs action" value={applicationSummary.needsAction} urgent={applicationSummary.needsAction > 0} />
           <SummaryMetric label="Submitted" value={applicationSummary.submitted} />
@@ -388,27 +490,6 @@ export default function Home() {
         </section>
       </div>
 
-      <section aria-labelledby="activity-heading">
-        <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
-          <h2 id="activity-heading" className="text-base font-medium text-ink">Recent activity</h2>
-        </div>
-        {recentActivity.length > 0 ? (
-          <div className="divide-y divide-border">
-            {recentActivity.map((item) => (
-              <div key={item.id} className="grid min-h-14 grid-cols-[1fr_auto] items-center gap-4 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{item.label}</p>
-                  <p className="truncate text-xs text-muted">{item.detail}</p>
-                </div>
-                <time className="font-mono text-[11px] text-faint">{formatDate(item.date)}</time>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="py-5 text-sm text-muted">Activity appears here.</p>
-        )}
-      </section>
-
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
           <div>
@@ -436,26 +517,11 @@ export default function Home() {
             <span />
           </div>
           {visibleJobs.map((job) => (
-            <JobMatchCard key={job.id} job={job} rank={rankedJobs.findIndex((ranked) => ranked.id === job.id) + 1} qaMode={qaMode} prepared={packets.some((packet) => packetMatchesJob(packet, job))} onDismiss={() => dismiss(job.id)} />
+            <JobMatchCard key={job.id} job={job} rank={rankedJobs.findIndex((ranked) => ranked.id === job.id) + 1} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
           ))}
         </div>
       )}
       </section>
-
-      {dailyJobs.length > 0 && (
-        <section aria-label="Daily resume preparation" className="border-y border-border py-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium text-ink">Daily preparation</p>
-              <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-faint">
-                {preparedCount} ready{preparingCount > 0 ? ` · ${preparingCount} preparing` : ""}
-              </p>
-            </div>
-            <Link href="/dashboard/applications" className="text-sm font-medium text-brand hover:text-brand-ink">Review</Link>
-          </div>
-          {prewarmError && <p className="mt-2 text-xs text-warn">Preparation paused. Open any role to continue generating its resume.</p>}
-        </section>
-      )}
 
       {lastDismissed && (
         <div role="status" className="flex items-center justify-between rounded-[12px] bg-surface-alt px-4 py-3 text-sm text-muted">
@@ -472,7 +538,7 @@ export default function Home() {
                 <h2 id="usage-heading" className="text-sm font-medium text-ink">Usage</h2>
                 <span className="font-mono text-[10px] uppercase text-faint">{me.tier}</span>
               </div>
-              <p className="mt-1 text-xs text-muted">{usageLabel(me.usage.resumes.used, me.usage.resumes.limit, "applications")} · {usageLabel(me.usage.drafts.used, me.usage.drafts.limit, "drafts")}</p>
+              <p className="mt-1 text-xs text-muted">{usageLabel(me.usage.resumes.used, applicationLimit(me), "resumes this month")} · {usageLabel(me.usage.drafts.used, me.usage.drafts.limit, "drafts")}</p>
             </div>
             <div className="flex gap-2">
               <Link href="/dashboard/settings" className="flex min-h-11 items-center px-2 text-sm font-medium text-muted hover:text-ink">Plan</Link>
@@ -480,6 +546,17 @@ export default function Home() {
             </div>
           </div>
         </section>
+      )}
+
+      {reviewJob && (
+        <ReviewDrawer
+          job={reviewJob}
+          packet={reviewPacket}
+          submitting={reviewSubmitting}
+          error={reviewError}
+          onClose={closeReview}
+          onSubmit={submitFromDrawer}
+        />
       )}
     </div>
   );
@@ -515,7 +592,7 @@ function DashboardRow({ label, detail, href }: { label: string; detail: string; 
   );
 }
 
-function JobMatchCard({ job, rank, qaMode, prepared, onDismiss }: { job: RankedJob; rank: number; qaMode: boolean; prepared: boolean; onDismiss: () => void }) {
+function JobMatchCard({ job, rank, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; rank: number; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
   return (
     <Card className="overflow-hidden transition-colors hover:border-ink/30">
       <div className="grid gap-5 p-5 sm:grid-cols-[44px_1fr_auto] sm:items-center sm:p-6">
@@ -525,7 +602,7 @@ function JobMatchCard({ job, rank, qaMode, prepared, onDismiss }: { job: RankedJ
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Chip label={`${job.match}% match`} kind="ready" />
-            <Chip label={prepared ? "Resume ready" : "Preparing"} kind={prepared ? "sent" : "generating"} />
+            <Chip label={prepared ? "Resume ready" : preparationFailed ? "Preparation paused" : "Preparing"} kind={prepared ? "sent" : "generating"} />
             {job.remote && <Chip label="Remote" kind="sent" />}
             <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-faint">Found {formatDate(job.first_seen_at)}</span>
           </div>
@@ -537,9 +614,9 @@ function JobMatchCard({ job, rank, qaMode, prepared, onDismiss }: { job: RankedJ
           <button type="button" onClick={onDismiss} aria-label={`Pass on ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Pass
           </button>
-          <Link href={`/dashboard/applications?job=${job.id}${qaMode ? `&qa=${qaScenarioKey(job)}` : ""}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-            {prepared ? "Review" : "Approve"}
-          </Link>
+          <button type="button" onClick={prepared ? onReview : onRetry} disabled={!prepared && !preparationFailed} aria-label={`${prepared ? "Review" : preparationFailed ? "Retry preparation for" : "Preparing"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:bg-surface-strong disabled:text-faint">
+            {prepared ? "Review" : preparationFailed ? "Retry" : "Preparing"}
+          </button>
         </div>
       </div>
     </Card>
@@ -563,10 +640,148 @@ function prewarmLockKey(jobId: string): string {
   return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
 }
 
-function qaScenarioKey(job: MonitoredJob): string {
-  return job.company_name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+function usageLabel(used: number, limit: number, noun: string): string {
+  return `${used.toLocaleString()} of ${limit.toLocaleString()} ${noun}`;
 }
 
-function usageLabel(used: number, limit: number, noun: string): string {
-  return limit >= 100000 ? `${used} ${noun}` : `${used} of ${limit} ${noun}`;
+function applicationLimit(me: Me): number {
+  return me.usage.resumes.limit;
+}
+
+function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { job: RankedJob; packet: GeneratedResume | null; submitting: boolean; error: string | null; onClose: () => void; onSubmit: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const review = packet?.spec._review;
+  const missingAnswers = review?.questions.filter((question) => question.required && !question.answer.trim()) ?? [];
+  const status = review?.status;
+  const submitted = status === "submitted";
+  const inProgress = status ? ACTIVE_SUBMISSION_STATUSES.has(status) : false;
+  const needsAttention = ["needs_attention", "failed"].includes(status ?? "");
+  const canSubmit = Boolean(packet && review && missingAnswers.length === 0 && !submitted && !inProgress && !needsAttention);
+  const buttonLabel = submitting
+    ? "Submitting..."
+    : status === "ready_for_final_approval"
+      ? "Approve submission"
+      : submitted
+        ? "Submitted"
+        : inProgress
+          ? "Submitting"
+      : "Submit application";
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+  }, []);
+
+  function containFocus(event: React.KeyboardEvent<HTMLElement>) {
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ));
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <button type="button" tabIndex={-1} aria-label="Close review" onClick={onClose} className="dashboard-drawer-backdrop absolute inset-0 bg-ink/30 backdrop-blur-[2px]" />
+      <aside role="dialog" aria-modal="true" aria-labelledby="review-title" onKeyDown={containFocus} className="dashboard-drawer absolute inset-y-0 right-0 flex w-full max-w-[1120px] flex-col bg-white shadow-[-24px_0_80px_rgba(20,20,18,0.14)]">
+        <header className="flex items-start justify-between gap-6 border-b border-border px-5 py-5 sm:px-8">
+          <div className="min-w-0">
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Review match</p>
+            <h2 id="review-title" className="mt-1 truncate text-xl font-medium tracking-[-0.02em] text-ink">{job.title}</h2>
+            <p className="mt-1 truncate text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
+          </div>
+          <button ref={closeButtonRef} type="button" onClick={onClose} className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border text-xl text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Close review">×</button>
+        </header>
+
+        <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
+          <section aria-labelledby="job-description-heading" className="border-b border-border p-5 lg:overflow-y-auto lg:border-b-0 lg:border-r sm:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <h3 id="job-description-heading" className="text-sm font-medium text-ink">Job description</h3>
+              <Chip label={`${job.match}% match`} kind="ready" />
+            </div>
+            <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>
+          </section>
+
+          <section aria-labelledby="resume-heading" className="bg-surface-alt p-5 lg:overflow-y-auto sm:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <h3 id="resume-heading" className="text-sm font-medium text-ink">Tailored resume</h3>
+              {packet?.created_at && <span className="font-mono text-[10px] uppercase text-faint">{formatDate(packet.created_at)}</span>}
+            </div>
+            {packet ? <ResumePreview packet={packet} /> : <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>}
+          </section>
+        </div>
+
+        <footer className="border-t border-border bg-white px-5 py-4 sm:px-8">
+          {error && <p role="alert" className="mb-3 text-sm text-warn">{error}</p>}
+          {missingAnswers.length > 0 && <p className="mb-3 text-sm text-warn">{missingAnswers.length} answer{missingAnswers.length === 1 ? "" : "s"} needed.</p>}
+          {needsAttention && <p className="mb-3 text-sm text-warn">This application needs attention.</p>}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted">Safety checks pause when you are needed.</p>
+            <div className="flex items-center gap-2">
+              {(missingAnswers.length > 0 || needsAttention) && packet && (
+                <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Resolve details</Link>
+              )}
+              <button type="button" onClick={onSubmit} disabled={!canSubmit || submitting} className={`min-h-11 rounded-full px-6 text-sm font-medium transition-opacity ${submitted ? "bg-positive-soft text-positive disabled:bg-positive-soft disabled:text-positive" : "bg-brand text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-faint"}`}>
+                {buttonLabel}
+              </button>
+            </div>
+          </div>
+        </footer>
+      </aside>
+    </div>
+  );
+}
+
+function ResumePreview({ packet }: { packet: GeneratedResume }) {
+  const spec = packet.spec;
+  return (
+    <article className="mt-6 rounded-[14px] border border-border bg-white p-5 shadow-[0_12px_36px_rgba(20,20,18,0.06)] sm:p-7">
+      <div className="border-b border-ink pb-4">
+        <h4 className="text-lg font-semibold tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
+        <p className="mt-1 text-xs text-muted">{packet.job_context.company}</p>
+      </div>
+      <ResumeSection title="Education">
+        <p className="text-sm font-medium text-ink">{spec.school}</p>
+        <p className="mt-1 text-xs leading-5 text-muted">{[spec.degree, spec.grad_date].filter(Boolean).join(" · ")}</p>
+        {spec.coursework && <p className="mt-2 text-xs leading-5 text-muted">{spec.coursework}</p>}
+      </ResumeSection>
+      {spec.experience.length > 0 && (
+        <ResumeSection title="Experience">
+          <div className="space-y-5">
+            {spec.experience.map((entry, index) => (
+              <div key={`${entry.org}-${entry.title}-${index}`}>
+                <div className="flex flex-wrap justify-between gap-2">
+                  <p className="text-sm font-medium text-ink">{entry.title} · {entry.org}</p>
+                  <p className="font-mono text-[10px] text-faint">{entry.date_range}</p>
+                </div>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-muted">
+                  {entry.bullets.map((bullet, bulletIndex) => <li key={`${bullet}-${bulletIndex}`}>{bullet}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </ResumeSection>
+      )}
+      <ResumeSection title="Skills">
+        <p className="text-xs leading-6 text-muted">{spec.skills.join(" · ")}</p>
+      </ResumeSection>
+    </article>
+  );
+}
+
+function ResumeSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="border-b border-border py-4 last:border-b-0 last:pb-0">
+      <h5 className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{title}</h5>
+      {children}
+    </section>
+  );
 }
