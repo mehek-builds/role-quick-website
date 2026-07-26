@@ -463,7 +463,7 @@ export default function Home() {
         </Card>
       )}
 
-      {me?.is_guest && !trialActive && me.upgrade_url && (
+      {me?.is_guest && !trialActive && me.checkout_available && (
         <Card className="flex flex-wrap items-center justify-between gap-4 bg-brand-soft p-5">
           <div>
             <p className="text-sm font-medium text-ink">Your seven-day trial has ended.</p>
@@ -471,7 +471,6 @@ export default function Home() {
           </div>
           <Link
             href="/login?claim=1&next=upgrade"
-            onClick={() => window.sessionStorage.setItem("litos_pending_upgrade_url", me.upgrade_url!)}
             className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
           >
             Get Pro
