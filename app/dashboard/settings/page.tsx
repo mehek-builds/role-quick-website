@@ -186,7 +186,11 @@ export default function Settings() {
   }
 
   async function deleteAccount() {
-    const confirmation = window.prompt(`Type ${me?.email ?? "your email"} to delete your account.`);
+    if (!me?.email) {
+      setError("Save this guest workspace with an email before deleting the account.");
+      return;
+    }
+    const confirmation = window.prompt(`Type ${me.email} to delete your account.`);
     if (!me || confirmation === null) return;
     if (confirmation.trim().toLowerCase() !== me.email.toLowerCase()) {
       setError("Email did not match. Nothing was deleted.");
@@ -241,7 +245,7 @@ export default function Settings() {
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-faint">Email</p>
-            <p className="mt-0.5 font-mono text-sm text-ink">{me.email}</p>
+            <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Guest workspace"}</p>
           </div>
           <div>
             <p className="text-xs text-faint">Plan</p>
@@ -379,7 +383,7 @@ export default function Settings() {
           <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
-        {me.upgrade_url ? (
+        {me.upgrade_url && !trialActive ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
             <p className="text-sm text-muted">
               <span className="font-medium text-ink">Pro covers 500 jobs a month. </span>
@@ -387,7 +391,12 @@ export default function Settings() {
               the billing portal linked in your receipt email.
             </p>
             <a
-              href={me.upgrade_url}
+              href={me.is_guest ? "/login?claim=1&next=upgrade" : me.upgrade_url}
+              onClick={() => {
+                if (me.is_guest && me.upgrade_url) {
+                  window.sessionStorage.setItem("litos_pending_upgrade_url", me.upgrade_url);
+                }
+              }}
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Upgrade to Pro
