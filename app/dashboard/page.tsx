@@ -36,6 +36,7 @@ export default function Overview() {
   const [activity, setActivity] = useState<Activity[] | null>(null);
   const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadedAt, setLoadedAt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,6 +54,7 @@ export default function Overview() {
         ]);
         if (cancelled) return;
         setMe(meRes);
+        setLoadedAt(Date.now());
         setOnboarding(onboardingRes);
 
         const events = Array.isArray(eventsRes)
@@ -101,10 +103,10 @@ export default function Overview() {
     );
 
   const trialActive =
-    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > Date.now();
+    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > loadedAt;
   const trialDays = trialActive
     ? Math.ceil(
-        (new Date(me.trial_ends_at!).getTime() - Date.now()) / 86400000,
+        (new Date(me.trial_ends_at!).getTime() - loadedAt) / 86400000,
       )
     : 0;
 
@@ -150,6 +152,18 @@ export default function Overview() {
         </Link>
       )}
 
+      {me.is_guest && trialActive && (
+        <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div>
+            <p className="text-sm font-medium text-ink">Keep this workspace.</p>
+            <p className="mt-1 text-xs text-muted">Verify a new email before this browser session is lost.</p>
+          </div>
+          <Link href="/login?claim=1" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+            Save workspace
+          </Link>
+        </Card>
+      )}
+
       {/* Usage meters fill in ink per DESIGN.md: a meter is a quantity, not a
           pillar. Autofill has no cap on any plan, so it has no meter. */}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -178,7 +192,7 @@ export default function Overview() {
 
       {/* Pro emphasis surface (DESIGN.md v1.1): blue-soft, the screen's
           strongest moment. States what you get; no urgency mechanics. */}
-      {me.upgrade_url && (
+      {me.upgrade_url && !trialActive && (
         <div className="flex flex-wrap items-center justify-between gap-4 rounded-[20px] bg-brand-soft p-6">
           <div>
             <div className="flex items-center gap-2.5">
@@ -192,7 +206,12 @@ export default function Overview() {
             </p>
           </div>
           <a
-            href={me.upgrade_url}
+            href={me.is_guest ? "/login?claim=1&next=upgrade" : me.upgrade_url}
+            onClick={() => {
+              if (me.is_guest && me.upgrade_url) {
+                window.sessionStorage.setItem("litos_pending_upgrade_url", me.upgrade_url);
+              }
+            }}
             className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             Upgrade to Pro

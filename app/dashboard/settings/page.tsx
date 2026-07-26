@@ -38,6 +38,7 @@ export default function Settings() {
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
+  const [loadedAt, setLoadedAt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +61,7 @@ export default function Settings() {
         }
         if (cancelled) return;
         setMe(meRes);
+        setLoadedAt(Date.now());
         setProfile(profileRes);
         setAutomaticVerificationState(onboardingRes.automatic_verification_enabled);
         setEmailConnections(connectionRes);
@@ -166,7 +168,7 @@ export default function Settings() {
     );
 
   const trialActive =
-    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > Date.now();
+    me.trial_ends_at && new Date(me.trial_ends_at).getTime() > loadedAt;
 
   return (
     <div className="space-y-8">
@@ -190,7 +192,7 @@ export default function Settings() {
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-faint">Email</p>
-            <p className="mt-0.5 font-mono text-sm text-ink">{me.email}</p>
+            <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Guest workspace"}</p>
           </div>
           <div>
             <p className="text-xs text-faint">Plan</p>

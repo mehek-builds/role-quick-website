@@ -64,7 +64,7 @@ export default function DashboardLayout({
             </span>
           </Link>
           <div className="flex items-center gap-4">
-            <span className="hidden font-mono text-xs text-muted sm:block">{email}</span>
+            <span className="hidden font-mono text-xs text-muted sm:block">{email ?? "Guest workspace"}</span>
             <button
               onClick={() => {
                 clearSession();

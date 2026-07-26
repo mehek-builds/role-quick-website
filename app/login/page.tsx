@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { API_URL } from "@/lib/config";
-import { setSession, getToken, getOnboardingState } from "@/lib/api";
+import {
+  setSession,
+  getToken,
+  getOnboardingState,
+  getOrCreateGuestKey,
+  hasLitosHistory,
+} from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
 import { requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
@@ -38,10 +44,19 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
+  const [guestEligible, setGuestEligible] = useState(false);
+  const [claimMode, setClaimMode] = useState(false);
 
   useEffect(() => {
-    if (!getToken()) return;
-    void landingRoute().then((r) => router.replace(r));
+    const claiming = new URLSearchParams(window.location.search).get("claim") === "1";
+    if (getToken() && !claiming) {
+      void landingRoute().then((r) => router.replace(r));
+      return;
+    }
+    queueMicrotask(() => {
+      setClaimMode(claiming);
+      setGuestEligible(!hasLitosHistory());
+    });
   }, [router]);
 
   useEffect(() => {
@@ -89,6 +104,29 @@ export default function Login() {
     await requestCode(normalized);
   }
 
+  async function continueAsGuest() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_URL}/auth/guest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
+        body: JSON.stringify({ idempotency_key: getOrCreateGuestKey() }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.token) {
+        setError(data?.error ?? "Could not start guest mode.");
+        return;
+      }
+      setSession(data.token, null, true);
+      router.replace("/start");
+    } catch {
+      setError("Network error. Check your connection and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function submitCode(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
@@ -96,12 +134,30 @@ export default function Login() {
     try {
       const res = await fetch(`${API_URL}/auth/verify-code`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
+        headers: {
+          "Content-Type": "application/json",
+          ...litosClientHeaders(),
+          ...(claimMode && getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+        },
         body: JSON.stringify({ email: email.trim().toLowerCase(), code: code.trim() }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok && data?.token) {
         setSession(data.token, email.trim().toLowerCase());
+        const next = new URLSearchParams(window.location.search).get("next");
+        const upgradeUrl = window.sessionStorage.getItem("litos_pending_upgrade_url");
+        if (next === "upgrade" && upgradeUrl) {
+          try {
+            const parsed = new URL(upgradeUrl);
+            if (parsed.protocol === "https:" && (parsed.hostname === "buy.stripe.com" || parsed.hostname.endsWith(".stripe.com"))) {
+              window.sessionStorage.removeItem("litos_pending_upgrade_url");
+              window.location.assign(parsed.toString());
+              return;
+            }
+          } catch {
+            window.sessionStorage.removeItem("litos_pending_upgrade_url");
+          }
+        }
         router.replace(await landingRoute());
       } else {
         setError(verifyCodeError(res.status, data?.error));
@@ -124,10 +180,13 @@ export default function Login() {
       <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">
         {step === "email" ? (
           <form onSubmit={submitEmail}>
-            <h1 className="text-xl font-semibold tracking-tight text-ink">Sign in</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-ink">
+              {claimMode ? "Save your guest workspace" : "Sign in"}
+            </h1>
             <p className="mt-2 text-sm leading-6 text-muted">
-              No password. We email you a six-digit code, new accounts are
-              created on first sign-in.
+              {claimMode
+                ? "Verify a new email to keep this work and use Litos across devices."
+                : "No password. We email you a six-digit code, new accounts are created on first sign-in."}
             </p>
             <label className="mt-6 block text-xs font-medium text-muted" htmlFor="email">
               Email
@@ -153,6 +212,26 @@ export default function Login() {
             >
               {busy ? <PendingLabel onColor>Sending code...</PendingLabel> : "Continue with email"}
             </button>
+            {guestEligible && (
+              <>
+                <div className="my-5 flex items-center gap-3" aria-hidden="true">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">or</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void continueAsGuest()}
+                  className="w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:opacity-50"
+                >
+                  {busy ? <PendingLabel state="searching">Starting guest mode...</PendingLabel> : "Try as a guest"}
+                </button>
+                <p className="mt-3 text-center text-xs leading-5 text-faint">
+                  Seven days at Pro limits. No card. This option appears only on your first visit.
+                </p>
+              </>
+            )}
           </form>
         ) : (
           <form onSubmit={submitCode}>
