@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 28
+      "community": 27
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 29
+      "community": 28
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 30
+      "community": 29
     },
     {
       "label": "layout.tsx",
@@ -161,7 +161,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L133",
       "id": "page_tick",
-      "community": 15
+      "community": 16
     },
     {
       "label": "worker()",
@@ -209,7 +209,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L522",
       "id": "page_retrypreparation",
-      "community": 12
+      "community": 13
     },
     {
       "label": "submitFromDrawer()",
@@ -223,7 +223,7 @@
       "label": "Settings()",
       "file_type": "code",
       "source_file": "app/dashboard/settings/page.tsx",
-      "source_location": "L31",
+      "source_location": "L36",
       "id": "page_settings",
       "community": 0
     },
@@ -273,7 +273,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L145",
       "id": "page_poll",
-      "community": 15
+      "community": 16
     },
     {
       "label": "onVisibility()",
@@ -281,7 +281,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L150",
       "id": "page_onvisibility",
-      "community": 15
+      "community": 16
     },
     {
       "label": "fetchJobDescription()",
@@ -313,7 +313,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L389",
       "id": "page_savecoverletter",
-      "community": 12
+      "community": 13
     },
     {
       "label": "saveResume()",
@@ -321,7 +321,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L432",
       "id": "page_saveresume",
-      "community": 12
+      "community": 13
     },
     {
       "label": "continueFromResume()",
@@ -329,7 +329,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L458",
       "id": "page_continuefromresume",
-      "community": 12
+      "community": 13
     },
     {
       "label": "prepareApplication()",
@@ -337,7 +337,7 @@
       "source_file": "app/dashboard/applications/page.tsx",
       "source_location": "L473",
       "id": "page_prepareapplication",
-      "community": 12
+      "community": 13
     },
     {
       "label": "completeHandoff()",
@@ -393,7 +393,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L8",
       "id": "page_jobparams",
-      "community": 20
+      "community": 24
     },
     {
       "label": "loadMore()",
@@ -401,7 +401,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L46",
       "id": "page_loadmore",
-      "community": 20
+      "community": 24
     },
     {
       "label": "TryPage()",
@@ -449,7 +449,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L1",
       "id": "errors",
-      "community": 14
+      "community": 15
     },
     {
       "label": "requestCodeError()",
@@ -457,7 +457,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L3",
       "id": "errors_requestcodeerror",
-      "community": 14
+      "community": 15
     },
     {
       "label": "verifyCodeError()",
@@ -465,7 +465,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L19",
       "id": "errors_verifycodeerror",
-      "community": 14
+      "community": 15
     },
     {
       "label": "googleSignInError()",
@@ -473,7 +473,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L31",
       "id": "errors_googlesigninerror",
-      "community": 14
+      "community": 15
     },
     {
       "label": "GoogleSignInButton.tsx",
@@ -481,7 +481,7 @@
       "source_file": "app/login/GoogleSignInButton.tsx",
       "source_location": "L1",
       "id": "googlesigninbutton",
-      "community": 26
+      "community": 21
     },
     {
       "label": "GoogleSignInButton()",
@@ -489,7 +489,7 @@
       "source_file": "app/login/GoogleSignInButton.tsx",
       "source_location": "L44",
       "id": "googlesigninbutton_googlesigninbutton",
-      "community": 26
+      "community": 21
     },
     {
       "label": "google-session.ts",
@@ -497,7 +497,7 @@
       "source_file": "app/login/google-session.ts",
       "source_location": "L1",
       "id": "google_session",
-      "community": 24
+      "community": 20
     },
     {
       "label": "completeGoogleSession()",
@@ -505,37 +505,53 @@
       "source_file": "app/login/google-session.ts",
       "source_location": "L12",
       "id": "google_session_completegooglesession",
-      "community": 24
+      "community": 20
     },
     {
       "label": "landingRoute()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L31",
+      "source_location": "L29",
       "id": "page_landingroute",
-      "community": 25
+      "community": 10
     },
     {
       "label": "requestCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L72",
+      "source_location": "L77",
       "id": "page_requestcode",
-      "community": 18
+      "community": 10
     },
     {
-      "label": "submitEmail()",
+      "label": "passwordProblem()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L105",
-      "id": "page_submitemail",
-      "community": 18
+      "source_location": "L110",
+      "id": "page_passwordproblem",
+      "community": 10
+    },
+    {
+      "label": "submitCredentials()",
+      "file_type": "code",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L114",
+      "id": "page_submitcredentials",
+      "community": 10
+    },
+    {
+      "label": "setVerifiedPassword()",
+      "file_type": "code",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L151",
+      "id": "page_setverifiedpassword",
+      "community": 10
     },
     {
       "label": "continueAsGuest()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L111",
+      "source_location": "L171",
       "id": "page_continueasguest",
       "community": 0
     },
@@ -543,9 +559,17 @@
       "label": "submitCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L162",
+      "source_location": "L222",
       "id": "page_submitcode",
-      "community": 25
+      "community": 10
+    },
+    {
+      "label": "submitNewPassword()",
+      "file_type": "code",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L278",
+      "id": "page_submitnewpassword",
+      "community": 10
     },
     {
       "label": "PacketDemo.tsx",
@@ -553,7 +577,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L1",
       "id": "packetdemo",
-      "community": 10
+      "community": 11
     },
     {
       "label": "active()",
@@ -561,7 +585,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L84",
       "id": "packetdemo_active",
-      "community": 10
+      "community": 11
     },
     {
       "label": "stop()",
@@ -569,7 +593,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L85",
       "id": "packetdemo_stop",
-      "community": 10
+      "community": 11
     },
     {
       "label": "advance()",
@@ -577,7 +601,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L90",
       "id": "packetdemo_advance",
-      "community": 10
+      "community": 11
     },
     {
       "label": "restart()",
@@ -585,7 +609,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L103",
       "id": "packetdemo_restart",
-      "community": 10
+      "community": 11
     },
     {
       "label": "onVisibility()",
@@ -593,7 +617,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L115",
       "id": "packetdemo_onvisibility",
-      "community": 10
+      "community": 11
     },
     {
       "label": "jump()",
@@ -601,7 +625,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L131",
       "id": "packetdemo_jump",
-      "community": 10
+      "community": 11
     },
     {
       "label": "Mockups.tsx",
@@ -681,7 +705,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L1",
       "id": "herobackdrop",
-      "community": 16
+      "community": 17
     },
     {
       "label": "onMove()",
@@ -689,7 +713,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L52",
       "id": "herobackdrop_onmove",
-      "community": 16
+      "community": 17
     },
     {
       "label": "tick()",
@@ -697,7 +721,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L59",
       "id": "herobackdrop_tick",
-      "community": 16
+      "community": 17
     },
     {
       "label": "Motion.tsx",
@@ -705,7 +729,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L1",
       "id": "motion",
-      "community": 17
+      "community": 18
     },
     {
       "label": "Reveal()",
@@ -713,7 +737,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L9",
       "id": "motion_reveal",
-      "community": 17
+      "community": 18
     },
     {
       "label": "CountUp()",
@@ -721,7 +745,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L69",
       "id": "motion_countup",
-      "community": 17
+      "community": 18
     },
     {
       "label": "OutreachDemo.tsx",
@@ -865,7 +889,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L1",
       "id": "cinematichero",
-      "community": 13
+      "community": 14
     },
     {
       "label": "framePath()",
@@ -873,7 +897,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L28",
       "id": "cinematichero_framepath",
-      "community": 13
+      "community": 14
     },
     {
       "label": "CinematicHero()",
@@ -881,7 +905,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L49",
       "id": "cinematichero_cinematichero",
-      "community": 13
+      "community": 14
     },
     {
       "label": "BRoll.tsx",
@@ -889,7 +913,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 27
+      "community": 26
     },
     {
       "label": "BRoll()",
@@ -897,7 +921,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 27
+      "community": 26
     },
     {
       "label": "SmoothScroll.tsx",
@@ -905,7 +929,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L1",
       "id": "smoothscroll",
-      "community": 22
+      "community": 23
     },
     {
       "label": "SmoothScroll()",
@@ -913,7 +937,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L11",
       "id": "smoothscroll_smoothscroll",
-      "community": 22
+      "community": 23
     },
     {
       "label": "paperRollEngine.js",
@@ -921,7 +945,7 @@
       "source_file": "components/cinema/paperRollEngine.js",
       "source_location": "L1",
       "id": "paperrollengine",
-      "community": 13
+      "community": 14
     },
     {
       "label": "createPaperRoll()",
@@ -929,7 +953,7 @@
       "source_file": "components/cinema/paperRollEngine.js",
       "source_location": "L8",
       "id": "paperrollengine_createpaperroll",
-      "community": 13
+      "community": 14
     },
     {
       "label": "CinematicPage.tsx",
@@ -937,7 +961,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L1",
       "id": "cinematicpage",
-      "community": 23
+      "community": 22
     },
     {
       "label": "CinematicPage()",
@@ -945,7 +969,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L38",
       "id": "cinematicpage_cinematicpage",
-      "community": 23
+      "community": 22
     },
     {
       "label": "Wash.tsx",
@@ -953,7 +977,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L1",
       "id": "wash",
-      "community": 21
+      "community": 25
     },
     {
       "label": "Wash()",
@@ -961,7 +985,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L14",
       "id": "wash_wash",
-      "community": 21
+      "community": 25
     },
     {
       "label": "steps.tsx",
@@ -1049,7 +1073,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L1",
       "id": "strip_page_blue",
-      "community": 11
+      "community": 12
     },
     {
       "label": "_packet_shield()",
@@ -1057,7 +1081,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L22",
       "id": "strip_page_blue_packet_shield",
-      "community": 11
+      "community": 12
     },
     {
       "label": "degrade()",
@@ -1065,7 +1089,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L38",
       "id": "strip_page_blue_degrade",
-      "community": 11
+      "community": 12
     },
     {
       "label": "frames()",
@@ -1073,7 +1097,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L53",
       "id": "strip_page_blue_frames",
-      "community": 11
+      "community": 12
     },
     {
       "label": "video()",
@@ -1081,7 +1105,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L61",
       "id": "strip_page_blue_video",
-      "community": 11
+      "community": 12
     },
     {
       "label": "The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is",
@@ -1089,7 +1113,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L23",
       "id": "strip_page_blue_rationale_23",
-      "community": 11
+      "community": 12
     },
     {
       "label": "application-review.ts",
@@ -2146,18 +2170,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/dashboard/settings/page.tsx",
-      "source_location": "L31",
-      "weight": 1.0,
-      "_src": "page",
-      "_tgt": "page_settings",
-      "source": "page",
-      "target": "page_settings",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
@@ -2167,6 +2179,18 @@
       "_tgt": "product",
       "source": "page",
       "target": "product",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/dashboard/settings/page.tsx",
+      "source_location": "L36",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_settings",
+      "source": "page",
+      "target": "page_settings",
       "confidence_score": 1.0
     },
     {
@@ -2509,7 +2533,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L31",
+      "source_location": "L29",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_landingroute",
@@ -2521,7 +2545,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L72",
+      "source_location": "L77",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_requestcode",
@@ -2533,19 +2557,43 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L105",
+      "source_location": "L110",
       "weight": 1.0,
       "_src": "page",
-      "_tgt": "page_submitemail",
+      "_tgt": "page_passwordproblem",
       "source": "page",
-      "target": "page_submitemail",
+      "target": "page_passwordproblem",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L111",
+      "source_location": "L114",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_submitcredentials",
+      "source": "page",
+      "target": "page_submitcredentials",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L151",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_setverifiedpassword",
+      "source": "page",
+      "target": "page_setverifiedpassword",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L171",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_continueasguest",
@@ -2557,12 +2605,24 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L162",
+      "source_location": "L222",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitcode",
       "source": "page",
       "target": "page_submitcode",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L278",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_submitnewpassword",
+      "source": "page",
+      "target": "page_submitnewpassword",
       "confidence_score": 1.0
     },
     {
@@ -2845,7 +2905,31 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L196",
+      "source_location": "L143",
+      "weight": 1.0,
+      "_src": "page_submitcredentials",
+      "_tgt": "page_landingroute",
+      "source": "page_landingroute",
+      "target": "page_submitcredentials",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L167",
+      "weight": 1.0,
+      "_src": "page_setverifiedpassword",
+      "_tgt": "page_landingroute",
+      "source": "page_landingroute",
+      "target": "page_setverifiedpassword",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L267",
       "weight": 1.0,
       "_src": "page_submitcode",
       "_tgt": "page_landingroute",
@@ -2857,12 +2941,60 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L108",
+      "source_location": "L125",
       "weight": 1.0,
-      "_src": "page_submitemail",
+      "_src": "page_submitcredentials",
       "_tgt": "page_requestcode",
       "source": "page_requestcode",
-      "target": "page_submitemail",
+      "target": "page_submitcredentials",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L119",
+      "weight": 1.0,
+      "_src": "page_submitcredentials",
+      "_tgt": "page_passwordproblem",
+      "source": "page_passwordproblem",
+      "target": "page_submitcredentials",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L280",
+      "weight": 1.0,
+      "_src": "page_submitnewpassword",
+      "_tgt": "page_passwordproblem",
+      "source": "page_passwordproblem",
+      "target": "page_submitnewpassword",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L239",
+      "weight": 1.0,
+      "_src": "page_submitcode",
+      "_tgt": "page_setverifiedpassword",
+      "source": "page_setverifiedpassword",
+      "target": "page_submitcode",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L292",
+      "weight": 1.0,
+      "_src": "page_submitnewpassword",
+      "_tgt": "page_setverifiedpassword",
+      "source": "page_setverifiedpassword",
+      "target": "page_submitnewpassword",
       "confidence_score": 1.0
     },
     {
