@@ -66,7 +66,7 @@ export default function JobsPage() {
     <div className="space-y-6">
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">All jobs</p>
-        <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">Search the full feed.</h1>
+        <h1 className="mt-2 text-3xl font-medium tracking-[-0.025em] text-ink">Jobs</h1>
         <p className="mt-2 text-sm text-muted">Active roles collected across supported job boards.</p>
       </div>
 
