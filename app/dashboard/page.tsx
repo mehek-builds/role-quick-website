@@ -228,7 +228,7 @@ export default function Home() {
         setOutreach(Array.isArray(outreachResult) ? outreachResult : (outreachResult.events ?? []));
       })
       .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load today's matches.");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "We could not load your jobs. Reload the page.");
       });
     return () => {
       cancelled = true;
@@ -298,7 +298,7 @@ export default function Home() {
         }
       } catch (reason) {
         if (cancelled) return;
-        setReviewError(reason instanceof Error ? reason.message : "Could not refresh submission status.");
+        setReviewError(reason instanceof Error ? reason.message : "We lost track of this application. Reload the page.");
         timer = window.setTimeout(tick, 5_000);
       }
     };
@@ -427,7 +427,7 @@ export default function Home() {
       setPackets((current) => current.map((packet) => packet.id === reviewPacket.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet));
     } catch (reason) {
       if (activeReviewJobIdRef.current === submittedJobId) {
-        setReviewError(reason instanceof Error ? reason.message : "Could not submit this application.");
+        setReviewError(reason instanceof Error ? reason.message : "We could not send this application. Try again.");
       }
     } finally {
       if (activeReviewJobIdRef.current === submittedJobId) setReviewSubmitting(false);
@@ -561,7 +561,7 @@ export default function Home() {
 
       {lastDismissed && (
         <div role="status" className="flex items-center justify-between rounded-[12px] bg-surface-alt px-4 py-3 text-sm text-muted">
-          <span>Passed for today.</span>
+          <span>Skipped for today.</span>
           <button type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
         </div>
       )}
@@ -643,8 +643,8 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
           <p className="mt-2 text-xs text-faint">{job.reasons.join(" · ")}</p>
         </div>
         <div className="flex gap-2 sm:justify-end">
-          <button type="button" onClick={onDismiss} aria-label={`Pass on ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
-            Pass
+          <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
+            Skip
           </button>
           <button type="button" onClick={prepared ? onReview : onRetry} disabled={!prepared && !preparationFailed} aria-label={`${prepared ? "Review" : preparationFailed ? "Retry preparation for" : "Preparing"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:bg-surface-strong disabled:text-faint">
             {prepared ? "Review" : preparationFailed ? "Retry" : "Preparing"}
@@ -730,7 +730,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
       <aside role="dialog" aria-modal="true" aria-labelledby="review-title" onKeyDown={containFocus} className="dashboard-drawer absolute inset-y-0 right-0 flex w-full max-w-[1120px] flex-col border-l border-border bg-white">
         <header className="flex items-start justify-between gap-6 border-b border-border px-5 py-5 sm:px-8">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Review match</p>
+            <p className="text-xs text-faint">Review job</p>
             <h2 id="review-title" className="mt-1 truncate text-xl font-medium tracking-[-0.02em] text-ink">{job.title}</h2>
             <p className="mt-1 truncate text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
           </div>
@@ -741,7 +741,12 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
           <section aria-labelledby="job-description-heading" className="border-b border-border p-5 lg:overflow-y-auto lg:border-b-0 lg:border-r sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <h3 id="job-description-heading" className="text-sm font-medium text-ink">Job description</h3>
-              <Chip label={`${job.match}% match`} kind="ready" />
+              {/* Same score, same shape as Home and Applications. It was a blue chip here and a
+                  ring everywhere else. */}
+              <div className="text-center">
+                <ScoreRing score={job.match} />
+                <p className="mt-1 w-12 text-[11px] text-faint">match</p>
+              </div>
             </div>
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>
           </section>
@@ -749,7 +754,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
           <section aria-labelledby="resume-heading" className="bg-surface-alt p-5 lg:overflow-y-auto sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <h3 id="resume-heading" className="text-sm font-medium text-ink">Tailored resume</h3>
-              {packet?.created_at && <span className="font-mono text-[10px] uppercase text-faint">{formatDate(packet.created_at)}</span>}
+              {packet?.created_at && <span className="text-xs text-faint">{formatRelativeDate(packet.created_at)}</span>}
             </div>
             {packet ? <ResumePreview packet={packet} /> : <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>}
           </section>
@@ -758,12 +763,12 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
         <footer className="border-t border-border bg-white px-5 py-4 sm:px-8">
           {error && <p role="alert" className="mb-3 text-sm text-warn">{error}</p>}
           {missingAnswers.length > 0 && <p className="mb-3 text-sm text-warn">{missingAnswers.length} answer{missingAnswers.length === 1 ? "" : "s"} needed.</p>}
-          {needsAttention && <p className="mb-3 text-sm text-warn">This application needs attention.</p>}
+          {needsAttention && <p className="mb-3 text-sm text-warn">This application needs you.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted">Safety checks pause when you are needed.</p>
+            <p className="text-xs text-muted">Litos stops if it needs you.</p>
             <div className="flex items-center gap-2">
               {(missingAnswers.length > 0 || needsAttention) && packet && (
-                <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Resolve details</Link>
+                <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Finish your answers</Link>
               )}
               <button type="button" onClick={onSubmit} disabled={!canSubmit || submitting} className={`min-h-11 rounded-full px-6 text-sm font-medium transition-opacity ${submitted ? "bg-positive-soft text-positive disabled:bg-positive-soft disabled:text-positive" : "bg-brand text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-faint"}`}>
                 {buttonLabel}

@@ -57,29 +57,45 @@ test("the stopword list covers the function words seen highlighted in production
 
 // ---- R-051c: the chip said SUBMITTING while the body said nothing was being submitted ----
 
-test("preparation never reports itself as submitting", () => {
+// The label vocabulary collapsed from six words to four (Getting ready / Ready / Needs you /
+// Sent) in the 2026-07-26 UX pass. The invariants below are unchanged; only the words moved.
+
+test("work in progress never reports itself as sent", () => {
   for (const status of ["submit_requested", "preparing", "filling"]) {
-    assert.equal(statusLabel(true, status), "Preparing");
-    assert.equal(statusLabel(false, status), "Preparing");
+    assert.equal(statusLabel(true, status), "Getting ready");
+    assert.equal(statusLabel(false, status), "Getting ready");
   }
 });
 
-test("only the genuine post-approval status says Submitting", () => {
-  assert.equal(statusLabel(true, "submitting"), "Submitting");
-  assert.equal(statusLabel(false, "submitting"), "Submitting");
+test("an in-flight submission is still only getting ready, never Sent", () => {
+  // R-051c: the chip said SUBMITTING while the body said nothing was being submitted. "Sent" is
+  // now reserved for a real, confirmed receipt, so the mid-flight states cannot claim it.
+  assert.equal(statusLabel(true, "submitting"), "Getting ready");
+  assert.equal(statusLabel(false, "submitting"), "Getting ready");
+  assert.equal(statusLabel(false, "submission_claimed"), "Getting ready");
 });
 
 test("terminal and blocked states outrank the submitting screen", () => {
   // The screen lags the server by up to one poll, so a stale "submitting" screen must not mask a
   // status that needs the user: this is the approval boundary's own label.
-  assert.equal(statusLabel(true, "needs_attention"), "Needs attention");
-  assert.equal(statusLabel(true, "ready_for_final_approval"), "Continue submission");
-  assert.equal(statusLabel(true, "failed"), "Needs attention");
-  assert.equal(statusLabel(true, "submitted"), "Submitted");
+  assert.equal(statusLabel(true, "needs_attention"), "Needs you");
+  assert.equal(statusLabel(true, "ready_for_final_approval"), "Needs you");
+  assert.equal(statusLabel(true, "failed"), "Needs you");
+  assert.equal(statusLabel(true, "submitted"), "Sent");
 });
 
-test("a fresh packet reads as ready for review", () => {
-  assert.equal(statusLabel(false, "resume_ready"), "Ready for review");
+test("a fresh packet reads as ready", () => {
+  assert.equal(statusLabel(false, "resume_ready"), "Ready");
+});
+
+test("the whole vocabulary is four words", () => {
+  const every = [
+    "resume_ready", "questions_ready", "ready_to_submit", "submit_requested", "preparing",
+    "filling", "submitting", "submission_claimed", "needs_attention", "ready_for_final_approval",
+    "failed", "submitted",
+  ];
+  const words = new Set(every.flatMap((s) => [statusLabel(false, s), statusLabel(true, s)]));
+  assert.deepEqual([...words].sort(), ["Getting ready", "Needs you", "Ready", "Sent"]);
 });
 
 // ---- R-051a: "EXPERIENCE" printed once per role instead of once per section ----
@@ -135,9 +151,13 @@ test("R-051d: the packet switcher is not nested inside the review screen", () =>
 });
 
 test("R-046: the legend names both marks, not just one", () => {
-  assert.match(dashboard, /language your resume already matches/);
-  assert.match(dashboard, /wording tailoring changed for this posting/);
+  // The invariant is that BOTH marks are named. The 2026-07-26 pass kept that and dropped the
+  // wording ("wording tailoring changed for this posting" is not a sentence a student parses),
+  // and moved the legend out of the action bar to sit under the panes it describes.
+  assert.match(dashboard, /words you already had/);
+  assert.match(dashboard, /words we added for this job/);
   assert.doesNotMatch(dashboard, /Blue highlights job language/);
+  assert.doesNotMatch(dashboard, /wording tailoring changed for this posting/);
 });
 
 test("R-046: the two highlight tones are visually distinct", () => {
@@ -191,8 +211,13 @@ test('degree and graduation date are separate fields, not a separator-joined str
 });
 
 test('a blocked or failed run is not painted in the ready treatment', () => {
+  // The selected packet's status used to print a third time in the page header, beside the
+  // create button; that copy is gone. The invariant lives on the row, which is where status is
+  // painted now: needs_attention and failed must not fall through to the "ready" chip.
   assert.match(dashboard, /function chipKind/);
-  assert.match(dashboard, /kind=\{chipKind\(review\.status\)\}/);
+  assert.match(dashboard, /kind=\{chipKind\(packet\.spec\._review\.status\)\}/);
+  const chipKind = dashboard.slice(dashboard.indexOf("function chipKind"));
+  assert.match(chipKind.slice(0, 400), /status === "needs_attention" \|\| status === "failed"\) return "bounced"/);
 });
 
 test('the elapsed clock is anchored to the server, not to component mount', () => {

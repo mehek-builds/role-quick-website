@@ -119,14 +119,19 @@ export type ReviewStatus =
  * and telling the user their application was going out before the approval gate had been reached.
  * Only the genuine post-approval status may say Submitting.
  */
+/**
+ * Four words, and only four. Nine backend statuses used to surface as six labels, and the chip
+ * palette added a dozen more kinds on top, so reading this product meant learning about twelve
+ * status words. A student needs to know exactly one thing at a glance: is Litos working, is it
+ * done, or does it want me? Everything else is detail that belongs in the screen body.
+ *
+ * Getting ready -> Ready -> Sent, with Needs you as the one branch off that line.
+ */
 export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): string {
-  if (status === "submitted") return "Submitted";
-  if (status === "submitting" || status === "submission_claimed") return "Submitting";
-  if (status === "needs_attention") return "Needs attention";
-  if (status === "ready_for_final_approval") return "Continue submission";
-  if (status === "failed") return "Needs attention";
-  if (onSubmittingScreen || ["submit_requested", "preparing", "filling"].includes(status)) return "Preparing";
-  return "Ready for review";
+  if (status === "submitted") return "Sent";
+  if (status === "needs_attention" || status === "failed" || status === "ready_for_final_approval") return "Needs you";
+  if (onSubmittingScreen || ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "Getting ready";
+  return "Ready";
 }
 
 /**
