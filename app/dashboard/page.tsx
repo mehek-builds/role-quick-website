@@ -1,20 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   api,
+  getStoredEmail,
+  type ApplicationProfile,
+  type GeneratedResume,
   type Me,
   type MonitoredJob,
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, ShimmerRows, formatDate } from "@/components/app/ui";
-
-type RankedJob = MonitoredJob & {
-  match: number;
-  reasons: string[];
-};
+import {
+  countPreparedJobs,
+  DAILY_PREPARED_RESUME_LIMIT,
+  packetMatchesJob,
+  rankJobs,
+  resumeGenerationBody,
+  type ProfileIdentity,
+  type RankedJob,
+} from "@/lib/daily-matches";
 
 const QA_JOBS: MonitoredJob[] = [
   {
@@ -88,15 +95,45 @@ const QA_PROFILE: Partial<ParsedProfile> = {
   target_roles: ["Software Engineer", "Product Engineer"],
 };
 
+const QA_PACKETS: GeneratedResume[] = QA_JOBS.map((job) => ({
+  id: `resume-${job.id}`,
+  job_context: { company: job.company_name, role: job.title, jd_hash: job.id },
+  created_at: new Date().toISOString(),
+  spec: {
+    school: "University of Southern California",
+    degree: "B.S. Computer Science",
+    grad_date: "May 2027",
+    coursework: "Data Structures, Software Engineering",
+    experience: [],
+    skills: QA_PROFILE.skills ?? [],
+    _review: {
+      jd_text: job.description,
+      portal_url: job.apply_url,
+      ats_name: job.ats_name,
+      status: "ready_to_submit",
+      edited_terms: [],
+      questions: [],
+      skipped_reasons: [],
+      updated_at: new Date().toISOString(),
+    },
+  },
+}));
+
 export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
   const [targeting, setTargeting] = useState<Targeting | null>(null);
   const [profile, setProfile] = useState<Partial<ParsedProfile> | null>(null);
+  const [identity, setIdentity] = useState<ProfileIdentity | null>(null);
+  const [applicationProfile, setApplicationProfile] = useState<ApplicationProfile | null>(null);
+  const [packets, setPackets] = useState<GeneratedResume[]>([]);
   const [qaMode, setQaMode] = useState(false);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [prewarmError, setPrewarmError] = useState<string | null>(null);
+  const [preparingCount, setPreparingCount] = useState(0);
+  const prewarmStarted = useRef(false);
 
   useEffect(() => {
     queueMicrotask(() => setDismissed(readDismissed(dailyDismissalKey())));
@@ -108,6 +145,9 @@ export default function Home() {
         setJobs(QA_JOBS);
         setTargeting(QA_TARGETING);
         setProfile(QA_PROFILE);
+        setIdentity({ full_name: "Alex Rivera", email: "qa@trylitos.com" });
+        setApplicationProfile({});
+        setPackets(QA_PACKETS);
       });
       return;
     }
@@ -118,13 +158,21 @@ export default function Home() {
       api<{ jobs: MonitoredJob[] }>("/jobs?offset=0"),
       api<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, primary_period: null, backup_period: null })),
       api<Partial<ParsedProfile>>("/profile").catch(() => ({ skills: [], target_roles: [] })),
+      api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
+      api<ApplicationProfile>("/profile/application").catch(() => ({})),
     ])
-      .then(([meResult, jobsResult, targetingResult, profileResult]) => {
+      .then(([meResult, jobsResult, targetingResult, profileResult, historyResult, applicationProfileResult]) => {
         if (cancelled) return;
         setMe(meResult);
         setJobs(jobsResult.jobs);
         setTargeting(targetingResult);
         setProfile(profileResult);
+        setIdentity({
+          full_name: "full_name" in profileResult ? profileResult.full_name : undefined,
+          email: meResult.email,
+        });
+        setApplicationProfile(applicationProfileResult);
+        setPackets(historyResult.resumes);
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load today's matches.");
@@ -134,10 +182,71 @@ export default function Home() {
     };
   }, []);
 
-  const rankedJobs = useMemo(
-    () => rankJobs(jobs ?? [], targeting, profile).filter((job) => !dismissed.includes(job.id)).slice(0, 5),
-    [dismissed, jobs, profile, targeting],
+  const rankedJobs = useMemo(() => rankJobs(jobs ?? [], targeting, profile), [jobs, profile, targeting]);
+  const dailyJobs = useMemo(() => rankedJobs.slice(0, DAILY_PREPARED_RESUME_LIMIT), [rankedJobs]);
+  const visibleJobs = useMemo(
+    () => rankedJobs.filter((job) => !dismissed.includes(job.id)).slice(0, 5),
+    [dismissed, rankedJobs],
   );
+  const preparedCount = useMemo(() => countPreparedJobs(dailyJobs, packets), [dailyJobs, packets]);
+
+  useEffect(() => {
+    if (qaMode || prewarmStarted.current || !me || !identity || !applicationProfile || dailyJobs.length === 0) return;
+    if (!identity.full_name?.trim()) return;
+    prewarmStarted.current = true;
+
+    const remainingQuota = me.usage.resumes.limit >= 100000
+      ? DAILY_PREPARED_RESUME_LIMIT
+      : Math.max(0, me.usage.resumes.limit - me.usage.resumes.used);
+    const missing = dailyJobs
+      .filter((job) => !packets.some((packet) => packetMatchesJob(packet, job)))
+      .slice(0, remainingQuota);
+    if (missing.length === 0) return;
+
+    let cancelled = false;
+    let cursor = 0;
+    let halted = false;
+    queueMicrotask(() => setPreparingCount(missing.length));
+
+    const worker = async () => {
+      while (!cancelled && !halted) {
+        const job = missing[cursor++];
+        if (!job) return;
+        const lockKey = prewarmLockKey(job.id);
+        const existingLock = Number(window.localStorage.getItem(lockKey));
+        if (existingLock && Date.now() - existingLock < 10 * 60 * 1000) {
+          setPreparingCount((count) => Math.max(0, count - 1));
+          continue;
+        }
+        window.localStorage.setItem(lockKey, String(Date.now()));
+        try {
+          const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${job.id}`);
+          const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
+            method: "POST",
+            body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, getStoredEmail())),
+          });
+          if (generated.application && !cancelled) {
+            setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
+          }
+        } catch (reason) {
+          window.localStorage.removeItem(lockKey);
+          const message = reason instanceof Error ? reason.message : "Resume preparation paused.";
+          if (/limit|quota|slow down|temporarily unavailable/i.test(message)) {
+            halted = true;
+            setPreparingCount(0);
+          }
+          if (!cancelled) setPrewarmError(message);
+        } finally {
+          if (!cancelled) setPreparingCount((count) => Math.max(0, count - 1));
+        }
+      }
+    };
+
+    void Promise.all(Array.from({ length: Math.min(3, missing.length) }, () => worker()));
+    return () => {
+      cancelled = true;
+    };
+  }, [applicationProfile, dailyJobs, identity, me, packets, qaMode]);
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];
@@ -173,7 +282,7 @@ export default function Home() {
 
       {jobs === null ? (
         <ShimmerRows rows={4} />
-      ) : rankedJobs.length === 0 ? (
+      ) : visibleJobs.length === 0 ? (
         <EmptyState
           title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
           body={dismissed.length ? "You reviewed every match. New roles will appear after the next job-board scan." : "Complete your profile so Litos can rank roles from the job boards it monitors."}
@@ -185,13 +294,28 @@ export default function Home() {
       ) : (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <p className="font-mono text-xs text-faint">{rankedJobs.length} READY TO REVIEW</p>
+            <p className="font-mono text-xs text-faint">{visibleJobs.length} READY TO REVIEW</p>
             <Link href="/dashboard/jobs" className="text-sm text-muted hover:text-ink">See all jobs</Link>
           </div>
-          {rankedJobs.map((job, index) => (
-            <JobMatchCard key={job.id} job={job} rank={index + 1} qaMode={qaMode} onDismiss={() => dismiss(job.id)} />
+          {visibleJobs.map((job) => (
+            <JobMatchCard key={job.id} job={job} rank={rankedJobs.findIndex((ranked) => ranked.id === job.id) + 1} qaMode={qaMode} prepared={packets.some((packet) => packetMatchesJob(packet, job))} onDismiss={() => dismiss(job.id)} />
           ))}
         </div>
+      )}
+
+      {dailyJobs.length > 0 && (
+        <section aria-label="Daily resume preparation" className="rounded-[16px] border border-brand/20 bg-brand-soft/55 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-brand-ink">Top {Math.min(DAILY_PREPARED_RESUME_LIMIT, dailyJobs.length)} resumes</p>
+              <p className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.06em] text-brand-ink/70">
+                {preparedCount} ready{preparingCount > 0 ? ` · ${preparingCount} preparing` : ""}
+              </p>
+            </div>
+            <Link href="/dashboard/applications" className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white">Open applications</Link>
+          </div>
+          {prewarmError && <p className="mt-2 text-xs text-warn">Preparation paused. Open any role to continue generating its resume.</p>}
+        </section>
       )}
 
       {lastDismissed && (
@@ -221,7 +345,7 @@ export default function Home() {
   );
 }
 
-function JobMatchCard({ job, rank, qaMode, onDismiss }: { job: RankedJob; rank: number; qaMode: boolean; onDismiss: () => void }) {
+function JobMatchCard({ job, rank, qaMode, prepared, onDismiss }: { job: RankedJob; rank: number; qaMode: boolean; prepared: boolean; onDismiss: () => void }) {
   return (
     <Card className="overflow-hidden transition-colors hover:border-ink/30">
       <div className="grid gap-5 p-5 sm:grid-cols-[44px_1fr_auto] sm:items-center sm:p-6">
@@ -231,6 +355,7 @@ function JobMatchCard({ job, rank, qaMode, onDismiss }: { job: RankedJob; rank: 
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <Chip label={`${job.match}% match`} kind="ready" />
+            <Chip label={prepared ? "Resume ready" : "Preparing"} kind={prepared ? "sent" : "generating"} />
             {job.remote && <Chip label="Remote" kind="sent" />}
             <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-faint">Found {formatDate(job.first_seen_at)}</span>
           </div>
@@ -239,48 +364,16 @@ function JobMatchCard({ job, rank, qaMode, onDismiss }: { job: RankedJob; rank: 
           <p className="mt-2 text-xs text-faint">{job.reasons.join(" · ")}</p>
         </div>
         <div className="flex gap-2 sm:justify-end">
-          <button type="button" onClick={onDismiss} aria-label={`Pass on ${job.title} at ${job.company_name}`} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-muted transition-colors hover:border-ink hover:text-ink">
+          <button type="button" onClick={onDismiss} aria-label={`Pass on ${job.title} at ${job.company_name}`} className="rounded-full border border-danger/20 bg-danger-soft px-4 py-2.5 text-sm font-medium text-danger transition-colors hover:border-danger/40">
             Pass
           </button>
-          <Link href={`/dashboard/applications?job=${job.id}${qaMode ? "&qa=1" : ""}`} className="rounded-full bg-brand px-5 py-2.5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-            Approve
+          <Link href={`/dashboard/applications?job=${job.id}${qaMode ? `&qa=${qaScenarioKey(job)}` : ""}`} className="rounded-full border border-positive/20 bg-positive-soft px-5 py-2.5 text-center text-sm font-medium text-positive transition-colors hover:border-positive/40">
+            {prepared ? "Review" : "Approve"}
           </Link>
         </div>
       </div>
     </Card>
   );
-}
-
-function rankJobs(jobs: MonitoredJob[], targeting: Targeting | null, profile: Partial<ParsedProfile> | null): RankedJob[] {
-  const titleTerms = tokens([...(targeting?.titles ?? []), ...(profile?.target_roles ?? [])].join(" "));
-  const skillTerms = tokens([...(profile?.skills ?? []), ...(targeting?.categories ?? [])].join(" "));
-
-  return jobs
-    .map((job) => {
-      const title = tokens(job.title);
-      const corpus = tokens(`${job.title} ${job.department ?? ""} ${job.description}`);
-      const titleMatches = [...titleTerms].filter((term) => title.has(term));
-      const skillMatches = [...skillTerms].filter((term) => corpus.has(term));
-      const match = Math.min(98, 72 + titleMatches.length * 6 + Math.min(14, skillMatches.length * 2));
-      const reasons = [...new Set([...titleMatches, ...skillMatches])].slice(0, 3).map(readableTerm);
-      return {
-        ...job,
-        match,
-        reasons: reasons.length ? reasons : [job.department || job.employment_type || "Role fit"],
-      };
-    })
-    .sort((a, b) => b.match - a.match || (b.posted_at ?? b.first_seen_at).localeCompare(a.posted_at ?? a.first_seen_at));
-}
-
-function tokens(value: string): Set<string> {
-  return new Set(value.toLowerCase().match(/[a-z][a-z0-9+#.]{1,}/g)?.filter((term) => !STOP_WORDS.has(term)) ?? []);
-}
-
-function readableTerm(term: string): string {
-  if (term === "api" || term === "apis") return "API experience";
-  if (term === "typescript") return "TypeScript";
-  if (term === "react") return "React";
-  return term.charAt(0).toUpperCase() + term.slice(1);
 }
 
 function dailyDismissalKey(): string {
@@ -296,4 +389,10 @@ function readDismissed(key: string): string[] {
   }
 }
 
-const STOP_WORDS = new Set(["and", "the", "with", "for", "from", "that", "this", "your", "engineer", "engineering", "intern", "internship", "new", "grad"]);
+function prewarmLockKey(jobId: string): string {
+  return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
+}
+
+function qaScenarioKey(job: MonitoredJob): string {
+  return job.company_name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}

@@ -9,7 +9,7 @@
       "source_file": "next-env.d.ts",
       "source_location": "L1",
       "id": "next_env_d",
-      "community": 24
+      "community": 25
     },
     {
       "label": "next.config.ts",
@@ -17,7 +17,7 @@
       "source_file": "next.config.ts",
       "source_location": "L1",
       "id": "next_config",
-      "community": 25
+      "community": 26
     },
     {
       "label": "opengraph-image.tsx",
@@ -25,7 +25,7 @@
       "source_file": "app/opengraph-image.tsx",
       "source_location": "L1",
       "id": "opengraph_image",
-      "community": 26
+      "community": 27
     },
     {
       "label": "layout.tsx",
@@ -148,10 +148,18 @@
       "community": 0
     },
     {
+      "label": "worker()",
+      "file_type": "code",
+      "source_file": "app/dashboard/page.tsx",
+      "source_location": "L211",
+      "id": "page_worker",
+      "community": 0
+    },
+    {
       "label": "dismiss()",
       "file_type": "code",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L142",
+      "source_location": "L251",
       "id": "page_dismiss",
       "community": 0
     },
@@ -159,23 +167,15 @@
       "label": "undoDismiss()",
       "file_type": "code",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L149",
+      "source_location": "L258",
       "id": "page_undodismiss",
-      "community": 0
-    },
-    {
-      "label": "return()",
-      "file_type": "code",
-      "source_file": "app/dashboard/page.tsx",
-      "source_location": "L276",
-      "id": "page_return",
       "community": 0
     },
     {
       "label": "patch()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L754",
+      "source_location": "L760",
       "id": "page_patch",
       "community": 0
     },
@@ -231,7 +231,7 @@
       "label": "patchEntry()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L394",
+      "source_location": "L408",
       "id": "page_patchentry",
       "community": 0
     },
@@ -255,31 +255,31 @@
       "label": "tick()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L127",
+      "source_location": "L129",
       "id": "page_tick",
-      "community": 17
+      "community": 15
     },
     {
       "label": "poll()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L139",
+      "source_location": "L141",
       "id": "page_poll",
-      "community": 17
+      "community": 15
     },
     {
       "label": "onVisibility()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L144",
+      "source_location": "L146",
       "id": "page_onvisibility",
-      "community": 17
+      "community": 15
     },
     {
       "label": "fetchJobDescription()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L219",
+      "source_location": "L233",
       "id": "page_fetchjobdescription",
       "community": 0
     },
@@ -287,7 +287,7 @@
       "label": "createApplication()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L250",
+      "source_location": "L264",
       "id": "page_createapplication",
       "community": 0
     },
@@ -295,7 +295,7 @@
       "label": "generateCoverLetter()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L334",
+      "source_location": "L348",
       "id": "page_generatecoverletter",
       "community": 0
     },
@@ -303,39 +303,39 @@
       "label": "saveCoverLetter()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L359",
+      "source_location": "L373",
       "id": "page_savecoverletter",
-      "community": 12
+      "community": 13
     },
     {
       "label": "saveResume()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L402",
+      "source_location": "L416",
       "id": "page_saveresume",
-      "community": 12
+      "community": 13
     },
     {
       "label": "continueFromResume()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L428",
+      "source_location": "L442",
       "id": "page_continuefromresume",
-      "community": 12
+      "community": 13
     },
     {
       "label": "prepareApplication()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L443",
+      "source_location": "L457",
       "id": "page_prepareapplication",
-      "community": 12
+      "community": 13
     },
     {
       "label": "completeHandoff()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L472",
+      "source_location": "L486",
       "id": "page_completehandoff",
       "community": 0
     },
@@ -343,7 +343,7 @@
       "label": "reviewPortalQuestions()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L486",
+      "source_location": "L500",
       "id": "page_reviewportalquestions",
       "community": 0
     },
@@ -351,15 +351,15 @@
       "label": "retryPreparation()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L492",
+      "source_location": "L506",
       "id": "page_retrypreparation",
-      "community": 12
+      "community": 13
     },
     {
       "label": "approveFinalSubmission()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L499",
+      "source_location": "L513",
       "id": "page_approvefinalsubmission",
       "community": 0
     },
@@ -367,7 +367,7 @@
       "label": "commit()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L904",
+      "source_location": "L910",
       "id": "page_commit",
       "community": 0
     },
@@ -375,7 +375,7 @@
       "label": "formatElapsed()",
       "file_type": "code",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L1162",
+      "source_location": "L1168",
       "id": "page_formatelapsed",
       "community": 0
     },
@@ -385,7 +385,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L8",
       "id": "page_jobparams",
-      "community": 22
+      "community": 20
     },
     {
       "label": "loadMore()",
@@ -393,7 +393,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L46",
       "id": "page_loadmore",
-      "community": 22
+      "community": 20
     },
     {
       "label": "TryPage()",
@@ -409,7 +409,7 @@
       "source_file": "app/api/try/route.ts",
       "source_location": "L1",
       "id": "route",
-      "community": 7
+      "community": 9
     },
     {
       "label": "bump()",
@@ -417,7 +417,7 @@
       "source_file": "app/api/try/route.ts",
       "source_location": "L23",
       "id": "route_bump",
-      "community": 7
+      "community": 9
     },
     {
       "label": "looksLikeResume()",
@@ -425,7 +425,7 @@
       "source_file": "app/api/try/route.ts",
       "source_location": "L35",
       "id": "route_lookslikeresume",
-      "community": 7
+      "community": 9
     },
     {
       "label": "POST()",
@@ -433,7 +433,7 @@
       "source_file": "app/api/try/route.ts",
       "source_location": "L91",
       "id": "route_post",
-      "community": 7
+      "community": 9
     },
     {
       "label": "errors.ts",
@@ -441,7 +441,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L1",
       "id": "errors",
-      "community": 14
+      "community": 16
     },
     {
       "label": "requestCodeError()",
@@ -449,7 +449,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L3",
       "id": "errors_requestcodeerror",
-      "community": 14
+      "community": 16
     },
     {
       "label": "verifyCodeError()",
@@ -457,7 +457,7 @@
       "source_file": "app/login/errors.ts",
       "source_location": "L19",
       "id": "errors_verifycodeerror",
-      "community": 14
+      "community": 16
     },
     {
       "label": "landingRoute()",
@@ -481,7 +481,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L1",
       "id": "packetdemo",
-      "community": 9
+      "community": 10
     },
     {
       "label": "active()",
@@ -489,7 +489,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L84",
       "id": "packetdemo_active",
-      "community": 9
+      "community": 10
     },
     {
       "label": "stop()",
@@ -497,7 +497,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L85",
       "id": "packetdemo_stop",
-      "community": 9
+      "community": 10
     },
     {
       "label": "advance()",
@@ -505,7 +505,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L90",
       "id": "packetdemo_advance",
-      "community": 9
+      "community": 10
     },
     {
       "label": "restart()",
@@ -513,7 +513,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L103",
       "id": "packetdemo_restart",
-      "community": 9
+      "community": 10
     },
     {
       "label": "onVisibility()",
@@ -521,7 +521,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L115",
       "id": "packetdemo_onvisibility",
-      "community": 9
+      "community": 10
     },
     {
       "label": "jump()",
@@ -529,7 +529,7 @@
       "source_file": "components/PacketDemo.tsx",
       "source_location": "L131",
       "id": "packetdemo_jump",
-      "community": 9
+      "community": 10
     },
     {
       "label": "Mockups.tsx",
@@ -609,7 +609,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L1",
       "id": "herobackdrop",
-      "community": 15
+      "community": 17
     },
     {
       "label": "onMove()",
@@ -617,7 +617,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L52",
       "id": "herobackdrop_onmove",
-      "community": 15
+      "community": 17
     },
     {
       "label": "tick()",
@@ -625,7 +625,7 @@
       "source_file": "components/HeroBackdrop.tsx",
       "source_location": "L59",
       "id": "herobackdrop_tick",
-      "community": 15
+      "community": 17
     },
     {
       "label": "Motion.tsx",
@@ -633,7 +633,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L1",
       "id": "motion",
-      "community": 16
+      "community": 18
     },
     {
       "label": "Reveal()",
@@ -641,7 +641,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L9",
       "id": "motion_reveal",
-      "community": 16
+      "community": 18
     },
     {
       "label": "CountUp()",
@@ -649,7 +649,7 @@
       "source_file": "components/Motion.tsx",
       "source_location": "L69",
       "id": "motion_countup",
-      "community": 16
+      "community": 18
     },
     {
       "label": "OutreachDemo.tsx",
@@ -793,7 +793,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L1",
       "id": "cinematichero",
-      "community": 13
+      "community": 14
     },
     {
       "label": "framePath()",
@@ -801,7 +801,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L28",
       "id": "cinematichero_framepath",
-      "community": 13
+      "community": 14
     },
     {
       "label": "CinematicHero()",
@@ -809,7 +809,7 @@
       "source_file": "components/cinema/CinematicHero.tsx",
       "source_location": "L49",
       "id": "cinematichero_cinematichero",
-      "community": 13
+      "community": 14
     },
     {
       "label": "BRoll.tsx",
@@ -817,7 +817,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L1",
       "id": "broll",
-      "community": 23
+      "community": 24
     },
     {
       "label": "BRoll()",
@@ -825,7 +825,7 @@
       "source_file": "components/cinema/BRoll.tsx",
       "source_location": "L25",
       "id": "broll_broll",
-      "community": 23
+      "community": 24
     },
     {
       "label": "SmoothScroll.tsx",
@@ -833,7 +833,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L1",
       "id": "smoothscroll",
-      "community": 19
+      "community": 23
     },
     {
       "label": "SmoothScroll()",
@@ -841,7 +841,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L11",
       "id": "smoothscroll_smoothscroll",
-      "community": 19
+      "community": 23
     },
     {
       "label": "paperRollEngine.js",
@@ -849,7 +849,7 @@
       "source_file": "components/cinema/paperRollEngine.js",
       "source_location": "L1",
       "id": "paperrollengine",
-      "community": 13
+      "community": 14
     },
     {
       "label": "createPaperRoll()",
@@ -857,7 +857,7 @@
       "source_file": "components/cinema/paperRollEngine.js",
       "source_location": "L8",
       "id": "paperrollengine_createpaperroll",
-      "community": 13
+      "community": 14
     },
     {
       "label": "CinematicPage.tsx",
@@ -865,7 +865,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L1",
       "id": "cinematicpage",
-      "community": 20
+      "community": 19
     },
     {
       "label": "CinematicPage()",
@@ -873,7 +873,7 @@
       "source_file": "components/cinema/CinematicPage.tsx",
       "source_location": "L38",
       "id": "cinematicpage_cinematicpage",
-      "community": 20
+      "community": 19
     },
     {
       "label": "Wash.tsx",
@@ -881,7 +881,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L1",
       "id": "wash",
-      "community": 18
+      "community": 22
     },
     {
       "label": "Wash()",
@@ -889,7 +889,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L14",
       "id": "wash_wash",
-      "community": 18
+      "community": 22
     },
     {
       "label": "steps.tsx",
@@ -1033,7 +1033,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L1",
       "id": "strip_page_blue",
-      "community": 11
+      "community": 12
     },
     {
       "label": "_packet_shield()",
@@ -1041,7 +1041,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L22",
       "id": "strip_page_blue_packet_shield",
-      "community": 11
+      "community": 12
     },
     {
       "label": "degrade()",
@@ -1049,7 +1049,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L38",
       "id": "strip_page_blue_degrade",
-      "community": 11
+      "community": 12
     },
     {
       "label": "frames()",
@@ -1057,7 +1057,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L53",
       "id": "strip_page_blue_frames",
-      "community": 11
+      "community": 12
     },
     {
       "label": "video()",
@@ -1065,7 +1065,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L61",
       "id": "strip_page_blue_video",
-      "community": 11
+      "community": 12
     },
     {
       "label": "The finale packet keeps its cover marks (Mehek's exception). Its teal     bar is",
@@ -1073,7 +1073,7 @@
       "source_file": "scripts/strip-page-blue.py",
       "source_location": "L23",
       "id": "strip_page_blue_rationale_23",
-      "community": 11
+      "community": 12
     },
     {
       "label": "application-review.ts",
@@ -1249,7 +1249,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L1",
       "id": "periods",
-      "community": 10
+      "community": 11
     },
     {
       "label": "periodSlug()",
@@ -1257,7 +1257,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L23",
       "id": "periods_periodslug",
-      "community": 10
+      "community": 11
     },
     {
       "label": "periodLabel()",
@@ -1265,7 +1265,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L27",
       "id": "periods_periodlabel",
-      "community": 10
+      "community": 11
     },
     {
       "label": "ordinal()",
@@ -1273,7 +1273,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L34",
       "id": "periods_ordinal",
-      "community": 10
+      "community": 11
     },
     {
       "label": "periodsFor()",
@@ -1281,7 +1281,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L46",
       "id": "periods_periodsfor",
-      "community": 10
+      "community": 11
     },
     {
       "label": "defaultPrimary()",
@@ -1289,7 +1289,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L74",
       "id": "periods_defaultprimary",
-      "community": 10
+      "community": 11
     },
     {
       "label": "defaultBackup()",
@@ -1297,7 +1297,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L85",
       "id": "periods_defaultbackup",
-      "community": 10
+      "community": 11
     },
     {
       "label": "api.ts",
@@ -1500,6 +1500,78 @@
       "community": 8
     },
     {
+      "label": "daily-matches.ts",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L1",
+      "id": "daily_matches",
+      "community": 7
+    },
+    {
+      "label": "rankJobs()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L12",
+      "id": "daily_matches_rankjobs",
+      "community": 7
+    },
+    {
+      "label": "packetMatchesJob()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L37",
+      "id": "daily_matches_packetmatchesjob",
+      "community": 7
+    },
+    {
+      "label": "countPreparedJobs()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L42",
+      "id": "daily_matches_countpreparedjobs",
+      "community": 7
+    },
+    {
+      "label": "resumeGenerationBody()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L46",
+      "id": "daily_matches_resumegenerationbody",
+      "community": 7
+    },
+    {
+      "label": "portalName()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L71",
+      "id": "daily_matches_portalname",
+      "community": 7
+    },
+    {
+      "label": "tokens()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L81",
+      "id": "daily_matches_tokens",
+      "community": 7
+    },
+    {
+      "label": "readableTerm()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L85",
+      "id": "daily_matches_readableterm",
+      "community": 7
+    },
+    {
+      "label": "normalized()",
+      "file_type": "code",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L92",
+      "id": "daily_matches_normalized",
+      "community": 7
+    },
+    {
       "label": "config.ts",
       "file_type": "code",
       "source_file": "lib/config.ts",
@@ -1513,7 +1585,7 @@
       "source_file": "lib/try-jobs.ts",
       "source_location": "L1",
       "id": "try_jobs",
-      "community": 7
+      "community": 9
     },
     {
       "label": "loadFeed()",
@@ -1521,7 +1593,7 @@
       "source_file": "lib/try-jobs.ts",
       "source_location": "L27",
       "id": "try_jobs_loadfeed",
-      "community": 7
+      "community": 9
     },
     {
       "label": "getJobCards()",
@@ -1529,7 +1601,7 @@
       "source_file": "lib/try-jobs.ts",
       "source_location": "L40",
       "id": "try_jobs_getjobcards",
-      "community": 7
+      "community": 9
     },
     {
       "label": "findJob()",
@@ -1537,7 +1609,7 @@
       "source_file": "lib/try-jobs.ts",
       "source_location": "L45",
       "id": "try_jobs_findjob",
-      "community": 7
+      "community": 9
     }
   ],
   "links": [
@@ -1914,10 +1986,34 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "app/dashboard/applications/page.tsx",
+      "source_location": "L19",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "daily_matches",
+      "source": "page",
+      "target": "daily_matches",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L142",
+      "source_location": "L211",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_worker",
+      "source": "page",
+      "target": "page_worker",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/dashboard/page.tsx",
+      "source_location": "L251",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_dismiss",
@@ -1929,24 +2025,12 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L149",
+      "source_location": "L258",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_undodismiss",
       "source": "page",
       "target": "page_undodismiss",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "app/dashboard/page.tsx",
-      "source_location": "L276",
-      "weight": 1.0,
-      "_src": "page",
-      "_tgt": "page_return",
-      "source": "page",
-      "target": "page_return",
       "confidence_score": 1.0
     },
     {
@@ -1965,7 +2049,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L754",
+      "source_location": "L760",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_patch",
@@ -2061,7 +2145,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L394",
+      "source_location": "L408",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_patchentry",
@@ -2085,7 +2169,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L1126",
+      "source_location": "L1132",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_tick",
@@ -2097,7 +2181,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L139",
+      "source_location": "L141",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_poll",
@@ -2109,7 +2193,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L144",
+      "source_location": "L146",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_onvisibility",
@@ -2121,7 +2205,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L219",
+      "source_location": "L233",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_fetchjobdescription",
@@ -2133,7 +2217,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L250",
+      "source_location": "L264",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_createapplication",
@@ -2145,7 +2229,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L334",
+      "source_location": "L348",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_generatecoverletter",
@@ -2157,7 +2241,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L359",
+      "source_location": "L373",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_savecoverletter",
@@ -2169,7 +2253,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L402",
+      "source_location": "L416",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_saveresume",
@@ -2181,7 +2265,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L428",
+      "source_location": "L442",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_continuefromresume",
@@ -2193,7 +2277,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L443",
+      "source_location": "L457",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_prepareapplication",
@@ -2205,7 +2289,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L472",
+      "source_location": "L486",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_completehandoff",
@@ -2217,7 +2301,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L486",
+      "source_location": "L500",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_reviewportalquestions",
@@ -2229,7 +2313,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L492",
+      "source_location": "L506",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_retrypreparation",
@@ -2241,7 +2325,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L499",
+      "source_location": "L513",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_approvefinalsubmission",
@@ -2253,7 +2337,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L904",
+      "source_location": "L910",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_commit",
@@ -2265,7 +2349,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L1162",
+      "source_location": "L1168",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_formatelapsed",
@@ -2433,7 +2517,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L140",
+      "source_location": "L142",
       "weight": 1.0,
       "_src": "page_poll",
       "_tgt": "page_tick",
@@ -2445,7 +2529,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L145",
+      "source_location": "L147",
       "weight": 1.0,
       "_src": "page_onvisibility",
       "_tgt": "page_tick",
@@ -2457,7 +2541,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L434",
+      "source_location": "L448",
       "weight": 1.0,
       "_src": "page_continuefromresume",
       "_tgt": "page_savecoverletter",
@@ -2469,7 +2553,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L433",
+      "source_location": "L447",
       "weight": 1.0,
       "_src": "page_continuefromresume",
       "_tgt": "page_saveresume",
@@ -2481,7 +2565,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L440",
+      "source_location": "L454",
       "weight": 1.0,
       "_src": "page_continuefromresume",
       "_tgt": "page_prepareapplication",
@@ -2493,7 +2577,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/applications/page.tsx",
-      "source_location": "L496",
+      "source_location": "L510",
       "weight": 1.0,
       "_src": "page_retrypreparation",
       "_tgt": "page_prepareapplication",
@@ -4230,6 +4314,18 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports_from",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "api",
+      "source": "api",
+      "target": "daily_matches",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
@@ -4443,6 +4539,138 @@
       "_tgt": "rolesfeed_focusseed",
       "source": "rolesfeed",
       "target": "rolesfeed_focusseed",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_rankjobs",
+      "source": "daily_matches",
+      "target": "daily_matches_rankjobs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_packetmatchesjob",
+      "source": "daily_matches",
+      "target": "daily_matches_packetmatchesjob",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L42",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_countpreparedjobs",
+      "source": "daily_matches",
+      "target": "daily_matches_countpreparedjobs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L46",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_resumegenerationbody",
+      "source": "daily_matches",
+      "target": "daily_matches_resumegenerationbody",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L71",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_portalname",
+      "source": "daily_matches",
+      "target": "daily_matches_portalname",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L81",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_tokens",
+      "source": "daily_matches",
+      "target": "daily_matches_tokens",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L85",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_readableterm",
+      "source": "daily_matches",
+      "target": "daily_matches_readableterm",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L92",
+      "weight": 1.0,
+      "_src": "daily_matches",
+      "_tgt": "daily_matches_normalized",
+      "source": "daily_matches",
+      "target": "daily_matches_normalized",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L17",
+      "weight": 1.0,
+      "_src": "daily_matches_rankjobs",
+      "_tgt": "daily_matches_tokens",
+      "source": "daily_matches_rankjobs",
+      "target": "daily_matches_tokens",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L38",
+      "weight": 1.0,
+      "_src": "daily_matches_packetmatchesjob",
+      "_tgt": "daily_matches_normalized",
+      "source": "daily_matches_packetmatchesjob",
+      "target": "daily_matches_normalized",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/daily-matches.ts",
+      "source_location": "L57",
+      "weight": 1.0,
+      "_src": "daily_matches_resumegenerationbody",
+      "_tgt": "daily_matches_portalname",
+      "source": "daily_matches_resumegenerationbody",
+      "target": "daily_matches_portalname",
       "confidence_score": 1.0
     },
     {
