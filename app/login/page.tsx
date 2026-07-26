@@ -475,7 +475,7 @@ export default function Login() {
                   onClick={() => void continueAsGuest()}
                   className="w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:opacity-50"
                 >
-                  {busy ? <PendingLabel state="searching">Starting guest mode...</PendingLabel> : "Try as a guest"}
+                  {busy ? <PendingLabel state="searching">Starting guest mode...</PendingLabel> : "Look around without an account"}
                 </button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
                   Seven days at Pro limits. No card. This option appears only on your first visit.
