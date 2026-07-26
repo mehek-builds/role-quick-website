@@ -108,14 +108,60 @@ export type Me = {
   upgrade_url?: string;
   billing_provider?: "lemonsqueezy";
   checkout_available?: boolean;
+  checkout_intervals?: { monthly: boolean; yearly: boolean };
   billing_status?: string | null;
   billing_renews_at?: string | null;
   billing_ends_at?: string | null;
   billing_portal_url?: string | null;
+  pricing?: {
+    country_code: string;
+    band: PricingBand;
+    policy_version: string;
+    experiment_id: string | null;
+    experiment_variant: string;
+    interval: BillingInterval;
+    currency: string;
+    amount_cents: number;
+    verification_status: string;
+  } | null;
 };
 
-export function createCheckout() {
-  return api<{ provider: "lemonsqueezy"; url: string }>("/billing/checkout", { method: "POST" });
+export type BillingInterval = "monthly" | "yearly";
+export type PricingBand = "premium" | "standard" | "access";
+export type PricingOffer = {
+  policy_version: string;
+  country_code: string;
+  detected_country_code: string | null;
+  requested_country_code: string | null;
+  country_mismatch: boolean;
+  band: PricingBand;
+  interval: BillingInterval;
+  currency: "USD";
+  base_amount_cents: number;
+  amount_cents: number;
+  experiment_id: string | null;
+  experiment_variant: string;
+  quote_token: string | null;
+};
+
+export type PricingResponse = { offer: PricingOffer; countries: string[] };
+
+export function getPricingOffer(subjectId: string, countryCode: string | null, interval: BillingInterval) {
+  const params = new URLSearchParams({ subject_id: subjectId, interval });
+  if (countryCode) params.set("country_code", countryCode);
+  return api<PricingResponse>(`/billing/pricing?${params.toString()}`);
+}
+
+export function createCheckout(input: {
+  subject_id: string;
+  country_code: string | null;
+  interval: BillingInterval;
+  quote_token: string | null;
+}) {
+  return api<{ provider: "lemonsqueezy"; url: string; offer_id: string; offer: PricingOffer; reused: boolean }>(
+    "/billing/checkout",
+    { method: "POST", body: JSON.stringify(input) },
+  );
 }
 
 export type OutreachContact = {

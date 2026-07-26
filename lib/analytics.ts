@@ -39,6 +39,13 @@ type OnboardingEvent =
   | "onboarding_step_later"
   | "onboarding_complete";
 
+type PricingEvent =
+  | "pricing_quote_viewed"
+  | "pricing_country_changed"
+  | "pricing_interval_changed"
+  | "pricing_checkout_started"
+  | "pricing_checkout_failed";
+
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const POSTHOG_HOST =
   process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "https://us.i.posthog.com";
@@ -49,7 +56,7 @@ function device(): "desktop" | "mobile" {
 }
 
 export function track(
-  event: TryEvent | OnboardingEvent,
+  event: TryEvent | OnboardingEvent | PricingEvent,
   props: Record<string, string | number | boolean> = {},
 ) {
   const payload = { ...props, device: device(), path: window.location.pathname };

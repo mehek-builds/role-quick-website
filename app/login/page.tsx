@@ -10,9 +10,11 @@ import {
   getOnboardingState,
   getOrCreateGuestKey,
   hasLitosHistory,
+  isGuestSession,
   createCheckout,
 } from "@/lib/api";
-import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
+import { isLemonSqueezyCheckoutUrl, loadPricingSelection } from "@/lib/billing";
+import { track } from "@/lib/analytics";
 import { litosClientHeaders } from "@/lib/product";
 import { googleSignInError, requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
@@ -53,9 +55,49 @@ export default function Login() {
   const [guestEligible, setGuestEligible] = useState(false);
   const [claimMode, setClaimMode] = useState(false);
 
+  const openSelectedCheckout = useCallback(async (): Promise<boolean> => {
+    if (new URLSearchParams(window.location.search).get("next") !== "upgrade") return false;
+    try {
+      const selection = loadPricingSelection();
+      const checkout = await createCheckout({
+        subject_id: selection.subjectId,
+        country_code: selection.countryCode,
+        interval: selection.interval,
+        quote_token: selection.quoteToken,
+      });
+      if (!isLemonSqueezyCheckoutUrl(checkout.url)) throw new Error("Unsafe checkout URL");
+      track("pricing_checkout_started", {
+        source: "login",
+        country: checkout.offer.country_code,
+        band: checkout.offer.band,
+        interval: checkout.offer.interval,
+        amount_cents: checkout.offer.amount_cents,
+        experiment_variant: checkout.offer.experiment_variant,
+      });
+      window.location.assign(checkout.url);
+      return true;
+    } catch {
+      track("pricing_checkout_failed", { source: "login" });
+      router.replace("/dashboard/settings?billing=unavailable");
+      return true;
+    }
+  }, [router]);
+
   useEffect(() => {
     const claiming = new URLSearchParams(window.location.search).get("claim") === "1";
+    const upgrading = new URLSearchParams(window.location.search).get("next") === "upgrade";
     if (getToken() && !claiming) {
+      if (upgrading && isGuestSession()) {
+        queueMicrotask(() => {
+          setClaimMode(true);
+          setGuestEligible(false);
+        });
+        return;
+      }
+      if (upgrading) {
+        void openSelectedCheckout();
+        return;
+      }
       void landingRoute().then((r) => router.replace(r));
       return;
     }
@@ -63,7 +105,7 @@ export default function Login() {
       setClaimMode(claiming);
       setGuestEligible(!hasLitosHistory());
     });
-  }, [router]);
+  }, [openSelectedCheckout, router]);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -149,6 +191,7 @@ export default function Login() {
           returningUserRoute: landingRoute,
         });
         if (route) {
+          if (await openSelectedCheckout()) return;
           router.replace(route);
           return;
         }
@@ -159,7 +202,7 @@ export default function Login() {
     } finally {
       setBusy(false);
     }
-  }, [router]);
+  }, [openSelectedCheckout, router]);
 
   async function submitCode(e: React.FormEvent) {
     e.preventDefault();
@@ -178,19 +221,7 @@ export default function Login() {
       const data = await res.json().catch(() => null);
       if (res.ok && data?.token) {
         setSession(data.token, email.trim().toLowerCase());
-        const next = new URLSearchParams(window.location.search).get("next");
-        if (next === "upgrade") {
-          try {
-            const checkout = await createCheckout();
-            if (isLemonSqueezyCheckoutUrl(checkout.url)) {
-              window.location.assign(checkout.url);
-              return;
-            }
-          } catch {
-            router.replace("/dashboard/settings?billing=unavailable");
-            return;
-          }
-        }
+        if (await openSelectedCheckout()) return;
         router.replace(await landingRoute());
       } else {
         setError(verifyCodeError(res.status, data?.error));

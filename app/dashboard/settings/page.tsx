@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   api,
@@ -13,10 +13,14 @@ import {
   type EmailProvider,
   getEmailConnections,
   getOnboardingState,
+  getPricingOffer,
   Me,
   setAutomationSettings,
+  type BillingInterval,
+  type PricingOffer,
 } from "@/lib/api";
-import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
+import { countryName, formatUsd, isLemonSqueezyCheckoutUrl, loadPricingSelection, savePricingSelection } from "@/lib/billing";
+import { track } from "@/lib/analytics";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 
 /* Application profile: exactly the fields the backend encrypts and the
@@ -43,6 +47,13 @@ export default function Settings() {
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [pricingSubject, setPricingSubject] = useState<string | null>(null);
+  const [pricingCountry, setPricingCountry] = useState<string | null>(null);
+  const [pricingInterval, setPricingInterval] = useState<BillingInterval>("yearly");
+  const [pricingOffer, setPricingOffer] = useState<PricingOffer | null>(null);
+  const [pricingCountries, setPricingCountries] = useState<string[]>([]);
+  const [pricingError, setPricingError] = useState(false);
+  const [pricingLoading, setPricingLoading] = useState(true);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [mountedAt] = useState(() => Date.now());
   const [dataBusy, setDataBusy] = useState<"export" | "delete" | null>(null);
@@ -91,6 +102,41 @@ export default function Settings() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    const selection = loadPricingSelection();
+    queueMicrotask(() => {
+      setPricingSubject(selection.subjectId);
+      setPricingCountry(selection.countryCode);
+      setPricingInterval(selection.interval);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!pricingSubject) return;
+    let cancelled = false;
+    void getPricingOffer(pricingSubject, pricingCountry, pricingInterval).then((response) => {
+      if (cancelled) return;
+      setPricingOffer(response.offer);
+      setPricingCountries(response.countries);
+      setPricingLoading(false);
+      savePricingSelection(response.offer);
+      track("pricing_quote_viewed", {
+        source: "settings",
+        band: response.offer.band,
+        country: response.offer.country_code,
+        interval: response.offer.interval,
+        amount_cents: response.offer.amount_cents,
+        experiment_variant: response.offer.experiment_variant,
+      });
+    }).catch(() => {
+      if (!cancelled) {
+        setPricingError(true);
+        setPricingLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [pricingCountry, pricingInterval, pricingSubject]);
 
   function patch(p: Partial<ApplicationProfile>) {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
@@ -174,14 +220,34 @@ export default function Settings() {
     setCheckoutBusy(true);
     setError(null);
     try {
-      const checkout = await createCheckout();
+      if (!pricingOffer || !pricingSubject || pricingLoading) throw new Error("Pricing is still loading.");
+      const checkout = await createCheckout({
+        subject_id: pricingSubject,
+        country_code: pricingCountry,
+        interval: pricingInterval,
+        quote_token: pricingOffer.quote_token,
+      });
       if (!isLemonSqueezyCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
+      track("pricing_checkout_started", {
+        source: "settings",
+        country: checkout.offer.country_code,
+        band: checkout.offer.band,
+        interval: checkout.offer.interval,
+        amount_cents: checkout.offer.amount_cents,
+        experiment_variant: checkout.offer.experiment_variant,
+      });
       window.location.assign(checkout.url);
     } catch (checkoutError) {
+      track("pricing_checkout_failed", { source: "settings" });
       setError(checkoutError instanceof Error ? checkoutError.message : "Checkout is temporarily unavailable.");
       setCheckoutBusy(false);
     }
   }
+
+  const pricingCountryOptions = useMemo(() => pricingCountries
+    .filter((code) => code !== "ZZ")
+    .map((code) => ({ code, name: countryName(code) }))
+    .sort((a, b) => a.name.localeCompare(b.name)), [pricingCountries]);
 
   async function exportAccount() {
     setDataBusy("export");
@@ -399,26 +465,59 @@ export default function Settings() {
           <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
-        {me.checkout_available && !trialActive ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[14px] bg-brand-soft px-5 py-4">
-            <p className="text-sm text-muted">
-              <span className="font-medium text-ink">Pro covers 1,000 resumes a month. </span>
-              $49.99/mo. Canceling takes the same clicks as signing up, from
-              the billing portal linked in your receipt email.
-            </p>
-            {me.is_guest ? <a
-              href="/login?claim=1&next=upgrade"
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
-              Upgrade to Pro
-            </a> : <button
-              type="button"
-              disabled={checkoutBusy}
-              onClick={() => void startCheckout()}
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {checkoutBusy ? "Opening checkout..." : "Upgrade to Pro"}
-            </button>}
+        {(me.checkout_intervals?.monthly || me.checkout_intervals?.yearly || me.checkout_available) && !trialActive ? (
+          <div className="mt-6 rounded-[14px] bg-brand-soft px-5 py-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs font-medium text-muted">
+                Billing period
+                <select value={pricingInterval} onChange={(event) => {
+                  const next = event.target.value as BillingInterval;
+                  setPricingLoading(true);
+                  setPricingError(false);
+                  setPricingInterval(next);
+                  track("pricing_interval_changed", { source: "settings", interval: next });
+                }} className="mt-1 block rounded-full border border-border bg-surface px-4 py-2 text-sm text-ink">
+                  <option value="monthly">Monthly</option>
+                  <option value="yearly">Yearly</option>
+                </select>
+              </label>
+              <label className="min-w-56 text-xs font-medium text-muted">
+                Billing country
+                <select value={pricingCountry ?? ""} onChange={(event) => {
+                  const next = event.target.value || null;
+                  setPricingLoading(true);
+                  setPricingError(false);
+                  setPricingCountry(next);
+                  track("pricing_country_changed", { source: "settings", country: next ?? "automatic" });
+                }} className="mt-1 block w-full rounded-full border border-border bg-surface px-4 py-2 text-sm text-ink">
+                  <option value="">Detect my country</option>
+                  {pricingCountryOptions.map(({ code, name }) => <option key={code} value={code}>{name}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="text-sm text-muted">
+                <p><span className="font-medium text-ink">Pro covers 1,000 resumes a month. </span>
+                  {!pricingLoading && pricingOffer ? `${formatUsd(pricingOffer.amount_cents / (pricingOffer.interval === "yearly" ? 12 : 1))}/mo` : pricingError ? "Standard price will be verified at checkout." : "Loading regional price..."}
+                </p>
+                {pricingOffer && <p className="mt-1 text-xs">{pricingOffer.interval === "yearly" ? `Billed ${formatUsd(pricingOffer.amount_cents)} yearly. ` : "Billed monthly. "}{countryName(pricingOffer.country_code)} pricing in USD. Cancel from the billing portal.</p>}
+                {pricingOffer?.band === "access" && <p className="mt-1 text-xs font-medium text-positive">Regional access discount applied.</p>}
+              </div>
+              {me.is_guest ? <button
+                type="button"
+                disabled={!pricingOffer || pricingLoading}
+                onClick={() => {
+                  if (pricingOffer) savePricingSelection(pricingOffer);
+                  router.push("/login?claim=1&next=upgrade");
+                }}
+                className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >Upgrade to Pro</button> : <button
+                type="button"
+                disabled={checkoutBusy || pricingLoading || !pricingOffer || me.checkout_intervals?.[pricingInterval] === false}
+                onClick={() => void startCheckout()}
+                className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              >{checkoutBusy ? "Opening checkout..." : "Upgrade to Pro"}</button>}
+            </div>
           </div>
         ) : me.tier === "pro" ? (
           <div className="mt-6 border-t border-border pt-5 text-sm text-muted">

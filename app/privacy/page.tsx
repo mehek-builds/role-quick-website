@@ -188,9 +188,20 @@ export default function Privacy() {
 
         <Section title="Billing">
           <p>
-            Payments are processed by Stripe. We never see or store your card
-            number. Canceling takes the same clicks as signing up, from the
-            billing portal linked in your receipt email.
+            Payments are processed by Lemon Squeezy. We never see or store your
+            card number. We use your request country, your network-derived
+            country, and the billing country Lemon Squeezy returns to apply and
+            verify regional pricing. We keep the price, country, pricing policy,
+            and experiment group attached to a checkout so renewals and billing
+            support can be handled consistently.
+          </p>
+          <p>
+            Litos may test different prices within a regional price band to
+            understand willingness to pay. Assignment is pseudonymous and
+            stable, and does not use your resume, applications, school,
+            ethnicity, gender, or other sensitive profile details. Canceling
+            takes the same clicks as signing up, from the billing portal linked
+            in your receipt email.
           </p>
         </Section>
 
