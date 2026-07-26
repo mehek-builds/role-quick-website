@@ -63,7 +63,13 @@ export default function Applications() {
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
-  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>("all");
+  // Seeded from ?state= so the Overview metrics are real filter links rather than decoration.
+  // Read once at mount: after that the select on this page is the only thing that moves it.
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>(() => {
+    if (typeof window === "undefined") return "all";
+    const requested = new URLSearchParams(window.location.search).get("state");
+    return requested === "action" || requested === "ready" || requested === "submitted" ? requested : "all";
+  });
   const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const moveToScreen = useCallback((next: Screen) => {
@@ -553,7 +559,7 @@ export default function Applications() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Applications</h1>
+          <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Applications</h1>
           <p className="mt-1 text-sm text-muted">Review and track.</p>
         </div>
         <div className="flex items-center gap-2">
@@ -822,7 +828,7 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text" }
 
 function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
-    <div className="mx-auto max-w-[640px] bg-white px-4 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)] sm:px-7">
+    <div className="mx-auto max-w-[640px] rounded-[20px] border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
       {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
           lossy in both directions: a degree legitimately containing " · " split wrong, and any
