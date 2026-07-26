@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   api,
@@ -13,11 +13,17 @@ import {
   type EmailProvider,
   getEmailConnections,
   getOnboardingState,
+  getToken,
   Me,
+  setSession,
   setAutomationSettings,
 } from "@/lib/api";
 import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import { API_URL } from "@/lib/config";
+import { passwordFormProblem } from "@/app/login/password-form";
+import { updatePasswordSession } from "@/app/login/password-session";
+import { litosClientHeaders } from "@/lib/product";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -46,6 +52,13 @@ export default function Settings() {
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [mountedAt] = useState(() => Date.now());
   const [dataBusy, setDataBusy] = useState<"export" | "delete" | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+  const passwordErrorRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,6 +214,51 @@ export default function Settings() {
     }
   }
 
+  async function changePassword(event: React.FormEvent) {
+    event.preventDefault();
+    const reportPasswordError = (message: string) => {
+      setPasswordError(message);
+      queueMicrotask(() => passwordErrorRef.current?.focus());
+    };
+    const passwordProblem = passwordFormProblem(newPassword, confirmPassword);
+    if (passwordProblem) {
+      reportPasswordError(passwordProblem);
+      return;
+    }
+    setPasswordBusy(true);
+    setPasswordNotice(null);
+    setPasswordError(null);
+    try {
+      const result = await updatePasswordSession({
+        apiUrl: API_URL,
+        token: getToken() ?? "",
+        password: newPassword,
+        currentPassword,
+        headers: litosClientHeaders(),
+      });
+      if (result.kind === "recovery_required") {
+        clearSession();
+        router.replace("/login?flow=recovery&reason=password-state");
+        return;
+      }
+      if (result.kind === "rejected") {
+        reportPasswordError(result.code === "recent_verification_required"
+          ? "Verify your email from the sign-in page, then choose a password."
+          : result.error);
+        return;
+      }
+      setSession(result.token, result.email ?? me?.email ?? null);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setPasswordNotice("Password updated. Older sessions have been signed out.");
+    } catch {
+      reportPasswordError("Could not confirm the password update. Verify your email and try again.");
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
   async function deleteAccount() {
     if (!me?.email) {
       setError("Save this guest workspace with an email before deleting the account.");
@@ -304,6 +362,65 @@ export default function Settings() {
             );
           })}
         </div>
+        {me.email && (
+          <form onSubmit={changePassword} className="mt-6 border-t border-border pt-6">
+            <h3 className="text-sm font-medium text-ink">Set or change password</h3>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Use 15 to 128 characters. Changing it signs out every older session.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
+                placeholder="Current password"
+                aria-label="Current password"
+                className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              />
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
+                placeholder="New password"
+                aria-label="New password"
+                className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              />
+              <input
+                type="password"
+                required
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
+                placeholder="Confirm new password"
+                aria-label="Confirm new password"
+                className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              />
+            </div>
+            {passwordError && (
+              <p
+                ref={passwordErrorRef}
+                tabIndex={-1}
+                className="mt-3 text-sm text-danger outline-none"
+                role="alert"
+                aria-live="assertive"
+              >
+                {passwordError}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-4">
+              <button type="submit" disabled={passwordBusy} className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
+                {passwordBusy ? "Updating..." : "Update password"}
+              </button>
+              <button type="button" onClick={() => { clearSession(); router.push("/login?flow=recovery"); }} className="text-xs text-muted hover:text-ink">
+                Sign out and verify email to reset it
+              </button>
+              {passwordNotice && <span className="text-xs text-positive" role="status">{passwordNotice}</span>}
+            </div>
+          </form>
+        )}
       </Card>
 
       <Card className="p-6">
