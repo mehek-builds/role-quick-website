@@ -14,37 +14,41 @@
 
 import type { OnboardingStep } from "@/lib/api";
 
-export const STEPS: { key: OnboardingStep; act: string; label: string }[] = [
-  { key: "focus", act: "00", label: "Focus" },
-  { key: "resume", act: "01", label: "Résumé" },
-  { key: "install", act: "02", label: "Install" },
-  { key: "apply", act: "03", label: "Apply" },
-  { key: "gaps", act: "04", label: "Gaps" },
-  { key: "targeting", act: "05", label: "Target" },
-  { key: "done", act: "06", label: "Done" },
+/* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
+   screens, and "Résumé" was the only place in the product that spelled it with accents. */
+export const STEPS: { key: OnboardingStep; label: string }[] = [
+  { key: "focus", label: "What you want" },
+  { key: "resume", label: "Your resume" },
+  { key: "install", label: "Add to Chrome" },
+  { key: "apply", label: "One application" },
+  { key: "gaps", label: "A few details" },
+  { key: "targeting", label: "When you start" },
+  { key: "done", label: "Done" },
 ];
 
 export function StepRail({ current }: { current: OnboardingStep }) {
   const i = STEPS.findIndex((s) => s.key === current);
   const activeStep = STEPS[Math.max(0, i)];
-  const progress = ((Math.max(0, i) + 1) / STEPS.length) * 100;
+  const step = Math.max(0, i) + 1;
+  /* The old bar filled by step count and read 43% while the twelve-minute step was still ahead,
+     so it promised a finish line it could not keep. Steps are not equal in effort and this cannot
+     know how long any of them takes, so it no longer draws a fraction of the way there: it marks
+     where you are. The written "Step 5 of 7" is the honest part and it stays. */
   return (
-    <div aria-label={`Setup progress: step ${i + 1} of ${STEPS.length}, ${activeStep.label}`}>
-      <div className="flex items-center justify-between gap-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
-        <span className="text-ink">
-          <span className="text-brand-ink">{activeStep.act}</span> {activeStep.label}
-        </span>
-        <span className="text-faint">{i + 1} of {STEPS.length}</span>
+    <div aria-label={`Setup: step ${step} of ${STEPS.length}, ${activeStep.label}`}>
+      <div className="flex items-center justify-between gap-4 text-[13px]">
+        <span className="text-ink">{activeStep.label}</span>
+        <span className="text-faint">Step {step} of {STEPS.length}</span>
       </div>
-      <div
-        role="progressbar"
-        aria-valuemin={1}
-        aria-valuemax={STEPS.length}
-        aria-valuenow={i + 1}
-        className="mt-3 h-px overflow-hidden bg-border"
-      >
-        <div className="h-full bg-brand transition-[width] duration-300" style={{ width: `${progress}%` }} />
-      </div>
+      <ol className="mt-3 flex gap-1.5">
+        {STEPS.map((s, index) => (
+          <li
+            key={s.key}
+            aria-hidden="true"
+            className={`h-0.5 flex-1 rounded-full ${index < step ? "bg-ink" : "bg-border"}`}
+          />
+        ))}
+      </ol>
     </div>
   );
 }
@@ -148,21 +152,22 @@ export function PrimaryButton({
 }
 
 /* "Finish later" is plainly worded and always visible. Strong default, not a trap: burying the
-   exit would be the dark pattern the Guardrails exist to prevent. */
+   exit would be the dark pattern the Guardrails exist to prevent.
+ *
+ * One name for one control. This button said "Exit setup", the component is LaterLink and the
+ * analytics event is onboarding_step_later, so the same escape hatch had three names. The
+ * reassurance moves into the button's own title rather than sitting beside it as a third piece
+ * of text in a row that already had two buttons. */
 export function LaterLink({ onClick }: { onClick: () => void }) {
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={onClick}
-        className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
-      >
-        Exit setup
-      </button>
-      <span className="font-mono text-[12px] text-faint">
-        Completed steps stay saved
-      </span>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      title="Anything you have finished stays saved"
+      className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+    >
+      Finish later
+    </button>
   );
 }
 

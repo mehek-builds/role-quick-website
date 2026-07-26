@@ -14,7 +14,7 @@ import {
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, ShimmerRows, formatDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatDate, formatRelativeDate } from "@/components/app/ui";
 import {
   DAILY_PREPARED_RESUME_LIMIT,
   packetMatchesJob,
@@ -228,7 +228,7 @@ export default function Home() {
         setOutreach(Array.isArray(outreachResult) ? outreachResult : (outreachResult.events ?? []));
       })
       .catch((reason) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not load today's matches.");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "We could not load your jobs. Reload the page.");
       });
     return () => {
       cancelled = true;
@@ -237,8 +237,10 @@ export default function Home() {
 
   const rankedJobs = useMemo(() => rankJobs(jobs ?? [], targeting, profile), [jobs, profile, targeting]);
   const dailyJobs = useMemo(() => rankedJobs.slice(0, DAILY_PREPARED_RESUME_LIMIT), [rankedJobs]);
+  // Three, not five. Home is the summary and Jobs is the browse; showing most of the feed here
+  // made the two pages the same page.
   const visibleJobs = useMemo(
-    () => rankedJobs.filter((job) => !dismissed.includes(job.id)).slice(0, 5),
+    () => rankedJobs.filter((job) => !dismissed.includes(job.id)).slice(0, 3),
     [dismissed, rankedJobs],
   );
   const applicationSummary = useMemo(() => {
@@ -296,7 +298,7 @@ export default function Home() {
         }
       } catch (reason) {
         if (cancelled) return;
-        setReviewError(reason instanceof Error ? reason.message : "Could not refresh submission status.");
+        setReviewError(reason instanceof Error ? reason.message : "We lost track of this application. Reload the page.");
         timer = window.setTimeout(tick, 5_000);
       }
     };
@@ -425,13 +427,14 @@ export default function Home() {
       setPackets((current) => current.map((packet) => packet.id === reviewPacket.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet));
     } catch (reason) {
       if (activeReviewJobIdRef.current === submittedJobId) {
-        setReviewError(reason instanceof Error ? reason.message : "Could not submit this application.");
+        setReviewError(reason instanceof Error ? reason.message : "We could not send this application. Try again.");
       }
     } finally {
       if (activeReviewJobIdRef.current === submittedJobId) setReviewSubmitting(false);
     }
   }
 
+  const hasHistory = packets.length > 0 || outreach.length > 0;
   const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "your target roles";
   const trialActive = Boolean(
     me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
@@ -441,13 +444,22 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
+      {/* The header carries the one thing a person comes here to do. "Change what I want" is a
+          setting, so it sits as a text link under the subtitle rather than occupying the primary
+          button slot. */}
       <section className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Overview</h1>
-          <p className="mt-1 text-sm text-muted">{targetLabel}</p>
+          <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Overview</h1>
+          <p className="mt-1 text-sm text-muted">
+            {targetLabel}
+            <span aria-hidden="true" className="mx-2 text-faint">·</span>
+            <Link href="/dashboard/profile" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
+              Change what I want
+            </Link>
+          </p>
         </div>
-        <Link href="/dashboard/profile" className="flex min-h-11 items-center rounded-full border border-border px-4 text-sm font-medium text-ink transition-colors hover:border-ink">
-          Edit targeting
+        <Link href="/dashboard/applications?new=1" className="flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90">
+          Add a job link
         </Link>
       </section>
 
@@ -478,56 +490,51 @@ export default function Home() {
         </Card>
       )}
 
+      {/* On day one every one of these counters is 0, and six zeros is a worse first screen than
+          no counters at all. They appear once there is something to count. */}
+      {hasHistory && (
       <section aria-labelledby="applications-summary">
         <div className="flex items-center justify-between gap-4">
           <h2 id="applications-summary" className="text-base font-medium text-ink">Applications</h2>
           <Link href="/dashboard/applications" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
         </div>
+        {/* Every metric is a filter link. A number you cannot act on is decoration, and the
+            old "Action needed" panel below restated these same counts a second and third time. */}
         <dl className="mt-4 grid grid-cols-3 border-y border-border">
-          <SummaryMetric label="Ready" value={applicationSummary.ready} />
-          <SummaryMetric label="Needs action" value={applicationSummary.needsAction} urgent={applicationSummary.needsAction > 0} />
-          <SummaryMetric label="Submitted" value={applicationSummary.submitted} />
+          <SummaryMetric label="Ready" value={applicationSummary.ready} href="/dashboard/applications?state=ready" />
+          <SummaryMetric label="Needs you" value={applicationSummary.needsAction} href="/dashboard/applications?state=action" />
+          <SummaryMetric label="Sent" value={applicationSummary.submitted} href="/dashboard/applications?state=submitted" />
         </dl>
       </section>
+      )}
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        <section aria-labelledby="action-heading">
-          <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
-            <h2 id="action-heading" className="text-base font-medium text-ink">Action needed</h2>
-            <span className="font-mono text-xs text-faint">{applicationSummary.needsAction + applicationSummary.ready}</span>
-          </div>
-          {applicationSummary.needsAction + applicationSummary.ready > 0 ? (
-            <div className="divide-y divide-border">
-              {applicationSummary.needsAction > 0 && (
-                <DashboardRow label={`${applicationSummary.needsAction} application${applicationSummary.needsAction === 1 ? "" : "s"} blocked`} detail="Resolve required details" href="/dashboard/applications" />
-              )}
-              {applicationSummary.ready > 0 && (
-                <DashboardRow label={`${applicationSummary.ready} application${applicationSummary.ready === 1 ? "" : "s"} ready`} detail="Review and submit" href="/dashboard/applications" />
-              )}
-            </div>
-          ) : (
-            <p className="py-5 text-sm text-muted">Nothing needs you.</p>
-          )}
-        </section>
+      {applicationSummary.needsAction > 0 && (
+        <DashboardRow
+          label={`${applicationSummary.needsAction} application${applicationSummary.needsAction === 1 ? "" : "s"} stopped for you`}
+          detail="Finish the missing answers"
+          href="/dashboard/applications?state=action"
+        />
+      )}
 
-        <section aria-labelledby="outreach-summary">
-          <div className="flex items-center justify-between gap-4 border-b border-border pb-3">
-            <h2 id="outreach-summary" className="text-base font-medium text-ink">Outreach</h2>
-            <Link href="/dashboard/outreach" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
-          </div>
-          <dl className="grid grid-cols-3 divide-x divide-border py-5">
-            <MiniMetric label="Drafted" value={outreachSummary.drafted} />
-            <MiniMetric label="Sent" value={outreachSummary.sent} />
-            <MiniMetric label="Replied" value={outreachSummary.replied} />
-          </dl>
-        </section>
-      </div>
+      {outreach.length > 0 && (
+      <section aria-labelledby="outreach-summary">
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="outreach-summary" className="text-base font-medium text-ink">Outreach</h2>
+          <Link href="/dashboard/outreach" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
+        </div>
+        <dl className="mt-4 grid grid-cols-3 border-y border-border">
+          <SummaryMetric label="Drafted" value={outreachSummary.drafted} href="/dashboard/outreach" />
+          <SummaryMetric label="Sent" value={outreachSummary.sent} href="/dashboard/outreach" />
+          <SummaryMetric label="Replied" value={outreachSummary.replied} href="/dashboard/outreach" />
+        </dl>
+      </section>
+      )}
 
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 id="matches-heading" className="text-base font-medium text-ink">Today&apos;s matches</h2>
-            <p className="mt-1 text-xs text-muted">Ranked from your profile.</p>
+            <h2 id="matches-heading" className="text-base font-medium text-ink">Your top jobs today</h2>
+            <p className="mt-1 text-xs text-muted">Picked to match what you said you want.</p>
           </div>
           <Link href="/dashboard/jobs" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
         </div>
@@ -545,12 +552,8 @@ export default function Home() {
         </EmptyState>
       ) : (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-xs text-faint">{visibleJobs.length} READY TO REVIEW</p>
-            <span />
-          </div>
           {visibleJobs.map((job) => (
-            <JobMatchCard key={job.id} job={job} rank={rankedJobs.findIndex((ranked) => ranked.id === job.id) + 1} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
+            <JobMatchCard key={job.id} job={job} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
           ))}
         </div>
       )}
@@ -558,26 +561,18 @@ export default function Home() {
 
       {lastDismissed && (
         <div role="status" className="flex items-center justify-between rounded-[12px] bg-surface-alt px-4 py-3 text-sm text-muted">
-          <span>Passed for today.</span>
+          <span>Skipped for today.</span>
           <button type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
         </div>
       )}
 
-      {me && (
+      {/* A quota readout at 0.7% is noise, and it was competing with the header for the page's one
+          primary action. It appears only once it can actually change a decision, and then it uses
+          the real Meter rather than a sentence. Plan lives in Account, where settings live. */}
+      {me && nearLimit(me) && (
         <section aria-labelledby="usage-heading" className="border-t border-border pt-6">
-          <div className="grid gap-5 sm:grid-cols-[1fr_auto] sm:items-center">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 id="usage-heading" className="text-sm font-medium text-ink">Usage</h2>
-                <span className="font-mono text-[10px] uppercase text-faint">{me.tier}</span>
-              </div>
-              <p className="mt-1 text-xs text-muted">{usageLabel(me.usage.resumes.used, applicationLimit(me), "resumes this month")} · {usageLabel(me.usage.drafts.used, me.usage.drafts.limit, "drafts")}</p>
-            </div>
-            <div className="flex gap-2">
-              <Link href="/dashboard/settings" className="flex min-h-11 items-center px-2 text-sm font-medium text-muted hover:text-ink">Plan</Link>
-              <Link href="/dashboard/applications?new=1" className="flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white">Add job URL</Link>
-            </div>
-          </div>
+          <h2 id="usage-heading" className="sr-only">Usage</h2>
+          <Meter label="Resumes this month" used={me.usage.resumes.used} limit={applicationLimit(me)} />
         </section>
       )}
 
@@ -595,27 +590,22 @@ export default function Home() {
   );
 }
 
-function SummaryMetric({ label, value, urgent = false }: { label: string; value: number; urgent?: boolean }) {
+function SummaryMetric({ label, value, href }: { label: string; value: number; href: string }) {
   return (
-    <div className="border-border px-3 py-4 first:pl-0 even:border-l sm:border-l sm:first:border-l-0 sm:px-5">
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className={`mt-1 font-mono text-2xl ${urgent ? "text-warn" : "text-ink"}`}>{value}</dd>
-    </div>
-  );
-}
-
-function MiniMetric({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="px-4 first:pl-0">
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-1 font-mono text-xl text-ink">{value}</dd>
+    <div className="border-border first:pl-0 even:border-l sm:border-l sm:first:border-l-0">
+      {/* DESIGN.md hard law: color never encodes urgency. A count is a quantity, so it stays ink
+          and the label carries the meaning. */}
+      <Link href={href} className="block px-3 py-4 transition-colors hover:bg-surface-alt sm:px-5">
+        <dt className="text-xs text-muted">{label}</dt>
+        <dd className="mt-1 font-mono text-2xl text-ink">{value}</dd>
+      </Link>
     </div>
   );
 }
 
 function DashboardRow({ label, detail, href }: { label: string; detail: string; href: string }) {
   return (
-    <Link href={href} className="grid min-h-16 grid-cols-[1fr_auto] items-center gap-4 py-2 group">
+    <Link href={href} className="group grid min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-[20px] border border-border px-5 py-3">
       <span>
         <span className="block text-sm font-medium text-ink">{label}</span>
         <span className="block text-xs text-muted">{detail}</span>
@@ -625,27 +615,36 @@ function DashboardRow({ label, detail, href }: { label: string; detail: string; 
   );
 }
 
-function JobMatchCard({ job, rank, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; rank: number; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
+function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
   return (
     <Card className="overflow-hidden transition-colors hover:border-ink/30">
-      <div className="grid gap-5 p-5 sm:grid-cols-[44px_1fr_auto] sm:items-center sm:p-6">
-        <div className="hidden size-11 items-center justify-center rounded-full bg-brand-soft font-mono text-xs font-medium text-brand-ink sm:flex">
-          {String(rank).padStart(2, "0")}
+      {/* Two signals, not five. The score is the ring (deck 07 says the score is a ring, and the
+          Applications page already renders it that way, so Home now matches). One status chip
+          carries the only thing that changes. "Remote" is a fact about the job, so it reads as
+          text beside the location instead of borrowing the success colour. */}
+      <div className="grid gap-5 p-5 sm:grid-cols-[48px_1fr_auto] sm:items-center sm:p-6">
+        <div className="hidden sm:block">
+          <ScoreRing score={job.match} />
+          <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Chip label={`${job.match}% match`} kind="ready" />
-            <Chip label={prepared ? "Resume ready" : preparationFailed ? "Preparation paused" : "Preparing"} kind={prepared ? "sent" : "generating"} />
-            {job.remote && <Chip label="Remote" kind="sent" />}
-            <span className="font-mono text-[10px] uppercase tracking-[0.06em] text-faint">Found {formatDate(job.first_seen_at)}</span>
+            <Chip label={prepared ? "Ready" : preparationFailed ? "Paused" : "Getting ready"} kind={prepared ? "ready" : "generating"} />
+            <span className="text-xs text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
           </div>
           <h2 className="mt-3 text-lg font-medium text-ink">{job.title}</h2>
-          <p className="mt-1 text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
+          <p className="mt-1 text-sm text-muted">
+            {job.company_name}
+            {job.location ? ` · ${job.location}` : ""}
+            {/* Only when the location line does not already say it, or a remote role reads
+                "Remote, US · Remote". */}
+            {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
+          </p>
           <p className="mt-2 text-xs text-faint">{job.reasons.join(" · ")}</p>
         </div>
         <div className="flex gap-2 sm:justify-end">
-          <button type="button" onClick={onDismiss} aria-label={`Pass on ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
-            Pass
+          <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
+            Skip
           </button>
           <button type="button" onClick={prepared ? onReview : onRetry} disabled={!prepared && !preparationFailed} aria-label={`${prepared ? "Review" : preparationFailed ? "Retry preparation for" : "Preparing"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:bg-surface-strong disabled:text-faint">
             {prepared ? "Review" : preparationFailed ? "Retry" : "Preparing"}
@@ -673,12 +672,15 @@ function prewarmLockKey(jobId: string): string {
   return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
 }
 
-function usageLabel(used: number, limit: number, noun: string): string {
-  return `${used.toLocaleString()} of ${limit.toLocaleString()} ${noun}`;
-}
-
 function applicationLimit(me: Me): number {
   return me.usage.resumes.limit;
+}
+
+/** Show the quota only once it is close enough to change what someone does today. */
+function nearLimit(me: Me): boolean {
+  const limit = applicationLimit(me);
+  if (limit <= 0) return false;
+  return me.usage.resumes.used / limit >= 0.6;
 }
 
 function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { job: RankedJob; packet: GeneratedResume | null; submitting: boolean; error: string | null; onClose: () => void; onSubmit: () => void }) {
@@ -724,10 +726,11 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
   return (
     <div className="fixed inset-0 z-50">
       <button type="button" tabIndex={-1} aria-label="Close review" onClick={onClose} className="dashboard-drawer-backdrop absolute inset-0 bg-ink/30 backdrop-blur-[2px]" />
-      <aside role="dialog" aria-modal="true" aria-labelledby="review-title" onKeyDown={containFocus} className="dashboard-drawer absolute inset-y-0 right-0 flex w-full max-w-[1120px] flex-col bg-white shadow-[-24px_0_80px_rgba(20,20,18,0.14)]">
+      {/* Deck 04: borders do the separating, shadows almost never appear. */}
+      <aside role="dialog" aria-modal="true" aria-labelledby="review-title" onKeyDown={containFocus} className="dashboard-drawer absolute inset-y-0 right-0 flex w-full max-w-[1120px] flex-col border-l border-border bg-white">
         <header className="flex items-start justify-between gap-6 border-b border-border px-5 py-5 sm:px-8">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Review match</p>
+            <p className="text-xs text-faint">Review job</p>
             <h2 id="review-title" className="mt-1 truncate text-xl font-medium tracking-[-0.02em] text-ink">{job.title}</h2>
             <p className="mt-1 truncate text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
           </div>
@@ -738,7 +741,12 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
           <section aria-labelledby="job-description-heading" className="border-b border-border p-5 lg:overflow-y-auto lg:border-b-0 lg:border-r sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <h3 id="job-description-heading" className="text-sm font-medium text-ink">Job description</h3>
-              <Chip label={`${job.match}% match`} kind="ready" />
+              {/* Same score, same shape as Home and Applications. It was a blue chip here and a
+                  ring everywhere else. */}
+              <div className="text-center">
+                <ScoreRing score={job.match} />
+                <p className="mt-1 w-12 text-[11px] text-faint">match</p>
+              </div>
             </div>
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>
           </section>
@@ -746,7 +754,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
           <section aria-labelledby="resume-heading" className="bg-surface-alt p-5 lg:overflow-y-auto sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <h3 id="resume-heading" className="text-sm font-medium text-ink">Tailored resume</h3>
-              {packet?.created_at && <span className="font-mono text-[10px] uppercase text-faint">{formatDate(packet.created_at)}</span>}
+              {packet?.created_at && <span className="text-xs text-faint">{formatRelativeDate(packet.created_at)}</span>}
             </div>
             {packet ? <ResumePreview packet={packet} /> : <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>}
           </section>
@@ -755,12 +763,12 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
         <footer className="border-t border-border bg-white px-5 py-4 sm:px-8">
           {error && <p role="alert" className="mb-3 text-sm text-warn">{error}</p>}
           {missingAnswers.length > 0 && <p className="mb-3 text-sm text-warn">{missingAnswers.length} answer{missingAnswers.length === 1 ? "" : "s"} needed.</p>}
-          {needsAttention && <p className="mb-3 text-sm text-warn">This application needs attention.</p>}
+          {needsAttention && <p className="mb-3 text-sm text-warn">This application needs you.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted">Safety checks pause when you are needed.</p>
+            <p className="text-xs text-muted">Litos stops if it needs you.</p>
             <div className="flex items-center gap-2">
               {(missingAnswers.length > 0 || needsAttention) && packet && (
-                <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Resolve details</Link>
+                <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Finish your answers</Link>
               )}
               <button type="button" onClick={onSubmit} disabled={!canSubmit || submitting} className={`min-h-11 rounded-full px-6 text-sm font-medium transition-opacity ${submitted ? "bg-positive-soft text-positive disabled:bg-positive-soft disabled:text-positive" : "bg-brand text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-faint"}`}>
                 {buttonLabel}
@@ -776,7 +784,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
 function ResumePreview({ packet }: { packet: GeneratedResume }) {
   const spec = packet.spec;
   return (
-    <article className="mt-6 rounded-[14px] border border-border bg-white p-5 shadow-[0_12px_36px_rgba(20,20,18,0.06)] sm:p-7">
+    <article className="mt-6 rounded-[20px] border border-border bg-white p-5 sm:p-7">
       <div className="border-b border-ink pb-4">
         <h4 className="text-lg font-semibold tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
         <p className="mt-1 text-xs text-muted">{packet.job_context.company}</p>

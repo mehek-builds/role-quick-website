@@ -91,11 +91,7 @@ export function FocusStep({
       <div className="mb-7">
         <div className="flex min-h-5 items-baseline justify-between">
           <p className="text-[14px] text-ink">Kind of work</p>
-          {categories.length > 0 && (
-            <span className="font-mono text-[11px] text-faint">
-              {categories.length} of {MAX_CATEGORIES} selected
-            </span>
-          )}
+          <span className="text-[12px] text-faint">Pick up to {MAX_CATEGORIES}</span>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => {
@@ -122,11 +118,7 @@ export function FocusStep({
       <div className="mb-8">
         <div className="flex min-h-5 items-baseline justify-between">
           <p className="text-[14px] text-ink">Type</p>
-          {roleTypes.length > 0 && (
-            <span className="font-mono text-[11px] text-faint">
-              {roleTypes.length} of {MAX_ROLE_TYPES} selected
-            </span>
-          )}
+          <span className="text-[12px] text-faint">Pick up to {MAX_ROLE_TYPES}</span>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
@@ -183,7 +175,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     try {
       setParsed(await uploadResume(f));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not read that résumé.");
+      setError(e instanceof Error ? e.message : "Could not read that resume.");
       setFile(null);
     } finally {
       setBusy(false);
@@ -223,7 +215,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         <Receipt rows={rows} />
         {empty && (
           <p className="mt-4 rounded-[12px] bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
-            We couldn&apos;t pull any experience out of that file, so tailored résumés won&apos;t
+            We couldn&apos;t pull any experience out of that file, so tailored resumes won&apos;t
             work yet. It usually means the PDF is an image rather than text. Try a different
             export, or carry on and add entries by hand later.
           </p>
@@ -248,7 +240,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   return (
     <StartShell
       step="resume"
-      title="Start with your résumé."
+      title="Start with your resume."
       sub="We pull out the facts applications need."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
@@ -284,7 +276,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           </>
         ) : (
           <>
-            <p className="text-[16px] text-ink">Choose your résumé</p>
+            <p className="text-[16px] text-ink">Choose your resume</p>
             <p className="shrink-0 text-right font-mono text-[12px] text-muted">
               PDF or DOCX<br />10 MB max
             </p>
@@ -355,15 +347,19 @@ export function InstallStep({
           >
             Add to Chrome
           </a>
+          {/* The only way past this screen for anyone who already has the extension, or who
+              applies on a portal Litos cannot see. It was 11px uppercase faint text below the
+              button row: the least visible thing on the screen, doing the most important job on
+              it. It is a real secondary control now, beside the primary. */}
+          <button
+            type="button"
+            onClick={onInstalled}
+            className="flex min-h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink"
+          >
+            I already have it
+          </button>
           <LaterLink onClick={onLater} />
         </div>
-        <button
-          type="button"
-          onClick={onInstalled}
-          className="mt-6 block font-mono text-[11px] uppercase tracking-[0.08em] text-faint underline-offset-4 hover:text-muted hover:underline"
-        >
-          Already installed →
-        </button>
       </StartShell>
     );
   }
@@ -496,7 +492,7 @@ export function GapsStep({
         onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
         placeholder={meta.placeholder}
         aria-label={meta.label}
-        className="w-full rounded-full border border-border bg-surface px-4 py-2.5 font-mono text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="w-full rounded-full border border-border bg-surface px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     );
   }
@@ -625,7 +621,7 @@ export function TargetStep({
     <StartShell
       step="targeting"
       title="Last thing."
-      sub="Your résumé told us most of this. Correct anything that's wrong."
+      sub="Your resume told us most of this. Correct anything that's wrong."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -634,7 +630,7 @@ export function TargetStep({
         {/* target_roles has been written by the parser since v0 and read by nothing. First use. */}
         <p className="mt-0.5 text-[12px] text-faint">
           {suggestedTitles.length > 0
-            ? "Pulled from your résumé. Drop any that are wrong."
+            ? "Pulled from your resume. Drop any that are wrong."
             : "Add the titles you'd actually accept."}
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
@@ -724,31 +720,31 @@ export function DoneStep({
     <StartShell
       step="done"
       title="Setup complete."
-      sub="Choose what Litos may do automatically."
+      sub="Two things you can let Litos do on its own. Both are off unless you turn them on."
     >
       <div className="divide-y divide-border border-y border-border">
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
           <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
           <span>
-            <span className="block text-[16px] text-ink">Submit eligible applications</span>
+            <span className="block text-[16px] text-ink">Send an application without asking me again</span>
             <span className="mt-1 block text-[14px] leading-6 text-muted">
-              Uses a cancelable review countdown. Pauses when facts are missing.
+              Only when every answer is filled in. You get a few seconds to stop it, and it stops on its own if anything is missing.
             </span>
           </span>
         </label>
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
           <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-[#6b84e8]" />
           <span>
-            <span className="block text-[16px] text-ink">Use application verification codes</span>
+            <span className="block text-[16px] text-ink">Read the code a company emails me</span>
             <span className="mt-1 block text-[14px] leading-6 text-muted">
-              Reads a code only while an application is active. Never saves it.
+              Only while an application is running, only that code, and it is never saved.
             </span>
           </span>
         </label>
       </div>
 
       <p className="mt-4 text-[13px] leading-5 text-muted">
-        Optional. Change anytime in Settings. CAPTCHA and sensitive declarations always stay with you.
+        You can change both any time in Account. Litos never answers a CAPTCHA or a legal question for you.
       </p>
 
       <div className="mt-6">

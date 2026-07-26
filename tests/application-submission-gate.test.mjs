@@ -10,10 +10,14 @@ test("saved answers honor standing consent while retaining a manual fallback", a
 
   assert.match(dashboard, /await prepareApplication\(questions\)/);
   assert.match(dashboard, /missingRequiredAnswers\.length > 0/);
-  assert.match(dashboard, /Complete only the answers Litos does not know yet/);
-  assert.match(dashboard, /Saved profile answers and completed drafts are entered automatically/);
-  assert.match(dashboard, /"Prepare application"/);
-  assert.match(dashboard, /With automatic submission on, an eligible application proceeds without another approval/);
+  // Same promise, plainer words: the questions screen only ever asks for genuine blanks.
+  assert.match(dashboard, /Only the answers we could not work out/);
+  assert.match(dashboard, /Everything we already knew is filled in\. This page only shows the blanks/);
+  // The button was "Prepare application" and the bar under it ran to nineteen words about
+  // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
+  // describe is unchanged, so the assertions follow the new wording.
+  assert.match(dashboard, /"Fill the form"/);
+  assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);
   assert.match(dashboard, /Automatic submission is off or was revoked/);
   assert.match(dashboard, /submission_authorized_at/);
   assert.match(dashboard, /status === "ready_for_final_approval"[\s\S]*>Submit application</);
@@ -30,9 +34,12 @@ test("overview keeps three application states and reviews matches in a right-sid
   const overview = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
+  // Still three states; the labels moved onto the four-word vocabulary.
   assert.match(overview, /label="Ready"/);
-  assert.match(overview, /label="Needs action"/);
-  assert.match(overview, /label="Submitted"/);
+  assert.match(overview, /label="Needs you"/);
+  assert.match(overview, /label="Sent"/);
+  // Each one is a filter link rather than a bare number.
+  assert.match(overview, /href="\/dashboard\/applications\?state=action"/);
   assert.doesNotMatch(overview, /label="Prepared"/);
   assert.doesNotMatch(overview, /Recent activity/);
   assert.doesNotMatch(overview, /Daily resume preparation/);

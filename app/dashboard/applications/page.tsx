@@ -13,7 +13,7 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatDate, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 import { packetMatchesJob } from "@/lib/daily-matches";
@@ -63,7 +63,13 @@ export default function Applications() {
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
-  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>("all");
+  // Seeded from ?state= so the Overview metrics are real filter links rather than decoration.
+  // Read once at mount: after that the select on this page is the only thing that moves it.
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>(() => {
+    if (typeof window === "undefined") return "all";
+    const requested = new URLSearchParams(window.location.search).get("state");
+    return requested === "action" || requested === "ready" || requested === "submitted" ? requested : "all";
+  });
   const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const moveToScreen = useCallback((next: Screen) => {
@@ -136,7 +142,7 @@ export default function Applications() {
       try {
         await refreshSubmission();
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "Could not refresh portal status.");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "We lost track of the form. Reload the page to check.");
       } finally {
         inFlight = false;
       }
@@ -185,7 +191,7 @@ export default function Applications() {
         const first = requested ?? reviewable[0];
         if (first) selectPacket(first);
       })
-      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load applications."));
+      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
     return () => {
       cancelled = true;
     };
@@ -203,7 +209,7 @@ export default function Applications() {
         if (cancelled) return;
         setPendingJob(job);
       })
-      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load that monitored role."));
+      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load that job. Try opening it again."));
     return () => {
       cancelled = true;
     };
@@ -216,11 +222,11 @@ export default function Applications() {
       if (existing) {
         selectPacket(existing);
         setShowNewApplication(false);
-        setNotice("Resume ready. Review the job description and tailored version side by side.");
+        setNotice("Your resume is ready. Compare it with the job below.");
       } else {
         setNewApplication({ company: pendingJob.company_name, role: pendingJob.title, portalUrl: pendingJob.apply_url, jobDescription: pendingJob.description });
         setShowNewApplication(true);
-        setNotice("This role is outside the ready queue. Generate its tailored resume when you are ready.");
+        setNotice("No resume for this job yet. Make one when you want to apply.");
       }
       setPendingJob(null);
     });
@@ -241,6 +247,12 @@ export default function Applications() {
       ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
   }, [applicationFilter, applicationSort, reviewablePackets]);
+  // True when every visible row would print the identical status chip, which is the common case
+  // and makes that whole column dead weight.
+  const uniformStatus = useMemo(() => {
+    const labels = new Set(visiblePackets.map((packet) => packet.spec._review ? statusLabel(false, packet.spec._review.status) : ""));
+    return labels.size <= 1;
+  }, [visiblePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
@@ -249,7 +261,7 @@ export default function Applications() {
   async function fetchJobDescription() {
     const portalUrl = newApplication.portalUrl.trim();
     if (!portalUrl) {
-      setError("Add the job URL first, then fetch the description.");
+      setError("Add the job link first, then get the description.");
       return;
     }
     try {
@@ -271,7 +283,7 @@ export default function Applications() {
     } catch (err) {
       // A 502 here is expected for some client-rendered boards (see backend jobExtract.ts) - the
       // manual textarea right below stays the fallback, this just saves the copy/paste when it works.
-      setError(err instanceof ApiError ? err.message : "Could not fetch that posting. Paste the job description manually below.");
+      setError(err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.");
     } finally {
       setExtractingJd(false);
     }
@@ -283,7 +295,7 @@ export default function Applications() {
     const portalUrl = newApplication.portalUrl.trim();
     const jobDescription = newApplication.jobDescription.trim();
     if (!company || !role || !portalUrl || jobDescription.length < 20) {
-      setError("Add the company, role, job URL, and full job description before generating the review packet.");
+      setError("Fill in all four boxes first.");
       return;
     }
     try {
@@ -331,7 +343,7 @@ export default function Applications() {
         selectPacket(created);
         setNewApplication(EMPTY_APPLICATION_DRAFT);
         setShowNewApplication(false);
-        setNotice("Review packet generated. Litos will check the employer portal for a cover-letter attachment when you submit.");
+        setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
         return;
       }
 
@@ -349,13 +361,13 @@ export default function Applications() {
       const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
       const fallbackCreated = history.resumes.find((packet) => packet.id === generated.resume_id);
       setPackets(history.resumes);
-      if (!fallbackCreated?.spec._review) throw new Error("The review packet was generated but could not be reopened.");
+      if (!fallbackCreated?.spec._review) throw new Error("Your resume was made, but we could not open it. Reload the page.");
       selectPacket(fallbackCreated);
       setNewApplication(EMPTY_APPLICATION_DRAFT);
       setShowNewApplication(false);
-      setNotice("Review packet generated. Litos will check the employer portal for a cover-letter attachment when you submit.");
+      setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not generate the application review packet.");
+      setError(reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.");
     } finally {
       setCreating(false);
     }
@@ -414,7 +426,7 @@ export default function Applications() {
       setNotice("Cover letter saved and grounding checks passed.");
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save the cover letter.");
+      setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
       return false;
     } finally {
       setCoverLetterBusy(false);
@@ -448,7 +460,7 @@ export default function Applications() {
       setNotice("Resume saved and rechecked.");
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save the resume.");
+      setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
       return false;
     } finally {
       setSaving(false);
@@ -473,7 +485,7 @@ export default function Applications() {
   async function prepareApplication(finalQuestions = questions) {
     if (!selected) return;
     if (finalQuestions.some((question) => question.required && !question.answer.trim())) {
-      setError("Complete required profile answers before Litos prepares the portal.");
+      setError("Some answers are missing. Add them first.");
       return;
     }
     moveToScreen("submitting");
@@ -553,15 +565,14 @@ export default function Applications() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-medium tracking-[-0.025em] text-ink">Applications</h1>
+          <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Applications</h1>
           <p className="mt-1 text-sm text-muted">Review and track.</p>
         </div>
-        <div className="flex items-center gap-2">
-          {selected && review && <Chip label={statusLabel(screen === "submitting", review.status)} kind={chipKind(review.status)} />}
-          <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink">
-            {showNewApplication ? "Close" : "Add job URL"}
-          </button>
-        </div>
+        {/* The selected packet's status already prints on its own row and inside the review
+            surface; a third copy in the page header was noise. */}
+        <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90">
+          {showNewApplication ? "Close" : "Add a job link"}
+        </button>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -606,20 +617,34 @@ export default function Applications() {
               </select>
             </div>
           </div>
-          <div className="max-h-72 overflow-y-auto border-t border-border">
+          {/* Whole rows: max-h-72 cut the fifth row in half, which reads as a broken layout
+              rather than as "there is more below". */}
+          <div className="max-h-[280px] overflow-y-auto border-t border-border">
             {visiblePackets.length === 0 ? (
               <p className="py-5 text-sm text-muted">No applications in this view.</p>
             ) : (
-              <div className="divide-y divide-border">
-                {visiblePackets.map((packet) => (
-                  <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
-                    <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
-                    <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
-                    <time className="hidden font-mono text-[10px] text-faint sm:block">{formatDate(packetTimestamp(packet))}</time>
-                    {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
-                  </button>
-                ))}
-              </div>
+              <>
+                {/* An unlabelled column of company names and bare dates left "Jul 21, 2026"
+                    meaning nothing. Say what each column is. */}
+                <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-2 py-2 text-[11px] text-faint sm:grid">
+                  <span>Role</span>
+                  <span>Company</span>
+                  <span>Last updated</span>
+                  <span>{uniformStatus ? "" : "Status"}</span>
+                </div>
+                <div className="divide-y divide-border">
+                  {visiblePackets.map((packet) => (
+                    <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                      <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
+                      <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
+                      <time className="hidden text-xs text-faint sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
+                      {/* A column where every cell reads the same carries no information and costs
+                          a fifth of the row. It only renders when the rows actually differ. */}
+                      {!uniformStatus && packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         </section>
@@ -656,7 +681,9 @@ export default function Applications() {
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
         <>
-          <div className="grid min-h-[680px] gap-4 xl:grid-cols-2">
+          {/* items-start, not a forced min-height: a five-line job description used to sit in a
+              680px box beside a full resume, so most of the review surface was blank. */}
+          <div className="grid items-start gap-4 xl:grid-cols-2">
             <DocumentPane eyebrow="Job description" title={`${selected.job_context.role} · ${selected.job_context.company}`} meta={review.ats_name ?? "Company portal"}>
               <div className="prose-copy text-[15px] leading-7 text-ink">
                 <HighlightedText text={review.jd_text} terms={resumeTerms} tone="match" />
@@ -665,11 +692,11 @@ export default function Applications() {
 
             <DocumentPane
               eyebrow="Tailored resume"
-              title="Your optimized version"
+              title="Your resume for this job"
               meta={
                 <div className="flex items-center gap-3">
-                  <span className="hidden text-right font-mono text-[10px] leading-4 text-faint sm:block">
-                    {formatDate(selected.created_at)}<br />JD coverage
+                  <span className="hidden text-right text-[11px] leading-4 text-faint sm:block">
+                    {formatRelativeDate(selected.created_at)}<br />words matched
                   </span>
                   <ScoreRing score={extractScore(selected.spec)} />
                 </div>
@@ -682,7 +709,7 @@ export default function Applications() {
           {review.cover_letter_supported === true ? <Card className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Tailored cover letter</p>
+                <p className="text-xs text-muted">Tailored cover letter</p>
                 <h2 className="mt-2 text-lg font-medium text-ink">Grounded in this role and your saved experience.</h2>
                 <p className="mt-1 text-sm text-muted">Litos maps the job requirements to evidence already present in your profile, resume, and experience bank.</p>
               </div>
@@ -699,7 +726,7 @@ export default function Applications() {
               </ul>
             )}
           </Card> : <Card className="p-6">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Cover letter on demand</p>
+            <p className="text-xs text-muted">Cover letter on demand</p>
             <h2 className="mt-2 text-lg font-medium text-ink">{review.cover_letter_supported === false ? "No cover-letter attachment was found." : "Litos will check the employer portal first."}</h2>
             <p className="mt-1 text-sm leading-6 text-muted">
               {review.cover_letter_supported === false
@@ -708,29 +735,26 @@ export default function Applications() {
             </p>
           </Card>}
 
+          {/* The action bar used to carry three stacked sentences and a two-part colour legend at
+              11px. A legend belongs beside the thing it explains, so it sits directly under the two
+              panes now, and the bar is left with one sentence and one button. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <mark className="rounded bg-brand-soft px-1 text-brand-ink">Blue</mark>
+              words you already had
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <mark className="rounded-sm border-b-2 border-positive bg-positive-soft px-1 text-positive">Green</mark>
+              words we added for this job
+            </span>
+          </div>
+
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
-            {/* The old one-line legend described only one of the two marks on screen and named
-                neither pane, so the tailoring diff, the thing this review exists to show, was
-                invisible as a concept. Name both, and render each mark in its own style inline so
-                the legend is read in the same visual language as the panes. */}
-            <div>
-              <p className="text-sm font-medium text-ink">Litos enters saved answers, the tailored resume, and an approved cover letter, then follows your automation permission.</p>
-              <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
-                <span className="inline-flex items-center gap-1.5">
-                  <mark className="rounded bg-brand-soft px-1 text-brand-ink">highlighted</mark>
-                  in the job description: language your resume already matches
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <mark className="rounded-sm border-b-2 border-positive bg-positive-soft px-1 text-positive">underlined</mark>
-                  in the resume: wording tailoring changed for this posting
-                </span>
-              </p>
-              <p className="mt-1 text-xs text-muted">With automatic submission on, an eligible application proceeds without another approval. Safety blockers always pause for you.</p>
-            </div>
+            <p className="text-sm text-ink">Litos fills the form with your saved answers and this resume.</p>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               <button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
-                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Checking application...</PendingLabel> : "Prepare application"}
+                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Checking...</PendingLabel> : "Fill the form"}
               </button>
             </div>
           </div>
@@ -744,7 +768,8 @@ function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; tit
   return (
     <section className="overflow-hidden rounded-[20px] border border-border bg-surface">
       <header className="border-b border-border px-6 py-5">
-        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{eyebrow}</p>
+        {/* Mono is the machine voice: numbers, timestamps, statuses. A pane name is neither. */}
+        <p className="text-xs text-faint">{eyebrow}</p>
         <div className="mt-1 flex items-center justify-between gap-3">
           <h2 className="text-base font-medium text-ink">{title}</h2>
           {typeof meta === "string" ? <span className="font-mono text-[10px] text-faint">{meta}</span> : meta}
@@ -778,7 +803,7 @@ function NewApplicationPanel({
   return (
     <Card className="p-6">
       <div className="max-w-2xl">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">New application</p>
+        <p className="text-xs text-muted">New application</p>
         <h2 className="mt-2 text-xl font-medium text-ink">Generate the tailored resume.</h2>
         <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
       </div>
@@ -822,7 +847,7 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text" }
 
 function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
-    <div className="mx-auto max-w-[640px] bg-white px-4 py-8 text-[13px] leading-5 text-ink shadow-[0_1px_8px_rgba(18,18,15,0.08)] sm:px-7">
+    <div className="mx-auto max-w-[640px] rounded-[20px] border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
       {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
           lossy in both directions: a degree legitimately containing " · " split wrong, and any
@@ -984,8 +1009,8 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to portal status" : "Back to resume"}</button>
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Portal answers" : "Missing portal answers"}</p>
-        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "Review what the employer portal asked." : "Complete only the answers Litos does not know yet."}</h2>
-        <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "These questions were discovered during preparation. Edit every answer that needs your judgment, then retry the same application." : "Saved profile answers and completed drafts are entered automatically. This screen appears only for required blanks."}</p>
+        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "Review what the employer portal asked." : "Only the answers we could not work out."}</h2>
+        <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "The form asked for things we did not know. Answer them, then try again." : "Everything we already knew is filled in. This page only shows the blanks."}</p>
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
@@ -1007,7 +1032,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-brand-ink">Secure portal runner</p>
+        <p className="text-xs text-muted">Secure portal runner</p>
         <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "Your attention is needed." : review.status === "failed" ? "The portal run stopped safely." : "Review the filled portal before submitting."}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which

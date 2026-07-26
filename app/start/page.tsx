@@ -40,9 +40,15 @@ import { focusSeed } from "@/lib/rolesFeed";
 import type { RoleType } from "@/lib/api";
 import { StepRail } from "@/components/start/ui";
 
-// The web app cannot see the extension (no externally_connectable, and adding it would widen the
-// manifest while the store listing is in review). An autofill_event is proof of install because
-// only a running extension can POST one - so we poll for it while the student is off applying.
+// An autofill_event is proof of install because only a running extension can POST one, so we poll
+// for it while the student is off applying.
+//
+// NOTE, corrected 2026-07-26: an older comment here claimed the web app "cannot see the extension
+// (no externally_connectable)". That has not been true for some time - wxt.config.ts declares
+// externally_connectable for trylitos.com - so a direct handshake is available and would let this
+// screen advance the moment the extension is installed, rather than waiting for a whole
+// application to complete. The poll stays as the fallback for the case it also covers (the student
+// applied on a portal the extension does not support), but it should no longer be the only signal.
 //
 // Backs off 5s -> 30s. The event we are waiting for lands somewhere inside a ~12-minute
 // application, so 5s granularity is only useful for the first few seconds and is pure waste after
@@ -98,6 +104,25 @@ export default function Start() {
   }, []);
 
   useEffect(() => {
+    // Same localhost-only QA bypass the dashboard uses (?qa=1&step=resume), so every step of the
+    // flow can be opened and reviewed without a live account. Never reachable in production.
+    if (typeof window !== "undefined" && window.location.hostname === "localhost") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("qa")) {
+        setState({
+          step: (params.get("step") as OnboardingStep) ?? "focus",
+          has_resume: true,
+          has_applied: false,
+          gaps: ["gpa", "gpa_scale", "major", "languages"],
+          learned: [],
+          automatic_submission_enabled: false,
+          automatic_submission_consented_at: null,
+          automatic_verification_enabled: false,
+        } as OnboardingState);
+        setProfile({ grad_year: 2027, target_roles: ["Software Engineer", "Product Engineer"] } as ParsedProfile);
+        return;
+      }
+    }
     if (!getToken()) {
       router.replace("/login");
       return;

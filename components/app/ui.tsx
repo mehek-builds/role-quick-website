@@ -14,7 +14,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-[12px] border border-border bg-surface ${className}`}>
+    <div className={`rounded-[20px] border border-border bg-surface ${className}`}>
       {children}
     </div>
   );
@@ -103,7 +103,7 @@ export function ScoreRing({ score }: { score: number }) {
           cy="18"
           r={r}
           fill="none"
-          stroke="var(--color-brand)"
+          stroke="var(--color-ink)"
           strokeWidth="3.5"
           strokeLinecap="round"
           strokeDasharray={`${pct} 100`}
@@ -193,4 +193,19 @@ export function formatDate(value: string | null | undefined): string {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+/* A job hunt is a thing with momentum, and an absolute date carries none of it: "Jul 21, 2026"
+   does not tell a student whether that was this morning or three weeks ago. Inside a week we say
+   how long ago, which is the only form that answers "is this still moving?". Past a week the
+   absolute date is the more useful fact again. */
+export function formatRelativeDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const days = Math.floor((Date.now() - d.getTime()) / 86_400_000);
+  if (days <= 0) return "today";
+  if (days === 1) return "yesterday";
+  if (days < 7) return `${days} days ago`;
+  return formatDate(value);
 }
