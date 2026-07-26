@@ -20,25 +20,36 @@ export function Card({
   );
 }
 
+/* FIVE looks, not twelve.
+ *
+ * A student does not learn twelve chip colours; they learn "quiet means nothing to do", "blue
+ * means your turn", "green means it happened", "amber means it stopped", "red means it failed".
+ * Every key below is an alias onto one of those five, so callers keep their vocabulary while the
+ * eye only ever has five things to tell apart. Adding a sixth look needs a reason, not a key. */
+const QUIET = "bg-surface-alt text-muted";
+const YOUR_TURN = "bg-brand-soft text-brand-ink";
+const HAPPENED = "bg-positive-soft text-positive";
+const STOPPED = "bg-warn-soft text-warn";
+const FAILED = "bg-danger-soft text-danger";
+
 const CHIP_STYLES: Record<string, string> = {
-  // review-flow statuses (deck 07): Draft -> Generating -> Ready -> Sent.
-  // Status runs neutral-to-semantic; pillar color marks artifact type only.
-  draft: "bg-surface-alt text-muted",
-  generating: "bg-surface-alt text-muted",
-  drafted: "bg-surface-alt text-muted",
-  ready: "bg-brand-soft text-brand-ink",
-  sent: "bg-positive-soft text-positive",
-  replied: "bg-positive-soft text-positive",
-  bounced: "bg-danger-soft text-danger",
-  // A run that stopped for the user: needs attention, awaiting approval, or stopped safely. These
-  // previously fell through to the `ready` treatment, so a blocked application looked as calm as a
-  // finished one and the label was the only thing distinguishing them.
-  warn: "bg-warn-soft text-warn",
-  // contact confidence tiers (same scale as the marketing mockups)
-  verified: "bg-positive-soft text-positive",
-  likely: "bg-warn-soft text-warn",
-  linkedin_only: "bg-surface-alt text-muted",
-  // persona marks what a contact is: an outreach-pillar artifact, not a status
+  // nothing is being asked of you yet
+  draft: QUIET,
+  generating: QUIET,
+  drafted: QUIET,
+  linkedin_only: QUIET,
+  // your turn
+  ready: YOUR_TURN,
+  // it happened
+  sent: HAPPENED,
+  replied: HAPPENED,
+  verified: HAPPENED,
+  // it stopped and is waiting on you
+  warn: STOPPED,
+  likely: STOPPED,
+  // it failed
+  bounced: FAILED,
+  // persona marks what a contact IS, not a status, so it keeps the outreach pillar tint
   persona: "bg-coral-soft text-coral-ink",
 };
 
@@ -83,20 +94,25 @@ export function Meter({
           />
         )}
       </div>
-      <p className="mt-1.5 text-[11px] text-faint">
-        {unlimited ? "No cap on your plan" : "Resets on the 1st of the month"}
-      </p>
+      {/* A meter's job is to show a quantity. The billing-cycle rule is a policy sentence and it
+          lives in Account, not under every bar. */}
+      {unlimited && <p className="mt-1.5 text-[11px] text-faint">No cap on your plan</p>}
     </div>
   );
 }
 
-/** Match-score ring (deck 07). Only rendered when a real score exists. */
+/** Match-score ring (deck 07). Only rendered when a real score exists.
+ *
+ *  The meaning used to live in a `title` tooltip reading "88% JD keyword coverage": invisible on
+ *  touch, invisible to the keyboard, and written in the engine's vocabulary. It is a real
+ *  sentence in the accessible name now, and the visible caption under the ring says what the
+ *  number counts in words a student already owns. */
 export function ScoreRing({ score }: { score: number }) {
   const pct = Math.max(0, Math.min(100, Math.round(score)));
   const r = 15.9155;
   return (
-    <div className="relative h-12 w-12 shrink-0" title={`${pct}% JD keyword coverage`}>
-      <svg viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
+    <div className="relative h-12 w-12 shrink-0" role="img" aria-label={`${pct} out of 100 words in this job post also appear on your resume`}>
+      <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
         <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />
         <circle
           cx="18"
