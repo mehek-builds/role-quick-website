@@ -109,16 +109,22 @@ export default function Start() {
     if (typeof window !== "undefined" && window.location.hostname === "localhost") {
       const params = new URLSearchParams(window.location.search);
       if (params.has("qa")) {
-        setState({
+        const state: OnboardingState = {
           step: (params.get("step") as OnboardingStep) ?? "focus",
+          completed_at: null,
+          has_focus: true,
           has_resume: true,
           has_applied: false,
-          gaps: ["gpa", "gpa_scale", "major", "languages"],
+          has_targeting: false,
           learned: [],
+          gaps: ["gpa", "gpa_scale", "major", "languages"],
+          harvest_active: false,
           automatic_submission_enabled: false,
           automatic_submission_consented_at: null,
+          automatic_submission_consent_version: null,
           automatic_verification_enabled: false,
-        } as OnboardingState);
+        };
+        setState(state);
         setProfile({ grad_year: 2027, target_roles: ["Software Engineer", "Product Engineer"] } as ParsedProfile);
         return;
       }
