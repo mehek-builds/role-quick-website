@@ -129,7 +129,7 @@
       "source_file": "app/qa/portal-submission/portal-form.tsx",
       "source_location": "L1",
       "id": "portal_form",
-      "community": 22
+      "community": 26
     },
     {
       "label": "PortalForm()",
@@ -137,7 +137,7 @@
       "source_file": "app/qa/portal-submission/portal-form.tsx",
       "source_location": "L7",
       "id": "portal_form_portalform",
-      "community": 22
+      "community": 26
     },
     {
       "label": "ControlledPortalCase()",
@@ -151,7 +151,7 @@
       "label": "worker()",
       "file_type": "code",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L274",
+      "source_location": "L277",
       "id": "page_worker",
       "community": 0
     },
@@ -159,7 +159,7 @@
       "label": "dismiss()",
       "file_type": "code",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L314",
+      "source_location": "L317",
       "id": "page_dismiss",
       "community": 0
     },
@@ -167,7 +167,7 @@
       "label": "undoDismiss()",
       "file_type": "code",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L321",
+      "source_location": "L324",
       "id": "page_undodismiss",
       "community": 0
     },
@@ -361,7 +361,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L8",
       "id": "page_jobparams",
-      "community": 23
+      "community": 19
     },
     {
       "label": "loadMore()",
@@ -369,7 +369,7 @@
       "source_file": "app/dashboard/jobs/page.tsx",
       "source_location": "L46",
       "id": "page_loadmore",
-      "community": 23
+      "community": 19
     },
     {
       "label": "TryPage()",
@@ -449,7 +449,7 @@
       "source_file": "app/login/GoogleSignInButton.tsx",
       "source_location": "L1",
       "id": "googlesigninbutton",
-      "community": 26
+      "community": 21
     },
     {
       "label": "GoogleSignInButton()",
@@ -457,7 +457,7 @@
       "source_file": "app/login/GoogleSignInButton.tsx",
       "source_location": "L44",
       "id": "googlesigninbutton_googlesigninbutton",
-      "community": 26
+      "community": 21
     },
     {
       "label": "google-session.ts",
@@ -479,33 +479,41 @@
       "label": "landingRoute()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L25",
+      "source_location": "L31",
       "id": "page_landingroute",
-      "community": 19
+      "community": 18
     },
     {
       "label": "requestCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L57",
+      "source_location": "L72",
       "id": "page_requestcode",
-      "community": 21
+      "community": 25
     },
     {
       "label": "submitEmail()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L90",
+      "source_location": "L105",
       "id": "page_submitemail",
-      "community": 21
+      "community": 25
+    },
+    {
+      "label": "continueAsGuest()",
+      "file_type": "code",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L111",
+      "id": "page_continueasguest",
+      "community": 0
     },
     {
       "label": "submitCode()",
       "file_type": "code",
       "source_file": "app/login/page.tsx",
-      "source_location": "L124",
+      "source_location": "L162",
       "id": "page_submitcode",
-      "community": 19
+      "community": 18
     },
     {
       "label": "PacketDemo.tsx",
@@ -777,7 +785,7 @@
       "source_file": "components/app/TargetingCard.tsx",
       "source_location": "L1",
       "id": "targetingcard",
-      "community": 2
+      "community": 3
     },
     {
       "label": "patch()",
@@ -785,7 +793,7 @@
       "source_file": "components/app/TargetingCard.tsx",
       "source_location": "L78",
       "id": "targetingcard_patch",
-      "community": 2
+      "community": 3
     },
     {
       "label": "save()",
@@ -793,7 +801,7 @@
       "source_file": "components/app/TargetingCard.tsx",
       "source_location": "L82",
       "id": "targetingcard_save",
-      "community": 2
+      "community": 3
     },
     {
       "label": "ui.tsx",
@@ -801,7 +809,7 @@
       "source_file": "components/start/ui.tsx",
       "source_location": "L1",
       "id": "ui",
-      "community": 2
+      "community": 3
     },
     {
       "label": "Card()",
@@ -809,7 +817,7 @@
       "source_file": "components/app/ui.tsx",
       "source_location": "L9",
       "id": "ui_card",
-      "community": 2
+      "community": 3
     },
     {
       "label": "Chip()",
@@ -817,7 +825,7 @@
       "source_file": "components/app/ui.tsx",
       "source_location": "L45",
       "id": "ui_chip",
-      "community": 2
+      "community": 3
     },
     {
       "label": "CinematicHero.tsx",
@@ -865,7 +873,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L1",
       "id": "smoothscroll",
-      "community": 25
+      "community": 22
     },
     {
       "label": "SmoothScroll()",
@@ -873,7 +881,7 @@
       "source_file": "components/cinema/SmoothScroll.tsx",
       "source_location": "L11",
       "id": "smoothscroll_smoothscroll",
-      "community": 25
+      "community": 22
     },
     {
       "label": "paperRollEngine.js",
@@ -913,7 +921,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L1",
       "id": "wash",
-      "community": 18
+      "community": 23
     },
     {
       "label": "Wash()",
@@ -921,7 +929,7 @@
       "source_file": "components/cinema/Wash.tsx",
       "source_location": "L14",
       "id": "wash_wash",
-      "community": 18
+      "community": 23
     },
     {
       "label": "steps.tsx",
@@ -929,7 +937,7 @@
       "source_file": "components/start/steps.tsx",
       "source_location": "L1",
       "id": "steps",
-      "community": 2
+      "community": 3
     },
     {
       "label": "save()",
@@ -937,7 +945,7 @@
       "source_file": "components/start/steps.tsx",
       "source_location": "L65",
       "id": "steps_save",
-      "community": 2
+      "community": 3
     },
     {
       "label": "toggle()",
@@ -945,7 +953,7 @@
       "source_file": "components/start/steps.tsx",
       "source_location": "L601",
       "id": "steps_toggle",
-      "community": 2
+      "community": 3
     },
     {
       "label": "TrySimulator.tsx",
@@ -953,7 +961,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L1",
       "id": "trysimulator",
-      "community": 3
+      "community": 2
     },
     {
       "label": "after()",
@@ -961,7 +969,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L32",
       "id": "trysimulator_after",
-      "community": 3
+      "community": 2
     },
     {
       "label": "stamp()",
@@ -969,7 +977,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L72",
       "id": "trysimulator_stamp",
-      "community": 3
+      "community": 2
     },
     {
       "label": "chooseCanned()",
@@ -977,7 +985,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L77",
       "id": "trysimulator_choosecanned",
-      "community": 3
+      "community": 2
     },
     {
       "label": "chooseReal()",
@@ -985,7 +993,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L84",
       "id": "trysimulator_choosereal",
-      "community": 3
+      "community": 2
     },
     {
       "label": "cycle()",
@@ -993,7 +1001,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L190",
       "id": "trysimulator_cycle",
-      "community": 3
+      "community": 2
     },
     {
       "label": "async()",
@@ -1001,7 +1009,7 @@
       "source_file": "components/try/TrySimulator.tsx",
       "source_location": "L664",
       "id": "trysimulator_async",
-      "community": 3
+      "community": 2
     },
     {
       "label": "strip-page-blue.py",
@@ -1145,7 +1153,7 @@
       "source_file": "lib/extract-resume.ts",
       "source_location": "L1",
       "id": "extract_resume",
-      "community": 3
+      "community": 2
     },
     {
       "label": "extractResumeText()",
@@ -1153,7 +1161,7 @@
       "source_file": "lib/extract-resume.ts",
       "source_location": "L18",
       "id": "extract_resume_extractresumetext",
-      "community": 3
+      "community": 2
     },
     {
       "label": "fromPdf()",
@@ -1161,7 +1169,7 @@
       "source_file": "lib/extract-resume.ts",
       "source_location": "L44",
       "id": "extract_resume_frompdf",
-      "community": 3
+      "community": 2
     },
     {
       "label": "fromDocx()",
@@ -1169,7 +1177,7 @@
       "source_file": "lib/extract-resume.ts",
       "source_location": "L63",
       "id": "extract_resume_fromdocx",
-      "community": 3
+      "community": 2
     },
     {
       "label": "analytics.ts",
@@ -1177,7 +1185,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L1",
       "id": "analytics",
-      "community": 3
+      "community": 2
     },
     {
       "label": "device()",
@@ -1185,7 +1193,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L46",
       "id": "analytics_device",
-      "community": 3
+      "community": 2
     },
     {
       "label": "track()",
@@ -1193,7 +1201,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L51",
       "id": "analytics_track",
-      "community": 3
+      "community": 2
     },
     {
       "label": "anonId()",
@@ -1201,7 +1209,7 @@
       "source_file": "lib/analytics.ts",
       "source_location": "L73",
       "id": "analytics_anonid",
-      "community": 3
+      "community": 2
     },
     {
       "label": "product.ts",
@@ -1225,7 +1233,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L1",
       "id": "periods",
-      "community": 2
+      "community": 3
     },
     {
       "label": "periodSlug()",
@@ -1233,7 +1241,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L23",
       "id": "periods_periodslug",
-      "community": 2
+      "community": 3
     },
     {
       "label": "periodLabel()",
@@ -1241,7 +1249,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L27",
       "id": "periods_periodlabel",
-      "community": 2
+      "community": 3
     },
     {
       "label": "ordinal()",
@@ -1249,7 +1257,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L34",
       "id": "periods_ordinal",
-      "community": 2
+      "community": 3
     },
     {
       "label": "periodsFor()",
@@ -1257,7 +1265,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L46",
       "id": "periods_periodsfor",
-      "community": 2
+      "community": 3
     },
     {
       "label": "defaultPrimary()",
@@ -1265,7 +1273,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L74",
       "id": "periods_defaultprimary",
-      "community": 2
+      "community": 3
     },
     {
       "label": "defaultBackup()",
@@ -1273,7 +1281,7 @@
       "source_file": "lib/periods.ts",
       "source_location": "L85",
       "id": "periods_defaultbackup",
-      "community": 2
+      "community": 3
     },
     {
       "label": "api.ts",
@@ -1287,7 +1295,7 @@
       "label": "getToken()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L9",
+      "source_location": "L12",
       "id": "api_gettoken",
       "community": 1
     },
@@ -1295,15 +1303,39 @@
       "label": "getStoredEmail()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L14",
+      "source_location": "L17",
       "id": "api_getstoredemail",
+      "community": 1
+    },
+    {
+      "label": "hasLitosHistory()",
+      "file_type": "code",
+      "source_file": "lib/api.ts",
+      "source_location": "L22",
+      "id": "api_haslitoshistory",
+      "community": 1
+    },
+    {
+      "label": "isGuestSession()",
+      "file_type": "code",
+      "source_file": "lib/api.ts",
+      "source_location": "L27",
+      "id": "api_isguestsession",
+      "community": 1
+    },
+    {
+      "label": "getOrCreateGuestKey()",
+      "file_type": "code",
+      "source_file": "lib/api.ts",
+      "source_location": "L32",
+      "id": "api_getorcreateguestkey",
       "community": 1
     },
     {
       "label": "setSession()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L19",
+      "source_location": "L40",
       "id": "api_setsession",
       "community": 1
     },
@@ -1311,7 +1343,7 @@
       "label": "clearSession()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L24",
+      "source_location": "L49",
       "id": "api_clearsession",
       "community": 1
     },
@@ -1319,7 +1351,7 @@
       "label": "ApiError",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L29",
+      "source_location": "L56",
       "id": "api_apierror",
       "community": 1
     },
@@ -1327,7 +1359,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L31",
+      "source_location": "L58",
       "id": "api_apierror_constructor",
       "community": 1
     },
@@ -1335,7 +1367,7 @@
       "label": "api()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L39",
+      "source_location": "L66",
       "id": "api_api",
       "community": 1
     },
@@ -1343,7 +1375,7 @@
       "label": "getOnboardingState()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L304",
+      "source_location": "L333",
       "id": "api_getonboardingstate",
       "community": 1
     },
@@ -1351,7 +1383,7 @@
       "label": "completeOnboarding()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L313",
+      "source_location": "L342",
       "id": "api_completeonboarding",
       "community": 1
     },
@@ -1359,7 +1391,7 @@
       "label": "setAutomationSettings()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L320",
+      "source_location": "L349",
       "id": "api_setautomationsettings",
       "community": 1
     },
@@ -1367,7 +1399,7 @@
       "label": "getEmailConnections()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L340",
+      "source_location": "L369",
       "id": "api_getemailconnections",
       "community": 1
     },
@@ -1375,7 +1407,7 @@
       "label": "createEmailConnection()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L344",
+      "source_location": "L373",
       "id": "api_createemailconnection",
       "community": 1
     },
@@ -1383,7 +1415,7 @@
       "label": "disconnectEmailConnection()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L348",
+      "source_location": "L377",
       "id": "api_disconnectemailconnection",
       "community": 1
     },
@@ -1391,7 +1423,7 @@
       "label": "getTargeting()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L352",
+      "source_location": "L381",
       "id": "api_gettargeting",
       "community": 1
     },
@@ -1399,7 +1431,7 @@
       "label": "putTargeting()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L356",
+      "source_location": "L385",
       "id": "api_puttargeting",
       "community": 1
     },
@@ -1407,7 +1439,7 @@
       "label": "getApplicationProfile()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L363",
+      "source_location": "L392",
       "id": "api_getapplicationprofile",
       "community": 1
     },
@@ -1415,7 +1447,7 @@
       "label": "putApplicationProfile()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L371",
+      "source_location": "L400",
       "id": "api_putapplicationprofile",
       "community": 1
     },
@@ -1423,7 +1455,7 @@
       "label": "uploadResume()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L379",
+      "source_location": "L408",
       "id": "api_uploadresume",
       "community": 1
     },
@@ -1431,7 +1463,7 @@
       "label": "getProductMeta()",
       "file_type": "code",
       "source_file": "lib/api.ts",
-      "source_location": "L400",
+      "source_location": "L429",
       "id": "api_getproductmeta",
       "community": 1
     },
@@ -1441,7 +1473,7 @@
       "source_file": "lib/try-data.ts",
       "source_location": "L1",
       "id": "try_data",
-      "community": 3
+      "community": 2
     },
     {
       "label": "rolesFeed.ts",
@@ -1881,7 +1913,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L10",
+      "source_location": "L16",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "ui",
@@ -1977,7 +2009,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L274",
+      "source_location": "L277",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_worker",
@@ -1989,7 +2021,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L314",
+      "source_location": "L317",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_dismiss",
@@ -2001,7 +2033,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/dashboard/page.tsx",
-      "source_location": "L321",
+      "source_location": "L324",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_undodismiss",
@@ -2025,7 +2057,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L8",
+      "source_location": "L14",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "product",
@@ -2361,7 +2393,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L9",
+      "source_location": "L15",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "errors",
@@ -2373,7 +2405,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L11",
+      "source_location": "L17",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "googlesigninbutton",
@@ -2385,7 +2417,7 @@
       "relation": "imports_from",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L12",
+      "source_location": "L18",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "google_session",
@@ -2397,7 +2429,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L25",
+      "source_location": "L31",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_landingroute",
@@ -2409,7 +2441,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L57",
+      "source_location": "L72",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_requestcode",
@@ -2421,7 +2453,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L90",
+      "source_location": "L105",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitemail",
@@ -2433,7 +2465,19 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L124",
+      "source_location": "L111",
+      "weight": 1.0,
+      "_src": "page",
+      "_tgt": "page_continueasguest",
+      "source": "page",
+      "target": "page_continueasguest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "app/login/page.tsx",
+      "source_location": "L162",
       "weight": 1.0,
       "_src": "page",
       "_tgt": "page_submitcode",
@@ -2721,7 +2765,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L137",
+      "source_location": "L196",
       "weight": 1.0,
       "_src": "page_submitcode",
       "_tgt": "page_landingroute",
@@ -2733,7 +2777,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "app/login/page.tsx",
-      "source_location": "L93",
+      "source_location": "L108",
       "weight": 1.0,
       "_src": "page_submitemail",
       "_tgt": "page_requestcode",
@@ -4065,7 +4109,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L9",
+      "source_location": "L12",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_gettoken",
@@ -4077,7 +4121,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L14",
+      "source_location": "L17",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getstoredemail",
@@ -4089,7 +4133,43 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L19",
+      "source_location": "L22",
+      "weight": 1.0,
+      "_src": "api",
+      "_tgt": "api_haslitoshistory",
+      "source": "api",
+      "target": "api_haslitoshistory",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/api.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "_src": "api",
+      "_tgt": "api_isguestsession",
+      "source": "api",
+      "target": "api_isguestsession",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/api.ts",
+      "source_location": "L32",
+      "weight": 1.0,
+      "_src": "api",
+      "_tgt": "api_getorcreateguestkey",
+      "source": "api",
+      "target": "api_getorcreateguestkey",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "lib/api.ts",
+      "source_location": "L40",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_setsession",
@@ -4101,7 +4181,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L24",
+      "source_location": "L49",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_clearsession",
@@ -4113,7 +4193,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L29",
+      "source_location": "L56",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_apierror",
@@ -4125,7 +4205,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L39",
+      "source_location": "L66",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_api",
@@ -4137,7 +4217,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L304",
+      "source_location": "L333",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getonboardingstate",
@@ -4149,7 +4229,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L313",
+      "source_location": "L342",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_completeonboarding",
@@ -4161,7 +4241,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L320",
+      "source_location": "L349",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_setautomationsettings",
@@ -4173,7 +4253,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L340",
+      "source_location": "L369",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getemailconnections",
@@ -4185,7 +4265,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L344",
+      "source_location": "L373",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_createemailconnection",
@@ -4197,7 +4277,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L348",
+      "source_location": "L377",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_disconnectemailconnection",
@@ -4209,7 +4289,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L352",
+      "source_location": "L381",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_gettargeting",
@@ -4221,7 +4301,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L356",
+      "source_location": "L385",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_puttargeting",
@@ -4233,7 +4313,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L363",
+      "source_location": "L392",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getapplicationprofile",
@@ -4245,7 +4325,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L371",
+      "source_location": "L400",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_putapplicationprofile",
@@ -4257,7 +4337,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L379",
+      "source_location": "L408",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_uploadresume",
@@ -4269,7 +4349,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L400",
+      "source_location": "L429",
       "weight": 1.0,
       "_src": "api",
       "_tgt": "api_getproductmeta",
@@ -4293,7 +4373,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L43",
+      "source_location": "L70",
       "weight": 1.0,
       "_src": "api_api",
       "_tgt": "api_gettoken",
@@ -4305,7 +4385,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L380",
+      "source_location": "L409",
       "weight": 1.0,
       "_src": "api_uploadresume",
       "_tgt": "api_gettoken",
@@ -4317,7 +4397,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L54",
+      "source_location": "L81",
       "weight": 1.0,
       "_src": "api_api",
       "_tgt": "api_clearsession",
@@ -4329,7 +4409,7 @@
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L31",
+      "source_location": "L58",
       "weight": 1.0,
       "_src": "api_apierror",
       "_tgt": "api_apierror_constructor",
@@ -4341,7 +4421,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L305",
+      "source_location": "L334",
       "weight": 1.0,
       "_src": "api_getonboardingstate",
       "_tgt": "api_api",
@@ -4353,7 +4433,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L314",
+      "source_location": "L343",
       "weight": 1.0,
       "_src": "api_completeonboarding",
       "_tgt": "api_api",
@@ -4365,7 +4445,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L321",
+      "source_location": "L350",
       "weight": 1.0,
       "_src": "api_setautomationsettings",
       "_tgt": "api_api",
@@ -4377,7 +4457,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L341",
+      "source_location": "L370",
       "weight": 1.0,
       "_src": "api_getemailconnections",
       "_tgt": "api_api",
@@ -4389,7 +4469,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L345",
+      "source_location": "L374",
       "weight": 1.0,
       "_src": "api_createemailconnection",
       "_tgt": "api_api",
@@ -4401,7 +4481,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L349",
+      "source_location": "L378",
       "weight": 1.0,
       "_src": "api_disconnectemailconnection",
       "_tgt": "api_api",
@@ -4413,7 +4493,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L353",
+      "source_location": "L382",
       "weight": 1.0,
       "_src": "api_gettargeting",
       "_tgt": "api_api",
@@ -4425,7 +4505,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L357",
+      "source_location": "L386",
       "weight": 1.0,
       "_src": "api_puttargeting",
       "_tgt": "api_api",
@@ -4437,7 +4517,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L365",
+      "source_location": "L394",
       "weight": 1.0,
       "_src": "api_getapplicationprofile",
       "_tgt": "api_api",
@@ -4449,7 +4529,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L372",
+      "source_location": "L401",
       "weight": 1.0,
       "_src": "api_putapplicationprofile",
       "_tgt": "api_api",
@@ -4461,7 +4541,7 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "lib/api.ts",
-      "source_location": "L402",
+      "source_location": "L431",
       "weight": 1.0,
       "_src": "api_getproductmeta",
       "_tgt": "api_api",

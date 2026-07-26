@@ -74,6 +74,7 @@ const QA_JOBS: MonitoredJob[] = [
 
 const QA_ME: Me = {
   email: "qa@trylitos.com",
+  is_guest: false,
   tier: "pro",
   trial_ends_at: null,
   usage: {
@@ -164,6 +165,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [prewarmError, setPrewarmError] = useState<string | null>(null);
   const [preparingCount, setPreparingCount] = useState(0);
+  const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
 
   useEffect(() => {
@@ -197,12 +199,13 @@ export default function Home() {
       .then(([meResult, jobsResult, targetingResult, profileResult, historyResult, applicationProfileResult, outreachResult]) => {
         if (cancelled) return;
         setMe(meResult);
+        setLoadedAt(Date.now());
         setJobs(jobsResult.jobs);
         setTargeting(targetingResult);
         setProfile(profileResult);
         setIdentity({
           full_name: "full_name" in profileResult ? profileResult.full_name : undefined,
-          email: meResult.email,
+          email: meResult.email ?? undefined,
         });
         setApplicationProfile(applicationProfileResult);
         setPackets(historyResult.resumes);
@@ -327,6 +330,9 @@ export default function Home() {
   }
 
   const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "your target roles";
+  const trialActive = Boolean(
+    me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
+  );
 
   if (error && !jobs) return <ErrorNote message={error} />;
 
@@ -341,6 +347,34 @@ export default function Home() {
           Edit targeting
         </Link>
       </section>
+
+      {me?.is_guest && trialActive && (
+        <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
+          <div>
+            <p className="text-sm font-medium text-ink">Keep this workspace.</p>
+            <p className="mt-1 text-xs text-muted">Verify a new email before this browser session is lost.</p>
+          </div>
+          <Link href="/login?claim=1" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+            Save workspace
+          </Link>
+        </Card>
+      )}
+
+      {me?.is_guest && !trialActive && me.upgrade_url && (
+        <Card className="flex flex-wrap items-center justify-between gap-4 bg-brand-soft p-5">
+          <div>
+            <p className="text-sm font-medium text-ink">Your seven-day trial has ended.</p>
+            <p className="mt-1 text-xs text-muted">Save this workspace, then continue with Litos Pro.</p>
+          </div>
+          <Link
+            href="/login?claim=1&next=upgrade"
+            onClick={() => window.sessionStorage.setItem("litos_pending_upgrade_url", me.upgrade_url!)}
+            className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
+          >
+            Get Pro
+          </Link>
+        </Card>
+      )}
 
       <section aria-labelledby="applications-summary">
         <div className="flex items-center justify-between gap-4">

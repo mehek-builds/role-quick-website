@@ -5,6 +5,9 @@ import { litosClientHeaders, type ProductMeta } from "./product";
 
 const TOKEN_KEY = "rq_token";
 const EMAIL_KEY = "rq_email";
+const SESSION_MODE_KEY = "litos_session_mode_v1";
+const HISTORY_KEY = "litos_has_history_v1";
+const GUEST_KEY = "litos_guest_idempotency_v1";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -16,14 +19,38 @@ export function getStoredEmail(): string | null {
   return window.localStorage.getItem(EMAIL_KEY);
 }
 
-export function setSession(token: string, email: string) {
+export function hasLitosHistory(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(HISTORY_KEY) === "true";
+}
+
+export function isGuestSession(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.localStorage.getItem(SESSION_MODE_KEY) === "guest";
+}
+
+export function getOrCreateGuestKey(): string {
+  const existing = window.localStorage.getItem(GUEST_KEY);
+  if (existing) return existing;
+  const created = window.crypto.randomUUID();
+  window.localStorage.setItem(GUEST_KEY, created);
+  return created;
+}
+
+export function setSession(token: string, email?: string | null, isGuest = false) {
   window.localStorage.setItem(TOKEN_KEY, token);
-  window.localStorage.setItem(EMAIL_KEY, email);
+  if (email) window.localStorage.setItem(EMAIL_KEY, email);
+  else window.localStorage.removeItem(EMAIL_KEY);
+  window.localStorage.setItem(SESSION_MODE_KEY, isGuest ? "guest" : "verified");
+  window.localStorage.setItem(HISTORY_KEY, "true");
+  if (!isGuest) window.localStorage.removeItem(GUEST_KEY);
 }
 
 export function clearSession() {
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(EMAIL_KEY);
+  window.localStorage.removeItem(SESSION_MODE_KEY);
+  window.localStorage.removeItem(GUEST_KEY);
 }
 
 export class ApiError extends Error {
@@ -72,9 +99,11 @@ export async function api<T>(
 export type Usage = { used: number; limit: number };
 
 export type Me = {
-  email: string;
+  email: string | null;
+  is_guest: boolean;
   tier: string;
   trial_ends_at: string | null;
+  guest_expires_at?: string | null;
   usage: { contacts: Usage; drafts: Usage; resumes: Usage };
   upgrade_url?: string;
 };
