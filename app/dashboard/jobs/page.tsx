@@ -96,7 +96,7 @@ export default function JobsPage() {
                 </div>
                 <div className="flex gap-2">
                   <a href={job.posting_url} target="_blank" rel="noreferrer" className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View posting</a>
-                  <Link href={`/dashboard/applications?job=${job.id}`} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Approve</Link>
+                  <Link href={`/dashboard/applications?job=${job.id}`} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Generate resume</Link>
                 </div>
               </div>
             </Card>
