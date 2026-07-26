@@ -9,6 +9,7 @@ import { litosClientHeaders } from "@/lib/product";
 import { googleSignInError, requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
 import { GoogleSignInButton } from "./GoogleSignInButton";
+import { completeGoogleSession } from "./google-session";
 
 /* Passwordless sign-in, same account system as the extension: email a 6-digit
    code (/auth/request-code + /auth/verify-code). Email ownership must always be
@@ -101,10 +102,15 @@ export default function Login() {
         body: JSON.stringify({ credential }),
       });
       const data = await res.json().catch(() => null);
-      if (res.ok && data?.token && data?.email) {
-        setSession(data.token, data.email);
-        router.replace(data.is_new_user === true ? "/start" : await landingRoute());
-        return;
+      if (res.ok) {
+        const route = await completeGoogleSession(data, {
+          setSession,
+          returningUserRoute: landingRoute,
+        });
+        if (route) {
+          router.replace(route);
+          return;
+        }
       }
       setError(googleSignInError(res.status, data?.error));
     } catch {

@@ -31,7 +31,6 @@ jobs:
       - name: Configure Google authentication
         run: |
           printf '%s\n' "$GOOGLE_CLIENT_ID" | npx vercel@latest env add NEXT_PUBLIC_GOOGLE_CLIENT_ID production --force --token "$VERCEL_TOKEN"
-          printf '%s\n' "$GOOGLE_CLIENT_ID" | VERCEL_PROJECT_ID=prj_5gPI7ADAT5M26VIxhiAKe1efsJPi npx vercel@latest env add GOOGLE_CLIENT_ID production --force --token "$VERCEL_TOKEN"
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
       - name: Deploy

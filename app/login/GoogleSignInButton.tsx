@@ -71,16 +71,21 @@ export function GoogleSignInButton({ clientId, busy, onCredential, onLoadError }
   }, [clientId]);
 
   useEffect(() => {
-    currentCredentialHandler = (response) => {
+    const handler = (response: CredentialResponse) => {
       if (response.credential) onCredential(response.credential);
     };
+    currentCredentialHandler = handler;
     renderButton();
 
     const parent = buttonRef.current;
-    if (!parent || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(renderButton);
-    observer.observe(parent);
-    return () => observer.disconnect();
+    const observer = parent && typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(renderButton)
+      : null;
+    if (parent && observer) observer.observe(parent);
+    return () => {
+      observer?.disconnect();
+      if (currentCredentialHandler === handler) currentCredentialHandler = null;
+    };
   }, [onCredential, renderButton]);
 
   return (
