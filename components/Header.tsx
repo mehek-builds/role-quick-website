@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { STORE_URL } from "@/lib/config";
+import { track } from "@/lib/analytics";
 
 /* Floating glass pill, not a white bar: the film shows around and through
    it, so the page reads as one surface from the first pixel.
@@ -69,7 +70,7 @@ export function Header() {
             Product
           </a>
           <a href="/try" className="transition-colors hover:text-ink">
-            Try it
+            Try it first
           </a>
           <a href="/#faq" className="transition-colors hover:text-ink">
             FAQ
@@ -88,6 +89,7 @@ export function Header() {
               logo + Sign in, and the only ask hidden behind the hamburger. */}
           <a
             href={STORE_URL}
+            onClick={() => track("install_click", { source: "header" })}
             className="inline-flex min-h-[44px] items-center rounded-full bg-brand px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 sm:px-4 sm:text-sm"
           >
             Add to Chrome
@@ -140,7 +142,7 @@ export function Header() {
             onClick={closeMenu}
             className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
           >
-            Try it
+            Try it first
           </a>
           <a
             href="/#faq"
@@ -152,7 +154,10 @@ export function Header() {
           <div className="px-1.5 pb-2 pt-2">
             <a
               href={STORE_URL}
-              onClick={closeMenu}
+              onClick={() => {
+                track("install_click", { source: "mobile-menu" });
+                closeMenu();
+              }}
               className="block rounded-full bg-brand px-4 py-3 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Add to Chrome

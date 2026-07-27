@@ -6,6 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
 import { MobileSendLink } from "@/components/MobileSendLink";
+import { track } from "@/lib/analytics";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
    a canvas and scrubbed by scroll across a pinned viewport: scattered
@@ -557,6 +558,15 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:top-[18svh]">
           <div className="rq-glass rq-enter mx-auto max-w-2xl px-7 py-10 text-center sm:px-12 sm:py-12">
+            {/* Nothing above the fold said what Litos IS or who it is for:
+                the H1 names a speed and the sub names a mechanism, so a
+                first-time visitor had to infer the category. This is the
+                same line the Chrome Web Store listing already leads with
+                (store-assets-v2 shot 1), narrowed from "job seekers" to
+                the people actually being built for. */}
+            <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+              Free Chrome extension for students
+            </p>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[68px]">
               Apply <span className="text-brand-ink">in seconds.</span>
             </h1>
@@ -567,6 +577,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
                 href={storeUrl}
+                onClick={() => track("install_click", { source: "hero" })}
                 className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Add to Chrome, it&apos;s free
@@ -620,6 +631,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a
                 href={storeUrl}
+                onClick={() => track("install_click", { source: "film-card" })}
                 className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Add to Chrome, it&apos;s free

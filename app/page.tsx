@@ -13,6 +13,7 @@ import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
+import { InstallLink } from "@/components/InstallLink";
 import { StickyCTA } from "@/components/StickyCTA";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
@@ -101,6 +102,16 @@ export default function Home() {
     <div className="flex flex-col flex-1">
       <StructuredData faq={FAQ_ITEMS} />
       <ScrollProgress />
+      {/* The footer claims the site is keyboard-navigable end to end, and
+          the focus rings back that up, but a page with fixed chrome and a
+          long film needs the standard escape: one skip link, visible only
+          when focused. */}
+      <a
+        href="#product"
+        className="sr-only left-4 top-4 z-50 rounded-full bg-ink px-5 py-3 text-sm font-medium text-white focus:not-sr-only focus:fixed"
+      >
+        Skip to content
+      </a>
       <Header />
       <CalibrateCard />
       <StickyCTA />
@@ -118,6 +129,10 @@ export default function Home() {
         <section id="product" className="relative scroll-mt-24">
           <Wash soft />
           <div className="relative px-6 pt-20">
+          {/* sr-only: the big number and the assembling packet ARE the
+              visible headings here. This is for the document outline, so
+              screen readers and crawlers get a complete one. */}
+          <h2 className="sr-only">Watch one application assemble</h2>
           <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             19:42:07 → 19:42:16
           </p>
@@ -155,7 +170,7 @@ export default function Home() {
               href="/try"
               className="inline-flex min-h-[44px] items-center px-3 transition-colors hover:text-ink"
             >
-              Or drive it yourself →
+              Or try it first →
             </a>
           </p>
           </div>
@@ -167,6 +182,7 @@ export default function Home() {
           <Wash tint="warm" soft />
           <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
+              <h2 className="sr-only">The odds on an average corporate role</h2>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
                 <CountUp to={250} />
               </p>
@@ -382,7 +398,7 @@ export default function Home() {
                 href="/try"
                 className="mt-8 inline-block rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink"
               >
-                Open the demo booth
+                Try it first
               </a>
             </Reveal>
           </div>
@@ -449,12 +465,12 @@ export default function Home() {
                 Open your next application.
               </h2>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <a
-                  href={STORE_URL}
+                <InstallLink
+                  source="close"
                   className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
                 >
                   Add to Chrome, it&apos;s free
-                </a>
+                </InstallLink>
                 <a
                   href="/login"
                   className="w-full rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
