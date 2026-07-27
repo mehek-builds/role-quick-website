@@ -108,7 +108,7 @@ export default function Home() {
           when focused. */}
       <a
         href="#product"
-        className="sr-only left-4 top-4 z-50 rounded-full bg-ink px-5 py-3 text-sm font-medium text-white focus:not-sr-only focus:fixed"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-ink focus:px-5 focus:py-3 focus:text-sm focus:font-medium focus:text-white"
       >
         Skip to content
       </a>
@@ -467,13 +467,13 @@ export default function Home() {
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <InstallLink
                   source="close"
-                  className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
                 >
                   Add to Chrome, it&apos;s free
                 </InstallLink>
                 <a
                   href="/login"
-                  className="w-full rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
                 >
                   Sign in
                 </a>

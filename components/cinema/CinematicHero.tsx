@@ -578,7 +578,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               <a
                 href={storeUrl}
                 onClick={() => track("install_click", { source: "hero" })}
-                className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Add to Chrome, it&apos;s free
               </a>
@@ -632,13 +632,13 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               <a
                 href={storeUrl}
                 onClick={() => track("install_click", { source: "film-card" })}
-                className="w-full rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
                 Add to Chrome, it&apos;s free
               </a>
               <a
                 href="#product"
-                className="w-full rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
               >
                 See it assemble
               </a>
