@@ -19,7 +19,7 @@ import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets 
 import { packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { resumeSpecText } from "@/lib/jd-match";
-import { restatesSameBullet } from "@/lib/bullet-variants";
+import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/lib/requirement-terms";
 import type { JdMatchResponse } from "@/lib/jd-match";
@@ -91,40 +91,29 @@ export default function Applications() {
   // resume, which lit up "backed", "services" and "deployed" in the same blue as "PostgreSQL" and
   // so told the student nothing.
   const [matchResult, setMatchResult] = useState<JdMatchResponse | null>(null);
+  // What the last accept actually did, so the student is told and can undo it. Accepting used to
+  // mutate the resume with no feedback at all, and could silently no-op or silently delete.
+  const [lastApply, setLastApply] = useState<{ outcome: ApplyOutcome; previous: ResumeSpec } | null>(null);
+
   /**
-   * Put one of the student's OWN stored bullets onto the tailored resume.
+   * Put one of the student's own stored bullets onto the tailored resume.
    *
-   * Attached to the entry it came from, matched by org, so it stays with the job it describes.
-   *
-   * SWAPS RATHER THAN APPENDS when the accepted wording restates a bullet already there. The
-   * experience bank models bullet_variants as different phrasings of the SAME accomplishment, so
-   * accepting the Kubernetes phrasing of a bullet whose AWS phrasing is already on the page should
-   * replace it, not print both. Appending was visibly wrong the first time it ran: the resume
-   * showed "Containerized six services with Docker and deployed them on AWS, cutting release time
-   * by 35%" directly above the identical sentence ending in Kubernetes. That is a near-duplicate
-   * the resume validator already flags, and on a renderer that enforces one page it also spends a
-   * line saying nothing new.
+   * All the judgement lives in lib/apply-variant.ts, which is pure and tested. This only records
+   * what happened so the UI can report it and offer an undo.
    */
-  const appendBankVariant = useCallback((org: string, variant: string) => {
+  const acceptBankVariant = useCallback((org: string, variant: string) => {
     setSpec((current) => {
       if (!current) return current;
-      const index = current.experience.findIndex(
-        (entry) => entry.org.trim().toLowerCase() === org.trim().toLowerCase(),
-      );
-      if (index === -1) return current;
-      const entry = current.experience[index];
-      if (entry.bullets.includes(variant)) return current;
+      const { spec: next, outcome } = applyBankVariant(current, { org, variant });
+      setLastApply({ outcome, previous: current });
+      return next;
+    });
+  }, []);
 
-      const restated = entry.bullets.findIndex((bullet) => restatesSameBullet(bullet, variant));
-      const bullets =
-        restated === -1
-          ? [...entry.bullets, variant]
-          : entry.bullets.map((bullet, i) => (i === restated ? variant : bullet));
-
-      const experience = current.experience.map((item, i) =>
-        i === index ? { ...item, bullets } : item,
-      );
-      return { ...current, experience };
+  const undoLastApply = useCallback(() => {
+    setLastApply((last) => {
+      if (last) setSpec(last.previous);
+      return null;
     });
   }, []);
 
@@ -780,7 +769,9 @@ export default function Applications() {
                       <MatchGaps
                         missing={matchResult.missing}
                         resumeText={resumeSpecText(deferredSpec ?? spec)}
-                        onUseVariant={({ org, variant }) => appendBankVariant(org, variant)}
+                        onUseVariant={({ org, variant }) => acceptBankVariant(org, variant)}
+                        lastApply={lastApply}
+                        onUndo={undoLastApply}
                       />
                     </div>
                   )}

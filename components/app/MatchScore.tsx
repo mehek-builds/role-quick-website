@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer } from "@/lib/jd-match";
 import type { ResumeSpec } from "@/lib/api";
 import { useTermHover } from "./RequirementText";
+import type { ApplyOutcome } from "@/lib/apply-variant";
 
 /**
  * The single number the review screen leads with: how much of what this posting actually asks for
@@ -132,17 +133,34 @@ export function MatchGaps({
   missing,
   resumeText,
   onUseVariant,
+  lastApply,
+  onUndo,
 }: {
   missing: JdMatchResponse["missing"];
   /** The resume as currently tailored, so evidence already in use can be marked. */
   resumeText: string;
   /** Called when the student accepts one of their own stored bullets. */
   onUseVariant?: (evidence: { org: string; variant: string }) => void;
+  lastApply?: { outcome: ApplyOutcome } | null;
+  onUndo?: () => void;
 }) {
-  const [answers, setAnswers] = useState<GapAnswer[] | null>(null);
+  // Answers are stored WITH the term list they describe, rather than cleared in the effect.
+  // Clearing there is a synchronous setState inside an effect, which cascades a render on every
+  // rescore; comparing keys during render gets the same staleness guarantee for free. A stale
+  // answer set previously kept the detail panel open for a gap that had just been closed, still
+  // offering accepts for it.
+  const [state, setState] = useState<{ key: string; answers: GapAnswer[] | null; failed: boolean }>({
+    key: "",
+    answers: null,
+    failed: false,
+  });
   const [open, setOpen] = useState<string | null>(null);
 
   const key = missing.map((m) => m.term).join("|");
+  const fresh = state.key === key;
+  const answers = fresh ? state.answers : null;
+  const failed = fresh && state.failed;
+
   useEffect(() => {
     let cancelled = false;
     if (missing.length === 0) return;
@@ -150,8 +168,11 @@ export function MatchGaps({
       missing.map((m) => ({ term: m.term, display: m.display })),
       resumeText,
     )
-      .then((r) => !cancelled && setAnswers(r.answers))
-      .catch(() => !cancelled && setAnswers(null));
+      .then((r) => !cancelled && setState({ key, answers: r.answers, failed: false }))
+      // A failure is NOT the same as "no evidence". Left as null, the panel said it was still
+      // checking forever and every chip lost its dot, which reads as "you have never done any of
+      // this" when the truth is that we do not know.
+      .catch(() => !cancelled && setState({ key, answers: null, failed: true }));
     return () => {
       cancelled = true;
     };
@@ -176,7 +197,9 @@ export function MatchGaps({
       <p className="text-sm text-muted">
         This posting asks for {missing.length} thing{missing.length === 1 ? "" : "s"} your resume does
         not mention.{" "}
-        {answers === null
+        {failed
+          ? "Could not check your saved experience just now."
+          : answers === null
           ? "Checking what you have already written."
           : supported > 0
             ? `You have already written about ${supported} of them somewhere else.`
@@ -193,9 +216,11 @@ export function MatchGaps({
           />
         ))}
       </ul>
-      {open && byTerm.get(open) && (
+      {/* Only while the term is still a gap: after an accept closes one, its panel must go too. */}
+      {open && missing.some((m) => m.term === open) && byTerm.get(open) && (
         <GapDetail answer={byTerm.get(open)!} onUseVariant={onUseVariant} />
       )}
+      {lastApply && <ApplyReceipt outcome={lastApply.outcome} onUndo={onUndo} />}
     </div>
   );
 }
@@ -308,5 +333,55 @@ function GapChip({
         {hasEvidence && <span className="ml-1.5 text-positive" aria-label="you have written about this before">•</span>}
       </button>
     </li>
+  );
+}
+
+/**
+ * What the accept actually did, in words, with a way back.
+ *
+ * Accepting used to mutate the resume with no feedback: a swap removed a bullet the student never
+ * saw leave, and an accept for a role not on this version of the resume did nothing at all and said
+ * nothing about it. Every outcome is now stated, and the destructive one is reversible.
+ */
+function ApplyReceipt({ outcome, onUndo }: { outcome: ApplyOutcome; onUndo?: () => void }) {
+  const body = () => {
+    switch (outcome.kind) {
+      case "appended":
+        return `Added to your ${outcome.org} experience.`;
+      case "replaced":
+        return `Replaced a bullet in your ${outcome.org} experience.`;
+      case "already_present":
+        return `That bullet is already on this resume.`;
+      case "role_not_on_resume":
+        return `${outcome.org} is not on this version of your resume, so there was nowhere to put it. Add the role first.`;
+      case "ambiguous_role":
+        return `You have more than one role at ${outcome.org}, so Litos did not guess which one this belongs to.`;
+    }
+  };
+  return (
+    <div role="status" className="mt-4 rounded-[12px] border border-border bg-surface px-4 py-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="text-[13px] leading-5 text-ink">{body()}</p>
+        {outcome.kind === "replaced" && onUndo && (
+          <button
+            type="button"
+            onClick={onUndo}
+            className="shrink-0 rounded-full border border-border px-3 py-1 text-[12px] font-medium text-ink transition-colors hover:border-brand"
+          >
+            Undo
+          </button>
+        )}
+      </div>
+      {outcome.kind === "replaced" && (
+        <>
+          <p className="mt-1.5 text-[12px] leading-5 text-muted">Removed: {outcome.removed}</p>
+          {outcome.dropped.length > 0 && (
+            <p className="mt-1 text-[12px] leading-5 text-warn">
+              Your resume no longer mentions {outcome.dropped.slice(0, 5).join(", ")}.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
