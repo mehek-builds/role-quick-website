@@ -61,13 +61,13 @@ export function Funnel() {
   return (
     <section className="rounded-[20px] border border-border bg-surface-alt px-5 py-4">
       <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
-        <Stat value={f.applications_submitted} label="applications submitted, all time" />
+        <Stat value={f.applications_submitted} label="applications sent, all time" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.
             Calling it their own throughput would be the one thing this panel must not do. */}
         <Stat value={f.resumes_tailored} label="resumes prepared for you" />
-        {f.fields_filled > 0 && <Stat value={f.fields_filled} label="form fields Litos filled" />}
+        {f.fields_filled > 0 && <Stat value={f.fields_filled} label="questions Litos filled in" />}
       </div>
 
       {!f.too_early && (
@@ -80,13 +80,13 @@ export function Funnel() {
                 <div
                   className={w.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
                   style={w.submitted === 0 ? undefined : { height: `${Math.max(4, (w.submitted / peak) * 40)}px` }}
-                  title={`${w.submitted} submitted`}
+                  title={`${w.submitted} sent`}
                 />
                 <span className="font-mono text-[9px] text-faint">{w.week_start.slice(5)}</span>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-faint">Applications submitted per week.</p>
+          <p className="mt-2 text-[11px] text-faint">Applications you sent each week.</p>
         </div>
       )}
     </section>
