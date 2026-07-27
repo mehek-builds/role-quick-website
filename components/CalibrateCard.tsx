@@ -29,7 +29,7 @@ type Profile = { hunt: Hunt; field: Field; region: Region };
 type Phase = "hidden" | "card" | "pill";
 
 const chipCls =
-  "rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] font-medium text-ink transition-colors hover:border-ink";
+  "inline-flex min-h-[44px] items-center rounded-full border border-border bg-surface px-3.5 py-2 text-[13px] font-medium text-ink transition-colors hover:border-ink";
 const monoCls =
   "font-mono text-[11px] font-medium uppercase tracking-[0.08em]";
 
@@ -121,6 +121,15 @@ export function CalibrateCard() {
     return () => cancelAnimationFrame(raf);
   }, [phase]);
 
+  /* Publish the phase so other fixed chrome can stand down instead of
+     stacking in the same corner (StickyCTA reads this). */
+  useEffect(() => {
+    document.documentElement.dataset.calibrate = phase;
+    return () => {
+      delete document.documentElement.dataset.calibrate;
+    };
+  }, [phase]);
+
   const dismiss = () => {
     if (matchTimer.current) clearTimeout(matchTimer.current);
     setMatching(false);
@@ -205,7 +214,7 @@ export function CalibrateCard() {
         <button
           onClick={dismiss}
           aria-label="Close"
-          className="-m-2 p-2 text-faint transition-colors hover:text-ink"
+          className="-m-2 flex h-11 w-11 items-center justify-center p-2 text-faint transition-colors hover:text-ink"
         >
           <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden>
             <path

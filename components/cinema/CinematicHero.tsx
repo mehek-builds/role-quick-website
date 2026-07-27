@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
+import { MobileSendLink } from "@/components/MobileSendLink";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
    a canvas and scrubbed by scroll across a pinned viewport: scattered
@@ -26,6 +27,22 @@ const FRAME_RETRY_MS = 5_000;
 const MAX_FRAME_ATTEMPTS = 2;
 const FRAME_PREFETCH_OFFSETS = [0, 1, -1, 2, -2] as const;
 const framePath = (i: number) => `/film/frame-${String(i).padStart(4, "0")}.webp`;
+
+/* Frame stride. The full sequence is 121 frames at roughly 62KB, about
+   7.5MB, and it is spent before the viewer has been told a single benefit.
+   That is a fine trade on a laptop and a bad one on a phone plan, so small
+   screens and Save-Data connections scrub every Nth frame instead. The film
+   is a slow dissolve, not fast action, so a coarser stride reads as the same
+   shot; only the download drops. Desktop is untouched. */
+const frameStride = () => {
+  if (typeof window === "undefined") return 1;
+  const c = (navigator as { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (c?.saveData) return 4;
+  if (c?.effectiveType && /(^|-)2g$/.test(c.effectiveType)) return 4;
+  return window.matchMedia("(max-width: 639px)").matches ? 3 : 1;
+};
+const snapToStride = (i: number, stride: number) =>
+  stride <= 1 ? i : Math.min(FRAME_COUNT - 1, Math.round(i / stride) * stride);
 
 /* Chapter tint overlay colors (multiply over the film, whisper-quiet). */
 const TINTS = [
@@ -64,10 +81,12 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   /* Load a small frame window on demand and draw the nearest decoded frame. */
   const imagesRef = useRef(new Map<number, HTMLImageElement>());
   const requestFrameRef = useRef<(index: number) => void>(() => {});
-  const drawFrame = (index: number) => {
+  const strideRef = useRef(1);
+  const drawFrame = (rawIndex: number) => {
     const canvas = filmRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
+    const index = snapToStride(rawIndex, strideRef.current);
     requestFrameRef.current(index);
     const imgs = imagesRef.current;
     /* nearest loaded frame so scrubbing never blanks */
@@ -166,11 +185,13 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     };
     requestFrameRef.current = (index: number) => {
       if (retryIndex !== null && retryIndex !== index) cancelRetry();
+      const stride = strideRef.current;
       for (const offset of FRAME_PREFETCH_OFFSETS) {
-        const candidate = index + offset;
+        const candidate = index + offset * stride;
         if (candidate >= 0 && candidate < FRAME_COUNT) load(candidate);
       }
     };
+    strideRef.current = frameStride();
     requestFrameRef.current(0);
 
     const resize = () => {
@@ -552,20 +573,26 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               </a>
               <a
                 href="/try"
-                className="text-sm font-medium text-muted transition-colors hover:text-ink"
+                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
               >
                 Try it first
               </a>
+              {/* #product is the film's own section (top of page): pointing
+                  here sent "skip" back to where the viewer already was. The
+                  first section past the opening act is #formats. */}
               <a
-                href="#product"
-                className="text-sm font-medium text-muted transition-colors hover:text-ink"
+                href="#formats"
+                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
               >
                 Skip the film ↓
               </a>
             </div>
+            {/* Phones can't install a Chrome extension. Say so once, in the
+                handoff itself, and give a real door instead of a dead end. */}
+            <MobileSendLink source="hero" className="mt-6 sm:hidden" />
             <p className="mt-5 text-[13px] text-muted">
               Reads only the posting you&apos;re viewing. Your data is never sold.{" "}
-              <a href="/privacy" className="underline decoration-border underline-offset-2 hover:text-ink">
+              <a href="/privacy" data-inline-link className="underline decoration-border underline-offset-2 hover:text-ink">
                 Privacy
               </a>
             </p>
@@ -573,7 +600,9 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         </div>
 
         {/* scroll hint */}
-        <div className="rq-cine-hint absolute inset-x-0 bottom-8 flex flex-col items-center gap-2" aria-hidden>
+        {/* Hidden on mobile: the hero card is taller there (it carries the
+            install handoff) and the hint collided with the privacy line. */}
+        <div className="rq-cine-hint absolute inset-x-0 bottom-8 hidden flex-col items-center gap-2 sm:flex" aria-hidden>
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             Scroll
           </p>

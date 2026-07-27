@@ -13,7 +13,10 @@ import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
-import { PricingCards } from "@/components/PricingCards";
+import { StickyCTA } from "@/components/StickyCTA";
+import { ScrollProgress } from "@/components/ScrollProgress";
+import { StructuredData } from "@/components/StructuredData";
+import { Voices } from "@/components/Voices";
 import { STORE_URL } from "@/lib/config";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
@@ -41,7 +44,10 @@ const FAQ_ITEMS = [
   },
   {
     q: "Are my resume and personal information safe?",
-    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. Litos makes money from Pro subscriptions, not from you; that is also why Free stays free.",
+    /* No plan names or prices while pricing is off the site: this answer
+       used to end on "Pro subscriptions ... that is why Free stays free",
+       which pointed at a pricing section that no longer exists. */
+    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. Selling your data is not the business, and never will be.",
   },
 ];
 
@@ -93,8 +99,11 @@ function PillarChip({
 export default function Home() {
   return (
     <div className="flex flex-col flex-1">
+      <StructuredData faq={FAQ_ITEMS} />
+      <ScrollProgress />
       <Header />
       <CalibrateCard />
+      <StickyCTA />
 
       <main className="flex-1">
         {/* The scroll film: pinned canvas scrub of the generated film,
@@ -118,21 +127,21 @@ export default function Home() {
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
             <a
               href="#documents"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
             >
               <span className="text-brand-ink">{PILLAR_ICONS.resume}</span>
               Resume
             </a>
             <a
               href="#autofill"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
             >
               <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
               Autofill
             </a>
             <a
               href="#outreach"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
             >
               <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
               Outreach
@@ -142,7 +151,10 @@ export default function Home() {
             <PacketDemo />
           </div>
           <p className="pb-36 pt-6 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            <a href="/try" className="transition-colors hover:text-ink">
+            <a
+              href="/try"
+              className="inline-flex min-h-[44px] items-center px-3 transition-colors hover:text-ink"
+            >
               Or drive it yourself →
             </a>
           </p>
@@ -180,6 +192,12 @@ export default function Home() {
                 Recruiting software skips what it can&apos;t parse. Litos
                 outputs the layout the parser wants: single column, real
                 headings, no tables.
+              </p>
+              {/* Alex Rivera is a sample applicant, and the numbers inside
+                  that resume ("80 students", "800 student users") are his,
+                  not ours. Unlabelled, a skimmer reads them as Litos proof. */}
+              <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                Sample applicant · Alex Rivera is not a real student
               </p>
             </div>
           </Reveal>
@@ -260,7 +278,17 @@ export default function Home() {
                       <span className="text-muted"> · essays and the final say to you</span>
                     </p>
                   </div>
-                  <p className="mt-5 text-[13px] text-muted">
+                  {/* The supported list was only ever in the meta
+                      description, so the page itself never said where this
+                      works. Fill and submit differ: submission is gated to
+                      the three boards the extension can drive end to end
+                      (lib/api.ts ats_name), so say both, plainly. */}
+                  <p className="mt-5 text-[13px] leading-6 text-muted">
+                    Fills on Greenhouse, Lever, Ashby, Workday and LinkedIn.
+                    Submits on Greenhouse, Lever and Ashby; everywhere else
+                    it stops and hands you the finished form.
+                  </p>
+                  <p className="mt-3 text-[13px] text-muted">
                     Every default is yours to change in Settings.
                   </p>
                 </div>
@@ -320,6 +348,19 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Voices: the film has just finished proving the mechanism, which is
+            the exact moment the honest question becomes "does it work for
+            anyone other than the demo?". The same five beta quotes that ship
+            on the store listing answer it, in the same anonymized form. */}
+        <section id="voices" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative px-6 py-32">
+            <Reveal>
+              <Voices />
+            </Reveal>
+          </div>
+        </section>
+
         {/* Try it: the reel is the trailer, /try is the demo booth. One settled
             section, no scrub choreography - the film stage runs behind it. */}
         <section id="try" className="relative scroll-mt-24">
@@ -347,22 +388,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Pricing */}
-        <section id="pricing" className="relative">
-          <Wash soft />
-          <div className="relative mx-auto max-w-4xl px-6 py-36">
-          <Reveal>
-            <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
-              Every feature, free, every month.
-            </h2>
-            <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
-              Free covers 20 resumes a month, resetting on the 1st. Pro covers 1,000.
-            </p>
-            <PricingCards />
-          </Reveal>
-          </div>
-        </section>
-
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
         <section id="faq" className="relative scroll-mt-24">
           <Wash tint="warm" soft />
@@ -371,7 +396,24 @@ export default function Home() {
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 Questions, answered.
               </h2>
-              <div className="rq-glass mt-12 px-6">
+              {/* The three answers that decide whether a skeptic installs were
+                  locked inside collapsed <details>, so they were never read.
+                  State them once, open, above the accordion. */}
+              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  ["Never invented", "It reorders and rewords your real work. It never invents a job, a skill, or a number."],
+                  ["Never auto-sent", "Nothing submits and no email sends until you say so. Essays stay yours."],
+                  ["Never sold", "The extension reads only the posting you're viewing. Your data is never sold or shared."],
+                ].map(([label, body]) => (
+                  <div key={label} className="rq-glass px-5 py-5">
+                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                      {label}
+                    </p>
+                    <p className="mt-2.5 text-[14px] leading-6 text-muted">{body}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="rq-glass mt-6 px-6">
                 {FAQ_ITEMS.map(({ q, a }) => (
                   <details key={q} className="group border-b border-border">
                     <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-left text-[17px] font-medium text-ink [&::-webkit-details-marker]:hidden">
@@ -425,6 +467,22 @@ export default function Home() {
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                 Posting detected → application ready · 9 seconds
               </p>
+              {/* A person, not a company voice. The strongest asset here is
+                  that a student on the same job hunt is building it. */}
+              <p className="mt-8 text-[14px] leading-7 text-muted">
+                Built by{" "}
+                {/* inline in a sentence: WCAG 2.5.8 exempts these, and a
+                    44px box here would break the line. */}
+                <a
+                  href="https://x.com/MehekBuilds"
+                  data-inline-link
+                  className="font-medium text-ink underline decoration-border underline-offset-2 hover:decoration-ink"
+                >
+                  Mehek
+                </a>
+                , a USC computer science student, on the same job hunt as you.
+                Every change ships in public.
+              </p>
             </Reveal>
           </div>
         </section>
@@ -448,10 +506,9 @@ export default function Home() {
                 Product
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                <li><a href="/#product" className="hover:text-ink">Product</a></li>
-                <li><a href="/#pricing" className="hover:text-ink">Pricing</a></li>
-                <li><a href="/#faq" className="hover:text-ink">FAQ</a></li>
-                <li><a href={STORE_URL} className="hover:text-ink">Add to Chrome</a></li>
+                <li><a href="/#product" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Product</a></li>
+                <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
+                <li><a href={STORE_URL} className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Add to Chrome</a></li>
               </ul>
             </div>
             <div>
@@ -460,12 +517,12 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li>
-                  <a href="https://x.com/MehekBuilds" className="hover:text-ink">
+                  <a href="https://x.com/MehekBuilds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
                     X
                   </a>
                 </li>
                 <li>
-                  <a href="https://github.com/mehek-builds" className="hover:text-ink">
+                  <a href="https://github.com/mehek-builds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
                     GitHub
                   </a>
                 </li>
@@ -476,8 +533,8 @@ export default function Home() {
                 Legal
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                <li><a href="/privacy" className="hover:text-ink">Privacy</a></li>
-                <li><a href="/login" className="hover:text-ink">Sign in</a></li>
+                <li><a href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Privacy</a></li>
+                <li><a href="/login" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Sign in</a></li>
               </ul>
             </div>
           </div>
