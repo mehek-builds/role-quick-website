@@ -333,18 +333,33 @@ export function BaseResumeStep({
    * own wording wins over ours. */
   const applyMetrics = useCallback(async () => {
     setSavingMetrics(true);
-    const answers = metricGaps
-      .map((gap, i) => ({ gap, value: (metricAnswers[i] ?? "").trim() }))
-      .filter(({ value }) => value.length > 0);
+    /* Answers are CONSUMED as they match, one per occurrence, rather than looked up by value.
+     *
+     * Two entries can carry the same org and the same bullet: a student with two stints at one
+     * employer, or two roles there, whose duty line reads identically. (The policy pass dedupes
+     * bullets WITHIN one entry, so this is the only shape that survives to here.) A plain `find`
+     * matched the first answer for both bullets, so one number was written twice and the other was
+     * silently dropped, which is the worst outcome available: a number attached to work it does not
+     * describe, on a resume the student is about to approve. */
+    const pending = new Map<string, string[]>();
+    const key = (org: string, bullet: string) => `${org} ${bullet}`;
+    metricGaps.forEach((gap, i) => {
+      const value = (metricAnswers[i] ?? "").trim();
+      if (!value) return;
+      const k = key(gap.org, gap.bullet);
+      pending.set(k, [...(pending.get(k) ?? []), value]);
+    });
+    const answers = [...pending.values()].flat();
     const next: ResumeSpec = {
       ...(spec as ResumeSpec),
       experience: (spec as ResumeSpec).experience.map((entry) => ({
         ...entry,
         bullets: entry.bullets.map((bullet) => {
-          const hit = answers.find((a) => a.gap.org === entry.org && a.gap.bullet === bullet);
-          if (!hit) return bullet;
+          const queue = pending.get(key(entry.org, bullet));
+          const value = queue?.shift();
+          if (!value) return bullet;
           const body = bullet.replace(/\.\s*$/, "");
-          return `${body} (${hit.value}).`;
+          return `${body} (${value}).`;
         }),
       })),
     };
