@@ -73,7 +73,12 @@ export function StepRail({ current }: { current: OnboardingStep }) {
                  "Done" step weighs 0, so it collapses to the gap and the rail
                  ends where the work ends. */
               style={{ flexGrow: s.weight, flexBasis: 0 }}
-              className={`h-0.5 rounded-full transition-colors duration-300 ${
+              /* motion-safe, and 200ms: Motion v1.1 puts micro transitions at
+                 150-250ms, and there is no blanket transition kill in the
+                 reduced-motion block, so the variant is what actually honours
+                 the preference here rather than an assumption that something
+                 upstream does. */
+              className={`h-0.5 rounded-full motion-safe:transition-colors motion-safe:duration-200 ${
                 done ? "bg-ink" : here ? "bg-ink/40" : "bg-border"
               }`}
             />
