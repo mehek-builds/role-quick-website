@@ -6,6 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
 import { MobileSendLink } from "@/components/MobileSendLink";
+import { ReturningVisitor } from "@/components/ReturningVisitor";
 import { track } from "@/lib/analytics";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
@@ -600,6 +601,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             </div>
             {/* Phones can't install a Chrome extension. Say so once, in the
                 handoff itself, and give a real door instead of a dead end. */}
+            <ReturningVisitor />
             <MobileSendLink source="hero" className="mt-6 sm:hidden" />
             <p className="mt-5 text-[13px] text-muted">
               Reads only the posting you&apos;re viewing. Your data is never sold.{" "}

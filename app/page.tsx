@@ -19,6 +19,7 @@ import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
 import { STORE_URL } from "@/lib/config";
+import { ROLES } from "@/lib/rolesFeed";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
    works, tonal pillar bands, motion that settles rather than loops (the
@@ -96,6 +97,9 @@ function PillarChip({
     </p>
   );
 }
+
+/* Counted, never typed: if the feed changes, this changes with it. */
+const HARD_DEADLINE_COUNT = ROLES.filter((r) => r.deadline).length;
 
 export default function Home() {
   return (
@@ -396,10 +400,19 @@ export default function Home() {
               </p>
               <a
                 href="/try"
-                className="mt-8 inline-block rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink"
+                className="mt-8 inline-flex min-h-[44px] items-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink"
               >
                 Try it first
               </a>
+              {/* The page gave nobody a reason to act today. This is the
+                  only honest one available: it is counted from the role
+                  feed at render, so it cannot drift into a claim the data
+                  does not support, and it names no date that could quietly
+                  expire. Feed honesty rules live in lib/rolesFeed.ts. */}
+              <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+                {HARD_DEADLINE_COUNT} of the {ROLES.length} roles we track close on a
+                hard date, not a rolling one
+              </p>
             </Reveal>
           </div>
         </section>
