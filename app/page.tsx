@@ -353,10 +353,13 @@ export default function Home() {
                         accounts, so this is the claim worth making loudly. Naming the
                         one exception is what makes it believable.
 
-                        No duration stated on purpose: DESIGN.md's ledger says a
-                        9-second countdown and /privacy says 15, and marketing must not
-                        pick a side in a contradiction between two of our own surfaces.
-                        The mechanism is true either way.
+                        The duration was left out of the first version of this line
+                        because DESIGN.md said 9 seconds and /privacy said 15, and
+                        marketing must not pick a side in a contradiction between two
+                        of our own surfaces. The extension settles it: COUNTDOWN_SECONDS
+                        is 15 in src/entrypoints/content.ts. /privacy was right, the
+                        ledger was wrong and is now corrected, and the number goes in,
+                        because a hedge reads as one once the real figure exists.
 
                         Phrased as "sending stays off" rather than "we do not press
                         send", because the line four rows down says we CAN press send on
@@ -367,8 +370,8 @@ export default function Home() {
                         where-it-works nuance to the line that already owns it. */}
                     <p className="text-muted">We leave the writing to you.</p>
                     <p className="text-muted">
-                      Sending stays off until you turn it on. Then a countdown
-                      gives you the last word.
+                      Sending stays off until you turn it on. Then you get 15
+                      seconds to stop it.
                     </p>
                   </div>
                   {/* The supported list was only ever in the meta
