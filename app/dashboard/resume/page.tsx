@@ -214,7 +214,7 @@ export default function ResumeWorkspace() {
                     label="Title"
                     value={entry.title ?? ""}
                     onChange={(v) => patchEntry(i, { title: v })}
-                    placeholder="Software Engineering Intern"
+                    placeholder="Software Engineer"
                   />
                   <Field
                     label="Dates"

@@ -915,7 +915,7 @@ function NewApplicationPanel({
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" />
-        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineering Intern" />
+        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineer" />
       </div>
       <div className="mt-4 flex items-end gap-3">
         <div className="flex-1">

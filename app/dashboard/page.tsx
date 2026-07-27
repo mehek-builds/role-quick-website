@@ -70,7 +70,7 @@ const QA_JOBS: MonitoredJob[] = [
   {
     id: "qa-job-3",
     company_name: "Deepgram",
-    title: "Software Engineering Intern",
+    title: "Software Engineer",
     location: "Remote, US",
     department: "Engineering",
     employment_type: "Full-time",
@@ -137,8 +137,8 @@ const QA_OUTREACH: OutreachEvent[] = [
   {
     id: "qa-outreach-1",
     channel: "gmail",
-    subject: "USC student interested in Acme",
-    draft_text: "Hi Jordan, I am a USC student interested in Acme's product engineering work.",
+    subject: "Fellow Trojan interested in Acme",
+    draft_text: "Hi Jordan, fellow Trojan here, and interested in Acme's product engineering work.",
     sent_at: new Date().toISOString(),
     opened_at: null,
     replied_at: new Date().toISOString(),
@@ -150,8 +150,8 @@ const QA_OUTREACH: OutreachEvent[] = [
   {
     id: "qa-outreach-2",
     channel: "gmail",
-    subject: "Stripe engineering internship",
-    draft_text: "Hi Sam, I would value your perspective on Stripe's internship program.",
+    subject: "Stripe engineering, quick question",
+    draft_text: "Hi Sam, I would value your perspective on how Stripe's engineering teams are structured.",
     sent_at: new Date(Date.now() - 86_400_000).toISOString(),
     opened_at: null,
     replied_at: null,
