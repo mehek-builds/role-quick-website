@@ -14,22 +14,24 @@ import { useRef } from "react";
    parallax never initialize, grain is static (globals.css). */
 
 const FILM_CHAPTERS = [
-  { at: 0.0, label: "00 · Detected" },
-  { at: 0.24, label: "01 · Documents" },
-  { at: 0.5, label: "02 · Autofill" },
-  { at: 0.74, label: "03 · Outreach" },
-  { at: 0.92, label: "04 · Application ready" },
+  { at: 0.0, label: "00 · Job found" },
+  { at: 0.24, label: "01 · Resume" },
+  { at: 0.5, label: "02 · Forms" },
+  { at: 0.74, label: "03 · Emails" },
+  { at: 0.92, label: "04 · Ready to send" },
 ];
 
 /* Sections below the film, in scroll order. ids live in app/page.tsx. */
 const SECTIONS = [
-  { id: "#product", label: "The receipt" },
+  { id: "#product", label: "Watch it work" },
   { id: "#odds", label: "The odds" },
-  { id: "#formats", label: "ATS formats" },
-  { id: "#documents", label: "01 · Documents" },
-  { id: "#autofill", label: "02 · Autofill" },
-  { id: "#outreach", label: "03 · Outreach" },
-  { id: "#try", label: "Now you drive" },
+  { id: "#formats", label: "The robot" },
+  { id: "#documents", label: "01 · Resume" },
+  { id: "#autofill", label: "02 · Forms" },
+  { id: "#outreach", label: "03 · Emails" },
+  { id: "#captures", label: "Real photos" },
+  { id: "#voices", label: "Reviews" },
+  { id: "#try", label: "Now you try" },
   { id: "#faq", label: "Questions" },
   { id: "#close", label: "Your move" },
 ];

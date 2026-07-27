@@ -774,7 +774,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
 
           <section aria-labelledby="resume-heading" className="bg-surface-alt p-5 lg:overflow-y-auto sm:p-8">
             <div className="flex items-center justify-between gap-4">
-              <h3 id="resume-heading" className="text-sm font-medium text-ink">Tailored resume</h3>
+              <h3 id="resume-heading" className="text-sm font-medium text-ink">Your new resume</h3>
               {packet?.created_at && <span className="text-xs text-faint">{formatRelativeDate(packet.created_at)}</span>}
             </div>
             {packet ? <ResumePreview packet={packet} /> : <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>}

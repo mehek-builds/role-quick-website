@@ -47,77 +47,67 @@ export default function Privacy() {
 
         <Section title="What the extension reads">
           <p>
-            Only the page you are actively viewing, and only when it is a job
-            posting on a supported platform (Greenhouse, Lever, Ashby, Workday,
-            LinkedIn) or a LinkedIn profile you opened. There is no bulk
-            collection and no background scraping. If you are not on a posting,
-            it reads nothing.
+            Only the page you are looking at, and only when it is a job on
+            Greenhouse, Lever, Ashby, Workday or LinkedIn, or a LinkedIn
+            profile you opened. We do not read anything in the background. If
+            you are not on a job page, we read nothing.
           </p>
         </Section>
 
         <Section title="What we store">
           <p>
-            Your account email and, if you use Google to sign in, the stable
-            Google account identifier used to recognize that login. We do not
-            receive your Google password or access to your Google files or
-            inbox from sign-in. The profile we parse out of the resume you
-            upload, including your experience bank. We read that upload once to
-            build the profile and do not keep the file itself. Your application
-            details, which reach us two ways: values you enter in Settings, and
-            values the extension learns while it watches you fill your first
-            application during onboarding (the next section says exactly how
-            that works and what it will never learn). The contacts we resolved,
-            the drafts we wrote, and the tailored resumes we generated, so your
-            dashboard can show them back to you.
+            We store your email. If you sign in with Google, we store an ID
+            that tells us it is you. We never get your Google password, your
+            files, or your inbox. We store the facts we read out of your
+            resume. We read the file once to get them, then we throw the file
+            away. We store your answers, which reach us two ways: what you
+            type in Settings, and what Litos watches you type into your first
+            form. The next part explains that. We also store the people we
+            found, the emails we wrote, and the resumes we made, so your
+            dashboard can show them to you.
           </p>
           <p>
-            Application details that are sensitive (phone, location,
-            citizenship, date of birth, availability, salary) are encrypted at
-            rest. Your work authorization and sponsorship answers are stored as
-            plain yes/no values, not encrypted.
+            Private answers are locked up: your phone, where you live, your
+            citizenship, your birthday, when you can start, and the pay you
+            want. Your yes or no answers about being allowed to work are
+            stored as plain yes or no, not locked.
           </p>
         </Section>
 
         <Section title="Learning your profile from your first application">
           <p>
-            Starting with extension version 0.4.0, onboarding works by
-            watching, not asking. The first job application you fill in by
-            hand, on the employer&apos;s own form, teaches Litos your
-            answers: while onboarding is open and you are on a recognized
-            application page, the extension reads what you type into that form
-            and saves it to your profile, so you never type it again. Versions
-            before 0.4.0 do not do this; they only store what you enter in
-            Settings.
+            From version 0.4.0, Litos learns by watching instead of asking.
+            The first job form you fill in by hand teaches Litos your answers.
+            While setup is open and you are on a real form, Litos reads what
+            you type and saves it, so you never type it again. Older versions
+            do not do this. They only save what you type in Settings.
           </p>
           <p>
-            This learning is passive. It never fills, clicks, or submits
-            anything by itself, and it only records what you yourself typed:
-            values the extension wrote, or a script wrote, are ignored. It can
-            learn at most these seventeen fields: phone, city, state, zip,
-            country, LinkedIn URL, GitHub URL, portfolio URL, citizenship,
-            date of birth, availability date, availability term, desired
-            salary, GPA, GPA scale, major, and how you heard about the role.
-            Anything that is not one of those fields, including anything that
-            looks like an essay, is not recorded.
+            Litos only watches. It never types, clicks, or sends anything on
+            its own. It only saves what you typed yourself. It can learn these
+            seventeen things and nothing else: phone, city, state, zip,
+            country, LinkedIn link, GitHub link, portfolio link, citizenship,
+            birthday, start date, how long you can work, the pay you want,
+            GPA, GPA scale, major, and how you heard about the job. Anything
+            else, including anything that looks like an essay, is not
+            saved.
           </p>
           <p>
-            Three promises about it. First, it never learns your work
-            authorization, sponsorship, or self-identification answers. Those
-            questions are refused in the extension, refused again by the
-            server, and there is no place in the learned profile they could
-            even be stored. Second, it never overwrites: a value you entered
-            in Settings always wins over one we watched you type. Third, it
-            ends. Learning stops for good the moment your onboarding
-            completes, and it does not restart.
+            Three promises. One: it never learns your answers about being
+            allowed to work, needing sponsorship, or your race and gender. The
+            extension says no, the server says no again, and there is nowhere
+            to put them even if it tried. Two: it never writes over you. What
+            you type in Settings always wins. Three: it stops. Learning ends
+            when setup ends, and it never starts again.
           </p>
         </Section>
 
         <Section title="Contacts and outreach">
           <p>
-            Contact emails are found and verified against public professional
-            sources, and every contact is labeled with how confident we are.
-            If we cannot verify an address, we say so and never guess one. We
-            never resell contact data.
+            We find work emails on public work profiles and check them. Every
+            person is labeled with how sure we are. If we cannot check an
+            email, we say so. We never make one up, and we never sell this
+            data.
           </p>
           <p>
             Outreach emails are sent by you, from your own Gmail account.
@@ -135,7 +125,7 @@ export default function Privacy() {
           </p>
         </Section>
 
-        <Section title="Application verification">
+        <Section title="Codes sent to your email">
           <p>
             If you separately turn on automatic verification, Litos can use a
             Gmail or Outlook account you already connected to look for a
@@ -146,64 +136,58 @@ export default function Privacy() {
             steps still pause for you.
           </p>
           <p>
-            Automatic submission and automatic verification are separate,
-            optional permissions. You can turn either one off in Settings.
+            Sending forms by itself and finding codes are two separate
+            choices. You can turn either one off in Settings.
           </p>
         </Section>
 
         <Section title="Application verification">
           <p>
-            If you turn on automatic verification, Litos can use a Gmail or
-            Outlook account you already connected to look for a verification
-            code while an application is actively waiting for one. Litos only
-            accepts a recent code from a sender domain associated with the job
-            portal you are using. The code is used for that application and is
-            not saved to your Litos profile or application record.
+            Some job sites email you a code. If you turn this on, Litos can
+            look in the Gmail or Outlook you connected and find that code
+            while the form is waiting for it. It only takes a new code, and
+            only from the job site you are on. It uses the code once. It never
+            saves it.
           </p>
           <p>
-            This permission is optional and can be turned off in Settings.
-            Turning it off makes Litos pause for you whenever an application
-            needs an email verification code. Litos also pauses for CAPTCHA,
-            MFA that requires your device or identity, and any verification
-            step it cannot complete with high confidence. Litos does not bypass
-            those portal security controls.
+            You choose this, and you can turn it off in Settings. If it is
+            off, Litos stops and waits for you whenever a code is needed. It
+            also stops for the puzzles that check you are human, for anything
+            that needs your phone, and for any step it is not sure about.
+            Litos never sneaks past those checks.
           </p>
           <p>
-            Gmail and Outlook authentication is handled through Composio&apos;s
-            hosted connection page. Your provider password does not pass
-            through Litos. Composio stores and refreshes the OAuth connection
-            for your Litos account. Disconnecting an account in Settings asks
-            Composio to revoke supported provider tokens and removes the
-            connection from Litos&apos;s Composio project.
+            You connect Gmail or Outlook on a page run by Composio. Your
+            password never goes through Litos. Composio holds that connection
+            for your account. If you disconnect in Settings, we ask Composio
+            to cut the connection and we remove it from our side.
           </p>
         </Section>
 
-        <Section title="EEO and demographic questions">
+        <Section title="Questions about race and gender">
           <p>
-            Voluntary self-identification questions default to
-            decline-to-answer everywhere. They are only ever filled with a
-            value if you explicitly opt in inside the extension.
+            Litos always picks "I would rather not say" on these. It only
+            answers them if you tell it to, inside the extension.
           </p>
         </Section>
 
         <Section title="Billing">
           <p>
-            Payments are processed by Stripe. We never see or store your card
-            number. Canceling takes the same clicks as signing up, from the
-            billing portal linked in your receipt email.
+            Stripe handles payments. We never see or keep your card number.
+            Cancelling takes the same number of clicks as signing up. The link
+            is in your receipt email.
           </p>
         </Section>
 
         <Section title="How long we keep it">
           <p>
-            Generated resume PDFs are deleted 30 days after we make them. The
-            record of what we tailored for which job stays in your dashboard,
-            but the file itself is gone and any link to it stops working.
+            We delete the resume files we make after 30 days. Your dashboard
+            still shows which resume went to which job, but the file is gone
+            and old links stop working.
           </p>
           <p>
-            Links to a resume file expire about an hour after they are issued,
-            so a link that ends up somewhere it should not be does not stay a
-            working key to your resume.
+            A link to a resume file stops working after about an hour. If a
+            link ends up somewhere it should not, it is already dead.
           </p>
           <p>
             The resume you upload is read once to build your profile and is not
@@ -222,24 +206,21 @@ export default function Privacy() {
             stores about you.
           </p>
           <p>
-            Deletion removes your account, the profile parsed from your resume,
-            your experience bank, your application details, both the ones you
-            saved and the ones learned during onboarding, your drafts, your
-            autofill history, and every resume we generated for you, including
-            the files. It cannot be undone.
+            Deleting removes all of it. Your account. The facts we read from
+            your resume. Your answers, both the ones you typed and the ones we
+            watched you type. Your emails. Your form history. Every resume we
+            made, files and all. You cannot undo this.
           </p>
           <p>
-            Contacts are the one exception, and not because we keep them for
-            you. A contact record is a real person at a company. We store it
-            once per company and everyone who looks up that company sees the
-            same record, so it is not yours to delete and removing your account
-            does not remove it. Which contacts you were shown, and what you
-            drafted to them, is yours and does get deleted.
+            People are the one thing that stays. A person at a company is a
+            real person. We save them once, and everyone who looks up that
+            company sees the same one, so it is not yours to delete. Which
+            people you saw, and what you wrote to them, is yours. That does
+            get deleted.
           </p>
           <p>
-            We also keep anonymous outcome rows, meaning which kind of intro
-            tends to get a reply, with the link to your account removed so they
-            cannot be traced back to you.
+            We also keep notes on which kinds of emails get replies. Your
+            name is stripped off, so they cannot lead back to you.
           </p>
         </Section>
 

@@ -136,7 +136,7 @@ export default function ProfilePage() {
       )}
 
       <div className="flex flex-wrap gap-2 border-t border-border pt-6">
-        <Link href="/dashboard/outreach" className="rounded-full border border-border px-4 py-2 text-sm text-muted hover:text-ink">Outreach</Link>
+        <Link href="/dashboard/outreach" className="rounded-full border border-border px-4 py-2 text-sm text-muted hover:text-ink">Emails</Link>
         <Link href="/dashboard/settings" className="rounded-full border border-border px-4 py-2 text-sm text-muted hover:text-ink">Account and connections</Link>
       </div>
     </div>

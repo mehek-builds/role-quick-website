@@ -70,7 +70,7 @@ export default function Login() {
       if (claiming) setFlow("email-code");
       else if (requestedFlow === "recovery") setFlow("recovery");
       if (reason === "password-state") {
-        setError("Your password may have changed, but the confirmation was interrupted. Verify your email to recover access safely.");
+        setError("Your password may have changed, but we did not finish. Check your email so we know it is you.");
       }
       setGuestEligible(!hasLitosHistory());
     });
@@ -98,8 +98,8 @@ export default function Login() {
         setResendCooldown(30);
         setDeliveryNotice(
           isResend
-            ? "A fresh code was requested. Only the newest code will work."
-            : "Code requested. Check your inbox, spam, and promotions folders.",
+            ? "We sent a new code. Only the newest one works."
+            : "Code sent. Check your inbox, and your spam folder.",
         );
         return true;
       }
@@ -108,7 +108,7 @@ export default function Login() {
       setError(requestCodeError(res.status, data?.error));
       return false;
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError("Something went wrong. Check your internet and try again.");
       return false;
     } finally {
       setBusy(false);
@@ -144,13 +144,13 @@ export default function Login() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.token) {
-        setError(res.status === 429 ? "Too many attempts. Try again later." : "Invalid email or password.");
+        setError(res.status === 429 ? "Too many tries. Wait a bit, then try again." : "That email or password is wrong.");
         return;
       }
       setSession(data.token, normalized);
       router.replace(await landingRoute());
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError("Something went wrong. Check your internet and try again.");
     } finally {
       setBusy(false);
     }
@@ -164,7 +164,7 @@ export default function Login() {
     setCode("");
     setFlow("recovery");
     setStep("credentials");
-    setError("Your password may have changed, but the confirmation was interrupted. Verify your email to recover access safely.");
+    setError("Your password may have changed, but we did not finish. Check your email so we know it is you.");
     router.replace("/login?flow=recovery&reason=password-state");
   }
 
@@ -202,13 +202,13 @@ export default function Login() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.token) {
-        setError(data?.error ?? "Could not start guest mode.");
+        setError(data?.error ?? "We could not open the guest view.");
         return;
       }
       setSession(data.token, null, true);
       router.replace("/start");
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError("Something went wrong. Check your internet and try again.");
     } finally {
       setBusy(false);
     }
@@ -236,7 +236,7 @@ export default function Login() {
       }
       setError(googleSignInError(res.status, data?.error));
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError("Something went wrong. Check your internet and try again.");
     } finally {
       setBusy(false);
     }
@@ -292,7 +292,7 @@ export default function Login() {
         setError(verifyCodeError(res.status, data?.error));
       }
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError("Something went wrong. Check your internet and try again.");
     } finally {
       setBusy(false);
     }
@@ -306,7 +306,7 @@ export default function Login() {
       return;
     }
     if (!verificationToken) {
-      setError("Your verification expired. Start again.");
+      setError("That code ran out. Start again.");
       return;
     }
     setBusy(true);
@@ -314,7 +314,7 @@ export default function Login() {
     try {
       await setVerifiedPassword(verificationToken, password);
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError("Something went wrong. Check your internet and try again.");
     } finally {
       setBusy(false);
     }
@@ -421,7 +421,7 @@ export default function Login() {
                     onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
                     className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                   />
-                  <p className="mt-2 text-xs leading-5 text-faint">At least 15 characters. Spaces are allowed.</p>
+                  <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
                 </>
               )}
               <button
@@ -475,10 +475,10 @@ export default function Login() {
                   onClick={() => void continueAsGuest()}
                   className="w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:opacity-50"
                 >
-                  {busy ? <PendingLabel state="searching">Starting guest mode...</PendingLabel> : "Look around without an account"}
+                  {busy ? <PendingLabel state="searching">Opening...</PendingLabel> : "Look around without signing up"}
                 </button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
-                  Seven days at Pro limits. No card. This option appears only on your first visit.
+                  Free for seven days. No card needed. You only see this the first time.
                 </p>
               </>
             )}
@@ -525,7 +525,7 @@ export default function Login() {
               className="mt-3 w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
             >
               {busy
-                ? <PendingLabel state="searching">Requesting a fresh code...</PendingLabel>
+                ? <PendingLabel state="searching">Sending a new code...</PendingLabel>
                 : resendCooldown > 0
                   ? `Resend code in ${resendCooldown}s`
                   : "Resend code"}
@@ -545,7 +545,7 @@ export default function Login() {
           </form>
         ) : (
           <form onSubmit={submitNewPassword}>
-            <h1 className="text-xl font-semibold tracking-tight text-ink">Choose a new password</h1>
+            <h1 className="text-xl font-semibold tracking-tight text-ink">Pick a new password</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
               Your email is verified. This will sign out every older Litos session.
             </p>
@@ -573,7 +573,7 @@ export default function Login() {
               onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
               className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             />
-            <p className="mt-2 text-xs leading-5 text-faint">At least 15 characters. Spaces are allowed.</p>
+            <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
             <button
               type="submit"
               disabled={busy}
@@ -597,11 +597,11 @@ export default function Login() {
       </div>
 
       <p className="mt-8 max-w-sm text-center text-xs leading-5 text-faint">
-        One account for the extension and this dashboard. Signing in here shows
-        the contacts, drafts, and resumes the extension has already made for you.
+        One account for everything. Sign in to see the emails and resumes
+        Litos already made for you.
       </p>
       <p className="mt-3 max-w-sm text-center text-xs leading-5 text-faint">
-        Your data is yours: export or delete it anytime.{" "}
+        Your data is yours. You can download it or delete it anytime.{" "}
         <a href="/privacy" className="underline hover:text-muted">
           Privacy
         </a>
