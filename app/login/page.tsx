@@ -40,6 +40,65 @@ async function landingRoute(): Promise<string> {
   }
 }
 
+/* One password input, with the toggle that replaced the Confirm field.
+ *
+ * The competitor audit's criticism of LoopCV applied to Litos more sharply than
+ * to LoopCV: "Confirm Password is a required field in 2026, on a form that
+ * already has a password visibility toggle." Litos had the confirm field and NO
+ * toggle, so a 15-character passphrase had to be typed correctly twice with no
+ * way to check either one. Both password forms now use this instead, so signup
+ * and password recovery cannot drift apart again.
+ *
+ * The toggle is a real button, not an icon with a click handler: it is
+ * keyboard-reachable, it announces its state through aria-pressed, and its
+ * label changes rather than relying on an icon a screen reader cannot read.
+ * type="button" matters, because a bare <button> inside a form submits it. */
+function PasswordField({
+  id,
+  label,
+  value,
+  onChange,
+  autoComplete,
+  hint,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  autoComplete: string;
+  hint?: string;
+}) {
+  const [shown, setShown] = useState(false);
+  return (
+    <>
+      <div className="mt-4 flex items-baseline justify-between gap-3">
+        <label className="block text-xs font-medium text-muted" htmlFor={id}>
+          {label}
+        </label>
+        <button
+          type="button"
+          onClick={() => setShown((s) => !s)}
+          aria-pressed={shown}
+          aria-controls={id}
+          className="text-xs text-muted underline-offset-4 hover:text-ink hover:underline"
+        >
+          {shown ? "Hide" : "Show"}
+        </button>
+      </div>
+      <input
+        id={id}
+        type={shown ? "text" : "password"}
+        required
+        autoComplete={autoComplete}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+      />
+      {hint && <p className="mt-2 text-xs leading-5 text-faint">{hint}</p>}
+    </>
+  );
+}
+
 export default function Login() {
   const router = useRouter();
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim()
@@ -48,7 +107,6 @@ export default function Login() {
   const [flow, setFlow] = useState<Flow>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -120,7 +178,7 @@ export default function Login() {
   }
 
   function passwordProblem(): string | null {
-    return passwordFormProblem(password, confirmPassword);
+    return passwordFormProblem(password);
   }
 
   async function submitCredentials(e: React.FormEvent) {
@@ -164,7 +222,6 @@ export default function Login() {
     clearSession();
     setVerificationToken(null);
     setPassword("");
-    setConfirmPassword("");
     setCode("");
     setFlow("recovery");
     setStep("credentials");
@@ -273,7 +330,6 @@ export default function Login() {
         if (flow === "recovery") {
           setVerificationToken(data.token);
           setPassword("");
-          setConfirmPassword("");
           setStep("new-password");
           return;
         }
@@ -350,7 +406,7 @@ export default function Login() {
               {claimMode
                 ? "Save your work"
                 : flow === "signup"
-                  ? "Create your account"
+                  ? "Start applying in seconds"
                   : flow === "recovery"
                     ? "Reset your password"
                     : flow === "email-code"
@@ -361,7 +417,7 @@ export default function Login() {
               {claimMode
                 ? "Add an email to keep this work and use Litos on your other devices."
                 : flow === "signup"
-                  ? "Choose a password, then verify your email to finish registration."
+                  ? "Free to start, no card needed. Choose a password, then verify your email."
                   : flow === "recovery"
                     ? "We will verify your email before you choose a new password."
                     : flow === "email-code"
@@ -407,37 +463,14 @@ export default function Login() {
                 className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
               {(flow === "signin" || flow === "signup") && (
-                <>
-                  <label className="mt-4 block text-xs font-medium text-muted" htmlFor="password">
-                    Password
-                  </label>
-                  <input
-                    id="password"
-                    type="password"
-                    required
-                    autoComplete={flow === "signup" ? "new-password" : "current-password"}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-                  />
-                </>
-              )}
-              {flow === "signup" && (
-                <>
-                  <label className="mt-4 block text-xs font-medium text-muted" htmlFor="confirm-password">
-                    Confirm password
-                  </label>
-                  <input
-                    id="confirm-password"
-                    type="password"
-                    required
-                    autoComplete="new-password"
-                    value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-                    className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-                  />
-                  <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
-                </>
+                <PasswordField
+                  id="password"
+                  label="Password"
+                  autoComplete={flow === "signup" ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(v) => { setPassword(v); setError(null); }}
+                  hint={flow === "signup" ? "Use at least 15 letters. Spaces are fine." : undefined}
+                />
               )}
               <Button
                 type="submit"
@@ -602,31 +635,16 @@ export default function Login() {
             <p className="mt-2 text-sm leading-6 text-muted">
               Your email is verified. This will sign out every older Litos session.
             </p>
-            <label className="mt-6 block text-xs font-medium text-muted" htmlFor="new-password">
-              New password
-            </label>
-            <input
-              id="new-password"
-              type="password"
-              required
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => { setPassword(e.target.value); setError(null); }}
-              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-            />
-            <label className="mt-4 block text-xs font-medium text-muted" htmlFor="confirm-new-password">
-              Confirm new password
-            </label>
-            <input
-              id="confirm-new-password"
-              type="password"
-              required
-              autoComplete="new-password"
-              value={confirmPassword}
-              onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-            />
-            <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
+            <div className="mt-6">
+              <PasswordField
+                id="new-password"
+                label="New password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(v) => { setPassword(v); setError(null); }}
+                hint="Use at least 15 letters. Spaces are fine."
+              />
+            </div>
             <Button
               type="submit"
               disabled={busy} block className="mt-4">
