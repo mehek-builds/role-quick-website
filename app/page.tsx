@@ -15,6 +15,7 @@ import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
 import { StickyCTA } from "@/components/StickyCTA";
+import { Voices } from "@/components/Voices";
 import { STORE_URL } from "@/lib/config";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
@@ -183,6 +184,12 @@ export default function Home() {
                 outputs the layout the parser wants: single column, real
                 headings, no tables.
               </p>
+              {/* Alex Rivera is a sample applicant, and the numbers inside
+                  that resume ("80 students", "800 student users") are his,
+                  not ours. Unlabelled, a skimmer reads them as Litos proof. */}
+              <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                Sample applicant · Alex Rivera is not a real student
+              </p>
             </div>
           </Reveal>
           <Reveal>
@@ -322,6 +329,19 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Voices: the film has just finished proving the mechanism, which is
+            the exact moment the honest question becomes "does it work for
+            anyone other than the demo?". The same five beta quotes that ship
+            on the store listing answer it, in the same anonymized form. */}
+        <section id="voices" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative px-6 py-32">
+            <Reveal>
+              <Voices />
+            </Reveal>
+          </div>
+        </section>
+
         {/* Try it: the reel is the trailer, /try is the demo booth. One settled
             section, no scrub choreography - the film stage runs behind it. */}
         <section id="try" className="relative scroll-mt-24">
@@ -373,7 +393,24 @@ export default function Home() {
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 Questions, answered.
               </h2>
-              <div className="rq-glass mt-12 px-6">
+              {/* The three answers that decide whether a skeptic installs were
+                  locked inside collapsed <details>, so they were never read.
+                  State them once, open, above the accordion. */}
+              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {[
+                  ["Never invented", "It reorders and rewords your real work. It never invents a job, a skill, or a number."],
+                  ["Never auto-sent", "Nothing submits and no email sends until you say so. Essays stay yours."],
+                  ["Never sold", "The extension reads only the posting you're viewing. Your data is never sold or shared."],
+                ].map(([label, body]) => (
+                  <div key={label} className="rq-glass px-5 py-5">
+                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                      {label}
+                    </p>
+                    <p className="mt-2.5 text-[14px] leading-6 text-muted">{body}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="rq-glass mt-6 px-6">
                 {FAQ_ITEMS.map(({ q, a }) => (
                   <details key={q} className="group border-b border-border">
                     <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-left text-[17px] font-medium text-ink [&::-webkit-details-marker]:hidden">
@@ -426,6 +463,19 @@ export default function Home() {
                   directly beneath the button it supports. */}
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                 Posting detected → application ready · 9 seconds
+              </p>
+              {/* A person, not a company voice. The strongest asset here is
+                  that a student on the same job hunt is building it. */}
+              <p className="mt-8 text-[14px] leading-7 text-muted">
+                Built by{" "}
+                <a
+                  href="https://x.com/MehekBuilds"
+                  className="font-medium text-ink underline decoration-border underline-offset-2 hover:decoration-ink"
+                >
+                  Mehek
+                </a>
+                , a USC computer science student, on the same job hunt as you.
+                Every change ships in public.
               </p>
             </Reveal>
           </div>
