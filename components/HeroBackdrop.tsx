@@ -12,15 +12,21 @@ import { useEffect, useRef } from "react";
 
 /* Every subject reads unambiguously as a submission confirmation —
    "thank you for your interest" phrasing is banned here, it scans as a
-   rejection opener. */
+   rejection opener.
+
+   The role mix is deliberate. Seven of these nine used to say "Intern" or
+   "Summer Analyst", so the wall of confirmations behind the headline read
+   as an internship product. Keep most of them open-level, and keep at
+   most two internships: internships are one thing Litos applies to, not
+   the thing it is for. */
 const INBOX = [
-  { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Google was sent", time: "11:58 AM", unread: true },
-  { from: "Amazon Jobs", subject: "Application received: Software Development Engineer Intern", time: "11:57 AM", unread: true },
+  { from: "LinkedIn", subject: "Your application to Software Engineer at Google was sent", time: "11:58 AM", unread: true },
+  { from: "Amazon Jobs", subject: "Application received: Software Development Engineer", time: "11:57 AM", unread: true },
   { from: "Meta Careers", subject: "We've received your application to Meta", time: "11:56 AM", unread: false },
-  { from: "Goldman Sachs", subject: "Application received: Summer Analyst", time: "11:55 AM", unread: true },
+  { from: "Goldman Sachs", subject: "Application received: Technology Analyst", time: "11:55 AM", unread: true },
   { from: "Netflix Jobs", subject: "Your application has been received", time: "11:54 AM", unread: false },
-  { from: "Spotify", subject: "We received your application: UX Design Intern", time: "11:53 AM", unread: true },
-  { from: "Microsoft Careers", subject: "Application received: Business Analyst Intern", time: "11:52 AM", unread: false },
+  { from: "Spotify", subject: "We received your application: Product Designer", time: "11:53 AM", unread: true },
+  { from: "Microsoft Careers", subject: "Application received: Business Analyst", time: "11:52 AM", unread: false },
   { from: "LinkedIn", subject: "Your application to Software Engineer Intern at Stripe was sent", time: "11:51 AM", unread: true },
   { from: "Apple", subject: "We've received your application, Research Intern", time: "11:50 AM", unread: false },
 ];

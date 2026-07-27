@@ -559,14 +559,16 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:top-[18svh]">
           <div className="rq-glass rq-enter mx-auto max-w-2xl px-7 py-10 text-center sm:px-12 sm:py-12">
-            {/* Nothing above the fold said what Litos IS or who it is for:
-                the H1 names a speed and the sub names a mechanism, so a
-                first-time visitor had to infer the category. This is the
-                same line the Chrome Web Store listing already leads with
-                (store-assets-v2 shot 1), narrowed from "job seekers" to
-                the people actually being built for. */}
+            {/* Nothing above the fold said what Litos IS: the H1 names a
+                speed and the sub names a mechanism, so a first-time visitor
+                had to infer the category. This is the same line the Chrome
+                Web Store listing already leads with (store-assets-v2 shot 1).
+                It says "job seekers" and must keep saying it: an earlier
+                version narrowed it to "students and new grads", which read
+                as a product nobody else was allowed to use. Students and new
+                grads are one audience Litos serves, not the only one. */}
             <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-              Free Chrome extension for students and new grads
+              Free Chrome extension for job seekers
             </p>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[68px]">
               Apply <span className="text-brand-ink">in seconds.</span>

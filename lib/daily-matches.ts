@@ -75,7 +75,7 @@ export function portalName(portalUrl: string): string {
   if (hostname.includes("ashby")) return "Ashby";
   if (hostname.includes("workday")) return "Workday";
   if (hostname.includes("linkedin")) return "LinkedIn";
-  return "Company portal";
+  return "the company's application page";
 }
 
 function tokens(value: string): Set<string> {

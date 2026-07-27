@@ -142,7 +142,7 @@ export function PacketDemo() {
           <span className="h-2.5 w-2.5 rounded-full bg-border" />
         </span>
         <span className="flex-1 rounded-full bg-surface-alt px-3 py-1 text-center font-mono text-[10px] text-faint">
-          jobs.lever.co/notion/software-engineer-intern
+          jobs.lever.co/notion/software-engineer
         </span>
       </div>
 

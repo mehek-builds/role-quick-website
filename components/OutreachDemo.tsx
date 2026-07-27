@@ -26,8 +26,8 @@ const CONTACTS: Contact[] = [
     tier: "Verified",
     alum: true,
     email: "priya.nair@northline.com",
-    subject: "USC senior, just applied to SWE intern",
-    body: "Hi Priya, fellow Trojan here. I just applied to the SWE intern role and wanted to reach out beyond the pile. Last summer I built REST APIs at Acme serving 40K requests a day, and Northline's platform work looks like that at real scale. Open to a 15-minute chat?",
+    subject: "Fellow Trojan, just applied to the SWE role",
+    body: "Hi Priya, fellow Trojan here. I just applied to the SWE role and wanted to reach out beyond the pile. Last year I built REST APIs at Acme serving 40K requests a day, and Northline's platform work looks like that at real scale. Open to a 15-minute chat?",
   },
   {
     id: "daniel",
@@ -36,7 +36,7 @@ const CONTACTS: Contact[] = [
     tier: "Verified",
     email: "daniel.cho@northline.com",
     subject: "Quick question about the platform team",
-    body: "Hi Daniel, I applied to the SWE intern role this morning. Last summer I built REST APIs handling 40K requests a day and learned the hard way what breaks at scale. What would an intern actually own on your team? One email, I promise.",
+    body: "Hi Daniel, I applied to the SWE role this morning. Last year I built REST APIs handling 40K requests a day and learned the hard way what breaks at scale. What would someone joining actually own on your team? One email, I promise.",
   },
   {
     id: "sam",
@@ -44,8 +44,8 @@ const CONTACTS: Contact[] = [
     role: "Head of Talent",
     tier: "Likely",
     email: "sam.alvarez@northline.com",
-    subject: "SWE intern application, quick hello",
-    body: "Hi Sam, I applied to the SWE intern opening today. One thing that didn't fit the form: I've shipped production work for six freelance clients while carrying a full course load. If the pipeline is deep this cycle, I'd love to know what stands out.",
+    subject: "SWE application, quick hello",
+    body: "Hi Sam, I applied to the SWE opening today. One thing that didn't fit the form: I've shipped production work for six freelance clients on top of a full-time workload. If the pipeline is deep this cycle, I'd love to know what stands out.",
   },
   {
     id: "rina",
