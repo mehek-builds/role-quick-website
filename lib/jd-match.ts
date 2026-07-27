@@ -96,3 +96,28 @@ export async function fetchGapEvidence(
     body: JSON.stringify({ terms, resume_text: resumeText }),
   });
 }
+
+// ---- F3: the resume health check ----
+
+export type HealthFinding = {
+  rule: string;
+  severity: "fix" | "consider";
+  title: string;
+  action: string;
+  org?: string;
+  bullet?: string;
+};
+
+export type ResumeHealth = {
+  findings: HealthFinding[];
+  bullet_count: number;
+  quantified_count: number;
+};
+
+/** Checks the spec ON SCREEN, not the last one saved, so the panel describes what they can see. */
+export async function fetchResumeHealth(spec: ResumeSpec): Promise<ResumeHealth> {
+  return api<ResumeHealth>("/resume/health", {
+    method: "POST",
+    body: JSON.stringify({ spec }),
+  });
+}

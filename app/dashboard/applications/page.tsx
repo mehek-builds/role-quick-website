@@ -18,6 +18,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 import { packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { resumeSpecText } from "@/lib/jd-match";
 import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
@@ -784,6 +785,16 @@ export default function Applications() {
                 </p>
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-15.5rem)]">
                   <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
+                  {/* Under the resume, inside the same scroll area: the checks describe the page
+                      directly above them, so they belong to it rather than to the screen. */}
+                  <div className="mx-auto mt-5 max-w-[640px] border-t border-border pt-4">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+                      Resume checks
+                    </p>
+                    <div className="mt-3">
+                      <ResumeHealth spec={deferredSpec ?? spec} />
+                    </div>
+                  </div>
                 </div>
               </section>
             </div>
