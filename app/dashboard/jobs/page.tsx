@@ -4,7 +4,7 @@ import { Button } from "@/components/app/Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type MonitoredJob } from "@/lib/api";
-import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, EmptyState, ErrorNote, PageHeader, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 
 function jobParams(query: string, location: string, remoteOnly: boolean, offset: number) {
   const params = new URLSearchParams({ offset: String(offset) });
@@ -66,8 +66,7 @@ export default function JobsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Jobs</h1>
-        <p className="mt-2 text-sm text-muted">Every job Litos has found for you.</p>
+        <PageHeader title="Jobs" sub="Every job Litos has found for you." />
       </div>
 
       <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto]">

@@ -3,14 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, OutreachEvent } from "@/lib/api";
 import { STORE_URL } from "@/lib/config";
-import {
-  Card,
-  Chip,
-  ShimmerRows,
-  EmptyState,
-  ErrorNote,
-  formatRelativeDate,
-} from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PageHeader, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 
 const FILTERS = ["all", "drafted", "sent", "replied", "bounced"] as const;
 
@@ -127,8 +120,7 @@ export default function Outreach() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Emails</h1>
-        <p className="mt-1 text-sm text-muted">People you wrote to, and who wrote back.</p>
+        <PageHeader title="Emails" sub="People you wrote to, and who wrote back." />
       </div>
 
       <div className="flex flex-wrap gap-2">
