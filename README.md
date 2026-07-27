@@ -72,18 +72,26 @@ Registered launch configs (vault `.claude/launch.json`):
 
 ## Deploy
 
-Deploy the website from its Vercel project after merging to `main`:
+**Production builds from `main`.** The Vercel project is connected to this
+GitHub repo (reconnected 2026-07-27), so merging or pushing to `main` is the
+deploy. Every production deployment now carries the commit SHA that built
+it, which a CLI upload does not.
 
-```bash
-npx vercel deploy --prod --yes
-```
+Do not run `vercel deploy --prod`. It ships the working directory rather
+than `main`, and this repo regularly has a dozen worktrees open across
+sessions; one stale tree deploying would overwrite the live site with no
+record of where it came from.
 
-then verify the live HTML actually changed (curl for a new string).
+After a push, verify the live HTML actually changed (curl for a new
+string), and check the deployment in `vercel ls role-quick-website`.
 
 ## Open items
 
 - trylitos.com purchased on Porkbun and attached to the Litos Vercel project.
-- Yearly Pro Stripe link ($479.88/yr) does not exist yet; the site shows the
-  toggle but in-app upgrades only know the $49.99/mo link.
+- Pricing is OFF the site entirely (2026-07-27, Mehek's call) while the plan
+  is reworked. No surface quotes a price; `components/PricingCards.tsx` was
+  deleted. Unresolved: $49.99 is Pro's current monthly price and cannot also
+  be the Premium price, Premium's volume is unset, and "free trial" vs the
+  old "Free forever" promise are opposite products.
 - Publish the prepared Litos name, copy, icon, and screenshots to the existing
   Chrome Web Store listing.
