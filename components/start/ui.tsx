@@ -12,6 +12,7 @@
  * Guardrails ban all three and a number would only make a 12-minute step feel longer.
  */
 
+import { Button } from "@/components/app/Button";
 import type { OnboardingStep } from "@/lib/api";
 
 /* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
@@ -167,12 +168,10 @@ export function PrimaryButton({
   ...rest
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button
-      {...rest}
-      className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-    >
+    <Button
+      {...rest} >
       {children}
-    </button>
+    </Button>
   );
 }
 

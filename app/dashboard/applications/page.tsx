@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
@@ -715,7 +716,7 @@ export default function Applications() {
         <ShimmerRows rows={4} />
       ) : reviewablePackets.length === 0 ? (
         <EmptyState title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to create your first reviewable application." : "Add a job URL. Litos will prepare the resume and review."}>
-          <button type="button" onClick={() => setShowNewApplication(true)} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Start an application</button>
+          <Button type="button" onClick={() => setShowNewApplication(true)} >Start an application</Button>
         </EmptyState>
       ) : !selected || !spec || !review ? (
         /* A board, not a list. Reviewers of Huntr and Teal both describe the Kanban as the thing
@@ -830,8 +831,8 @@ export default function Applications() {
               </div>
               <div className="flex gap-2">
                 {coverLetterDownloadUrl && <a href={coverLetterDownloadUrl} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">View PDF</a>}
-                <button type="button" onClick={() => void generateCoverLetter()} disabled={coverLetterBusy} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">{coverLetterBody ? "Regenerate" : "Generate"}</button>
-                <button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || (!coverLetterBody.trim() && !selected.spec._cover_letter)} className="rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">{coverLetterBusy ? "Checking..." : coverLetterBody.trim() ? "Save cover letter" : "Remove cover letter"}</button>
+                <Button type="button" onClick={() => void generateCoverLetter()} disabled={coverLetterBusy} variant="secondary" className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBody ? "Regenerate" : "Generate"}</Button>
+                <Button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || (!coverLetterBody.trim() && !selected.spec._cover_letter)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBusy ? "Checking..." : coverLetterBody.trim() ? "Save cover letter" : "Remove cover letter"}</Button>
               </div>
             </div>
             <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
@@ -868,9 +869,9 @@ export default function Applications() {
             <p className="text-sm text-ink">Litos fills the form with your saved answers and this resume.</p>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
-              <button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
+              <Button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                 {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
-              </button>
+              </Button>
             </div>
           </div>
         </>
@@ -914,21 +915,19 @@ function NewApplicationPanel({
         <div className="flex-1">
           <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" />
         </div>
-        <button
+        <Button
           type="button"
           onClick={onFetchJobDescription}
-          disabled={extractingJd || !value.portalUrl.trim()}
-          className="mb-0.5 whitespace-nowrap rounded-full border border-border px-4 py-3 text-sm font-medium text-ink disabled:opacity-50"
-        >
+          disabled={extractingJd || !value.portalUrl.trim()} variant="secondary" className="mb-0.5 whitespace-nowrap">
           {extractingJd ? <PendingLabel state="composing">Reading...</PendingLabel> : "Fetch from URL"}
-        </button>
+        </Button>
       </div>
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
-        <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
+        <Button type="button" onClick={onGenerate} disabled={creating} >
           {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
-        </button>
+        </Button>
       </div>
     </Card>
   );
@@ -1109,7 +1108,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</button></div>
+      <div className="flex justify-end"><Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button></div>
     </div>
   );
 }
@@ -1171,10 +1170,10 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
         )}
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>}
-          {hasQuestionsToReview && <button onClick={onReviewQuestions} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Check the answers</button>}
-          {needsAttention && <button onClick={onRetry} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">Try again</button>}
-          {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I finished it myself</button>}
-          {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Try again</button>}
+          {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
+          {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
+          {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
           {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>

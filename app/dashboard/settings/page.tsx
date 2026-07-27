@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -411,9 +412,9 @@ export default function Settings() {
               </p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-4">
-              <button type="submit" disabled={passwordBusy} className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
+              <Button type="submit" disabled={passwordBusy} >
                 {passwordBusy ? "Updating..." : "Update password"}
-              </button>
+              </Button>
               <button type="button" onClick={() => { clearSession(); router.push("/login?flow=recovery"); }} className="text-xs text-muted hover:text-ink">
                 Sign out and verify email to reset it
               </button>
@@ -451,13 +452,11 @@ export default function Settings() {
           </div>
           <div className="flex items-center gap-3">
             {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
-            <button
+            <Button
               onClick={save}
-              disabled={saving}
-              className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              disabled={saving} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -531,14 +530,12 @@ export default function Settings() {
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Upgrade to Pro
-            </a> : <button
+            </a> : <Button
               type="button"
               disabled={checkoutBusy}
-              onClick={() => void startCheckout()}
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              onClick={() => void startCheckout()} >
               {checkoutBusy ? "Opening..." : "Upgrade to Pro"}
-            </button>}
+            </Button>}
           </div>
         ) : me.tier === "pro" ? (
           <div className="mt-6 border-t border-border pt-5 text-sm text-muted">

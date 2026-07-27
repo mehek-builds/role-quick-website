@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useEffect, useState } from "react";
 import { RoleType, Targeting, api, getTargeting, putTargeting } from "@/lib/api";
 import {
@@ -110,13 +111,11 @@ export default function TargetingCard() {
         </div>
         <div className="flex items-center gap-3">
           {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
-          <button
+          <Button
             onClick={() => void save()}
-            disabled={saving}
-            className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+            disabled={saving} >
             {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
-          </button>
+          </Button>
         </div>
       </div>
 
