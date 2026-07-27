@@ -19,6 +19,7 @@ import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets 
 import { packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
+import { Board } from "@/components/app/Board";
 import { resumeSpecText } from "@/lib/jd-match";
 import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
@@ -610,6 +611,21 @@ export default function Applications() {
         <div>
           <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-2xl" : "text-[32px]"}`}>Applications</h1>
           {!reviewOpen && <p className="mt-1 text-sm text-muted">Review and track.</p>}
+          {/* Without this the board is unreachable: a packet auto-selects on load, which sends the
+              page straight to the review surface, and nothing took the student back. */}
+          {reviewOpen && (
+            <button
+              type="button"
+              onClick={() => {
+                selectedIdRef.current = null;
+                setSelectedId(null);
+                setMatchResult(null);
+              }}
+              className="mt-1 text-sm text-muted transition-colors hover:text-ink"
+            >
+              ← All applications
+            </button>
+          )}
         </div>
         {/* The selected packet's status already prints on its own row and inside the review
             surface; a third copy in the page header was noise. */}
@@ -700,14 +716,16 @@ export default function Applications() {
           <button type="button" onClick={() => setShowNewApplication(true)} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Start an application</button>
         </EmptyState>
       ) : !selected || !spec || !review ? (
-        <div className="grid gap-3">
-          {reviewablePackets.map((packet) => (
-            <button key={packet.id} onClick={() => selectPacket(packet)} className={`rounded-[20px] p-5 text-left ${applicationCardClasses(packet, false)}`}>
-              <span className="text-sm font-medium">{packet.job_context.role}</span>
-              <span className="ml-2 text-sm opacity-65">{packet.job_context.company}</span>
-            </button>
-          ))}
-        </div>
+        /* A board, not a list. Reviewers of Huntr and Teal both describe the Kanban as the thing
+           that replaced their spreadsheet, and what retains is that the data accumulates and stays
+           theirs. The flat list this replaces showed only role and company, with no way to record
+           what had actually happened with any of them. */
+        <Board
+          onOpen={(id) => {
+            const packet = (packets ?? []).find((item) => item.id === id);
+            if (packet) selectPacket(packet);
+          }}
+        />
       ) : screen === "questions" ? (
         <QuestionsScreen
           questions={questions}
