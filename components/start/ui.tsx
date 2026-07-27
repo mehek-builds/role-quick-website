@@ -18,42 +18,72 @@ import type { OnboardingStep } from "@/lib/api";
 /* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
    screens, and the resume step was the only place in the product that accented the word. It is
    "resume" everywhere we write it, in every surface, with no exceptions. */
-export const STEPS: { key: OnboardingStep; label: string }[] = [
-  { key: "focus", label: "What you want" },
-  { key: "resume", label: "Your resume" },
-  { key: "base", label: "Your one page" },
-  { key: "install", label: "Add to Chrome" },
-  { key: "apply", label: "One application" },
-  { key: "gaps", label: "A few details" },
-  { key: "targeting", label: "When you start" },
-  { key: "done", label: "Done" },
+/* `weight` is roughly how much of the student's TIME the step costs, and it is
+   the whole reason this rail can draw a fill again. The 2026-07-04 removal was
+   right about the bar it removed: equal segments read 43% done while the
+   twelve-minute application was still ahead, which is a promise the flow
+   cannot keep. But the fault was equal weighting, not fills. Sizing each
+   segment by its real cost means the apply step occupies 12 of 22 of the rail,
+   so the student SEES the big block ahead instead of being told they are
+   nearly finished. Rough numbers on purpose: they only have to be right
+   relative to each other, and being roughly honest beats being precisely
+   wrong. Approved 2026-07-27 as override 1 of 10 (DESIGN.md). */
+export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
+  { key: "focus", label: "What you want", weight: 1 },
+  { key: "resume", label: "Your resume", weight: 2 },
+  { key: "base", label: "Your one page", weight: 2 },
+  { key: "install", label: "Add to Chrome", weight: 2 },
+  { key: "apply", label: "One application", weight: 12 },
+  { key: "gaps", label: "A few details", weight: 2 },
+  { key: "targeting", label: "When you start", weight: 1 },
+  { key: "done", label: "Done", weight: 0 },
 ];
 
 export function StepRail({ current }: { current: OnboardingStep }) {
   const i = STEPS.findIndex((s) => s.key === current);
   const activeStep = STEPS[Math.max(0, i)];
   const step = Math.max(0, i) + 1;
-  /* The old bar filled by step count and read 43% while the twelve-minute step was still ahead,
-     so it promised a finish line it could not keep. Steps are not equal in effort and this cannot
-     know how long any of them takes, so it no longer draws a fraction of the way there: it marks
-     where you are. The written "Step 5 of 7" is the honest part and it stays. */
+  /* The fill is back, weighted by effort rather than by step count. The rule it
+     has to satisfy is the one that killed the last bar: never tell a student
+     they are nearly done while the twelve-minute application is still ahead.
+     Weighting does that structurally. Each segment is as wide as the step is
+     expensive, so at "Add to Chrome" the rail is visibly about a third filled
+     with one wide block left, which is the truth.
+
+     No percentage number. The 2026-07-04 note that a figure "would only make a
+     12-minute step feel longer" still holds, and the bar's shape already says
+     more than a digit would. The written "Step 5 of 8" stays as the precise
+     part. */
   return (
     <div aria-label={`Setup: step ${step} of ${STEPS.length}, ${activeStep.label}`}>
       <div className="flex items-center justify-between gap-4 text-[13px]">
         <span className="text-ink">{activeStep.label}</span>
         <span className="text-faint">Step {step} of {STEPS.length}</span>
       </div>
-      {/* One segment marked, not a filled fraction. Filling every segment up to the current one
-          is a progress bar by another name, and it promised a finish line these steps cannot
-          keep: step 03 is a twelve-minute application and step 06 is a single tap. */}
       <ol className="mt-3 flex gap-1.5">
-        {STEPS.map((s, index) => (
-          <li
-            key={s.key}
-            aria-hidden="true"
-            className={`h-0.5 flex-1 rounded-full ${index === step - 1 ? "bg-ink" : "bg-border"}`}
-          />
-        ))}
+        {STEPS.map((s, index) => {
+          const done = index < step - 1;
+          const here = index === step - 1;
+          return (
+            <li
+              key={s.key}
+              aria-hidden="true"
+              /* flexGrow, not flex-1: the segment carries its own weight, which
+                 is what makes the rail read as the shape of the work. The final
+                 "Done" step weighs 0, so it collapses to the gap and the rail
+                 ends where the work ends. */
+              style={{ flexGrow: s.weight, flexBasis: 0 }}
+              /* motion-safe, and 200ms: Motion v1.1 puts micro transitions at
+                 150-250ms, and there is no blanket transition kill in the
+                 reduced-motion block, so the variant is what actually honours
+                 the preference here rather than an assumption that something
+                 upstream does. */
+              className={`h-0.5 rounded-full motion-safe:transition-colors motion-safe:duration-200 ${
+                done ? "bg-ink" : here ? "bg-ink/40" : "bg-border"
+              }`}
+            />
+          );
+        })}
       </ol>
     </div>
   );
