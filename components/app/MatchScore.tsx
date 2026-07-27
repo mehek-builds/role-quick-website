@@ -35,7 +35,7 @@ export function MatchScore({
   /** Hands the whole result up so the parent can drive both panes' highlighting and the gap list
    *  from ONE request. Passing only `missing` meant the JD pane had no way to know which terms
    *  were covered, and it fell back to highlighting every word of the resume. */
-  onResult?: (result: JdMatchResponse) => void;
+  onResult?: (result: JdMatchResponse | null) => void;
 }) {
   const [result, setResult] = useState<JdMatchResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -54,7 +54,13 @@ export function MatchScore({
         onResult?.(next);
       })
       .catch(() => {
-        if (!cancelled) setFailed(true);
+        if (cancelled) return;
+        setFailed(true);
+        setResult(null);
+        // The parent drives BOTH panes' highlighting from this. Leaving the last good result in
+        // place after a failure kept every mark and gap chip lit from a score that no longer
+        // stands, next to a panel reading "Match score unavailable".
+        onResult?.(null);
       });
     return () => {
       cancelled = true;

@@ -84,11 +84,19 @@ export default function Applications() {
     });
   }, []);
 
+  // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
+  // result. The JD pane used to highlight against resumeTerms, every content word anywhere in the
+  // resume, which lit up "backed", "services" and "deployed" in the same blue as "PostgreSQL" and
+  // so told the student nothing.
+  const [matchResult, setMatchResult] = useState<JdMatchResponse | null>(null);
   const selectPacket = useCallback((packet: GeneratedResume) => {
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
     setSelectedId(packet.id);
+    // Highlighting is per (resume, posting). Carrying the previous packet's result over marks the
+    // new JD against a resume and a posting that are no longer on screen.
+    setMatchResult(null);
     setSpec(stripMetadata(packet.spec));
     setQuestions(packet.spec._review?.questions ?? []);
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
@@ -259,11 +267,6 @@ export default function Applications() {
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
   const deferredSpec = useDeferredValue(spec);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
-  // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
-  // result. The JD pane used to highlight against resumeTerms, every content word anywhere in the
-  // resume, which lit up "backed", "services" and "deployed" in the same blue as "PostgreSQL" and
-  // so told the student nothing.
-  const [matchResult, setMatchResult] = useState<JdMatchResponse | null>(null);
   const requirementIndex = useMemo(
     () => (matchResult ? buildRequirementIndex(matchResult.matched, matchResult.missing) : EMPTY_REQUIREMENT_INDEX),
     [matchResult],
@@ -716,7 +719,7 @@ export default function Applications() {
                 <MatchScore jdText={review.jd_text} spec={deferredSpec ?? spec} onResult={setMatchResult} />
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
-                <MatchLegend missingCount={matchResult?.missing.length ?? 0} />
+                <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} />
                 <p className="mt-1.5 text-[11px] text-faint">
                   Point at any highlighted term to see it light up on both sides.
                 </p>

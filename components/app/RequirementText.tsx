@@ -61,6 +61,13 @@ const TONE_CLASS: Record<TermTone, string> = {
   edited: "border-b-2 border-positive bg-positive-soft text-positive",
 };
 
+/** Spoken meaning of each tone, so the marking is not carried by colour alone. */
+const TONE_LABEL: Record<TermTone, string> = {
+  covered: "asked for by this job, and on your resume",
+  missing: "asked for by this job, not on your resume",
+  edited: "wording Litos changed for this job",
+};
+
 export function TermMark({
   term,
   tone,
@@ -76,8 +83,16 @@ export function TermMark({
   const dimmed = active !== null && !isActive;
   return (
     <mark
+      // Focusable, because the header tells the student to "point at any highlighted term" and a
+      // mouse-only affordance excludes keyboard and screen-reader users from the feature entirely.
+      // GapChip already does this; the marks were the half that got left behind.
+      tabIndex={0}
+      role="button"
+      aria-label={`${children} — ${TONE_LABEL[tone]}`}
       onMouseEnter={() => setActive(term)}
       onMouseLeave={() => setActive(null)}
+      onFocus={() => setActive(term)}
+      onBlur={() => setActive(null)}
       className={[
         "rounded px-0.5 transition-opacity",
         TONE_CLASS[tone],
@@ -148,11 +163,13 @@ function Swatch({ tone, label }: { tone: TermTone; label: string }) {
   );
 }
 
-export function MatchLegend({ missingCount }: { missingCount: number }) {
+/** missingCount is null when the posting was not scorable: claiming "(0)" gaps beside a panel that
+ *  says the posting could not be scored asserts a measurement that never happened. */
+export function MatchLegend({ missingCount }: { missingCount: number | null }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <Swatch tone="covered" label="asked for, and on your resume" />
-      <Swatch tone="missing" label={`asked for, not on your resume (${missingCount})`} />
+      <Swatch tone="missing" label={missingCount === null ? "asked for, not on your resume" : `asked for, not on your resume (${missingCount})`} />
       <Swatch tone="edited" label="wording Litos changed for this job" />
     </div>
   );

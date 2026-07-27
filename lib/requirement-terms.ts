@@ -28,9 +28,41 @@ export function normalizeTerm(raw: string): string {
   return raw
     .toLowerCase()
     .replace(/[.’']/g, "")
-    .replace(/[-_/]+/g, " ")
-    .replace(/\s+/g, " ")
+    // Every other non-alphanumeric becomes a separator, matching the backend. When this was only
+    // [-_/], a comma stayed glued to the word and the two copies disagreed about whether a resume
+    // saying "Docker, Kubernetes" contained `docker`, which is exactly how the panes came to
+    // contradict the score.
+    .replace(/[^a-z0-9+#]+/g, " ")
     .trim();
+}
+
+/** Mirrors singular() in the backend's engine/jdMatch.ts. */
+function singular(word: string): string {
+  if (/(ss|us|is)$/.test(word)) return word;
+  if (/ies$/.test(word)) return word.slice(0, -3) + "y";
+  if (/es$/.test(word) && /(ch|sh|x|s)es$/.test(word)) return word.slice(0, -2);
+  if (/s$/.test(word)) return word.slice(0, -1);
+  return word;
+}
+
+/**
+ * Look a candidate up the way the BACKEND matches, not by exact key.
+ *
+ * resumeCovers credits singular/plural variants, so the score could count "api" as covered on the
+ * strength of a resume that says "APIs" while this pane, doing an exact lookup, marked nothing.
+ * The student was told the requirement was met and given no way to see where. Any lookup rule here
+ * that is stricter than the backend's produces that class of bug.
+ */
+function lookupTone(index: RequirementIndex, candidate: string): TermTone | undefined {
+  const direct = index.tone.get(candidate);
+  if (direct) return direct;
+  const sing = candidate.split(" ").map(singular).join(" ");
+  if (sing !== candidate) {
+    const viaSingular = index.tone.get(sing);
+    if (viaSingular) return viaSingular;
+  }
+  const bare = candidate.replace(/s$/, "");
+  return bare !== candidate ? index.tone.get(bare) : undefined;
 }
 
 export type RequirementIndex = {
@@ -65,7 +97,9 @@ export type Segment =
  * spaces) and matched the one-word term, so the mark swallowed the line break AND the next bullet's
  * dash. On the rendered page that showed up as stray coloured dashes down the left margin.
  */
-const WORD_RE = /[A-Za-z0-9][A-Za-z0-9+#./_'’-]*/g;
+// Character class mirrors the backend's tokenizer exactly. It used to admit a leading digit,
+// which the backend's does not, so digit-suffixed tokens tokenized differently on the two sides.
+const WORD_RE = /[A-Za-z][A-Za-z0-9+#./_-]*/g;
 
 /**
  * Punctuation carried at the edge of a written word, stripped before lookup and re-emitted outside
@@ -135,7 +169,7 @@ export function segmentText(
       if (pieces.some((piece) => !piece.core)) continue;
 
       const candidate = normalizeTerm(pieces.map((piece) => piece.core).join(" "));
-      const tone = index.tone.get(candidate);
+      const tone = lookupTone(index, candidate);
       if (tone) {
         hit = {
           start: tokens[i].start + pieces[0].lead.length,

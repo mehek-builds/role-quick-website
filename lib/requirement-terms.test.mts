@@ -113,3 +113,41 @@ describe("segmentText", () => {
     assert.equal(out.map((s) => s.text).join(""), "Anything at all");
   });
 });
+
+/**
+ * Regressions from the pre-merge review. Each of these is a way the panes could contradict the
+ * score, which is the one failure mode this highlighting exists to prevent.
+ */
+describe("review regressions: the panes must agree with the score", () => {
+  test("a term the score credits via plural is marked in the pane", () => {
+    // The backend's resumeCovers credits singular/plural variants; an exact-key lookup here meant
+    // the score said "api: covered" while the resume pane marked nothing, so the hover link to
+    // "where does my resume say this" silently failed on the terms the score had credited.
+    const out = segmentText("Shipped APIs and data pipelines.", idx(["api", "pipeline"]));
+    assert.deepEqual(marks(out), [
+      ["APIs", "covered"],
+      ["pipelines", "covered"],
+    ]);
+  });
+
+  test("a comma-separated resume line marks every term on it", () => {
+    // normalizeTerm only separated on [-_/], so the two copies disagreed about whether a resume
+    // saying "Docker, Kubernetes" contained `docker`.
+    const text = "Used Docker, Kubernetes, and Terraform.";
+    const out = segmentText(text, idx(["docker", "kubernetes", "terraform"]));
+    assert.deepEqual(marks(out), [
+      ["Docker", "covered"],
+      ["Kubernetes", "covered"],
+      ["Terraform", "covered"],
+    ]);
+    assert.equal(out.map((s) => s.text).join(""), text);
+  });
+
+  test("a digit-suffixed token tokenizes the same way the backend does", () => {
+    const out = segmentText("Experience with OAuth2 and GraphQL", idx(["oauth2", "graphql"]));
+    assert.deepEqual(marks(out), [
+      ["OAuth2", "covered"],
+      ["GraphQL", "covered"],
+    ]);
+  });
+});
