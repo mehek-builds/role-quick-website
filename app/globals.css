@@ -359,6 +359,14 @@ html {
   animation: dashboard-drawer-backdrop-in 180ms ease-out;
 }
 
+/* The reduced-motion product still is off under full motion: the film and
+   the Application Roll own the opening, and a still underneath them would
+   dissolve into the roll as a visible cut. Turned on in the reduced-motion
+   block below, which is the only place it is meant to appear. */
+.rq-cine-still {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -377,10 +385,23 @@ html {
   .rq-grain {
     animation: none;
   }
-  /* the film canvas appears instantly (it dissolves in via a transition
-     under full motion) */
+  /* Reduced motion gets the product, not the poster. The film canvas parks
+     on frame 0, which is scattered application pages: the problem, not what
+     Litos does. Hide it and show the static capture of the extension open on
+     a posting instead, so the one visitor who cannot watch the film still
+     sees the product above the fold. */
   .rq-cine-film {
-    transition: none;
+    display: none;
+  }
+  /* Phones excluded on purpose. The hero card is taller on mobile because it
+     carries the install handoff (QR + copy link), and it occludes almost all
+     of the capture, so a phone would pay 143KB for a few visible pixels. The
+     film already strides frames down on small screens and Save-Data for the
+     same reason; this is that rule applied to the still. */
+  @media (min-width: 640px) {
+    .rq-cine-still {
+      display: block;
+    }
   }
   .rq-blink {
     animation: none;
