@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCode from "qrcode";
-import { SITE_URL, STORE_URL } from "@/lib/config";
+import { STORE_URL } from "@/lib/config";
 import { track } from "@/lib/analytics";
 import { extractResumeText } from "@/lib/extract-resume";
 import {
@@ -16,6 +15,7 @@ import {
 import type { TryJobCard } from "@/lib/try-jobs";
 import { ThinkingOrb } from "thinking-orbs";
 import { PendingLabel } from "@/components/app/ui";
+import { MobileSendLink } from "@/components/MobileSendLink";
 
 /* /try - the drive-it-yourself demo (design doc 2026-07-08).
    The visitor clicks the extension's real verbs: Detect -> Generate ->
@@ -27,7 +27,6 @@ import { PendingLabel } from "@/components/app/ui";
 type Step = "chooser" | "resume" | "autofill" | "outreach" | "done";
 const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "outreach", "done"];
 
-const INSTALL_URL = `${SITE_URL}/install?src=qr`;
 
 function after(step: Step, target: Step) {
   return STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(target);
@@ -631,49 +630,7 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
       >
         Add to Chrome, it&apos;s free
       </a>
-      <MobileSendLink />
-    </div>
-  );
-}
-
-/* Phones can't install Chrome extensions - the mobile conversion is
-   "get this link onto my desktop". Copy-link + QR, zero backend. */
-function MobileSendLink() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (canvasRef.current) {
-      QRCode.toCanvas(canvasRef.current, INSTALL_URL, {
-        width: 112,
-        margin: 1,
-        color: { dark: "#12120f", light: "#ffffff" },
-      }).catch(() => {});
-    }
-  }, []);
-
-  return (
-    <div className="sm:hidden">
-      <div className="flex items-center gap-4 rounded-xl border border-border bg-surface-alt/60 p-3">
-        <canvas ref={canvasRef} className="h-[72px] w-[72px] rounded-md" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[12px] leading-5 text-muted">
-            On your phone? Scan on your laptop, or copy the link for later.
-          </p>
-          <button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(INSTALL_URL);
-                setCopied(true);
-                track("send_link_submit", { method: "copy" });
-              } catch {}
-            }}
-            className="mt-1.5 rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] font-medium text-ink"
-          >
-            {copied ? "Copied" : "Copy install link"}
-          </button>
-        </div>
-      </div>
+      <MobileSendLink source="try" className="sm:hidden" />
     </div>
   );
 }

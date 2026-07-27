@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
+import { MobileSendLink } from "@/components/MobileSendLink";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
    a canvas and scrubbed by scroll across a pinned viewport: scattered
@@ -556,13 +557,19 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               >
                 Try it first
               </a>
+              {/* #product is the film's own section (top of page): pointing
+                  here sent "skip" back to where the viewer already was. The
+                  first section past the opening act is #formats. */}
               <a
-                href="#product"
+                href="#formats"
                 className="text-sm font-medium text-muted transition-colors hover:text-ink"
               >
                 Skip the film ↓
               </a>
             </div>
+            {/* Phones can't install a Chrome extension. Say so once, in the
+                handoff itself, and give a real door instead of a dead end. */}
+            <MobileSendLink source="hero" className="mt-6 sm:hidden" />
             <p className="mt-5 text-[13px] text-muted">
               Reads only the posting you&apos;re viewing. Your data is never sold.{" "}
               <a href="/privacy" className="underline decoration-border underline-offset-2 hover:text-ink">
@@ -573,7 +580,9 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         </div>
 
         {/* scroll hint */}
-        <div className="rq-cine-hint absolute inset-x-0 bottom-8 flex flex-col items-center gap-2" aria-hidden>
+        {/* Hidden on mobile: the hero card is taller there (it carries the
+            install handoff) and the hint collided with the privacy line. */}
+        <div className="rq-cine-hint absolute inset-x-0 bottom-8 hidden flex-col items-center gap-2 sm:flex" aria-hidden>
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             Scroll
           </p>

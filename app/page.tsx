@@ -14,6 +14,7 @@ import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { PricingCards } from "@/components/PricingCards";
+import { StickyCTA } from "@/components/StickyCTA";
 import { STORE_URL } from "@/lib/config";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
@@ -95,6 +96,7 @@ export default function Home() {
     <div className="flex flex-col flex-1">
       <Header />
       <CalibrateCard />
+      <StickyCTA />
 
       <main className="flex-1">
         {/* The scroll film: pinned canvas scrub of the generated film,

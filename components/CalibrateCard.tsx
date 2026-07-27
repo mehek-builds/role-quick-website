@@ -121,6 +121,15 @@ export function CalibrateCard() {
     return () => cancelAnimationFrame(raf);
   }, [phase]);
 
+  /* Publish the phase so other fixed chrome can stand down instead of
+     stacking in the same corner (StickyCTA reads this). */
+  useEffect(() => {
+    document.documentElement.dataset.calibrate = phase;
+    return () => {
+      delete document.documentElement.dataset.calibrate;
+    };
+  }, [phase]);
+
   const dismiss = () => {
     if (matchTimer.current) clearTimeout(matchTimer.current);
     setMatching(false);

@@ -87,9 +87,11 @@ export function Header() {
           </a>
           {/* Color v1.1: action blue repeats on every true CTA, so the primary
               action reads as primary at a glance next to the quiet Sign in. */}
+          {/* Was sm:block, which left the mobile header with no CTA at all:
+              logo + Sign in, and the only ask hidden behind the hamburger. */}
           <a
             href={STORE_URL}
-            className="hidden rounded-full bg-brand px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:block"
+            className="rounded-full bg-brand px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 sm:px-4 sm:text-sm"
           >
             Add to Chrome
           </a>
