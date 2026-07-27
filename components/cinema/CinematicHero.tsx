@@ -566,7 +566,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 (store-assets-v2 shot 1), narrowed from "job seekers" to
                 the people actually being built for. */}
             <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-              Free Chrome extension for students
+              Free Chrome extension for students and new grads
             </p>
             <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[68px]">
               Apply <span className="text-brand-ink">in seconds.</span>
