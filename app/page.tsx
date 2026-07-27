@@ -14,6 +14,8 @@ import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { StickyCTA } from "@/components/StickyCTA";
+import { ScrollProgress } from "@/components/ScrollProgress";
+import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
 import { STORE_URL } from "@/lib/config";
 
@@ -97,6 +99,8 @@ function PillarChip({
 export default function Home() {
   return (
     <div className="flex flex-col flex-1">
+      <StructuredData faq={FAQ_ITEMS} />
+      <ScrollProgress />
       <Header />
       <CalibrateCard />
       <StickyCTA />
@@ -123,21 +127,21 @@ export default function Home() {
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
             <a
               href="#documents"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
             >
               <span className="text-brand-ink">{PILLAR_ICONS.resume}</span>
               Resume
             </a>
             <a
               href="#autofill"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
             >
               <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
               Autofill
             </a>
             <a
               href="#outreach"
-              className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
+              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
             >
               <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
               Outreach
@@ -147,7 +151,10 @@ export default function Home() {
             <PacketDemo />
           </div>
           <p className="pb-36 pt-6 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            <a href="/try" className="transition-colors hover:text-ink">
+            <a
+              href="/try"
+              className="inline-flex min-h-[44px] items-center px-3 transition-colors hover:text-ink"
+            >
               Or drive it yourself →
             </a>
           </p>
@@ -271,7 +278,17 @@ export default function Home() {
                       <span className="text-muted"> · essays and the final say to you</span>
                     </p>
                   </div>
-                  <p className="mt-5 text-[13px] text-muted">
+                  {/* The supported list was only ever in the meta
+                      description, so the page itself never said where this
+                      works. Fill and submit differ: submission is gated to
+                      the three boards the extension can drive end to end
+                      (lib/api.ts ats_name), so say both, plainly. */}
+                  <p className="mt-5 text-[13px] leading-6 text-muted">
+                    Fills on Greenhouse, Lever, Ashby, Workday and LinkedIn.
+                    Submits on Greenhouse, Lever and Ashby; everywhere else
+                    it stops and hands you the finished form.
+                  </p>
+                  <p className="mt-3 text-[13px] text-muted">
                     Every default is yours to change in Settings.
                   </p>
                 </div>
@@ -454,8 +471,11 @@ export default function Home() {
                   that a student on the same job hunt is building it. */}
               <p className="mt-8 text-[14px] leading-7 text-muted">
                 Built by{" "}
+                {/* inline in a sentence: WCAG 2.5.8 exempts these, and a
+                    44px box here would break the line. */}
                 <a
                   href="https://x.com/MehekBuilds"
+                  data-inline-link
                   className="font-medium text-ink underline decoration-border underline-offset-2 hover:decoration-ink"
                 >
                   Mehek
@@ -486,9 +506,9 @@ export default function Home() {
                 Product
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                <li><a href="/#product" className="hover:text-ink">Product</a></li>
-                <li><a href="/#faq" className="hover:text-ink">FAQ</a></li>
-                <li><a href={STORE_URL} className="hover:text-ink">Add to Chrome</a></li>
+                <li><a href="/#product" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Product</a></li>
+                <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
+                <li><a href={STORE_URL} className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Add to Chrome</a></li>
               </ul>
             </div>
             <div>
@@ -497,12 +517,12 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li>
-                  <a href="https://x.com/MehekBuilds" className="hover:text-ink">
+                  <a href="https://x.com/MehekBuilds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
                     X
                   </a>
                 </li>
                 <li>
-                  <a href="https://github.com/mehek-builds" className="hover:text-ink">
+                  <a href="https://github.com/mehek-builds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
                     GitHub
                   </a>
                 </li>
@@ -513,8 +533,8 @@ export default function Home() {
                 Legal
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                <li><a href="/privacy" className="hover:text-ink">Privacy</a></li>
-                <li><a href="/login" className="hover:text-ink">Sign in</a></li>
+                <li><a href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Privacy</a></li>
+                <li><a href="/login" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Sign in</a></li>
               </ul>
             </div>
           </div>
