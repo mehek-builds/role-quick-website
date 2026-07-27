@@ -203,6 +203,16 @@ export function BaseResumeStep({
     setLog([]);
     setSpec({});
     setFinished(false);
+    /* A rebuild produces a different set of bullets, and the metric answers are keyed by POSITION in
+     * the gap list. Carrying them over would attach a number the student wrote about one job to
+     * whatever bullet happens to land at that index next time, and a carried-over `metricsDone`
+     * would suppress the second build's ask entirely. Reachable from the Try again button, which
+     * appears on any save error after a successful build. */
+    setAts(null);
+    setMetricGaps([]);
+    setMetricAnswers({});
+    setMetricsDone(false);
+    setWarnings([]);
     if (demo) {
       replayDemo(onFrame);
       return;

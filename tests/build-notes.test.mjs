@@ -67,3 +67,29 @@ describe("build notes a student reads", () => {
     }
   });
 });
+
+/* Findings from the code review of this branch: five validator strings the first pass missed still
+ * put "ungrounded" and "experience bank" on the student's screen. */
+describe("every note the backend can emit is translated", () => {
+  const raws = [
+    'grounding: metric "40%" in a job bullet is not in the experience bank ("Cut latency…")',
+    'grounding: claim "led a team" in a project bullet is not in the experience bank ("Led four…")',
+    "dropped bullet with ungrounded 40% in Acme Corp",
+    'reset title "Senior Engineer" -> "Engineer" for Acme Corp',
+    'reset date "2020 - 2024" -> "2022 - 2024" for Acme Corp',
+    "6 entries selected (max 4)",
+    "education must render at the top for a currently enrolled student",
+    'dropped "Acme Corp" entirely, nothing on it could be supported by your resume',
+  ];
+
+  for (const raw of raws) {
+    test(`translates: ${raw.slice(0, 40)}`, () => {
+      const said = humanizeBuildNote(raw);
+      assert.notEqual(said, raw, "fell through untranslated");
+      assert.ok(
+        !/ungrounded|experience bank|action-verb-first|^grounding:|->/.test(said),
+        said,
+      );
+    });
+  }
+});

@@ -36,6 +36,10 @@ export function humanizeBuildNote(raw: string): string {
       (m) => `We left ${m[1]} off, because it is not in your experience yet.`,
     ],
     [
+      /^dropped "(.+)" entirely, nothing on it could be supported by your resume$/,
+      (m) => `We left ${m[1]} off entirely, because nothing listed under it appears on the resume you uploaded.`,
+    ],
+    [
       /^dropped ungrounded skills: (.+)$/,
       (m) => `We left these skills off, because they are not on the resume you uploaded: ${m[1]}.`,
     ],
@@ -47,6 +51,35 @@ export function humanizeBuildNote(raw: string): string {
     [
       /^grounding: metric "([^"]+)" in a (.+?) bullet is not in the experience bank \("(.+)"\)$/,
       (m) => `The number "${m[1]}" in a ${m[2]} bullet is not on the resume you uploaded. Check it: ${m[3]}`,
+    ],
+    [
+      /^grounding: (.+?) "(.+?)" in a (.+?) bullet is not in the experience bank(?: \("(.*)"\))?$/,
+      (m) =>
+        `A ${m[1]} in a ${m[3]} bullet ("${m[2]}") is not on the resume you uploaded. Check it${m[4] ? `: ${m[4]}` : "."}`,
+    ],
+    [
+      /^dropped bullet with ungrounded (.+?) in (.+)$/,
+      (m) => `We left out a bullet from ${m[2]}, because the number in it (${m[1]}) is not on the resume you uploaded.`,
+    ],
+    [
+      /^reset title "(.+?)" -> "(.+?)" for (.+)$/,
+      (m) => `We put your title at ${m[3]} back to "${m[2]}", the one your resume gives.`,
+    ],
+    [
+      /^reset date "(.+?)" -> "(.+?)" for (.+)$/,
+      (m) => `We put the dates at ${m[3]} back to "${m[2]}", the ones your resume gives.`,
+    ],
+    [
+      /^(\d+) entries selected \(max (\d+)\)$/,
+      (m) => `${m[1]} roles were picked and only ${m[2]} fit on a page.`,
+    ],
+    [
+      /^education must render (.+)$/,
+      (m) => `Your education should sit ${m[1].replace(/^at the top for a currently enrolled student$/, "at the top, since you are still enrolled").replace(/^after experience for this candidate$/, "below your experience")}.`,
+    ],
+    [
+      /^dropped ungrounded skill: (.+)$/,
+      (m) => `We left the skill ${m[1]} off, because it is not on the resume you uploaded.`,
     ],
     [
       /^education (school|degree|graduation date) differs from uploaded resume$/,
