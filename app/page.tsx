@@ -136,7 +136,7 @@ export default function Home() {
               screen readers and crawlers get a complete one. */}
           <h2 className="sr-only">Watch one application assemble</h2>
           <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-            19:42:07 → 19:42:16
+            Nine seconds, start to finish
           </p>
           {/* Hero-to-body bridge: the three pillars as a table of contents,
               one small first click before the big ask. Pillar color marks
@@ -172,7 +172,7 @@ export default function Home() {
               href="/try"
               className="inline-flex min-h-[44px] items-center px-3 transition-colors hover:text-ink"
             >
-              Or try it first →
+              Or try it free →
             </a>
           </p>
           </div>
@@ -189,8 +189,8 @@ export default function Home() {
                 <CountUp to={250} />
               </p>
               <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
-                people apply for one job. Six get an interview. One gets
-                the job. We help yours stand out.
+                people apply for one job. Six of them get an interview. One
+                gets the job. We help yours stand out.
               </p>
               <ApplicantField />
             </Reveal>
@@ -234,7 +234,7 @@ export default function Home() {
               <Reveal>
                 <div className="mx-auto max-w-[600px] text-center">
                   <div className="flex justify-center">
-                    <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
+                    <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Resume</PillarChip>
                   </div>
                   <h2 className="mt-3 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     We rebuild it. We do not just swap words.
@@ -264,7 +264,7 @@ export default function Home() {
                 </div>
                 <div className="rq-glass order-1 px-7 py-8 sm:order-2">
                   <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    19:42:14
+                    While you read this
                   </p>
                   <div className="mt-3" />
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Forms</PillarChip>
@@ -277,23 +277,11 @@ export default function Home() {
                     check.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
-                  <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
-                    <p>
-                      <span className="text-teal-ink">Fills</span>
-                      <span className="text-muted"> · name, links, and the yes or no questions</span>
-                    </p>
-                    <p>
-                      <span className="text-teal-ink">Attaches</span>
-                      <span className="text-muted"> · your new resume</span>
-                    </p>
-                    <p>
-                      <span className="text-teal-ink">Skips</span>
-                      <span className="text-muted"> · the questions about race and gender</span>
-                    </p>
-                    <p>
-                      <span className="text-teal-ink">Leaves</span>
-                      <span className="text-muted"> · the writing, and the send button, to you</span>
-                    </p>
+                  <div className="mt-8 space-y-2.5 text-[14px] leading-6">
+                    <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
+                    <p className="text-muted">We attach your new resume.</p>
+                    <p className="text-muted">We skip the questions about race and gender.</p>
+                    <p className="text-muted">We leave the writing, and the send button, to you.</p>
                   </div>
                   {/* The supported list was only ever in the meta
                       description, so the page itself never said where this
@@ -301,9 +289,10 @@ export default function Home() {
                       the three boards the extension can drive end to end
                       (lib/api.ts ats_name), so say both, plainly. */}
                   <p className="mt-5 text-[13px] leading-6 text-muted">
-                    We fill forms on Greenhouse, Lever, Ashby, Workday and
-                    LinkedIn. We can send on the first three. Anywhere else
-                    we stop and hand it to you.
+                    We fill in forms on Greenhouse, Lever, Ashby, Workday and
+                    LinkedIn. We can press send for you on Greenhouse,
+                    Lever and Ashby. Anywhere else we fill it in and you
+                    press send.
                   </p>
                   <p className="mt-3 text-[13px] text-muted">
                     You can change any of this in Settings.
@@ -313,7 +302,7 @@ export default function Home() {
                       output, but a reader is entitled to know which one
                       they are looking at before treating it as evidence. */}
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    A drawing, not a photo · real ones below
+                    This is a picture we made. Real screenshots are below.
                   </p>
                 </div>
               </div>
@@ -331,12 +320,12 @@ export default function Home() {
               <div className="mx-auto grid w-full max-w-6xl origin-center grid-cols-1 items-center gap-14 sm:scale-[0.92] sm:grid-cols-2">
                 <div className="rq-glass px-7 py-8">
                   <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    19:42:16
+                    Two seconds later
                   </p>
                   <div className="mt-3" />
                   <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Emails</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                    Applications get filed. Emails get read.
+                    Nobody reads applications. People read emails.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
                     While the form fills, we find people who work there. We
@@ -344,26 +333,14 @@ export default function Home() {
                     your school answer most, so they come first.
                   </p>
                   {/* Machine voice: what outreach actually does, as data. */}
-                  <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
-                    <p>
-                      <span className="text-coral-ink">Finds</span>
-                      <span className="text-muted"> · people who work there</span>
-                    </p>
-                    <p>
-                      <span className="text-coral-ink">Verifies</span>
-                      <span className="text-muted"> · each email, and says if it is a guess</span>
-                    </p>
-                    <p>
-                      <span className="text-coral-ink">Drafts</span>
-                      <span className="text-muted"> · a short note that sounds like you</span>
-                    </p>
-                    <p>
-                      <span className="text-coral-ink">Leaves</span>
-                      <span className="text-muted"> · the send button to you</span>
-                    </p>
+                  <div className="mt-8 space-y-2.5 text-[14px] leading-6">
+                    <p className="text-muted">We find people who work there.</p>
+                    <p className="text-muted">We check every email address, and tell you when we could not.</p>
+                    <p className="text-muted">We write a short note that sounds like you.</p>
+                    <p className="text-muted">We leave the send button to you.</p>
                   </div>
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    A drawing, not a photo · real ones below
+                    This is a picture we made. Real screenshots are below.
                   </p>
                 </div>
                 <div>
@@ -407,7 +384,7 @@ export default function Home() {
           <div className="relative mx-auto max-w-2xl px-6 py-32 text-center">
             <Reveal>
               <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                19:42:16 · Application ready
+                Your application is ready
               </p>
               <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                 Now you try.
@@ -420,7 +397,7 @@ export default function Home() {
                 href="/try"
                 className="mt-8 inline-flex min-h-[44px] items-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink"
               >
-                Try it first
+                Try it free
               </a>
               {/* The page gave nobody a reason to act today. This is the
                   only honest one available: it is counted from the role
@@ -585,7 +562,7 @@ export default function Home() {
           </div>
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
             <span>&copy; {new Date().getFullYear()} Litos</span>
-            <span>You can use this whole site with just a keyboard.</span>
+            <span>You do not need a mouse to use this site.</span>
             <span className="font-mono text-[11px] uppercase tracking-[0.08em]">
               Updated{" "}
               {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}

@@ -22,9 +22,9 @@ const ARTIFACTS: {
 }[] = [
   {
     t: "19:42:11",
-    label: "Resume tailored",
+    label: "Resume rewritten",
     sub: "Alex_Rivera_Notion_Resume.pdf",
-    working: "Tailoring resume",
+    working: "Rewriting your resume",
     orb: "composing",
     action: "Review",
     thread: "bg-brand",
@@ -35,7 +35,7 @@ const ARTIFACTS: {
   {
     t: "19:42:14",
     label: "Application filled",
-    sub: "27 fields · nothing sent yet",
+    sub: "27 questions · nothing sent yet",
     working: "Filling application",
     orb: "solving",
     action: "Review",
@@ -46,9 +46,9 @@ const ARTIFACTS: {
   },
   {
     t: "19:42:16",
-    label: "Outreach drafted",
+    label: "Email written",
     sub: "To Priya Nair · USC alum",
-    working: "Drafting outreach",
+    working: "Writing the email",
     orb: "shaping",
     action: "Open",
     thread: "bg-coral",
@@ -190,7 +190,7 @@ export function PacketDemo() {
                 ) : done ? (
                   "Ready · 9 seconds"
                 ) : (
-                  "Posting detected"
+                  "Job found"
                 )}
               </span>
             </div>
@@ -246,7 +246,7 @@ export function PacketDemo() {
                     : "border border-dashed border-border text-faint"
                 }`}
               >
-                {done ? "Review, then send" : "Assembling application…"}
+                {done ? "Review, then send" : "Making your application…"}
               </span>
             </div>
           </div>

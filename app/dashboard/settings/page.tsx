@@ -124,7 +124,7 @@ export default function Settings() {
     } catch (err) {
       setAutomaticSubmission(previousSubmission);
       setAutomaticVerification(previousVerification);
-      setError(err instanceof Error ? err.message : "Could not update automation permissions.");
+      setError(err instanceof Error ? err.message : "Could not save that change.");
     } finally {
       setSavingAutomation(false);
     }
@@ -261,7 +261,7 @@ export default function Settings() {
 
   async function deleteAccount() {
     if (!me?.email) {
-      setError("Save this guest workspace with an email before deleting the account.");
+      setError("Add your email to save this work before deleting the account.");
       return;
     }
     const confirmation = window.prompt(`Type ${me.email} to delete your account.`);
@@ -319,7 +319,7 @@ export default function Settings() {
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div>
             <p className="text-xs text-faint">Email</p>
-            <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Guest workspace"}</p>
+            <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Not saved yet"}</p>
           </div>
           <div>
             <p className="text-xs text-faint">Plan</p>
@@ -424,15 +424,15 @@ export default function Settings() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="text-base font-medium text-ink">Application automation</h2>
+        <h2 className="text-base font-medium text-ink">Two things Litos can do on its own</h2>
         <p className="mt-1 text-sm leading-6 text-muted">These are two separate choices, and you can turn either off at any time. We check again right before anything is sent.</p>
         <div className="mt-5 space-y-4">
           <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
-            <span><span className="block text-sm font-medium text-ink">Automatic submission</span><span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span></span>
+            <span><span className="block text-sm font-medium text-ink">Send an application without asking me again</span><span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span></span>
             <input aria-label="Automatic submission" type="checkbox" checked={automaticSubmission} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
           <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
-            <span><span className="block text-sm font-medium text-ink">Codes sent to your email</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
+            <span><span className="block text-sm font-medium text-ink">Read the code a company emails me</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
             <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
         </div>
@@ -443,9 +443,9 @@ export default function Settings() {
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-medium text-ink">Application details</h2>
+            <h2 className="text-base font-medium text-ink">Answers you give every time</h2>
             <p className="mt-1 text-sm text-muted">
-              What autofill types into forms. Phone, location, citizenship,
+              What Litos types into forms. Phone, location, citizenship,
               availability, and salary are encrypted at rest.
             </p>
           </div>
@@ -491,8 +491,8 @@ export default function Settings() {
           {/* Value AND scale, both stored (R-005). A bare "3.89" cannot be answered onto a form
               asking for a percentage or a UK classification without knowing what it was earned
               on, and guessing there would be a fabricated academic claim. */}
-          <Input label="Grade average" value={profile.gpa} onChange={(v) => patch({ gpa: v })} placeholder="3.89" />
-          <Input label="Grade scale" value={profile.gpa_scale} onChange={(v) => patch({ gpa_scale: v })} placeholder="4.0" />
+          <Input label="GPA" value={profile.gpa} onChange={(v) => patch({ gpa: v })} placeholder="3.89" />
+          <Input label="GPA scale" value={profile.gpa_scale} onChange={(v) => patch({ gpa_scale: v })} placeholder="4.0" />
           <Input label="Available from" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" />
           <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
           {/* A figure without a unit is not an answer: replaying "80000" from a Munich posting
@@ -502,7 +502,7 @@ export default function Settings() {
         </div>
 
         <p className="mt-5 text-xs leading-5 text-faint">
-          Voluntary EEO self-identification always defaults to decline-to-answer
+          Questions about race and gender always default to "I would rather not say"
           and can only be changed by an explicit opt-in inside the extension.
           Work authorization is always asked, never inferred.
         </p>
@@ -537,7 +537,7 @@ export default function Settings() {
               onClick={() => void startCheckout()}
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
-              {checkoutBusy ? "Opening checkout..." : "Upgrade to Pro"}
+              {checkoutBusy ? "Opening..." : "Upgrade to Pro"}
             </button>}
           </div>
         ) : me.tier === "pro" ? (

@@ -14,7 +14,7 @@ describe("dashboard application review compatibility", () => {
     assert.equal(portalName("https://job-boards.greenhouse.io/acme/jobs/123"), "Greenhouse");
     assert.equal(portalName("https://jobs.ashbyhq.com/acme/123"), "Ashby");
     assert.equal(portalName("https://acme.wd1.myworkdayjobs.com/job/123"), "Workday");
-    assert.equal(portalName("https://careers.acme.com/jobs/123"), "Company portal");
+    assert.equal(portalName("https://careers.acme.com/jobs/123"), "the company's application page");
   });
 
   test("adds portal-discovered questions without overwriting an answer already edited locally", () => {

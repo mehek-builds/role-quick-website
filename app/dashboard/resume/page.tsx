@@ -108,7 +108,7 @@ export default function ResumeWorkspace() {
       <div>
         <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Resume</h1>
         <p className="mt-1 text-sm text-muted">
-          Your base resume and experience bank. Every tailored resume is built
+          Your main resume and everything you have done. Every resume we make is built
           from what lives here, so the richer it is, the better the fit.
         </p>
       </div>
@@ -119,13 +119,13 @@ export default function ResumeWorkspace() {
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-medium text-ink">Base resume</h2>
+            <h2 className="text-base font-medium text-ink">Your main resume</h2>
             <p className="mt-1 text-sm text-muted">
               {profile === null
-                ? <PendingLabel>Loading...</PendingLabel>
+                ? <PendingLabel>Reading...</PendingLabel>
                 : profile === "missing"
-                  ? "No resume uploaded yet. Upload a PDF to seed your profile and experience bank."
-                  : "Parsed and on file. Uploading a new PDF replaces it."}
+                  ? "No resume uploaded yet. Upload a PDF and we will fill in the rest from it."
+                  : "Read and saved. Uploading a new PDF replaces it."}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -138,7 +138,7 @@ export default function ResumeWorkspace() {
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {uploading
-                ? <PendingLabel state="composing" onColor>Parsing...</PendingLabel>
+                ? <PendingLabel state="composing" onColor>Reading...</PendingLabel>
                 : profile === "missing"
                   ? "Upload resume PDF"
                   : "Replace resume"}
@@ -166,7 +166,7 @@ export default function ResumeWorkspace() {
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-medium text-ink">Experience bank</h2>
+            <h2 className="text-base font-medium text-ink">Everything you have done</h2>
             <p className="mt-1 text-sm text-muted">
               Every role, project, and bullet variant. Tailoring picks the
               best-fit subset per posting.
@@ -201,7 +201,7 @@ export default function ResumeWorkspace() {
           <ShimmerRows rows={3} />
         ) : entries.length === 0 ? (
           <Card className="p-8 text-center text-sm text-muted">
-            No entries yet. Upload a resume above to seed the bank, or add
+            No entries yet. Upload a resume above and we will fill this in, or add
             entries by hand.
           </Card>
         ) : (
@@ -244,7 +244,7 @@ export default function ResumeWorkspace() {
 
                 <div className="mt-4">
                   <label className="block text-xs font-medium text-muted">
-                    Bullet variants (one per line)
+                    Different ways to write this line (one per line)
                   </label>
                   <textarea
                     value={entry.bullet_variants.join("\n")}

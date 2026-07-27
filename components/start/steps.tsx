@@ -84,13 +84,13 @@ export function FocusStep({
 
       {seed && (
         <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Calibrated from your homepage answers · adjust freely
+          Filled in from what you told us. Change anything.
         </p>
       )}
 
       <div className="mb-7">
         <div className="flex min-h-5 items-baseline justify-between">
-          <p className="text-[14px] text-ink">Kind of work</p>
+          <p className="text-[14px] text-ink">What job</p>
           <span className="text-[12px] text-faint">Pick up to {MAX_CATEGORIES}</span>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
@@ -452,7 +452,7 @@ export function InstallStep({
 /* -------------------------------------------------------------------- 04 GAPS */
 
 const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: string }> = {
-  gpa: { label: "Grade average", placeholder: "3.89" },
+  gpa: { label: "GPA", placeholder: "3.89" },
   gpa_scale: { label: "Out of", placeholder: "4.0" },
   major: { label: "Major", placeholder: "Computer Science" },
   desired_salary: { label: "Desired salary", note: "Optional. Left blank on every form unless you set it.", placeholder: "Leave blank" },
@@ -521,18 +521,18 @@ export function GapsStep({
   return (
     <StartShell
       step="gaps"
-      title={`${n === 1 ? "One thing" : n === 2 ? "Two things" : "A few things"} that job didn't ask.`}
-      sub="Most others will. This is the last of the boring part."
+      title={`${n === 1 ? "One question left" : n === 2 ? "Two questions left" : "A few questions left"} that job didn't ask.`}
+      sub="Most forms ask for these. This is the last of the boring part."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       {showGpa && (
         <div className="mb-5">
-          <label htmlFor="gap-gpa" className="text-[13px] text-ink">Grade average</label>
+          <label htmlFor="gap-gpa" className="text-[13px] text-ink">GPA</label>
           {/* R-005: store the value AND the scale, then convert through a disclosed mapping.
               A bare 3.89 tells a UK form nothing, and guessing 97% would be a lie. */}
           <p className="mt-1 text-[12px] leading-5 text-faint">
-            Stored as you earned it. When a form wants a percentage or a classification, we convert
+            Stored the way you earned it. Some forms want a percentage instead, and we work that out
             and show you the mapping first.
           </p>
           <div className="mt-2 grid grid-cols-2 gap-3">
@@ -678,11 +678,11 @@ export function TargetStep({
       </div>
 
       <div className="mb-7">
-        <p className="text-[14px] text-ink">Main focus</p>
+        <p className="text-[14px] text-ink">When you want to start</p>
         <p className="mt-0.5 text-[12px] text-faint">
           {gradYear
             ? `You graduate in ${gradYear}, so this is the one that matters.`
-            : "The term you're aiming at."}
+            : "The season you are aiming at."}
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {periods.map((p) => (
@@ -697,8 +697,8 @@ export function TargetStep({
       </div>
 
       <div className="mb-8">
-        <p className="text-[14px] text-ink">Backup</p>
-        <p className="mt-0.5 text-[12px] text-faint">If the main one doesn&apos;t land.</p>
+        <p className="text-[14px] text-ink">If that does not work out</p>
+        <p className="mt-0.5 text-[12px] text-faint">The next season you would take.</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {periods
             .filter((p) => p.slug !== primary)
@@ -765,7 +765,7 @@ export function DoneStep({
       </div>
 
       <p className="mt-4 text-[13px] leading-5 text-muted">
-        You can change both any time in Account. Litos never answers a CAPTCHA or a legal question for you.
+        You can change both any time in Account. Litos never answers a CAPTCHA, the puzzle that checks you are human, and never answers anything you have to swear to.
       </p>
 
       <div className="mt-6">
@@ -779,7 +779,7 @@ export function DoneStep({
           }}
           disabled={busy}
         >
-          {busy ? <PendingLabel state="shaping" onColor>Finishing...</PendingLabel> : "Go to dashboard"}
+          {busy ? <PendingLabel state="shaping" onColor>Saving...</PendingLabel> : "Go to dashboard"}
         </PrimaryButton>
       </div>
     </StartShell>

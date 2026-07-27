@@ -78,13 +78,13 @@ export function RealCaptures() {
     <div className="mx-auto max-w-5xl">
       <div className="mx-auto max-w-[560px] text-center">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-          Real photos
+          Real screenshots
         </p>
         <h2 className="mt-3 text-[32px] font-[450] tracking-[-0.02em] text-ink">
           This is the real thing.
         </h2>
         <p className="mt-4 text-[15px] leading-7 text-muted">
-          The pictures above are drawings, so they can move. These three are
+          The pictures above are ones we made, so they can move. These three are
           real photos of the app. The names in them are made up.
         </p>
       </div>

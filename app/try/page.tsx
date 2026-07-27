@@ -6,7 +6,7 @@ import { getJobCards } from "@/lib/try-jobs";
 export const metadata: Metadata = {
   title: "Try Litos without installing it",
   description:
-    "Try Litos on a pretend job. Watch it build your resume, fill the form, and write the email. Nothing gets sent.",
+    "Try Litos on a pretend job. Watch it make your resume, fill in the form, and write the email. Nothing gets sent.",
 };
 
 /* Standalone try-it surface (design doc 2026-07-08). Deliberately quiet:

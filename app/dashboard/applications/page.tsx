@@ -183,7 +183,7 @@ export default function Applications() {
       try {
         await refreshSubmission();
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "We lost track of the form. Reload the page to check.");
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "We lost sight of the form. Reload the page to check.");
       } finally {
         inFlight = false;
       }
@@ -432,7 +432,7 @@ export default function Applications() {
         setCoverLetterBody(result.cover_letter.body);
         setCoverLetterDownloadUrl(result.download_url);
       }
-      setNotice("Tailored cover letter generated and checked against your saved experience.");
+      setNotice("Cover letter written and checked against the work you told us about.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not generate the tailored cover letter.");
       throw reason;
@@ -466,7 +466,7 @@ export default function Applications() {
           setCoverLetterDownloadUrl(result.download_url);
         }
       }
-      setNotice("Cover letter saved and grounding checks passed.");
+      setNotice("Cover letter saved. Every line checks out against your real work.");
       return true;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
@@ -550,7 +550,7 @@ export default function Applications() {
       }
     } catch (reason) {
       moveToScreen("review");
-      setError(reason instanceof Error ? reason.message : "The company portal could not be prepared.");
+      setError(reason instanceof Error ? reason.message : "We could not open the company's application page.");
     }
   }
 
@@ -564,7 +564,7 @@ export default function Applications() {
       setSubmission(result);
       moveToScreen("portal");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not confirm the portal handoff.");
+      setError(reason instanceof Error ? reason.message : "We could not tell whether it went through.");
     }
   }
 
@@ -651,7 +651,7 @@ export default function Applications() {
                 <option value="all">Everything</option>
                 <option value="action">Needs you</option>
                 <option value="ready">Ready</option>
-                <option value="submitted">Applied</option>
+                <option value="submitted">Sent</option>
               </select>
               <label className="sr-only" htmlFor="application-sort">Sort applications</label>
               <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
@@ -804,8 +804,8 @@ export default function Applications() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs text-muted">Tailored cover letter</p>
-                <h2 className="mt-2 text-lg font-medium text-ink">Grounded in this role and your saved experience.</h2>
-                <p className="mt-1 text-sm text-muted">Litos maps the job requirements to evidence already present in your profile, resume, and experience bank.</p>
+                <h2 className="mt-2 text-lg font-medium text-ink">Written for this job, from work you really did.</h2>
+                <p className="mt-1 text-sm text-muted">Every line points back to something already in your resume or in the work you told us about.</p>
               </div>
               <div className="flex gap-2">
                 {coverLetterDownloadUrl && <a href={coverLetterDownloadUrl} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">View PDF</a>}
@@ -848,7 +848,7 @@ export default function Applications() {
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               <button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
-                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Checking...</PendingLabel> : "Fill the form"}
+                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
               </button>
             </div>
           </div>
@@ -882,7 +882,7 @@ function NewApplicationPanel({
     <Card className="p-6">
       <div className="max-w-2xl">
         <p className="text-xs text-muted">New application</p>
-        <h2 className="mt-2 text-xl font-medium text-ink">Generate the tailored resume.</h2>
+        <h2 className="mt-2 text-xl font-medium text-ink">Make the resume for this job.</h2>
         <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -899,14 +899,14 @@ function NewApplicationPanel({
           disabled={extractingJd || !value.portalUrl.trim()}
           className="mb-0.5 whitespace-nowrap rounded-full border border-border px-4 py-3 text-sm font-medium text-ink disabled:opacity-50"
         >
-          {extractingJd ? <PendingLabel state="composing">Fetching...</PendingLabel> : "Fetch from URL"}
+          {extractingJd ? <PendingLabel state="composing">Reading...</PendingLabel> : "Fetch from URL"}
         </button>
       </div>
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
         <button type="button" onClick={onGenerate} disabled={creating} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white disabled:opacity-50">
-          {creating ? <PendingLabel state="composing" onColor>Generating resume...</PendingLabel> : "Build my resume"}
+          {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
         </button>
       </div>
     </Card>
@@ -1075,9 +1075,9 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to portal status" : "Back to resume"}</button>
+      <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to how it is going" : "Back to resume"}</button>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Portal answers" : "Missing portal answers"}</p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Their questions" : "Questions we could not answer"}</p>
         <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "The company asked for these." : "A few answers we could not work out."}</h2>
         <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "The form asked for things we did not know. Answer them, then try again." : "Everything we already knew is filled in. This page only shows the blanks."}</p>
       </div>
@@ -1088,7 +1088,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">{reviewDiscovered ? "Save answers and try again" : "Save answers and build my application"}</button></div>
+      <div className="flex justify-end"><button onClick={onSubmit} className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white">{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</button></div>
     </div>
   );
 }
@@ -1101,7 +1101,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
-        <p className="text-xs text-muted">Secure portal runner</p>
+        <p className="text-xs text-muted">Filling it in for you</p>
         <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "This one needs you." : review.status === "failed" ? "Litos stopped before sending." : "Check it over before it goes."}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
@@ -1134,7 +1134,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
         {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
         {review.verification?.status === "completed" && (
           <div className="mt-4 rounded-[12px] border border-border bg-surface-alt px-4 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Verification completed</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Code found</p>
             <p className="mt-1 text-xs text-muted">
               Litos used the one-time code from your connected {review.verification.provider === "outlook" ? "Outlook" : "Gmail"} account. The code was not saved.
             </p>
@@ -1142,25 +1142,25 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
         )}
         {review.verification?.status === "handoff" && (
           <div className="mt-4 rounded-[12px] border border-border bg-surface px-4 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">Verification needs you</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">The code needs you</p>
             <p className="mt-1 text-xs text-muted">
-              This browser run could not complete the verification step with high confidence. Open the secure portal to finish it.
+              Litos was not sure it finished this step. Open the company page and finish it yourself.
             </p>
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
-          {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open secure portal</a>}
+          {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>}
           {hasQuestionsToReview && <button onClick={onReviewQuestions} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Check the answers</button>}
           {needsAttention && <button onClick={onRetry} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">Try again</button>}
           {needsAttention && <button onClick={onHandoffComplete} className="rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink">I finished it myself</button>}
           {review.status === "failed" && <button onClick={onRetry} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Try again</button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Submit application</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
-        <p className="mt-5 text-xs leading-5 text-faint">Litos will not bypass CAPTCHA, MFA, login, or legal declarations. Verification codes are used only with your permission, and a verified portal receipt is required before an application is marked submitted.</p>
+        <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
-        <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Portal preview captured after filling</p></div>
-        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="Company portal after Litos filled the saved profile and application fields" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">The worker is still capturing the filled portal.</div>}
+        <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">What the form looked like after we filled it in</p></div>
+        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="The company's application page after Litos filled it in" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
       </Card>
     </div>
   );
@@ -1170,13 +1170,13 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
   const receipt = review.receipt;
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <CenteredState title="Application submitted." body={`${role} at ${company} is complete. The company portal confirmed receipt.`} />
+      <CenteredState title="Sent to the company." body={`${role} at ${company} is complete. The company portal confirmed receipt.`} />
       {receipt && <Card className="overflow-hidden">
         <div className="grid gap-5 p-6 sm:grid-cols-2">
-          <div><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-positive">Verified receipt</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
-          <dl className="space-y-3 text-sm"><div><dt className="text-xs text-muted">Captured</dt><dd className="text-ink">{new Date(receipt.captured_at).toLocaleString()}</dd></div>{receipt.reference_id && <div><dt className="text-xs text-muted">Reference</dt><dd className="font-mono text-ink">{receipt.reference_id}</dd></div>}<div><dt className="text-xs text-muted">Final portal URL</dt><dd><a href={receipt.final_url} target="_blank" rel="noreferrer" className="break-all text-brand-ink underline">Open confirmation</a></dd></div></dl>
+          <div><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-positive">Proof it was sent</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
+          <dl className="space-y-3 text-sm"><div><dt className="text-xs text-muted">Captured</dt><dd className="text-ink">{new Date(receipt.captured_at).toLocaleString()}</dd></div>{receipt.reference_id && <div><dt className="text-xs text-muted">Reference</dt><dd className="font-mono text-ink">{receipt.reference_id}</dd></div>}<div><dt className="text-xs text-muted">Where it was sent</dt><dd><a href={receipt.final_url} target="_blank" rel="noreferrer" className="break-all text-brand-ink underline">Open confirmation</a></dd></div></dl>
         </div>
-        <img src={receipt.screenshot_url} alt="Company portal submission confirmation receipt" className="h-auto w-full border-t border-border" />
+        <img src={receipt.screenshot_url} alt="The company's confirmation that the application arrived" className="h-auto w-full border-t border-border" />
       </Card>}
     </div>
   );
@@ -1189,7 +1189,7 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
 function BlockerList({ reason }: { reason?: string }) {
   const blockers = (reason ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
   if (blockers.length === 0) {
-    return <p className="mt-2 text-sm leading-6 text-muted">Complete the remaining portal step in the secure live browser.</p>;
+    return <p className="mt-2 text-sm leading-6 text-muted">Finish the last step on the company's page.</p>;
   }
   if (blockers.length === 1) {
     return <p className="mt-2 text-sm leading-6 text-muted">{blockers[0]}</p>;
@@ -1256,16 +1256,16 @@ function PortalProgress({ status, startedAt }: { status?: ApplicationReview["sta
   // including the genuinely-submitting one. That reassurance was false at exactly the moment it
   // mattered most, so each stage now states only what is true of that stage.
   const submitting = status === "submitting" || status === "submission_claimed";
-  const title = submitting ? "Submitting through the company portal." : "Preparing the company portal.";
+  const title = submitting ? "Sending it to the company now." : "Getting the company's page ready.";
   const body = submitting
-    ? "You authorized this submission from the Litos dashboard. Litos is completing it in the secure remote browser and will not mark it submitted until the portal returns a confirmation and a receipt screenshot."
-    : "Litos is entering your saved profile answers, tailored resume, and approved cover letter in a secure remote browser. Nothing is submitted during this preparation step.";
+    ? "You told Litos to send this. It is finishing the form now, and will not say it is sent until the company confirms it."
+    : "Litos is typing in your saved answers, your new resume, and the cover letter you approved. Nothing is sent yet.";
 
   const milestone =
     elapsed >= PORTAL_STUCK_AFTER_S
-      ? "This is longer than a portal run usually takes. The run is still open on the server, so leave this page if you want and come back; if it has not moved shortly, prepare the application again."
+      ? "This is taking longer than usual. It is still going, so you can leave this page and come back. If it has not moved soon, start the application again."
       : elapsed >= PORTAL_SLOW_AFTER_S
-        ? "Portal runs regularly take a few minutes. This one is still going."
+        ? "This normally takes a few minutes. It is still going."
         : null;
 
   return (

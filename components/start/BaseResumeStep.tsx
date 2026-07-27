@@ -47,10 +47,10 @@ import { humanizeBuildNote } from "@/lib/buildNotes";
 const STAGE_COPY: Record<BuildStage, { label: string; orb: "searching" | "solving" | "composing" | "shaping" }> = {
   reading: { label: "Reading what you uploaded", orb: "searching" },
   selecting: { label: "Choosing what earns a place", orb: "solving" },
-  writing: { label: "Writing it in the ATS format", orb: "composing" },
+  writing: { label: "Writing it so a robot can read it", orb: "composing" },
   polishing: { label: "Sharpening how each line opens", orb: "composing" },
   fitting: { label: "Fitting it to one page", orb: "shaping" },
-  checking: { label: "Checking a robot can read it", orb: "shaping" },
+  checking: { label: "Checking a robot can read every word", orb: "shaping" },
   done: { label: "Done", orb: "shaping" },
   failed: { label: "Stopped", orb: "shaping" },
 };
@@ -177,7 +177,7 @@ export function BaseResumeStep({
           setAts(frame);
           note(
             frame.passed
-              ? `Readable by an ATS, ${frame.extractable_chars} characters on one page`
+              ? `A robot can read every word of this, and it fits one page`
               : `Did not pass the ATS check: ${frame.issues.join("; ")}`,
           );
           break;
@@ -465,8 +465,8 @@ export function BaseResumeStep({
           <p className="mt-3 max-w-[60ch] text-[15px] leading-7 text-muted">
             {phase === "compare"
               ? sourcePages > 1
-                ? `On the left is the ${sourcePages}-page file you uploaded. On the right is the same history in the one-page format that actually gets read.`
-                : "On the left is the file you uploaded. On the right is the same history in the format that actually gets read."
+                ? `On the left is the ${sourcePages}-page resume you uploaded. On the right is the same history on one page, in the form that actually gets read.`
+                : "On the left is the resume you uploaded. On the right is the same history in the form that actually gets read."
               : "Every application starts from this. Edit anything that is not right."}
           </p>
         </div>
@@ -524,7 +524,7 @@ export function BaseResumeStep({
           {phase === "compare" && (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <PrimaryButton onClick={choose} disabled={!finished}>
-                {finished ? "Use this resume" : <PendingLabel onColor>Building...</PendingLabel>}
+                {finished ? "Use this resume" : <PendingLabel onColor>Making...</PendingLabel>}
               </PrimaryButton>
               <LaterLink onClick={onLater} />
             </div>
@@ -556,7 +556,7 @@ export function BaseResumeStep({
                 {finished ? "Built" : "Building"}
               </p>
               <p className="mt-1 truncate text-[15px] text-ink">
-                {error ? "Stopped" : finished ? "Your base resume" : STAGE_COPY[stage ?? "reading"].label}
+                {error ? "Stopped" : finished ? "Your Litos resume" : STAGE_COPY[stage ?? "reading"].label}
               </p>
             </div>
           </div>

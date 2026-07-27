@@ -301,7 +301,7 @@ export default function Home() {
         }
       } catch (reason) {
         if (cancelled) return;
-        setReviewError(reason instanceof Error ? reason.message : "We lost track of this application. Reload the page.");
+        setReviewError(reason instanceof Error ? reason.message : "We could not find this application. Reload the page.");
         timer = window.setTimeout(tick, 5_000);
       }
     };
@@ -471,11 +471,11 @@ export default function Home() {
       {me?.is_guest && trialActive && (
         <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div>
-            <p className="text-sm font-medium text-ink">Keep this workspace.</p>
-            <p className="mt-1 text-xs text-muted">Verify a new email before this browser session is lost.</p>
+            <p className="text-sm font-medium text-ink">You have not saved this yet.</p>
+            <p className="mt-1 text-xs text-muted">Add your email or you will lose everything on this page.</p>
           </div>
           <Link href="/login?claim=1" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
-            Save workspace
+            Save my work
           </Link>
         </Card>
       )}
@@ -512,7 +512,7 @@ export default function Home() {
               hundred pixels apart meaning two different things. */}
           <SummaryMetric label="Ready" value={applicationSummary.ready} href="/dashboard/applications?state=ready" />
           <SummaryMetric label="Needs you" value={applicationSummary.needsAction} href="/dashboard/applications?state=action" />
-          <SummaryMetric label="Applied" value={applicationSummary.submitted} href="/dashboard/applications?state=submitted" />
+          <SummaryMetric label="Sent" value={applicationSummary.submitted} href="/dashboard/applications?state=submitted" />
         </dl>
       </section>
       )}
@@ -553,7 +553,7 @@ export default function Home() {
       ) : visibleJobs.length === 0 ? (
         <EmptyState
           title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
-          body={dismissed.length ? "You reviewed every match. New roles will appear after the next job-board scan." : "Complete your profile so Litos can rank roles from the job boards it monitors."}
+          body={dismissed.length ? "You have looked at all of them. New jobs turn up when we next check the job boards." : "Fill in your profile so Litos can pick out the best jobs from the job boards it watches."}
         >
           <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/profile"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
             {dismissed.length ? "Browse all jobs" : "Complete profile"}
@@ -634,7 +634,7 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
       <div className="grid gap-5 p-5 sm:grid-cols-[48px_1fr_auto] sm:items-center sm:p-6">
         <div className="hidden sm:block">
           <ScoreRing score={job.match} />
-          <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
+          <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
         </div>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -718,10 +718,10 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
   const buttonLabel = submitting || inProgress
     ? "Sending..."
     : status === "ready_for_final_approval"
-      ? "Approve and send"
+      ? "Send it"
       : submitted
         ? "Sent"
-        : "Send application";
+        : "Send it";
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -766,7 +766,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
                   ring everywhere else. */}
               <div className="text-center">
                 <ScoreRing score={job.match} />
-                <p className="mt-1 w-12 text-[11px] text-faint">match</p>
+                <p className="mt-1 w-12 text-[11px] text-faint">fit</p>
               </div>
             </div>
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>

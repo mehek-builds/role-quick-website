@@ -58,11 +58,11 @@ const TINTS = [
 const DUST = ["#a3a19a", "#6b84e8", "#68ad95", "#dd9273", "#a3a19a"];
 
 const CHAPTERS = [
-  { at: 0.0, label: "00 · Detected" },
-  { at: 0.24, label: "01 · Documents" },
-  { at: 0.5, label: "02 · Autofill" },
-  { at: 0.74, label: "03 · Outreach" },
-  { at: 0.92, label: "04 · Application ready" },
+  { at: 0.0, label: "00 · Job found" },
+  { at: 0.24, label: "01 · Resume" },
+  { at: 0.5, label: "02 · Forms" },
+  { at: 0.74, label: "03 · Emails" },
+  { at: 0.92, label: "04 · Ready to send" },
 ];
 
 export function CinematicHero({ storeUrl }: { storeUrl: string }) {
@@ -553,7 +553,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
 
         {/* sparse machine-voice caption over the opening frame */}
         <p className="rq-cine-caption rq-enter absolute bottom-24 right-16 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
-          19:42:07 · Posting detected
+          Job found
         </p>
 
         {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
@@ -587,7 +587,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 href="/try"
                 className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
               >
-                Try it first
+                Try it free
               </a>
               {/* #product is the film's own section (top of page): pointing
                   here sent "skip" back to where the viewer already was. The

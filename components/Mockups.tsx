@@ -969,10 +969,10 @@ export function ResumeMockup() {
    The mono timestamp gutter is the machine voice; threads are provenance
    (blue = documents, teal = autofill, coral = outreach). */
 const packetLog = [
-  { t: "19:42:07", e: "POSTING DETECTED", thread: "bg-border" },
-  { t: "19:42:11", e: "RESUME TAILORED", thread: "bg-brand" },
-  { t: "19:42:14", e: "APPLICATION FILLED, 27 FIELDS", thread: "bg-teal" },
-  { t: "19:42:16", e: "OUTREACH DRAFTED, USC ALUM", thread: "bg-coral" },
+  { t: "0s", e: "JOB FOUND", thread: "bg-border" },
+  { t: "4s", e: "RESUME REWRITTEN", thread: "bg-brand" },
+  { t: "7s", e: "FORM FILLED IN, 27 QUESTIONS", thread: "bg-teal" },
+  { t: "9s", e: "EMAIL WRITTEN, TO A USC ALUM", thread: "bg-coral" },
 ];
 
 export function PacketMockup() {

@@ -342,7 +342,7 @@ export function TrySimulator({
                     <ReceiptRows step={step} stamps={stamps} mode={mode} />
                     <p className="flex items-center justify-center gap-1.5 pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
                       <ThinkingOrb state="working" size={20} />
-                      Assembling your application
+                      Making your application
                     </p>
                   </>
                 )}
@@ -432,7 +432,7 @@ function Chooser({
         <div className="flex items-center justify-center gap-1.5">
           <ThinkingOrb state="working" size={20} />
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            Building your application
+            Making your application
           </p>
         </div>
         <p className="mt-2 font-mono text-[10px] text-faint">+{elapsed.toFixed(1)}s</p>
@@ -533,7 +533,7 @@ function Chooser({
         />
         <div className={resume.trim().length < 200 ? "pointer-events-none opacity-50" : ""}>
           <VerbButton onClick={() => onReal(resume, website)}>
-            Generate my application
+            Make my application
           </VerbButton>
         </div>
         <p className="text-[11px] leading-4 text-faint">
@@ -563,7 +563,7 @@ function Chooser({
         onClick={() => setPasteOpen(true)}
         className="hidden w-full rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink sm:block"
       >
-        Try it with your resume
+        Try it free with your resume
       </button>
     </div>
   );
@@ -579,9 +579,9 @@ function ReceiptRows({
   mode: "canned" | "real";
 }) {
   const rows = [
-    { key: "resume" as Step, label: "Resume tailored", thread: "bg-brand", orb: "composing" as const },
+    { key: "resume" as Step, label: "Resume rewritten", thread: "bg-brand", orb: "composing" as const },
     { key: "autofill" as Step, label: "Application filled", thread: "bg-teal", orb: "solving" as const },
-    { key: "outreach" as Step, label: mode === "real" ? "Outreach opened" : "Outreach drafted", thread: "bg-coral", orb: "shaping" as const },
+    { key: "outreach" as Step, label: mode === "real" ? "Email opened" : "Email written", thread: "bg-coral", orb: "shaping" as const },
   ];
   return (
     <div className="space-y-1">
@@ -777,7 +777,7 @@ function ResumeArtifact({
       </ul>
       {real && (
         <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
-          Preview · full page blurs here in the shipped version
+          Preview. The real one shows the whole page.
         </p>
       )}
     </ArtifactShell>
@@ -831,7 +831,7 @@ function FormArtifact({
         })}
       </div>
       <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
-        {packet ? "3 sample fields · nothing sent yet" : "27 fields · nothing sent yet"}
+        {packet ? "3 example questions · nothing sent yet" : "27 questions · nothing sent yet"}
       </p>
     </ArtifactShell>
   );
@@ -849,7 +849,7 @@ function OutreachArtifact({ body, real }: { body: string; real: boolean }) {
       )}
       <p className="mt-1.5 text-[12.5px] leading-5 text-muted">{body}</p>
       <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
-        Draft only · sending is an explicit button, and it&apos;s yours
+        This is a draft. You press send.
       </p>
     </ArtifactShell>
   );

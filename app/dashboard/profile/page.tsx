@@ -83,7 +83,7 @@ export default function ProfilePage() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Resume</p>
-                <h2 className="mt-2 text-lg font-medium text-ink">{profile.full_name || "Base resume"}</h2>
+                <h2 className="mt-2 text-lg font-medium text-ink">{profile.full_name || "Your main resume"}</h2>
                 <p className="mt-1 text-sm text-muted">{profile.school}{profile.grad_year ? ` · ${profile.grad_year}` : ""}</p>
               </div>
               <Chip label="On file" kind="ready" />
@@ -97,8 +97,8 @@ export default function ProfilePage() {
           <Card className="p-6">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Application details</p>
-                <h2 className="mt-2 text-lg font-medium text-ink">Reusable answers</h2>
+                <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">Your answers</p>
+                <h2 className="mt-2 text-lg font-medium text-ink">Answers you give every time</h2>
                 <p className="mt-1 text-sm text-muted">Contact, eligibility, links, and defaults.</p>
               </div>
               <span className="font-mono text-xs text-faint">{completedFields}/7 CORE</span>

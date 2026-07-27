@@ -168,7 +168,7 @@ test("R-046: the two highlight tones are visually distinct", () => {
 
 test("the submitting screen names the dashboard authorization", () => {
   const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
-  assert.match(progress.slice(0, 3200), /You authorized this submission from the Litos dashboard/);
+  assert.match(progress.slice(0, 3200), /You told Litos to send this/);
 });
 
 // ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----
@@ -238,7 +238,7 @@ test('the ticking second count is not announced to screen readers', () => {
 
 test('a run that has gone on too long says so instead of claiming it is fine', () => {
   assert.match(dashboard, /PORTAL_STUCK_AFTER_S/);
-  assert.match(dashboard, /longer than a portal run usually takes/);
+  assert.match(dashboard, /This is taking longer than usual/);
 });
 
 test('a successful poll clears a stale error banner', () => {

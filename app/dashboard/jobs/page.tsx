@@ -35,7 +35,7 @@ export default function JobsPage() {
             setError(null);
           }
         })
-        .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load monitored jobs."));
+        .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load the jobs we watch for you."));
     }, 250);
     return () => {
       cancelled = true;
@@ -54,7 +54,7 @@ export default function JobsPage() {
       setHasMore(result.has_more);
       setError(null);
     } catch (reason) {
-      if (requestVersion.current === version) setError(reason instanceof Error ? reason.message : "Could not load more monitored jobs.");
+      if (requestVersion.current === version) setError(reason instanceof Error ? reason.message : "Could not load any more jobs.");
     } finally {
       if (requestVersion.current === version) setLoadingMore(false);
     }
@@ -66,7 +66,7 @@ export default function JobsPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Jobs</h1>
-        <p className="mt-2 text-sm text-muted">Every role Litos has found for you.</p>
+        <p className="mt-2 text-sm text-muted">Every job Litos has found for you.</p>
       </div>
 
       <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto]">
@@ -81,7 +81,7 @@ export default function JobsPage() {
       {jobs && <p className="text-xs text-muted">{jobs.length} role{jobs.length === 1 ? "" : "s"} at {companies} compan{companies === 1 ? "y" : "ies"}{hasMore ? ", and more to load" : ""}</p>}
       {error && <ErrorNote message={error} />}
       {jobs === null ? <ShimmerRows rows={5} /> : jobs.length === 0 ? (
-        <EmptyState title="No matching roles" body="Try a shorter search, or clear the location. New roles show up here as Litos finds them." />
+        <EmptyState title="No matching roles" body="Try a shorter search, or clear the location. New jobs show up here as Litos finds them." />
       ) : (
         <div className="grid gap-3">
           {jobs.map((job) => (

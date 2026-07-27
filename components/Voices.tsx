@@ -26,13 +26,13 @@ export function Voices() {
       <div className="grid grid-cols-1 items-center gap-10 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] sm:gap-14">
         <div>
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-            Reviews
+            What testers said
           </p>
           <h2 className="mt-3 text-[32px] font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
             In their words.
           </h2>
           <p className="mt-3 text-[15px] leading-7 text-muted">
-            Real words from people who used it.
+            Real words from the people who tested it.
           </p>
         </div>
 

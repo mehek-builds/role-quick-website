@@ -70,7 +70,7 @@ export function Header() {
             Product
           </a>
           <a href="/try" className="transition-colors hover:text-ink">
-            Try it first
+            Try it free
           </a>
           <a href="/#faq" className="transition-colors hover:text-ink">
             FAQ
@@ -142,7 +142,7 @@ export function Header() {
             onClick={closeMenu}
             className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
           >
-            Try it first
+            Try it free
           </a>
           <a
             href="/#faq"

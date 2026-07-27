@@ -230,7 +230,7 @@ export function CalibrateCard() {
       {step === 0 && (
         <>
           <p className="mt-3 text-[17px] font-[450] tracking-[-0.01em] text-ink">
-            What are you hunting?
+            What job do you want?
           </p>
           <div className="mt-3.5 flex flex-wrap gap-2">
             {HUNTS.map((h) => (
@@ -311,7 +311,7 @@ export function CalibrateCard() {
           <div className="flex h-8 w-8 items-center justify-center">
             <ThinkingOrb state="searching" size={20} />
           </div>
-          <p className={`${monoCls} mt-3 text-faint`}>Matching your market</p>
+          <p className={`${monoCls} mt-3 text-faint`}>Finding your jobs</p>
         </div>
       )}
 
@@ -371,7 +371,7 @@ export function CalibrateCard() {
             week a posting is live. Early is the whole game.
           </p>
           <p className="mt-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-            Source: Lever recruiting benchmarks
+            Measured by Lever, a job application company
           </p>
 
           <div className="mt-4 flex items-center gap-3">
@@ -379,7 +379,7 @@ export function CalibrateCard() {
               href={startHref}
               className="rounded-full bg-brand px-5 py-2.5 text-[13px] font-medium text-white transition-opacity hover:opacity-90"
             >
-              Prep your first one now
+              Get your first one ready
             </a>
             <a
               href="/try"

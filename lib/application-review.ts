@@ -33,7 +33,7 @@ export function portalName(portalUrl: string): string {
   if (hostname.includes("ashby")) return "Ashby";
   if (hostname.includes("workday")) return "Workday";
   if (hostname.includes("linkedin")) return "LinkedIn";
-  return "Company portal";
+  return "the company's application page";
 }
 
 // Filtering candidate highlight terms on length alone let every three-letter function word through,

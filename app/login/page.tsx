@@ -333,7 +333,7 @@ export default function Login() {
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-ink">
               {claimMode
-                ? "Save your guest workspace"
+                ? "Save your work"
                 : flow === "signup"
                   ? "Create your account"
                   : flow === "recovery"
@@ -344,7 +344,7 @@ export default function Login() {
             </h1>
             <p className="mt-2 text-sm leading-6 text-muted">
               {claimMode
-                ? "Verify a new email to keep this work and use Litos across devices."
+                ? "Add an email to keep this work and use Litos on your other devices."
                 : flow === "signup"
                   ? "Choose a password, then verify your email to finish registration."
                   : flow === "recovery"
@@ -430,7 +430,7 @@ export default function Login() {
                 className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {busy
-                  ? <PendingLabel onColor>Working...</PendingLabel>
+                  ? <PendingLabel onColor>Saving...</PendingLabel>
                   : flow === "signin"
                     ? "Sign in"
                     : flow === "signup"
@@ -478,7 +478,7 @@ export default function Login() {
                   {busy ? <PendingLabel state="searching">Opening...</PendingLabel> : "Look around without signing up"}
                 </button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
-                  Free for seven days. No card needed. You only see this the first time.
+                  Your first week is free. No card needed. You only see this the first time.
                 </p>
               </>
             )}
@@ -511,7 +511,7 @@ export default function Login() {
               className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               {busy
-                ? <PendingLabel state="solving" onColor>Verifying...</PendingLabel>
+                ? <PendingLabel state="solving" onColor>Saving...</PendingLabel>
                 : flow === "signup"
                   ? "Verify and create account"
                   : flow === "recovery"

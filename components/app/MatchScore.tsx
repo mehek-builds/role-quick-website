@@ -72,7 +72,7 @@ export function MatchScore({
   }, [jdText, spec]);
 
   if (failed) {
-    return <p className="text-[11px] leading-4 text-faint">Match score unavailable</p>;
+    return <p className="text-[11px] leading-4 text-faint">We could not work out how well you fit this one</p>;
   }
   if (!result) {
     return <div className="h-12 w-12 shrink-0 animate-pulse rounded-full bg-surface-alt" aria-hidden="true" />;
@@ -81,7 +81,7 @@ export function MatchScore({
   if (!result.scorable || result.score === null) {
     return (
       <p className="max-w-[220px] text-[11px] leading-4 text-faint">
-        {result.reason ?? "This posting cannot be scored."}
+        {result.reason ?? "We could not work out how well you fit this one."}
       </p>
     );
   }
