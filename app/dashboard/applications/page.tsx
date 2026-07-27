@@ -13,10 +13,12 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 import { packetMatchesJob } from "@/lib/daily-matches";
+import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import type { JdMatchResponse } from "@/lib/jd-match";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationFilter = "all" | "action" | "ready" | "submitted";
@@ -251,6 +253,9 @@ export default function Applications() {
   const deferredSpec = useDeferredValue(spec);
   const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
+  // Lifted out of MatchScore so the gap list can render in its own card below the two panes
+  // without a second /jd-match round trip.
+  const [matchGaps, setMatchGaps] = useState<JdMatchResponse["missing"] | null>(null);
 
   async function fetchJobDescription() {
     const portalUrl = newApplication.portalUrl.trim();
@@ -690,15 +695,29 @@ export default function Applications() {
               meta={
                 <div className="flex items-center gap-3">
                   <span className="hidden text-right text-[11px] leading-4 text-faint sm:block">
-                    {formatRelativeDate(selected.created_at)}<br />match
+                    {formatRelativeDate(selected.created_at)}
                   </span>
-                  <ScoreRing score={extractScore(selected.spec)} />
+                  {/* Was <ScoreRing score={extractScore(selected.spec)} /> under the caption
+                      "match". That read spec._quality.atsCoverage, which counts every non-stopword
+                      in the posting and therefore sat at 12-17% for a strong resume. MatchScore
+                      scores only what the posting actually asks for, and recomputes as the student
+                      edits below. See lib/jd-match.ts. */}
+                  <MatchScore jdText={review.jd_text} spec={deferredSpec ?? spec} onMissingChange={setMatchGaps} />
                 </div>
               }
             >
               <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
             </DocumentPane>
           </div>
+
+          {matchGaps !== null && (
+            <Card className="p-6">
+              <p className="text-xs text-muted">Requirements not on your resume</p>
+              <div className="mt-3">
+                <MatchGaps missing={matchGaps} />
+              </div>
+            </Card>
+          )}
 
           {review.cover_letter_supported === true ? <Card className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -1243,7 +1262,4 @@ function resumeCorpus(spec: ResumeSpec): string {
   return [spec.school, spec.degree, spec.coursework, ...spec.experience.flatMap((entry) => [entry.org, entry.title, ...entry.bullets]), ...spec.skills].join(" ");
 }
 
-function extractScore(spec: GeneratedResume["spec"]): number {
-  const raw = spec._quality?.atsCoverage;
-  return typeof raw === "number" ? Math.round(raw <= 1 ? raw * 100 : raw) : 0;
-}
+

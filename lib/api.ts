@@ -192,6 +192,9 @@ export type ResumeEntry = {
 };
 
 export type ResumeSpec = {
+  /** Targeting headline, not a claim the candidate held the role. Mirrors the backend's ResumeSpec;
+   *  needed here so the JD match score reads the same text the rendered resume shows. */
+  target_role?: string;
   school: string;
   degree: string;
   grad_date: string;
