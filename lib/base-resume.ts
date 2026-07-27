@@ -79,7 +79,7 @@ export async function getBaseResume(): Promise<StoredBaseResume | null> {
     if (typeof window !== "undefined") window.location.href = "/login";
     throw new ApiError(401, "Signed out");
   }
-  if (!res.ok) throw new ApiError(res.status, `Could not load the base resume (${res.status})`);
+  if (!res.ok) throw new ApiError(res.status, `Could not load your main resume (${res.status})`);
   return (await res.json()) as StoredBaseResume;
 }
 

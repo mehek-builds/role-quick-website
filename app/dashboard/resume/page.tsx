@@ -167,8 +167,8 @@ export default function ResumeWorkspace() {
           <div>
             <h2 className="text-base font-medium text-ink">Everything you have done</h2>
             <p className="mt-1 text-sm text-muted">
-              Every role, project, and bullet variant. Tailoring picks the
-              best-fit subset per posting.
+              Every job, project, and different way you have written a line.
+              We pick the ones that fit each job.
             </p>
           </div>
           <div className="flex items-center gap-3">
