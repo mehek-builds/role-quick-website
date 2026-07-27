@@ -55,6 +55,17 @@ const FAQ_ITEMS = [
     q: "Is my resume safe?",
     a: "Yes. We use your resume and answers only to fill in your own job applications. We only read the job page you are on. We never sell or share your data, and we never will.",
   },
+  /* The support question. Until now the site had no answer to "it broke", and
+     no contact route at all outside the data-request address buried in
+     /privacy: a stuck installer had nowhere to go, which is audit finding S25.
+     Deliberately about getting HELP rather than about coverage. Where it works
+     is already answered once, in the autofill section, and say-once means this
+     must not become a second copy of that list. It also sets an expectation it
+     can keep rather than promising a response time nobody staffs. */
+  {
+    q: "Something is not working. Who do I ask?",
+    a: "Email mehekman@usc.edu and tell us the job link you were on. A person built this and a person answers, so it is not instant, but it is a real reply. If Litos could not fill a form, that link is the single most useful thing you can send: it is how the site gets added.",
+  },
 ];
 
 /* The one icon set on the site: the brand deck's three pillar pictograms
@@ -658,6 +669,17 @@ export default function Home() {
                     and the say-once rule is what keeps it doing that. This is a
                     destination for someone who came looking, not a second pitch
                     aimed at students. Promote it if the channel earns it. */}
+                {/* The site had no contact route at all. The only address was
+                    inside /privacy, for data requests, which is not where
+                    someone whose autofill just failed will look. */}
+                <li>
+                  <a
+                    href="mailto:mehekman@usc.edu?subject=Litos%20help"
+                    className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0"
+                  >
+                    Help
+                  </a>
+                </li>
                 <li>
                   <a href="/for-career-centres" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
                     For career centres
