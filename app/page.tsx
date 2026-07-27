@@ -13,7 +13,6 @@ import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
-import { PricingCards } from "@/components/PricingCards";
 import { StickyCTA } from "@/components/StickyCTA";
 import { Voices } from "@/components/Voices";
 import { STORE_URL } from "@/lib/config";
@@ -43,7 +42,10 @@ const FAQ_ITEMS = [
   },
   {
     q: "Are my resume and personal information safe?",
-    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. Litos makes money from Pro subscriptions, not from you; that is also why Free stays free.",
+    /* No plan names or prices while pricing is off the site: this answer
+       used to end on "Pro subscriptions ... that is why Free stays free",
+       which pointed at a pricing section that no longer exists. */
+    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. Selling your data is not the business, and never will be.",
   },
 ];
 
@@ -369,22 +371,6 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Pricing */}
-        <section id="pricing" className="relative">
-          <Wash soft />
-          <div className="relative mx-auto max-w-4xl px-6 py-36">
-          <Reveal>
-            <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
-              Every feature, free, every month.
-            </h2>
-            <p className="mx-auto mt-4 max-w-md text-center text-[15px] leading-7 text-muted">
-              Free covers 20 resumes a month, resetting on the 1st. Pro covers 1,000.
-            </p>
-            <PricingCards />
-          </Reveal>
-          </div>
-        </section>
-
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
         <section id="faq" className="relative scroll-mt-24">
           <Wash tint="warm" soft />
@@ -501,7 +487,6 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li><a href="/#product" className="hover:text-ink">Product</a></li>
-                <li><a href="/#pricing" className="hover:text-ink">Pricing</a></li>
                 <li><a href="/#faq" className="hover:text-ink">FAQ</a></li>
                 <li><a href={STORE_URL} className="hover:text-ink">Add to Chrome</a></li>
               </ul>

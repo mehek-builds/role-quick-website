@@ -30,7 +30,6 @@ const SECTIONS = [
   { id: "#autofill", label: "02 · Autofill" },
   { id: "#outreach", label: "03 · Outreach" },
   { id: "#try", label: "Now you drive" },
-  { id: "#pricing", label: "Pricing" },
   { id: "#faq", label: "Questions" },
   { id: "#close", label: "Your move" },
 ];

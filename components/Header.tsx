@@ -71,9 +71,6 @@ export function Header() {
           <a href="/try" className="transition-colors hover:text-ink">
             Try it
           </a>
-          <a href="/#pricing" className="transition-colors hover:text-ink">
-            Pricing
-          </a>
           <a href="/#faq" className="transition-colors hover:text-ink">
             FAQ
           </a>
@@ -95,8 +92,8 @@ export function Header() {
           >
             Add to Chrome
           </a>
-          {/* Mobile: the film hides the desktop nav, so Pricing and FAQ still
-              need a door. One button, one glass sheet, no hamburger maze. */}
+          {/* Mobile: the film hides the desktop nav, so Product, Try it and
+              FAQ still need a door. One button, one glass sheet. */}
           <button
             type="button"
             aria-expanded={menuOpen}
@@ -144,13 +141,6 @@ export function Header() {
             className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
           >
             Try it
-          </a>
-          <a
-            href="/#pricing"
-            onClick={closeMenu}
-            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
-          >
-            Pricing
           </a>
           <a
             href="/#faq"
