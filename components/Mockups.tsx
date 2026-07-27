@@ -480,7 +480,7 @@ export function MessyResumeMockup() {
   return (
     <Paper
       label="Before"
-      chip="Skipped by ATS"
+      chip="Robot skips it"
       chipClass="bg-danger-soft text-danger"
       note="alex_resume_FINAL_v3.docx · 1 page"
     >
@@ -632,7 +632,7 @@ export function CleanResumeMockup() {
   return (
     <Paper
       label="After"
-      chip="ATS-ready"
+      chip="Robot reads it"
       chipClass="bg-positive-soft text-positive"
       note="Alex_Rivera_Acme_Resume.pdf · 1 page"
     >

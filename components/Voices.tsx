@@ -32,8 +32,7 @@ export function Voices() {
             In their words.
           </h2>
           <p className="mt-3 text-[15px] leading-7 text-muted">
-            Real quotes from people using Litos, in the middle of application
-            season.
+            Real words from people who used it.
           </p>
         </div>
 

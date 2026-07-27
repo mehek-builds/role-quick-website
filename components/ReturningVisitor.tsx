@@ -48,7 +48,7 @@ export function ReturningVisitor() {
       href="#formats"
       className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted transition-colors hover:border-ink hover:text-ink"
     >
-      Welcome back · jump to the product ↓
+      Welcome back · skip ahead ↓
     </a>
   );
 }

@@ -99,8 +99,8 @@ export function TrySimulator({
         setGenerating(false);
         setNotice(
           data.error === "too_long"
-            ? "That paste is over the 10KB cap. Trim it down and try again."
-            : "That doesn't read like resume text yet. Paste the body of your resume, or watch it on Alex's.",
+            ? "That is too long. Make it shorter and try again."
+            : "That does not look like a resume. Paste your resume, or watch it run on Alex's.",
         );
         return;
       } else {
@@ -109,8 +109,8 @@ export function TrySimulator({
         setMode("canned");
         setNotice(
           data.reason === "rate_limited"
-            ? "You've used today's live previews. This is Alex's application."
-            : "Live preview is down. This is Alex's application.",
+            ? "You have used all your tries today. This is Alex's."
+            : "Live tries are down right now. This is Alex's.",
         );
       }
     } catch {
@@ -253,7 +253,9 @@ export function TrySimulator({
 
             <PostingHeader job={pageJob} />
             {browsing ? (
-              <PostingBody jd={showReal ? realJob?.jd : undefined} />
+              <div data-sample>
+                <PostingBody jd={showReal ? realJob?.jd : undefined} />
+              </div>
             ) : (
               <div className="mt-5 space-y-4">
                 <ResumeArtifact
@@ -417,8 +419,8 @@ function Chooser({
       setFileName(null);
       setExtractErr(
         result.reason === "unsupported"
-          ? "That file type isn't supported yet. Upload a PDF, DOCX, or TXT."
-          : "Couldn't read text in that file (scans and image-only PDFs don't have any). Paste the text instead.",
+          ? "We cannot read that kind of file. Try a PDF, Word, or text file."
+          : "We could not find any words in that file. It may be a photo. Paste the text instead.",
       );
       if (result.reason === "no_text") setPasteMode(true);
     }
@@ -555,7 +557,7 @@ function Chooser({
         Upload your resume to build an application for this role, or watch a
         sample on Alex&apos;s.
       </p>
-      <VerbButton onClick={onCanned}>Watch it on Alex&apos;s resume</VerbButton>
+      <VerbButton onClick={onCanned}>Watch it on Alex&apos;s</VerbButton>
       {/* Real path is desktop-only: phones can't install the extension anyway. */}
       <button
         onClick={() => setPasteOpen(true)}
@@ -620,8 +622,8 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
     <div className="space-y-3 pt-1">
       <p className="text-[13px] leading-6 text-muted">
         {mode === "real"
-          ? "That was your resume against a real posting. The extension does this on every posting you visit."
-          : "That's the whole loop. The extension does this on every posting you visit, with your resume."}
+          ? "That was your resume on a real job. Litos does this on every job you open."
+          : "That is the whole thing. Litos does this on every job you open, with your resume."}
       </p>
       <a
         href={STORE_URL}
@@ -754,7 +756,7 @@ function ResumeArtifact({
 }) {
   return (
     <ArtifactShell
-      eyebrow={real ? "Your resume · tailored preview" : CANNED_RESUME.filename}
+      eyebrow={real ? "Your resume · new version" : CANNED_RESUME.filename}
       chip={`ATS coverage ${coverage}%`}
       chipClass="bg-brand-soft text-brand-ink"
       active={active}
@@ -838,7 +840,7 @@ function FormArtifact({
 function OutreachArtifact({ body, real }: { body: string; real: boolean }) {
   return (
     <ArtifactShell
-      eyebrow={real ? "Outreach draft · opening lines" : `To ${CANNED_OUTREACH.to}`}
+      eyebrow={real ? "Your email · first lines" : `To ${CANNED_OUTREACH.to}`}
       chip={real ? "In your voice" : `~${CANNED_OUTREACH.words} words · in your voice`}
       chipClass="bg-coral-soft text-coral-ink"
     >

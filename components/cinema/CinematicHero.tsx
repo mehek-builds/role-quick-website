@@ -572,8 +572,8 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               Apply <span className="text-brand-ink">in seconds.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-[460px] text-[16px] leading-[1.65] text-muted">
-              Open a posting and it tailors your resume, fills the application,
-              and drafts the outreach. You get the final say.
+              Open a job. We fix your resume, fill in the form, and write
+              the email. You hit send.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
@@ -596,7 +596,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 href="#formats"
                 className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
               >
-                Skip the film ↓
+                Skip ahead ↓
               </a>
             </div>
             {/* Phones can't install a Chrome extension. Say so once, in the
@@ -604,7 +604,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             <ReturningVisitor />
             <MobileSendLink source="hero" className="mt-6 sm:hidden" />
             <p className="mt-5 text-[13px] text-muted">
-              Reads only the posting you&apos;re viewing. Your data is never sold.{" "}
+              We only read the job you are on. We never sell your data.{" "}
               <a href="/privacy" data-inline-link className="underline decoration-border underline-offset-2 hover:text-ink">
                 Privacy
               </a>
@@ -625,10 +625,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         <div className="rq-cine-card-4 invisible absolute inset-x-0 bottom-[10svh] px-6 opacity-0 sm:bottom-[12svh]">
           <div className="rq-glass mx-auto max-w-xl px-7 py-9 text-center sm:px-10">
             <h2 className="text-[32px] font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
-              One application. Nine seconds.
+              One job. Nine seconds.
             </h2>
             <p className="mt-3 font-mono text-[11.5px] font-medium uppercase tracking-[0.08em] text-muted">
-              19:42:07 posting detected → 19:42:16 application ready
+              Job found → ready to send · 9 seconds
             </p>
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a
@@ -642,7 +642,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 href="#product"
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
               >
-                See it assemble
+                See how it works
               </a>
             </div>
           </div>

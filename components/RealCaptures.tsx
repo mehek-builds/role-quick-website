@@ -21,21 +21,21 @@ const SHOTS = [
     w: 598,
     h: 900,
     alt: "The Litos extension popup on a job posting, showing the detected role, a Fill this form button, and a Find people button.",
-    cap: "The extension, on a posting",
+    cap: "On a job page",
   },
   {
     src: "/product/extension-contacts.png",
     w: 598,
     h: 900,
     alt: "The Litos contacts panel listing four people at the company, ranked by likelihood of a reply, each marked either Email checked or Email is a guess.",
-    cap: "Contacts, tiered honestly",
+    cap: "People to email",
   },
   {
     src: "/product/dashboard-emails.png",
     w: 1400,
     h: 933,
     alt: "The Litos dashboard Emails page, listing drafts that were written, sent, and replied to.",
-    cap: "The dashboard, after you send",
+    cap: "After you send",
   },
 ];
 
@@ -78,15 +78,14 @@ export function RealCaptures() {
     <div className="mx-auto max-w-5xl">
       <div className="mx-auto max-w-[560px] text-center">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-          Captures
+          Real photos
         </p>
         <h2 className="mt-3 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-          And here it is, actually running.
+          This is the real thing.
         </h2>
         <p className="mt-4 text-[15px] leading-7 text-muted">
-          Everything above is drawn on the page so it can move. These three are
-          screenshots of the shipped extension and dashboard, with sample data
-          in them.
+          The pictures above are drawings, so they can move. These three are
+          real photos of the app. The names in them are made up.
         </p>
       </div>
 

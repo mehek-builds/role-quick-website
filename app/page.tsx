@@ -30,27 +30,24 @@ import { ROLES } from "@/lib/rolesFeed";
    plainly and only claiming what the product does today (Guardrails). */
 const FAQ_ITEMS = [
   {
-    q: "Will it make up things I haven't done?",
-    a: "No. Litos only uses what is already in your resume and experience bank. It reorders and rewords your real work to match the posting, and it never invents a job, a skill, or a number. Every line is yours, and you can see exactly what changed before it goes anywhere.",
+    q: "Will it make things up about me?",
+    a: "No. Litos only uses what is already in your resume. It moves your real work around and rewrites it to fit the job. It never adds a job, a skill, or a number you did not do. You can see every change before it goes out.",
   },
   {
-    q: "Does it apply to jobs for me automatically?",
-    a: "Only if you explicitly turn on automatic submission. Litos can then submit eligible applications you start, after checking that every answer is supported. Missing facts, conflicting answers, sensitive attestations, CAPTCHA, and unsupported portal steps always pause for you. You can turn the permission off in Settings.",
+    q: "Will it apply to jobs without me?",
+    a: "Only if you turn that on. Even then it stops and asks you when something is missing, when two answers do not match, when a question is about you personally, or when the site asks you to prove you are human. You can turn it off in Settings.",
   },
   {
-    q: "Will a recruiter be able to tell I used AI?",
-    a: "It reads like an application you wrote carefully, because the facts are yours. Litos fills fields from your saved answers and drafts short responses from your grounded experience. Automatic submission is optional, and safety blockers still stop the flow before anything is sent.",
+    q: "Can a recruiter tell I used AI?",
+    a: "It reads like you wrote it carefully, because the facts are yours. We fill the boxes from answers you gave us, and we write from your real work. Nothing goes out until you send it.",
   },
   {
-    q: "Will this actually help me get interviews?",
-    a: "It fixes the two places applications quietly die. Your resume gets rebuilt in the layout and keywords the ATS actually reads, so it stops getting filtered out, and instead of vanishing into the pile, you reach a real person at the company, alumni first. It cannot promise offers, but it gets you seen.",
+    q: "Will this help me get interviews?",
+    a: "It fixes the two places job applications die. First, a robot reads your resume, and ours is built so it can. Second, most people apply and wait. You also email a real person, starting with people from your school.",
   },
   {
-    q: "Are my resume and personal information safe?",
-    /* No plan names or prices while pricing is off the site: this answer
-       used to end on "Pro subscriptions ... that is why Free stays free",
-       which pointed at a pricing section that no longer exists. */
-    a: "Yes. Your resume and answers are used only to fill your own applications. The extension reads only the posting you are viewing, and your data is never sold or shared. Selling your data is not the business, and never will be.",
+    q: "Is my resume safe?",
+    a: "Yes. We use your resume and answers only to fill in your own job applications. We only read the job page you are on. We never sell or share your data, and we never will.",
   },
 ];
 
@@ -157,18 +154,18 @@ export default function Home() {
               className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
             >
               <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
-              Autofill
+              Forms
             </a>
             <a
               href="#outreach"
               className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
             >
               <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
-              Outreach
+              Emails
             </a>
           </div>
           <div className="pt-16">
-            <PacketDemo />
+            <div data-demo><PacketDemo /></div>
           </div>
           <p className="pb-36 pt-6 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             <a
@@ -187,13 +184,13 @@ export default function Home() {
           <Wash tint="warm" soft />
           <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
-              <h2 className="sr-only">The odds on an average corporate role</h2>
+              <h2 className="sr-only">How many people you are up against</h2>
               <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
                 <CountUp to={250} />
               </p>
               <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
-                apply to the average corporate role. Six get interviews. One
-                gets the job. We make yours the tailored one.
+                people apply for one job. Six get an interview. One gets
+                the job. We help yours stand out.
               </p>
               <ApplicantField />
             </Reveal>
@@ -207,24 +204,23 @@ export default function Home() {
           <Reveal>
             <div className="mx-auto max-w-[560px] text-center">
               <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                Messy in. ATS-ready out.
+                A robot reads it first.
               </h2>
               <p className="mt-4 text-[15px] leading-7 text-muted">
-                Recruiting software skips what it can&apos;t parse. Litos
-                outputs the layout the parser wants: single column, real
-                headings, no tables.
+                Job sites scan your resume with software. If it cannot read
+                yours, no person ever sees it. We build one it can read.
               </p>
               {/* Alex Rivera is a sample applicant, and the numbers inside
                   that resume ("80 students", "800 student users") are his,
                   not ours. Unlabelled, a skimmer reads them as Litos proof. */}
               <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Sample applicant · Alex Rivera is not a real student
+                Not a real student. Just an example.
               </p>
             </div>
           </Reveal>
           <Reveal>
             <div className="mt-14" data-parallax="24">
-              <ResumeFormatDemo />
+              <div data-demo><ResumeFormatDemo /></div>
             </div>
           </Reveal>
           </div>
@@ -241,16 +237,16 @@ export default function Home() {
                     <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Documents</PillarChip>
                   </div>
                   <h2 className="mt-3 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                    Tuned means rebuilt, not reworded.
+                    We rebuild it. We do not just swap words.
                   </h2>
                   <p className="mt-2.5 text-[14px] leading-6 text-muted">
-                    Litos pulls the requirements from the posting and reorders
-                    your story to answer them, in its own language.
+                    We read what the job asks for. Then we put your best
+                    work first, in their words.
                   </p>
                 </div>
               </Reveal>
               <div className="w-full max-w-5xl origin-center sm:scale-[0.84]">
-                <ResumeMatchDemo />
+                <div data-demo><ResumeMatchDemo /></div>
               </div>
             </div>
           </div>
@@ -264,39 +260,39 @@ export default function Home() {
             <Reveal>
               <div className="mx-auto grid w-full max-w-6xl origin-center grid-cols-1 items-center gap-14 sm:scale-[0.92] sm:grid-cols-2">
                 <div className="order-2 sm:order-1" data-parallax="20">
-                  <ApplicationFormMockup />
+                  <div data-demo><ApplicationFormMockup /></div>
                 </div>
                 <div className="rq-glass order-1 px-7 py-8 sm:order-2">
                   <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                     19:42:14
                   </p>
                   <div className="mt-3" />
-                  <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Autofill</PillarChip>
+                  <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Forms</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     You never type your phone number again.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    Twenty-seven fields on the average portal, the same answers
-                    every time. Litos answers once, everywhere, then waits
-                    for your review.
+                    Most forms ask 27 questions. It is the same answers
+                    every time. We fill them in, then wait for you to
+                    check.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
                   <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
                     <p>
                       <span className="text-teal-ink">Fills</span>
-                      <span className="text-muted"> · contact, links, work auth, screening</span>
+                      <span className="text-muted"> · name, links, and the yes or no questions</span>
                     </p>
                     <p>
                       <span className="text-teal-ink">Attaches</span>
-                      <span className="text-muted"> · the tailored resume PDF</span>
+                      <span className="text-muted"> · your new resume</span>
                     </p>
                     <p>
-                      <span className="text-teal-ink">Defaults</span>
-                      <span className="text-muted"> · EEO to decline-to-identify</span>
+                      <span className="text-teal-ink">Skips</span>
+                      <span className="text-muted"> · the questions about race and gender</span>
                     </p>
                     <p>
                       <span className="text-teal-ink">Leaves</span>
-                      <span className="text-muted"> · essays and the final say to you</span>
+                      <span className="text-muted"> · the writing, and the send button, to you</span>
                     </p>
                   </div>
                   {/* The supported list was only ever in the meta
@@ -305,19 +301,19 @@ export default function Home() {
                       the three boards the extension can drive end to end
                       (lib/api.ts ats_name), so say both, plainly. */}
                   <p className="mt-5 text-[13px] leading-6 text-muted">
-                    Fills on Greenhouse, Lever, Ashby, Workday and LinkedIn.
-                    Submits on Greenhouse, Lever and Ashby; everywhere else
-                    it stops and hands you the finished form.
+                    We fill forms on Greenhouse, Lever, Ashby, Workday and
+                    LinkedIn. We can send on the first three. Anywhere else
+                    we stop and hand it to you.
                   </p>
                   <p className="mt-3 text-[13px] text-muted">
-                    Every default is yours to change in Settings.
+                    You can change any of this in Settings.
                   </p>
                   {/* These panels are built in the DOM, not captured from a
                       live session. They reproduce the extension's real
                       output, but a reader is entitled to know which one
                       they are looking at before treating it as evidence. */}
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Illustration, not a screenshot · real ones below
+                    A drawing, not a photo · real ones below
                   </p>
                 </div>
               </div>
@@ -338,40 +334,40 @@ export default function Home() {
                     19:42:16
                   </p>
                   <div className="mt-3" />
-                  <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Outreach</PillarChip>
+                  <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Emails</PillarChip>
                   <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
                     Applications get filed. Emails get read.
                   </h2>
                   <p className="mt-4 text-[15px] leading-7 text-muted">
-                    While the form fills, Litos finds your people at the
-                    company and leaves a draft in Gmail. Alumni answer most, so
-                    alumni come first.
+                    While the form fills, we find people who work there. We
+                    write the email and leave it in your Gmail. People from
+                    your school answer most, so they come first.
                   </p>
                   {/* Machine voice: what outreach actually does, as data. */}
                   <div className="mt-8 space-y-2.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]">
                     <p>
                       <span className="text-coral-ink">Finds</span>
-                      <span className="text-muted"> · recruiters, managers, your alumni</span>
+                      <span className="text-muted"> · people who work there</span>
                     </p>
                     <p>
                       <span className="text-coral-ink">Verifies</span>
-                      <span className="text-muted"> · every address, tiered honestly</span>
+                      <span className="text-muted"> · each email, and says if it is a guess</span>
                     </p>
                     <p>
                       <span className="text-coral-ink">Drafts</span>
-                      <span className="text-muted"> · ~120 words in your voice</span>
+                      <span className="text-muted"> · a short note that sounds like you</span>
                     </p>
                     <p>
                       <span className="text-coral-ink">Leaves</span>
-                      <span className="text-muted"> · send to you</span>
+                      <span className="text-muted"> · the send button to you</span>
                     </p>
                   </div>
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Illustration, not a screenshot · real ones below
+                    A drawing, not a photo · real ones below
                   </p>
                 </div>
                 <div>
-                  <OutreachDemo />
+                  <div data-demo><OutreachDemo /></div>
                 </div>
               </div>
             </Reveal>
@@ -414,12 +410,11 @@ export default function Home() {
                 19:42:16 · Application ready
               </p>
               <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                Now you drive.
+                Now you try.
               </h2>
               <p className="mx-auto mt-4 max-w-md text-[15px] leading-7 text-muted">
-                You&apos;ve watched the application come together. Drive the
-                extension yourself on a simulated posting, or paste your own
-                resume and see your application, before installing anything.
+                Try it on a pretend job. Or paste your own resume and watch
+                it work. You do not have to install anything.
               </p>
               <a
                 href="/try"
@@ -433,8 +428,7 @@ export default function Home() {
                   does not support, and it names no date that could quietly
                   expire. Feed honesty rules live in lib/rolesFeed.ts. */}
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                {HARD_DEADLINE_COUNT} of the {ROLES.length} roles we track close on a
-                hard date, not a rolling one
+                {HARD_DEADLINE_COUNT} of the {ROLES.length} jobs we track have a closing date
               </p>
             </Reveal>
           </div>
@@ -446,16 +440,16 @@ export default function Home() {
           <div className="relative mx-auto max-w-2xl px-6 py-36">
             <Reveal>
               <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
-                Questions, answered.
+                Questions.
               </h2>
               {/* The three answers that decide whether a skeptic installs were
                   locked inside collapsed <details>, so they were never read.
                   State them once, open, above the accordion. */}
               <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {[
-                  ["Never invented", "It reorders and rewords your real work. It never invents a job, a skill, or a number."],
-                  ["Never auto-sent", "Nothing submits and no email sends until you say so. Essays stay yours."],
-                  ["Never sold", "The extension reads only the posting you're viewing. Your data is never sold or shared."],
+                  ["Never invented", "We move and rewrite your real work. We never add a job, a skill, or a number."],
+                  ["Never auto-sent", "Nothing is sent until you say so. The writing stays yours."],
+                  ["Never sold", "We only read the job page you are on. We never sell your data."],
                 ].map(([label, body]) => (
                   <div key={label} className="rq-glass px-5 py-5">
                     <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
@@ -517,12 +511,12 @@ export default function Home() {
               {/* Proof at arm's length from the ask: the one real number,
                   directly beneath the button it supports. */}
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                Posting detected → application ready · 9 seconds
+                Job found → ready to send · 9 seconds
               </p>
               {/* A person, not a company voice. The strongest asset here is
                   that a student on the same job hunt is building it. */}
               <p className="mt-8 text-[14px] leading-7 text-muted">
-                Built by{" "}
+                Made by{" "}
                 {/* inline in a sentence: WCAG 2.5.8 exempts these, and a
                     44px box here would break the line. */}
                 <a
@@ -532,8 +526,7 @@ export default function Home() {
                 >
                   Mehek
                 </a>
-                , a USC computer science student, on the same job hunt as you.
-                Every change ships in public.
+                , a student at USC. She is looking for a job too.
               </p>
             </Reveal>
           </div>
@@ -592,7 +585,7 @@ export default function Home() {
           </div>
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
             <span>&copy; {new Date().getFullYear()} Litos</span>
-            <span>Built to be keyboard-navigable, end to end.</span>
+            <span>You can use this whole site with just a keyboard.</span>
             <span className="font-mono text-[11px] uppercase tracking-[0.08em]">
               Updated{" "}
               {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
