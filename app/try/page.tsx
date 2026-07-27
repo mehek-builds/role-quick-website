@@ -33,6 +33,30 @@ export default async function TryPage({
             This is what happens on a real job. Press the buttons.
             Nothing installs. Nothing gets sent.
           </p>
+          {/* /try had no privacy link at all, on the one page where a visitor is
+              actively deciding whether to trust this with a resume. The homepage
+              hero and the footer both carry one; the demo booth did not.
+
+              Kept to the two facts that matter at this moment rather than
+              restating the hero.
+
+              "Nothing you paste here is stored" and not "this demo stores
+              nothing", which is what the first draft said. api/try/route.ts does
+              keep one thing: a per-session and per-IP rate-limit counter. The
+              resume text is never persisted, which is the fact a visitor
+              actually cares about, so say that one exactly instead of a rounder
+              claim that is not quite true. */}
+          <p className="mx-auto mt-3 max-w-[460px] text-[13px] leading-6 text-faint">
+            Nothing you paste here is stored. When you do have an account, you
+            can delete everything in it.{" "}
+            <a
+              href="/privacy"
+              data-inline-link
+              className="underline decoration-border underline-offset-2 hover:text-ink"
+            >
+              Privacy
+            </a>
+          </p>
         </div>
         <div className="mt-12">
           <TrySimulator initialStep={step} jobs={jobs} />
