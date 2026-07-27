@@ -15,6 +15,7 @@ import {
   type Targeting,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Funnel } from "@/components/app/Funnel";
 import {
   DAILY_PREPARED_RESUME_LIMIT,
   packetMatchesJob,
@@ -494,6 +495,11 @@ export default function Home() {
           </Link>
         </Card>
       )}
+
+      {/* Above the per-application detail: the student's own throughput is the thing they open the
+          dashboard to check, and it is the number the teardown found behind every product with real
+          retention. It renders nothing at all until there is something to report. */}
+      <Funnel />
 
       {/* On day one every one of these counters is 0, and six zeros is a worse first screen than
           no counters at all. They appear once there is something to count. */}
