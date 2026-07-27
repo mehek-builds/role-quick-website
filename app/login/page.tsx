@@ -450,6 +450,33 @@ export default function Login() {
                       ? "Create account"
                       : "Send verification code"}
               </Button>
+              {/* The agreement, and the moment it is formed.
+                  Until now nothing on this page mentioned the Terms, so nobody
+                  had agreed to anything: /terms existed and bound no one.
+
+                  Shown on account creation only. Signing in again is not a new
+                  agreement, and repeating it there would be noise on the screen
+                  a returning user sees most often.
+
+                  A line rather than a tick box, deliberately. Four of the ten
+                  products audited do it this way and the two that use a required
+                  checkbox (Careerflow, LoopCV) have the highest-friction gates in
+                  the set. A clickwrap is formed by an affirmative act next to
+                  clear notice, and pressing "Create account" under this sentence
+                  is that act. */}
+              {(flow === "signup" || claimMode) && (
+                <p className="mt-3 text-center text-xs leading-5 text-faint">
+                  By creating an account you agree to the{" "}
+                  <a href="/terms" className="underline hover:text-muted">
+                    Terms
+                  </a>{" "}
+                  and the{" "}
+                  <a href="/privacy" className="underline hover:text-muted">
+                    Privacy Policy
+                  </a>
+                  .
+                </p>
+              )}
             </form>
             {!claimMode && (
               <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
@@ -490,6 +517,23 @@ export default function Login() {
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
                   Your first week is free. No card needed. You only see this the first time.
+                </p>
+                {/* Both controls in this block can create an account: Google on a
+                    first sign-in, and looking around, which makes a guest one.
+                    Neither passes through the signup flow, so without this line
+                    the two easiest ways in would be the two with no agreement
+                    attached. Worded to cover both rather than repeated twice. */}
+                <p className="mt-4 text-center text-xs leading-5 text-faint">
+                  Continuing with Google or looking around creates an account,
+                  under the same{" "}
+                  <a href="/terms" className="underline hover:text-muted">
+                    Terms
+                  </a>{" "}
+                  and{" "}
+                  <a href="/privacy" className="underline hover:text-muted">
+                    Privacy Policy
+                  </a>
+                  .
                 </p>
               </>
             )}
