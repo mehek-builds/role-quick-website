@@ -509,7 +509,7 @@ export function MessyResumeMockup() {
 
         <p className="mt-2 text-[8.5px] font-bold underline">work experience</p>
         <p className="mt-1">
-          <span className="font-bold">Acme Inc</span> - software eng intern (summer 2026)
+          <span className="font-bold">Acme Inc</span> - software engineer (2025 - 2026)
         </p>
         <p className="mt-0.5 pl-2">&bull; Responsible for helping the backend team with apis and databases</p>
         <p className="pl-2">&bull; Worked on a dashboard for the team and attended meetings</p>
@@ -661,7 +661,7 @@ export function CleanResumeMockup() {
         </p>
 
         <CSec title="Experience" />
-        <CRow left="Software Engineer Intern, Acme Inc" right="May – Aug 2026" />
+        <CRow left="Software Engineer, Acme Inc" right="Jun 2025 – Aug 2026" />
         <CBul>Built 4 REST APIs in Python serving 40K requests/day; cut p95 latency 30%</CBul>
         <CBul>Shipped a React + SQL metrics dashboard adopted by 12 engineers weekly</CBul>
         <CBul>Automated integration tests in CI/CD, raising coverage from 41% to 78%</CBul>
@@ -808,7 +808,7 @@ export function TailoredResumeMockup() {
         </p>
 
         <CSec title="Experience" />
-        <CRow left="Software Engineer Intern, Acme Inc" right="May – Aug 2026" />
+        <CRow left="Software Engineer, Acme Inc" right="Jun 2025 – Aug 2026" />
         <CBul>
           Built 4 REST APIs in <M k="python">Python</M> serving
           40K requests/day; cut p95 latency 30%

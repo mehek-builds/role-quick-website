@@ -85,10 +85,15 @@ test("a failed onboarding permission save keeps the consent controls available f
 
 test("privacy disclosure covers both standing submission and verification-code access", async () => {
   const privacy = await readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8");
-  assert.match(privacy, /standing automatic-submission permission/);
-  assert.match(privacy, /Gmail or Outlook account/);
+  // The plain-language pass retired "standing automatic-submission permission"
+  // (commit 3b7e4b1) and this assertion was not moved with it, so the suite has
+  // been red on a disclosure that is actually still there, in plainer words.
+  // Pinned to the substance, not the jargon: the setting, and the cancel window.
+  assert.match(privacy, /send without asking you each\s+time/);
+  assert.match(privacy, /15-second countdown, and one click cancels it/);
+  assert.match(privacy, /Gmail or\s+Outlook you connected/);
   // was /separate,[\s\S]*optional permissions/ before the plain-language pass
-  assert.match(privacy, /two separate\s+choices[\s\S]*turn either one off/);
+  assert.match(privacy, /separate choices\.\s+You can turn either one off/);
 });
 
 test("cover letters wait for a detected attachment field, including optional fields", async () => {
