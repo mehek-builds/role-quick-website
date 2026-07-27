@@ -2,21 +2,28 @@
 
 import { useState } from "react";
 import { Header } from "@/components/Header";
+import { API_URL } from "@/lib/config";
+import { litosClientHeaders } from "@/lib/product";
 import { Button } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 
 /* The contact form.
  *
- * No address anywhere in the markup, by design. The form posts to
- * /api/contact and the destination is read from CONTACT_INBOX on the server,
- * so there is no mailto: for a scraper to harvest and nothing to change here
- * if the address ever moves.
+ * Posts straight to the backend's POST /contact, the same way every other
+ * backend call on this site works (login posts to /auth/request-code from the
+ * browser too), and trylitos.com is already on the backend's CORS allowlist.
+ * There was briefly a Next.js route here that called Resend itself; it was
+ * deleted, because the backend has sent mail all along for the verification
+ * codes and a second transport meant a second key, a second sender domain and a
+ * second way for delivery to break.
  *
- * The reason list is duplicated from the route rather than imported, because
- * importing it would pull a server module (and the Resend client) into the
- * browser bundle. The route validates against its own copy, so a drifted list
- * here fails closed with "Pick a reason" rather than delivering something
- * unexpected.
+ * No address anywhere in the markup, by design. CONTACT_INBOX is read inside the
+ * backend process, so there is no mailto: for a scraper to harvest and nothing
+ * to change here if the address ever moves.
+ *
+ * The reason list is duplicated from the backend rather than imported across the
+ * repo boundary. The backend validates against its own copy, so a drifted list
+ * here fails closed with a 400 rather than delivering something unexpected.
  */
 const REASONS = [
   "Something is not working",
@@ -42,9 +49,9 @@ export default function Contact() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/contact", {
+      const res = await fetch(`${API_URL}/contact`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
         body: JSON.stringify({ name, email, reason, message, company }),
       });
       const data = await res.json().catch(() => ({}));
