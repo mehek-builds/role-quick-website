@@ -393,7 +393,7 @@ export default function Login() {
                   setDeliveryNotice(null);
                 }}
                 placeholder="you@example.com"
-                className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
               {(flow === "signin" || flow === "signup") && (
                 <>
@@ -407,7 +407,7 @@ export default function Login() {
                     autoComplete={flow === "signup" ? "new-password" : "current-password"}
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                    className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                   />
                 </>
               )}
@@ -423,7 +423,7 @@ export default function Login() {
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-                    className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                    className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                   />
                   <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
                 </>
@@ -503,7 +503,7 @@ export default function Login() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
             />
             <Button
               type="submit"
@@ -557,7 +557,7 @@ export default function Login() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(null); }}
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             />
             <label className="mt-4 block text-xs font-medium text-muted" htmlFor="confirm-new-password">
               Confirm new password
@@ -569,7 +569,7 @@ export default function Login() {
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             />
             <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
             <Button
