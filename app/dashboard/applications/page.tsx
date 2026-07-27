@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   api,
   ApiError,
@@ -13,10 +13,14 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, normalizedTerms, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 import { packetMatchesJob } from "@/lib/daily-matches";
+import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
+import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/lib/requirement-terms";
+import type { JdMatchResponse } from "@/lib/jd-match";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationFilter = "all" | "action" | "ready" | "submitted";
@@ -80,11 +84,19 @@ export default function Applications() {
     });
   }, []);
 
+  // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
+  // result. The JD pane used to highlight against resumeTerms, every content word anywhere in the
+  // resume, which lit up "backed", "services" and "deployed" in the same blue as "PostgreSQL" and
+  // so told the student nothing.
+  const [matchResult, setMatchResult] = useState<JdMatchResponse | null>(null);
   const selectPacket = useCallback((packet: GeneratedResume) => {
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
     setSelectedId(packet.id);
+    // Highlighting is per (resume, posting). Carrying the previous packet's result over marks the
+    // new JD against a resume and a posting that are no longer on screen.
+    setMatchResult(null);
     setSpec(stripMetadata(packet.spec));
     setQuestions(packet.spec._review?.questions ?? []);
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
@@ -248,9 +260,17 @@ export default function Applications() {
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
   }, [applicationFilter, applicationSort, reviewablePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
+  // The review surface is meant to be read without scrolling, so while it is open the page chrome
+  // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
+  // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
+  // the resume are supposed to share.
+  const reviewOpen = Boolean(selected && spec && review) && screen === "review";
   const deferredSpec = useDeferredValue(spec);
-  const resumeTerms = useMemo(() => normalizedTerms(deferredSpec ? resumeCorpus(deferredSpec) : ""), [deferredSpec]);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
+  const requirementIndex = useMemo(
+    () => (matchResult ? buildRequirementIndex(matchResult.matched, matchResult.missing) : EMPTY_REQUIREMENT_INDEX),
+    [matchResult],
+  );
 
   async function fetchJobDescription() {
     const portalUrl = newApplication.portalUrl.trim();
@@ -556,11 +576,11 @@ export default function Applications() {
   if (error && packets === null) return <ErrorNote message={error} />;
 
   return (
-    <div className="space-y-6">
+    <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Applications</h1>
-          <p className="mt-1 text-sm text-muted">Review and track.</p>
+          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-2xl" : "text-[32px]"}`}>Applications</h1>
+          {!reviewOpen && <p className="mt-1 text-sm text-muted">Review and track.</p>}
         </div>
         {/* The selected packet's status already prints on its own row and inside the review
             surface; a third copy in the page header was noise. */}
@@ -581,7 +601,7 @@ export default function Applications() {
           extractingJd={extractingJd}
         />
       )}
-      {legacyCount > 0 && (
+      {legacyCount > 0 && !reviewOpen && (
         <p className="border-y border-border py-3 text-sm text-muted">
           {legacyCount} saved resume{legacyCount === 1 ? "" : "s"} · Add a job URL to turn one into a reviewable application.
         </p>
@@ -675,30 +695,65 @@ export default function Applications() {
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
         <>
-          {/* items-start, not a forced min-height: a five-line job description used to sit in a
-              680px box beside a full resume, so most of the review surface was blank. */}
-          <div className="grid items-start gap-4 xl:grid-cols-2">
-            <DocumentPane eyebrow="Job description" title={`${selected.job_context.role} · ${selected.job_context.company}`} meta={review.ats_name ?? "Company portal"}>
-              <div className="prose-copy text-[15px] leading-7 text-ink">
-                <HighlightedText text={review.jd_text} terms={resumeTerms} tone="match" />
-              </div>
-            </DocumentPane>
-
-            <DocumentPane
-              eyebrow="Tailored resume"
-              title="Your resume for this job"
-              meta={
-                <div className="flex items-center gap-3">
-                  <span className="hidden text-right text-[11px] leading-4 text-faint sm:block">
-                    {formatRelativeDate(selected.created_at)}<br />match
-                  </span>
-                  <ScoreRing score={extractScore(selected.spec)} />
+          {/* The review surface is built to be read WITHOUT SCROLLING. It used to stack a JD pane, a
+              resume pane, a gaps card, a cover-letter card and a legend down the page, so the two
+              things a student is actually comparing were never both fully on screen, and the
+              whitespace beside a short JD pushed everything else further down.
+              Now: one compact header carrying the score and the legend, then two columns that each
+              scroll INSIDE themselves against a shared height. The page holds still; the panes
+              move. The gap list sits under the JD, which is where the dead space was. */}
+          <RequirementProvider index={requirementIndex}>
+            <div className="rounded-[20px] border border-border bg-surface-alt px-5 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-ink">
+                    {selected.job_context.role} · {selected.job_context.company}
+                  </p>
+                  <p className="text-[11px] text-faint">
+                    {review.ats_name ?? "Company portal"} · resume built {formatRelativeDate(selected.created_at)}
+                  </p>
                 </div>
-              }
-            >
-              <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
-            </DocumentPane>
-          </div>
+                {/* Was <ScoreRing score={extractScore(selected.spec)} /> under the caption "match".
+                    That read spec._quality.atsCoverage, which counts every non-stopword in the
+                    posting and therefore sat at 12-17% for a strong resume. */}
+                <MatchScore jdText={review.jd_text} spec={deferredSpec ?? spec} onResult={setMatchResult} />
+              </div>
+              <div className="mt-3 border-t border-border pt-2.5">
+                <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} />
+                <p className="mt-1.5 text-[11px] text-faint">
+                  Point at any highlighted term to see it light up on both sides.
+                </p>
+              </div>
+            </div>
+
+            {/* min-h-0 on the children is what actually lets them scroll inside a grid row. */}
+            <div className="mt-4 grid gap-4 xl:grid-cols-2">
+              <section className="flex min-h-0 flex-col rounded-[20px] border border-border bg-surface">
+                <p className="border-b border-border px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+                  Job description
+                </p>
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-15.5rem)]">
+                  <div className="prose-copy whitespace-pre-line text-[14px] leading-6 text-ink">
+                    <RequirementText text={review.jd_text} />
+                  </div>
+                  {matchResult && matchResult.missing.length > 0 && (
+                    <div className="mt-5 border-t border-border pt-4">
+                      <MatchGaps missing={matchResult.missing} />
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="flex min-h-0 flex-col rounded-[20px] border border-border bg-surface">
+                <p className="border-b border-border px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+                  Your resume for this job
+                </p>
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-15.5rem)]">
+                  <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
+                </div>
+              </section>
+            </div>
+          </RequirementProvider>
 
           {review.cover_letter_supported === true ? <Card className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -755,22 +810,6 @@ export default function Applications() {
         </>
       )}
     </div>
-  );
-}
-
-function DocumentPane({ eyebrow, title, meta, children }: { eyebrow: string; title: string; meta: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="overflow-hidden rounded-[20px] border border-border bg-surface">
-      <header className="border-b border-border px-6 py-5">
-        {/* Mono is the machine voice: numbers, timestamps, statuses. A pane name is neither. */}
-        <p className="text-xs text-faint">{eyebrow}</p>
-        <div className="mt-1 flex items-center justify-between gap-3">
-          <h2 className="text-base font-medium text-ink">{title}</h2>
-          {typeof meta === "string" ? <span className="font-mono text-[10px] text-faint">{meta}</span> : meta}
-        </div>
-      </header>
-      <div className="max-h-[760px] overflow-y-auto p-6">{children}</div>
-    </section>
   );
 }
 
@@ -979,21 +1018,12 @@ function EditableHighlight({ value, terms, onChange }: { value: string; terms: R
     <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-[12px] border border-brand bg-white px-2 py-1 outline-none" />
   ) : (
     <button type="button" onClick={() => setEditing(true)} className="text-left leading-5 hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30">
-      <HighlightedText text={value} terms={terms} tone="edited" />
+      {/* hideMissing: an amber "asked for and NOT on your resume" mark cannot honestly appear on
+          the resume. If the word were here the scorer would have counted it as covered. */}
+      <RequirementText text={value} editedTerms={terms} hideMissing />
     </button>
   );
 }
-
-const HighlightedText = memo(function HighlightedText({ text, terms, tone }: { text: string; terms: ReadonlySet<string>; tone: "match" | "edited" }) {
-  return <>{text.split(/(\s+)/).map((part, index) => {
-    const key = part.toLowerCase().replace(/[^a-z0-9+#./-]/g, "");
-    const highlighted = key.length > 2 && terms.has(key);
-    // Both tones were brand-blue and differed only by a border, so a JD keyword match and a
-    // tailoring edit were near-indistinguishable at a glance despite meaning opposite things: one
-    // is what already fit, the other is what was changed. Give the edit its own hue.
-    return highlighted ? <mark key={index} className={tone === "edited" ? "rounded-sm border-b-2 border-positive bg-positive-soft px-0.5 text-positive" : "rounded bg-brand-soft px-0.5 text-brand-ink"}>{part}</mark> : <span key={index}>{part}</span>;
-  })}</>;
-});
 
 function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
@@ -1239,11 +1269,5 @@ function applicationCardClasses(packet: GeneratedResume, selected: boolean): str
 function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
   return { school: spec.school ?? "", degree: spec.degree ?? "", grad_date: spec.grad_date ?? "", coursework: spec.coursework ?? "", education_position: spec.education_position, experience: spec.experience ?? [], skills: spec.skills ?? [], skill_source: spec.skill_source };
 }
-function resumeCorpus(spec: ResumeSpec): string {
-  return [spec.school, spec.degree, spec.coursework, ...spec.experience.flatMap((entry) => [entry.org, entry.title, ...entry.bullets]), ...spec.skills].join(" ");
-}
 
-function extractScore(spec: GeneratedResume["spec"]): number {
-  const raw = spec._quality?.atsCoverage;
-  return typeof raw === "number" ? Math.round(raw <= 1 ? raw * 100 : raw) : 0;
-}
+
