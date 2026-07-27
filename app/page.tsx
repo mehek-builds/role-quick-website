@@ -15,6 +15,7 @@ import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { InstallLink } from "@/components/InstallLink";
 import { StickyCTA } from "@/components/StickyCTA";
+import { RealCaptures } from "@/components/RealCaptures";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
@@ -316,7 +317,7 @@ export default function Home() {
                       output, but a reader is entitled to know which one
                       they are looking at before treating it as evidence. */}
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Illustration of the real fill, not a screenshot
+                    Illustration, not a screenshot · real ones below
                   </p>
                 </div>
               </div>
@@ -366,7 +367,7 @@ export default function Home() {
                     </p>
                   </div>
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Illustration of a real draft, not a screenshot
+                    Illustration, not a screenshot · real ones below
                   </p>
                 </div>
                 <div>
@@ -375,6 +376,18 @@ export default function Home() {
               </div>
             </Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* Captures: the chapters above are drawn in the DOM so they can
+            move, which is right for a film and wrong as evidence. This is
+            the shipped product, screenshotted. */}
+        <section id="captures" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative px-6 py-32">
+            <Reveal>
+              <RealCaptures />
+            </Reveal>
           </div>
         </section>
 
