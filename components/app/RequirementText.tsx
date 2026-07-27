@@ -129,11 +129,20 @@ export const RequirementText = memo(function RequirementText({
   );
 });
 
+/** Swatch fills, spelled out rather than derived from TONE_CLASS. Taking the first class off the
+ *  tone string worked for the two tones whose first class is a background and produced a bare
+ *  "border-b-2" for the edited tone, which rendered as an unfilled dark blob. */
+const SWATCH_CLASS: Record<TermTone, string> = {
+  covered: "bg-brand-soft ring-1 ring-brand/40",
+  missing: "bg-warn-soft ring-1 ring-warn/40",
+  edited: "bg-positive-soft ring-1 ring-positive/40",
+};
+
 /** The legend. Three swatches, stated as what the colour means rather than as a colour name. */
 function Swatch({ tone, label }: { tone: TermTone; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={`inline-block h-3 w-3 rounded-sm ${TONE_CLASS[tone].split(" ")[0]}`} />
+      <span className={`inline-block h-3 w-3 rounded-sm ${SWATCH_CLASS[tone]}`} />
       <span className="text-[11px] text-muted">{label}</span>
     </span>
   );

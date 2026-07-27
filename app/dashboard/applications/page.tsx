@@ -252,6 +252,11 @@ export default function Applications() {
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
   }, [applicationFilter, applicationSort, reviewablePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
+  // The review surface is meant to be read without scrolling, so while it is open the page chrome
+  // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
+  // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
+  // the resume are supposed to share.
+  const reviewOpen = Boolean(selected && spec && review) && screen === "review";
   const deferredSpec = useDeferredValue(spec);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
   // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
@@ -568,11 +573,11 @@ export default function Applications() {
   if (error && packets === null) return <ErrorNote message={error} />;
 
   return (
-    <div className="space-y-6">
+    <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Applications</h1>
-          <p className="mt-1 text-sm text-muted">Review and track.</p>
+          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-2xl" : "text-[32px]"}`}>Applications</h1>
+          {!reviewOpen && <p className="mt-1 text-sm text-muted">Review and track.</p>}
         </div>
         {/* The selected packet's status already prints on its own row and inside the review
             surface; a third copy in the page header was noise. */}
@@ -593,7 +598,7 @@ export default function Applications() {
           extractingJd={extractingJd}
         />
       )}
-      {legacyCount > 0 && (
+      {legacyCount > 0 && !reviewOpen && (
         <p className="border-y border-border py-3 text-sm text-muted">
           {legacyCount} saved resume{legacyCount === 1 ? "" : "s"} · Add a job URL to turn one into a reviewable application.
         </p>
@@ -724,7 +729,7 @@ export default function Applications() {
                 <p className="border-b border-border px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
                   Job description
                 </p>
-                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-19rem)]">
+                <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-15.5rem)]">
                   <div className="prose-copy whitespace-pre-line text-[14px] leading-6 text-ink">
                     <RequirementText text={review.jd_text} />
                   </div>
@@ -740,7 +745,7 @@ export default function Applications() {
                 <p className="border-b border-border px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
                   Your resume for this job
                 </p>
-                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-19rem)]">
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-15.5rem)]">
                   <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
                 </div>
               </section>
