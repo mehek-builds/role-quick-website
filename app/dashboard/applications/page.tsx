@@ -768,7 +768,7 @@ export default function Applications() {
                 {/* Was <ScoreRing score={extractScore(selected.spec)} /> under the caption "match".
                     That read spec._quality.atsCoverage, which counts every non-stopword in the
                     posting and therefore sat at 12-17% for a strong resume. */}
-                <MatchScore jdText={review.jd_text} spec={deferredSpec ?? spec} onResult={setMatchResult} />
+                <MatchScore jdText={review.jd_text} spec={deferredSpec ?? spec} jobContext={selected.job_context} onResult={setMatchResult} />
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
                 <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} />
@@ -791,7 +791,7 @@ export default function Applications() {
                   {/* Preparation for later, under the posting it comes from. Collapsed by default:
                       expanding it is the student saying they are at that stage. */}
                   <div className="mt-5 border-t border-border pt-4">
-                    <InterviewPrep jdText={review.jd_text} spec={deferredSpec ?? spec} />
+                    <InterviewPrep jdText={review.jd_text} spec={deferredSpec ?? spec} jobContext={selected.job_context} />
                   </div>
                   {matchResult && matchResult.missing.length > 0 && (
                     <div className="mt-5 border-t border-border pt-4">

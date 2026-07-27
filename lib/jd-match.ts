@@ -54,10 +54,16 @@ export function resumeSpecText(spec: ResumeSpec): string {
   ].join(" ");
 }
 
-export async function fetchJdMatch(jdText: string, resumeText: string): Promise<JdMatchResponse> {
+export type JobContext = { company?: string; role?: string };
+
+export async function fetchJdMatch(
+  jdText: string,
+  resumeText: string,
+  jobContext?: JobContext,
+): Promise<JdMatchResponse> {
   return api<JdMatchResponse>("/jd-match", {
     method: "POST",
-    body: JSON.stringify({ jd_text: jdText, resume_text: resumeText }),
+    body: JSON.stringify({ jd_text: jdText, resume_text: resumeText, job_context: jobContext }),
   });
 }
 
@@ -182,9 +188,13 @@ export type InterviewPrep = {
   reason?: string;
 };
 
-export async function fetchInterviewPrep(jdText: string, spec: ResumeSpec): Promise<InterviewPrep> {
+export async function fetchInterviewPrep(
+  jdText: string,
+  spec: ResumeSpec,
+  jobContext?: JobContext,
+): Promise<InterviewPrep> {
   return api<InterviewPrep>("/interview-prep", {
     method: "POST",
-    body: JSON.stringify({ jd_text: jdText, spec }),
+    body: JSON.stringify({ jd_text: jdText, spec, job_context: jobContext }),
   });
 }
