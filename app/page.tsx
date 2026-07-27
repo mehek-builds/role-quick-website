@@ -653,6 +653,16 @@ export default function Home() {
                 Company
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
+                {/* Footer, not the header. Five of ten competitors keep a B2B
+                    entry in the main nav, but the header here carries one ask
+                    and the say-once rule is what keeps it doing that. This is a
+                    destination for someone who came looking, not a second pitch
+                    aimed at students. Promote it if the channel earns it. */}
+                <li>
+                  <a href="/for-career-centres" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
+                    For career centres
+                  </a>
+                </li>
                 <li>
                   <a href="https://x.com/MehekBuilds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
                     X
