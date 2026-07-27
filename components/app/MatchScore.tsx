@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { fetchJdMatch, resumeSpecText, type JdMatchResponse } from "@/lib/jd-match";
 import type { ResumeSpec } from "@/lib/api";
+import { useTermHover } from "./RequirementText";
 
 /**
  * The single number the review screen leads with: how much of what this posting actually asks for
@@ -27,12 +28,14 @@ import type { ResumeSpec } from "@/lib/api";
 export function MatchScore({
   jdText,
   spec,
-  onMissingChange,
+  onResult,
 }: {
   jdText: string;
   spec: ResumeSpec;
-  /** Lets the parent reuse the gap list (F2 turns it into bullets) without a second request. */
-  onMissingChange?: (missing: JdMatchResponse["missing"]) => void;
+  /** Hands the whole result up so the parent can drive both panes' highlighting and the gap list
+   *  from ONE request. Passing only `missing` meant the JD pane had no way to know which terms
+   *  were covered, and it fell back to highlighting every word of the resume. */
+  onResult?: (result: JdMatchResponse) => void;
 }) {
   const [result, setResult] = useState<JdMatchResponse | null>(null);
   const [failed, setFailed] = useState(false);
@@ -41,12 +44,14 @@ export function MatchScore({
     let cancelled = false;
     const resumeText = resumeSpecText(spec);
     if (!jdText.trim() || !resumeText.trim()) return;
-    setFailed(false);
     fetchJdMatch(jdText, resumeText)
       .then((next) => {
         if (cancelled) return;
+        // Cleared here rather than before the request: resetting synchronously inside the effect
+        // triggers a cascading render on every keystroke-driven recompute.
+        setFailed(false);
         setResult(next);
-        onMissingChange?.(next.missing);
+        onResult?.(next);
       })
       .catch(() => {
         if (!cancelled) setFailed(true);
@@ -54,8 +59,8 @@ export function MatchScore({
     return () => {
       cancelled = true;
     };
-    // onMissingChange is intentionally not a dependency: callers pass an inline closure, and
-    // including it would refire the request on every parent render.
+    // onResult is intentionally not a dependency: callers pass an inline closure, and including it
+    // would refire the request on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jdText, spec]);
 
@@ -133,15 +138,38 @@ export function MatchGaps({ missing }: { missing: JdMatchResponse["missing"] }) 
       </p>
       <ul className="mt-3 flex flex-wrap gap-2">
         {missing.map((term) => (
-          <li
-            key={term.term}
-            className="rounded-full border border-border px-3 py-1 text-[13px] text-ink"
-            title={term.weight >= 1 ? "Listed under requirements" : "Listed as preferred or in the role description"}
-          >
-            {term.display}
-          </li>
+          <GapChip key={term.term} term={term} />
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A gap chip is a handle on the term, not a label. Pointing at it scrolls nothing and opens
+ *  nothing; it just lights the same word up in the job description so the student can see WHERE
+ *  they are being asked for it before deciding whether they have actually done it. */
+function GapChip({ term }: { term: JdMatchResponse["missing"][number] }) {
+  const { active, setActive } = useTermHover();
+  const isActive = active === term.term;
+  return (
+    <li>
+      <button
+        type="button"
+        onMouseEnter={() => setActive(term.term)}
+        onMouseLeave={() => setActive(null)}
+        onFocus={() => setActive(term.term)}
+        onBlur={() => setActive(null)}
+        className={`rounded-full border px-3 py-1 text-[13px] transition-colors ${
+          isActive ? "border-warn bg-warn-soft text-warn" : "border-border text-ink"
+        }`}
+        title={
+          term.weight >= 1
+            ? "Listed under requirements"
+            : "Listed as preferred or in the role description"
+        }
+      >
+        {term.display}
+      </button>
+    </li>
   );
 }
