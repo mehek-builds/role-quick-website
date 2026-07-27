@@ -60,17 +60,11 @@ test("overview keeps three application states and reviews matches in a right-sid
   assert.match(styles, /dashboard-drawer-in/);
 });
 
-test("every paid-plan surface states the 1,000-resume allowance", async () => {
-  const pricing = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const cards = await readFile(new URL("../components/PricingCards.tsx", import.meta.url), "utf8");
-  const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
-  const paidCopy = `${pricing}\n${cards}\n${settings}`;
-
-  assert.doesNotMatch(paidCopy, /Pro covers 500|Unlimited resumes/);
-  assert.match(pricing, /Pro covers 1,000/);
-  assert.match(cards, /1,000 tailored resumes \/ mo/);
-  assert.match(settings, /Pro covers 1,000 resumes a month/);
-});
+/* Removed 2026-07-27: this guarded that every paid surface quoted the same
+   1,000-resume allowance. Pricing has been taken off the site entirely while
+   the plan is reworked, components/PricingCards.tsx is deleted, and no
+   surface states a price. There is nothing left to keep consistent. Restore
+   this test alongside whatever the new pricing turns out to be. */
 
 test("automation settings send field-specific updates so stale clients cannot restore another permission", async () => {
   const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
@@ -93,7 +87,8 @@ test("privacy disclosure covers both standing submission and verification-code a
   const privacy = await readFile(new URL("../app/privacy/page.tsx", import.meta.url), "utf8");
   assert.match(privacy, /standing automatic-submission permission/);
   assert.match(privacy, /Gmail or Outlook account/);
-  assert.match(privacy, /separate,[\s\S]*optional permissions/);
+  // was /separate,[\s\S]*optional permissions/ before the plain-language pass
+  assert.match(privacy, /two separate\s+choices[\s\S]*turn either one off/);
 });
 
 test("cover letters wait for a detected attachment field, including optional fields", async () => {
@@ -145,5 +140,6 @@ test("the controlled portal mirrors every supported adapter without an employer 
   assert.match(portal, /name="urls\[LinkedIn\]"/);
   assert.match(portal, /name="_systemfield_name"/);
   assert.match(portal, /id="confirm-email-input"/);
-  assert.match(portal, /No employer received this application/);
+  // was "No employer received this application" before the plain-language pass
+  assert.match(portal, /No employer got this application/);
 });
