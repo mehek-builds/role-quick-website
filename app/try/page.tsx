@@ -4,7 +4,7 @@ import { TrySimulator } from "@/components/try/TrySimulator";
 import { getJobCards } from "@/lib/try-jobs";
 
 export const metadata: Metadata = {
-  title: "Try Litos without installing it",
+  title: "Try it without installing",
   description:
     "Try Litos on a pretend job. Watch it make your resume, fill in the form, and write the email. Nothing gets sent.",
 };

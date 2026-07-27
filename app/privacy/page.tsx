@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 
 export const metadata = {
-  title: "Privacy: Litos",
+  title: "Privacy",
 };
 
 /* The real interim policy. Every statement here matches shipped product

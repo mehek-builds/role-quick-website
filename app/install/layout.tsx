@@ -4,7 +4,7 @@ import type { Metadata } from "next";
    title lives here. Without it the tab fell back to the root layout's marketing
    title on every logged-in screen (audit finding 41). */
 export const metadata: Metadata = {
-  title: "Add Litos to Chrome",
+  title: "Add to Chrome",
   description: "Opening the Chrome Web Store.",
 };
 
