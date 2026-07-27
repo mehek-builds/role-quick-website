@@ -614,7 +614,7 @@ export function ResumePaper({
         muted ? "opacity-40" : ""
       }`}
       style={{ fontFamily: PAPER_FONT, containerType: "inline-size" }}
-      aria-label="Base resume preview"
+      aria-label="Your main resume, preview"
     >
       {/* 36pt margin on a 612pt page = 5.88%. Percentage, not pixels, so the type and the margins
           scale together when the column narrows. */}

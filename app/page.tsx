@@ -218,9 +218,12 @@ export default function Home() {
               </p>
               {/* Alex Rivera is a sample applicant, and the numbers inside
                   that resume ("80 students", "800 student users") are his,
-                  not ours. Unlabelled, a skimmer reads them as Litos proof. */}
+                  not ours. Unlabelled, a skimmer reads them as Litos proof.
+                  Says "applicant", not "student": this label is the one line
+                  that names who the example IS, so calling him a student
+                  told every non-student the tool was not for them. */}
               <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Not a real student. Just an example.
+                Not a real applicant. Just an example.
               </p>
             </div>
           </Reveal>

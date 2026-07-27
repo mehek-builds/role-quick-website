@@ -360,7 +360,7 @@ export default function Applications() {
         api<ApplicationProfile>("/profile/application"),
       ]);
       const fullName = identity.full_name?.trim();
-      if (!fullName) throw new Error("Your base resume is missing your name. Replace it on the Resume page first.");
+      if (!fullName) throw new Error("Your main resume is missing your name. Replace it on the Resume page first.");
 
       const generated = await api<ResumeGenerationResponse>("/resume/generate", {
         method: "POST",
@@ -762,7 +762,7 @@ export default function Applications() {
                     {selected.job_context.role} · {selected.job_context.company}
                   </p>
                   <p className="text-[11px] text-faint">
-                    {review.ats_name ?? "Company portal"} · resume built {formatRelativeDate(selected.created_at)}
+                    {review.ats_name ?? "the company's application page"} · resume built {formatRelativeDate(selected.created_at)}
                   </p>
                 </div>
                 {/* Was <ScoreRing score={extractScore(selected.spec)} /> under the caption "match".
@@ -1196,7 +1196,7 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
   const receipt = review.receipt;
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <CenteredState title="Sent to the company." body={`${role} at ${company} is complete. The company portal confirmed receipt.`} />
+      <CenteredState title="Sent to the company." body={`${role} at ${company} is complete. The company confirmed receipt.`} />
       {receipt && <Card className="overflow-hidden">
         <div className="grid gap-5 p-6 sm:grid-cols-2">
           <div><p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Proof it was sent</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>

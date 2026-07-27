@@ -92,11 +92,11 @@ export function DraftMockup() {
         </div>
         <div className="flex gap-2 border-b border-border pb-2.5">
           <span className="text-faint">Subject</span>
-          <span className="text-ink">USC senior, just applied to SWE intern</span>
+          <span className="text-ink">Fellow Trojan, just applied to the SWE role</span>
         </div>
         <p className="pt-1 leading-6 text-muted">
-          Hi Priya, fellow Trojan here. I just applied to the SWE intern role
-          and wanted to reach out beyond the pile. Last summer I built REST
+          Hi Priya, fellow Trojan here. I just applied to the SWE role
+          and wanted to reach out beyond the pile. Last year I built REST
           APIs at Acme serving 40K requests a day, and Northline&apos;s
           platform work looks like that at real scale. Open to a 15-minute
           chat?
@@ -865,7 +865,7 @@ export function BankStrip() {
     { org: "Freelance", picked: true },
     { org: "TrojanMarket", picked: true },
     { org: "Robotics Club", picked: false },
-    { org: "Campus TA", picked: false },
+    { org: "Teaching Assistant", picked: false },
     { org: "Coffee Shop Lead", picked: false },
   ];
   return (
@@ -927,7 +927,7 @@ export function ResumeMockup() {
     <Frame>
       <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
         <p className="text-sm font-semibold text-ink">Alex Rivera</p>
-        <p className="text-[11px] text-faint">Software Engineer, New Grad</p>
+        <p className="text-[11px] text-faint">Software Engineer</p>
         <div className="mt-3 h-px w-full bg-border" />
         <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">
           Experience

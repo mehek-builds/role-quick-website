@@ -120,8 +120,9 @@ export default function Privacy() {
             answers are supported and the portal has no safety blocker. The
             extension shows a cancelable 15-second countdown. A dashboard
             submission can proceed as soon as those checks pass. Missing or
-            conflicting facts, sensitive attestations, CAPTCHA, unsupported
-            portal behavior, and uncertain confirmation always pause the flow.
+            conflicting facts, anything you have to swear to, a check that
+            you are human, a page Litos cannot drive, and any confirmation it
+            is unsure of all stop it and wait for you.
           </p>
         </Section>
 

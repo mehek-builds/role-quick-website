@@ -85,7 +85,7 @@ export function RealCaptures() {
         </h2>
         <p className="mt-4 text-[15px] leading-7 text-muted">
           The pictures above are ones we made, so they can move. These three are
-          real photos of the app. The names in them are made up.
+          real screenshots of the app. The names in them are made up.
         </p>
       </div>
 
