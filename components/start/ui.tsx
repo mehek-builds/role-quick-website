@@ -6,7 +6,7 @@
  *   1. The receipt - a mono timestamp gutter. Speed shown as a fact, never claimed.
  *   2. The refusal list - "what we won't do", set like terms of service. Ethics as furniture.
  *
- * The step rail reuses the homepage film's own act labels (00 DETECTED, 01 DOCUMENTS), so the
+ * The step rail reuses the homepage film's own act labels (00 JOB FOUND, 01 RESUME), so the
  * marketing page and onboarding share one wayfinding device instead of inventing a second.
  * It is wayfinding, not a progress meter: no percentage, no streak, no celebration. The
  * Guardrails ban all three and a number would only make a 12-minute step feel longer.

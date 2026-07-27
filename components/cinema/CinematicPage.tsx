@@ -29,8 +29,8 @@ const SECTIONS = [
   { id: "#documents", label: "01 · Resume" },
   { id: "#autofill", label: "02 · Forms" },
   { id: "#outreach", label: "03 · Emails" },
-  { id: "#captures", label: "Real photos" },
-  { id: "#voices", label: "Reviews" },
+  { id: "#captures", label: "Real screenshots" },
+  { id: "#voices", label: "What testers said" },
   { id: "#try", label: "Now you try" },
   { id: "#faq", label: "Questions" },
   { id: "#close", label: "Your move" },
@@ -122,7 +122,7 @@ export function CinematicPage() {
           ref={railLabelRef}
           className="rotate-180 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted [writing-mode:vertical-rl]"
         >
-          00 · Detected
+          00 · Job found
         </p>
         <div className="relative h-40 w-px bg-border">
           <div
