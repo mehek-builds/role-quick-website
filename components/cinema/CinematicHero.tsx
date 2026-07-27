@@ -532,6 +532,49 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             className="absolute inset-0 h-full w-full opacity-0"
           />
         </div>
+        {/* 1c · the static product still, reduced motion only.
+            Until now a reduced-motion visitor got film frame 0 behind the
+            hero card, and frame 0 is scattered application pages: the
+            PROBLEM, not the product. So the one audience that cannot watch
+            the film was also the one audience never shown what Litos does.
+            This swaps in a real capture of the extension open on a posting.
+
+            Reduced motion only, deliberately. Painting it under full motion
+            too would fix the slow-connection case as well, but the film and
+            the roll both start at opacity 0 and dissolve in, and a still
+            underneath them would read as a cut. That is the exact load-order
+            pop (white -> poster -> sting) called out in drawFrame above.
+
+            Real product UI per DESIGN.md imagery law, and it sits before the
+            tint and vignette layers so the stage's own atmosphere applies to
+            it unchanged. The veil is what keeps the rq-glass hero card
+            legible over a dense screenshot, the same problem the 2026-07-24
+            calibration pass solved with opacity rather than more frost. */}
+        <div className="rq-cine-still absolute inset-0">
+          {/* object-contain, not cover, and a landscape capture rather than the
+              portrait extension one. The first attempt used extension-job.png
+              (598x900) at object-cover: on a 1600px stage that scales to about
+              1600x2400, so the viewer got one blown-up fragment with 60px type
+              and no way to tell what the product was. Cover crops to fill;
+              a screenshot has to stay whole to be legible.
+
+              Pushed below the header pill on purpose. Anchored at the top, the
+              capture's own product nav (Litos / Home / Jobs / Applications /
+              Emails) landed a few pixels under the site's real nav, so the page
+              showed two Litos wordmarks and two navigations at once and read as
+              a rendering fault. Starting it at 14svh keeps the two chromes
+              apart and lets the rows, which are the part that shows what the
+              product does, sit in the open. */}
+          <div className="absolute inset-x-0 bottom-0 top-[14svh]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/product/dashboard-emails.png"
+              alt=""
+              className="h-full w-full object-contain object-top"
+            />
+          </div>
+          <div className="absolute inset-0 bg-white/[0.72]" />
+        </div>
         {/* 5 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
         {/* 2 · paper dust */}

@@ -359,6 +359,14 @@ html {
   animation: dashboard-drawer-backdrop-in 180ms ease-out;
 }
 
+/* The reduced-motion product still is off under full motion: the film and
+   the Application Roll own the opening, and a still underneath them would
+   dissolve into the roll as a visible cut. Turned on in the reduced-motion
+   block below, which is the only place it is meant to appear. */
+.rq-cine-still {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -377,10 +385,35 @@ html {
   .rq-grain {
     animation: none;
   }
-  /* the film canvas appears instantly (it dissolves in via a transition
-     under full motion) */
+  /* Reduced motion gets the product, not the poster. The frame-0 request at
+     mount is not behind a reduced-motion guard, so the canvas really does
+     park on the poster, and the poster is scattered application pages: the
+     problem, not what Litos does. Hide it and show a static capture of the
+     dashboard instead, so the one visitor who cannot watch the film still
+     sees the product above the fold.
+
+     Frame 0 still downloads and draws to a hidden canvas. That is one frame
+     at roughly 62KB, not the 7.5MB sequence, since both the opening effect
+     and the scrub timeline already return early under reduced motion. Left
+     alone deliberately: gating it would mean touching the frame pipeline for
+     a rounding error. */
   .rq-cine-film {
-    transition: none;
+    display: none;
+  }
+  /* Phones excluded on purpose. The hero card is taller on mobile because it
+     carries the install handoff (QR + copy link), and it occludes almost all
+     of the capture, so a phone would pay 143KB for a few visible pixels. The
+     film already strides frames down on small screens and Save-Data for the
+     same reason; this is that rule applied to the still.
+
+     Consequence, and it is intended: a reduced-motion phone now gets a plain
+     white ground behind the card rather than the poster. The brand is light,
+     the card carries the whole message there, and white beats a picture of
+     the problem. */
+  @media (min-width: 640px) {
+    .rq-cine-still {
+      display: block;
+    }
   }
   .rq-blink {
     animation: none;
