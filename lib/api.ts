@@ -318,6 +318,14 @@ export type ParsedProfile = {
 export type OnboardingStep = "focus" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
 
 export type OnboardingState = {
+  /** Unattended submission is earned: the server refuses to enable it until the student has
+   *  personally approved `required` real submissions. Absent on older backends. */
+  standing_consent_eligibility?: {
+    eligible: boolean;
+    reviewed_submits: number;
+    required: number;
+    remaining: number;
+  };
   step: OnboardingStep;
   completed_at: string | null;
   has_focus: boolean;
@@ -353,7 +361,9 @@ export function getOnboardingState() {
 }
 
 export type AutomationSettings = {
-  automatic_submission_enabled: boolean;
+  /** Optional: onboarding no longer sends it at all, so finishing setup can never be the thing
+   *  that turns unattended submission on. The server refuses to enable it before it is earned. */
+  automatic_submission_enabled?: boolean;
   automatic_verification_enabled: boolean;
 };
 

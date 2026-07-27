@@ -163,3 +163,28 @@ export async function fetchBoard(): Promise<{ stages: Stage[]; cards: BoardCard[
 export async function moveCard(id: string, stage: Stage): Promise<void> {
   await api(`/applications/${id}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
 }
+
+// ---- F7: interview prep ----
+
+export type PrepItem = {
+  term: string;
+  display: string;
+  question: string;
+  weight: number;
+  answer?: { org: string; bullet: string };
+  unanswered: boolean;
+};
+
+export type InterviewPrep = {
+  items: PrepItem[];
+  answered: number;
+  unanswered: number;
+  reason?: string;
+};
+
+export async function fetchInterviewPrep(jdText: string, spec: ResumeSpec): Promise<InterviewPrep> {
+  return api<InterviewPrep>("/interview-prep", {
+    method: "POST",
+    body: JSON.stringify({ jd_text: jdText, spec }),
+  });
+}

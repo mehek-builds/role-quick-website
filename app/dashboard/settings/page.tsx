@@ -47,6 +47,14 @@ export default function Settings() {
   const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
   const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
   const [savingAutomation, setSavingAutomation] = useState(false);
+  // Unattended submission is earned, not offered. The server is the authority; this only explains
+  // the state so the control is not an unexplained dead toggle.
+  const [consentEligibility, setConsentEligibility] = useState<{
+    eligible: boolean;
+    reviewed_submits: number;
+    required: number;
+    remaining: number;
+  } | null>(null);
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -84,6 +92,7 @@ export default function Settings() {
         setMe(meRes);
         setProfile(profileRes);
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
+        setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(onboardingRes.automatic_verification_enabled);
         setEmailConnections(connectionRes);
         if (callbackProvider && callbackStatus) {
@@ -120,7 +129,7 @@ export default function Settings() {
     setError(null);
     try {
       const result = await setAutomationSettings(patch);
-      setAutomaticSubmission(result.automatic_submission_enabled);
+      setAutomaticSubmission(result.automatic_submission_enabled ?? previousSubmission);
       setAutomaticVerification(result.automatic_verification_enabled);
     } catch (err) {
       setAutomaticSubmission(previousSubmission);
@@ -428,9 +437,31 @@ export default function Settings() {
         <h2 className="text-base font-medium text-ink">Two things Litos can do on its own</h2>
         <p className="mt-1 text-sm leading-6 text-muted">These are two separate choices, and you can turn either off at any time. We check again right before anything is sent.</p>
         <div className="mt-5 space-y-4">
+          {/* Locked until the student has personally approved a few real submissions. LazyApply
+              sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
+              with users reporting permanently restricted LinkedIn accounts. The lock is enforced on
+              the server; this copy exists so the control is not an unexplained dead toggle. */}
           <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
-            <span><span className="block text-sm font-medium text-ink">Send an application without asking me again</span><span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span></span>
-            <input aria-label="Automatic submission" type="checkbox" checked={automaticSubmission} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
+            <span>
+              <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
+              <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
+              {consentEligibility && !consentEligibility.eligible && !automaticSubmission && (
+                <span className="mt-2 block text-xs leading-5 text-warn">
+                  Available after you have approved {consentEligibility.required} applications
+                  yourself. {consentEligibility.remaining} to go. That way you have seen what Litos
+                  fills in on a real form before it sends one without you.
+                </span>
+              )}
+            </span>
+            <input
+              aria-label="Automatic submission"
+              type="checkbox"
+              checked={automaticSubmission}
+              // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
+              disabled={savingAutomation || (!automaticSubmission && consentEligibility?.eligible === false)}
+              onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })}
+              className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+            />
           </label>
           <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
             <span><span className="block text-sm font-medium text-ink">Read the code a company emails me</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>

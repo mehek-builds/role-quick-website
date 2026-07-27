@@ -21,6 +21,7 @@ import { packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
+import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { resumeSpecText } from "@/lib/jd-match";
 import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
@@ -786,6 +787,11 @@ export default function Applications() {
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-15.5rem)]">
                   <div className="prose-copy whitespace-pre-line text-[14px] leading-6 text-ink">
                     <RequirementText text={review.jd_text} />
+                  </div>
+                  {/* Preparation for later, under the posting it comes from. Collapsed by default:
+                      expanding it is the student saying they are at that stage. */}
+                  <div className="mt-5 border-t border-border pt-4">
+                    <InterviewPrep jdText={review.jd_text} spec={deferredSpec ?? spec} />
                   </div>
                   {matchResult && matchResult.missing.length > 0 && (
                     <div className="mt-5 border-t border-border pt-4">
