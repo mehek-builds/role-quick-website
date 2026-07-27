@@ -7,14 +7,17 @@ import {
   buildBaseResume,
   getBaseResume,
   putBaseResume,
+  type AtsVerdict,
   type BuildFrame,
   type BuildStage,
+  type MetricGap,
 } from "@/lib/base-resume";
 import { track } from "@/lib/analytics";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { SourceResume } from "./SourceResume";
 import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
+import { humanizeBuildNote } from "@/lib/buildNotes";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * The base resume screen. Paper on the left, the build on the right.
@@ -47,11 +50,12 @@ const STAGE_COPY: Record<BuildStage, { label: string; orb: "searching" | "solvin
   writing: { label: "Writing it in the ATS format", orb: "composing" },
   polishing: { label: "Sharpening how each line opens", orb: "composing" },
   fitting: { label: "Fitting it to one page", orb: "shaping" },
+  checking: { label: "Checking a robot can read it", orb: "shaping" },
   done: { label: "Done", orb: "shaping" },
   failed: { label: "Stopped", orb: "shaping" },
 };
 
-const STAGE_ORDER: BuildStage[] = ["reading", "selecting", "writing", "polishing", "fitting"];
+const STAGE_ORDER: BuildStage[] = ["reading", "selecting", "writing", "polishing", "fitting", "checking"];
 
 /* Sheet width caps, which set the sheet HEIGHT: the page is 612/792, so a width of N svh renders
  * about 1.29N svh tall. Capping width rather than height keeps the ratio honest on narrow screens,
@@ -104,6 +108,11 @@ export function BaseResumeStep({
   const [stage, setStage] = useState<BuildStage | null>(null);
   const [log, setLog] = useState<LogRow[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [ats, setAts] = useState<AtsVerdict | null>(null);
+  const [metricGaps, setMetricGaps] = useState<MetricGap[]>([]);
+  const [metricAnswers, setMetricAnswers] = useState<Record<number, string>>({});
+  const [metricsDone, setMetricsDone] = useState(false);
+  const [savingMetrics, setSavingMetrics] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   const started = useRef(false);
@@ -162,9 +171,18 @@ export function BaseResumeStep({
             note(`${frame.skills.length} skills selected`);
           }
           break;
+        case "ats":
+          setAts(frame);
+          note(
+            frame.passed
+              ? `Readable by an ATS, ${frame.extractable_chars} characters on one page`
+              : `Did not pass the ATS check: ${frame.issues.join("; ")}`,
+          );
+          break;
         case "done":
           setSpec(frame.spec);
           setWarnings(frame.warnings);
+          setMetricGaps(frame.metrics ?? []);
           setFinished(true);
           setStage("done");
           note("One page, ready");
@@ -185,6 +203,16 @@ export function BaseResumeStep({
     setLog([]);
     setSpec({});
     setFinished(false);
+    /* A rebuild produces a different set of bullets, and the metric answers are keyed by POSITION in
+     * the gap list. Carrying them over would attach a number the student wrote about one job to
+     * whatever bullet happens to land at that index next time, and a carried-over `metricsDone`
+     * would suppress the second build's ask entirely. Reachable from the Try again button, which
+     * appears on any save error after a successful build. */
+    setAts(null);
+    setMetricGaps([]);
+    setMetricAnswers({});
+    setMetricsDone(false);
+    setWarnings([]);
     if (demo) {
       replayDemo(onFrame);
       return;
@@ -295,6 +323,42 @@ export function BaseResumeStep({
   /* Edits are held locally and written on leaving edit mode, not per keystroke. A PUT per
      character would be a request storm, and a half-typed bullet is not a state worth persisting. */
   const onSpecChange = useCallback((next: ResumeSpec) => setSpec(next), []);
+
+  /* Writing the student's numbers into their own bullets.
+   *
+   * Appended as a clause rather than sent back to the model to reword. A number the student typed is
+   * the one fact on this screen we did not infer, and handing it to a rewrite pass is how it comes
+   * back rounded, relocated or attached to the wrong achievement. Matching on the exact bullet text
+   * means an edit made in the editor first simply misses, which is the safe direction: the student's
+   * own wording wins over ours. */
+  const applyMetrics = useCallback(async () => {
+    setSavingMetrics(true);
+    const answers = metricGaps
+      .map((gap, i) => ({ gap, value: (metricAnswers[i] ?? "").trim() }))
+      .filter(({ value }) => value.length > 0);
+    const next: ResumeSpec = {
+      ...(spec as ResumeSpec),
+      experience: (spec as ResumeSpec).experience.map((entry) => ({
+        ...entry,
+        bullets: entry.bullets.map((bullet) => {
+          const hit = answers.find((a) => a.gap.org === entry.org && a.gap.bullet === bullet);
+          if (!hit) return bullet;
+          const body = bullet.replace(/\.\s*$/, "");
+          return `${body} (${hit.value}).`;
+        }),
+      })),
+    };
+    setSpec(next);
+    setMetricsDone(true);
+    track("base_resume_metrics_added", { asked: metricGaps.length, answered: answers.length });
+    try {
+      if (!demo) await putBaseResume(next);
+    } catch {
+      /* The resume is already saved; a failed metric write is not worth blocking the step on. */
+    } finally {
+      setSavingMetrics(false);
+    }
+  }, [demo, metricAnswers, metricGaps, spec]);
 
   const persist = useCallback(async () => {
     if (demo) return;
@@ -524,15 +588,85 @@ export function BaseResumeStep({
 
           {/* Surfaced, never hidden: the student is about to approve this document, so anything the
               validator dropped or flagged has to be visible BEFORE they press the button. */}
+          {/* The ATS verdict, stated rather than implied. A student has no way to know whether the
+              thing they are about to send parses, and "we checked" is the reassurance the whole
+              build is for. Numbers, not adjectives: DESIGN.md's Guardrails forbid a claim we cannot
+              show the working for. */}
+          {finished && ats && (
+            <p className="mt-5 text-[12.5px] leading-5 text-muted">
+              Checked: an applicant tracking system can read this, {ats.extractable_chars} characters
+              on {ats.pages === 1 ? "one page" : `${ats.pages} pages`}.
+              {ats.scored_against === "target roles" && (
+                <> It matches {ats.keyword_coverage_pct}% of the words in the roles you picked.</>
+              )}
+            </p>
+          )}
+
+          {/* The metrics ask. A bullet without a number is not wrong, it is weaker than the same
+              bullet with one, and the student is the only person who knows the number. Skippable and
+              capped at five: asking about all fifteen on a federal-style resume turns the payoff
+              screen into a form, and drop-off is the real risk. */}
+          {finished && metricGaps.length > 0 && !metricsDone && (
+            <div className="mt-5 rounded-[12px] border border-border px-4 py-3.5">
+              <p className="text-[13px] text-ink">
+                {metricGaps.length === 1
+                  ? "One line would land harder with a number in it."
+                  : `${metricGaps.length} lines would land harder with a number in them.`}
+              </p>
+              <p className="mt-1 text-[12.5px] leading-5 text-muted">
+                How many, how much, how often, how fast. Leave any blank and we keep it as it is.
+              </p>
+              <ul className="mt-3 space-y-3">
+                {metricGaps.map((gap, i) => (
+                  <li key={i}>
+                    <p className="text-[12.5px] leading-5 text-muted">{gap.bullet}</p>
+                    <input
+                      value={metricAnswers[i] ?? ""}
+                      onChange={(e) =>
+                        setMetricAnswers((a) => ({ ...a, [i]: e.target.value }))
+                      }
+                      placeholder="e.g. 12 clients a week"
+                      aria-label={`A number for: ${gap.bullet}`}
+                      className="mt-1.5 w-full rounded-full border border-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+                    />
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void applyMetrics()}
+                  disabled={savingMetrics || Object.values(metricAnswers).every((v) => !v?.trim())}
+                  className="rounded-full bg-ink px-4 py-2 text-[13px] text-white disabled:opacity-40"
+                >
+                  {savingMetrics ? "Adding" : "Add these"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    track("base_resume_metrics_skipped", { asked: metricGaps.length });
+                    setMetricsDone(true);
+                  }}
+                  className="text-[13px] text-muted underline underline-offset-2"
+                >
+                  Skip
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* `open`, not a closed disclosure. The comment above says these have to be visible before
+              the student presses the button, and a summary they must click to expand is not visible -
+              it is one more thing to skip on the way to the button. There are rarely more than two. */}
           {finished && warnings.length > 0 && (
-            <details className="mt-5 rounded-[12px] border border-border px-4 py-3">
+            <details open className="mt-5 rounded-[12px] border border-border px-4 py-3">
               <summary className="cursor-pointer text-[13px] text-ink">
-                {warnings.length} {warnings.length === 1 ? "note" : "notes"} from the build
+                {warnings.length === 1 ? "One thing to check" : `${warnings.length} things to check`}
               </summary>
               <ul className="mt-2.5 space-y-1.5">
                 {warnings.map((w, i) => (
                   <li key={i} className="text-[12.5px] leading-5 text-muted">
-                    {w}
+                    {humanizeBuildNote(w)}
                   </li>
                 ))}
               </ul>
@@ -652,6 +786,15 @@ function replayDemo(onFrame: (frame: BuildFrame) => void) {
         event: "done",
         built_at: new Date().toISOString(),
         warnings: [],
+        ats: {
+          passed: true,
+          issues: [],
+          pages: 1,
+          extractable_chars: 2184,
+          keyword_coverage_pct: 41,
+          scored_against: "target roles",
+        },
+        metrics: [],
         spec: {
           school: "University of Southern California",
           degree: "Bachelor of Science in Computer Science",

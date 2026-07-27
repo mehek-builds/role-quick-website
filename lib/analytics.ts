@@ -41,6 +41,10 @@ type OnboardingEvent =
   // Measured separately from onboarding_step_done: choosing and finishing are different acts, and
   // the gap between them is how long they spent editing.
   | "onboarding_base_chosen"
+  // The metrics ask on the base step. Added and skipped are tracked apart because they answer
+  // different questions: whether students have the numbers, and whether the ask is worth its place.
+  | "base_resume_metrics_added"
+  | "base_resume_metrics_skipped"
   | "onboarding_complete";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
