@@ -83,23 +83,44 @@ const PILLAR_ICONS: Record<string, React.ReactNode> = {
   ),
 };
 
+/* The one pillar chip.
+ *
+ * The hero used to rebuild this by hand as three anchors, with the pillar tint
+ * demoted to :hover, so the same primitive read one way in the hero and another
+ * on the feature sections (audit finding 37). A chip carries its pillar's tint
+ * because that IS what identifies the pillar; being a link is a separate fact,
+ * so `href` is a prop rather than a second copy of the markup. */
+const PILLAR_CHIP =
+  "inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em]";
+
 function PillarChip({
   children,
   icon,
   bg,
   tone,
+  href,
 }: {
   children: React.ReactNode;
   icon: string;
   bg: string;
   tone: string;
+  /** When present the chip is a jump link, and takes the 44px target every control gets. */
+  href?: string;
 }) {
-  return (
-    <p className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] ${bg} ${tone}`}>
+  const inner = (
+    <>
       {PILLAR_ICONS[icon]}
       {children}
-    </p>
+    </>
   );
+  if (href) {
+    return (
+      <a href={href} className={`${PILLAR_CHIP} min-h-[44px] px-4 transition-opacity hover:opacity-80 ${bg} ${tone}`}>
+        {inner}
+      </a>
+    );
+  }
+  return <p className={`${PILLAR_CHIP} ${bg} ${tone}`}>{inner}</p>;
 }
 
 /* One CTA per pillar, each going somewhere DIFFERENT.
@@ -178,27 +199,15 @@ export default function Home() {
               one small first click before the big ask. Pillar color marks
               the feature it links to, nothing else. */}
           <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
-            <a
-              href="#documents"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-brand-soft hover:text-brand-ink"
-            >
-              <span className="text-brand-ink">{PILLAR_ICONS.resume}</span>
+            <PillarChip href="#documents" icon="resume" bg="bg-brand-soft" tone="text-brand-ink">
               Resume
-            </a>
-            <a
-              href="#autofill"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-teal-soft hover:text-teal-ink"
-            >
-              <span className="text-teal-ink">{PILLAR_ICONS.autofill}</span>
+            </PillarChip>
+            <PillarChip href="#autofill" icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">
               Forms
-            </a>
-            <a
-              href="#outreach"
-              className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-[13px] font-medium text-ink transition-colors hover:border-transparent hover:bg-coral-soft hover:text-coral-ink"
-            >
-              <span className="text-coral-ink">{PILLAR_ICONS.outreach}</span>
+            </PillarChip>
+            <PillarChip href="#outreach" icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">
               Emails
-            </a>
+            </PillarChip>
           </div>
           <div className="pt-16">
             <div data-demo><PacketDemo /></div>

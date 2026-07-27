@@ -178,6 +178,43 @@ export function ShimmerRows({ rows = 3 }: { rows?: number }) {
   );
 }
 
+/* The dashboard's page header.
+ *
+ * All seven pages repeated the same five-class h1 string by hand, and had already
+ * drifted: one used mt-2 for its subhead where the rest used mt-1, and the header
+ * block varied in whether it carried a divider (audit finding 42). A repeated
+ * string is a pattern nobody can enforce; a component is one you cannot get wrong.
+ *
+ * `action` is the page's one primary control, kept on the header's baseline. */
+export function PageHeader({
+  title,
+  sub,
+  action,
+  size = "section",
+}: {
+  title: React.ReactNode;
+  sub?: React.ReactNode;
+  action?: React.ReactNode;
+  /** The Applications page shrinks its title while the review drawer is open. */
+  size?: "section" | "heading";
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="min-w-0">
+        <h1
+          className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${
+            size === "heading" ? "text-heading" : "text-section"
+          }`}
+        >
+          {title}
+        </h1>
+        {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
 export function EmptyState({
   title,
   body,

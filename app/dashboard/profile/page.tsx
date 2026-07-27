@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, getApplicationProfile, type ApplicationProfile, type ParsedProfile } from "@/lib/api";
 import TargetingCard from "@/components/app/TargetingCard";
-import { Card, Chip, ErrorNote, ShimmerRows } from "@/components/app/ui";
+import { Card, Chip, ErrorNote, PageHeader, ShimmerRows } from "@/components/app/ui";
 
 type ProfileSummary = Pick<ParsedProfile, "full_name" | "school" | "grad_year" | "skills" | "target_roles">;
 
@@ -72,8 +72,7 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Profile</h1>
-        <p className="mt-1 text-sm text-muted">Resume, targeting, and saved answers.</p>
+        <PageHeader title="Profile" sub="Resume, targeting, and saved answers." />
       </div>
 
       {!profile || !applicationProfile ? (
