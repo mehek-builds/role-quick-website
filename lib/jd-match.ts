@@ -140,3 +140,26 @@ export async function fetchFunnel(): Promise<FunnelSummary> {
   const offset = -new Date().getTimezoneOffset(); // getTimezoneOffset is minutes WEST of UTC
   return api<FunnelSummary>(`/metrics/funnel?tz_offset=${offset}`);
 }
+
+// ---- F5: the pipeline board ----
+
+export type Stage = "saved" | "applied" | "interview" | "offer" | "closed";
+
+export type BoardCard = {
+  id: string;
+  company: string;
+  role: string;
+  created_at: string | null;
+  moved_at: string | null;
+  reviewable: boolean;
+  submission_status: string | null;
+  stage: Stage;
+};
+
+export async function fetchBoard(): Promise<{ stages: Stage[]; cards: BoardCard[] }> {
+  return api<{ stages: Stage[]; cards: BoardCard[] }>("/applications/board");
+}
+
+export async function moveCard(id: string, stage: Stage): Promise<void> {
+  await api(`/applications/${id}/stage`, { method: "PATCH", body: JSON.stringify({ stage }) });
+}
