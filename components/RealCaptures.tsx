@@ -11,22 +11,32 @@
    - dashboard-emails.png is app/dashboard/outreach rendered in the
      localhost QA mode (?qa=1) with its fixture data, same date.
 
+   All three were re-captured 2026-07-27 after the fixture roles were
+   changed from internships to open-level ones. Nothing about the interface
+   changed; only the fixture job titles and draft wording, which are the
+   part of these images a visitor reads as "who this is for". The extension
+   fixture lives in student-outreach-extension/preview.tsx, the dashboard
+   fixture in app/dashboard/outreach/page.tsx (QA_EVENTS). Re-render both
+   from those files rather than editing the PNGs.
+
    The data inside is fixture data (Figma, Marcus Lee, Acme). The
    *interface* is real, and that is what the caption claims and no more.
    If you swap these images, keep the caption honest about which is
    which. */
 const SHOTS = [
   {
+    /* w/h must match the PNG on disk exactly. They set the reserved
+       aspect ratio, so a stale number silently scales the capture. */
     src: "/product/extension-job.png",
     w: 598,
-    h: 900,
+    h: 913,
     alt: "The Litos extension popup on a job posting, showing the detected role, a Fill this form button, and a Find people button.",
     cap: "On a job page",
   },
   {
     src: "/product/extension-contacts.png",
     w: 598,
-    h: 900,
+    h: 913,
     alt: "The Litos contacts panel listing four people at the company, ranked by likelihood of a reply, each marked either Email checked or Email is a guess.",
     cap: "People to email",
   },

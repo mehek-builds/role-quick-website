@@ -118,27 +118,30 @@ const inboxTimes = [
   "11:43 AM", "11:42 AM", "11:41 AM", "11:40 AM", "11:39 AM",
 ];
 
+/* Role mix, not an internship list. Every row here used to end in "Intern",
+   which turned the confirmation wall into a claim about who Litos is for.
+   Keep a few internships and keep the rest open-level. */
 const inboxCompanies = [
-  { sender: "LinkedIn", company: "Northline", role: "Software Engineer Intern", pattern: "linkedin" },
+  { sender: "LinkedIn", company: "Northline", role: "Software Engineer", pattern: "linkedin" },
   { sender: "Fintra Careers", company: "Fintra", role: "Product Analyst", pattern: "interest" },
-  { sender: "Brightpath Health", company: "Brightpath", role: "Marketing Intern", pattern: "applying" },
-  { sender: "Ashworth Robotics", company: "Ashworth Robotics", role: "Backend Engineer Intern", pattern: "colon" },
+  { sender: "Brightpath Health", company: "Brightpath", role: "Marketing Associate", pattern: "applying" },
+  { sender: "Ashworth Robotics", company: "Ashworth Robotics", role: "Backend Engineer", pattern: "colon" },
   { sender: "Vela", company: "Vela", role: "Data Science Intern", pattern: "received" },
-  { sender: "Coreway Talent", company: "Coreway", role: "UX Design Intern", pattern: "linkedin" },
-  { sender: "Lumen Analytics", company: "Lumen Analytics", role: "Business Analyst Intern", pattern: "applying" },
-  { sender: "LinkedIn", company: "Parallax Systems", role: "Software Engineer Intern", pattern: "linkedin" },
+  { sender: "Coreway Talent", company: "Coreway", role: "UX Designer", pattern: "linkedin" },
+  { sender: "Lumen Analytics", company: "Lumen Analytics", role: "Business Analyst", pattern: "applying" },
+  { sender: "LinkedIn", company: "Parallax Systems", role: "Software Engineer", pattern: "linkedin" },
   { sender: "Solace Biotech", company: "Solace", role: "Research Intern", pattern: "interest" },
-  { sender: "Meridian Capital", company: "Meridian Capital", role: "Investment Banking Intern", pattern: "colon" },
-  { sender: "Driftwood Media", company: "Driftwood", role: "Content Intern", pattern: "received" },
-  { sender: "Anchorpoint Labs", company: "Anchorpoint", role: "Growth Intern", pattern: "applying" },
+  { sender: "Meridian Capital", company: "Meridian Capital", role: "Investment Banking Analyst", pattern: "colon" },
+  { sender: "Driftwood Media", company: "Driftwood", role: "Content Strategist", pattern: "received" },
+  { sender: "Anchorpoint Labs", company: "Anchorpoint", role: "Growth Marketer", pattern: "applying" },
   { sender: "LinkedIn", company: "Cascade Robotics", role: "Mechanical Engineer Intern", pattern: "linkedin" },
-  { sender: "Ionic Health", company: "Ionic Health", role: "Product Design Intern", pattern: "interest" },
-  { sender: "Westbrook Talent", company: "Westbrook", role: "Operations Intern", pattern: "colon" },
-  { sender: "Nimbus Cloud", company: "Nimbus", role: "Cloud Engineer Intern", pattern: "received" },
+  { sender: "Ionic Health", company: "Ionic Health", role: "Product Designer", pattern: "interest" },
+  { sender: "Westbrook Talent", company: "Westbrook", role: "Operations Manager", pattern: "colon" },
+  { sender: "Nimbus Cloud", company: "Nimbus", role: "Cloud Engineer", pattern: "received" },
   { sender: "Halcyon Finance", company: "Halcyon", role: "Finance Intern", pattern: "applying" },
-  { sender: "LinkedIn", company: "Rowan Dynamics", role: "Systems Engineer Intern", pattern: "linkedin" },
-  { sender: "Tidal Works", company: "Tidal Works", role: "Frontend Engineer Intern", pattern: "interest" },
-  { sender: "Brookline Ventures", company: "Brookline", role: "Venture Intern", pattern: "colon" },
+  { sender: "LinkedIn", company: "Rowan Dynamics", role: "Systems Engineer", pattern: "linkedin" },
+  { sender: "Tidal Works", company: "Tidal Works", role: "Frontend Engineer", pattern: "interest" },
+  { sender: "Brookline Ventures", company: "Brookline", role: "Venture Associate", pattern: "colon" },
 ];
 
 function buildInboxEmail(entry: (typeof inboxCompanies)[number], time: string, i: number) {
@@ -378,7 +381,7 @@ export function ApplicationFormMockup() {
         </span>
       </div>
       <p className="mt-2 text-[13px] font-semibold text-ink">
-        Software Engineer Intern · Northline
+        Software Engineer · Northline
       </p>
 
       <div className="mt-3.5 grid grid-cols-2 gap-2">
@@ -741,9 +744,9 @@ export function JobDescriptionMockup() {
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Northline · Los Angeles
         </p>
-        <p className="mt-1.5 text-sm font-semibold text-ink">Software Engineer Intern</p>
+        <p className="mt-1.5 text-sm font-semibold text-ink">Software Engineer</p>
         <p className="mt-3 text-[12px] leading-6 text-muted">
-          We&apos;re looking for a Software Engineer Intern to help build{" "}
+          We&apos;re looking for a Software Engineer to help build{" "}
           <M k="distributed">distributed systems</M> that power our platform.
           Strong <M k="python">Python</M> fundamentals required.
         </p>
@@ -980,7 +983,7 @@ export function PacketMockup() {
     <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-[20px] border border-border bg-surface text-left">
       <div className="flex items-baseline justify-between border-b border-border px-6 py-4">
         <span className="text-sm font-medium text-ink">
-          Software Engineer Intern <span className="font-normal text-muted">· Notion</span>
+          Software Engineer <span className="font-normal text-muted">· Notion</span>
         </span>
         <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Application

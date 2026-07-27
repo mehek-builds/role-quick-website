@@ -9,10 +9,10 @@
    any deploy. They are structured so the swap is data-only. */
 
 export const CANNED_POSTING = {
-  url: "jobs.lever.co/notion/software-engineer-intern",
+  url: "jobs.lever.co/notion/software-engineer",
   company: "Notion",
   location: "San Francisco",
-  title: "Software Engineer Intern",
+  title: "Software Engineer",
 };
 
 /* The canon artifacts, matching the film props and PacketDemo rows. */
@@ -46,14 +46,20 @@ export const CANNED_FIELDS_TOTAL = 27;
 
 export const CANNED_OUTREACH = {
   to: "Priya Nair · USC alum · Engineering",
-  subject: "USC junior applying to the SWE intern role",
-  body: "Hi Priya, I just applied to the software engineer intern role and saw you made the same USC-to-Notion jump. I've spent the last year building a CRDT-backed editor for our club portal, so Notion's sync problems are the ones I already think about for fun. Would you be open to a 15-minute chat about your first year on the team?",
-  words: 120,
+  subject: "Fellow Trojan applying to the SWE role",
+  body: "Hi Priya, I just applied to the software engineer role and saw you made the same USC-to-Notion jump. I've spent the last year building a CRDT-backed editor, so Notion's sync problems are the ones I already think about for fun. Would you be open to a 15-minute chat about your first year on the team?",
+  /* TrySimulator prints this as "~N words" on the draft the visitor is looking
+     at, so it has to be the count of the body above, not a typical-output
+     figure. It said 120 against a 60-word body before this, and a visitor who
+     counts is the person we are trying to earn trust from. */
+  words: 55,
 };
 
 /* Real-path job postings moved to the daily feed: public/try-jobs.json,
    loaded via lib/try-jobs.ts (Mehek, 2026-07-08: cycle through ~10 recent
-   big-tech intern roles that refresh daily). */
+   recognizable roles that refresh daily). The feed used to be intern-only,
+   which made the one demo a visitor can actually run read as a product for
+   students; see the brief in try-jobs.json. */
 
 export type RealPacket = {
   tailored_bullets: string[];
