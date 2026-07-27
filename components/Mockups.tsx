@@ -872,9 +872,9 @@ export function BankStrip() {
     <div className="mx-auto mt-10 w-full max-w-[640px] rounded-[14px] border border-border bg-surface px-5 py-4">
       <div className="flex items-baseline justify-between gap-3">
         <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
-          Your experience bank
+          Everything you have done
         </span>
-        <span className="font-mono text-[10px] text-faint">3 of 6 entries picked for this JD</span>
+        <span className="font-mono text-[10px] text-faint">3 of 6 picked for this job</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-1.5">
         {entries.map((e) => (
