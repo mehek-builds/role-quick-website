@@ -205,6 +205,14 @@ export function PrimaryButton({
   );
 }
 
+/* The quiet controls in an action row, Skip and Finish later, share one class
+   string on purpose. They sit next to each other on the same baseline, so any
+   drift between them is visible immediately, and drift is exactly the bug both
+   components were written to fix. Shared constant rather than two identical
+   literals, so the parity is enforced instead of coincidental. */
+const QUIET_ACTION =
+  "min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline";
+
 /* "Finish later" is plainly worded and always visible. Strong default, not a trap: burying the
    exit would be the dark pattern the Guardrails exist to prevent.
  *
@@ -218,7 +226,7 @@ export function LaterLink({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       title="Anything you have finished stays saved"
-      className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+      className={QUIET_ACTION}
     >
       Finish later
     </button>
@@ -246,7 +254,7 @@ export function SkipLink({ onClick, what }: { onClick: () => void; what: string 
       type="button"
       onClick={onClick}
       title={`Optional. You can add ${what} later from your profile.`}
-      className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+      className={QUIET_ACTION}
     >
       Skip
     </button>
