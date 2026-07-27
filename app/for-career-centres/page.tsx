@@ -126,7 +126,7 @@ export default function ForCareerCentres() {
             It is a small team and the reply comes from a person who built it.
           </p>
           <a
-            href="mailto:mehekman@usc.edu?subject=Litos%20for%20career%20centres"
+            href="/contact"
             className="mt-5 inline-flex min-h-11 items-center rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
           >
             Email us
