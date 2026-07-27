@@ -311,6 +311,13 @@ export default function Home() {
                   <p className="mt-3 text-[13px] text-muted">
                     Every default is yours to change in Settings.
                   </p>
+                  {/* These panels are built in the DOM, not captured from a
+                      live session. They reproduce the extension's real
+                      output, but a reader is entitled to know which one
+                      they are looking at before treating it as evidence. */}
+                  <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    Illustration of the real fill, not a screenshot
+                  </p>
                 </div>
               </div>
             </Reveal>
@@ -358,6 +365,9 @@ export default function Home() {
                       <span className="text-muted"> · send to you</span>
                     </p>
                   </div>
+                  <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    Illustration of a real draft, not a screenshot
+                  </p>
                 </div>
                 <div>
                   <OutreachDemo />
