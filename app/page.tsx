@@ -20,6 +20,12 @@ import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
 import { STORE_URL } from "@/lib/config";
+
+/* Stamped once at build time, not per render. */
+const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString("en-US", {
+  month: "long",
+  year: "numeric",
+});
 import { ROLES } from "@/lib/rolesFeed";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
@@ -185,7 +191,7 @@ export default function Home() {
           <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
             <Reveal>
               <h2 className="sr-only">How many people you are up against</h2>
-              <p className="font-mono text-7xl tracking-[-0.04em] text-ink sm:text-8xl">
+              <p className="font-mono text-display tracking-[-0.04em] text-ink">
                 <CountUp to={250} />
               </p>
               <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
@@ -203,10 +209,10 @@ export default function Home() {
           <div className="relative mx-auto max-w-5xl px-6 py-36">
           <Reveal>
             <div className="mx-auto max-w-[560px] text-center">
-              <h2 className="text-[32px] font-[450] tracking-[-0.02em] text-ink">
+              <h2 className="text-section font-[450] tracking-[-0.02em] text-ink">
                 A robot reads it first.
               </h2>
-              <p className="mt-4 text-[15px] leading-7 text-muted">
+              <p className="mt-4 text-base leading-7 text-muted">
                 Job sites scan your resume with software. If it cannot read
                 yours, no person ever sees it. We build one it can read.
               </p>
@@ -239,10 +245,10 @@ export default function Home() {
                   <div className="flex justify-center">
                     <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Resume</PillarChip>
                   </div>
-                  <h2 className="mt-3 text-[32px] font-[450] tracking-[-0.02em] text-ink">
+                  <h2 className="mt-3 text-section font-[450] tracking-[-0.02em] text-ink">
                     We rebuild it. We do not just swap words.
                   </h2>
-                  <p className="mt-2.5 text-[14px] leading-6 text-muted">
+                  <p className="mt-2.5 text-sm leading-6 text-muted">
                     We read what the job asks for. Then we put your best
                     work first, in their words.
                   </p>
@@ -271,16 +277,16 @@ export default function Home() {
                   </p>
                   <div className="mt-3" />
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Forms</PillarChip>
-                  <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
+                  <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
                     You never type your phone number again.
                   </h2>
-                  <p className="mt-4 text-[15px] leading-7 text-muted">
+                  <p className="mt-4 text-base leading-7 text-muted">
                     Most forms ask 27 questions. It is the same answers
                     every time. We fill them in, then wait for you to
                     check.
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
-                  <div className="mt-8 space-y-2.5 text-[14px] leading-6">
+                  <div className="mt-8 space-y-2.5 text-sm leading-6">
                     <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
                     <p className="text-muted">We attach your new resume.</p>
                     <p className="text-muted">We skip the questions about race and gender.</p>
@@ -327,16 +333,16 @@ export default function Home() {
                   </p>
                   <div className="mt-3" />
                   <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Emails</PillarChip>
-                  <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
+                  <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
                     Nobody reads applications. People read emails.
                   </h2>
-                  <p className="mt-4 text-[15px] leading-7 text-muted">
+                  <p className="mt-4 text-base leading-7 text-muted">
                     While the form fills, we find people who work there. We
                     write the email and leave it in your Gmail. People from
                     your school answer most, so they come first.
                   </p>
                   {/* Machine voice: what outreach actually does, as data. */}
-                  <div className="mt-8 space-y-2.5 text-[14px] leading-6">
+                  <div className="mt-8 space-y-2.5 text-sm leading-6">
                     <p className="text-muted">We find people who work there.</p>
                     <p className="text-muted">We check every email address, and tell you when we could not.</p>
                     <p className="text-muted">We write a short note that sounds like you.</p>
@@ -389,10 +395,10 @@ export default function Home() {
               <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                 Your application is ready
               </p>
-              <h2 className="mt-4 text-[32px] font-[450] tracking-[-0.02em] text-ink">
+              <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
                 Now you try.
               </h2>
-              <p className="mx-auto mt-4 max-w-md text-[15px] leading-7 text-muted">
+              <p className="mx-auto mt-4 max-w-md text-base leading-7 text-muted">
                 Try it on a pretend job. Or paste your own resume and watch
                 it work. You do not have to install anything.
               </p>
@@ -419,7 +425,7 @@ export default function Home() {
           <Wash tint="warm" soft />
           <div className="relative mx-auto max-w-2xl px-6 py-36">
             <Reveal>
-              <h2 className="text-center text-[32px] font-[450] tracking-[-0.02em] text-ink">
+              <h2 className="text-center text-section font-[450] tracking-[-0.02em] text-ink">
                 Questions.
               </h2>
               {/* The three answers that decide whether a skeptic installs were
@@ -435,14 +441,14 @@ export default function Home() {
                     <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
                       {label}
                     </p>
-                    <p className="mt-2.5 text-[14px] leading-6 text-muted">{body}</p>
+                    <p className="mt-2.5 text-sm leading-6 text-muted">{body}</p>
                   </div>
                 ))}
               </div>
               <div className="rq-glass mt-6 px-6">
                 {FAQ_ITEMS.map(({ q, a }) => (
                   <details key={q} className="group border-b border-border">
-                    <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-left text-[17px] font-medium text-ink [&::-webkit-details-marker]:hidden">
+                    <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-left text-lg font-medium text-ink [&::-webkit-details-marker]:hidden">
                       {q}
                       <span
                         aria-hidden
@@ -451,7 +457,7 @@ export default function Home() {
                         +
                       </span>
                     </summary>
-                    <p className="pb-6 pr-10 text-[15px] leading-7 text-muted">{a}</p>
+                    <p className="pb-6 pr-10 text-base leading-7 text-muted">{a}</p>
                   </details>
                 ))}
               </div>
@@ -471,7 +477,7 @@ export default function Home() {
               </div>
             </Reveal>
             <Reveal>
-              <h2 className="mt-8 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
+              <h2 className="mt-8 text-display font-[450] leading-[1.05] tracking-[-0.03em] text-ink">
                 Open your next application.
               </h2>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -495,7 +501,7 @@ export default function Home() {
               </p>
               {/* A person, not a company voice. The strongest asset here is
                   that a student on the same job hunt is building it. */}
-              <p className="mt-8 text-[14px] leading-7 text-muted">
+              <p className="mt-8 text-sm leading-7 text-muted">
                 Made by{" "}
                 {/* inline in a sentence: WCAG 2.5.8 exempts these, and a
                     44px box here would break the line. */}
@@ -521,7 +527,7 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/brand/litos-mark.svg" alt="" className="h-5 w-5" />
-                <span className="text-sm font-semibold tracking-tight text-ink">
+                <span className="text-base font-medium tracking-tight text-ink">
                   Litos
                 </span>
               </div>
@@ -559,16 +565,17 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li><a href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Privacy</a></li>
-                <li><a href="/login" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Sign in</a></li>
               </ul>
             </div>
           </div>
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
             <span>&copy; {new Date().getFullYear()} Litos</span>
             <span>You do not need a mouse to use this site.</span>
+            {/* Was new Date() at render, so it always read "updated this month"
+                whether or not anything had changed. Manufactured freshness is
+                exactly what the Guardrails ban. This is the real build date. */}
             <span className="font-mono text-[11px] uppercase tracking-[0.08em]">
-              Updated{" "}
-              {new Date().toLocaleString("en-US", { month: "long", year: "numeric" })}
+              Built {BUILD_DATE}
             </span>
           </div>
         </div>

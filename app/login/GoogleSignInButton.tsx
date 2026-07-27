@@ -91,7 +91,7 @@ export function GoogleSignInButton({ clientId, busy, onCredential, onLoadError }
   return (
     <div className={busy ? "pointer-events-none opacity-50" : undefined} aria-busy={busy}>
       <Script
-        src="https://accounts.google.com/gsi/client"
+        src="https://accounts.google.com/gsi/client?hl=en"
         strategy="afterInteractive"
         onReady={renderButton}
         onError={onLoadError}

@@ -107,7 +107,7 @@ export default function ResumeWorkspace() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Resume</h1>
+        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Resume</h1>
         <p className="mt-1 text-sm text-muted">
           Your main resume and everything you have done. Every resume we make is built
           from what lives here, so the richer it is, the better the fit.
@@ -247,7 +247,7 @@ export default function ResumeWorkspace() {
                       patchEntry(i, { bullet_variants: e.target.value.split("\n") })
                     }
                     rows={Math.max(3, entry.bullet_variants.length)}
-                    className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-3.5 py-2.5 text-sm leading-6 text-ink outline-none focus:border-brand"
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3.5 py-2.5 text-sm leading-6 text-ink outline-none focus:border-brand"
                     placeholder="Shipped X that did Y, measured by Z"
                   />
                 </div>
@@ -351,7 +351,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         <summary className="cursor-pointer text-xs text-faint hover:text-muted">
           View full parsed profile
         </summary>
-        <pre className="mt-2 max-h-72 overflow-auto rounded-[12px] bg-surface-alt p-4 font-mono text-[11px] leading-5 text-muted">
+        <pre className="mt-2 max-h-72 overflow-auto rounded-inner bg-surface-alt p-4 font-mono text-[11px] leading-5 text-muted">
           {JSON.stringify(profile, null, 2)}
         </pre>
       </details>
@@ -419,7 +419,7 @@ function EducationEditor({ school, degree, gradDate, onSaved }: { school: string
   }
 
   return (
-    <div className="mt-4 rounded-[12px] border border-border bg-surface-alt p-4">
+    <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
       <p className="text-xs text-muted">
         Every tailored resume prints this exactly as written here. Keep a joint degree whole, for example
         &quot;Bachelor of Science in Computer Science &amp; Business Administration, Finance Emphasis&quot;.

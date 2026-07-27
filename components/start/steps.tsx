@@ -77,7 +77,7 @@ export function FocusStep({
   return (
     <StartShell
       step="focus"
-      title="What are you looking for?"
+      title="Tell us what you want."
       sub="Choose what you want next."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
@@ -90,8 +90,8 @@ export function FocusStep({
 
       <div className="mb-7">
         <div className="flex min-h-5 items-baseline justify-between">
-          <p className="text-[14px] text-ink">What job</p>
-          <span className="text-[12px] text-faint">Pick up to {MAX_CATEGORIES}</span>
+          <p className="text-sm text-ink">What job</p>
+          <span className="text-xs text-faint">Pick up to {MAX_CATEGORIES}</span>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => {
@@ -117,8 +117,8 @@ export function FocusStep({
 
       <div className="mb-8">
         <div className="flex min-h-5 items-baseline justify-between">
-          <p className="text-[14px] text-ink">Type</p>
-          <span className="text-[12px] text-faint">Pick up to {MAX_ROLE_TYPES}</span>
+          <p className="text-sm text-ink">Type</p>
+          <span className="text-xs text-faint">Pick up to {MAX_ROLE_TYPES}</span>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
@@ -228,7 +228,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       >
         <Receipt rows={rows} />
         {empty && (
-          <p className="mt-4 rounded-[12px] bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
+          <p className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
             We couldn&apos;t pull any experience out of that file, so tailored resumes won&apos;t
             work yet. It usually means the PDF is an image rather than text. Try a different
             export, or carry on and add entries by hand later.
@@ -275,7 +275,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           const f = e.dataTransfer.files?.[0];
           if (f) void upload(f);
         }}
-        className={`flex min-h-28 w-full min-w-0 cursor-pointer items-center justify-between gap-5 rounded-[12px] border border-dashed border-border bg-surface-alt px-5 py-5 text-left transition-colors hover:border-brand sm:px-6 ${
+        className={`flex min-h-28 w-full min-w-0 cursor-pointer items-center justify-between gap-5 rounded-inner border border-dashed border-border bg-surface-alt px-5 py-5 text-left transition-colors hover:border-brand sm:px-6 ${
           busy ? "pointer-events-none" : ""
         }`}
       >
@@ -284,14 +284,14 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
             <div className="flex h-8 w-8 shrink-0 items-center justify-center">
               <ThinkingOrb state="composing" size={20} />
             </div>
-            <p className="min-w-0 truncate font-mono text-[12px] text-muted">
+            <p className="min-w-0 truncate font-mono text-xs text-muted">
               Reading {file?.name}
             </p>
           </>
         ) : (
           <>
-            <p className="text-[16px] text-ink">Choose your resume</p>
-            <p className="shrink-0 text-right font-mono text-[12px] text-muted">
+            <p className="text-base text-ink">Choose your resume</p>
+            <p className="shrink-0 text-right font-mono text-xs text-muted">
               PDF or DOCX<br />10 MB max
             </p>
           </>
@@ -308,7 +308,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         }}
       />
 
-      <p className="mt-6 max-w-[46ch] text-[14px] leading-6 text-muted">
+      <p className="mt-6 max-w-[46ch] text-sm leading-6 text-muted">
         Used only for your applications. Never sold.
       </p>
       <div className="mt-6 flex items-center gap-3">
@@ -398,17 +398,17 @@ export function InstallStep({
           and I&apos;d rather learn it from a real one than guess. This is the last one you type.
         </FounderNote>
       </div>
-      <div className="overflow-hidden rounded-[12px] border border-border">
+      <div className="overflow-hidden rounded-inner border border-border">
         <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
             Live postings
           </span>
-          <span className="font-mono text-[10px] text-faint">Refreshed daily</span>
+          <span className="font-mono text-[11px] text-faint">Refreshed daily</span>
         </div>
         {jobs === null ? (
           <div className="space-y-2 p-4">
-            <div className="rq-shimmer h-10 rounded-[8px]" />
-            <div className="rq-shimmer h-10 rounded-[8px]" />
+            <div className="rq-shimmer h-10 rounded-inner" />
+            <div className="rq-shimmer h-10 rounded-inner" />
           </div>
         ) : jobs.length === 0 ? (
           <p className="px-4 py-5 text-[13px] text-muted">
@@ -425,12 +425,12 @@ export function InstallStep({
               className="flex items-center justify-between gap-4 border-t border-border px-4 py-3 transition-colors first:border-t-0 hover:bg-surface-alt"
             >
               <span className="min-w-0">
-                <span className="block truncate text-[14px] text-ink">{j.title}</span>
-                <span className="block truncate text-[12px] text-muted">
+                <span className="block truncate text-sm text-ink">{j.title}</span>
+                <span className="block truncate text-xs text-muted">
                   {j.company} · {j.location}
                 </span>
               </span>
-              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.06em] text-faint">
+              <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.06em] text-faint">
                 {j.ats}
               </span>
             </a>
@@ -513,7 +513,7 @@ export function GapsStep({
         value={values[key] ?? ""}
         onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
         placeholder={meta.placeholder}
-        className="w-full rounded-full border border-border bg-surface px-4 py-2.5 text-[14px] text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     );
   }
@@ -531,7 +531,7 @@ export function GapsStep({
           <label htmlFor="gap-gpa" className="text-[13px] text-ink">GPA</label>
           {/* R-005: store the value AND the scale, then convert through a disclosed mapping.
               A bare 3.89 tells a UK form nothing, and guessing 97% would be a lie. */}
-          <p className="mt-1 text-[12px] leading-5 text-faint">
+          <p className="mt-1 text-xs leading-5 text-faint">
             Stored the way you earned it. Some forms want a percentage instead, and we work that out
             and show you the mapping first.
           </p>
@@ -552,7 +552,7 @@ export function GapsStep({
       {gaps.includes("languages") && (
         <div className="mb-5">
           <label htmlFor="gap-languages" className="text-[13px] text-ink">Which languages are you fluent in?</label>
-          <p className="mt-1 text-[12px] leading-5 text-faint">
+          <p className="mt-1 text-xs leading-5 text-faint">
             Separate them with commas. Forms that ask get exactly this list, nothing inferred.
           </p>
           <div className="mt-2">{field("languages")}</div>
@@ -562,7 +562,7 @@ export function GapsStep({
       {showSalary && (
         <div className="mb-5">
           <label htmlFor="gap-desired_salary" className="text-[13px] text-ink">Desired salary</label>
-          <p className="mt-1 text-[12px] leading-5 text-faint">
+          <p className="mt-1 text-xs leading-5 text-faint">
             Optional, and left blank on every form unless you set it. We need the currency too, or
             the number means nothing on a posting priced somewhere else.
           </p>
@@ -647,9 +647,9 @@ export function TargetStep({
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="mb-7">
-        <p className="text-[14px] text-ink">Titles</p>
+        <p className="text-sm text-ink">Titles</p>
         {/* target_roles has been written by the parser since v0 and read by nothing. First use. */}
-        <p className="mt-0.5 text-[12px] text-faint">
+        <p className="mt-0.5 text-xs text-faint">
           {suggestedTitles.length > 0
             ? "Pulled from your resume. Drop any that are wrong."
             : "Add the titles you'd actually accept."}
@@ -678,8 +678,8 @@ export function TargetStep({
       </div>
 
       <div className="mb-7">
-        <p className="text-[14px] text-ink">When you want to start</p>
-        <p className="mt-0.5 text-[12px] text-faint">
+        <p className="text-sm text-ink">When you want to start</p>
+        <p className="mt-0.5 text-xs text-faint">
           {gradYear
             ? `You graduate in ${gradYear}, so this is the one that matters.`
             : "The season you are aiming at."}
@@ -697,8 +697,8 @@ export function TargetStep({
       </div>
 
       <div className="mb-8">
-        <p className="text-[14px] text-ink">If that does not work out</p>
-        <p className="mt-0.5 text-[12px] text-faint">The next season you would take.</p>
+        <p className="text-sm text-ink">If that does not work out</p>
+        <p className="mt-0.5 text-xs text-faint">The next season you would take.</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {periods
             .filter((p) => p.slug !== primary)
@@ -750,15 +750,15 @@ export function DoneStep({
             now refuses to enable it until they have approved three submissions themselves, so
             offering it here would have been a checkbox that 403s the whole finish action. It
             appears in Settings once it is theirs to make. */}
-        <p className="py-4 text-[14px] leading-6 text-muted">
+        <p className="py-4 text-sm leading-6 text-muted">
           Litos asks you before it sends anything. Once you have approved a few applications
           yourself and seen what it fills in, you can let it send without asking, from Settings.
         </p>
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
           <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
           <span>
-            <span className="block text-[16px] text-ink">Read the code a company emails me</span>
-            <span className="mt-1 block text-[14px] leading-6 text-muted">
+            <span className="block text-base text-ink">Read the code a company emails me</span>
+            <span className="mt-1 block text-sm leading-6 text-muted">
               Only while an application is running, only that code, and it is never saved.
             </span>
           </span>

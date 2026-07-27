@@ -17,7 +17,8 @@ import { useEffect, useState } from "react";
 const LS_SEEN = "litos.film.seen.v1";
 const SEEN_AT = 1400;
 
-export function ReturningVisitor() {
+/** Shared so the hero and this pill cannot both claim the skip control. */
+export function useHasSeenFilm() {
   const [returning, setReturning] = useState(false);
 
   useEffect(() => {
@@ -41,6 +42,11 @@ export function ReturningVisitor() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  return returning;
+}
+
+export function ReturningVisitor() {
+  const returning = useHasSeenFilm();
   if (!returning) return null;
 
   return (

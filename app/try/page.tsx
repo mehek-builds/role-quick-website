@@ -26,10 +26,10 @@ export default async function TryPage({
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             Try it
           </p>
-          <h1 className="mt-3 text-4xl font-[450] leading-[1.05] tracking-[-0.03em] text-ink sm:text-[52px]">
+          <h1 className="mt-3 text-display font-[450] leading-[1.05] tracking-[-0.03em] text-ink">
             Now you try.
           </h1>
-          <p className="mx-auto mt-4 max-w-[460px] text-[15px] leading-7 text-muted">
+          <p className="mx-auto mt-4 max-w-[460px] text-base leading-7 text-muted">
             This is what happens on a real job. Press the buttons.
             Nothing installs. Nothing gets sent.
           </p>

@@ -36,7 +36,15 @@ numbers), never claimed with hype.
   ending with a period.
 - **Machine voice:** Azeret Mono. Every number, timestamp, filename, ATS name,
   status, and label. When the machine speaks, it speaks in mono.
-- **Scale (deliberate gap — nothing between 20 and 64):**
+- **Scale is enforced, not described.** The named steps live in
+  `app/globals.css` (`text-display/section/heading/body/small/machine/label`).
+  Reach for a step; if none fits, the element is usually the wrong size. ONE
+  exemption, documented there: components that draw a miniature PICTURE of a UI
+  (Mockups, TrySimulator, HeroBackdrop, PacketDemo, BRoll, ResumePaper,
+  OutreachDemo, RealCaptures, Funnel) and `app/qa/portal-submission`, which
+  depicts a generic employer ATS. Those are illustrations, not type.
+- **Scale (deliberate gap — nothing between 20 and 64, except `heading` at 20
+  which is its top edge, for headings inside a card):**
   - Display: 64-76px / 450 / -0.03em / 1.02
   - Section: 32px / 450 / -0.02em
   - Body: 16px / 400 / 1.65 (muted color, max-width ~560-660px)
@@ -53,13 +61,13 @@ Copilot pages captured live): Simplify repeats ONE action color on every CTA
 and gives each feature row a pale tinted band. The law is **consistency of
 meaning**, not scarcity. Three tonal families, each with a job:
 
-- **Blue family** `#6b84e8` / ink `#4257b8` / soft `#eef1fe` — **action +
+- **Blue family** `#6b84e8` / ink `#3d51ad` / soft `#eef1fe` — **action +
   documents pillar + Pro.** Solid blue may repeat on every true CTA on a page
   (never on anything that isn't an action). Blue-soft surfaces carry the
   documents pillar, selected states, the closing band, and **Pro emphasis**
   (pricing card, dashboard upsell) — the upgrade is allowed to be the
   strongest moment on its screen.
-- **Teal family** `#68ad95` / ink `#457f6c` / soft `#eaf5f0` — **autofill
+- **Teal family** `#68ad95` / ink `#3f7d67` / soft `#eaf5f0` — **autofill
   pillar.** Its feature section sits on a whisper band (`teal-soft/50`);
   chips, threads, and "filled/done" states in app.
 - **Coral family** `#dd9273` / ink `#a35f3f` / soft `#fbefe8` — **outreach
@@ -90,7 +98,13 @@ meaning**, not scarcity. Three tonal families, each with a job:
   preceded by an 11px mono label eyebrow when context is needed.
 - **Imagery:** real product UI only (the mockup components). One visual per
   section, max. No stock, no illustration, no icons-in-colored-circles.
-- **Radius:** cards 20px, controls/pills 999px, inner blocks 12px. (Deck rule.)
+- **Radius:** cards 20px (`rounded-card`), controls/pills 999px
+  (`rounded-control`), inner blocks and text inputs 12px (`rounded-inner`).
+  A text input is an inner block, not a pill: `/login` shipped full-pill inputs
+  while the extension shipped 12px, so one product had two form languages.
+- **Elevation:** `shadow-rest`, `shadow-raised`, `shadow-overlay`. Three levels.
+  The system previously defined none, so the site grew 14 one-off recipes, each
+  used exactly once.
 - **Numbers:** stats appear as bare mono numerals (Stripe style), no badge.
 - **Signature motifs:**
   1. **The receipt:** a packet card with a mono timestamp gutter

@@ -81,7 +81,7 @@ export function InterviewPrep({
       )}
 
       {open && !failed && !prep && (
-        <div className="mt-3 h-20 animate-pulse rounded-[12px] bg-surface-alt" aria-hidden="true" />
+        <div className="mt-3 h-20 animate-pulse rounded-inner bg-surface-alt" aria-hidden="true" />
       )}
 
       {open && prep && (
@@ -99,15 +99,15 @@ export function InterviewPrep({
               </p>
               <ul className="mt-3 space-y-2">
                 {prep.items.map((item) => (
-                  <li key={item.term} className="rounded-[12px] border border-border bg-surface px-4 py-3">
+                  <li key={item.term} className="rounded-inner border border-border bg-surface px-4 py-3">
                     <p className="text-[13px] font-medium leading-5 text-ink">{item.question}</p>
                     {item.answer ? (
-                      <p className="mt-1.5 border-l-2 border-brand/40 pl-2.5 text-[12px] leading-5 text-muted">
+                      <p className="mt-1.5 border-l-2 border-brand/40 pl-2.5 text-xs leading-5 text-muted">
                         {item.answer.bullet}
                         <span className="ml-1.5 text-faint">{item.answer.org}</span>
                       </p>
                     ) : (
-                      <p className="mt-1.5 text-[12px] leading-5 text-warn">
+                      <p className="mt-1.5 text-xs leading-5 text-warn">
                         Nothing on your resume answers this. Decide what you would say before they ask.
                       </p>
                     )}

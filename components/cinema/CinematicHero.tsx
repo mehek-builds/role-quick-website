@@ -6,7 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
 import { MobileSendLink } from "@/components/MobileSendLink";
-import { ReturningVisitor } from "@/components/ReturningVisitor";
+import { ReturningVisitor, useHasSeenFilm } from "@/components/ReturningVisitor";
 import { track } from "@/lib/analytics";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
@@ -66,6 +66,7 @@ const CHAPTERS = [
 ];
 
 export function CinematicHero({ storeUrl }: { storeUrl: string }) {
+  const hasSeenFilm = useHasSeenFilm();
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const filmRef = useRef<HTMLCanvasElement>(null);
@@ -551,10 +552,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     <div ref={wrapRef} className="rq-cine relative h-[200svh]">
       <div className="sticky top-0 h-svh w-full overflow-hidden">
 
-        {/* sparse machine-voice caption over the opening frame */}
-        <p className="rq-cine-caption rq-enter absolute bottom-24 right-16 hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint sm:block" aria-hidden>
-          Job found
-        </p>
+        {/* The chapter caption that used to sit here said "Job found" at the same
+            moment, and a few hundred pixels from, the fixed site rail saying
+            "00 · Job found" down the right edge (audit finding 46). One machine
+            voice per moment; the rail is the one that persists, so it wins. */}
 
         {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:top-[18svh]">
@@ -570,36 +571,44 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Free Chrome extension for job seekers
             </p>
-            <h1 className="text-5xl font-[450] leading-[1.02] tracking-[-0.03em] text-ink sm:text-[68px]">
+            <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
               Apply <span className="text-brand-ink">in seconds.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-[460px] text-[16px] leading-[1.65] text-muted">
+            <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted">
               Open a job. We fix your resume, fill in the form, and write
               the email. You hit send.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+              {/* Desktop only: a phone cannot install a Chrome extension, and the
+                  handoff card right below this says exactly that. Leading a phone
+                  with an action it cannot take was audit finding 47. */}
               <a
                 href={storeUrl}
                 onClick={() => track("install_click", { source: "hero" })}
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                className="hidden min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:inline-flex sm:w-auto"
               >
                 Add to Chrome, it&apos;s free
               </a>
+              {/* Works on every device, so on mobile it IS the primary action. */}
               <a
                 href="/try"
-                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto sm:bg-transparent sm:px-2 sm:py-0 sm:text-muted sm:hover:bg-transparent sm:hover:text-ink"
               >
                 Try it free
               </a>
               {/* #product is the film's own section (top of page): pointing
                   here sent "skip" back to where the viewer already was. The
                   first section past the opening act is #formats. */}
-              <a
-                href="#formats"
-                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
-              >
-                Skip ahead ↓
-              </a>
+              {/* ReturningVisitor renders its own skip pill, so on a return visit
+                  this would be the second control doing the same jump. */}
+              {!hasSeenFilm && (
+                <a
+                  href="#formats"
+                  className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+                >
+                  Skip ahead ↓
+                </a>
+              )}
             </div>
             {/* Phones can't install a Chrome extension. Say so once, in the
                 handoff itself, and give a real door instead of a dead end. */}
@@ -626,10 +635,10 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
 
         <div className="rq-cine-card-4 invisible absolute inset-x-0 bottom-[10svh] px-6 opacity-0 sm:bottom-[12svh]">
           <div className="rq-glass mx-auto max-w-xl px-7 py-9 text-center sm:px-10">
-            <h2 className="text-[32px] font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
+            <h2 className="text-section font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
               One job. Nine seconds.
             </h2>
-            <p className="mt-3 font-mono text-[11.5px] font-medium uppercase tracking-[0.08em] text-muted">
+            <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Job found → ready to send · 9 seconds
             </p>
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">

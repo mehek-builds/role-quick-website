@@ -57,6 +57,9 @@ export default function Login() {
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [guestEligible, setGuestEligible] = useState(false);
   const [claimMode, setClaimMode] = useState(false);
+  /* Its own flag: sharing `busy` made the submit button announce "Working..."
+     for an action nobody pressed, in a second pending verb (finding 34). */
+  const [guestBusy, setGuestBusy] = useState(false);
 
   useEffect(() => {
     const claiming = new URLSearchParams(window.location.search).get("claim") === "1";
@@ -329,7 +332,7 @@ export default function Login() {
         <span className="text-lg font-semibold tracking-tight text-ink">Litos</span>
       </Link>
 
-      <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">
+      <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8">
         {step === "credentials" ? (
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-ink">
@@ -366,7 +369,7 @@ export default function Login() {
                 </div>
                 <div className="my-5 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-border" />
-                  <span className="text-xs text-faint">or</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
               </>
@@ -390,7 +393,7 @@ export default function Login() {
                   setDeliveryNotice(null);
                 }}
                 placeholder="you@example.com"
-                className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
               {(flow === "signin" || flow === "signup") && (
                 <>
@@ -404,7 +407,7 @@ export default function Login() {
                     autoComplete={flow === "signup" ? "new-password" : "current-password"}
                     value={password}
                     onChange={(e) => { setPassword(e.target.value); setError(null); }}
-                    className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                    className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                   />
                 </>
               )}
@@ -420,7 +423,7 @@ export default function Login() {
                     autoComplete="new-password"
                     value={confirmPassword}
                     onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-                    className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                    className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                   />
                   <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
                 </>
@@ -465,14 +468,14 @@ export default function Login() {
               <>
                 <div className="my-5 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-border" />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">or</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
                 <Button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || guestBusy}
                   onClick={() => void continueAsGuest()} variant="secondary" block>
-                  {busy ? <PendingLabel state="searching">Opening...</PendingLabel> : "Look around without signing up"}
+                  {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Look around without signing up"}
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
                   Your first week is free. No card needed. You only see this the first time.
@@ -500,7 +503,7 @@ export default function Login() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
             />
             <Button
               type="submit"
@@ -554,7 +557,7 @@ export default function Login() {
               autoComplete="new-password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(null); }}
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             />
             <label className="mt-4 block text-xs font-medium text-muted" htmlFor="confirm-new-password">
               Confirm new password
@@ -566,7 +569,7 @@ export default function Login() {
               autoComplete="new-password"
               value={confirmPassword}
               onChange={(e) => { setConfirmPassword(e.target.value); setError(null); }}
-              className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             />
             <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
             <Button

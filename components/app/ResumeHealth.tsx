@@ -87,7 +87,7 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
         {findings.map((finding, i) => (
           <li
             key={`${finding.rule}-${i}`}
-            className="rounded-[12px] border border-border bg-surface px-4 py-3"
+            className="rounded-inner border border-border bg-surface px-4 py-3"
           >
             <div className="flex items-baseline gap-2">
               <span
@@ -103,7 +103,7 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
                 </p>
                 <p className="mt-0.5 text-[13px] leading-5 text-muted">{finding.action}</p>
                 {finding.bullet && (
-                  <p className="mt-1.5 border-l-2 border-border pl-2.5 text-[12px] leading-5 text-faint">
+                  <p className="mt-1.5 border-l-2 border-border pl-2.5 text-xs leading-5 text-faint">
                     {finding.bullet}
                   </p>
                 )}

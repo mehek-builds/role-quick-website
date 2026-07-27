@@ -18,7 +18,7 @@ function Section({
 }) {
   return (
     <section className="mt-10">
-      <h2 className="text-lg font-semibold tracking-tight text-ink">{title}</h2>
+      <h2 className="text-lg font-medium tracking-tight text-ink">{title}</h2>
       <div className="mt-3 space-y-3 text-sm leading-6 text-muted">{children}</div>
     </section>
   );
@@ -30,8 +30,8 @@ export default function Privacy() {
       <Header />
       {/* Header is a fixed floating pill now — clear it before content */}
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-20 pt-32">
-        <h1 className="text-3xl font-semibold tracking-tight text-ink">
-          Privacy Policy
+        <h1 className="text-section font-[450] tracking-tight text-ink">
+          What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Last updated: July 27, 2026

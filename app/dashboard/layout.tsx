@@ -27,6 +27,16 @@ export default function DashboardLayout({
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
 
+  /* One name per screen in the tab, matching the nav. A client layout cannot
+     export metadata, so all six pages inherited the marketing title (finding 41). */
+  useEffect(() => {
+    const here = NAV.find((n) =>
+      n.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(n.href),
+    );
+    const name = pathname.startsWith("/dashboard/settings") ? "Account" : here?.label;
+    document.title = name ? `${name}: Litos` : "Litos";
+  }, [pathname]);
+
   useEffect(() => {
     queueMicrotask(() => {
       if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("qa")) {
@@ -75,7 +85,7 @@ export default function DashboardLayout({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
             {/* DESIGN.md: display weight is 450, never bold. This was 600. */}
-            <span className="text-[15px] font-medium tracking-tight text-ink">
+            <span className="text-base font-medium tracking-tight text-ink">
               Litos
             </span>
           </Link>
@@ -118,7 +128,7 @@ export default function DashboardLayout({
               href={qaMode ? `${item.href}?qa=1` : item.href}
               /* 12px, not 11px, and the active item gets a surface rather than relying on a
                  colour difference two shades apart at the smallest size in the product. */
-              className={`min-h-11 rounded-full px-0.5 py-2 text-center text-[12px] ${active ? "bg-surface-alt font-medium text-ink" : "text-muted"}`}
+              className={`min-h-11 rounded-full px-0.5 py-2 text-center text-xs ${active ? "bg-surface-alt font-medium text-ink" : "text-muted"}`}
             >
               {item.label}
             </Link>

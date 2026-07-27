@@ -202,7 +202,7 @@ export function TrySimulator({
           toolbar icon). */}
       <div className="overflow-hidden rounded-[14px] border border-border bg-surface shadow-[0_1px_2px_rgba(18,18,15,0.04),0_30px_60px_-30px_rgba(18,18,15,0.28)]">
         {/* Tab strip + traffic lights */}
-        <div className="flex items-center gap-3 bg-[#f0eeea] px-3.5 pt-2.5">
+        <div className="flex items-center gap-3 bg-[var(--color-surface-alt)] px-3.5 pt-2.5">
           <span className="flex shrink-0 gap-2">
             <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
             <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
