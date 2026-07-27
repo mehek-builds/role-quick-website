@@ -84,12 +84,23 @@ export default function Privacy() {
           </p>
           <p>
             Litos only watches. It never types, clicks, or sends anything on
-            its own. It only saves what you typed yourself. It can learn these
-            seventeen things and nothing else: phone, city, state, zip,
-            country, LinkedIn link, GitHub link, portfolio link, citizenship,
-            birthday, start date, how long you can work, the pay you want,
-            GPA, GPA scale, major, and how you heard about the job. Anything
-            else, including anything that looks like an essay, is not
+            its own. It only saves what you typed yourself. There are
+            seventeen things it can learn, and nothing else:
+          </p>
+          {/* Seventeen items were a single sentence, which is a list wearing
+              a disguise. A reader checking whether their own answer is on it
+              had to parse the whole thing. */}
+          <ul className="ml-5 list-disc space-y-1">
+            <li>Phone, city, state, zip, country</li>
+            <li>LinkedIn link, GitHub link, portfolio link</li>
+            <li>Citizenship and birthday</li>
+            <li>Start date, and how long you can work</li>
+            <li>The pay you want</li>
+            <li>GPA, GPA scale, major</li>
+            <li>How you heard about the job</li>
+          </ul>
+          <p>
+            Anything else, including anything that looks like an essay, is not
             saved.
           </p>
           <p>
@@ -114,12 +125,13 @@ export default function Privacy() {
             Drafts wait in your drafts folder and never send themselves.
           </p>
           <p>
-            Applications submit only when you click Submit, unless you grant
-            standing automatic-submission permission. With that permission,
-            Litos may submit an application you start after checking that its
-            answers are supported and the portal has no safety blocker. The
-            extension shows a cancelable 15-second countdown. A dashboard
-            submission can proceed as soon as those checks pass. Missing or
+            Applications are sent only when you click Submit, unless you have
+            turned on the setting that lets Litos send without asking you each
+            time. With that setting on, Litos may send an application you
+            started, once it has checked that every answer is backed up and
+            that the page puts nothing in the way. In the extension you get a
+            15-second countdown, and one click cancels it. From the dashboard
+            it can go as soon as those checks pass. Missing or
             conflicting facts, anything you have to swear to, a check that
             you are human, a page Litos cannot drive, and any confirmation it
             is unsure of all stop it and wait for you.
@@ -128,40 +140,29 @@ export default function Privacy() {
 
         <Section title="Codes sent to your email">
           <p>
-            If you separately turn on automatic verification, Litos can use a
-            Gmail or Outlook account you already connected to look for a
-            verification code tied to an application that is actively open.
-            It checks the sender and timing before using a code, does not save
-            the code, and does not use this permission to read or send other
-            mail. CAPTCHA, device-based MFA, and unsupported verification
-            steps still pause for you.
-          </p>
-          <p>
-            Sending forms by itself and finding codes are two separate
-            choices. You can turn either one off in Settings.
-          </p>
-        </Section>
-
-        <Section title="Application verification">
-          <p>
-            Some job sites email you a code. If you turn this on, Litos can
-            look in the Gmail or Outlook you connected and find that code
-            while the form is waiting for it. It only takes a new code, and
-            only from the job site you are on. It uses the code once. It never
-            saves it.
+            Some job sites email you a code before they will take your
+            application. If you turn this on, Litos can look in the Gmail or
+            Outlook you connected and find that code while the form is waiting
+            for it. It only takes a code that just arrived, and only from the
+            site you are applying to. It uses the code once. It never saves
+            it, and it never uses this to read or send any other mail.
           </p>
           <p>
             You choose this, and you can turn it off in Settings. If it is
             off, Litos stops and waits for you whenever a code is needed. It
-            also stops for the puzzles that check you are human, for anything
-            that needs your phone, and for any step it is not sure about.
-            Litos never sneaks past those checks.
+            also stops for the puzzles that check you are human, for a code
+            sent to your phone or your authenticator app, and for any step it
+            is not sure about. Litos never sneaks past those checks.
           </p>
           <p>
-            You connect Gmail or Outlook on a page run by Composio. Your
-            password never goes through Litos. Composio holds that connection
-            for your account. If you disconnect in Settings, we ask Composio
-            to cut the connection and we remove it from our side.
+            Sending applications without asking, and finding codes, are two
+            separate choices. You can turn either one off in Settings.
+          </p>
+          <p>
+            You connect Gmail or Outlook on a page run by Composio, a company
+            we use to hold that connection for your account. Your password
+            never goes through Litos. If you disconnect in Settings, we ask
+            Composio to cut the connection and we remove it from our side.
           </p>
         </Section>
 
