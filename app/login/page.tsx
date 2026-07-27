@@ -325,7 +325,18 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-6 py-16">
+    /* Two columns on a wide screen: the form, and the thing being signed into.
+       The gate used to be a card centred in empty space, which asks a student
+       to hand over an email with nothing on screen to say what for. The one
+       competitor in the ten-product audit that does this well (Rezi) puts a
+       live view of the product beside the form, and it is the cheapest
+       reassurance available: the product is the argument.
+
+       Preview is lg and up only. Below that it would push the form itself
+       under the fold, and the form is what the page is for.
+       Approved 2026-07-27 as override 3 of 10 (DESIGN.md). */
+    <div className="flex min-h-screen flex-col lg:flex-row">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <Link href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/litos-mark.svg" alt="" className="h-7 w-7" />
@@ -602,6 +613,34 @@ export default function Login() {
           Privacy
         </a>
       </p>
+      </div>
+
+      {/* The product, beside the form. Real capture, no device frame and no
+          drop shadow: the imagery law is real product UI, and a mockup chrome
+          around a screenshot is decoration pretending to be evidence.
+
+          The extension on a posting rather than the dashboard, deliberately.
+          It is the moment the whole product turns on, and its portrait shape
+          fits a column, which is exactly why it was wrong for the hero. */}
+      <aside
+        aria-hidden
+        className="hidden border-l border-border bg-surface-alt lg:flex lg:w-[46%] lg:shrink-0 lg:flex-col lg:justify-center lg:px-14 lg:py-16"
+      >
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Inside Litos
+        </p>
+        {/* Height-capped, not width-capped. The form column is the taller of
+            the two once its two footnotes are counted, and the row stretches
+            to match it, so a width-capped portrait image centred in that row
+            ran past the fold and the panel lost its last rows. Capping the
+            height keeps the whole capture on screen at any viewport. */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/product/extension-job.png"
+          alt=""
+          className="mt-6 max-h-[62svh] w-auto self-start rounded-inner border border-border"
+        />
+      </aside>
     </div>
   );
 }
