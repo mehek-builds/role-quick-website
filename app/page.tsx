@@ -64,7 +64,7 @@ const FAQ_ITEMS = [
      can keep rather than promising a response time nobody staffs. */
   {
     q: "Something is not working. Who do I ask?",
-    a: "Email mehekman@usc.edu and tell us the job link you were on. A person built this and a person answers, so it is not instant, but it is a real reply. If Litos could not fill a form, that link is the single most useful thing you can send: it is how the site gets added.",
+    a: "Use the contact form and tell us the job link you were on. A person built this and a person answers, so it is not instant, but it is a real reply. If Litos could not fill a form, that link is the single most useful thing you can send: it is how the site gets added.",
   },
 ];
 
@@ -674,10 +674,10 @@ export default function Home() {
                     someone whose autofill just failed will look. */}
                 <li>
                   <a
-                    href="mailto:mehekman@usc.edu?subject=Litos%20help"
+                    href="/contact"
                     className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0"
                   >
-                    Help
+                    Contact
                   </a>
                 </li>
                 <li>
@@ -703,6 +703,7 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li><a href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Privacy</a></li>
+                <li><a href="/terms" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Terms</a></li>
               </ul>
             </div>
           </div>
