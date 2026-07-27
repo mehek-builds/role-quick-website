@@ -43,24 +43,29 @@ const PERSONA_LABELS: Record<string, string> = {
   recruiter: "Recruiter",
 };
 
+/* These fixtures are photographed: public/product/dashboard-emails.png on the
+   marketing site is this page in ?qa=1 mode. They used to read "USC student",
+   "300 classmates", and two internship subjects, so the one screenshot of the
+   dashboard announced a student-only product. Keep the alum persona and the
+   shared-school angle; keep the role wording open-level. */
 const QA_EVENTS: OutreachEvent[] = [
   {
-    id: "qa-1", channel: "gmail", subject: "USC student interested in Acme",
-    draft_text: "Hi Jordan, I am a USC student interested in Acme's product engineering work. I built a scheduling tool used by 300 classmates last term and would value ten minutes to hear how your team thinks about onboarding.",
+    id: "qa-1", channel: "gmail", subject: "Fellow Trojan interested in Acme",
+    draft_text: "Hi Jordan, fellow Trojan here, and interested in Acme's product engineering work. I built a scheduling tool that 300 people ended up using every week, and would value ten minutes to hear how your team thinks about onboarding.",
     sent_at: new Date().toISOString(), opened_at: null, replied_at: new Date().toISOString(),
     bounced: false, follow_up_count: 0, status: "replied",
     contact: { id: "c1", full_name: "Jordan Lee", title: "Product Engineer", persona: "alumni", company_domain: "acme.com" },
   },
   {
-    id: "qa-2", channel: "gmail", subject: "Stripe engineering internship",
-    draft_text: "Hi Sam, I would value your perspective on Stripe's internship program.",
+    id: "qa-2", channel: "gmail", subject: "Stripe engineering, quick question",
+    draft_text: "Hi Sam, I would value your perspective on how Stripe's engineering teams are structured.",
     sent_at: new Date(Date.now() - 86_400_000).toISOString(), opened_at: null, replied_at: null,
     bounced: false, follow_up_count: 1, status: "sent",
     contact: { id: "c2", full_name: "Sam Chen", title: "Software Engineer", persona: "near_peer", company_domain: "stripe.com" },
   },
   {
-    id: "qa-3", channel: "gmail", subject: "Notion product design internship",
-    draft_text: "Hi Priya, I am applying to the product design internship and wanted to introduce myself.",
+    id: "qa-3", channel: "gmail", subject: "Notion product design role",
+    draft_text: "Hi Priya, I am applying to the product design role and wanted to introduce myself.",
     sent_at: null, opened_at: null, replied_at: null,
     bounced: false, follow_up_count: 0, status: "drafted",
     contact: { id: "c3", full_name: "Priya Sharma", title: "Recruiter", persona: "recruiter", company_domain: "notion.so" },

@@ -153,7 +153,7 @@ export function PacketDemo() {
             Notion · San Francisco
           </p>
           <p className="mt-2 text-lg font-semibold tracking-tight text-ink">
-            Software Engineer Intern
+            Software Engineer
           </p>
           <div className="mt-5 space-y-2.5">
             <div className="h-1.5 w-11/12 rounded-full bg-surface-alt" />
