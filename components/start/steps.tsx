@@ -730,29 +730,30 @@ export function DoneStep({
   onFinish,
 }: {
   state: OnboardingState;
-  onFinish: (settings: { automatic_submission_enabled: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
+  onFinish: (settings: { automatic_submission_enabled?: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
-  const [automaticSubmission, setAutomaticSubmission] = useState(
-    state.automatic_submission_consented_at ? state.automatic_submission_enabled : false,
-  );
+  // Not offered on this screen any more, and deliberately NOT carried through from state either:
+  // finishing onboarding must never be the thing that turns unattended submission on. An existing
+  // grant is untouched because the field is simply omitted from the patch below.
   const [automaticVerification, setAutomaticVerification] = useState(state.automatic_verification_enabled);
   return (
     <StartShell
       step="done"
       title="Setup complete."
-      sub="Two things you can let Litos do on its own. Both are off unless you turn them on."
+      sub="One thing you can let Litos do on its own. It is off unless you turn it on."
     >
       <div className="divide-y divide-border border-y border-border">
-        <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
-          <input type="checkbox" checked={automaticSubmission} onChange={(event) => setAutomaticSubmission(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
-          <span>
-            <span className="block text-[16px] text-ink">Send an application without asking me again</span>
-            <span className="mt-1 block text-[14px] leading-6 text-muted">
-              Only when every answer is filled in. You get a few seconds to stop it, and it stops on its own if anything is missing.
-            </span>
-          </span>
-        </label>
+        {/* The "send without asking me again" checkbox used to live here, and it was the single
+            most dangerous control in the product sitting on the screen where the student has the
+            least information: they have not yet watched Litos fill in one real form. The server
+            now refuses to enable it until they have approved three submissions themselves, so
+            offering it here would have been a checkbox that 403s the whole finish action. It
+            appears in Settings once it is theirs to make. */}
+        <p className="py-4 text-[14px] leading-6 text-muted">
+          Litos asks you before it sends anything. Once you have approved a few applications
+          yourself and seen what it fills in, you can let it send without asking, from Settings.
+        </p>
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
           <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
           <span>
@@ -773,7 +774,6 @@ export function DoneStep({
           onClick={() => {
             setBusy(true);
             void onFinish({
-              automatic_submission_enabled: automaticSubmission,
               automatic_verification_enabled: automaticVerification,
             }).finally(() => setBusy(false));
           }}
