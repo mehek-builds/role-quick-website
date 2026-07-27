@@ -28,11 +28,20 @@ const STAGE_LABEL: Record<Stage, string> = {
   closed: "Closed",
 };
 
-export function Board({ onOpen }: { onOpen?: (id: string) => void }) {
+export function Board({
+  onOpen,
+  openableIds,
+}: {
+  onOpen?: (id: string) => void;
+  /** Ids the parent can actually open. The board is unbounded relative to the 50-row history the
+   *  parent holds, so past 50 applications the older cards looked clickable and did nothing. */
+  openableIds?: ReadonlySet<string>;
+}) {
   const [cards, setCards] = useState<BoardCard[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [stages, setStages] = useState<Stage[]>([]);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
+  const [moveError, setMoveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -51,19 +60,30 @@ export function Board({ onOpen }: { onOpen?: (id: string) => void }) {
   }, [attempt]);
 
   async function move(card: BoardCard, stage: Stage) {
-    const previous = cards;
-    // Optimistic, with the previous state kept so a failed write is rolled back rather than left
-    // showing a move the server never accepted.
+    const from = card.stage;
+    setMoveError(null);
     setCards((current) => (current ?? []).map((c) => (c.id === card.id ? { ...c, stage } : c)));
-    setBusy(card.id);
+    setBusy((current) => new Set(current).add(card.id));
     try {
       await moveCard(card.id, stage);
-    } catch {
-      setCards(previous);
+    } catch (reason) {
+      // Roll back ONLY this card, functionally. Restoring a whole array snapshot captured before
+      // the request would discard every other move the server had accepted in the meantime.
+      setCards((current) => (current ?? []).map((c) => (c.id === card.id ? { ...c, stage: from } : c)));
+      // And say so. An empty catch snapped the card back with no message, so the student either
+      // missed it and believed the interview was recorded, or saw an unexplained jump.
+      setMoveError(reason instanceof Error ? reason.message : "Could not save that move.");
     } finally {
-      setBusy(null);
+      setBusy((current) => {
+        const next = new Set(current);
+        next.delete(card.id);
+        return next;
+      });
     }
   }
+
+  const openable = (card: BoardCard) =>
+    card.reviewable && (openableIds === undefined || openableIds.has(card.id));
 
   if (failed) {
     return (
@@ -78,7 +98,13 @@ export function Board({ onOpen }: { onOpen?: (id: string) => void }) {
   if (!cards) return <div className="h-40 animate-pulse rounded-[16px] bg-surface-alt" aria-hidden="true" />;
 
   return (
-    <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+    <div>
+      {moveError && (
+        <p role="status" className="mb-3 rounded-[12px] bg-warn-soft px-4 py-2.5 text-[13px] text-warn">
+          {moveError}
+        </p>
+      )}
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
       {stages.map((stage) => {
         const column = cards.filter((c) => c.stage === stage);
         return (
@@ -89,13 +115,15 @@ export function Board({ onOpen }: { onOpen?: (id: string) => void }) {
               </h3>
               <span className="font-mono text-[11px] text-faint">{column.length}</span>
             </div>
-            <ul className="mt-2 space-y-2">
+            {/* Capped and scrollable, matching the ledger this replaced. An uncapped column grows
+                without bound and stretches every sibling to the tallest one. */}
+            <ul className="mt-2 max-h-[60vh] space-y-2 overflow-y-auto pr-1">
               {column.map((card) => (
                 <li key={card.id} className="rounded-[12px] border border-border bg-surface p-3">
                   <button
                     type="button"
-                    onClick={() => card.reviewable && onOpen?.(card.id)}
-                    disabled={!card.reviewable}
+                    onClick={() => openable(card) && onOpen?.(card.id)}
+                    disabled={!openable(card)}
                     className="block w-full text-left disabled:cursor-default"
                   >
                     <p className="truncate text-[13px] font-medium text-ink">{card.role}</p>
@@ -104,7 +132,7 @@ export function Board({ onOpen }: { onOpen?: (id: string) => void }) {
                   {card.submission_status && (
                     <p className="mt-1 text-[11px] text-faint">Litos: {card.submission_status.replace(/_/g, " ")}</p>
                   )}
-                  <MoveControl card={card} stages={stages} busy={busy === card.id} onMove={move} />
+                  <MoveControl card={card} stages={stages} busy={busy.has(card.id)} onMove={move} />
                 </li>
               ))}
               {column.length === 0 && (
@@ -116,6 +144,7 @@ export function Board({ onOpen }: { onOpen?: (id: string) => void }) {
           </section>
         );
       })}
+      </div>
     </div>
   );
 }

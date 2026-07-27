@@ -611,9 +611,11 @@ export default function Applications() {
         <div>
           <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-2xl" : "text-[32px]"}`}>Applications</h1>
           {!reviewOpen && <p className="mt-1 text-sm text-muted">Review and track.</p>}
-          {/* Without this the board is unreachable: a packet auto-selects on load, which sends the
-              page straight to the review surface, and nothing took the student back. */}
-          {reviewOpen && (
+          {/* Gated on `selected`, not on reviewOpen. A packet auto-selects on load, and it can land
+              on ANY of the screens (review, questions, portal, the submitted receipt), none of
+              which had a way back to the list. Gating on reviewOpen left every other screen a dead
+              end, which is how the board turned out to be unreachable. */}
+          {selected && spec && review && (
             <button
               type="button"
               onClick={() => {
@@ -721,6 +723,7 @@ export default function Applications() {
            theirs. The flat list this replaces showed only role and company, with no way to record
            what had actually happened with any of them. */
         <Board
+          openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);
             if (packet) selectPacket(packet);
