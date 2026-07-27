@@ -61,7 +61,7 @@ export function Header() {
               white, everywhere the brand appears. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
-          <span className="text-[15px] font-semibold tracking-tight text-ink">
+          <span className="text-base font-medium tracking-tight text-ink">
             Litos
           </span>
         </a>
@@ -125,7 +125,7 @@ export function Header() {
       </div>
       {menuOpen && (
         <nav
-          className="rq-glass mx-auto mt-2 max-w-5xl rounded-3xl px-3 py-2 sm:hidden"
+          className="rq-glass mx-auto mt-2 max-w-5xl rounded-card px-3 py-2 sm:hidden"
           /* near-opaque: the sheet floats over the hero's own glass card, and
              glass-on-glass leaves the links unreadable */
           style={{ background: "rgba(255,255,255,0.92)" }}
@@ -133,21 +133,21 @@ export function Header() {
           <a
             href="/#product"
             onClick={closeMenu}
-            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
           >
             Product
           </a>
           <a
             href="/try"
             onClick={closeMenu}
-            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
           >
             Try it free
           </a>
           <a
             href="/#faq"
             onClick={closeMenu}
-            className="block rounded-2xl px-4 py-3 text-[15px] font-medium text-ink transition-colors hover:bg-white/70"
+            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
           >
             FAQ
           </a>

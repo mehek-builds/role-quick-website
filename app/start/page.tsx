@@ -248,7 +248,7 @@ export default function Start() {
       <div className="mx-auto max-w-2xl px-6 py-16">
         <StepRail current="focus" />
         <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
-        <div className="rq-shimmer mt-6 h-32 rounded-[12px]" />
+        <div className="rq-shimmer mt-6 h-32 rounded-inner" />
       </div>
     );
   }

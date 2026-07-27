@@ -122,7 +122,7 @@ export default function Outreach() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Emails</h1>
+        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Emails</h1>
         <p className="mt-1 text-sm text-muted">People you wrote to, and who wrote back.</p>
       </div>
 

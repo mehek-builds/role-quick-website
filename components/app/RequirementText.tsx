@@ -157,7 +157,7 @@ const SWATCH_CLASS: Record<TermTone, string> = {
 function Swatch({ tone, label }: { tone: TermTone; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className={`inline-block h-3 w-3 rounded-sm ${SWATCH_CLASS[tone]}`} />
+      <span className={`inline-block h-3 w-3 rounded-[3px] ${SWATCH_CLASS[tone]}`} />
       <span className="text-[11px] text-muted">{label}</span>
     </span>
   );

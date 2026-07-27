@@ -57,6 +57,9 @@ export default function Login() {
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [guestEligible, setGuestEligible] = useState(false);
   const [claimMode, setClaimMode] = useState(false);
+  /* Its own flag: sharing `busy` made the submit button announce "Working..."
+     for an action nobody pressed, in a second pending verb (finding 34). */
+  const [guestBusy, setGuestBusy] = useState(false);
 
   useEffect(() => {
     const claiming = new URLSearchParams(window.location.search).get("claim") === "1";
@@ -329,7 +332,7 @@ export default function Login() {
         <span className="text-lg font-semibold tracking-tight text-ink">Litos</span>
       </Link>
 
-      <div className="w-full max-w-sm rounded-[20px] border border-border bg-surface p-8">
+      <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8">
         {step === "credentials" ? (
           <div>
             <h1 className="text-xl font-semibold tracking-tight text-ink">
@@ -366,7 +369,7 @@ export default function Login() {
                 </div>
                 <div className="my-5 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-border" />
-                  <span className="text-xs text-faint">or</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
               </>
@@ -465,14 +468,14 @@ export default function Login() {
               <>
                 <div className="my-5 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-border" />
-                  <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">or</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
                 <Button
                   type="button"
-                  disabled={busy}
+                  disabled={busy || guestBusy}
                   onClick={() => void continueAsGuest()} variant="secondary" block>
-                  {busy ? <PendingLabel state="searching">Opening...</PendingLabel> : "Look around without signing up"}
+                  {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Look around without signing up"}
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
                   Your first week is free. No card needed. You only see this the first time.

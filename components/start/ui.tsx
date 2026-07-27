@@ -92,14 +92,14 @@ export function StartShell({
       {/* Display type: weight 450, never bold. Calm things don't shout. */}
       {title && (
         <h1
-          className={`max-w-full text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:text-[34px] ${
+          className={`max-w-full text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:text-section ${
             wide ? "mt-6 sm:mt-7" : "mt-8 sm:mt-10"
           }`}
         >
           {title}
         </h1>
       )}
-      {sub && <p className="mt-3 max-w-[46ch] text-[15px] leading-7 text-muted">{sub}</p>}
+      {sub && <p className="mt-3 max-w-[46ch] text-base leading-7 text-muted">{sub}</p>}
       <div className={`min-w-0 ${title || sub ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}>{children}</div>
       {aside && <div className="mt-8">{aside}</div>}
     </main>
@@ -111,11 +111,11 @@ export type ReceiptRow = { t?: string; k: string; v: string; done?: boolean };
 /** DESIGN.md signature motif #1. Every value is mono, because the machine is speaking. */
 export function Receipt({ rows }: { rows: ReceiptRow[] }) {
   return (
-    <div className="rounded-[12px] border border-border bg-surface-alt py-1">
+    <div className="rounded-inner border border-border bg-surface-alt py-1">
       {rows.map((r, i) => (
         <div
           key={`${r.k}-${i}`}
-          className={`grid grid-cols-[64px_120px_minmax(0,1fr)] items-baseline gap-3 px-4 py-1.5 font-mono text-[12.5px] ${
+          className={`grid grid-cols-[64px_120px_minmax(0,1fr)] items-baseline gap-3 px-4 py-1.5 font-mono text-xs ${
             r.done ? "mt-1 border-t border-border pt-2.5" : ""
           }`}
         >
@@ -145,8 +145,8 @@ export function RefusalList() {
     },
   ];
   return (
-    <div className="overflow-hidden rounded-[12px] border border-border">
-      <div className="border-b border-border bg-surface-alt px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+    <div className="overflow-hidden rounded-inner border border-border">
+      <div className="border-b border-border bg-surface-alt px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
         What we won&apos;t keep
       </div>
       {rows.map((r) => (
@@ -210,7 +210,7 @@ export function LaterLink({ onClick }: { onClick: () => void }) {
  * the founder taking responsibility for the worst thing the product asks of you. */
 export function FounderNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-3 rounded-[12px] border border-border bg-surface-alt px-4 py-3.5">
+    <div className="flex items-start gap-3 rounded-inner border border-border bg-surface-alt px-4 py-3.5">
       {/* The mark has no ground of its own, so it merges into the surface it
           sits on: no border, no rounding, no padding. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -220,7 +220,7 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
         className="mt-0.5 h-6 w-6 shrink-0"
       />
       <div className="min-w-0">
-        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
           Mehek, who builds Litos
         </p>
         <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>

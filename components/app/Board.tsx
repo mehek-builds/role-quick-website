@@ -95,12 +95,12 @@ export function Board({
       </p>
     );
   }
-  if (!cards) return <div className="h-40 animate-pulse rounded-[16px] bg-surface-alt" aria-hidden="true" />;
+  if (!cards) return <div className="h-40 animate-pulse rounded-card bg-surface-alt" aria-hidden="true" />;
 
   return (
     <div>
       {moveError && (
-        <p role="status" className="mb-3 rounded-[12px] bg-warn-soft px-4 py-2.5 text-[13px] text-warn">
+        <p role="status" className="mb-3 rounded-inner bg-warn-soft px-4 py-2.5 text-[13px] text-warn">
           {moveError}
         </p>
       )}
@@ -119,7 +119,7 @@ export function Board({
                 without bound and stretches every sibling to the tallest one. */}
             <ul className="mt-2 max-h-[60vh] space-y-2 overflow-y-auto pr-1">
               {column.map((card) => (
-                <li key={card.id} className="rounded-[12px] border border-border bg-surface p-3">
+                <li key={card.id} className="rounded-inner border border-border bg-surface p-3">
                   <button
                     type="button"
                     onClick={() => openable(card) && onOpen?.(card.id)}
@@ -127,7 +127,7 @@ export function Board({
                     className="block w-full text-left disabled:cursor-default"
                   >
                     <p className="truncate text-[13px] font-medium text-ink">{card.role}</p>
-                    <p className="truncate text-[12px] text-muted">{card.company}</p>
+                    <p className="truncate text-xs text-muted">{card.company}</p>
                   </button>
                   {card.submission_status && (
                     <p className="mt-1 text-[11px] text-faint">Litos: {card.submission_status.replace(/_/g, " ")}</p>
@@ -136,7 +136,7 @@ export function Board({
                 </li>
               ))}
               {column.length === 0 && (
-                <li className="rounded-[12px] border border-dashed border-border px-3 py-4 text-center text-[12px] text-faint">
+                <li className="rounded-inner border border-dashed border-border px-3 py-4 text-center text-xs text-faint">
                   Nothing here
                 </li>
               )}
@@ -167,7 +167,7 @@ function MoveControl({
         value={card.stage}
         disabled={busy}
         onChange={(event) => onMove(card, event.target.value as Stage)}
-        className="w-full rounded-[8px] border border-border bg-surface px-2 py-1 text-[12px] text-muted outline-none focus:border-brand disabled:opacity-50"
+        className="w-full rounded-inner border border-border bg-surface px-2 py-1 text-xs text-muted outline-none focus:border-brand disabled:opacity-50"
       >
         {stages.map((stage) => (
           <option key={stage} value={stage}>

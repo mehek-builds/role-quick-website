@@ -224,7 +224,7 @@ export default function TargetingCard() {
       {/* A period saved before its term started is now in the past: the chip row is derived from
           today, so it simply won't be offered any more. Say so rather than silently dropping it. */}
       {t.primary_period && !periods.some((p) => p.slug === t.primary_period) && (
-        <p className="mt-5 rounded-[12px] bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
+        <p className="mt-5 rounded-inner bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
           Your main focus is set to {periodLabel(t.primary_period)}, which has already started.
           Pick a term that hasn&apos;t.
         </p>

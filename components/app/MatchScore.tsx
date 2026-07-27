@@ -249,7 +249,7 @@ function GapDetail({
 }) {
   if (answer.unsupported) {
     return (
-      <div className="mt-4 rounded-[14px] border border-border bg-surface-alt px-4 py-3">
+      <div className="mt-4 rounded-card border border-border bg-surface-alt px-4 py-3">
         <p className="text-sm text-ink">
           Nothing in your saved work mentions {answer.display}.
         </p>
@@ -261,13 +261,13 @@ function GapDetail({
     );
   }
   return (
-    <div className="mt-4 rounded-[14px] border border-border bg-surface-alt px-4 py-3">
+    <div className="mt-4 rounded-card border border-border bg-surface-alt px-4 py-3">
       <p className="text-sm text-ink">
         You have written about {answer.display} before. This is your own wording:
       </p>
       <ul className="mt-2 space-y-2">
         {answer.evidence.slice(0, 3).map((e, i) => (
-          <li key={`${e.entry_id}-${i}`} className="rounded-[10px] border border-border bg-surface px-3 py-2">
+          <li key={`${e.entry_id}-${i}`} className="rounded-inner border border-border bg-surface px-3 py-2">
             <p className="text-[11px] uppercase tracking-[0.06em] text-faint">
               {e.org}
               {e.title ? ` · ${e.title}` : ""}
@@ -279,7 +279,7 @@ function GapDetail({
               <button
                 type="button"
                 onClick={() => onUseVariant?.({ org: e.org, variant: e.variant })}
-                className="mt-1.5 rounded-full border border-border px-3 py-1 text-[12px] font-medium text-ink transition-colors hover:border-brand"
+                className="mt-1.5 rounded-full border border-border px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-brand"
               >
                 Use this bullet
               </button>
@@ -362,14 +362,14 @@ function ApplyReceipt({ outcome, onUndo }: { outcome: ApplyOutcome; onUndo?: () 
     }
   };
   return (
-    <div role="status" className="mt-4 rounded-[12px] border border-border bg-surface px-4 py-3">
+    <div role="status" className="mt-4 rounded-inner border border-border bg-surface px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="text-[13px] leading-5 text-ink">{body()}</p>
         {outcome.kind === "replaced" && onUndo && (
           <button
             type="button"
             onClick={onUndo}
-            className="shrink-0 rounded-full border border-border px-3 py-1 text-[12px] font-medium text-ink transition-colors hover:border-brand"
+            className="shrink-0 rounded-full border border-border px-3 py-1 text-xs font-medium text-ink transition-colors hover:border-brand"
           >
             Undo
           </button>
@@ -377,9 +377,9 @@ function ApplyReceipt({ outcome, onUndo }: { outcome: ApplyOutcome; onUndo?: () 
       </div>
       {outcome.kind === "replaced" && (
         <>
-          <p className="mt-1.5 text-[12px] leading-5 text-muted">Removed: {outcome.removed}</p>
+          <p className="mt-1.5 text-xs leading-5 text-muted">Removed: {outcome.removed}</p>
           {outcome.dropped.length > 0 && (
-            <p className="mt-1 text-[12px] leading-5 text-warn">
+            <p className="mt-1 text-xs leading-5 text-warn">
               Your resume no longer mentions {outcome.dropped.slice(0, 5).join(", ")}.
             </p>
           )}

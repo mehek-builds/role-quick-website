@@ -28,19 +28,19 @@ export function Voices() {
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
             What testers said
           </p>
-          <h2 className="mt-3 text-[32px] font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
+          <h2 className="mt-3 text-section font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
             In their words.
           </h2>
-          <p className="mt-3 text-[15px] leading-7 text-muted">
+          <p className="mt-3 text-base leading-7 text-muted">
             Real words from the people who tested it.
           </p>
         </div>
 
         <blockquote className="rq-glass px-7 py-8 sm:px-9 sm:py-9">
-          <p className="font-mono text-[26px] leading-none text-border" aria-hidden>
+          <p className="font-mono text-section leading-none text-border" aria-hidden>
             &ldquo;
           </p>
-          <p className="mt-3 text-[21px] font-[550] leading-[1.35] tracking-[-0.015em] text-ink sm:text-[24px]">
+          <p className="mt-3 text-section font-[550] leading-[1.35] tracking-[-0.015em] text-ink sm:text-section">
             {LEAD.head}{" "}
             <span className="text-brand-ink">{LEAD.tail}</span>
           </p>
@@ -58,10 +58,10 @@ export function Voices() {
             key={q}
             className="rq-glass flex flex-col px-6 py-6"
           >
-            <p className="flex-1 text-[16px] leading-[1.55] text-ink">
+            <p className="flex-1 text-base leading-[1.55] text-ink">
               &ldquo;{q}&rdquo;
             </p>
-            <footer className="mt-4 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
+            <footer className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
               Anonymous
             </footer>
           </blockquote>

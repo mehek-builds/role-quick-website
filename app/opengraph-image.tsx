@@ -13,11 +13,29 @@ const MARK =
   ).toString("base64");
 
 export const size = { width: 1200, height: 630 };
+
+/* Satori has no browser to fall back on: give it no font and every link preview
+   the product will ever generate renders in Arial while the site renders in
+   Hanken Grotesk (audit finding 7). next/font does not reach into ImageResponse,
+   so the face is fetched at render and handed over explicitly. */
+async function hanken(): Promise<ArrayBuffer | null> {
+  try {
+    const css = await fetch(
+      "https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@500&display=swap",
+      { headers: { "User-Agent": "Mozilla/5.0" } },
+    ).then((r) => r.text());
+    const url = css.match(/src:\s*url\((https:[^)]+)\)/)?.[1];
+    return url ? await fetch(url).then((r) => r.arrayBuffer()) : null;
+  } catch {
+    return null;
+  }
+}
 export const contentType = "image/png";
 export const alt =
   "Litos: tailored resume, filled application, real outreach";
 
-export default function OgImage() {
+export default async function OgImage() {
+  const font = await hanken();
   return new ImageResponse(
     (
       <div
@@ -29,13 +47,13 @@ export default function OgImage() {
           alignItems: "center",
           justifyContent: "center",
           background: "#ffffff",
-          fontFamily: "sans-serif",
+          fontFamily: "Hanken Grotesk, sans-serif",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={MARK} width={72} height={72} alt="" />
-          <div style={{ fontSize: 44, fontWeight: 600, color: "#12120f" }}>
+          <div style={{ fontSize: 44, fontWeight: 450, color: "#12120f" }}>
             Litos
           </div>
         </div>
@@ -44,7 +62,7 @@ export default function OgImage() {
             marginTop: 48,
             display: "flex",
             fontSize: 92,
-            fontWeight: 500,
+            fontWeight: 450,
             letterSpacing: "-0.03em",
             color: "#12120f",
           }}
@@ -62,12 +80,17 @@ export default function OgImage() {
           It tailors your resume, fills the application, drafts the outreach.
         </div>
         <div style={{ marginTop: 56, display: "flex", gap: 10 }}>
-          <div style={{ width: 48, height: 5, borderRadius: 3, background: "#6b84e8" }} />
-          <div style={{ width: 48, height: 5, borderRadius: 3, background: "#68ad95" }} />
-          <div style={{ width: 48, height: 5, borderRadius: 3, background: "#dd9273" }} />
+          <div style={{ width: 48, height: 5, borderRadius: 999, background: "#6b84e8" }} />
+          <div style={{ width: 48, height: 5, borderRadius: 999, background: "#68ad95" }} />
+          <div style={{ width: 48, height: 5, borderRadius: 999, background: "#dd9273" }} />
         </div>
       </div>
     ),
-    { ...size },
+    {
+      ...size,
+      fonts: font
+        ? [{ name: "Hanken Grotesk", data: font, weight: 500 as const, style: "normal" as const }]
+        : [],
+    },
   );
 }

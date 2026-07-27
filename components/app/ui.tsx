@@ -14,7 +14,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <div className={`rounded-[20px] border border-border bg-surface ${className}`}>
+    <div className={`rounded-card border border-border bg-surface ${className}`}>
       {children}
     </div>
   );
@@ -198,7 +198,7 @@ export function EmptyState({
 
 export function ErrorNote({ message }: { message: string }) {
   return (
-    <p className="rounded-[12px] bg-danger-soft px-4 py-3 text-sm text-danger">
+    <p className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
       {message}
     </p>
   );

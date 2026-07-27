@@ -611,7 +611,7 @@ export default function Applications() {
     <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-2xl" : "text-[32px]"}`}>Applications</h1>
+          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Applications</h1>
           {!reviewOpen && <p className="mt-1 text-sm text-muted">Review and track.</p>}
           {/* Gated on `selected`, not on reviewOpen. A packet auto-selects on load, and it can land
               on ANY of the screens (review, questions, portal, the submitted receipt), none of
@@ -639,7 +639,7 @@ export default function Applications() {
       </div>
 
       {error && <ErrorNote message={error} />}
-      {notice && <p role="status" className="rounded-[12px] bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
+      {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
       {showNewApplication && (
         <NewApplicationPanel
           value={newApplication}
@@ -663,7 +663,7 @@ export default function Applications() {
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-baseline gap-2">
               <h2 id="application-ledger-heading" className="sr-only">Your applications</h2>
-              <span className="font-mono text-[10px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
+              <span className="font-mono text-[11px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
             </div>
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="application-filter">Filter applications</label>
@@ -755,7 +755,7 @@ export default function Applications() {
               scroll INSIDE themselves against a shared height. The page holds still; the panes
               move. The gap list sits under the JD, which is where the dead space was. */}
           <RequirementProvider index={requirementIndex}>
-            <div className="rounded-[20px] border border-border bg-surface-alt px-5 py-3">
+            <div className="rounded-card border border-border bg-surface-alt px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-ink">
@@ -780,12 +780,12 @@ export default function Applications() {
 
             {/* min-h-0 on the children is what actually lets them scroll inside a grid row. */}
             <div className="mt-4 grid gap-4 xl:grid-cols-2">
-              <section className="flex min-h-0 flex-col rounded-[20px] border border-border bg-surface">
-                <p className="border-b border-border px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+              <section className="flex min-h-0 flex-col rounded-card border border-border bg-surface">
+                <p className="border-b border-border px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                   Job description
                 </p>
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-15.5rem)]">
-                  <div className="prose-copy whitespace-pre-line text-[14px] leading-6 text-ink">
+                  <div className="prose-copy whitespace-pre-line text-sm leading-6 text-ink">
                     <RequirementText text={review.jd_text} />
                   </div>
                   {/* Preparation for later, under the posting it comes from. Collapsed by default:
@@ -807,8 +807,8 @@ export default function Applications() {
                 </div>
               </section>
 
-              <section className="flex min-h-0 flex-col rounded-[20px] border border-border bg-surface">
-                <p className="border-b border-border px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+              <section className="flex min-h-0 flex-col rounded-card border border-border bg-surface">
+                <p className="border-b border-border px-5 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                   Your resume for this job
                 </p>
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-15.5rem)]">
@@ -816,7 +816,7 @@ export default function Applications() {
                   {/* Under the resume, inside the same scroll area: the checks describe the page
                       directly above them, so they belong to it rather than to the screen. */}
                   <div className="mx-auto mt-5 max-w-[640px] border-t border-border pt-4">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
+                    <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                       Resume checks
                     </p>
                     <div className="mt-3">
@@ -841,7 +841,7 @@ export default function Applications() {
                 <Button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || (!coverLetterBody.trim() && !selected.spec._cover_letter)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBusy ? "Checking..." : coverLetterBody.trim() ? "Save cover letter" : "Remove cover letter"}</Button>
               </div>
             </div>
-            <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
+            <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
             {(selected.spec._cover_letter?.warnings?.length ?? 0) > 0 && (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-warn">
                 {selected.spec._cover_letter!.warnings.map((warning) => <li key={warning}>{warning}</li>)}
@@ -866,12 +866,12 @@ export default function Applications() {
               words you already had
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <mark className="rounded-sm border-b-2 border-positive bg-positive-soft px-1 text-positive">Green</mark>
+              <mark className="rounded-[3px] border-b-2 border-positive bg-positive-soft px-1 text-positive">Green</mark>
               words we added for this job
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border bg-surface-alt p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
             <p className="text-sm text-ink">Litos fills the form with your saved answers and this resume.</p>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
@@ -929,7 +929,7 @@ function NewApplicationPanel({
         </Button>
       </div>
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
       <div className="mt-5 flex justify-end">
         <Button type="button" onClick={onGenerate} disabled={creating} >
           {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
@@ -951,7 +951,7 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text" }
 
 function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
-    <div className="mx-auto max-w-[640px] rounded-[20px] border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
+    <div className="mx-auto max-w-[640px] rounded-card border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
       {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
           lossy in both directions: a degree legitimately containing " · " split wrong, and any
@@ -981,7 +981,7 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
         return (
           <section key={`${entry.org}-${index}`} className={startsSection ? "mt-6" : "mt-4"}>
             {startsSection && (
-              <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
+              <p className="mb-2 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
             )}
             <div className="flex items-baseline justify-between gap-4">
               <span className="min-w-0 flex-1">
@@ -1004,7 +1004,7 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
       })}
 
       <section className="mt-6">
-        <p className="mb-2 border-b border-ink pb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.08em]">Skills</p>
+        <p className="mb-2 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Skills</p>
         <EditableHighlight value={spec.skills.join(" • ")} terms={editedTerms} onChange={(value) => onChange({ ...spec, skills: value.split("•").map((item) => item.trim()).filter(Boolean) })} />
       </section>
     </div>
@@ -1086,7 +1086,7 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
 function EditableHighlight({ value, terms, onChange }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void }) {
   const [editing, setEditing] = useState(false);
   return editing ? (
-    <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-[12px] border border-brand bg-white px-2 py-1 outline-none" />
+    <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-inner border border-brand bg-white px-2 py-1 outline-none" />
   ) : (
     <button type="button" onClick={() => setEditing(true)} className="text-left leading-5 hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30">
       {/* hideMissing: an amber "asked for and NOT on your resume" mark cannot honestly appear on
@@ -1104,14 +1104,14 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to how it is going" : "Back to resume"}</button>
       <div>
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Their questions" : "Questions we could not answer"}</p>
-        <h2 className="mt-2 text-2xl font-medium tracking-tight text-ink">{reviewDiscovered ? "The company asked for these." : "A few answers we could not work out."}</h2>
+        <h2 className="mt-2 text-heading font-medium tracking-tight text-ink">{reviewDiscovered ? "The company asked for these." : "A few answers we could not work out."}</h2>
         <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "The form asked for things we did not know. Answer them, then try again." : "Everything we already knew is filled in. This page only shows the blanks."}</p>
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
-          <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required information missing" : "Review before retry"}</p>
-          <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-[12px] border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required information missing" : "Review before retry"}</p>
+          <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
       <div className="flex justify-end"><Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button></div>
@@ -1128,7 +1128,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
         <p className="text-xs text-muted">Filling it in for you</p>
-        <h2 className="mt-2 text-2xl font-medium text-ink">{needsAttention ? "This one needs you." : review.status === "failed" ? "Litos stopped before sending." : "Check it over before it goes."}</h2>
+        <h2 className="mt-2 text-heading font-medium text-ink">{needsAttention ? "This one needs you." : review.status === "failed" ? "Litos stopped before sending." : "Check it over before it goes."}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
@@ -1147,7 +1147,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           </div>
         )}
         {submission.cover_letter && (
-          <div className="mt-6 rounded-[12px] border border-border bg-surface-alt p-4">
+          <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-xs font-medium text-muted">Cover letter included with final submission</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.cover_letter.body}</p>
             {submission.cover_letter.warnings.length > 0 && (
@@ -1159,16 +1159,16 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
         )}
         {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
         {review.verification?.status === "completed" && (
-          <div className="mt-4 rounded-[12px] border border-border bg-surface-alt px-4 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-teal-ink">Code found</p>
+          <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Code found</p>
             <p className="mt-1 text-xs text-muted">
               Litos used the one-time code from your connected {review.verification.provider === "outlook" ? "Outlook" : "Gmail"} account. The code was not saved.
             </p>
           </div>
         )}
         {review.verification?.status === "handoff" && (
-          <div className="mt-4 rounded-[12px] border border-border bg-surface px-4 py-3">
-            <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">The code needs you</p>
+          <div className="mt-4 rounded-inner border border-border bg-surface px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">The code needs you</p>
             <p className="mt-1 text-xs text-muted">
               Litos was not sure it finished this step. Open the company page and finish it yourself.
             </p>
@@ -1199,7 +1199,7 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
       <CenteredState title="Sent to the company." body={`${role} at ${company} is complete. The company portal confirmed receipt.`} />
       {receipt && <Card className="overflow-hidden">
         <div className="grid gap-5 p-6 sm:grid-cols-2">
-          <div><p className="font-mono text-[10px] uppercase tracking-[0.08em] text-positive">Proof it was sent</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
+          <div><p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Proof it was sent</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
           <dl className="space-y-3 text-sm"><div><dt className="text-xs text-muted">Captured</dt><dd className="text-ink">{new Date(receipt.captured_at).toLocaleString()}</dd></div>{receipt.reference_id && <div><dt className="text-xs text-muted">Reference</dt><dd className="font-mono text-ink">{receipt.reference_id}</dd></div>}<div><dt className="text-xs text-muted">Where it was sent</dt><dd><a href={receipt.final_url} target="_blank" rel="noreferrer" className="break-all text-brand-ink underline">Open confirmation</a></dd></div></dl>
         </div>
         <img src={receipt.screenshot_url} alt="The company's confirmation that the application arrived" className="h-auto w-full border-t border-border" />

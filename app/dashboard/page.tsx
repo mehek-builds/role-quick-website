@@ -441,7 +441,7 @@ export default function Home() {
     }
   }
 
-  const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "your target roles";
+  const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "Your target roles";
   const trialActive = Boolean(
     me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
   );
@@ -450,17 +450,17 @@ export default function Home() {
 
   return (
     <div className="space-y-8">
-      {/* The header carries the one thing a person comes here to do. "Change what I want" is a
+      {/* The header carries the one thing a person comes here to do. "Change what you want" is a
           setting, so it sits as a text link under the subtitle rather than occupying the primary
           button slot. */}
       <section className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
         <div>
-          <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Overview</h1>
+          <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Home</h1>
           <p className="mt-1 text-sm text-muted">
             {targetLabel}
             <span aria-hidden="true" className="mx-2 text-faint">·</span>
             <Link href="/dashboard/profile" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
-              Change what I want
+              Change what you want
             </Link>
           </p>
         </div>
@@ -575,7 +575,7 @@ export default function Home() {
       </section>
 
       {lastDismissed && (
-        <div role="status" className="flex items-center justify-between rounded-[12px] bg-surface-alt px-4 py-3 text-sm text-muted">
+        <div role="status" className="flex items-center justify-between rounded-inner bg-surface-alt px-4 py-3 text-sm text-muted">
           <span>Skipped for today.</span>
           <button type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
         </div>
@@ -612,7 +612,7 @@ function SummaryMetric({ label, value, href }: { label: string; value: number; h
           and the label carries the meaning. */}
       <Link href={href} className="block px-3 py-4 transition-colors hover:bg-surface-alt sm:px-5">
         <dt className="text-xs text-muted">{label}</dt>
-        <dd className="mt-1 font-mono text-2xl text-ink">{value}</dd>
+        <dd className="mt-1 font-mono text-heading text-ink">{value}</dd>
       </Link>
     </div>
   );
@@ -620,7 +620,7 @@ function SummaryMetric({ label, value, href }: { label: string; value: number; h
 
 function DashboardRow({ label, detail, href }: { label: string; detail: string; href: string }) {
   return (
-    <Link href={href} className="group grid min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-[20px] border border-border px-5 py-3">
+    <Link href={href} className="group grid min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-card border border-border px-5 py-3">
       <span>
         <span className="block text-sm font-medium text-ink">{label}</span>
         <span className="block text-xs text-muted">{detail}</span>
@@ -811,7 +811,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
 function ResumePreview({ packet }: { packet: GeneratedResume }) {
   const spec = packet.spec;
   return (
-    <article className="mt-6 rounded-[20px] border border-border bg-white p-5 sm:p-7">
+    <article className="mt-6 rounded-card border border-border bg-white p-5 sm:p-7">
       <div className="border-b border-ink pb-4">
         <h4 className="text-lg font-medium tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
         <p className="mt-1 text-xs text-muted">{packet.job_context.company}</p>
@@ -828,7 +828,7 @@ function ResumePreview({ packet }: { packet: GeneratedResume }) {
               <div key={`${entry.org}-${entry.title}-${index}`}>
                 <div className="flex flex-wrap justify-between gap-2">
                   <p className="text-sm font-medium text-ink">{entry.title} · {entry.org}</p>
-                  <p className="font-mono text-[10px] text-faint">{entry.date_range}</p>
+                  <p className="font-mono text-[11px] text-faint">{entry.date_range}</p>
                 </div>
                 <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-muted">
                   {entry.bullets.map((bullet, bulletIndex) => <li key={`${bullet}-${bulletIndex}`}>{bullet}</li>)}
@@ -848,7 +848,7 @@ function ResumePreview({ packet }: { packet: GeneratedResume }) {
 function ResumeSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-b border-border py-4 last:border-b-0 last:pb-0">
-      <h5 className="mb-2 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{title}</h5>
+      <h5 className="mb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">{title}</h5>
       {children}
     </section>
   );

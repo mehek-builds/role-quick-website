@@ -307,7 +307,7 @@ export default function Settings() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Account</h1>
+        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Account</h1>
         <p className="mt-1 text-sm text-muted">
           Account, application details, and plan.
         </p>
@@ -315,7 +315,7 @@ export default function Settings() {
 
       {error && <ErrorNote message={error} />}
       {connectionNotice && (
-        <div className="rounded-[12px] border border-border bg-surface-alt px-4 py-3 text-sm text-ink">
+        <div className="rounded-inner border border-border bg-surface-alt px-4 py-3 text-sm text-ink">
           {connectionNotice}
         </div>
       )}
@@ -353,7 +353,7 @@ export default function Settings() {
             const connected = connection?.connected === true;
             const label = provider === "gmail" ? "Gmail" : "Outlook";
             return (
-              <div key={provider} className="flex items-center justify-between rounded-[12px] border border-border bg-surface px-4 py-3">
+              <div key={provider} className="flex items-center justify-between rounded-inner border border-border bg-surface px-4 py-3">
                 <div>
                   <p className="text-sm font-medium text-ink">{label}</p>
                   <p className="mt-0.5 text-xs text-faint">
@@ -442,7 +442,7 @@ export default function Settings() {
               sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
               with users reporting permanently restricted LinkedIn accounts. The lock is enforced on
               the server; this copy exists so the control is not an unexplained dead toggle. */}
-          <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
+          <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
             <span>
               <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
               <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
@@ -464,7 +464,7 @@ export default function Settings() {
               className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
             />
           </label>
-          <label className="flex items-start justify-between gap-5 rounded-[12px] border border-border p-4">
+          <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
             <span><span className="block text-sm font-medium text-ink">Read the code a company emails me</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
             <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
@@ -548,7 +548,7 @@ export default function Settings() {
           <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
         </div>
         {me.checkout_available && !trialActive ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[12px] bg-brand-soft px-5 py-4">
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-inner bg-brand-soft px-5 py-4">
             {/* No price or quota stated here. The plan is being reworked and
                 a stale number is worse than none: checkout is the one place
                 that shows the real price, and it is always current. */}

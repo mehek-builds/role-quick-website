@@ -459,10 +459,10 @@ export function BaseResumeStep({
             phase === "compare" ? "lg:col-span-2" : "lg:col-start-2 lg:row-start-1"
           }`}
         >
-          <h1 className="max-w-full text-[30px] font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-[32px]">
+          <h1 className="max-w-full text-section font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-section">
             {phase === "compare" ? "Same you. One page." : "This is your resume now."}
           </h1>
-          <p className="mt-3 max-w-[60ch] text-[15px] leading-7 text-muted">
+          <p className="mt-3 max-w-[60ch] text-base leading-7 text-muted">
             {phase === "compare"
               ? sourcePages > 1
                 ? `On the left is the ${sourcePages}-page resume you uploaded. On the right is the same history on one page, in the form that actually gets read.`
@@ -507,7 +507,7 @@ export function BaseResumeStep({
                 type="button"
                 onClick={choose}
                 aria-label="Use this resume"
-                className="block w-full cursor-pointer rounded-[2px] text-left outline-none ring-offset-4 transition-shadow focus-visible:ring-2 focus-visible:ring-brand"
+                className="block w-full cursor-pointer rounded-[3px] text-left outline-none ring-offset-4 transition-shadow focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <ResumePaper spec={spec} contact={contact} />
               </button>
@@ -552,10 +552,10 @@ export function BaseResumeStep({
               )}
             </div>
             <div className="min-w-0">
-              <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
                 {finished ? "Built" : "Building"}
               </p>
-              <p className="mt-1 truncate text-[15px] text-ink">
+              <p className="mt-1 truncate text-base text-ink">
                 {error ? "Stopped" : finished ? "Your Litos resume" : STAGE_COPY[stage ?? "reading"].label}
               </p>
             </div>
@@ -594,11 +594,11 @@ export function BaseResumeStep({
           {/* The receipt motif: a mono timestamp gutter, times measured from the real start of the
               build rather than assigned. */}
           {log.length > 0 && (
-            <div className="mt-6 max-h-56 overflow-y-auto rounded-[12px] border border-border bg-surface-alt py-1">
+            <div className="mt-6 max-h-56 overflow-y-auto rounded-inner border border-border bg-surface-alt py-1">
               {log.map((row, i) => (
                 <div
                   key={`${row.t}-${i}`}
-                  className="grid grid-cols-[46px_minmax(0,1fr)] items-baseline gap-3 px-3.5 py-1 font-mono text-[11.5px]"
+                  className="grid grid-cols-[46px_minmax(0,1fr)] items-baseline gap-3 px-3.5 py-1 font-mono text-[11px]"
                 >
                   <span className="text-faint">{row.t}</span>
                   <span className="text-ink">{row.text}</span>
@@ -627,7 +627,7 @@ export function BaseResumeStep({
               build is for. Numbers, not adjectives: DESIGN.md's Guardrails forbid a claim we cannot
               show the working for. */}
           {finished && ats && (
-            <p className="mt-5 text-[12.5px] leading-5 text-muted">
+            <p className="mt-5 text-xs leading-5 text-muted">
               Checked: an applicant tracking system can read this, {ats.extractable_chars} characters
               on {ats.pages === 1 ? "one page" : `${ats.pages} pages`}.
               {ats.scored_against === "target roles" && (
@@ -641,13 +641,13 @@ export function BaseResumeStep({
               capped at five: asking about all fifteen on a federal-style resume turns the payoff
               screen into a form, and drop-off is the real risk. */}
           {finished && metricGaps.length > 0 && !metricsDone && (
-            <div className="mt-5 rounded-[12px] border border-border px-4 py-3.5">
+            <div className="mt-5 rounded-inner border border-border px-4 py-3.5">
               <p className="text-[13px] text-ink">
                 {metricGaps.length === 1
                   ? "One line would land harder with a number in it."
                   : `${metricGaps.length} lines would land harder with a number in them.`}
               </p>
-              <p className="mt-1 text-[12.5px] leading-5 text-muted">
+              <p className="mt-1 text-xs leading-5 text-muted">
                 How many, how much, how often, how fast. Leave any blank and we keep it as it is.
               </p>
               <ul className="mt-3 space-y-3">
@@ -656,10 +656,10 @@ export function BaseResumeStep({
                     {/* The role, above the line. Two stints at one employer can carry the same duty
                         line, and two unlabelled identical prompts give the student no way to tell
                         which is which. */}
-                    <p className="text-[11.5px] text-faint">
+                    <p className="text-[11px] text-faint">
                       {[gap.title, gap.org, gap.date_range].filter(Boolean).join(" \u00b7 ")}
                     </p>
-                    <p className="text-[12.5px] leading-5 text-muted">{gap.bullet}</p>
+                    <p className="text-xs leading-5 text-muted">{gap.bullet}</p>
                     <input
                       value={metricAnswers[i] ?? ""}
                       onChange={(e) =>
@@ -673,7 +673,7 @@ export function BaseResumeStep({
                 ))}
               </ul>
               {metricsMissed > 0 && (
-                <p className="mt-3 text-[12.5px] leading-5 text-ink">
+                <p className="mt-3 text-xs leading-5 text-ink">
                   {metricsMissed === 1 ? "One number" : `${metricsMissed} numbers`} could not be added,
                   because {metricsMissed === 1 ? "that line has" : "those lines have"} been edited since
                   we asked. Add {metricsMissed === 1 ? "it" : "them"} straight into the resume on the left.
@@ -706,13 +706,13 @@ export function BaseResumeStep({
               the student presses the button, and a summary they must click to expand is not visible -
               it is one more thing to skip on the way to the button. There are rarely more than two. */}
           {finished && warnings.length > 0 && (
-            <details open className="mt-5 rounded-[12px] border border-border px-4 py-3">
+            <details open className="mt-5 rounded-inner border border-border px-4 py-3">
               <summary className="cursor-pointer text-[13px] text-ink">
                 {warnings.length === 1 ? "One thing to check" : `${warnings.length} things to check`}
               </summary>
               <ul className="mt-2.5 space-y-1.5">
                 {warnings.map((w, i) => (
-                  <li key={i} className="text-[12.5px] leading-5 text-muted">
+                  <li key={i} className="text-xs leading-5 text-muted">
                     {humanizeBuildNote(w)}
                   </li>
                 ))}
@@ -749,7 +749,7 @@ export function BaseResumeStep({
 /** The small mono caption over each sheet in the comparison. */
 function PaneLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{children}</p>
+    <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">{children}</p>
   );
 }
 

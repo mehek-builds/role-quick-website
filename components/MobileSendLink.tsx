@@ -47,14 +47,14 @@ export function MobileSendLink({
 
   return (
     <div className={`rq-sendlink ${className}`}>
-      <div className="flex items-center gap-3.5 rounded-xl border border-border bg-surface-alt/60 p-3 text-left">
+      <div className="flex items-center gap-3.5 rounded-inner border border-border bg-surface-alt/60 p-3 text-left">
         <canvas
           ref={canvasRef}
           style={{ width: 64, height: 64 }}
-          className="shrink-0 rounded-md"
+          className="shrink-0 rounded-inner"
         />
         <div className="min-w-0 flex-1">
-          <p className="text-[12px] leading-5 text-muted">
+          <p className="text-xs leading-5 text-muted">
             Litos installs on a laptop. Scan this, or copy the link for later.
           </p>
           <button
@@ -66,7 +66,7 @@ export function MobileSendLink({
                 track("send_link_submit", { method: "copy", source });
               } catch {}
             }}
-            className="mt-1.5 min-h-[44px] rounded-full border border-border bg-surface px-3.5 py-1.5 text-[12px] font-medium text-ink"
+            className="mt-1.5 min-h-[44px] rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink"
           >
             {copied ? "Copied" : "Copy install link"}
           </button>

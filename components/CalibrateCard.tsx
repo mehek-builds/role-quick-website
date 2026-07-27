@@ -203,7 +203,7 @@ export function CalibrateCard() {
          film stills) and the default 55% glass let them collide with
          the payoff text */
       style={{ background: "rgba(255, 255, 255, 0.96)" }}
-      className={`fixed bottom-4 left-4 right-4 z-40 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] rounded-2xl border border-border rq-glass p-5 shadow-[0_12px_40px_rgba(18,18,15,0.10)] transition-all duration-300 ease-out motion-reduce:transition-none ${
+      className={`fixed bottom-4 left-4 right-4 z-40 sm:bottom-6 sm:left-auto sm:right-6 sm:w-[360px] rounded-card border border-border rq-glass p-5 shadow-[0_12px_40px_rgba(18,18,15,0.10)] transition-all duration-300 ease-out motion-reduce:transition-none ${
         entered ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0 motion-reduce:translate-y-0"
       }`}
     >
@@ -229,7 +229,7 @@ export function CalibrateCard() {
 
       {step === 0 && (
         <>
-          <p className="mt-3 text-[17px] font-[450] tracking-[-0.01em] text-ink">
+          <p className="mt-3 text-lg font-[450] tracking-[-0.01em] text-ink">
             What job do you want?
           </p>
           <div className="mt-3.5 flex flex-wrap gap-2">
@@ -251,7 +251,7 @@ export function CalibrateCard() {
 
       {step === 1 && (
         <>
-          <p className="mt-3 text-[17px] font-[450] tracking-[-0.01em] text-ink">
+          <p className="mt-3 text-lg font-[450] tracking-[-0.01em] text-ink">
             Your field?
           </p>
           <div className="mt-3.5 flex flex-wrap gap-2">
@@ -273,7 +273,7 @@ export function CalibrateCard() {
 
       {step === 2 && !matching && (
         <>
-          <p className="mt-3 text-[17px] font-[450] tracking-[-0.01em] text-ink">
+          <p className="mt-3 text-lg font-[450] tracking-[-0.01em] text-ink">
             Where?
           </p>
           <div className="mt-3.5 flex flex-wrap gap-2">
@@ -298,7 +298,7 @@ export function CalibrateCard() {
           {step > 0 && (
             <button
               onClick={() => setStep(step - 1)}
-              className="text-[12px] font-medium text-muted transition-colors hover:text-ink"
+              className="text-xs font-medium text-muted transition-colors hover:text-ink"
             >
               ← Back
             </button>
@@ -317,26 +317,26 @@ export function CalibrateCard() {
 
       {step === 3 && !matching && profile && top && (
         <>
-          <p className="mt-3 text-[16px] font-[450] leading-snug tracking-[-0.01em] text-ink">
+          <p className="mt-3 text-base font-[450] leading-snug tracking-[-0.01em] text-ink">
             {hu?.short ?? "Roles"}. {fieldLabel}.{" "}
             {profile.region === "anywhere" ? "Anywhere" : regionShort}.
           </p>
 
-          <div className="mt-3 rounded-xl border border-border bg-surface p-3.5">
+          <div className="mt-3 rounded-inner border border-border bg-surface p-3.5">
             <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-[15px] font-semibold text-brand-ink">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-inner bg-brand-soft text-base font-semibold text-brand-ink">
                 {top.company.slice(0, 1)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[13.5px] font-semibold text-ink">
+                <p className="truncate text-[13px] font-semibold text-ink">
                   {top.role}
                 </p>
-                <p className="truncate text-[12.5px] text-muted">{top.company}</p>
-                <p className="mt-1.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] text-ink">
+                <p className="truncate text-xs text-muted">{top.company}</p>
+                <p className="mt-1.5 font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-ink">
                   {top.status} · {regionsLabel(top)}
                 </p>
                 {top.verified && (
-                  <p className="mt-0.5 font-mono text-[10.5px] font-medium uppercase tracking-[0.06em] text-faint">
+                  <p className="mt-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.06em] text-faint">
                     Verified {top.verified}
                   </p>
                 )}
@@ -358,7 +358,7 @@ export function CalibrateCard() {
               {rest.map((r) => (
                 <p
                   key={r.company + r.role}
-                  className="truncate text-[12px] text-muted"
+                  className="truncate text-xs text-muted"
                 >
                   {r.role} · {r.company}
                 </p>
@@ -366,11 +366,11 @@ export function CalibrateCard() {
             </div>
           )}
 
-          <p className="mt-3.5 text-[12.5px] leading-relaxed text-muted">
+          <p className="mt-3.5 text-xs leading-relaxed text-muted">
             Nearly 70% of interviews go to people who applied in the first
             week a posting is live. Early is the whole game.
           </p>
-          <p className="mt-0.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+          <p className="mt-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
             Measured by Lever, a job application company
           </p>
 

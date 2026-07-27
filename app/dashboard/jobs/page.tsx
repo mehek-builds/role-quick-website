@@ -66,7 +66,7 @@ export default function JobsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[32px] font-normal leading-[1.15] tracking-[-0.02em] text-ink">Jobs</h1>
+        <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Jobs</h1>
         <p className="mt-2 text-sm text-muted">Every job Litos has found for you.</p>
       </div>
 
