@@ -43,4 +43,27 @@ describe("Litos vocabulary", () => {
     }
     assert.match(home, /01 · Resume/, "the section chips should name step 1 \"Resume\"");
   });
+
+  test("the audience is named one way", () => {
+    /* Who Litos is for was named three ways at once: the hero said "students",
+       the store listing said "students and new grads", the old backend policy
+       said "job seekers". It was fixed, then drifted straight back when a later
+       commit renamed only the hero. Mehek's call, 2026-07-27: JOB SEEKERS.
+       The store listing description is not in this repo, so it cannot be
+       asserted here; it is the one copy a human still has to keep in step. */
+    const AUDIENCE = "job seekers";
+    const hero = readFileSync("components/cinema/CinematicHero.tsx", "utf8");
+    assert.match(
+      hero,
+      new RegExp(`Free Chrome extension for ${AUDIENCE}`, "i"),
+      `the hero must say "${AUDIENCE}". Changing it means changing the store listing description in the same breath.`
+    );
+    const everywhere = FILES.map((p) => readFileSync(p, "utf8")).join("\n");
+    for (const name of ["students and new grads", "students", "college students"]) {
+      assert.ok(
+        !new RegExp(`extension for ${name}\\b`, "i").test(everywhere),
+        `"extension for ${name}" is a second name for the audience. It is "${AUDIENCE}" everywhere.`
+      );
+    }
+  });
 });
