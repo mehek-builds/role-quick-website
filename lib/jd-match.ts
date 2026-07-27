@@ -60,3 +60,39 @@ export async function fetchJdMatch(jdText: string, resumeText: string): Promise<
     body: JSON.stringify({ jd_text: jdText, resume_text: resumeText }),
   });
 }
+
+// ---- F2: what to do about a gap ----
+
+export type GapEvidence = {
+  term: string;
+  entry_id: string;
+  org: string;
+  title: string | null;
+  /** The student's own phrasing, verbatim. Never generated. */
+  variant: string;
+  already_on_resume: boolean;
+};
+
+export type GapAnswer = {
+  term: string;
+  display: string;
+  evidence: GapEvidence[];
+  /** Nothing in their experience bank mentions this. The UI says so and offers nothing. */
+  unsupported: boolean;
+};
+
+/**
+ * Ask what the student has actually done about each missing requirement.
+ *
+ * Separate from fetchJdMatch on purpose: the score recomputes as they type, this reads the whole
+ * experience bank, and the question is only asked once, when they look at the gap list.
+ */
+export async function fetchGapEvidence(
+  terms: { term: string; display: string }[],
+  resumeText: string,
+): Promise<{ answers: GapAnswer[] }> {
+  return api<{ answers: GapAnswer[] }>("/jd-match/evidence", {
+    method: "POST",
+    body: JSON.stringify({ terms, resume_text: resumeText }),
+  });
+}

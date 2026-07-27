@@ -18,6 +18,8 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
 import { packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import { resumeSpecText } from "@/lib/jd-match";
+import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/lib/requirement-terms";
 import type { JdMatchResponse } from "@/lib/jd-match";
@@ -89,6 +91,32 @@ export default function Applications() {
   // resume, which lit up "backed", "services" and "deployed" in the same blue as "PostgreSQL" and
   // so told the student nothing.
   const [matchResult, setMatchResult] = useState<JdMatchResponse | null>(null);
+  // What the last accept actually did, so the student is told and can undo it. Accepting used to
+  // mutate the resume with no feedback at all, and could silently no-op or silently delete.
+  const [lastApply, setLastApply] = useState<{ outcome: ApplyOutcome; previous: ResumeSpec } | null>(null);
+
+  /**
+   * Put one of the student's own stored bullets onto the tailored resume.
+   *
+   * All the judgement lives in lib/apply-variant.ts, which is pure and tested. This only records
+   * what happened so the UI can report it and offer an undo.
+   */
+  const acceptBankVariant = useCallback((org: string, variant: string) => {
+    setSpec((current) => {
+      if (!current) return current;
+      const { spec: next, outcome } = applyBankVariant(current, { org, variant });
+      setLastApply({ outcome, previous: current });
+      return next;
+    });
+  }, []);
+
+  const undoLastApply = useCallback(() => {
+    setLastApply((last) => {
+      if (last) setSpec(last.previous);
+      return null;
+    });
+  }, []);
+
   const selectPacket = useCallback((packet: GeneratedResume) => {
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
@@ -738,7 +766,13 @@ export default function Applications() {
                   </div>
                   {matchResult && matchResult.missing.length > 0 && (
                     <div className="mt-5 border-t border-border pt-4">
-                      <MatchGaps missing={matchResult.missing} />
+                      <MatchGaps
+                        missing={matchResult.missing}
+                        resumeText={resumeSpecText(deferredSpec ?? spec)}
+                        onUseVariant={({ org, variant }) => acceptBankVariant(org, variant)}
+                        lastApply={lastApply}
+                        onUndo={undoLastApply}
+                      />
                     </div>
                   )}
                 </div>
