@@ -15,7 +15,7 @@ import {
 import { track } from "@/lib/analytics";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { SourceResume } from "./SourceResume";
-import { LaterLink, PrimaryButton, StartShell } from "./ui";
+import { LaterLink, PrimaryButton, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { humanizeBuildNote } from "@/lib/buildNotes";
 
@@ -688,16 +688,13 @@ export function BaseResumeStep({
                 >
                   {savingMetrics ? "Adding" : "Add these"}
                 </button>
-                <button
-                  type="button"
+                <SkipLink
                   onClick={() => {
                     track("base_resume_metrics_skipped", { asked: metricGaps.length });
                     setMetricsDone(true);
                   }}
-                  className="text-[13px] text-muted underline underline-offset-2"
-                >
-                  Skip
-                </button>
+                  what="these numbers"
+                />
               </div>
             </div>
           )}
