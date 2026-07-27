@@ -19,8 +19,25 @@ export type BuildStage =
   | "writing"
   | "polishing"
   | "fitting"
+  // Rendering the PDF and putting it through the ATS check. Every resume goes through this, and a
+  // build that fails it is not saved.
+  | "checking"
   | "done"
   | "failed";
+
+export type AtsVerdict = {
+  passed: boolean;
+  issues: string[];
+  pages: number;
+  extractable_chars: number;
+  keyword_coverage_pct: number;
+  scored_against: string;
+};
+
+/* org, title and dates travel with the gap so the ask can SAY which role it means: two stints at
+ * one employer can carry the same duty line, and two unlabelled identical prompts give the student
+ * no way to tell which is which. */
+export type MetricGap = { org: string; title: string; date_range: string; bullet: string };
 
 export type BuildFrame =
   | { event: "stage"; stage: BuildStage; detail?: string }
@@ -31,7 +48,18 @@ export type BuildFrame =
   | { event: "piece"; type: "education"; education_position: "top" | "after_experience" }
   | { event: "piece"; type: "entry"; index: number; entry: ResumeEntry }
   | { event: "piece"; type: "skills"; skills: string[] }
-  | { event: "done"; spec: ResumeSpec; warnings: string[]; built_at: string }
+  // The ATS verdict, sent on every build whether it passed or not. A build that fails it is not
+  // saved, so the student sees the reason rather than a resume that quietly will not parse.
+  | ({ event: "ats" } & AtsVerdict)
+  | {
+      event: "done";
+      spec: ResumeSpec;
+      warnings: string[];
+      ats: AtsVerdict;
+      // Bullets carrying no number, worst first. The student is the only person who knows these.
+      metrics: MetricGap[];
+      built_at: string;
+    }
   | { event: "error"; message: string };
 
 export type StoredBaseResume = {
