@@ -63,6 +63,50 @@ describe("segmentText", () => {
     ]);
   });
 
+  // --- regressions, both found by reading the rendered page rather than the tests.
+
+  test("a comma-suffixed term still matches, and the comma stays outside the mark", () => {
+    // On a real posting, "Familiarity with React, PostgreSQL, and Docker" marked ONLY Docker: the
+    // two terms the student did have went uncredited in the pane while the score counted them.
+    const text = "Familiarity with React, PostgreSQL, and Docker";
+    const out = segmentText(text, idx(["react", "postgresql", "docker"]));
+    assert.deepEqual(marks(out), [
+      ["React", "covered"],
+      ["PostgreSQL", "covered"],
+      ["Docker", "covered"],
+    ]);
+    assert.equal(out.map((s) => s.text).join(""), text);
+  });
+
+  test("a mark never swallows a line break or the next bullet's dash", () => {
+    // "PostgreSQL\n-" normalized to "postgresql" when a lone dash counted as a word, so the mark
+    // ran past the end of the line and coloured the next bullet's dash.
+    const text = "- Design REST APIs backed by PostgreSQL\n- Own services on AWS";
+    const out = segmentText(text, idx(["postgresql", "aws"]));
+    for (const [marked] of marks(out)) {
+      assert.ok(!marked.includes("\n"), `mark "${marked}" crossed a line break`);
+      assert.ok(!marked.includes("-"), `mark "${marked}" swallowed a dash`);
+    }
+    assert.deepEqual(marks(out), [
+      ["PostgreSQL", "covered"],
+      ["AWS", "covered"],
+    ]);
+    assert.equal(out.map((s) => s.text).join(""), text);
+  });
+
+  test("a phrase does not form across a comma or a newline", () => {
+    const out = segmentText("Docker, Kubernetes", idx(["docker kubernetes"], []));
+    assert.deepEqual(marks(out), [], "a list separator is not a phrase boundary to cross");
+  });
+
+  test("C++ and C# survive edge stripping", () => {
+    const out = segmentText("Experience with C++ and C#.", idx(["c++", "c#"]));
+    assert.deepEqual(marks(out), [
+      ["C++", "covered"],
+      ["C#", "covered"],
+    ]);
+  });
+
   test("no requirements means no marks, not a crash", () => {
     const out = segmentText("Anything at all", idx([]));
     assert.deepEqual(marks(out), []);

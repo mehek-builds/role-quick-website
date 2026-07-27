@@ -57,81 +57,115 @@ export type Segment =
   | { kind: "mark"; text: string; term: string; tone: TermTone };
 
 /**
+ * A word is a run containing at least one letter or digit. Everything else, including a bullet dash
+ * and a comma, is a gap.
+ *
+ * This distinction is load-bearing. When "-" counted as a word, the two-word candidate
+ * "PostgreSQL\n-" normalized to "postgresql" (a lone dash contributes nothing once hyphens become
+ * spaces) and matched the one-word term, so the mark swallowed the line break AND the next bullet's
+ * dash. On the rendered page that showed up as stray coloured dashes down the left margin.
+ */
+const WORD_RE = /[A-Za-z0-9][A-Za-z0-9+#./_'’-]*/g;
+
+/**
+ * Punctuation carried at the edge of a written word, stripped before lookup and re-emitted outside
+ * the mark. Without this, "React," never matched the term `react`, so on a real posting the
+ * Requirements line "Familiarity with React, PostgreSQL, and Docker" marked only Docker: the two
+ * terms the student DID have went uncredited in the pane while the score counted them.
+ *
+ * `+` and `#` are kept as part of the core so "C++" and "C#" survive.
+ */
+function stripEdges(word: string): { core: string; lead: string; trail: string } {
+  const lead = word.match(/^[^A-Za-z0-9]+/)?.[0] ?? "";
+  const rest = word.slice(lead.length);
+  const trail = rest.match(/[^A-Za-z0-9+#]+$/)?.[0] ?? "";
+  return { core: trail ? rest.slice(0, -trail.length) : rest, lead, trail };
+}
+
+type Token = { text: string; start: number; end: number };
+
+/**
  * Split text into plain runs and highlighted runs.
  *
- * Multi-word aware, and greedy longest-first, so "machine learning" marks as one phrase rather than
+ * Multi-word aware and greedy longest-first, so "machine learning" marks as one phrase rather than
  * two adjacent words. A single token also normalizes on its own, which is what lets the two-word
  * term "ci cd" match the single written token "CI/CD" without a special case.
  *
- * `editedTerms` is the legacy single-word provenance set and is only consulted where a requirement
- * did not already claim the run: a term that is both a JD requirement and a Litos edit is more
- * useful shown as the requirement, since that is the one the score depends on.
+ * A phrase may only span words separated by SPACES. A comma, a semicolon or a line break between
+ * two words means they are separate list items, mirroring the same rule in the backend's
+ * extractJdTerms: "React, PostgreSQL, and Docker" is three requirements, not one phrase.
+ *
+ * `editedTerms` is the legacy single-word provenance set, consulted only where no requirement
+ * claimed the word: a term that is both a JD requirement and a Litos edit is more useful shown as
+ * the requirement, since that is the one the score depends on.
  */
 export function segmentText(
   text: string,
   index: RequirementIndex,
   editedTerms?: ReadonlySet<string>,
 ): Segment[] {
-  // Keep separators so the text can be reassembled exactly as written.
-  const parts = text.split(/(\s+)/);
-  const isWord = (s: string) => s.length > 0 && !/^\s+$/.test(s);
-  const segments: Segment[] = [];
-  let buffer = "";
+  const tokens: Token[] = [];
+  for (const m of text.matchAll(WORD_RE)) {
+    tokens.push({ text: m[0], start: m.index ?? 0, end: (m.index ?? 0) + m[0].length });
+  }
 
-  const flush = () => {
-    if (buffer) {
-      segments.push({ kind: "text", text: buffer });
-      buffer = "";
-    }
+  const segments: Segment[] = [];
+  let cursor = 0;
+  const pushTextUpTo = (upto: number) => {
+    if (upto > cursor) segments.push({ kind: "text", text: text.slice(cursor, upto) });
+    cursor = upto;
   };
 
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i];
-    if (!isWord(part)) {
-      buffer += part;
-      continue;
-    }
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].start < cursor) continue; // consumed by a phrase already emitted
 
-    // Try the longest phrase first.
-    let hit: { len: number; term: string; tone: TermTone } | null = null;
+    let hit: { start: number; end: number; term: string; tone: TermTone; span: number } | null = null;
+
     for (let len = Math.min(index.maxWords, 5); len >= 1 && !hit; len--) {
-      // Collect `len` words plus the separators between them.
-      const slice: string[] = [];
-      let words = 0;
-      let j = i;
-      while (j < parts.length && words < len) {
-        slice.push(parts[j]);
-        if (isWord(parts[j])) words++;
-        j++;
+      if (i + len > tokens.length) continue;
+
+      let joinable = true;
+      for (let k = i; k < i + len - 1 && joinable; k++) {
+        if (!/^ +$/.test(text.slice(tokens[k].end, tokens[k + 1].start))) joinable = false;
       }
-      if (words < len) continue;
-      const candidate = normalizeTerm(slice.filter(isWord).join(" "));
+      if (!joinable) continue;
+
+      const pieces = [];
+      for (let k = i; k < i + len; k++) pieces.push(stripEdges(tokens[k].text));
+      if (pieces.some((piece) => !piece.core)) continue;
+
+      const candidate = normalizeTerm(pieces.map((piece) => piece.core).join(" "));
       const tone = index.tone.get(candidate);
-      if (tone) hit = { len: slice.length, term: candidate, tone };
+      if (tone) {
+        hit = {
+          start: tokens[i].start + pieces[0].lead.length,
+          end: tokens[i + len - 1].end - pieces[len - 1].trail.length,
+          term: candidate,
+          tone,
+          span: len,
+        };
+      }
     }
 
     if (hit) {
-      flush();
-      const raw = parts.slice(i, i + hit.len).join("");
-      // Trailing punctuation belongs outside the mark so "Docker." does not underline the period.
-      const trailing = raw.match(/[),.;:]+$/)?.[0] ?? "";
-      const marked = trailing ? raw.slice(0, -trailing.length) : raw;
-      segments.push({ kind: "mark", text: marked, term: hit.term, tone: hit.tone });
-      if (trailing) buffer += trailing;
-      i += hit.len - 1;
+      pushTextUpTo(hit.start);
+      segments.push({ kind: "mark", text: text.slice(hit.start, hit.end), term: hit.term, tone: hit.tone });
+      cursor = hit.end;
+      i += hit.span - 1;
       continue;
     }
 
-    const key = normalizeTerm(part).replace(/[^a-z0-9+#. ]/g, "");
+    const { core, lead } = stripEdges(tokens[i].text);
+    const key = normalizeTerm(core);
     if (editedTerms && key.length > 2 && editedTerms.has(key)) {
-      flush();
-      segments.push({ kind: "mark", text: part, term: key, tone: "edited" });
-      continue;
+      const start = tokens[i].start + lead.length;
+      const end = start + core.length;
+      pushTextUpTo(start);
+      segments.push({ kind: "mark", text: text.slice(start, end), term: key, tone: "edited" });
+      cursor = end;
     }
-
-    buffer += part;
   }
 
-  flush();
+  pushTextUpTo(text.length);
   return segments;
 }
