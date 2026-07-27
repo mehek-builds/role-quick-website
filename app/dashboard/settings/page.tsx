@@ -518,10 +518,13 @@ export default function Settings() {
         </div>
         {me.checkout_available && !trialActive ? (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-[12px] bg-brand-soft px-5 py-4">
+            {/* No price or quota stated here. The plan is being reworked and
+                a stale number is worse than none: checkout is the one place
+                that shows the real price, and it is always current. */}
             <p className="text-sm text-muted">
-              <span className="font-medium text-ink">Pro covers 1,000 resumes a month. </span>
-              $49.99/mo. Canceling takes the same clicks as signing up, from
-              the billing portal linked in your receipt email.
+              <span className="font-medium text-ink">Need more room? </span>
+              Cancelling takes the same number of clicks as signing up, from
+              the link in your receipt email.
             </p>
             {me.is_guest ? <a
               href="/login?claim=1&next=upgrade"

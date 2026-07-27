@@ -483,8 +483,8 @@ export default function Home() {
       {me?.is_guest && !trialActive && me.checkout_available && (
         <Card className="flex flex-wrap items-center justify-between gap-4 bg-brand-soft p-5">
           <div>
-            <p className="text-sm font-medium text-ink">Your seven-day trial has ended.</p>
-            <p className="mt-1 text-xs text-muted">Save this workspace, then continue with Litos Pro.</p>
+            <p className="text-sm font-medium text-ink">Your free week is over.</p>
+            <p className="mt-1 text-xs text-muted">Save your work here, then keep going.</p>
           </div>
           <Link
             href="/login?claim=1&next=upgrade"
