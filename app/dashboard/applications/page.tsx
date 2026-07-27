@@ -633,9 +633,9 @@ export default function Applications() {
         </div>
         {/* The selected packet's status already prints on its own row and inside the review
             surface; a third copy in the page header was noise. */}
-        <button type="button" onClick={() => setShowNewApplication((current) => !current)} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90">
+        <Button type="button" onClick={() => setShowNewApplication((current) => !current)}>
           {showNewApplication ? "Close" : "Add a job link"}
-        </button>
+        </Button>
       </div>
 
       {error && <ErrorNote message={error} />}

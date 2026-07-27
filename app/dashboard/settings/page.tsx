@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/app/Button";
+import { Button, ButtonLink } from "@/components/app/Button";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -360,14 +360,15 @@ export default function Settings() {
                     {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
                   disabled={!emailConnections.configured || connectionBusy !== null}
                   onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider))}
-                  className={connected ? "rounded-full border border-border px-4 py-2 text-xs font-medium text-ink disabled:opacity-50" : "rounded-full bg-brand px-4 py-2 text-xs font-medium text-white disabled:opacity-50"}
+                  variant={connected ? "secondary" : "primary"}
+                  size="sm"
                 >
                   {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
-                </button>
+                </Button>
               </div>
             );
           })}
@@ -556,12 +557,9 @@ export default function Settings() {
               Cancelling takes the same number of clicks as signing up, from
               the link in your receipt email.
             </p>
-            {me.is_guest ? <a
-              href="/login?claim=1&next=upgrade"
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
+            {me.is_guest ? <ButtonLink href="/login?claim=1&next=upgrade">
               Upgrade to Pro
-            </a> : <Button
+            </ButtonLink> : <Button
               type="button"
               disabled={checkoutBusy}
               onClick={() => void startCheckout()} >
