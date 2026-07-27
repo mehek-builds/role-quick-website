@@ -198,12 +198,12 @@ export function MatchGaps({
         This posting asks for {missing.length} thing{missing.length === 1 ? "" : "s"} your resume does
         not mention.{" "}
         {failed
-          ? "Could not check your saved experience just now."
+          ? "We could not check your saved work just now."
           : answers === null
           ? "Checking what you have already written."
           : supported > 0
             ? `You have already written about ${supported} of them somewhere else.`
-            : "Nothing in your saved experience covers these."}
+            : "Nothing in your saved work covers these."}
       </p>
       <ul className="mt-3 flex flex-wrap gap-2">
         {missing.map((term) => (
@@ -248,7 +248,7 @@ function GapDetail({
     return (
       <div className="mt-4 rounded-[14px] border border-border bg-surface-alt px-4 py-3">
         <p className="text-sm text-ink">
-          Nothing in your saved experience mentions {answer.display}.
+          Nothing in your saved work mentions {answer.display}.
         </p>
         <p className="mt-1 text-[13px] leading-5 text-muted">
           Litos will not write a bullet claiming you have. If you have done it, add it to your

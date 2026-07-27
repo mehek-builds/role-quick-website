@@ -54,7 +54,7 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
   }, [key]);
 
   if (state.failed) {
-    return <p className="text-[13px] text-faint">Could not check this resume just now.</p>;
+    return <p className="text-[13px] text-faint">We could not check this resume just now.</p>;
   }
   if (!state.health) {
     return <div className="h-4 w-40 animate-pulse rounded bg-surface-alt" aria-hidden="true" />;
@@ -69,8 +69,8 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
     // merely unrecognised passes here and is still rewritten by the generator.
     return (
       <p className="text-sm text-ink">
-        Nothing flagged. All {bullet_count} bullet{bullet_count === 1 ? "" : "s"} carry a number and
-        none of them open on a filler verb.
+        Nothing to fix. All {bullet_count} bullet{bullet_count === 1 ? "" : "s"} have a number in
+        them, and none of them start on a weak word.
       </p>
     );
   }
@@ -80,7 +80,7 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
   return (
     <div className={pending ? "opacity-50 transition-opacity" : "transition-opacity"}>
       <p className="text-sm text-muted">
-        {quantified_count} of {bullet_count} bullet{bullet_count === 1 ? "" : "s"} carry a number.
+        {quantified_count} of your {bullet_count} bullet{bullet_count === 1 ? "" : "s"} have a number in them.
         {fixes.length > 0 && ` ${fixes.length} thing${fixes.length === 1 ? "" : "s"} worth fixing.`}
       </p>
       <ul className="mt-3 space-y-2">
