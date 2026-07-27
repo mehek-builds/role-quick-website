@@ -252,6 +252,26 @@ export default function Home() {
                     We read what the job asks for. Then we put your best
                     work first, in their words.
                   </p>
+                  {/* The rigour claim, and the ONLY form of it that is true.
+                      The approved change was an institution proof row, the
+                      Simplify move ("Recommended by Harvard, Stanford, and top
+                      career centers"). Litos has no such relationship. What it
+                      has is that 45 public sample resumes from five career
+                      centres were driven through this builder, which found and
+                      fixed 13 defects. Putting the universities' names or marks
+                      on the page would convert "we tested against their
+                      coursework" into "they endorse us", which is a fabricated
+                      endorsement and misrepresents five real institutions.
+
+                      So the number ships and the names do not. It is a claim
+                      about our own work rather than borrowed authority, which
+                      makes it both honest and, for a builder, more relevant:
+                      the question a student has is whether it handles a resume
+                      like theirs. Mono because it is a measurement.
+                      Source: vault litos-onboarding-15-resume-run-2026-07-27. */}
+                  <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    Tested on 45 real resumes from five university career centres
+                  </p>
                 </div>
               </Reveal>
               <div className="w-full max-w-5xl origin-center sm:scale-[0.84]">
