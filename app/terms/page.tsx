@@ -32,6 +32,16 @@ export const metadata = {
  * one. It is in the Terms and the footer, not on the marketing page.
  */
 
+/* Bump BOTH on any material change, in the same PR as the change itself.
+   TERMS_VERSION is what a backend should store against an account when
+   acceptance is recorded, the same shape the product already uses for
+   automatic_submission_consent_version. Recording it server-side is the
+   remaining half of this and lives in the backend repo: the clickwrap on the
+   sign-in screen forms the agreement, and storing the version is what proves
+   which text a given account accepted. */
+export const TERMS_VERSION = "2026-07-27";
+const TERMS_EFFECTIVE = "27 July 2026";
+
 function Section({
   title,
   id,
@@ -61,6 +71,38 @@ export default function Terms() {
           Plain terms for using Litos. If something here is unclear, ask, and it
           gets rewritten rather than explained.
         </p>
+        {/* Version and date in the machine voice, because this is the part that
+            has to be citable later. A contract nobody can pin to a date is hard
+            to rely on in either direction. TERMS_VERSION is the string a
+            backend should store against an account when acceptance is recorded;
+            see the note in the Agreement section. */}
+        <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          Version {TERMS_VERSION} &middot; In effect {TERMS_EFFECTIVE}
+        </p>
+
+        <Section title="Agreeing to this" id="agreement">
+          <p>
+            This is the agreement between you and Litos. You accept it when you
+            create an account, which includes continuing with Google and
+            choosing to look around without signing up. The sign-in screen says
+            so next to the button that does it.
+          </p>
+          <p>
+            If you do not accept it, do not create an account. You can still read
+            everything here and try the{" "}
+            <a
+              href="/try"
+              className="text-ink underline decoration-border underline-offset-2"
+            >
+              demo
+            </a>
+            , which needs no account and stores nothing you type.
+          </p>
+          <p>
+            Where a term below conflicts with a right the law gives you, the law
+            wins and the rest of this still stands.
+          </p>
+        </Section>
 
         <Section title="What Litos is">
           <p>
