@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchJdMatch, resumeSpecText, type JdMatchResponse } from "@/lib/jd-match";
+import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer } from "@/lib/jd-match";
 import type { ResumeSpec } from "@/lib/api";
 import { useTermHover } from "./RequirementText";
 
@@ -128,7 +128,38 @@ export function MatchScore({
  * The gap list, shown under the resume. Ordered by weight, so the first chip is the requirement
  * that costs the most to be missing.
  */
-export function MatchGaps({ missing }: { missing: JdMatchResponse["missing"] }) {
+export function MatchGaps({
+  missing,
+  resumeText,
+  onUseVariant,
+}: {
+  missing: JdMatchResponse["missing"];
+  /** The resume as currently tailored, so evidence already in use can be marked. */
+  resumeText: string;
+  /** Called when the student accepts one of their own stored bullets. */
+  onUseVariant?: (evidence: { org: string; variant: string }) => void;
+}) {
+  const [answers, setAnswers] = useState<GapAnswer[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+
+  const key = missing.map((m) => m.term).join("|");
+  useEffect(() => {
+    let cancelled = false;
+    if (missing.length === 0) return;
+    fetchGapEvidence(
+      missing.map((m) => ({ term: m.term, display: m.display })),
+      resumeText,
+    )
+      .then((r) => !cancelled && setAnswers(r.answers))
+      .catch(() => !cancelled && setAnswers(null));
+    return () => {
+      cancelled = true;
+    };
+    // Keyed on the term list, not the array identity, so a rescore that returns the same gaps does
+    // not refetch the bank.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
   if (missing.length === 0) {
     return (
       <p className="text-sm text-muted">
@@ -136,15 +167,96 @@ export function MatchGaps({ missing }: { missing: JdMatchResponse["missing"] }) 
       </p>
     );
   }
+
+  const byTerm = new Map((answers ?? []).map((a) => [a.term, a]));
+  const supported = (answers ?? []).filter((a) => !a.unsupported).length;
+
   return (
     <div>
       <p className="text-sm text-muted">
         This posting asks for {missing.length} thing{missing.length === 1 ? "" : "s"} your resume does
-        not mention. Add only what you have actually done.
+        not mention.{" "}
+        {answers === null
+          ? "Checking what you have already written."
+          : supported > 0
+            ? `You have already written about ${supported} of them somewhere else.`
+            : "Nothing in your saved experience covers these."}
       </p>
       <ul className="mt-3 flex flex-wrap gap-2">
         {missing.map((term) => (
-          <GapChip key={term.term} term={term} />
+          <GapChip
+            key={term.term}
+            term={term}
+            answer={byTerm.get(term.term)}
+            expanded={open === term.term}
+            onToggle={() => setOpen(open === term.term ? null : term.term)}
+          />
+        ))}
+      </ul>
+      {open && byTerm.get(open) && (
+        <GapDetail answer={byTerm.get(open)!} onUseVariant={onUseVariant} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * What Litos will and will not do about a gap.
+ *
+ * The competitive version of this (Rezi's keyword targeting, the most praised feature in its
+ * review corpus) offers to GENERATE a bullet containing the missing keyword. That is a claim the
+ * student used the thing, made by a model that cannot know whether they did, and it is the exact
+ * defect R-015 exists to prevent.
+ *
+ * So the supported case offers their OWN stored wording, verbatim, and the unsupported case says
+ * plainly that nothing in their experience covers it and offers nothing. The empty state is the
+ * feature: it tells them what they would need to have actually done.
+ */
+function GapDetail({
+  answer,
+  onUseVariant,
+}: {
+  answer: GapAnswer;
+  onUseVariant?: (evidence: { org: string; variant: string }) => void;
+}) {
+  if (answer.unsupported) {
+    return (
+      <div className="mt-4 rounded-[14px] border border-border bg-surface-alt px-4 py-3">
+        <p className="text-sm text-ink">
+          Nothing in your saved experience mentions {answer.display}.
+        </p>
+        <p className="mt-1 text-[13px] leading-5 text-muted">
+          Litos will not write a bullet claiming you have. If you have done it, add it to your
+          experience first and it will show up here.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4 rounded-[14px] border border-border bg-surface-alt px-4 py-3">
+      <p className="text-sm text-ink">
+        You have written about {answer.display} before. This is your own wording:
+      </p>
+      <ul className="mt-2 space-y-2">
+        {answer.evidence.slice(0, 3).map((e, i) => (
+          <li key={`${e.entry_id}-${i}`} className="rounded-[10px] border border-border bg-surface px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.06em] text-faint">
+              {e.org}
+              {e.title ? ` · ${e.title}` : ""}
+            </p>
+            <p className="mt-1 text-[13px] leading-5 text-ink">{e.variant}</p>
+            {e.already_on_resume ? (
+              <p className="mt-1.5 text-[11px] text-faint">Already on this resume.</p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => onUseVariant?.({ org: e.org, variant: e.variant })}
+                className="mt-1.5 rounded-full border border-border px-3 py-1 text-[12px] font-medium text-ink transition-colors hover:border-brand"
+              >
+                Use this bullet
+              </button>
+            )}
+          </li>
         ))}
       </ul>
     </div>
@@ -154,19 +266,37 @@ export function MatchGaps({ missing }: { missing: JdMatchResponse["missing"] }) 
 /** A gap chip is a handle on the term, not a label. Pointing at it scrolls nothing and opens
  *  nothing; it just lights the same word up in the job description so the student can see WHERE
  *  they are being asked for it before deciding whether they have actually done it. */
-function GapChip({ term }: { term: JdMatchResponse["missing"][number] }) {
+function GapChip({
+  term,
+  answer,
+  expanded,
+  onToggle,
+}: {
+  term: JdMatchResponse["missing"][number];
+  answer?: GapAnswer;
+  expanded?: boolean;
+  onToggle?: () => void;
+}) {
   const { active, setActive } = useTermHover();
   const isActive = active === term.term;
+  // A filled dot means their own experience already covers this, so the chip is worth opening.
+  const hasEvidence = answer !== undefined && !answer.unsupported;
   return (
     <li>
       <button
         type="button"
+        onClick={onToggle}
+        aria-expanded={expanded ?? false}
         onMouseEnter={() => setActive(term.term)}
         onMouseLeave={() => setActive(null)}
         onFocus={() => setActive(term.term)}
         onBlur={() => setActive(null)}
         className={`rounded-full border px-3 py-1 text-[13px] transition-colors ${
-          isActive ? "border-warn bg-warn-soft text-warn" : "border-border text-ink"
+          expanded
+            ? "border-ink text-ink"
+            : isActive
+              ? "border-warn bg-warn-soft text-warn"
+              : "border-border text-ink"
         }`}
         title={
           term.weight >= 1
@@ -175,6 +305,7 @@ function GapChip({ term }: { term: JdMatchResponse["missing"][number] }) {
         }
       >
         {term.display}
+        {hasEvidence && <span className="ml-1.5 text-positive" aria-label="you have written about this before">•</span>}
       </button>
     </li>
   );
