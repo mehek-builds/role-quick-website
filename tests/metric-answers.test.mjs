@@ -9,17 +9,17 @@ import { describe, test } from "node:test";
  * about to approve. This mirrors applyMetrics' matching, which is what the fix changed. */
 function apply(experience, gaps, answers) {
   const pending = new Map();
-  const key = (org, bullet) => `${org} ${bullet}`;
+  const key = (org, title, dates, bullet) => [org, title, dates, bullet].join("\u0000");
   gaps.forEach((gap, i) => {
     const value = (answers[i] ?? "").trim();
     if (!value) return;
-    const k = key(gap.org, gap.bullet);
+    const k = key(gap.org, gap.title, gap.date_range, gap.bullet);
     pending.set(k, [...(pending.get(k) ?? []), value]);
   });
   return experience.map((entry) => ({
     ...entry,
     bullets: entry.bullets.map((bullet) => {
-      const value = pending.get(key(entry.org, bullet))?.shift();
+      const value = pending.get(key(entry.org, entry.title, entry.date_range, bullet))?.shift();
       return value ? `${bullet.replace(/\.\s*$/, "")} (${value}).` : bullet;
     }),
   }));
@@ -28,12 +28,12 @@ function apply(experience, gaps, answers) {
 describe("metric answers are consumed one per occurrence", () => {
   test("two identical bullets at one employer get their own answers, in order", () => {
     const experience = [
-      { org: "Acme", bullets: ["Managed the intake desk."] },
-      { org: "Acme", bullets: ["Managed the intake desk."] },
+      { org: "Acme", title: "Analyst", date_range: "2024", bullets: ["Managed the intake desk."] },
+      { org: "Acme", title: "Analyst", date_range: "2024", bullets: ["Managed the intake desk."] },
     ];
     const gaps = [
-      { org: "Acme", bullet: "Managed the intake desk." },
-      { org: "Acme", bullet: "Managed the intake desk." },
+      { org: "Acme", title: "Analyst", date_range: "2024", bullet: "Managed the intake desk." },
+      { org: "Acme", title: "Analyst", date_range: "2024", bullet: "Managed the intake desk." },
     ];
     const out = apply(experience, gaps, ["12 a week", "30 a week"]);
     assert.equal(out[0].bullets[0], "Managed the intake desk (12 a week).");
@@ -45,10 +45,10 @@ describe("metric answers are consumed one per occurrence", () => {
   });
 
   test("an unanswered gap leaves its bullet exactly as it was", () => {
-    const experience = [{ org: "Acme", bullets: ["Managed the intake desk.", "Filed reports."] }];
+    const experience = [{ org: "Acme", title: "Analyst", date_range: "2024", bullets: ["Managed the intake desk.", "Filed reports."] }];
     const gaps = [
-      { org: "Acme", bullet: "Managed the intake desk." },
-      { org: "Acme", bullet: "Filed reports." },
+      { org: "Acme", title: "Analyst", date_range: "2024", bullet: "Managed the intake desk." },
+      { org: "Acme", title: "Analyst", date_range: "2024", bullet: "Filed reports." },
     ];
     const out = apply(experience, gaps, ["12 a week", "   "]);
     assert.equal(out[0].bullets[0], "Managed the intake desk (12 a week).");
@@ -56,8 +56,38 @@ describe("metric answers are consumed one per occurrence", () => {
   });
 
   test("a bullet nobody was asked about is untouched", () => {
-    const experience = [{ org: "Acme", bullets: ["Cut latency 40%."] }];
+    const experience = [{ org: "Acme", title: "Analyst", date_range: "2024", bullets: ["Cut latency 40%."] }];
     const out = apply(experience, [], []);
     assert.equal(out[0].bullets[0], "Cut latency 40%.");
+  });
+});
+
+describe("the key cannot collide across different roles", () => {
+  test("an org that ends where a bullet begins is still a different role", () => {
+    const experience = [
+      { org: "Google", title: "SWE", date_range: "2024", bullets: ["Cloud migrated 3 services."] },
+      { org: "Google Cloud", title: "SWE", date_range: "2024", bullets: ["migrated 3 services."] },
+    ];
+    const gaps = [
+      { org: "Google", title: "SWE", date_range: "2024", bullet: "Cloud migrated 3 services." },
+      { org: "Google Cloud", title: "SWE", date_range: "2024", bullet: "migrated 3 services." },
+    ];
+    const out = apply(experience, gaps, ["for 4 teams", "for 9 teams"]);
+    assert.equal(out[0].bullets[0], "Cloud migrated 3 services (for 4 teams).");
+    assert.equal(out[1].bullets[0], "migrated 3 services (for 9 teams).");
+  });
+
+  test("two stints at one employer are told apart by their dates", () => {
+    const experience = [
+      { org: "Acme", title: "Intern", date_range: "2023", bullets: ["Managed the desk."] },
+      { org: "Acme", title: "Intern", date_range: "2024", bullets: ["Managed the desk."] },
+    ];
+    const gaps = [
+      { org: "Acme", title: "Intern", date_range: "2024", bullet: "Managed the desk." },
+      { org: "Acme", title: "Intern", date_range: "2023", bullet: "Managed the desk." },
+    ];
+    const out = apply(experience, gaps, ["30 a week", "12 a week"]);
+    assert.equal(out[0].bullets[0], "Managed the desk (12 a week).", "the 2023 stint takes its own answer");
+    assert.equal(out[1].bullets[0], "Managed the desk (30 a week).");
   });
 });

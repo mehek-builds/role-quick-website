@@ -113,6 +113,8 @@ export function BaseResumeStep({
   const [metricAnswers, setMetricAnswers] = useState<Record<number, string>>({});
   const [metricsDone, setMetricsDone] = useState(false);
   const [savingMetrics, setSavingMetrics] = useState(false);
+  // Answers the student typed that no longer matched a bullet, so the panel can say so.
+  const [metricsMissed, setMetricsMissed] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [finished, setFinished] = useState(false);
   const started = useRef(false);
@@ -212,6 +214,7 @@ export function BaseResumeStep({
     setMetricGaps([]);
     setMetricAnswers({});
     setMetricsDone(false);
+    setMetricsMissed(0);
     setWarnings([]);
     if (demo) {
       replayDemo(onFrame);
@@ -342,30 +345,46 @@ export function BaseResumeStep({
      * silently dropped, which is the worst outcome available: a number attached to work it does not
      * describe, on a resume the student is about to approve. */
     const pending = new Map<string, string[]>();
-    const key = (org: string, bullet: string) => `${org} ${bullet}`;
+    /* A NUL delimiter, and the WHOLE role identity, not `${org} ${bullet}`. A plain space is not a
+     * reserved character, so ("Google", "Cloud migrated 3 services.") and ("Google Cloud",
+     * "migrated 3 services.") produced the SAME key: two distinct gaps sharing one queue, drained by
+     * whichever entry came first in document order. That is the same "number attached to work it
+     * does not describe" outcome this function exists to prevent, arriving through a different door. */
+    const key = (org: string, title: string, dates: string, bullet: string) =>
+      [org, title, dates, bullet].join("\u0000");
     metricGaps.forEach((gap, i) => {
       const value = (metricAnswers[i] ?? "").trim();
       if (!value) return;
-      const k = key(gap.org, gap.bullet);
+      const k = key(gap.org, gap.title, gap.date_range, gap.bullet);
       pending.set(k, [...(pending.get(k) ?? []), value]);
     });
-    const answers = [...pending.values()].flat();
+    // Counted before any shift(), so it measures what the student typed, not what landed.
+    const queued = [...pending.values()].flat().length;
+    let applied = 0;
     const next: ResumeSpec = {
       ...(spec as ResumeSpec),
       experience: (spec as ResumeSpec).experience.map((entry) => ({
         ...entry,
         bullets: entry.bullets.map((bullet) => {
-          const queue = pending.get(key(entry.org, bullet));
+          const queue = pending.get(key(entry.org, entry.title, entry.date_range, bullet));
           const value = queue?.shift();
           if (!value) return bullet;
+          applied += 1;
           const body = bullet.replace(/\.\s*$/, "");
           return `${body} (${value}).`;
         }),
       })),
     };
     setSpec(next);
-    setMetricsDone(true);
-    track("base_resume_metrics_added", { asked: metricGaps.length, answered: answers.length });
+    /* An answer only misses when its bullet was edited in the paper on the left after the ask was
+       drawn, so the text no longer matches. Missing is the SAFE direction - the student's own wording
+       wins over ours - but doing it silently is not: the panel would close, the number would be
+       nowhere, and the analytics meant to judge whether this ask earns its place would count it as
+       answered. So the panel stays open and says so. */
+    const missed = queued - applied;
+    setMetricsDone(missed === 0);
+    setMetricsMissed(missed);
+    track("base_resume_metrics_added", { asked: metricGaps.length, answered: applied, missed });
     try {
       if (!demo) await putBaseResume(next);
     } catch {
@@ -634,6 +653,12 @@ export function BaseResumeStep({
               <ul className="mt-3 space-y-3">
                 {metricGaps.map((gap, i) => (
                   <li key={i}>
+                    {/* The role, above the line. Two stints at one employer can carry the same duty
+                        line, and two unlabelled identical prompts give the student no way to tell
+                        which is which. */}
+                    <p className="text-[11.5px] text-faint">
+                      {[gap.title, gap.org, gap.date_range].filter(Boolean).join(" \u00b7 ")}
+                    </p>
                     <p className="text-[12.5px] leading-5 text-muted">{gap.bullet}</p>
                     <input
                       value={metricAnswers[i] ?? ""}
@@ -647,6 +672,13 @@ export function BaseResumeStep({
                   </li>
                 ))}
               </ul>
+              {metricsMissed > 0 && (
+                <p className="mt-3 text-[12.5px] leading-5 text-ink">
+                  {metricsMissed === 1 ? "One number" : `${metricsMissed} numbers`} could not be added,
+                  because {metricsMissed === 1 ? "that line has" : "those lines have"} been edited since
+                  we asked. Add {metricsMissed === 1 ? "it" : "them"} straight into the resume on the left.
+                </p>
+              )}
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <button
                   type="button"

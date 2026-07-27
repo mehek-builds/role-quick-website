@@ -34,7 +34,10 @@ export type AtsVerdict = {
   scored_against: string;
 };
 
-export type MetricGap = { org: string; bullet: string };
+/* org, title and dates travel with the gap so the ask can SAY which role it means: two stints at
+ * one employer can carry the same duty line, and two unlabelled identical prompts give the student
+ * no way to tell which is which. */
+export type MetricGap = { org: string; title: string; date_range: string; bullet: string };
 
 export type BuildFrame =
   | { event: "stage"; stage: BuildStage; detail?: string }
