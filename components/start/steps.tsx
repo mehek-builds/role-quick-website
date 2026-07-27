@@ -22,7 +22,7 @@ import {
   periodLabel,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, FounderNote, LaterLink, PrimaryButton, Receipt, RefusalList, StartShell } from "./ui";
+import { Chip, FounderNote, LaterLink, PrimaryButton, Receipt, RefusalList, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 
@@ -577,13 +577,7 @@ export function GapsStep({
         <PrimaryButton onClick={() => void save()} disabled={busy}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
-        <button
-          type="button"
-          onClick={() => onDone(true)}
-          className="px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
-        >
-          Skip these
-        </button>
+        <SkipLink onClick={() => onDone(true)} what="these" />
         <LaterLink onClick={onLater} />
       </div>
     </StartShell>

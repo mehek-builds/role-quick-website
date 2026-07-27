@@ -205,6 +205,14 @@ export function PrimaryButton({
   );
 }
 
+/* The quiet controls in an action row, Skip and Finish later, share one class
+   string on purpose. They sit next to each other on the same baseline, so any
+   drift between them is visible immediately, and drift is exactly the bug both
+   components were written to fix. Shared constant rather than two identical
+   literals, so the parity is enforced instead of coincidental. */
+const QUIET_ACTION =
+  "min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline";
+
 /* "Finish later" is plainly worded and always visible. Strong default, not a trap: burying the
    exit would be the dark pattern the Guardrails exist to prevent.
  *
@@ -218,9 +226,37 @@ export function LaterLink({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       title="Anything you have finished stays saved"
-      className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+      className={QUIET_ACTION}
     >
       Finish later
+    </button>
+  );
+}
+
+/* Skip: move past an OPTIONAL thing and stay in the flow. Distinct from
+   LaterLink, which leaves the flow entirely, and the two are always shown
+   together so the difference is legible.
+ *
+ * One name for one control, the same fix LaterLink already got. Before this
+ * there were two hand-rolled skips with two labels ("Skip these" on the gaps
+ * step, "Skip" on the base-resume metrics), two paddings and two underline
+ * offsets, so the same idea looked like a different control on each screen.
+ * `what` only feeds the title, so the visible word stays one word everywhere.
+ *
+ * Deliberately NOT offered on resume, install, apply or targeting. Steps are
+ * derived server-side from data that exists (routes/onboarding.ts), so a skip
+ * on any of those would advance the screen and the next load would deposit the
+ * student right back on it. A control that visibly does nothing is worse than
+ * no control, and "Finish later" already covers wanting out of those. */
+export function SkipLink({ onClick, what }: { onClick: () => void; what: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={`Optional. You can add ${what} later from your profile.`}
+      className={QUIET_ACTION}
+    >
+      Skip
     </button>
   );
 }
