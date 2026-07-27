@@ -55,6 +55,12 @@ export const RETIRED = [
   ["thoughtful outreach", "a short email to a real person"],
   ["without the noise", "most likely to reply"],
   ["one quick step away", "one more step"],
+  // The two automation switches. Their VISIBLE labels were renamed in the
+  // terminology pass and their aria-labels were not, so a screen reader still
+  // read the old words and voice control could not match the visible name
+  // (WCAG 2.5.3). Accessible names are copy too.
+  ["automatic submission", "Send an application without asking me again"],
+  ["application verification codes", "Read the code a company emails me"],
   // Retired because one thing must carry one name
   ["posting detected", "job found"],
   ["grade average", "GPA"],

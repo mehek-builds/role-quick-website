@@ -455,7 +455,7 @@ export default function Settings() {
               )}
             </span>
             <input
-              aria-label="Automatic submission"
+              aria-label="Send an application without asking me again"
               type="checkbox"
               checked={automaticSubmission}
               // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
@@ -466,7 +466,7 @@ export default function Settings() {
           </label>
           <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
             <span><span className="block text-sm font-medium text-ink">Read the code a company emails me</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
-            <input aria-label="Application verification codes" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
+            <input aria-label="Read the code a company emails me" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos still stops and waits for you when something is missing, when two answers do not match, when a question is about you personally, when a site checks you are human, or when it is not sure.</p>
