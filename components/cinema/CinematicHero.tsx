@@ -657,8 +657,21 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 handoff itself, and give a real door instead of a dead end. */}
             <ReturningVisitor />
             <MobileSendLink source="hero" className="mt-6 sm:hidden" />
+            {/* The deletion half was missing, and it is the half nobody else has.
+                This caption already carried the COLLECTION claim (what we read)
+                and the SALE claim (we do not). /privacy goes further than any of
+                the ten products audited: resume files are deleted after 30 days,
+                and one email exports or deletes everything. None of that reached
+                a marketing surface, so the best trust asset Litos owns was
+                invisible to anyone deciding whether to install.
+
+                Worded as "delete all of it" rather than "one click", because the
+                mechanism really is an email to support, and a caption that
+                promised a button would be a small lie on the exact subject where
+                one costs the most. */}
             <p className="mt-5 text-[13px] text-muted">
-              We only read the job you are on. We never sell your data.{" "}
+              We only read the job you are on. We never sell your data, and you
+              can delete all of it whenever you want.{" "}
               <a href="/privacy" data-inline-link className="underline decoration-border underline-offset-2 hover:text-ink">
                 Privacy
               </a>
