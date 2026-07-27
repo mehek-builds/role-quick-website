@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, ButtonLink } from "@/components/app/Button";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -359,14 +360,15 @@ export default function Settings() {
                     {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
                   disabled={!emailConnections.configured || connectionBusy !== null}
                   onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider))}
-                  className={connected ? "rounded-full border border-border px-4 py-2 text-xs font-medium text-ink disabled:opacity-50" : "rounded-full bg-brand px-4 py-2 text-xs font-medium text-white disabled:opacity-50"}
+                  variant={connected ? "secondary" : "primary"}
+                  size="sm"
                 >
                   {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
-                </button>
+                </Button>
               </div>
             );
           })}
@@ -420,9 +422,9 @@ export default function Settings() {
               </p>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-4">
-              <button type="submit" disabled={passwordBusy} className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white disabled:opacity-50">
+              <Button type="submit" disabled={passwordBusy} >
                 {passwordBusy ? "Updating..." : "Update password"}
-              </button>
+              </Button>
               <button type="button" onClick={() => { clearSession(); router.push("/login?flow=recovery"); }} className="text-xs text-muted hover:text-ink">
                 Sign out and verify email to reset it
               </button>
@@ -482,13 +484,11 @@ export default function Settings() {
           </div>
           <div className="flex items-center gap-3">
             {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
-            <button
+            <Button
               onClick={save}
-              disabled={saving}
-              className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              disabled={saving} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -557,19 +557,14 @@ export default function Settings() {
               Cancelling takes the same number of clicks as signing up, from
               the link in your receipt email.
             </p>
-            {me.is_guest ? <a
-              href="/login?claim=1&next=upgrade"
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
+            {me.is_guest ? <ButtonLink href="/login?claim=1&next=upgrade">
               Upgrade to Pro
-            </a> : <button
+            </ButtonLink> : <Button
               type="button"
               disabled={checkoutBusy}
-              onClick={() => void startCheckout()}
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              onClick={() => void startCheckout()} >
               {checkoutBusy ? "Opening..." : "Upgrade to Pro"}
-            </button>}
+            </Button>}
           </div>
         ) : me.tier === "pro" ? (
           <div className="mt-6 border-t border-border pt-5 text-sm text-muted">

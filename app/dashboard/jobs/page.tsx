@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type MonitoredJob } from "@/lib/api";
@@ -101,9 +102,9 @@ export default function JobsPage() {
             </Card>
           ))}
           {hasMore && (
-            <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="mx-auto mt-2 rounded-full border border-border px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:opacity-50">
+            <Button type="button" onClick={() => void loadMore()} disabled={loadingMore} variant="secondary" className="mx-auto mt-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
               {loadingMore ? "Loading..." : "Show more roles"}
-            </button>
+            </Button>
           )}
         </div>
       )}

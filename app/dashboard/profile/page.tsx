@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, getApplicationProfile, type ApplicationProfile, type ParsedProfile } from "@/lib/api";
@@ -122,7 +123,7 @@ export default function ProfilePage() {
               <h2 className="mt-2 text-lg font-medium text-ink">Software engineering</h2>
               <p className="mt-1 text-sm text-muted">Internships and new-grad roles · Summer 2027</p>
             </div>
-            <button type="button" className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white">Save changes</button>
+            <Button type="button" >Save changes</Button>
           </div>
           <div className="mt-5 flex flex-wrap gap-2">
             <Chip label="Software Engineer" kind="ready" />

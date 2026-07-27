@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -424,11 +425,9 @@ export default function Login() {
                   <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
                 </>
               )}
-              <button
+              <Button
                 type="submit"
-                disabled={busy}
-                className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              >
+                disabled={busy} block className="mt-4">
                 {busy
                   ? <PendingLabel onColor>Saving...</PendingLabel>
                   : flow === "signin"
@@ -436,7 +435,7 @@ export default function Login() {
                     : flow === "signup"
                       ? "Create account"
                       : "Send verification code"}
-              </button>
+              </Button>
             </form>
             {!claimMode && (
               <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
@@ -469,14 +468,12 @@ export default function Login() {
                   <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
-                <button
+                <Button
                   type="button"
                   disabled={busy}
-                  onClick={() => void continueAsGuest()}
-                  className="w-full rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand disabled:opacity-50"
-                >
+                  onClick={() => void continueAsGuest()} variant="secondary" block>
                   {busy ? <PendingLabel state="searching">Opening...</PendingLabel> : "Look around without signing up"}
-                </button>
+                </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
                   Your first week is free. No card needed. You only see this the first time.
                 </p>
@@ -505,11 +502,9 @@ export default function Login() {
               placeholder="000000"
               className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
             />
-            <button
+            <Button
               type="submit"
-              disabled={busy || code.length !== 6}
-              className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              disabled={busy || code.length !== 6} block className="mt-4">
               {busy
                 ? <PendingLabel state="solving" onColor>Saving...</PendingLabel>
                 : flow === "signup"
@@ -517,7 +512,7 @@ export default function Login() {
                   : flow === "recovery"
                     ? "Verify and continue"
                     : "Sign in"}
-            </button>
+            </Button>
             <button
               type="button"
               disabled={busy || resendCooldown > 0}
@@ -574,13 +569,11 @@ export default function Login() {
               className="mt-2 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             />
             <p className="mt-2 text-xs leading-5 text-faint">Use at least 15 letters. Spaces are fine.</p>
-            <button
+            <Button
               type="submit"
-              disabled={busy}
-              className="mt-4 w-full rounded-full bg-brand px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              disabled={busy} block className="mt-4">
               {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Save new password"}
-            </button>
+            </Button>
           </form>
         )}
 

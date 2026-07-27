@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/app/Button";
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, ExperienceEntry, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
@@ -132,17 +133,15 @@ export default function ResumeWorkspace() {
             {profile !== null && profile !== "missing" && (
               <Chip label="Parsed" kind="ready" />
             )}
-            <button
+            <Button
               onClick={() => fileRef.current?.click()}
-              disabled={uploading}
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              disabled={uploading} >
               {uploading
                 ? <PendingLabel state="composing" onColor>Reading...</PendingLabel>
                 : profile === "missing"
                   ? "Upload resume PDF"
                   : "Replace resume"}
-            </button>
+            </Button>
             <input
               ref={fileRef}
               type="file"
@@ -176,24 +175,20 @@ export default function ResumeWorkspace() {
             {savedAt && !saving && (
               <span className="text-xs text-positive">Saved</span>
             )}
-            <button
+            <Button
               onClick={() =>
                 setEntries((prev) => [
                   ...(prev ?? []),
                   { type: "job", org: "", title: "", date_range: "", bullet_variants: [""], tags: [] },
                 ])
-              }
-              className="rounded-full border border-border px-4 py-2 text-sm font-medium text-ink transition-colors hover:border-ink"
-            >
+              } variant="secondary">
               Add entry
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={saveBank}
-              disabled={saving || entries === null}
-              className="rounded-full bg-brand px-5 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
+              disabled={saving || entries === null} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -436,9 +431,9 @@ function EducationEditor({ school, degree, gradDate, onSaved }: { school: string
       </div>
       {error && <p className="mt-2 text-xs text-warn">{error}</p>}
       <div className="mt-3 flex gap-2">
-        <button type="button" onClick={save} disabled={saving} className="rounded-full bg-brand px-4 py-2 text-xs font-medium text-white disabled:opacity-50">
+        <Button type="button" onClick={save} disabled={saving} >
           {saving ? "Saving..." : "Save education"}
-        </button>
+        </Button>
         <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">
           Cancel
         </button>
