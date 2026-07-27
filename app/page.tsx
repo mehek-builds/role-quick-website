@@ -290,7 +290,35 @@ export default function Home() {
                     <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
                     <p className="text-muted">We attach your new resume.</p>
                     <p className="text-muted">We skip the questions about race and gender.</p>
-                    <p className="text-muted">We leave the writing, and the send button, to you.</p>
+                    {/* "and the send button" came out of this line because it was
+                        not true. Opt-in automatic submission ships, so a flat claim
+                        that the send button is always yours is the same absolute the
+                        2026-07-04 pass already softened everywhere else, and it had
+                        survived here.
+
+                        The replacement is stronger BECAUSE it is exact. Jobscan's
+                        human gate is the most-praised thing in its review corpus and
+                        LazyApply's absence of one is why its users report banned
+                        accounts, so this is the claim worth making loudly. Naming the
+                        one exception is what makes it believable.
+
+                        No duration stated on purpose: DESIGN.md's ledger says a
+                        9-second countdown and /privacy says 15, and marketing must not
+                        pick a side in a contradiction between two of our own surfaces.
+                        The mechanism is true either way.
+
+                        Phrased as "sending stays off" rather than "we do not press
+                        send", because the line four rows down says we CAN press send on
+                        Greenhouse, Lever and Ashby. Both were true with their implicit
+                        qualifiers and flatly contradictory read together, in the same
+                        card. This version states the default and the control, which is
+                        the part the reader is actually deciding about, and leaves the
+                        where-it-works nuance to the line that already owns it. */}
+                    <p className="text-muted">We leave the writing to you.</p>
+                    <p className="text-muted">
+                      Sending stays off until you turn it on. Then a countdown
+                      gives you the last word.
+                    </p>
                   </div>
                   {/* The supported list was only ever in the meta
                       description, so the page itself never said where this
