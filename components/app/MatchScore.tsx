@@ -29,10 +29,13 @@ import type { ApplyOutcome } from "@/lib/apply-variant";
 export function MatchScore({
   jdText,
   spec,
+  jobContext,
   onResult,
 }: {
   jdText: string;
   spec: ResumeSpec;
+  /** The posting's own company and role, excluded from its requirements. */
+  jobContext?: { company?: string; role?: string };
   /** Hands the whole result up so the parent can drive both panes' highlighting and the gap list
    *  from ONE request. Passing only `missing` meant the JD pane had no way to know which terms
    *  were covered, and it fell back to highlighting every word of the resume. */
@@ -45,7 +48,7 @@ export function MatchScore({
     let cancelled = false;
     const resumeText = resumeSpecText(spec);
     if (!jdText.trim() || !resumeText.trim()) return;
-    fetchJdMatch(jdText, resumeText)
+    fetchJdMatch(jdText, resumeText, jobContext)
       .then((next) => {
         if (cancelled) return;
         // Cleared here rather than before the request: resetting synchronously inside the effect
@@ -69,7 +72,7 @@ export function MatchScore({
     // onResult is intentionally not a dependency: callers pass an inline closure, and including it
     // would refire the request on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jdText, spec]);
+  }, [jdText, spec, jobContext?.company, jobContext?.role]);
 
   if (failed) {
     return <p className="text-[11px] leading-4 text-faint">We could not work out how well you fit this one</p>;

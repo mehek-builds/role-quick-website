@@ -19,7 +19,15 @@ import type { ResumeSpec } from "@/lib/api";
  * Collapsed by default. It is preparation for later, not part of reviewing the application, and
  * expanding it is the student saying they are at that stage.
  */
-export function InterviewPrep({ jdText, spec }: { jdText: string; spec: ResumeSpec }) {
+export function InterviewPrep({
+  jdText,
+  spec,
+  jobContext,
+}: {
+  jdText: string;
+  spec: ResumeSpec;
+  jobContext?: { company?: string; role?: string };
+}) {
   const [open, setOpen] = useState(false);
   // The request key travels WITH the answer, so staleness is derived during render rather than
   // reset from inside the effect (a synchronous setState there cascades a render).
@@ -47,7 +55,7 @@ export function InterviewPrep({ jdText, spec }: { jdText: string; spec: ResumeSp
     let cancelled = false;
     // Cleared before the request. Nothing reset it, so switching to another application rendered
     // the PREVIOUS posting's questions under the new posting's text, and a failure stuck.
-    fetchInterviewPrep(jdText, spec)
+    fetchInterviewPrep(jdText, spec, jobContext)
       .then((prep) => !cancelled && setState({ prep, failed: false, key: requestKey }))
       .catch(() => !cancelled && setState({ prep: null, failed: true, key: requestKey }));
     return () => {
@@ -55,7 +63,7 @@ export function InterviewPrep({ jdText, spec }: { jdText: string; spec: ResumeSp
     };
     // spec is covered by specKey; depending on the object itself would refire on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, jdText, specKey]);
+  }, [open, jdText, specKey, jobContext?.company, jobContext?.role]);
 
   return (
     <div>
