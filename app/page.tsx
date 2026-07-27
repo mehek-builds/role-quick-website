@@ -102,6 +102,36 @@ function PillarChip({
   );
 }
 
+/* One CTA per pillar, each going somewhere DIFFERENT.
+ *
+ * The 2026-07-05 pass rejected per-section CTA buttons under one-ask-per-page,
+ * and the audit that reopened it is also the reason to be careful: Jobright
+ * ships five first-person feature CTAs ("Find My Matches", "Ask Orion") that
+ * all land on the same signup wall, which is logged as a failure, not a win.
+ * Three buttons to one destination is one ask wearing three hats.
+ *
+ * What makes this worth doing is that /try already deep-links to resume,
+ * autofill and outreach (TrySimulator's Step union), so each pillar can hand
+ * the reader the live demo of the exact thing they just read about.
+ *
+ * A link, not a solid button: blue solid is reserved for a true CTA and the
+ * page keeps exactly one of those (Add to Chrome). "See it" rather than "Fix
+ * my resume" because /try runs a canned job, not the reader's, and a
+ * first-person promise there would be a small lie. */
+function PillarLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a
+      href={href}
+      className="mt-6 inline-flex min-h-11 items-center text-sm font-medium text-muted transition-colors hover:text-ink"
+    >
+      {children}
+      <span aria-hidden className="ml-1.5">
+        &rarr;
+      </span>
+    </a>
+  );
+}
+
 /* Counted, never typed: if the feed changes, this changes with it. */
 const HARD_DEADLINE_COUNT = ROLES.filter((r) => r.deadline).length;
 
@@ -272,6 +302,7 @@ export default function Home() {
                   <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                     Tested on 45 real resumes from five university career centres
                   </p>
+                  <PillarLink href="/try?step=resume">See it rebuild a resume</PillarLink>
                 </div>
               </Reveal>
               <div className="w-full max-w-5xl origin-center sm:scale-[0.84]">
@@ -354,6 +385,7 @@ export default function Home() {
                   <p className="mt-3 text-[13px] text-muted">
                     You can change any of this in Settings.
                   </p>
+                  <PillarLink href="/try?step=autofill">See it fill a form</PillarLink>
                   {/* These panels are built in the DOM, not captured from a
                       live session. They reproduce the extension's real
                       output, but a reader is entitled to know which one
@@ -399,6 +431,7 @@ export default function Home() {
                   <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
                     This is a picture we made. Real screenshots are below.
                   </p>
+                  <PillarLink href="/try?step=outreach">See it write an email</PillarLink>
                 </div>
                 <div>
                   <div data-demo><OutreachDemo /></div>
@@ -528,6 +561,19 @@ export default function Home() {
               <h2 className="mt-8 text-display font-[450] leading-[1.05] tracking-[-0.03em] text-ink">
                 Open your next application.
               </h2>
+              {/* The consolidation line, allowed to restate what the three
+                  pillars already said (override 5 of 10, superseding say-once
+                  for this idea only).
+                  Placed here because the three dashes directly above it are
+                  the brand, teal and coral pillars, and until now that motif
+                  was wordless: a reader who had not decoded the colours got a
+                  decoration. This names them in the order the page introduced
+                  them, so the close reads as the sum of the page rather than
+                  a fourth new thing. Kept to one line, in the strongest spot,
+                  which is what say-once was protecting in the first place. */}
+              <p className="mx-auto mt-5 max-w-[420px] text-base leading-7 text-muted">
+                The resume, the form and the email. One place.
+              </p>
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <InstallLink
                   source="close"
