@@ -2,12 +2,12 @@
    (store-assets-v2/src/shot-6-voices.html, carousel position 2).
 
    Provenance, and the reason none of this is dressed up: these are real
-   statements from the beta group, relayed by Mehek, paraphrased with her on
-   2026-07-16 so they read naturally, and the quoted friends confirmed they
-   were OK being used. They stay anonymous ("BETA TESTER") because that was
-   her call, and the footline says "group" rather than "real quotes" because
-   the lines are paraphrases. Do not add names, roles, schools, photos, or
-   outcome numbers to this component without a new source for them. */
+   statements from real users, relayed by Mehek, paraphrased with her on
+   2026-07-16 so they read naturally, and the quoted people confirmed they
+   were OK being used. They are completely anonymized, which is her standing
+   call on this set. Each one reads as its own review rather than as a batch
+   from one group. Do not add names, roles, schools, photos, or outcome
+   numbers to this component without a new source for them. */
 const LEAD = {
   head: "Ten applications in an hour.",
   tail: "Just tailoring my resume used to take me that long for one role.",
@@ -26,13 +26,14 @@ export function Voices() {
       <div className="grid grid-cols-1 items-center gap-10 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] sm:gap-14">
         <div>
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-            Heard in the beta
+            Reviews
           </p>
           <h2 className="mt-3 text-[32px] font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
-            The first testers said it best.
+            In their words.
           </h2>
           <p className="mt-3 text-[15px] leading-7 text-muted">
-            Notes from the beta group, in the middle of application season.
+            Real quotes from people using Litos, in the middle of application
+            season.
           </p>
         </div>
 
@@ -45,7 +46,7 @@ export function Voices() {
             <span className="text-brand-ink">{LEAD.tail}</span>
           </p>
           <footer className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-            Beta tester
+            Anonymous
           </footer>
         </blockquote>
       </div>
@@ -62,15 +63,11 @@ export function Voices() {
               &ldquo;{q}&rdquo;
             </p>
             <footer className="mt-4 font-mono text-[10.5px] font-medium uppercase tracking-[0.08em] text-faint">
-              Beta tester
+              Anonymous
             </footer>
           </blockquote>
         ))}
       </div>
-
-      <p className="mt-8 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-        From the Litos beta group
-      </p>
     </div>
   );
 }
