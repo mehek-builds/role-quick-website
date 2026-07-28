@@ -11,6 +11,7 @@ import {
   PER_PAGE,
   type BrowseJob,
 } from "@/lib/browse-jobs";
+import { logoPath, monogram } from "@/lib/company-logos";
 
 export const metadata: Metadata = {
   title: "Browse jobs",
@@ -39,7 +40,43 @@ export const metadata: Metadata = {
  * Server-rendered, plain GET form, no client state: a search is a real URL that
  * can be shared, linked and crawled. */
 
-function Tile({ job }: { job: BrowseJob }) {
+/* The company's own mark, top-left of the tile (Mehek, 2026-07-28).
+ *
+ * Served from public/company/, never from a logo API — see lib/company-logos.ts
+ * for why. Sized 28px and left un-cropped: these are 49 different companies'
+ * marks at 49 different aspect ratios, and `object-contain` inside a fixed box
+ * is what stops a wide wordmark from being centre-cropped into nonsense.
+ *
+ * No border, no tinted chip. DESIGN.md bans icons-in-coloured-circles, and the
+ * marks already carry every colour on the page; framing each one would turn a
+ * quiet grid into 24 competing badges. */
+function CompanyMark({ company, eager }: { company: string; eager?: boolean }) {
+  const src = logoPath(company);
+  if (!src) {
+    return (
+      <span
+        aria-hidden
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-inner border border-border font-mono text-small text-faint"
+      >
+        {monogram(company)}
+      </span>
+    );
+  }
+  /* eslint-disable-next-line @next/next/no-img-element */
+  return (
+    <img
+      src={src}
+      alt=""
+      width={28}
+      height={28}
+      loading={eager ? "eager" : "lazy"}
+      decoding="async"
+      className="h-7 w-7 shrink-0 object-contain"
+    />
+  );
+}
+
+function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
   const ago = agoLabel(job);
   return (
     <a
@@ -48,8 +85,13 @@ function Tile({ job }: { job: BrowseJob }) {
       rel="noreferrer"
       className="group flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
     >
-      <p className="text-[15px] font-medium leading-snug text-ink">{job.title}</p>
-      <p className="mt-1 text-small text-muted">{job.company_name}</p>
+      <div className="flex min-w-0 items-start gap-3">
+        <CompanyMark company={job.company_name} eager={eager} />
+        <div className="min-w-0">
+          <p className="text-[15px] font-medium leading-snug text-ink">{job.title}</p>
+          <p className="mt-1 text-small text-muted">{job.company_name}</p>
+        </div>
+      </div>
       <p className="mt-auto truncate pt-4 text-small text-faint">
         {locationLabel(job)}
       </p>
@@ -141,8 +183,11 @@ export default async function BrowseJobs({
 
         {jobs.length > 0 ? (
           <div className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {jobs.map((job) => (
-              <Tile key={job.id} job={job} />
+            {jobs.map((job, i) => (
+              /* The first two rows are above the fold on a laptop; lazy-loading
+                 those makes the marks pop in after the text, which reads as the
+                 page half-failing. */
+              <Tile key={job.id} job={job} eager={i < 6} />
             ))}
           </div>
         ) : (
