@@ -158,7 +158,7 @@ export function OutreachDemo() {
                 <p className="pt-1 leading-6 text-muted">
                   {selected.body}
                   <br />
-                  <span className="text-ink">- Alex</span>
+                  <span className="text-ink">- John</span>
                 </p>
               </div>
               <p className="mt-3 border-t border-border pt-3 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">

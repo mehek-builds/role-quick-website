@@ -215,8 +215,22 @@ test("internal #anchors resolve to a real id on the homepage", () => {
      with none of the evidence: no error, no redirect, the page just sits
      there. Two new anchors shipped on 2026-07-28 (#pricing, #dashboard) and
      nothing but this test would have caught a typo in either. */
-  const home = readFileSync(join(APP, "page.tsx"), "utf8");
-  const ids = new Set([...home.matchAll(/id="([a-z-]+)"/g)].map((m) => m[1]));
+  /* The homepage's ids are no longer all in page.tsx. When the packet demo
+     moved into the hero frame, the #product section it used to open went away
+     and id="product" moved onto the hero wrapper in CinematicHero, which
+     page.tsx renders. Scanning page.tsx alone reported the header's "Product"
+     link as broken while it resolved correctly in the browser, so the id
+     sources track the render tree rather than one file. Any future component
+     that owns a homepage anchor target belongs in this list. */
+  const idSources = [
+    join(APP, "page.tsx"),
+    join(ROOT, "components/cinema/CinematicHero.tsx"),
+  ];
+  const ids = new Set(
+    idSources.flatMap((file) =>
+      [...readFileSync(file, "utf8").matchAll(/id="([a-z-]+)"/g)].map((m) => m[1])
+    )
+  );
 
   const sources = [join(APP, "page.tsx"), join(ROOT, "components/Header.tsx")];
   const anchors = new Set();

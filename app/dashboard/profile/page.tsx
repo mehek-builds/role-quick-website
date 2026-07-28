@@ -10,7 +10,7 @@ import { Card, Chip, ErrorNote, PageHeader, ShimmerRows } from "@/components/app
 type ProfileSummary = Pick<ParsedProfile, "full_name" | "school" | "grad_year" | "skills" | "target_roles">;
 
 const QA_PROFILE: ProfileSummary = {
-  full_name: "Alex Rivera",
+  full_name: "John Doe",
   school: "University of Southern California",
   grad_year: 2027,
   skills: ["React", "TypeScript", "Python", "APIs", "Product"],
@@ -21,8 +21,8 @@ const QA_APPLICATION_PROFILE: ApplicationProfile = {
   phone: "+1 213 555 0142",
   address_city: "Los Angeles",
   address_state: "CA",
-  linkedin_url: "https://linkedin.com/in/alexrivera",
-  github_url: "https://github.com/alexrivera",
+  linkedin_url: "https://linkedin.com/in/johndoe",
+  github_url: "https://github.com/johndoe",
   work_authorized: true,
   needs_sponsorship: false,
 };

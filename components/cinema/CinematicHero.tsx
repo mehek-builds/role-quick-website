@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
+import { PacketDemo } from "@/components/PacketDemo";
 import { track } from "@/lib/analytics";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
@@ -451,6 +452,24 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     { scope: wrapRef }
   );
 
+  /* The packet, assembling, in the same frame as the ask. This is the proof
+     the hero lost on 2026-07-28 when the privacy caption moved into the #faq
+     refusal trio and the ledger recorded "there is no longer proof under the
+     hero CTA" as a known cost. It is better proof than the caption was: the
+     caption asserted a policy, this shows the product doing the thing the
+     headline claims, on a real posting, against the receipt clock.
+
+     Hidden below xl, and xl is measured rather than picked. The demo needs
+     about 600px to stay legible (a 348px panel plus a job column wide enough
+     to read) and the copy column needs about 380, which with the gap and the
+     page padding is roughly 1140px. Below that app/page.tsx renders it
+     directly beneath the hero instead. */
+  const demoNode = (
+    <div className="rq-enter hidden w-full xl:block">
+      <div data-demo className="h-full xl:max-w-[600px]"><PacketDemo /></div>
+    </div>
+  );
+
   return (
     <>
       {/* THE STAGE: the film and its atmosphere, fixed behind the entire
@@ -530,7 +549,11 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     {/* 200svh of scroll = the opening act: hero → film swirl → packet finale,
        then it hands off to the real pinned sections. Reduced motion collapses
        this to one viewport in CSS (globals.css). */}
-    <div ref={wrapRef} className="rq-cine relative h-[200svh]">
+    {/* id="product" moved here from the section below, which no longer exists:
+        the packet demo WAS that section, and the header's "Product" link plus
+        the footer sitemap both point at it. It now resolves to the top of the
+        page, which is where the product demo actually is. */}
+    <div ref={wrapRef} id="product" className="rq-cine relative h-[200svh]">
       <div className="sticky top-0 h-svh w-full overflow-hidden">
 
         {/* The chapter caption that used to sit here said "Job found" at the same
@@ -539,8 +562,28 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             voice per moment; the rail is the one that persists, so it wins. */}
 
         {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
-        <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:top-[18svh]">
-          <div className="rq-glass rq-enter mx-auto max-w-2xl px-7 py-10 text-center sm:px-12 sm:py-12">
+        {/* Vertically centred: two columns side by side are far shorter than
+            the same content stacked, so there is slack to centre INTO. */}
+        <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:inset-0 sm:flex sm:flex-col sm:items-center sm:justify-center sm:px-8 sm:pt-6 lg:px-10">
+        {/* The copy column takes 520 of the 1152 and the demo takes what is
+            left: the headline is the thing being read and the demo is the
+            thing being glanced at, so the split is not near-even.
+
+            items-stretch (the grid default) so the two boxes share a bottom
+            edge as well as a top one: one row of two equal panels. */}
+        <div className="mx-auto grid w-full max-w-6xl gap-8 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] xl:gap-10">
+          {/* max-w-2xl until the grid actually splits. Below xl the columns
+              collapse to one and the card would otherwise stretch to the full
+              max-w-6xl, giving a measure far past the ~660px the type scale
+              allows.
+
+              justify-between at xl, not justify-center. The card is stretched
+              to the demo's height, which leaves roughly 230px of slack, and
+              centring pooled all of it into two dead bands above and below a
+              clump of text. Distributing gives the card a top, a middle and a
+              bottom, and lands the actions level with the demo's own send
+              button across the gap. */}
+          <div className="rq-glass rq-enter mx-auto flex w-full max-w-2xl flex-col justify-center gap-8 px-7 py-10 text-center sm:px-9 sm:py-9 xl:max-w-none xl:justify-between xl:gap-6 xl:px-10 xl:py-12 xl:text-left">
             {/* Nothing above the fold said what Litos IS: the H1 names a
                 speed and the sub names a mechanism, so a first-time visitor
                 had to infer the category. This is the same line the Chrome
@@ -549,17 +592,30 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 version narrowed it to "students and new grads", which read
                 as a product nobody else was allowed to use. Students and new
                 grads are one audience Litos serves, not the only one. */}
-            <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Free Chrome extension for job seekers
             </p>
-            <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
-              Apply <span className="text-brand-ink">in seconds.</span>
-            </h1>
-            <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted">
-              Nothing is reused. Every job gets its own resume, form, and
-              email.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+
+            {/* The middle band: the claim and the one line explaining it,
+                grouped so justify-between treats them as a single object. */}
+            <div>
+              {/* In the split column the line wraps, and left to itself it
+                  wrapped as "Apply in" / "seconds.", breaking the coloured
+                  phrase across two lines and ending the first on a
+                  preposition. Forcing the break at the phrase boundary keeps
+                  "in seconds." whole, which is the half the colour marks. */}
+              <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
+                Apply <span className="text-brand-ink xl:block">in seconds.</span>
+              </h1>
+              <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted xl:mx-0">
+                Nothing is reused. Every job gets its own resume, form, and
+                email.
+              </p>
+            </div>
+
+            {/* The floor: everything actionable, grouped so it sits on the
+                bottom edge rather than trailing off the middle band. */}
+            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center xl:justify-start">
               {/* Desktop only: a phone cannot install a Chrome extension, and the
                   handoff card right below this says exactly that. Leading a phone
                   with an action it cannot take was audit finding 47. */}
@@ -615,17 +671,18 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 proof at the decision point (S26, under the hero CTA); /try
                 and the footer still carry /privacy. */}
           </div>
+
+          {demoNode}
+        </div>
         </div>
 
-        {/* scroll hint */}
-        {/* Hidden on mobile: the hero card is taller there (it carries the
-            install handoff) and the hint collided with the privacy line. */}
-        <div className="rq-cine-hint absolute inset-x-0 bottom-8 hidden flex-col items-center gap-2 sm:flex" aria-hidden>
-          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            Scroll
-          </p>
-          <span className="block h-8 w-px animate-pulse bg-faint" />
-        </div>
+        {/* The "Scroll" hint that used to sit at bottom-8 is GONE. It only
+            ever rendered at sm+, which is exactly the breakpoint where the
+            demo now occupies the lower half of the frame, so the two
+            overlapped outright. The demo is also the better affordance: it is
+            the one perpetually-moving element on the page and it sits at the
+            fold. The GSAP timeline that faded it is guarded with `if (hint)`,
+            so it no-ops rather than throwing. */}
 
         <div className="rq-cine-card-4 invisible absolute inset-x-0 bottom-[10svh] px-6 opacity-0 sm:bottom-[12svh]">
           <div className="rq-glass mx-auto max-w-xl px-7 py-9 text-center sm:px-10">
@@ -643,8 +700,11 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               >
                 Add to Chrome, it&apos;s free
               </a>
+              {/* Was #product. That anchor now resolves to the top of the
+                  page, so at 68% through the film this button would have
+                  thrown the viewer back to the start. */}
               <a
-                href="#product"
+                href="#documents"
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
               >
                 See how it works
