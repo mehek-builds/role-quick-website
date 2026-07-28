@@ -307,7 +307,18 @@ export default function Home() {
                   </h2>
                   <p className="mt-2.5 text-sm leading-6 text-muted">
                     We read what the job asks for. Then we put your best
-                    work first, in their words.
+                    work first, in their words. A robot reads it before a
+                    person does, so we build one it can read.
+                  </p>
+                  {/* Alex Rivera is a sample applicant, and the numbers inside
+                      that resume are his, not ours. Unlabelled, a skimmer reads
+                      them as Litos proof. Says "applicant", not "student": this
+                      label is the one line that names who the example IS, so
+                      calling him a student told every non-student the tool was
+                      not for them. Moved here from #formats when that section
+                      was cut; the demo below still shows his name. */}
+                  <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    Not a real applicant. Just an example.
                   </p>
                   {/* The rigour claim, and the ONLY form of it that is true.
                       The approved change was an institution proof row, the

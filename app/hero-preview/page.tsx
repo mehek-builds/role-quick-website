@@ -1,4 +1,5 @@
 import { HeroProof } from "@/components/HeroProof";
+import { HeroScene } from "@/components/HeroScene";
 import { InstallLink } from "@/components/InstallLink";
 
 /* PROPOSAL, not shipped. A standalone look at the Cal-AI-style proof hero so
@@ -51,6 +52,15 @@ export default function HeroPreviewPage() {
         </div>
 
         <div className="mt-14">
+          <HeroScene />
+        </div>
+
+        {/* The previous draft, kept directly below so the two can be judged
+            against each other rather than from memory. */}
+        <div className="mt-40 border-t border-border pt-12">
+          <p className="mb-10 text-center font-mono text-label uppercase tracking-[0.08em] text-faint">
+            Previous draft
+          </p>
           <HeroProof />
         </div>
       </div>
