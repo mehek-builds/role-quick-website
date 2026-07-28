@@ -115,6 +115,32 @@ export default function Settings() {
     };
   }, []);
 
+  /* Honour the #fragment once the content it points at actually exists.
+   *
+   * /dashboard/profile's "Edit details" links to
+   * /dashboard/settings#application-details. Giving that card an id was
+   * necessary and NOT sufficient: this page renders <ShimmerRows> until `me`
+   * resolves, so at the moment the browser handles the fragment the target is
+   * not in the DOM yet. The browser looks, finds nothing, and gives up. The
+   * card mounts a second later and nothing re-triggers the scroll.
+   *
+   * Verified against production on 2026-07-28 before this effect existed: both
+   * a hard load of /dashboard/settings#application-details and a client-side
+   * click from Profile ended at scrollY 0 with the card at top 1115. The id was
+   * live and the jump still did not happen.
+   *
+   * Keyed on `me` because that is the state that flips this page from shimmer
+   * to content. One frame of rAF lets the new subtree lay out before measuring. */
+  useEffect(() => {
+    if (!me) return;
+    const id = window.location.hash.slice(1);
+    if (!id) return;
+    const raf = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [me]);
+
   function patch(p: Partial<ApplicationProfile>) {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
   }
