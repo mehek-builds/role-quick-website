@@ -16,16 +16,22 @@ export type BrowseJob = {
   id: string;
   company_name: string;
   title: string;
-  location: string | null;
-  department: string | null;
-  employment_type: string | null;
+  /* Every city this exact role at this exact company is open in. The API groups
+     by (company, title), so one tile is one job even when the employer posted it
+     once per office — MongoDB posts a single role in 23 places. */
+  locations: string[];
+  openings: number;
   apply_url: string;
-  posting_url: string;
   remote: boolean;
   posted_at: string | null;
   first_seen_at: string;
   ats_name: string;
 };
+
+/* The board's three fields. All optional, all AND together, any combination
+   works on its own — a visitor who fills in only "city" and presses Search gets
+   every role in that city. */
+export type Filters = { title?: string; company?: string; location?: string; q?: string };
 
 export type JobsPage = {
   jobs: BrowseJob[];
@@ -38,15 +44,18 @@ export type JobsPage = {
 
 export const PER_PAGE = 24;
 
-export async function fetchJobs({
-  q = "",
+export async function fetchJobs(
+  filters: Filters = {},
   page = 1,
-}: { q?: string; page?: number } = {}): Promise<JobsPage> {
+): Promise<JobsPage> {
   const params = new URLSearchParams({
     limit: String(PER_PAGE),
     offset: String((Math.max(1, page) - 1) * PER_PAGE),
   });
-  if (q.trim()) params.set("q", q.trim());
+  for (const key of ["title", "company", "location", "q"] as const) {
+    const value = filters[key]?.trim();
+    if (value) params.set(key, value);
+  }
 
   /* Imported here rather than at the top of the file on purpose. The page's
      pure helpers below (agoLabel, pageWindow) are unit-tested by
@@ -57,7 +66,7 @@ export async function fetchJobs({
   const { API_URL } = await import("./config");
 
   try {
-    const response = await fetch(`${API_URL}/jobs?${params}`, {
+    const response = await fetch(`${API_URL}/jobs/grouped?${params}`, {
       headers: { Accept: "application/json" },
       /* Postings move slowly (the source refreshes once a day) but the board is
          the first thing a visitor sees, so a short window keeps it cheap
@@ -68,7 +77,9 @@ export async function fetchJobs({
     if (!response.ok) return { jobs: [], total: 0, ok: false };
     const body = await response.json();
     return {
-      jobs: Array.isArray(body.jobs) ? body.jobs : [],
+      jobs: Array.isArray(body.jobs)
+        ? body.jobs.map((j: BrowseJob) => ({ ...j, locations: j.locations ?? [] }))
+        : [],
       total: typeof body.total === "number" ? body.total : (body.jobs?.length ?? 0),
       ok: true,
     };
@@ -137,10 +148,41 @@ export function pageCount(total: number): number {
    plainly a placeholder falls back to what we do know. */
 const PLACEHOLDER = /^(location|city|remote\?|n\/?a|tbd|various|multiple)$/i;
 
-export function locationLabel(job: Pick<BrowseJob, "location" | "remote">): string {
-  const raw = job.location?.trim();
-  if (raw && !PLACEHOLDER.test(raw)) return raw;
-  return job.remote ? "Remote" : "Location not given";
+/* One role's cities, flattened and tidied.
+ *
+ * Two things make this less trivial than it looks. A single posting's location
+ * is often already a list ("Auckland; Melbourne", "Boston; New York City;
+ * Pennsylvania"), so grouping alone gives an array of lists; and the same city
+ * then appears under several postings. Split, trim, drop placeholders, dedupe
+ * case-insensitively, and keep first-seen order so the newest posting's cities
+ * lead. */
+export function locationList(job: Pick<BrowseJob, "locations" | "remote">): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of job.locations ?? []) {
+    for (const part of String(raw).split(/[;|]/)) {
+      const city = part.trim().replace(/\s+/g, " ");
+      if (!city || PLACEHOLDER.test(city)) continue;
+      const key = city.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(city);
+    }
+  }
+  if (out.length) return out;
+  return [job.remote ? "Remote" : "Location not given"];
+}
+
+/* What the tile actually prints. A role open in 23 cities cannot list 23 on a
+   tile without burying the job title, so it names a few and counts the rest —
+   the count is the honest part, and it is why the number is shown rather than
+   the list being silently cut. */
+export function locationSummary(
+  job: Pick<BrowseJob, "locations" | "remote">,
+  show = 3,
+): { shown: string[]; extra: number } {
+  const all = locationList(job);
+  return { shown: all.slice(0, show), extra: Math.max(0, all.length - show) };
 }
 
 /* Bare mono numerals, per DESIGN.md. Deliberately no thousands separator: in
@@ -149,4 +191,32 @@ export function locationLabel(job: Pick<BrowseJob, "location" | "remote">): stri
    a typo in the one number the page is judged on. */
 export function countLabel(n: number): string {
   return String(n);
+}
+
+
+/* Suggestions for the three fields. A miss is not an error: the fields take
+   free text, so an empty datalist costs a visitor nothing but the convenience.
+   Cached for an hour — the company list changes when a source is added, which
+   is a manual act, and the city and title lists move only as slowly as the
+   board does. */
+export type Facets = { companies: string[]; locations: string[]; titles: string[] };
+
+export async function fetchFacets(): Promise<Facets> {
+  const { API_URL } = await import("./config");
+  try {
+    const response = await fetch(`${API_URL}/jobs/facets`, {
+      headers: { Accept: "application/json" },
+      next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return { companies: [], locations: [], titles: [] };
+    const body = await response.json();
+    return {
+      companies: Array.isArray(body.companies) ? body.companies : [],
+      locations: Array.isArray(body.locations) ? body.locations : [],
+      titles: Array.isArray(body.titles) ? body.titles : [],
+    };
+  } catch {
+    return { companies: [], locations: [], titles: [] };
+  }
 }

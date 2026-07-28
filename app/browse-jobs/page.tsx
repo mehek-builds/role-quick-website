@@ -4,12 +4,14 @@ import { STORE_URL } from "@/lib/config";
 import {
   agoLabel,
   countLabel,
+  fetchFacets,
   fetchJobs,
-  locationLabel,
+  locationSummary,
   pageCount,
   pageWindow,
   PER_PAGE,
   type BrowseJob,
+  type Filters,
 } from "@/lib/browse-jobs";
 import { logoPath, monogram } from "@/lib/company-logos";
 
@@ -78,6 +80,7 @@ function CompanyMark({ company, eager }: { company: string; eager?: boolean }) {
 
 function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
   const ago = agoLabel(job);
+  const { shown, extra } = locationSummary(job);
   return (
     <a
       href={job.apply_url}
@@ -92,21 +95,93 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
           <p className="mt-1 text-small text-muted">{job.company_name}</p>
         </div>
       </div>
-      <p className="mt-auto truncate pt-4 text-small text-faint">
-        {locationLabel(job)}
+      <p className="mt-auto pt-4 text-small leading-snug text-faint">
+        {shown.join(" · ")}
+        {extra > 0 && (
+          <span className="text-faint/80"> +{extra} more</span>
+        )}
       </p>
-      {ago && (
-        <p className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">
-          {ago}
-        </p>
-      )}
+      <p className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">
+        {job.openings > 1 && (
+          <span>{job.openings} openings{ago ? " · " : ""}</span>
+        )}
+        {ago}
+      </p>
     </a>
   );
 }
 
-function hrefFor(q: string, page: number) {
+/* One search field: a label, an input, and a datalist of real values from the
+ * board. The datalist is what makes this both a dropdown and a free-text box at
+ * once — the browser offers the suggestions on focus and filters them as you
+ * type, but nothing is rejected, so "Berlin" works whether or not it is in the
+ * list. No JS, no combobox library, and it stays usable with the keyboard.
+ *
+ * The suggestions are capped server-side at 120 per field: a datalist of every
+ * one of ~5,000 titles is slower to render than it is useful to read. */
+function Field({
+  name,
+  label,
+  placeholder,
+  value,
+  options,
+}: {
+  name: string;
+  label: string;
+  placeholder: string;
+  value: string;
+  options: string[];
+}) {
+  const listId = `${name}-options`;
+  return (
+    <label className="flex min-w-0 flex-col gap-1.5">
+      <span className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">
+        {label}
+      </span>
+      <input
+        type="search"
+        name={name}
+        defaultValue={value}
+        placeholder={placeholder}
+        list={options.length ? listId : undefined}
+        autoComplete="off"
+        className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+      />
+      {options.length > 0 && (
+        <datalist id={listId}>
+          {options.map((o) => (
+            <option key={o} value={o} />
+          ))}
+        </datalist>
+      )}
+    </label>
+  );
+}
+
+/* "Job title “software engineer” and City “New York”" — the fields are named back
+ * so the reader can see which one narrowed the result, which matters most when
+ * a search returns nothing and they need to know which box to change. */
+function describeFilters(filters: Filters): string {
+  const named: [string, string | undefined][] = [
+    ["Job title", filters.title],
+    ["Company", filters.company],
+    ["City", filters.location],
+    ["", filters.q],
+  ];
+  const parts = named
+    .filter(([, v]) => v)
+    .map(([label, v]) => (label ? `${label} “${v}”` : `“${v}”`));
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+function hrefFor(filters: Filters, page: number) {
   const params = new URLSearchParams();
-  if (q) params.set("q", q);
+  /* Every filter has to survive pagination, or page 2 of a search silently
+     becomes page 2 of the whole board. */
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
   if (page > 1) params.set("page", String(page));
   const s = params.toString();
   return s ? `/browse-jobs?${s}` : "/browse-jobs";
@@ -115,12 +190,30 @@ function hrefFor(q: string, page: number) {
 export default async function BrowseJobs({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; page?: string }>;
+  searchParams: Promise<{
+    title?: string;
+    company?: string;
+    location?: string;
+    q?: string;
+    page?: string;
+  }>;
 }) {
   const params = await searchParams;
-  const q = (params.q ?? "").slice(0, 80);
+  const clean = (v?: string) => (v ?? "").slice(0, 80).trim();
+  /* `q` is still read, unlabelled, so links minted while the board had one
+     general search box keep working instead of silently returning everything. */
+  const filters: Filters = {
+    title: clean(params.title),
+    company: clean(params.company),
+    location: clean(params.location),
+    q: clean(params.q),
+  };
+  const searching = Boolean(filters.title || filters.company || filters.location || filters.q);
   const requested = Math.max(1, Number(params.page) || 1);
-  const { jobs, total, ok } = await fetchJobs({ q, page: requested });
+  const [{ jobs, total, ok }, facets] = await Promise.all([
+    fetchJobs(filters, requested),
+    fetchFacets(),
+  ]);
   const pages = pageCount(total);
   const current = Math.min(requested, pages);
 
@@ -138,9 +231,10 @@ export default async function BrowseJobs({
           {ok ? (
             <>
               <span className="font-mono text-ink">{countLabel(total)}</span>{" "}
-              open jobs, read straight off each company&rsquo;s own job board and
-              checked again every day. Open one and Litos writes the resume for it
-              and fills in the form.
+              open roles, read straight off each company&rsquo;s own job board and
+              checked again every day. A role open in several cities is one card
+              here, not one per city. Open any of them and Litos writes the
+              resume for it and fills in the form.
             </>
           ) : (
             <>
@@ -150,31 +244,51 @@ export default async function BrowseJobs({
           )}
         </p>
 
+        {/* Three fields, not one box (Mehek, 2026-07-28). Each is a native
+            combobox: an <input> with a <datalist>, so a visitor can pick a
+            suggestion OR type anything they like, and the same markup does
+            both with no JavaScript. They AND together and each works alone, so
+            filling in only the city and pressing Search is a valid search.
+            A plain GET form, so every result stays a shareable URL. */}
         <form
           action="/browse-jobs"
           method="get"
-          className="mt-8 flex max-w-[560px] flex-col gap-2 sm:flex-row"
+          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[900px] lg:grid-cols-[1fr_1fr_1fr_auto]"
         >
-          <input
-            type="search"
-            name="q"
-            defaultValue={q}
-            aria-label="Search jobs"
-            placeholder="Search by title, company or city"
-            className="min-h-[44px] flex-1 rounded-inner border border-border bg-white px-4 text-base text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+          <Field
+            name="title"
+            label="Job title"
+            placeholder="e.g. software engineer"
+            value={filters.title ?? ""}
+            options={facets.titles}
           />
+          <Field
+            name="company"
+            label="Company"
+            placeholder="e.g. Stripe"
+            value={filters.company ?? ""}
+            options={facets.companies}
+          />
+          <Field
+            name="location"
+            label="City"
+            placeholder="e.g. New York"
+            value={filters.location ?? ""}
+            options={facets.locations}
+          />
+          {filters.q && <input type="hidden" name="q" value={filters.q} />}
           <button
             type="submit"
-            className="min-h-[44px] rounded-control bg-brand px-6 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="min-h-[44px] rounded-control bg-brand px-6 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:col-span-3 lg:col-span-1 lg:self-end"
           >
             Search
           </button>
         </form>
 
-        {q && ok && (
+        {searching && ok && (
           <p className="mt-4 font-mono text-machine text-muted">
-            {countLabel(total)} {total === 1 ? "match for" : "matches for"}{" "}
-            &ldquo;{q}&rdquo;.{" "}
+            {countLabel(total)} {total === 1 ? "role" : "roles"} matching{" "}
+            {describeFilters(filters)}.{" "}
             <a href="/browse-jobs" className="underline underline-offset-2 hover:text-ink">
               Clear
             </a>
@@ -232,7 +346,7 @@ export default async function BrowseJobs({
               ) : (
                 <a
                   key={n}
-                  href={hrefFor(q, n)}
+                  href={hrefFor(filters, n)}
                   className="flex h-9 min-w-9 items-center justify-center rounded-control px-3 text-muted transition-colors hover:bg-surface-alt hover:text-ink"
                 >
                   {n}
@@ -241,7 +355,7 @@ export default async function BrowseJobs({
             )}
             {current < pages && (
               <a
-                href={hrefFor(q, current + 1)}
+                href={hrefFor(filters, current + 1)}
                 className="ml-2 flex h-9 items-center rounded-control px-3 text-muted transition-colors hover:bg-surface-alt hover:text-ink"
               >
                 Next →

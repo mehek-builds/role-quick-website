@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
    EMPLOYER (posted) or about us (found), and pageWindow is the only thing
    standing between a 300-page board and a nav bar with 300 links in it. */
 
-const { agoLabel, pageWindow, pageCount, locationLabel, countLabel, PER_PAGE } =
+const { agoLabel, pageWindow, pageCount, locationList, locationSummary, countLabel, PER_PAGE } =
   await import("../lib/browse-jobs.ts");
 
 const DAY = 86_400_000;
@@ -59,19 +59,58 @@ describe("agoLabel", () => {
   });
 });
 
-describe("locationLabel", () => {
-  test("passes a real location straight through", () => {
-    assert.equal(locationLabel({ location: "New York, NY", remote: false }), "New York, NY");
+describe("locationList", () => {
+  test("splits a posting whose location is already a list", () => {
+    /* Employers pack several cities into one location string. MongoDB posts
+       "Boston; New York City; Pennsylvania" as a single posting, so grouping
+       alone leaves an array of lists. */
+    assert.deepEqual(
+      locationList({ locations: ["Boston; New York City; Pennsylvania"], remote: false }),
+      ["Boston", "New York City", "Pennsylvania"],
+    );
+  });
+
+  test("dedupes across postings, case-insensitively, keeping first-seen order", () => {
+    assert.deepEqual(
+      locationList({ locations: ["London", "london", "Berlin; London"], remote: false }),
+      ["London", "Berlin"],
+    );
   });
 
   test("does not print an employer's leftover template text", () => {
-    /* Stripe publishes three live postings whose location is the literal word
-       "LOCATION". Rendering it verbatim makes our page look broken for a
-       mistake made on theirs. */
-    assert.equal(locationLabel({ location: "LOCATION", remote: false }), "Location not given");
-    assert.equal(locationLabel({ location: "TBD", remote: true }), "Remote");
-    assert.equal(locationLabel({ location: null, remote: true }), "Remote");
-    assert.equal(locationLabel({ location: "  ", remote: false }), "Location not given");
+    /* Stripe publishes live postings whose location is the literal word
+       "LOCATION". Rendering it makes our page look broken for a mistake made on
+       theirs. */
+    assert.deepEqual(locationList({ locations: ["LOCATION"], remote: false }), ["Location not given"]);
+    assert.deepEqual(locationList({ locations: ["TBD"], remote: true }), ["Remote"]);
+    assert.deepEqual(locationList({ locations: [], remote: true }), ["Remote"]);
+    assert.deepEqual(locationList({ locations: ["  "], remote: false }), ["Location not given"]);
+  });
+
+  test("a placeholder mixed in with real cities is dropped, not kept", () => {
+    assert.deepEqual(
+      locationList({ locations: ["New York, NY", "LOCATION"], remote: false }),
+      ["New York, NY"],
+    );
+  });
+});
+
+describe("locationSummary", () => {
+  test("names a few cities and counts the rest", () => {
+    /* MongoDB posts one role in 23 places. Listing all of them buries the job
+       title, and silently cutting the list would misstate where the job is, so
+       the remainder is counted rather than dropped. */
+    const many = Array.from({ length: 23 }, (_, i) => `City ${i + 1}`);
+    const { shown, extra } = locationSummary({ locations: many, remote: false });
+    assert.equal(shown.length, 3);
+    assert.equal(extra, 20);
+    assert.equal(shown.length + extra, 23);
+  });
+
+  test("no remainder when everything fits", () => {
+    const { shown, extra } = locationSummary({ locations: ["London", "Berlin"], remote: false });
+    assert.deepEqual(shown, ["London", "Berlin"]);
+    assert.equal(extra, 0);
   });
 });
 
@@ -158,6 +197,33 @@ describe("company marks", () => {
     assert.equal(logoPath("Chime"), null);
     assert.equal(monogram("Chime"), "C");
     assert.equal(logoPath("Stripe"), "/company/stripe.png");
+  });
+});
+
+describe("the three search fields", () => {
+  const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
+
+  test("all three exist and are named what the API expects", () => {
+    /* The field names ARE the API's query parameters and the shareable URL. A
+       rename on either side silently returns the whole board instead of a
+       search, which looks like a working page. */
+    for (const name of ["title", "company", "location"]) {
+      assert.match(page, new RegExp(`name="${name}"`), `no field named "${name}"`);
+    }
+  });
+
+  test("each field offers suggestions without demanding one", () => {
+    /* The datalist is what makes a field both a dropdown and a free-text box.
+       Swapping it for a <select> would silently forbid searching for anything
+       we had not already indexed. */
+    assert.match(page, /<datalist/, "fields must offer a datalist");
+    assert.doesNotMatch(page, /<select\b/, "a select would reject free text");
+  });
+
+  test("filters survive pagination", () => {
+    /* Page 2 of a search must still be that search. hrefFor takes the whole
+       filter set for exactly this reason. */
+    assert.match(page, /hrefFor\(filters, /);
   });
 });
 
