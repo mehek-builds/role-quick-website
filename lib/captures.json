@@ -62,5 +62,23 @@
     "h": 516,
     "src": "/product/hero-band.webp",
     "alt": "The Litos review screen: a strong-match score of 86, the highlight legend, the job posting with its requirements lit up, and the tailored resume beside it."
+  },
+  "hero-popup-band": {
+    "w": 380,
+    "h": 268,
+    "src": "/product/hero-popup-band.webp",
+    "alt": "The Litos extension popup on a job page, showing the detected role at Figma and buttons to fill the form or find people."
+  },
+  "hero-band-mobile": {
+    "w": 544,
+    "h": 470,
+    "src": "/product/hero-band-mobile.webp",
+    "alt": "The tailored resume Litos built for this job, with the posting's own requirements highlighted on the applicant's bullets."
+  },
+  "hero-band-lit": {
+    "w": 1104,
+    "h": 516,
+    "src": "/product/hero-band-lit.webp",
+    "alt": "The same Litos review screen with TypeScript pointed at, lit up on the posting and on the applicant's own bullet at the same time."
   }
 }

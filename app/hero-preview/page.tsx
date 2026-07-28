@@ -19,9 +19,9 @@ export const metadata = {
 
 export default function HeroPreviewPage() {
   return (
-    <main className="min-h-screen bg-canvas py-16">
+    <main className="min-h-screen bg-canvas pb-16 pt-14">
       <div className="mx-auto w-full">
-        <div className="mx-auto mb-10 max-w-5xl rounded-inner border border-border bg-surface px-4 py-3 text-small text-muted">
+        <div className="fixed bottom-3 left-3 z-50 rounded-inner border border-border bg-surface px-3 py-2 text-small text-muted shadow-raised">
           Internal preview. Not linked from anywhere and not indexed.
         </div>
 

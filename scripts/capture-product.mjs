@@ -148,6 +148,53 @@ const SHOTS = [
     alt: "The Litos review screen: a strong-match score of 86, the highlight legend, the job posting with its requirements lit up, and the tailored resume beside it.",
   },
   {
+    /* The same band, hovered. Pairs with hero-band for the one settle. */
+    name: "hero-band-lit",
+    url: () => `${site}/dashboard/applications?qa=1`,
+    viewport: { width: 1280, height: 1000 },
+    wait: "main",
+    scrollTo: "text=Point at any highlighted term",
+    scrollPad: 96,
+    hover: 'mark:has-text("TypeScript")',
+    element: "[data-hero-review]",
+    clipTo: { height: 516 },
+    hide: ["header.sticky"],
+    freezeClock: "2026-07-21T12:00:09.000Z",
+    alt: "The same Litos review screen with TypeScript pointed at, lit up on the posting and on the applicant's own bullet at the same time.",
+  },
+  {
+    /* MOBILE fold artifact. At 390px the 1104px review band is anchored left
+       and hard-cropped, so the whole phone fold is the JOB DESCRIPTION column:
+       the tailored resume, the 86 ring and the refusal line are all off-screen.
+       The one asset chosen because it contains the OUTPUT was delivering, on
+       phones, a picture of the input. Same real screen, cropped to the output. */
+    name: "hero-band-mobile",
+    url: () => `${site}/dashboard/applications?qa=1`,
+    viewport: { width: 1280, height: 1000 },
+    wait: "main",
+    scrollTo: "text=Point at any highlighted term",
+    scrollPad: 96,
+    element: 'section:has(p:text-is("Your resume for this job"))',
+    clipTo: { height: 470 },
+    hide: ["header.sticky"],
+    freezeClock: "2026-07-21T12:00:09.000Z",
+    alt: "The tailored resume Litos built for this job, with the posting's own requirements highlighted on the applicant's bullets.",
+  },
+  {
+    /* A SHORT cut of the real popup. The fold artifact is the dashboard review
+       screen, which proves the output but says nothing about this being a
+       Chrome extension — the one thing the eyebrow claims and the picture does
+       not corroborate. This band is the top of the shipped popup: the detected
+       role and the two verbs. Paired with the review band it restores "where
+       this lives" using a second REAL capture rather than a drawn browser. */
+    name: "hero-popup-band",
+    url: () => `http://localhost:${VITE_PORT}/preview.html?shot=job`,
+    element: "#shot",
+    clipTo: { height: 268 },
+    wait: "#shot",
+    alt: "The Litos extension popup on a job page, showing the detected role at Figma and buttons to fill the form or find people.",
+  },
+  {
     name: "hero-3-contacts",
     url: () => `http://localhost:${VITE_PORT}/preview.html?shot=contacts`,
     clip: { width: 380, height: 580 },
@@ -337,6 +384,20 @@ async function shoot(browser, shot, outDir) {
      claims to show. This hides furniture only; it never hides product state.
      The auth-banner assertion below still runs, so nothing can be hidden to
      make a broken screen look whole. */
+  /* `hover` shoots the same screen in a second real state. The review screen's
+     own legend promises "Point at any highlighted term to see it light up on
+     both sides", and a single still cannot honour that: the hero prints an
+     instruction it physically cannot obey. Capturing the hovered state as a
+     SECOND real screenshot lets the page cross-fade idle -> lit once and settle,
+     which demonstrates the link instead of asserting it. Both frames are
+     captures of the shipped screen; nothing is painted. */
+  if (shot.hover) {
+    const h = page.locator(shot.hover).first();
+    await h.waitFor({ timeout: 30_000 });
+    await h.hover();
+    await page.waitForTimeout(320);
+  }
+
   if (shot.hide) {
     await page.addStyleTag({
       content: `${shot.hide.join(", ")} { display: none !important; }`,

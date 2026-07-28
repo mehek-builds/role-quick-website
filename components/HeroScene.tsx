@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
 import captures from "@/lib/captures.json";
 import { InstallLink } from "@/components/InstallLink";
 
@@ -65,6 +68,18 @@ type Shot = { w: number; h: number; src: string; alt?: string };
    not mention" refusal with its Node.js chip, and both tailored bullets with
    their highlights. Nothing that argues anything was cut. */
 const SHOT = (captures as Record<string, Shot>)["hero-band"];
+/* The phone gets the OUTPUT, not the input. The desktop band is 1104px wide;
+   anchored left at 390px it showed only the job-description column, so the
+   whole phone fold was a picture of the posting and the tailored resume, the
+   86 ring and the refusal line were all off-screen. */
+const SHOT_MOBILE = (captures as Record<string, Shot>)["hero-band-mobile"];
+/* The same screen, hovered. The review surface's own legend says "Point at any
+   highlighted term to see it light up on both sides" — an instruction a single
+   still physically cannot obey, so the hero was printing a promise it broke.
+   These two frames are both real captures of the shipped screen at identical
+   viewport and scroll, so cross-fading them demonstrates the link rather than
+   asserting it, and nothing is painted. One settle, no loop. */
+const SHOT_LIT = (captures as Record<string, Shot>)["hero-band-lit"];
 
 /* Fills on five, submits on three. The previous card said "Works on:
    Greenhouse, Lever, Ashby, Workday and LinkedIn", which collapsed those two
@@ -78,96 +93,162 @@ const COVERAGE = [
 ] as const;
 
 export function HeroScene() {
+  /* Settles on the LIT frame and stays there. Reduced motion renders it
+     immediately: the settled state is the message, and the previous draft
+     degraded to the "nothing has happened yet" frame. */
+  const [lit, setLit] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      /* Deferred rather than set synchronously: a setState in the effect body
+         cascades a render. One tick is imperceptible and keeps the settled
+         frame the first thing a reduced-motion visitor sees. */
+      const t = setTimeout(() => setLit(true), 0);
+      return () => clearTimeout(t);
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((e) => e.isIntersecting)) return;
+        io.disconnect();
+        setTimeout(() => setLit(true), 520);
+      },
+      { threshold: 0.25 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   if (!SHOT) return null;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6">
-      {/* Copy, then the artifact, then the detail.
+    <div ref={ref}>
+      {/* Left-aligned, three blocks, one rhythm.
        *
-       * The claim and the coverage rows used to sit BETWEEN the CTA and the
-       * picture, which pushed the product to y=603 of a 900px fold — a third of
-       * the hero was product and two thirds was copy, the single most-repeated
-       * charge across 25 critics. The claim is now a callout ON the frame,
-       * which is Cal AI's move (the payoff number belongs outside the UI, in
-       * type larger than anything inside it), and the coverage detail moves
-       * below the artifact where it answers a question the visitor has already
-       * started asking. */}
-      <div className="mx-auto max-w-[680px] text-center">
-        <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">
-          Free Chrome extension for job seekers
-        </p>
-        <h1 className="mt-3 text-display font-[450] text-ink">
-          Apply <span className="text-brand-ink">in seconds.</span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-[460px] text-body text-muted">
-          Nothing is reused. Every job gets its own resume, form, and email.
-        </p>
+       * The centred seven-block stack ran 450px and left the product at a third
+       * of the fold; Attio reaches ~67% product with four elements in ~230px.
+       * Copy is now a single 560px column at the gutter and the artifact starts
+       * ~170px higher. */}
+      {/* Two copy columns, then the artifact full width.
+       *
+       * A single left-aligned 600px column left the right half of a 1440 fold
+       * empty, which is worse than the centred stack it replaced: the widest
+       * axis of the viewport went unspent. The claim and the coverage answer
+       * move to a right-hand column, so the copy row fills the width, the
+       * headline keeps a 560px measure, and the artifact still starts high. */}
+      <div className="mx-auto w-full max-w-7xl px-6">
+        <div className="flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
+          <div className="max-w-[600px]">
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">
+              Free Chrome extension for job seekers
+            </p>
+            <h1 className="mt-4 text-display font-[450] text-ink">
+              Apply <span className="text-brand-ink">in seconds.</span>
+            </h1>
+            <p className="mt-5 max-w-[460px] text-body text-muted">
+              Nothing is reused. Every job gets its own resume, form, and email.
+            </p>
 
-        <div className="mt-6 flex flex-col items-center gap-2.5">
-          <InstallLink
-            source="hero"
-            className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-body font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
-          >
-            Add to Chrome, it&apos;s free
-          </InstallLink>
-          <p className="text-small text-faint">
-            Desktop Chrome and Edge.{" "}
-            <a
-              href="/try"
-              data-inline-link
-              className="underline decoration-border underline-offset-2 hover:text-ink"
-            >
-              Try it free, no account needed
-            </a>
-            .
-          </p>
-        </div>
-      </div>
-
-      <div className="relative mt-9">
-        {/* Runs off the bottom of the viewport. Anchored left below xl so the
-            crop cuts ONE edge and every line still begins properly. */}
-        <div className="flex justify-start overflow-hidden xl:justify-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={SHOT.src}
-            alt={SHOT.alt ?? ""}
-            width={SHOT.w}
-            height={SHOT.h}
-            style={{ width: SHOT.w }}
-            loading="eager"
-            fetchPriority="high"
-            decoding="async"
-            className="block max-w-none rounded-card border border-border bg-surface shadow-overlay"
-          />
-        </div>
-
-        {/* The claim, as a callout breaking the frame's top edge, centred over
-            the empty middle of the header row so it occludes nothing. Set
-            larger than any type inside the screenshot, because a number that
-            matters does not belong buried in the UI. "<" is a real glyph rather
-            than the word "under": the machine voice is where this brand puts
-            its numbers, and a ceiling is the honest shape of the promise. */}
-        <div className="pointer-events-none absolute -top-5 left-1/2 hidden -translate-x-1/2 rounded-card border border-border bg-surface px-5 py-3 text-center shadow-overlay sm:block">
-          <p className="text-section font-[450] leading-none text-ink">
-            <span className="font-mono text-muted">&lt;</span>&thinsp;30 seconds
-          </p>
-          <p className="mt-1.5 font-mono text-label uppercase tracking-[0.08em] text-faint">
-            Job found → ready to send
-          </p>
-        </div>
-      </div>
-
-      <dl className="mx-auto mt-8 flex max-w-[720px] flex-col gap-2 border-t border-border pt-5 sm:flex-row sm:justify-center sm:gap-10">
-        {COVERAGE.map(([verb, sites]) => (
-          <div key={verb} className="flex gap-2.5 text-small">
-            <dt className="shrink-0 font-mono text-label uppercase tracking-[0.08em] text-faint">
-              {verb}
-            </dt>
-            <dd className="text-muted">{sites}</dd>
+            <div className="mt-7 flex flex-col items-start gap-2.5">
+              <InstallLink
+                source="hero"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-body font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+              >
+                Add to Chrome, it&apos;s free
+              </InstallLink>
+              <p className="text-small text-faint">
+                Desktop Chrome and Edge.{" "}
+                <a
+                  href="/try"
+                  data-inline-link
+                  className="underline decoration-border underline-offset-2 hover:text-ink"
+                >
+                  Try it free, no account needed
+                </a>
+                .
+              </p>
+            </div>
           </div>
-        ))}
-      </dl>
+
+          <div className="shrink-0 lg:pb-1">
+            {/* The number in the Stripe idiom: bare type over a hairline, no
+                card, no border, no shadow. It was a bordered, shadowed box
+                absolutely positioned over the capture, which occluded the line
+                saying WHICH job this is and wore the same radius and elevation
+                token as the artifact underneath — a marketing claim dressed as
+                product UI, which is the one thing a brand built on candour
+                cannot afford. Rendered at every width; it was sm:-gated, so the
+                phone fold carried no speed claim at all. */}
+            <p className="text-section font-[450] text-ink">
+              <span className="font-mono text-muted">&lt;</span>&thinsp;30 seconds
+            </p>
+            <p className="mt-1.5 font-mono text-label uppercase tracking-[0.08em] text-faint">
+              Job found → ready to send
+            </p>
+
+            {/* Above the fold at every width. Coverage is the first question a
+                job seeker asks and it had drifted below the cut. */}
+            <dl className="mt-6 flex flex-col gap-1.5 border-t border-border pt-4">
+              {COVERAGE.map(([verb, sites]) => (
+                <div key={verb} className="flex gap-3 text-small">
+                  <dt className="w-[64px] shrink-0 font-mono text-label uppercase tracking-[0.08em] text-faint">
+                    {verb}
+                  </dt>
+                  <dd className="text-muted">{sites}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </div>
+      </div>
+
+      {/* Full-viewport-width band with no page gutter, cropped past the side
+          edges and the bottom. The previous version centred 1104px inside a
+          1232px container, so both edges were visible and it read as a card
+          placed on a page rather than a workspace the viewport happens to cut.
+          Refusing to fit is what makes Linear and Attio read as real. */}
+      <div className="mt-10 flex w-full justify-center overflow-hidden">
+        <div className="relative w-[544px] shrink-0 sm:w-[1104px]">
+          <picture>
+            <source media="(max-width: 640px)" srcSet={SHOT_MOBILE?.src ?? SHOT.src} />
+            <img
+              src={SHOT.src}
+              alt={SHOT.alt ?? ""}
+              width={SHOT.w}
+              height={SHOT.h}
+              loading="eager"
+              fetchPriority="high"
+              decoding="async"
+              className="block h-auto w-full rounded-card border border-border bg-surface shadow-overlay"
+            />
+          </picture>
+
+          {/* The lit frame sits exactly on top of the idle one and fades in
+              once. Both are real captures of the same screen at the same
+              viewport and scroll, so nothing moves and nothing is invented —
+              the only change is which terms the product itself lights up.
+              Desktop only: the mobile crop is the resume column, where there is
+              no second side to link to. */}
+          {SHOT_LIT && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={SHOT_LIT.src}
+              alt=""
+              aria-hidden
+              width={SHOT_LIT.w}
+              height={SHOT_LIT.h}
+              loading="eager"
+              decoding="async"
+              className={`absolute inset-0 hidden h-auto w-full rounded-card border border-border bg-surface shadow-overlay sm:block ${
+                lit ? "opacity-100" : "opacity-0"
+              } motion-safe:transition-opacity motion-safe:duration-[420ms] motion-safe:ease-[cubic-bezier(.2,.6,.2,1)]`}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
