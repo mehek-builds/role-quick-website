@@ -702,10 +702,13 @@ export default function Login() {
             a picture of the product with the product's name is the caption
             saying what the picture already says. */}
         {/* Height-capped, not width-capped. The form column is the taller of
-            the two once its two footnotes are counted, and the row stretches
-            to match it, so a width-capped portrait image centred in that row
-            ran past the fold and the panel lost its last rows. Capping the
-            height keeps the whole capture on screen at any viewport. */}
+            the two once its footnote is counted, and the row stretches to
+            match it, so a width-capped portrait image centred in that row ran
+            past the fold and the panel lost its last rows. Capping the height
+            keeps the whole capture on screen at any viewport.
+            (Said "two footnotes" until 2026-07-28, when one of the two was
+            deleted a few lines above. The cap is still right; the count was
+            not.) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/product/extension-job.png"
