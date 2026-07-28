@@ -668,11 +668,17 @@ export default function Login() {
         )}
       </div>
 
+      {/* "One account for everything. Sign in to see the emails and resumes
+          Litos already made for you." came off 2026-07-28. Three footnotes
+          stacked under this card, and that one was a pitch on the screen where
+          the decision to try Litos has already been made. It also read oddly on
+          the flow most people arrive in, since a new account has nothing Litos
+          "already made".
+
+          The privacy line stays. On the screen that asks for an email, the
+          right to take it back is the thing worth saying, and it carries the
+          only /privacy link on this page. */}
       <p className="mt-8 max-w-sm text-center text-xs leading-5 text-faint">
-        One account for everything. Sign in to see the emails and resumes
-        Litos already made for you.
-      </p>
-      <p className="mt-3 max-w-sm text-center text-xs leading-5 text-faint">
         Your data is yours. You can download it or delete it anytime.{" "}
         <a href="/privacy" className="underline hover:text-muted">
           Privacy
@@ -691,14 +697,18 @@ export default function Login() {
         aria-hidden
         className="hidden border-l border-border bg-surface-alt lg:flex lg:w-[46%] lg:shrink-0 lg:flex-col lg:justify-center lg:px-14 lg:py-16"
       >
-        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Inside Litos
-        </p>
+        {/* The "Inside Litos" eyebrow came off 2026-07-28. The panel is
+            aria-hidden decoration showing the extension on a posting; labelling
+            a picture of the product with the product's name is the caption
+            saying what the picture already says. */}
         {/* Height-capped, not width-capped. The form column is the taller of
-            the two once its two footnotes are counted, and the row stretches
-            to match it, so a width-capped portrait image centred in that row
-            ran past the fold and the panel lost its last rows. Capping the
-            height keeps the whole capture on screen at any viewport. */}
+            the two once its footnote is counted, and the row stretches to
+            match it, so a width-capped portrait image centred in that row ran
+            past the fold and the panel lost its last rows. Capping the height
+            keeps the whole capture on screen at any viewport.
+            (Said "two footnotes" until 2026-07-28, when one of the two was
+            deleted a few lines above. The cap is still right; the count was
+            not.) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/product/extension-job.png"

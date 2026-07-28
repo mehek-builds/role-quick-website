@@ -124,6 +124,16 @@ const dashboard = await readFile(new URL("../app/dashboard/applications/page.tsx
 // The three highlight tones moved out of the page and into their own component in cb650c3.
 const requirementText = await readFile(new URL("../components/app/RequirementText.tsx", import.meta.url), "utf8");
 
+/** Source with comments removed, for assertions about what the screen SAYS rather than what the
+ *  file contains. A `doesNotMatch` against raw source cannot tell rendered copy from a comment
+ *  explaining why that copy was deleted, and this repo comments its deletions heavily. */
+function shippedCopy(source) {
+  return source
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "") // JSX comments
+    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+    .replace(/^\s*\/\/.*$/gm, ""); // line comments
+}
+
 test("R-051b: resume fields wrap instead of clipping", () => {
   // A single-line <input> truncated the education headline to "Marshall School of B". EditableLine
   // must stay a growing textarea so long values wrap and stay readable.
@@ -152,14 +162,30 @@ test("R-051d: the packet switcher is not nested inside the review screen", () =>
   assert.ok(switcherAt < screenBranchAt, "the switcher must be rendered before the screen branch");
 });
 
-test("R-046: the legend names both marks, not just one", () => {
-  // The invariant is that BOTH marks are named. The 2026-07-26 pass kept that and dropped the
-  // wording ("wording tailoring changed for this posting" is not a sentence a student parses),
-  // and moved the legend out of the action bar to sit under the panes it describes.
-  assert.match(dashboard, /words you already had/);
-  assert.match(dashboard, /words we added for this job/);
-  assert.doesNotMatch(dashboard, /Blue highlights job language/);
-  assert.doesNotMatch(dashboard, /wording tailoring changed for this posting/);
+test("R-046: every mark is named, in exactly one legend", () => {
+  // The invariant is that EVERY mark is named. It has not changed. What changed on 2026-07-28 is
+  // where the naming lives and how many copies of it there are.
+  //
+  // The screen carried two legends for one colour code: MatchLegend above the panes, and a
+  // Blue/Green pair below them in the action bar. Identical Tailwind classes, different words for
+  // the same two colours ("words you already had" vs "asked for, and on your resume"). Two names
+  // for one colour is worse than no name, so the Blue/Green copy was deleted and MatchLegend kept,
+  // because it names all three tones rather than two and says what the colour MEANS.
+  //
+  // So this test now asserts against the file that owns the legend, plus the thing the old version
+  // could not: that the second legend has not grown back on the dashboard page.
+  assert.match(requirementText, /asked for, and on your resume/);
+  assert.match(requirementText, /asked for, not on your resume/);
+  assert.match(requirementText, /wording Litos changed for this job/);
+
+  // The "is it gone?" half has to read SHIPPED COPY, not raw source. A comment explaining why the
+  // second legend was deleted necessarily quotes the phrase it deleted, and a bare grep counts
+  // that as the legend still being there. This failed exactly that way when the comment was
+  // written, which is the argument for stripping rather than for a vaguer regex.
+  assert.doesNotMatch(shippedCopy(dashboard), /words you already had/);
+  assert.doesNotMatch(shippedCopy(dashboard), /words we added for this job/);
+  assert.doesNotMatch(shippedCopy(dashboard), /Blue highlights job language/);
+  assert.doesNotMatch(shippedCopy(requirementText), /wording tailoring changed for this posting/);
 });
 
 test("R-046: the highlight tones are visually distinct", () => {

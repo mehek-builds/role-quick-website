@@ -122,7 +122,10 @@ test("cover letters wait for a detected attachment field, including optional fie
   assert.match(dashboard, /saveCoverLetter/);
   assert.match(dashboard, /coverLetterDownloadUrl/);
   assert.match(dashboard, /review\.cover_letter_supported === true/);
-  assert.match(dashboard, /even when the field is marked optional/);
+  // Reworded 2026-07-28 ("even when the field is marked optional" -> "even when it is marked
+  // optional") when the card lost its eyebrow and its first sentence. The promise is the
+  // invariant, not the phrasing: an optional attachment field still gets a letter.
+  assert.match(dashboard, /even when it is marked optional/);
   const creation = dashboard.slice(dashboard.indexOf("async function createApplication"), dashboard.indexOf("async function generateCoverLetter"));
   assert.doesNotMatch(creation, /\/cover-letter/);
   assert.doesNotMatch(creation, /generateCoverLetter/);
