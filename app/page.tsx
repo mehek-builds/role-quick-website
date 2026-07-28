@@ -623,21 +623,10 @@ export default function Home() {
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
                 Job found → ready to send · 9 seconds
               </p>
-              {/* A person, not a company voice. The strongest asset here is
-                  that a student on the same job hunt is building it. */}
-              <p className="mt-8 text-sm leading-7 text-muted">
-                Made by{" "}
-                {/* inline in a sentence: WCAG 2.5.8 exempts these, and a
-                    44px box here would break the line. */}
-                <a
-                  href="https://x.com/MehekBuilds"
-                  data-inline-link
-                  className="font-medium text-ink underline decoration-border underline-offset-2 hover:decoration-ink"
-                >
-                  Mehek
-                </a>
-                , a student at USC. She is looking for a job too.
-              </p>
+              {/* The founder line ("Made by Mehek, a student at USC...") was
+                  removed 2026-07-28 on Mehek's call. The close section now ends
+                  on the receipt line above. The X link in the footer is the only
+                  remaining signal that a person is behind this. */}
             </Reveal>
           </div>
         </section>
