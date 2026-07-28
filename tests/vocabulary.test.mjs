@@ -50,6 +50,31 @@ describe("Litos vocabulary", () => {
     assert.match(home, /03 · Emails/, 'the section chips should name step 3 "Emails"');
   });
 
+  test("the sample applicant is labelled as a sample", () => {
+    /* The resume demo on the homepage is Alex Rivera, and the numbers inside it
+       ("80 students", "800 student users") are his, not Litos's. Unlabelled, a
+       skimmer reads them as our proof.
+
+       This shipped broken once. The label lived in the #formats band; when that
+       band was deleted on 2026-07-28 the label was moved into #documents in the
+       same commit, and a cherry-pick auto-merge silently dropped the moved
+       lines. Production then showed a fabricated applicant's metrics with
+       nothing saying he was fabricated, and every automated check was green,
+       because nothing asserted the label and the demo travel together. */
+    const home = readFileSync("app/page.tsx", "utf8");
+    const mockups = readFileSync("components/Mockups.tsx", "utf8");
+    if (!/ResumeMatchDemo|ResumeFormatDemo/.test(home)) return; /* demo gone, label not needed */
+    assert.ok(
+      /Alex Rivera/.test(mockups),
+      "the sample resume no longer names Alex Rivera; update this guard to the new sample name"
+    );
+    assert.match(
+      home,
+      /Not a real applicant/,
+      "the homepage renders the sample resume demo, so it must carry the line saying the applicant is not real"
+    );
+  });
+
   test("the audience is named one way", () => {
     /* Who Litos is for was named three ways at once: the hero said "students",
        the store listing said "students and new grads", the old backend policy
