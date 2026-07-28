@@ -621,9 +621,12 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
   return (
     <div className="space-y-3 pt-1">
       <p className="text-[13px] leading-6 text-muted">
+        {/* "every job you open" assumed the extension-only product, the same
+            assumption the hero shed on 2026-07-28: Litos also finds jobs for
+            you now, so opening one yourself is one way in, not the only one. */}
         {mode === "real"
-          ? "That was your resume on a real job. Litos does this on every job you open."
-          : "That is the whole thing. Litos does this on every job you open, with your resume."}
+          ? "That was your resume on a real job. Litos does this on every job, whether you find it or we do."
+          : "That is the whole thing. Litos does this on every job, with your resume, whether you find it or we do."}
       </p>
       <a
         href={STORE_URL}

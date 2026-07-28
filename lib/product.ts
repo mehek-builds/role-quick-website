@@ -9,7 +9,10 @@ export const PRODUCT_FALLBACK = {
     install:
       "https://chromewebstore.google.com/detail/bdbedbmkjpfioknfpmhookefabipjaad",
     privacy: "https://trylitos.com/privacy",
-    supportEmail: "hello@rolequick.com",
+    // rolequick.com stopped resolving after the rename. This fallback is
+    // only used when the backend meta call fails, but it was still a dead
+    // address shipped as the support contact.
+    supportEmail: "mehekbuilds@gmail.com",
   },
 } as const;
 

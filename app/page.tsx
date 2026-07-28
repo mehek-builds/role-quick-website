@@ -27,6 +27,13 @@ const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString
   year: "numeric",
 });
 import { ROLES } from "@/lib/rolesFeed";
+import {
+  FREE_LIMITS,
+  PRO_LIMITS,
+  PRO_MONTHLY_PRICE,
+  PRO_YEARLY_MONTHLY_PRICE,
+  TRIAL_DAYS,
+} from "@/lib/pricing";
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
    works, tonal pillar bands, motion that settles rather than loops (the
@@ -53,7 +60,7 @@ const FAQ_ITEMS = [
   },
   {
     q: "Is my resume safe?",
-    a: "Yes. We use your resume and answers only to fill in your own job applications. We only read the job page you are on. We never sell or share your data, and we never will.",
+    a: "Yes. We use your resume and answers only to fill in your own job applications. In your browser, the extension reads only the job page you are on. On our side, Litos looks at job boards to find you roles, and it opens the company's form itself if you ask it to send. We never sell or share your data, and we never will. The privacy page lists every part of this.",
   },
   /* The support question. Until now the site had no answer to "it broke", and
      no contact route at all outside the data-request address buried in
@@ -360,7 +367,14 @@ export default function Home() {
                   <div className="mt-8 space-y-2.5 text-sm leading-6">
                     <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
                     <p className="text-muted">We attach your new resume.</p>
-                    <p className="text-muted">We skip the questions about race and gender.</p>
+                    {/* "We skip" was never what the code does, and the mockup
+                        beside this line has always shown the truth: the
+                        adapters pick a decline option (ashby.ts's desiredAnswer
+                        falls back to { mode: 'decline' }), or your own stored
+                        answer if you set one. Skipping would leave a required
+                        survey blank and block the form. The store listing and
+                        /start already said it this way. */}
+                    <p className="text-muted">We answer the race and gender questions with &ldquo;I would rather not say&rdquo;, unless you tell us otherwise.</p>
                     {/* "and the send button" came out of this line because it was
                         not true. Opt-in automatic submission ships, so a flat claim
                         that the send button is always yours is the same absolute the
@@ -396,14 +410,18 @@ export default function Home() {
                   </div>
                   {/* The supported list was only ever in the meta
                       description, so the page itself never said where this
-                      works. Fill and submit differ: submission is gated to
-                      the three boards the extension can drive end to end
-                      (lib/api.ts ats_name), so say both, plainly. */}
+                      works. Fill and submit differ, and they differ because
+                      they run in different places: filling is the extension
+                      in your browser, sending is the backend driving the
+                      portal itself. The send list is whatever detectPortal
+                      accepts in the backend's portalSubmission.ts, which
+                      gained SmartRecruiters after this line was written. If
+                      that list changes again, this sentence changes with it. */}
                   <p className="mt-5 text-[13px] leading-6 text-muted">
                     We fill in forms on Greenhouse, Lever, Ashby, Workday and
-                    LinkedIn. We can press send for you on Greenhouse,
-                    Lever and Ashby. Anywhere else we fill it in and you
-                    press send.
+                    LinkedIn. We can press send for you on Greenhouse, Lever,
+                    Ashby and SmartRecruiters. Anywhere else we fill it in and
+                    you press send.
                   </p>
                   <p className="mt-3 text-[13px] text-muted">
                     You can change any of this in Settings.
@@ -440,6 +458,11 @@ export default function Home() {
                     Nobody reads applications. People read emails.
                   </h2>
                   <p className="mt-4 text-base leading-7 text-muted">
+                    {/* Gmail, and only Gmail, is correct here: the draft is
+                        handed off through a Gmail compose URL (extension
+                        src/lib/gmail.ts). Outlook exists in the product only
+                        for reading a sign-in code, never for drafting, so
+                        naming it here would be a new false claim. */}
                     While the form fills, we find people who work there. We
                     write the email and leave it in your Gmail. People from
                     your school answer most, so they come first.
@@ -473,6 +496,53 @@ export default function Home() {
           <div className="relative px-6 py-32">
             <Reveal>
               <RealCaptures />
+            </Reveal>
+          </div>
+        </section>
+
+        {/* The dashboard. The three pillars describe the extension, which was
+            the whole product when they were written. It is now half of it: the
+            backend finds jobs, scores them against the resume, submits to the
+            portal itself, tracks what was sent, and drafts interview questions
+            from the posting. None of that was named anywhere on the marketing
+            site, while the page's own meta description already ended "submit
+            from your dashboard".
+
+            Deliberately a list and not a fourth pillar: the pillars are the
+            act the film performs, and inflating them to four would break the
+            RESUME / FORMS / EMAILS rhythm the whole reel is cut to. Every line
+            here is a shipped route, named in the same words the dashboard nav
+            uses, so a visitor who signs up recognises what they were shown.
+            Nothing aspirational goes in this list. */}
+        <section id="dashboard" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative mx-auto max-w-3xl px-6 py-32">
+            <Reveal>
+              <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                And when you are not on a job page
+              </p>
+              <h2 className="mt-4 text-center text-section font-[450] tracking-[-0.02em] text-ink">
+                The rest of it lives in your dashboard.
+              </h2>
+              <p className="mx-auto mt-4 max-w-md text-center text-base leading-7 text-muted">
+                The extension works on a posting you opened. Everything below
+                happens whether your browser is open or not.
+              </p>
+              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {[
+                  ["Jobs", "We watch for roles that fit and put them in one list. You did not have to find them."],
+                  ["Applications", "Every application in one place, with what is ready, what needs you, and what was sent."],
+                  ["Sending", "Ask Litos to send, and it fills in the company's form itself and waits for their confirmation."],
+                  ["Interviews", "When a job is ready, we pull the questions the posting is really asking, out of the posting."],
+                ].map(([label, body]) => (
+                  <div key={label} className="rq-glass px-6 py-5">
+                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                      {label}
+                    </p>
+                    <p className="mt-2.5 text-sm leading-6 text-muted">{body}</p>
+                  </div>
+                ))}
+              </div>
             </Reveal>
           </div>
         </section>
@@ -518,7 +588,10 @@ export default function Home() {
                   does not support, and it names no date that could quietly
                   expire. Feed honesty rules live in lib/rolesFeed.ts. */}
               <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                {HARD_DEADLINE_COUNT} of the {ROLES.length} jobs we track have a closing date
+                {/* "jobs we track" also names the per-user job monitor inside
+                    the product ("Every job Litos has found for you"), so this
+                    marketing feed needed its own words. */}
+                {HARD_DEADLINE_COUNT} of the {ROLES.length} roles in our open list have a closing date
               </p>
             </Reveal>
           </div>
@@ -546,7 +619,17 @@ export default function Home() {
                   // rather than "one click", because the mechanism is an email
                   // to support, and a promised button would be a small lie on
                   // the one subject where it costs the most.
-                  ["Never sold", "We only read the job page you are on. We never sell your data, and you can delete everything whenever you want."],
+                  //
+                  // "We only read the job page you are on" was true when Litos
+                  // was only an extension. It is not the whole product any
+                  // more: the backend watches job boards to find you roles, it
+                  // drives the employer's portal itself when you ask it to
+                  // send, and if you connect your email it looks for a sign-in
+                  // code. The extension half of the claim is still exactly
+                  // true and still worth saying, so it is scoped rather than
+                  // dropped, and the rest points at /privacy instead of
+                  // pretending it does not exist.
+                  ["Never sold", "In your browser, Litos reads only the job page you are on. On our side it finds jobs for you and, if you ask, sends the application. We never sell your data, and you can delete everything whenever you want."],
                 ].map(([label, body]) => (
                   <div key={label} className="rq-glass px-5 py-5">
                     <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
@@ -572,6 +655,71 @@ export default function Home() {
                   </details>
                 ))}
               </div>
+            </Reveal>
+          </div>
+        </section>
+
+        {/* Pricing. The site called itself free four times and never said what
+            free stops at, while the Chrome Web Store listing published the
+            caps and both prices and the backend enforced them
+            (middleware/quota.ts LIMITS + TRIAL_DAYS). Two public surfaces,
+            two different stories, on the one axis the competitor audit said
+            Litos wins: nine of ten rivals hide or obfuscate price, and this
+            was Litos quietly doing the same.
+
+            Every number here is READ FROM the enforced values, not typed
+            beside them, so the page cannot drift from the server. If the caps
+            move, this section moves with them. */}
+        <section id="pricing" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative mx-auto max-w-3xl px-6 py-32">
+            <Reveal>
+              <h2 className="text-center text-section font-[450] tracking-[-0.02em] text-ink">
+                What it costs.
+              </h2>
+              <p className="mx-auto mt-4 max-w-md text-center text-base leading-7 text-muted">
+                Your first {TRIAL_DAYS} days have everything switched on, and
+                we do not ask for a card. After that you stay on free unless
+                you choose otherwise.
+              </p>
+              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rq-glass px-6 py-6">
+                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                    Free
+                  </p>
+                  <p className="mt-2.5 text-heading font-medium text-ink">$0</p>
+                  <p className="mt-1 text-sm text-muted">Every month, forever.</p>
+                  <ul className="mt-5 space-y-2 text-sm leading-6 text-muted">
+                    <li>{FREE_LIMITS.resumes} tailored resumes a month, one for each application.</li>
+                    <li>{FREE_LIMITS.contacts} checked contacts a month.</li>
+                    <li>{FREE_LIMITS.drafts} written emails a month.</li>
+                  </ul>
+                </div>
+                <div className="rq-glass px-6 py-6">
+                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                    Pro
+                  </p>
+                  <p className="mt-2.5 text-heading font-medium text-ink">
+                    ${PRO_MONTHLY_PRICE}
+                    <span className="text-sm font-normal text-muted"> a month</span>
+                  </p>
+                  <p className="mt-1 text-sm text-muted">
+                    Or ${PRO_YEARLY_MONTHLY_PRICE} a month if you pay for the year.
+                  </p>
+                  <ul className="mt-5 space-y-2 text-sm leading-6 text-muted">
+                    <li>{PRO_LIMITS.resumes.toLocaleString()} tailored resumes a month.</li>
+                    <li>{PRO_LIMITS.contacts} checked contacts a month.</li>
+                    <li>{PRO_LIMITS.drafts.toLocaleString()} written emails a month.</li>
+                  </ul>
+                </div>
+              </div>
+              <p className="mt-6 text-center text-[13px] leading-6 text-muted">
+                Cancelling takes the same number of clicks as signing up. The{" "}
+                <a href="/terms" className="underline decoration-border underline-offset-2 hover:text-ink">
+                  terms, cancellation and refund policy
+                </a>{" "}
+                are written down before you pay, not after.
+              </p>
             </Reveal>
           </div>
         </section>
@@ -651,6 +799,7 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li><a href="/#product" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Product</a></li>
+                <li><a href="/#pricing" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Pricing</a></li>
                 <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
                 <li><a href="/litos-vs-simplify" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Litos vs Simplify</a></li>
                 <li><a href={STORE_URL} className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Add to Chrome</a></li>

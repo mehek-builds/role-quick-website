@@ -72,6 +72,13 @@ export function Header() {
           <a href="/try" className="transition-colors hover:text-ink">
             Try it free
           </a>
+          {/* Price belongs in the nav, not only in a section someone has to
+              scroll past the film to reach. Six of ten competitors have no
+              fetchable pricing page at all; being the exception is only worth
+              anything if it is findable. */}
+          <a href="/#pricing" className="transition-colors hover:text-ink">
+            Pricing
+          </a>
           <a href="/#faq" className="transition-colors hover:text-ink">
             FAQ
           </a>
@@ -143,6 +150,13 @@ export function Header() {
             className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
           >
             Try it free
+          </a>
+          <a
+            href="/#pricing"
+            onClick={closeMenu}
+            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
+          >
+            Pricing
           </a>
           <a
             href="/#faq"
