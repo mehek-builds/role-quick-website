@@ -355,9 +355,10 @@ html {
     height: 100svh;
   }
   /* .rq-siterail, .rq-cine-dust and .rq-grain all left this block on
-     2026-07-28 along with the layers themselves. */
-  .rq-cine-card-4,
-  .rq-cine-hint {
+     2026-07-28 along with the layers themselves. .rq-cine-hint left it when
+     the packet demo moved into the hero frame: the hint element is gone,
+     because the demo now occupies the space it used to sit in. */
+  .rq-cine-card-4 {
     display: none;
   }
   /* Reduced motion gets the product, not the poster. The frame-0 request at
@@ -375,19 +376,26 @@ html {
   .rq-cine-film {
     display: none;
   }
-  /* Phones excluded on purpose. The hero card is taller on mobile because it
-     carries the install handoff (QR + copy link), and it occludes almost all
-     of the capture, so a phone would pay 143KB for a few visible pixels. The
-     film already strides frames down on small screens and Save-Data for the
-     same reason; this is that rule applied to the still.
+  /* The still is the product for a reduced-motion visitor: without it they
+     get film frame 0, which is scattered application pages, the PROBLEM
+     rather than the product.
 
-     Consequence, and it is intended: a reduced-motion phone now gets a plain
-     white ground behind the card rather than the poster. The brand is light,
-     the card carries the whole message there, and white beats a picture of
-     the problem. */
+     Phones excluded on purpose: the hero card occludes almost all of the
+     capture there, so a phone would pay 143KB for a few visible pixels.
+
+     And off again at xl, where the packet demo sits beside the hero card and
+     does this job better: the real product mid-assembly rather than a washed
+     screenshot, and static under reduced motion anyway. Between sm and xl the
+     demo is not in the hero frame at all (app/page.tsx renders it underneath),
+     so the still remains the only product visible up here. */
   @media (min-width: 640px) {
     .rq-cine-still {
       display: block;
+    }
+  }
+  @media (min-width: 1280px) {
+    .rq-cine-still {
+      display: none;
     }
   }
   .rq-blink {

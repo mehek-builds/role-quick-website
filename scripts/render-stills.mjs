@@ -247,10 +247,10 @@ function drawMessy(ctx, px, py, pw, ph) {
     ...extra,
   });
 
-  pen.line("ALEX RIVERA", serif(12.5, { center: true, weight: "bold", underline: true, color: INK, lh: 15 * S }));
+  pen.line("JOHN DOE", serif(12.5, { center: true, weight: "bold", underline: true, color: INK, lh: 15 * S }));
   pen.gap(3 * S);
   pen.line(
-    "alex.r99@email.com | 213-555-0148 | Los Angeles | www.linkedin.com/in/alex-rivera-1997b",
+    "john.d99@email.com | 213-555-0148 | Los Angeles | www.linkedin.com/in/john-doe-1997b",
     serif(7.0, { center: true, style: "italic", color: MUTED, lh: 11 * S })
   );
 
@@ -342,10 +342,10 @@ function drawClean(ctx, px, py, pw, ph, lit) {
       lit
     );
 
-  pen.line("Alex Rivera", sans(12.5, { center: true, weight: "600", color: INK, lh: 15 * S }));
+  pen.line("John Doe", sans(12.5, { center: true, weight: "600", color: INK, lh: 15 * S }));
   pen.gap(2 * S);
   pen.line(
-    "alex.rivera@usc.edu · (213) 555-0148 · linkedin.com/in/alexrivera · github.com/alexrivera",
+    "john.doe@usc.edu · (213) 555-0148 · linkedin.com/in/johndoe · github.com/johndoe",
     sans(6.8, { center: true, color: MUTED, lh: 10 * S })
   );
 
@@ -492,14 +492,14 @@ const CPY = (H - CPH) / 2 + 30;
 writeFileSync(
   join(OUT, "convert_start.png"),
   frame((ctx) => {
-    chip(ctx, W / 2, CPY - 110, "ALEX_RESUME_FINAL_V3.DOCX · SKIPPED BY ATS", DANGER, DANGER_SOFT);
+    chip(ctx, W / 2, CPY - 110, "JOHN_RESUME_FINAL_V3.DOCX · SKIPPED BY ATS", DANGER, DANGER_SOFT);
     drawMessy(ctx, CPX, CPY, CPW, CPH);
   })
 );
 writeFileSync(
   join(OUT, "convert_end.png"),
   frame((ctx) => {
-    chip(ctx, W / 2, CPY - 110, "ALEX_RIVERA_ACME_RESUME.PDF · ATS-READY", POSITIVE, POSITIVE_SOFT);
+    chip(ctx, W / 2, CPY - 110, "JOHN_DOE_ACME_RESUME.PDF · ATS-READY", POSITIVE, POSITIVE_SOFT);
     drawClean(ctx, CPX, CPY, CPW, CPH, false);
   })
 );

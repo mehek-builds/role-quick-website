@@ -101,7 +101,7 @@ export function DraftMockup() {
           platform work looks like that at real scale. Open to a 15-minute
           chat?
           <br />
-          <span className="text-ink">- Alex</span>
+          <span className="text-ink">- John</span>
         </p>
       </div>
       <p className="mt-3 border-t border-border pt-3 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -371,11 +371,11 @@ export function ApplicationFormMockup() {
       </p>
 
       <div className="mt-3.5 grid grid-cols-2 gap-2">
-        <FormField label="First name *" value="Alex" />
-        <FormField label="Last name *" value="Rivera" />
+        <FormField label="First name *" value="John" />
+        <FormField label="Last name *" value="Doe" />
       </div>
       <div className="mt-2 space-y-2">
-        <FormField label="Email *" value="alex.rivera@usc.edu" />
+        <FormField label="Email *" value="john.doe@usc.edu" />
         <div className="grid grid-cols-2 gap-2">
           <FormField label="Phone *" value="(213) 555-0148" />
           <FormField label="Location *" value="Los Angeles, CA" />
@@ -384,12 +384,12 @@ export function ApplicationFormMockup() {
           <p className="text-[10px] font-medium text-muted">Resume / CV *</p>
           <div className="mt-1 flex items-center justify-between gap-2 rounded-lg border border-border bg-white px-2.5 py-1.5">
             <span className="flex min-w-0 items-center gap-1.5 truncate rounded-full bg-brand-soft px-2 py-0.5 text-[10.5px] font-medium text-brand-ink">
-              📎 Alex_Rivera_Northline_Resume.pdf
+              📎 John_Doe_Northline_Resume.pdf
             </span>
             <span className="text-[10px] text-teal-ink">✓</span>
           </div>
         </div>
-        <FormField label="LinkedIn profile" value="linkedin.com/in/alexrivera" />
+        <FormField label="LinkedIn profile" value="linkedin.com/in/johndoe" />
         {/* NOT filled, and this is not a styling choice.
             Litos never answers work-eligibility questions. Every adapter routes
             them through WORK_ELIGIBILITY_QUESTION / workEligibilitySkipReason()
@@ -597,14 +597,14 @@ export function TailoredResumeMockup() {
     <Paper
       chip="Tailored · 5/5 keywords placed"
       chipClass="bg-positive-soft text-positive"
-      note="Alex_Rivera_Northline_Resume.pdf · 1 page"
+      note="John_Doe_Northline_Resume.pdf · 1 page"
     >
       <div className="flex h-full flex-col font-sans">
         <p className="text-center text-[12.5px] font-semibold tracking-tight text-ink">
-          Alex Rivera
+          John Doe
         </p>
         <p className="mt-0.5 text-center text-[6.8px] text-muted">
-          alex.rivera@usc.edu · (213) 555-0148 · linkedin.com/in/alexrivera · github.com/alexrivera
+          john.doe@usc.edu · (213) 555-0148 · linkedin.com/in/johndoe · github.com/johndoe
         </p>
 
         <CSec title="Education" />
@@ -742,7 +742,7 @@ export function ResumeMockup() {
   return (
     <Frame>
       <div className="mx-auto max-w-[280px] rounded-2xl border border-border bg-white p-5 font-mono">
-        <p className="text-sm font-semibold text-ink">Alex Rivera</p>
+        <p className="text-sm font-semibold text-ink">John Doe</p>
         <p className="text-[11px] text-faint">Software Engineer</p>
         <div className="mt-3 h-px w-full bg-border" />
         <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-brand-ink">

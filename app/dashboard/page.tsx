@@ -195,7 +195,7 @@ export default function Home() {
         setJobs(QA_JOBS);
         setTargeting(QA_TARGETING);
         setProfile(QA_PROFILE);
-        setIdentity({ full_name: "Alex Rivera", email: "qa@trylitos.com" });
+        setIdentity({ full_name: "John Doe", email: "qa@trylitos.com" });
         setApplicationProfile({});
         setPackets(QA_PACKETS);
         setOutreach(QA_OUTREACH);

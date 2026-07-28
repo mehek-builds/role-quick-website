@@ -1,5 +1,5 @@
 /* Canned demo universe for /try (design doc 2026-07-08, premise 4: reuse the
-   Alex Rivera canon, never invent a second demo world). All canned content is
+   John Doe canon, never invent a second demo world). All canned content is
    honest fiction per DESIGN.md; the canned posting is the canon Notion listing
    the receipt already uses.
 
@@ -17,8 +17,8 @@ export const CANNED_POSTING = {
 
 /* The canon artifacts, matching the film props and PacketDemo rows. */
 export const CANNED_RESUME = {
-  filename: "Alex_Rivera_Notion_Resume.pdf",
-  name: "Alex Rivera",
+  filename: "John_Doe_Notion_Resume.pdf",
+  name: "John Doe",
   line: "CS @ USC · Los Angeles, CA",
   atsCoverage: 92,
   skills: ["TypeScript", "React", "Postgres", "Real-time sync"],
@@ -30,14 +30,14 @@ export const CANNED_RESUME = {
 };
 
 export const CANNED_FIELDS = [
-  { label: "First name", value: "Alex" },
-  { label: "Last name", value: "Rivera" },
-  { label: "Email", value: "alex.rivera@usc.edu" },
+  { label: "First name", value: "John" },
+  { label: "Last name", value: "Doe" },
+  { label: "Email", value: "john.doe@usc.edu" },
   { label: "Phone", value: "(213) 555-0148" },
   { label: "Location", value: "Los Angeles, CA" },
   { label: "University", value: "University of Southern California" },
   { label: "Work authorization", value: "Yes" },
-  { label: "LinkedIn", value: "linkedin.com/in/alexrivera" },
+  { label: "LinkedIn", value: "linkedin.com/in/johndoe" },
   { label: "How did you hear about us?", value: "Company careers page" },
   { label: "Voluntary self-identification", value: "Decline to self-identify" },
 ];

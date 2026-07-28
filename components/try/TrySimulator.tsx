@@ -20,7 +20,7 @@ import { MobileSendLink } from "@/components/MobileSendLink";
 /* /try - the drive-it-yourself demo (design doc 2026-07-08).
    The visitor clicks the extension's real verbs: Detect -> Generate ->
    Fill -> Review. Submit stays visibly disabled: waiting on you.
-   Two paths converge on this one assembly screen: canned (Alex Rivera
+   Two paths converge on this one assembly screen: canned (John Doe
    canon) and real (paste your resume, desktop only). Every failure of
    the real path lands back on the canned data - no dead ends. */
 
@@ -100,7 +100,7 @@ export function TrySimulator({
         setNotice(
           data.error === "too_long"
             ? "That is too long. Make it shorter and try again."
-            : "That does not look like a resume. Paste your resume, or watch it run on Alex's.",
+            : "That does not look like a resume. Paste your resume, or watch it run on John's.",
         );
         return;
       } else {
@@ -109,13 +109,13 @@ export function TrySimulator({
         setMode("canned");
         setNotice(
           data.reason === "rate_limited"
-            ? "You have used all your tries today. This is Alex's."
-            : "Live tries are down right now. This is Alex's.",
+            ? "You have used all your tries today. This is John's."
+            : "Live tries are down right now. This is John's.",
         );
       }
     } catch {
       setMode("canned");
-      setNotice("Live preview is down. This is Alex's application.");
+      setNotice("Live preview is down. This is John's application.");
     }
     setGenerating(false);
     setPasteOpen(false);
@@ -167,7 +167,7 @@ export function TrySimulator({
   /* The simulated job page IS the posting you're cycling (Mehek, 2026-07-08:
      the back-and-forth lives on the job page itself). While browsing (before a
      path is chosen) and in the real path, the left page + URL bar reflect the
-     selected real job; the canned "watch on Alex's" example keeps the Notion
+     selected real job; the canned "watch on John's" example keeps the Notion
      canon so its packet stays consistent. */
   const realJob = jobs[jobIdx];
   const browsing = step === "chooser";
@@ -555,9 +555,9 @@ function Chooser({
     <div className="space-y-2.5">
       <p className="text-[13px] leading-6 text-muted">
         Upload your resume to build an application for this role, or watch a
-        sample on Alex&apos;s.
+        sample on John&apos;s.
       </p>
-      <VerbButton onClick={onCanned}>Watch it on Alex&apos;s</VerbButton>
+      <VerbButton onClick={onCanned}>Watch it on John&apos;s</VerbButton>
       {/* Real path is desktop-only: phones can't install the extension anyway. */}
       <button
         onClick={() => setPasteOpen(true)}
