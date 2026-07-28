@@ -131,7 +131,7 @@ export default async function BrowseJobs({
 
         {q && ok && (
           <p className="mt-4 font-mono text-machine text-muted">
-            {countLabel(total)} {total === 1 ? "match" : "matches"} for
+            {countLabel(total)} {total === 1 ? "match for" : "matches for"}{" "}
             &ldquo;{q}&rdquo;.{" "}
             <a href="/browse-jobs" className="underline underline-offset-2 hover:text-ink">
               Clear
