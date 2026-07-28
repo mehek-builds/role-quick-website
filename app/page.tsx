@@ -367,14 +367,24 @@ export default function Home() {
                   <div className="mt-8 space-y-2.5 text-sm leading-6">
                     <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
                     <p className="text-muted">We attach your new resume.</p>
-                    {/* "We skip" was never what the code does, and the mockup
-                        beside this line has always shown the truth: the
-                        adapters pick a decline option (ashby.ts's desiredAnswer
-                        falls back to { mode: 'decline' }), or your own stored
-                        answer if you set one. Skipping would leave a required
-                        survey blank and block the form. The store listing and
-                        /start already said it this way. */}
-                    <p className="text-muted">We answer the race and gender questions with &ldquo;I would rather not say&rdquo;, unless you tell us otherwise.</p>
+                    {/* This line has now been wrong twice, in opposite
+                        directions, so here is what the code does.
+
+                        The extension's setup screen ASKS: an optional
+                        "Questions about race and gender" block (gender, race,
+                        disability) plus veteran status, saved to eeo_prefs.
+                        The adapters answer with what you gave. The decline is
+                        the FALLBACK for the fields you left blank, which the
+                        setup screen states in those words: "Leave these blank
+                        and Litos picks 'I would rather not say' on every
+                        application."
+
+                        So "we skip them" (before 2026-07-28) was wrong, and
+                        "we answer them with I would rather not say, unless you
+                        tell us otherwise" (same day) was also wrong: it made
+                        the fallback the headline and the student's own answer
+                        the exception. Your answer is the headline. */}
+                    <p className="text-muted">We answer the race and gender questions with what you told us at setup. Leave them blank and we pick &ldquo;I would rather not say&rdquo;.</p>
                     {/* "and the send button" came out of this line because it was
                         not true. Opt-in automatic submission ships, so a flat claim
                         that the send button is always yours is the same absolute the

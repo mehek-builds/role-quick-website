@@ -187,15 +187,31 @@ export function RefusalList() {
       what: "Visa sponsorship",
       why: "Same reason. We never put an answer in this field for you.",
     },
+    /* This row used to read: 'Race, gender, disability. Yours. We select
+       "prefer not to answer" and store nothing.' Under a heading that says
+       "What we won't keep", that was the wrong claim in the wrong table.
+       The extension's setup screen offers these as optional fields and keeps
+       what you enter in eeo_prefs, so Litos can answer with your own words.
+       Blank is what produces the decline. Left in the list because the
+       refusal is real, and stated as the choice it actually is. */
     {
       what: "Self-identification",
-      why: 'Race, gender, disability. Yours. We select "prefer not to answer" and store nothing.',
+      why: 'Race, gender, disability. Optional, and only if you fill them in at setup. Leave them blank and we pick "prefer not to answer" every time.',
     },
   ];
   return (
     <div className="overflow-hidden rounded-inner border border-border">
       <div className="border-b border-border bg-surface-alt px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
-        What we won&apos;t keep
+        {/* Was "What we won't keep", which was wrong for all three rows: the
+            setup screen collects and stores every one of them (citizenship
+            and sponsorship on the application profile, self-ID in eeo_prefs).
+            "What we won't answer for you" was the next attempt and is wrong
+            for the third row, because self-ID IS answered, from what you
+            entered. The one thing true of all three is that Litos never
+            supplies an answer you did not give it: the eligibility fields are
+            stored "for your reference only. Never used to answer forms", and
+            self-ID is your words or a decline, never an inference. */}
+        What we never guess
       </div>
       {rows.map((r) => (
         <div

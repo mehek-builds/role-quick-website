@@ -173,8 +173,12 @@ export default function Privacy() {
 
         <Section title="Questions about race and gender">
           <p>
-            Litos always picks "I would rather not say" on these. It only
-            answers them if you tell it to, inside the extension.
+            The extension's setup screen asks for these, and they are
+            optional. Whatever you enter is stored and used to answer the same
+            questions on application forms, so you never type them twice.
+            Leave them blank, which is what happens if you skip that section,
+            and Litos picks "I would rather not say" every time. It never
+            works an answer out from anything else about you.
           </p>
         </Section>
 
