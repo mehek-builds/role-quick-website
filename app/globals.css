@@ -401,13 +401,11 @@ html {
   animation: dashboard-drawer-backdrop-in 180ms ease-out;
 }
 
-/* The reduced-motion product still is off under full motion: the film and
-   the Application Roll own the opening, and a still underneath them would
-   dissolve into the roll as a visible cut. Turned on in the reduced-motion
-   block below, which is the only place it is meant to appear. */
-.rq-cine-still {
-  display: none;
-}
+/* .rq-cine-still is gone entirely, markup and rules. It was the
+   reduced-motion product still; the packet demo now sits in the hero frame
+   and shows the product at the same breakpoints, statically under reduced
+   motion. See the reduced-motion block below and CinematicHero's stage
+   layer 1c for the full reasoning. */
 
 @media (prefers-reduced-motion: reduce) {
   html {
@@ -418,9 +416,11 @@ html {
   .rq-cine {
     height: 100svh;
   }
+  /* .rq-cine-hint was in this list until the packet demo moved into the hero
+     frame; the hint element is gone, because the demo occupies the space it
+     used to sit in. */
   .rq-cine-card-4,
   .rq-siterail,
-  .rq-cine-hint,
   .rq-cine-dust {
     display: none;
   }
@@ -442,21 +442,19 @@ html {
   .rq-cine-film {
     display: none;
   }
-  /* Phones excluded on purpose. The hero card is taller on mobile because it
-     carries the install handoff (QR + copy link), and it occludes almost all
-     of the capture, so a phone would pay 143KB for a few visible pixels. The
-     film already strides frames down on small screens and Save-Data for the
-     same reason; this is that rule applied to the still.
+  /* The still is now OFF at every width, and the reason it existed is the
+     reason it goes. It shipped so that the one visitor who cannot watch the
+     film would still see the product above the fold instead of frame 0's
+     scattered pages. The packet demo now sits in the hero frame and does
+     exactly that job, better: it is the real product on a real posting rather
+     than a washed screenshot, and under reduced motion PacketDemo renders its
+     finished state, so it is static too.
 
-     Consequence, and it is intended: a reduced-motion phone now gets a plain
-     white ground behind the card rather than the poster. The brand is light,
-     the card carries the whole message there, and white beats a picture of
-     the problem. */
-  @media (min-width: 640px) {
-    .rq-cine-still {
-      display: block;
-    }
-  }
+     The overlap was also exact. The still was sm+ only (a phone's hero card
+     occludes it), and sm+ is precisely where the demo sits in the frame. Left
+     on, the two would stack: a 143KB dashboard capture under a 72% white veil
+     directly behind a demo card showing the same product. The phone keeps the
+     plain white ground it already had. */
   .rq-blink {
     animation: none;
     opacity: 0;

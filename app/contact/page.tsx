@@ -107,7 +107,7 @@ export default function Contact() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-                placeholder="Alex Rivera"
+                placeholder="John Doe"
               />
 
               <label htmlFor="c-email" className="mt-6 block text-[13px] text-ink">

@@ -23,8 +23,13 @@ const FILM_CHAPTERS = [
 
 /* Sections below the film, in scroll order. ids live in app/page.tsx. */
 const SECTIONS = [
-  { id: "#product", label: "Watch it work" },
-  { id: "#odds", label: "The odds" },
+  /* "#product" / "Watch it work" is gone from the rail. It used to be the
+     first section below the film; the packet demo it named now lives in the
+     hero, so the id resolves to the top of the page and the rail would have
+     opened its section list with an entry pointing behind the viewer. The
+     film's own "00 · Job found" chapter already covers that stretch.
+     "#odds" / "The odds" is gone too: the 250-applicant section it named was
+     cut from the page, so the rail is the film, then "The robot" first. */
   { id: "#formats", label: "The robot" },
   { id: "#documents", label: "01 · Resume" },
   { id: "#autofill", label: "02 · Forms" },

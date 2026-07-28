@@ -6,8 +6,7 @@ import {
   ResumeMatchDemo,
 } from "@/components/Mockups";
 import { OutreachDemo } from "@/components/OutreachDemo";
-import { ApplicantField } from "@/components/ApplicantField";
-import { Reveal, CountUp } from "@/components/Motion";
+import { Reveal } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { Wash } from "@/components/cinema/Wash";
@@ -183,8 +182,12 @@ export default function Home() {
           the focus rings back that up, but a page with fixed chrome and a
           long film needs the standard escape: one skip link, visible only
           when focused. */}
+      {/* Was #product, whose whole value here was "skip the film, land on real
+          content". #product is now the film wrapper itself, so that link would
+          have skipped to the thing it exists to skip. #formats is the first
+          section past the hero with an id at every breakpoint. */}
       <a
-        href="#product"
+        href="#formats"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:inline-flex focus:min-h-[44px] focus:items-center focus:rounded-full focus:bg-ink focus:px-5 focus:py-3 focus:text-sm focus:font-medium focus:text-white"
       >
         Skip to content
@@ -201,66 +204,44 @@ export default function Home() {
         <CinematicPage />
         <CinematicHero storeUrl={STORE_URL} />
 
-        {/* Chapter: the receipt. The film hands off to the live demo — the
-            chips bridge and the packet assembling in real time. */}
-        <section id="product" className="relative scroll-mt-24">
+        {/* The receipt chapter used to be a full section here: mono eyebrow,
+            three PillarChips, the packet demo, and an "Or try it free" link.
+            The demo moved INTO the hero frame (CinematicHero) so the claim and
+            the proof share one viewport, and the rest went with it or was cut:
+            the eyebrow travelled up with the demo it describes, the chips were
+            dropped as a second table of contents for targets the demo's own
+            rows already link to, and "Or try it free" was a third copy of a
+            link the hero and the header both already carry.
+
+            What is left is everything too narrow for two columns. The hero
+            runs copy-left / demo-right, which needs about 1140px of width to
+            keep both halves legible; below that the grid collapses and the
+            demo would be back to stacking under the copy, where it does not
+            fit (stacked, it is 700px against a 618px hero card in an 812px
+            viewport). So phones, tablets and small laptops get the next-best
+            thing: the same demo immediately below, with no band, no Wash
+            change and no section heading, so it reads as the hero continuing
+            rather than as a new section starting. xl:hidden, matching the
+            breakpoint where the hero itself stops rendering it. */}
+        <section className="relative xl:hidden">
           <Wash soft />
-          <div className="relative px-6 pt-20">
-          {/* sr-only: the big number and the assembling packet ARE the
-              visible headings here. This is for the document outline, so
-              screen readers and crawlers get a complete one. */}
-          <h2 className="sr-only">Watch one application assemble</h2>
-          <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-            Nine seconds, start to finish
-          </p>
-          {/* Hero-to-body bridge: the three pillars as a table of contents,
-              one small first click before the big ask. Pillar color marks
-              the feature it links to, nothing else. */}
-          <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
-            <PillarChip href="#documents" icon="resume" bg="bg-brand-soft" tone="text-brand-ink">
-              Resume
-            </PillarChip>
-            <PillarChip href="#autofill" icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">
-              Forms
-            </PillarChip>
-            <PillarChip href="#outreach" icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">
-              Emails
-            </PillarChip>
-          </div>
-          <div className="pt-16">
-            <div data-demo><PacketDemo /></div>
-          </div>
-          <p className="pb-36 pt-6 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            <a
-              href="/try"
-              className="inline-flex min-h-[44px] items-center px-3 transition-colors hover:text-ink"
-            >
-              Or try it free →
-            </a>
-          </p>
+          <div className="relative px-6 pb-28 pt-10">
+            {/* sr-only: the assembling packet IS the visible heading here.
+                This is for the document outline, so screen readers and
+                crawlers get a complete one. */}
+            <h2 className="sr-only">Watch one application assemble</h2>
+            <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+              Nine seconds, start to finish
+            </p>
+            <div className="pt-8">
+              <div data-demo><PacketDemo /></div>
+            </div>
           </div>
         </section>
 
-        {/* The number. Background changes mark section boundaries from here
-            down (deep-dive pacing rule) — no hairline dividers between bands. */}
-        <section id="odds" className="relative">
-          <Wash tint="warm" soft />
-          <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
-            <Reveal>
-              <h2 className="sr-only">How many people you are up against</h2>
-              <p className="font-mono text-display tracking-[-0.04em] text-ink">
-                <CountUp to={250} />
-              </p>
-              <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
-                people apply for one job. Six of them get an interview. One
-                gets the job. We help yours stand out.
-              </p>
-              <ApplicantField />
-            </Reveal>
-          </div>
-        </section>
-
-        {/* ATS formatting: mess in, machine-readable out */}
+        {/* ATS formatting: mess in, machine-readable out. Background changes
+            mark section boundaries from here down (deep-dive pacing rule),
+            no hairline dividers between bands. */}
         <section id="formats" className="relative">
           <Wash soft />
           <div className="relative mx-auto max-w-5xl px-6 py-36">
@@ -273,7 +254,7 @@ export default function Home() {
                 Job sites scan your resume with software. If it cannot read
                 yours, no person ever sees it. We build one it can read.
               </p>
-              {/* Alex Rivera is a sample applicant, and the numbers inside
+              {/* John Doe is a sample applicant, and the numbers inside
                   that resume ("80 students", "800 student users") are his,
                   not ours. Unlabelled, a skimmer reads them as Litos proof.
                   Says "applicant", not "student": this label is the one line
@@ -310,7 +291,7 @@ export default function Home() {
                     work first, in their words. A robot reads it before a
                     person does, so we build one it can read.
                   </p>
-                  {/* Alex Rivera is a sample applicant, and the numbers inside
+                  {/* John Doe is a sample applicant, and the numbers inside
                       that resume are his, not ours. Unlabelled, a skimmer reads
                       them as Litos proof. Says "applicant", not "student": this
                       label is the one line that names who the example IS, so

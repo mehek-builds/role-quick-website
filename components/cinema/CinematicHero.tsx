@@ -6,6 +6,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
 import { MobileSendLink } from "@/components/MobileSendLink";
+import { PacketDemo } from "@/components/PacketDemo";
 import { ReturningVisitor, useHasSeenFilm } from "@/components/ReturningVisitor";
 import { track } from "@/lib/analytics";
 
@@ -65,8 +66,24 @@ const CHAPTERS = [
   { at: 0.92, label: "04 · Ready to send" },
 ];
 
+/* Hero layout: copy left, packet demo right, on one row.
+
+   Two alternatives were built and measured against this one and both are gone
+   (Mehek's call). "combined" put both inside a single glass card: it read as
+   one object, but the card had to contain both children plus its own padding,
+   so its bottom border was always the first thing over the fold, and it
+   covered the Application Roll. "stacked" put the demo under the copy and
+   needed about 890px of viewport height, so it fought the fold on every
+   laptop. Split is the only arrangement where the two halves are not
+   competing for the same vertical budget, which is why the demo can run at
+   full size here with no transform.
+
+   Below xl there is not room for two columns; the demo drops out and
+   app/page.tsx renders it directly beneath instead. */
+
 export function CinematicHero({ storeUrl }: { storeUrl: string }) {
   const hasSeenFilm = useHasSeenFilm();
+
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const filmRef = useRef<HTMLCanvasElement>(null);
@@ -511,6 +528,39 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     { scope: wrapRef }
   );
 
+  /* The packet, assembling. One definition, placed differently per layout:
+     inside the glass card for "combined", as its own block for the other two.
+     The receipt line travels with it because it describes it.
+
+     The height-stepped transform is only needed where the demo sits UNDER the
+     copy and the two compete for the same vertical budget. Split puts them
+     side by side, where the pair is roughly 410px tall instead of 800, so it
+     renders at full size. */
+  const demoNode = (
+    /* Capped at 580px, down from the 674 it was rendering at, with the copy
+       column taking the difference (Mehek's call). 540 was the first attempt
+       and it went too far: it forced the extension panel down to a width where
+       its own rows truncated, and the panel is the half that has to stay
+       legible. 600 is what the panel's own content sets as the floor, so the
+       reduction lands nearer 11% than 20%; the panel showing every row in full
+       was worth the difference.
+       Done as a width cap rather than a transform on purpose. A transform
+       leaves the layout box at full size, so the grid row stays as tall and
+       as wide as the unscaled demo and has to be clawed back with negative
+       margins that go stale the moment the demo's content changes. A max-width
+       is the real size, and everything inside it reflows honestly. */
+    <div className="rq-enter hidden w-full xl:block">
+      {/* The "Nine seconds, start to finish" eyebrow that sat here is gone
+          (Mehek's call). It offset the demo from the top of the row by its own
+          height plus its margin, so the two boxes could never start on the
+          same line no matter what else was tuned. The claim was not lost: the
+          panel's own header says "Ready · 9 seconds" the moment the packet
+          lands, which is the receipt stating it at the point it becomes true
+          rather than a label promising it in advance. */}
+      <div data-demo className="h-full xl:max-w-[600px]"><PacketDemo /></div>
+    </div>
+  );
+
   return (
     <>
       {/* THE STAGE: the film and its atmosphere, fixed behind the entire
@@ -532,7 +582,27 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             className="absolute inset-0 h-full w-full opacity-0"
           />
         </div>
-        {/* 1c · the static product still, reduced motion only.
+        {/* 1c · REMOVED: the static product still, which was reduced-motion
+            only. It existed so a reduced-motion visitor saw the product above
+            the fold rather than film frame 0 (scattered pages: the problem,
+            not the product). The packet demo in the hero frame now does that
+            job at the same breakpoints, so this was a second, weaker picture
+            of the product sitting directly behind the first. See the
+            reduced-motion block in globals.css for the full reasoning.
+
+            Kept below in comment form only, delete outright once the merged
+            hero has been through a design pass and nobody wants it back:
+
+            <div className="rq-cine-still absolute inset-0">
+              <div className="absolute inset-x-0 bottom-0 top-[14svh]">
+                <img src="/product/dashboard-emails.png" alt=""
+                     className="h-full w-full object-contain object-top" />
+              </div>
+              <div className="absolute inset-0 bg-white/[0.72]" />
+            </div>
+        */}
+        {/* The original block's own notes, preserved because they record two
+            real mistakes and are worth not repeating if it ever comes back:
             Until now a reduced-motion visitor got film frame 0 behind the
             hero card, and frame 0 is scattered application pages: the
             PROBLEM, not the product. So the one audience that cannot watch
@@ -549,32 +619,14 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             tint and vignette layers so the stage's own atmosphere applies to
             it unchanged. The veil is what keeps the rq-glass hero card
             legible over a dense screenshot, the same problem the 2026-07-24
-            calibration pass solved with opacity rather than more frost. */}
-        <div className="rq-cine-still absolute inset-0">
-          {/* object-contain, not cover, and a landscape capture rather than the
-              portrait extension one. The first attempt used extension-job.png
-              (598x900) at object-cover: on a 1600px stage that scales to about
-              1600x2400, so the viewer got one blown-up fragment with 60px type
-              and no way to tell what the product was. Cover crops to fill;
-              a screenshot has to stay whole to be legible.
+            calibration pass solved with opacity rather than more frost.
 
-              Pushed below the header pill on purpose. Anchored at the top, the
-              capture's own product nav (Litos / Home / Jobs / Applications /
-              Emails) landed a few pixels under the site's real nav, so the page
-              showed two Litos wordmarks and two navigations at once and read as
-              a rendering fault. Starting it at 14svh keeps the two chromes
-              apart and lets the rows, which are the part that shows what the
-              product does, sit in the open. */}
-          <div className="absolute inset-x-0 bottom-0 top-[14svh]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/product/dashboard-emails.png"
-              alt=""
-              className="h-full w-full object-contain object-top"
-            />
-          </div>
-          <div className="absolute inset-0 bg-white/[0.72]" />
-        </div>
+            Two sizing lessons from it, if it is ever rebuilt: object-contain
+            rather than object-cover (cover crops a screenshot into an
+            illegible blown-up fragment), and offset from the top (anchored at
+            0 the capture's own product nav landed under the site's real nav,
+            so the page showed two Litos wordmarks at once and read as a
+            rendering fault). */}
         {/* 5 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
         {/* 2 · paper dust */}
@@ -592,7 +644,11 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     {/* 200svh of scroll = the opening act: hero → film swirl → packet finale,
        then it hands off to the real pinned sections. Reduced motion collapses
        this to one viewport in CSS (globals.css). */}
-    <div ref={wrapRef} className="rq-cine relative h-[200svh]">
+    {/* id="product" moved here from the section below, which no longer exists:
+        the packet demo WAS that section, and the header's "Product" link plus
+        the footer sitemap both point at it. It now resolves to the top of the
+        page, which is where the product demo actually is. */}
+    <div ref={wrapRef} id="product" className="rq-cine relative h-[200svh]">
       <div className="sticky top-0 h-svh w-full overflow-hidden">
 
         {/* The chapter caption that used to sit here said "Job found" at the same
@@ -600,9 +656,68 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             "00 · Job found" down the right edge (audit finding 46). One machine
             voice per moment; the rail is the one that persists, so it wins. */}
 
-        {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
-        <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:top-[18svh]">
-          <div className="rq-glass rq-enter mx-auto max-w-2xl px-7 py-10 text-center sm:px-12 sm:py-12">
+        {/* glass card 0, the hero. Server-rendered, visible at first paint.
+            The ask and the proof are ONE frame (Mehek's call 2026-07-28): the
+            packet demo used to open the #product section a full viewport below
+            this card, so the first thing a visitor saw was a claim and the
+            thing that backs it was behind a scroll. It now sits inside this
+            same container, which means it also inherits the container's exit
+            tween, headline and packet lift away together as one object
+            rather than as two things that happen to be near each other.
+
+            The whole frame is a centred flex column at sm+ instead of a card
+            pinned to top-[18svh]: with two stacked children a fixed top offset
+            put the demo's lower rows under the fold on a 13-inch laptop, and
+            this viewport is `overflow-hidden`, so under-the-fold here means
+            permanently cut off, not scrolled to. Centring lets the pair
+            balance in whatever height the viewport actually has.
+
+            justify-START, not center, and the 96px top offset is measured
+            rather than chosen: the header pill is fixed at top-4 and 62px
+            tall, so its bottom edge is at 78px and content begins clear of
+            it. Centred, the pair overflowed its padded box on any viewport
+            shorter than about 890px, and a flex overflow distributes BOTH
+            ways, so the hero card slid up underneath the fixed header, which
+            reads as a rendering fault rather than as a tight fit. Anchoring
+            the top means the overflow can only ever go one direction, down,
+            where it is the fold and the fold is the accepted cost here. */}
+        {/* Vertically centred: two columns side by side are far shorter than
+            the same content stacked, so there is slack to centre INTO. The
+            stacked layouts had to anchor to the top to keep the card from
+            sliding under the fixed header on short viewports; this one has
+            room to spare at every height tested. */}
+        <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:inset-0 sm:flex sm:flex-col sm:items-center sm:justify-center sm:px-8 sm:pt-6 lg:px-10">
+        {/* The copy column takes 520 of the 1152 and the demo takes what is
+            left. Mehek's call: the headline is the thing being read and the
+            demo is the thing being glanced at, so the split should not have
+            been near-even.
+
+            items-stretch (the grid default), not items-start. With the receipt
+            eyebrow gone the two boxes start on the same line, and stretching
+            makes them end on it too: one row of two equal panels rather than a
+            tall one next to a short one. */}
+        <div className="mx-auto grid w-full max-w-6xl gap-8 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] xl:gap-10">
+          {/* max-w-2xl until the grid actually splits. Below xl the two
+              columns collapse to one and the card would otherwise stretch to
+              the full max-w-6xl of the grid, giving a 1152px-wide text card
+              with a measure far past the ~660px the type scale allows. At xl
+              the cap comes off and the grid column governs the width. */}
+          {/* max-w-2xl until the grid actually splits. Below xl the two
+              columns collapse to one and the card would otherwise stretch to
+              the full max-w-6xl of the grid, giving a 1152px-wide text card
+              with a measure far past the ~660px the type scale allows. At xl
+              the cap comes off and the grid column governs the width.
+
+              justify-between at xl, not justify-center. The card is stretched
+              to the demo's height, which leaves roughly 230px of slack, and
+              centring pooled all of it into two dead bands above and below a
+              clump of text. Distributing instead gives the card a top, a
+              middle and a bottom: the category line sits at the head, the
+              headline and its sub hold the centre, and the actions sit on the
+              floor, level with the demo's own send button across the gap.
+              Below xl the card is only as tall as its content, so there is no
+              slack to distribute and this collapses back to a plain stack. */}
+          <div className="rq-glass rq-enter mx-auto flex w-full max-w-2xl flex-col justify-center gap-8 px-7 py-10 text-center sm:px-9 sm:py-9 xl:max-w-none xl:justify-between xl:gap-6 xl:px-10 xl:py-12 xl:text-left">
             {/* Nothing above the fold said what Litos IS: the H1 names a
                 speed and the sub names a mechanism, so a first-time visitor
                 had to infer the category. This is the same line the Chrome
@@ -611,17 +726,39 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 version narrowed it to "students and new grads", which read
                 as a product nobody else was allowed to use. Students and new
                 grads are one audience Litos serves, not the only one. */}
-            <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Free Chrome extension for job seekers
             </p>
-            <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
-              Apply <span className="text-brand-ink">in seconds.</span>
-            </h1>
-            <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted">
-              Nothing is reused. Every job gets its own resume, form, and
-              email.
-            </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+
+            {/* The middle band: the claim and the one line that explains it.
+                Grouped so justify-between treats them as a single object;
+                loose, they would have drifted apart into the slack. */}
+            <div>
+              {/* In the split column the line wraps, and left to itself it
+                  wrapped as "Apply in" / "seconds.", which breaks the coloured
+                  phrase across two lines and puts a preposition at the end of
+                  the first. Forcing the break at the phrase boundary keeps
+                  "in seconds." whole, which is the half the colour marks. */}
+              <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
+                Apply <span className="text-brand-ink xl:block">in seconds.</span>
+              </h1>
+              {/* Split runs the copy column left-aligned, so the centring
+                  helpers have to release at xl or the text sits ragged-left
+                  inside a centred box. */}
+              <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted xl:mx-0">
+                Nothing is reused. Every job gets its own resume, form, and
+                email.
+              </p>
+            </div>
+
+            {/* The floor: everything actionable, grouped so it stays together
+                at the bottom edge rather than trailing off the middle band. */}
+            <div>
+            <div
+              className={`flex flex-col items-center gap-4 sm:flex-row ${
+                "justify-center xl:justify-start"
+              }`}
+            >
               {/* Desktop only: a phone cannot install a Chrome extension, and the
                   handoff card right below this says exactly that. Leading a phone
                   with an action it cannot take was audit finding 47. */}
@@ -657,6 +794,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 handoff itself, and give a real door instead of a dead end. */}
             <ReturningVisitor />
             <MobileSendLink source="hero" className="mt-6 sm:hidden" />
+            </div>
             {/* The privacy caption that used to sit here (collection, no-sale,
                 deletion) moved into the refusal trio in #faq, app/page.tsx.
                 Mehek's call 2026-07-28: two body blocks of near-equal length
@@ -666,17 +804,55 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 proof at the decision point (S26, under the hero CTA); /try
                 and the footer still carry /privacy. */}
           </div>
+
+          {/* The packet, assembling, in the same frame as the ask. This is the
+              proof the hero lost on 2026-07-28 when the privacy caption moved
+              into the #faq refusal trio and the ledger recorded "there is no
+              longer proof under the hero CTA" as a known cost. It is better
+              proof than the caption was: the caption asserted a policy, this
+              shows the product doing the thing the headline claims, on a real
+              posting, against the receipt clock the rest of the site runs on.
+
+              The mono line is the receipt proof, moved up with the demo it
+              describes. The three PillarChips that used to sit between them
+              did NOT come along: the demo's own finished rows are already
+              buttons that jump to those same three pillar sections (DESIGN.md
+              motion: "the receipt doubles as the page's table of contents"),
+              so carrying both would put two tables of contents for the same
+              three targets in one viewport, against say-once. The pillar
+              colour bridge survives in the rows' own coloured threads.
+
+              hidden below sm, and this is the one place the merge does not
+              hold on a phone. Stacked, the demo is 700px and the mobile hero
+              card is 618px (it carries the install handoff) inside an 812px
+              viewport, so both in one frame is not arithmetic that works. The
+              phone gets it immediately below instead, with no section chrome,
+              which is as close to the same frame as a phone allows.
+
+              Split hides it below xl, and xl rather than lg is measured, not
+              picked. The demo needs about 600px to stay legible (a 340px
+              fixed panel plus a job column wide enough to read), the copy
+              column needs about 380, and with the gap and page padding that
+              is roughly 1140px of width. At lg (1024) the job column got
+              126px: "Notion · San Francisco" broke over three lines and
+              "Apply for this job" over four, which looks like a bug rather
+              than a narrow layout. Below xl the demo drops out here and
+              app/page.tsx renders it directly underneath instead. */}
+          {demoNode}
+        </div>
         </div>
 
-        {/* scroll hint */}
-        {/* Hidden on mobile: the hero card is taller there (it carries the
-            install handoff) and the hint collided with the privacy line. */}
-        <div className="rq-cine-hint absolute inset-x-0 bottom-8 hidden flex-col items-center gap-2 sm:flex" aria-hidden>
-          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            Scroll
-          </p>
-          <span className="block h-8 w-px animate-pulse bg-faint" />
-        </div>
+        {/* The "Scroll" hint that used to sit at bottom-8 is GONE, and that is
+            a deletion rather than an oversight. It only ever rendered at sm+,
+            which is exactly the breakpoint where the demo now occupies the
+            lower half of the frame, so the two overlapped outright. The demo
+            is also the better affordance: it is the one perpetually-moving
+            element on the page, it sits at the fold, and a thing that moves at
+            the fold reads as "there is more here" without a label. The site
+            rail still tracks position down the right edge.
+
+            The GSAP timeline that faded this on scroll is guarded with
+            `if (hint)`, so it no-ops rather than throwing. */}
 
         <div className="rq-cine-card-4 invisible absolute inset-x-0 bottom-[10svh] px-6 opacity-0 sm:bottom-[12svh]">
           <div className="rq-glass mx-auto max-w-xl px-7 py-9 text-center sm:px-10">
@@ -694,8 +870,12 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               >
                 Add to Chrome, it&apos;s free
               </a>
+              {/* Was #product. That anchor now resolves to the top of the
+                  page, so at 68% through the film this button would have
+                  thrown the viewer back to the start. #documents is the first
+                  pillar deep-dive and the next thing forward. */}
               <a
-                href="#product"
+                href="#documents"
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
               >
                 See how it works
