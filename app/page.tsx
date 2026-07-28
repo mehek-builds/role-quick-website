@@ -281,7 +281,26 @@ export default function Home() {
                   </h2>
                   <p className="mt-2.5 text-sm leading-6 text-muted">
                     We read what the job asks for. Then we put your best
-                    work first, in their words.
+                    work first, in their words. A robot reads it before a
+                    person does, so we build one it can read.
+                  </p>
+                  {/* Alex Rivera is a sample applicant, and the numbers inside
+                      that resume ("80 students", "800 student users") are his,
+                      not ours. Unlabelled, a skimmer reads them as Litos proof.
+                      Says "applicant", not "student": this label is the one line
+                      that names who the example IS, so calling him a student
+                      told every non-student the tool was not for them.
+
+                      This label used to live in #formats. When that band was
+                      deleted the label had to come with it, because the demo it
+                      describes is HERE and still shows his name and his numbers.
+                      Both this line and the machine-readability sentence above
+                      were written into the deletion commit and then silently
+                      dropped by a cherry-pick auto-merge, so for one deploy the
+                      page showed a fake applicant's metrics with nothing saying
+                      he was fake. Do not separate this label from the demo. */}
+                  <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+                    Not a real applicant. Just an example.
                   </p>
                   {/* The rigour claim, and the ONLY form of it that is true.
                       The approved change was an institution proof row, the
