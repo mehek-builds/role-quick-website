@@ -2,7 +2,7 @@
   "hero-1-job": {
     "w": 380,
     "h": 580,
-    "src": "/product/hero-1-job.png",
+    "src": "/product/hero-1-job.webp",
     "cap": "Litos spots the job",
     "note": "Open a job posting. Litos reads it off the page, so there is nothing to paste.",
     "alt": "The Litos popup open on a Figma software engineer posting, showing the detected role with a Fill this form button and a Find people button.",
@@ -11,7 +11,7 @@
   "hero-2-review": {
     "w": 544,
     "h": 652,
-    "src": "/product/hero-2-review.png",
+    "src": "/product/hero-2-review.webp",
     "cap": "You read it before it goes",
     "note": "The resume Litos wrote for this one job. The posting's own words are lit up where your work matches. Change anything before it goes.",
     "alt": "The resume Litos built for the Acme Labs product engineer job, with terms from the posting highlighted where the applicant's own work matches them.",
@@ -20,7 +20,7 @@
   "hero-3-contacts": {
     "w": 380,
     "h": 580,
-    "src": "/product/hero-3-contacts.png",
+    "src": "/product/hero-3-contacts.webp",
     "cap": "It finds people to email",
     "note": "Real people at that company, with the ones most likely to write back at the top.",
     "alt": "The Litos contacts panel listing four people at Figma, ranked by likelihood of a reply, each marked either Email checked or Email is a guess.",
@@ -29,7 +29,7 @@
   "hero-4-draft": {
     "w": 380,
     "h": 580,
-    "src": "/product/hero-4-draft.png",
+    "src": "/product/hero-4-draft.webp",
     "cap": "And writes the email",
     "note": "A short email drawn from your own work, ready to send from Gmail.",
     "alt": "The Litos draft editor showing a short email to Marcus Lee about the software engineer role, ready to edit before sending.",
@@ -38,23 +38,23 @@
   "dashboard-emails": {
     "w": 1400,
     "h": 933,
-    "src": "/product/dashboard-emails.png",
+    "src": "/product/dashboard-emails.webp",
     "cap": "After you send",
     "alt": "The Litos dashboard Emails page, listing drafts that were written, sent, and replied to."
   },
   "store-1-onboarding": {
     "w": 1280,
     "h": 800,
-    "src": "/product/store-1-onboarding.png"
+    "src": "/product/store-1-onboarding.webp"
   },
   "store-2-main": {
     "w": 1280,
     "h": 800,
-    "src": "/product/store-2-main.png"
+    "src": "/product/store-2-main.webp"
   },
   "store-3-contacts": {
     "w": 1280,
     "h": 800,
-    "src": "/product/store-3-contacts.png"
+    "src": "/product/store-3-contacts.webp"
   }
 }

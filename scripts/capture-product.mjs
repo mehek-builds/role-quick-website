@@ -43,6 +43,7 @@
  */
 
 import { chromium } from "playwright";
+import sharp from "sharp";
 import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -328,6 +329,13 @@ async function shoot(browser, shot, outDir) {
   const file = join(outDir, `${shot.name}.png`);
   await target.screenshot({ path: file, ...(selector ? {} : { fullPage: false }) });
 
+  /* WebP alongside the PNG, because these land above the fold and the hero
+     frame is a live LCP candidate. The film frames are already webp at ~62KB
+     for a full-bleed 1080p frame; a 380x580 popup has no business being 86KB.
+     Lossless keeps the type crisp — these are UI screenshots, not photographs,
+     and lossy webp smears 13px text at exactly the sizes that matter. */
+  await sharp(file).webp({ lossless: true, effort: 6 }).toFile(file.replace(/\.png$/, ".webp"));
+
   /* Measure what was actually shot rather than trusting a hand-written box.
      An `element` region has no declared size, and a stale number here silently
      rescales the capture on the page. */
@@ -400,7 +408,7 @@ async function main() {
     const dims = await shoot(browser, shot, outDir);
     manifest[shot.name] = {
       ...dims,
-      src: `/product/${shot.name}.png`,
+      src: `/product/${shot.name}.webp`,
       ...(shot.cap ? { cap: shot.cap } : {}),
       ...(shot.note ? { note: shot.note } : {}),
       ...(shot.alt ? { alt: shot.alt } : {}),
