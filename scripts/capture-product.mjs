@@ -175,7 +175,8 @@ const SHOTS = [
     scrollTo: "text=Point at any highlighted term",
     scrollPad: 96,
     element: 'section:has(p:text-is("Your resume for this job"))',
-    clipTo: { height: 470 },
+    clipFromY: 256,
+    clipTo: { height: 412 },
     hide: ["header.sticky"],
     freezeClock: "2026-07-21T12:00:09.000Z",
     alt: "The tailored resume Litos built for this job, with the posting's own requirements highlighted on the applicant's bullets.",
@@ -304,11 +305,17 @@ const FREEZE_CSS = `
    takes its normal success path, exactly as a user sees it) without teaching
    the product code about screenshots. The terms are the Acme Labs fixture's. */
 const JD_MATCH_FIXTURE = {
+  /* Internally consistent on purpose. This fixture used to say score 86 beside
+     "6 of 14 requirements", and both numbers are legible at 1:1 in the hero.
+     6/14 is 43%. A hero whose entire thesis is candour cannot carry a number
+     that does not survive a second look, and a skeptical reader stops exactly
+     there. 6 of 7 is 86%, which is what the ring says. The fixture was mine;
+     the product was never wrong. */
   score: 86,
   scorable: true,
   band: { label: "Strong match", tone: "strong" },
-  term_count: 14,
-  min_scorable_terms: 6,
+  term_count: 7,
+  min_scorable_terms: 5,
   matched: [
     { term: "typescript", display: "TypeScript", weight: 3 },
     { term: "react", display: "React", weight: 3 },
@@ -446,9 +453,20 @@ async function shoot(browser, shot, outDir) {
   if (selector && shot.clipTo) {
     const b = await target.boundingBox();
     if (!b) throw new Error(`${shot.name}: ${selector} has no box`);
+    /* `clipFromY` starts the cut partway down the element. The mobile frame
+       needs the tailored BULLETS, and the resume card opens with a university
+       header that is the least differentiated thing in the product; without an
+       offset the only way to reach the bullets was a taller crop that no longer
+       fits a phone fold. */
+    const fromY = shot.clipFromY ?? 0;
     await page.screenshot({
       path: file,
-      clip: { x: b.x, y: b.y, width: b.width, height: Math.min(b.height, shot.clipTo.height) },
+      clip: {
+        x: b.x,
+        y: b.y + fromY,
+        width: b.width,
+        height: Math.min(b.height - fromY, shot.clipTo.height),
+      },
     });
   } else {
     await target.screenshot({ path: file, ...(selector ? {} : { fullPage: false }) });
@@ -468,9 +486,12 @@ async function shoot(browser, shot, outDir) {
   if (shot.element) {
     const measured = await target.boundingBox();
     if (!measured) throw new Error(`${shot.name}: element ${shot.element} has no box`);
+    const fromY = shot.clipFromY ?? 0;
     box = {
       width: Math.round(measured.width),
-      height: Math.round(shot.clipTo ? Math.min(measured.height, shot.clipTo.height) : measured.height),
+      height: Math.round(
+        shot.clipTo ? Math.min(measured.height - fromY, shot.clipTo.height) : measured.height - fromY,
+      ),
     };
   }
   await page.close();

@@ -140,10 +140,10 @@ export function HeroScene() {
        * move to a right-hand column, so the copy row fills the width, the
        * headline keeps a 560px measure, and the artifact still starts high. */}
       <div className="mx-auto w-full max-w-7xl px-6">
-        <div className="flex flex-col gap-10 lg:flex-row lg:items-end lg:justify-between lg:gap-16">
+        <div className="flex max-w-[1060px] flex-col gap-10 lg:flex-row lg:items-end lg:gap-16">
           <div className="max-w-[600px]">
             <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">
-              Free Chrome extension for job seekers
+              Chrome extension for job seekers
             </p>
             <h1 className="mt-4 text-display font-[450] text-ink">
               Apply <span className="text-brand-ink">in seconds.</span>
@@ -173,7 +173,7 @@ export function HeroScene() {
             </div>
           </div>
 
-          <div className="shrink-0 lg:pb-1">
+          <div className="shrink-0 lg:w-[360px] lg:pb-1">
             {/* The number in the Stripe idiom: bare type over a hairline, no
                 card, no border, no shadow. It was a bordered, shadowed box
                 absolutely positioned over the capture, which occluded the line
@@ -182,7 +182,7 @@ export function HeroScene() {
                 product UI, which is the one thing a brand built on candour
                 cannot afford. Rendered at every width; it was sm:-gated, so the
                 phone fold carried no speed claim at all. */}
-            <p className="text-section font-[450] text-ink">
+            <p className="text-heading font-[450] text-ink">
               <span className="font-mono text-muted">&lt;</span>&thinsp;30 seconds
             </p>
             <p className="mt-1.5 font-mono text-label uppercase tracking-[0.08em] text-faint">
@@ -210,7 +210,11 @@ export function HeroScene() {
           1232px container, so both edges were visible and it read as a card
           placed on a page rather than a workspace the viewport happens to cut.
           Refusing to fit is what makes Linear and Attio read as real. */}
-      <div className="mt-10 flex w-full justify-center overflow-hidden">
+      {/* Anchored left below sm. Centring a 544px frame inside a 390px screen
+          cut ~77px off BOTH edges, so every line lost its left margin ("SUME
+          FOR THIS JOB", "ental AI") — the visual signature of a layout bug, not
+          of a workspace the viewport happens to cut. One edge, always. */}
+      <div className="mt-10 flex w-full justify-start overflow-hidden pl-6 sm:justify-center sm:pl-0">
         <div className="relative w-[544px] shrink-0 sm:w-[1104px]">
           <picture>
             <source media="(max-width: 640px)" srcSet={SHOT_MOBILE?.src ?? SHOT.src} />
