@@ -11,21 +11,33 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /await prepareApplication\(questions\)/);
   assert.match(dashboard, /missingRequiredAnswers\.length > 0/);
   // Same promise, plainer words: the questions screen only ever asks for genuine blanks.
-  assert.match(dashboard, /Only the answers we could not work out/);
+  // 2026-07-28: "Only the answers..." became "A few answers...". Matching the fragment rather
+  // than the whole sentence, because the guarantee is the subject, not the adverb.
+  assert.match(dashboard, /answers we could not work out/);
   assert.match(dashboard, /Everything we already knew is filled in\. This page only shows the blanks/);
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
   // describe is unchanged, so the assertions follow the new wording.
   assert.match(dashboard, /"Fill the form"/);
   assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);
-  assert.match(dashboard, /Automatic submission is off or was revoked/);
+  // The unauthorized-auto-submit state, in the words it now uses. Was "Automatic submission is
+  // off or was revoked. Review the captured form, then approve..." until ee07b12.
+  assert.match(dashboard, /You asked to check every application first/);
   assert.match(dashboard, /submission_authorized_at/);
-  assert.match(dashboard, /status === "ready_for_final_approval"[\s\S]*>Submit application</);
-  assert.match(dashboard, /status === "failed"[\s\S]*>Retry preparation</);
+  // Assert the GATE, not the button label. The invariant is that approving is reachable only from
+  // ready_for_final_approval and retrying only from failed; both labels have already been reworded
+  // once ("Submit application" -> "Send it", "Retry preparation" -> "Try again") and broke this
+  // test rather than the product. Bounded spans, so a match cannot span half the file.
+  assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{onApprove\}/);
+  assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
-  assert.match(dashboard, /I completed the portal step/);
-  assert.match(dashboard, /will not bypass CAPTCHA, MFA, login, or legal declarations/);
+  assert.match(dashboard, /I finished it myself/);
+  // The refusal list, in plain words since the terminology pass: it will not impersonate you, and
+  // it will not get past a CAPTCHA, an MFA code, a login, or a legal declaration. This is the
+  // safety promise the site makes publicly, so it must stay on the screen that performs the act.
+  assert.match(dashboard, /Litos will never pretend to be you/);
+  assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
@@ -48,14 +60,17 @@ test("overview keeps three application states and reviews matches in a right-sid
   assert.match(overview, /role="dialog"/);
   assert.match(overview, /Job description/);
   assert.match(overview, /Tailored resume/);
-  assert.match(overview, /Submit application/);
+  // The drawer's send control. Label reworded 2026-07-27 ("Submit application" -> "Send it");
+  // what matters is that the drawer can send and that sending is gated, asserted just below.
+  assert.match(overview, /"Send it"/);
+  assert.match(overview, /const canSubmit = Boolean\(packet && review && missingAnswers\.length === 0/);
   assert.match(overview, /\/submit-request/);
   assert.match(overview, /\/submission`/);
   assert.match(overview, /window\.setTimeout\(tick, 2_500\)/);
   assert.match(overview, /reviewTriggerRef\.current\?\.focus\(\)/);
   assert.match(overview, /closeButtonRef\.current\?\.focus\(\)/);
   assert.match(overview, /onKeyDown=\{containFocus\}/);
-  assert.match(overview, /preparationFailed \? "Retry"/);
+  assert.match(overview, /prepared \? "Review" : "Try again"/);
   assert.match(overview, /activeReviewJobIdRef\.current === submittedJobId/);
   assert.match(styles, /dashboard-drawer-in/);
 });
