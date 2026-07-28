@@ -181,6 +181,25 @@ export type MonitoredJob = {
   first_seen_at: string;
   ats_name: "greenhouse" | "lever" | "ashby";
   is_active?: boolean;
+  /** The company's own careers page. Every other URL here belongs to the job board. */
+  career_url?: string | null;
+  /**
+   * 0-100, how much of what this posting asks for is on your main resume.
+   *
+   * NULL IS NOT ZERO and must never be rendered as one. The scorer refuses to score a posting that
+   * lists too few real requirements, and it is also null for everyone signed out or without a main
+   * resume yet. In all of those cases the honest row shows no number at all.
+   */
+  match_score?: number | null;
+};
+
+/** What GET /jobs answers. `ranked` is false whenever there was no resume to rank against. */
+export type JobsPage = {
+  jobs: MonitoredJob[];
+  has_more: boolean;
+  ranked: boolean;
+  /** How many postings were scored to produce this ordering, or null when nothing was ranked. */
+  ranked_pool: number | null;
 };
 
 export type ResumeEntry = {
