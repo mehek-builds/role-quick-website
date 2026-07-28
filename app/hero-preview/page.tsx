@@ -19,41 +19,13 @@ export const metadata = {
 
 export default function HeroPreviewPage() {
   return (
-    <main className="min-h-screen bg-canvas px-6 py-16">
-      <div className="mx-auto max-w-5xl">
-        <div className="mb-4 rounded-inner border border-border bg-surface px-4 py-3 text-[13px] text-muted">
+    <main className="min-h-screen bg-canvas py-16">
+      <div className="mx-auto w-full">
+        <div className="mx-auto mb-10 max-w-5xl rounded-inner border border-border bg-surface px-4 py-3 text-small text-muted">
           Internal preview. Not linked from anywhere and not indexed.
         </div>
 
-        <div className="mx-auto max-w-2xl text-center">
-          <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-            Free Chrome extension for job seekers
-          </p>
-          <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
-            Apply <span className="text-brand-ink">in seconds.</span>
-          </h1>
-          <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted">
-            Nothing is reused. Every job gets its own resume, form, and email.
-          </p>
-          <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <InstallLink
-              source="hero-preview"
-              className="hidden min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:inline-flex sm:w-auto"
-            >
-              Add to Chrome, it&apos;s free
-            </InstallLink>
-            <a
-              href="/try"
-              className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto sm:bg-transparent sm:px-2 sm:py-0 sm:text-muted sm:hover:bg-transparent sm:hover:text-ink"
-            >
-              Try it free
-            </a>
-          </div>
-        </div>
-
-        <div className="mt-14">
-          <HeroScene />
-        </div>
+        <HeroScene />
 
         {/* The previous draft, kept directly below so the two can be judged
             against each other rather than from memory. */}

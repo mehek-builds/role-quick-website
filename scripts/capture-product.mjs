@@ -121,6 +121,8 @@ const SHOTS = [
     element: '[data-hero-review]',
     clipTo: { height: 620 },
     hide: ["header.sticky"],
+    /* Nine seconds after QA_PACKET.created_at, so the header reads "today". */
+    freezeClock: "2026-07-21T12:00:09.000Z",
     story: 2,
     cap: "You read it before it goes",
     note: "The resume Litos wrote for this one job. The posting's own words are lit up where your work matches. Change anything before it goes.",
@@ -269,6 +271,14 @@ async function shoot(browser, shot, outDir) {
     reducedMotion: "reduce",
     colorScheme: "light",
   });
+
+  /* Freeze the page clock so relative dates are deterministic AND current.
+     The review header renders formatRelativeDate(created_at), which was reading
+     "resume built 6 days ago" next to a receipt claiming nine seconds. Pinning
+     "now" to just after the fixture's build time makes it read "today" without
+     making the capture change every day and break --check. Mehek's call
+     2026-07-28: recapture with a fresh timestamp. */
+  if (shot.freezeClock) await page.clock.setFixedTime(new Date(shot.freezeClock));
 
   const problems = [];
   page.on("console", (m) => m.type() === "error" && problems.push(m.text()));
