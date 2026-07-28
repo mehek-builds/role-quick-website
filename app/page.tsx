@@ -367,24 +367,24 @@ export default function Home() {
                   <div className="mt-8 space-y-2.5 text-sm leading-6">
                     <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
                     <p className="text-muted">We attach your new resume.</p>
-                    {/* This line has now been wrong twice, in opposite
-                        directions, so here is what the code does.
+                    {/* The race-and-gender line was REMOVED from this list on
+                        2026-07-28 (Mehek's call: too specified for the
+                        homepage). It had been wrong twice in one day in
+                        opposite directions, first "we skip them", then a
+                        version that made the decline the headline and the
+                        student's own answer the exception, and the accurate
+                        version needed two sentences in a list of one-line
+                        beats. That length is the tell: it is documentation,
+                        and it belongs where documentation goes.
 
-                        The extension's setup screen ASKS: an optional
-                        "Questions about race and gender" block (gender, race,
-                        disability) plus veteran status, saved to eeo_prefs.
-                        The adapters answer with what you gave. The decline is
-                        the FALLBACK for the fields you left blank, which the
-                        setup screen states in those words: "Leave these blank
-                        and Litos picks 'I would rather not say' on every
-                        application."
-
-                        So "we skip them" (before 2026-07-28) was wrong, and
-                        "we answer them with I would rather not say, unless you
-                        tell us otherwise" (same day) was also wrong: it made
-                        the fallback the headline and the student's own answer
-                        the exception. Your answer is the headline. */}
-                    <p className="text-muted">We answer the race and gender questions with what you told us at setup. Leave them blank and we pick &ldquo;I would rather not say&rdquo;.</p>
+                        Do not re-add it here. It is stated in full in
+                        /privacy under "Questions about race and gender", in
+                        /dashboard/settings, and in the extension's own setup
+                        screen at the moment it asks. What the code does:
+                        the setup screen asks (optional gender/race/disability
+                        plus veteran status, saved to eeo_prefs), the adapters
+                        answer with what you gave, and blank fields fall back
+                        to a decline. */}
                     {/* "and the send button" came out of this line because it was
                         not true. Opt-in automatic submission ships, so a flat claim
                         that the send button is always yours is the same absolute the
@@ -407,7 +407,7 @@ export default function Home() {
 
                         Phrased as "sending stays off" rather than "we do not press
                         send", because the line four rows down says we CAN press send on
-                        Greenhouse, Lever and Ashby. Both were true with their implicit
+                        Greenhouse, Lever, Ashby and SmartRecruiters. Both were true with their implicit
                         qualifiers and flatly contradictory read together, in the same
                         card. This version states the default and the control, which is
                         the part the reader is actually deciding about, and leaves the
