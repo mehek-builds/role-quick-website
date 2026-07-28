@@ -327,10 +327,9 @@ export default function Home() {
                   <div data-demo><ApplicationFormMockup /></div>
                 </div>
                 <div className="rq-glass order-1 px-7 py-8 sm:order-2">
-                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    While you read this
-                  </p>
-                  <div className="mt-3" />
+                  {/* The "While you read this" eyebrow was removed 2026-07-28:
+                      invented timing, and it argued with the nine-seconds
+                      receipt the page states elsewhere. */}
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Forms</PillarChip>
                   <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
                     You never type your phone number again.
@@ -410,9 +409,6 @@ export default function Home() {
                     Ashby and SmartRecruiters. Anywhere else we fill it in and
                     you press send.
                   </p>
-                  <p className="mt-3 text-[13px] text-muted">
-                    You can change any of this in Settings.
-                  </p>
 
                   {/* "This is a picture we made. Real screenshots are below."
                       stood here and in #outreach, and #captures states the same
@@ -436,10 +432,8 @@ export default function Home() {
             <Reveal>
               <div className="mx-auto grid w-full max-w-6xl origin-center grid-cols-1 items-center gap-14 sm:scale-[0.92] sm:grid-cols-2">
                 <div className="rq-glass px-7 py-8">
-                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Two seconds later
-                  </p>
-                  <div className="mt-3" />
+                  {/* The "Two seconds later" eyebrow was removed 2026-07-28,
+                      with its opposite number in #autofill. Same reason. */}
                   <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Emails</PillarChip>
                   <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
                     Nobody reads applications. People read emails.
@@ -702,19 +696,11 @@ export default function Home() {
               <h2 className="mt-8 text-display font-[450] leading-[1.05] tracking-[-0.03em] text-ink">
                 Open your next application.
               </h2>
-              {/* The consolidation line, allowed to restate what the three
-                  pillars already said (override 5 of 10, superseding say-once
-                  for this idea only).
-                  Placed here because the three dashes directly above it are
-                  the brand, teal and coral pillars, and until now that motif
-                  was wordless: a reader who had not decoded the colours got a
-                  decoration. This names them in the order the page introduced
-                  them, so the close reads as the sum of the page rather than
-                  a fourth new thing. Kept to one line, in the strongest spot,
-                  which is what say-once was protecting in the first place. */}
-              <p className="mx-auto mt-5 max-w-[420px] text-base leading-7 text-muted">
-                The resume, the form and the email. One place.
-              </p>
+              {/* "The resume, the form and the email. One place." was removed
+                  2026-07-28. Its own comment recorded it as a deliberate
+                  say-once override, restating the three pillars twelve
+                  viewports after the page made them. The three coloured
+                  dashes above carry the motif without narrating it. */}
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
                 <InstallLink
                   source="close"
@@ -729,11 +715,10 @@ export default function Home() {
                   Sign in
                 </a>
               </div>
-              {/* Proof at arm's length from the ask: the one real number,
-                  directly beneath the button it supports. */}
-              <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                Job found → ready to send · 9 seconds
-              </p>
+              {/* The "Job found -> ready to send - 9 seconds" receipt was
+                  removed here 2026-07-28. CinematicHero's film card states
+                  it verbatim, and "nine seconds" is said elsewhere on the
+                  page besides. This was the duplicate, not the original. */}
               {/* The founder line ("Made by Mehek, a student at USC...") was
                   removed 2026-07-28 on Mehek's call. The close section now ends
                   on the receipt line above. The X link in the footer is the only
@@ -818,7 +803,6 @@ export default function Home() {
           </div>
           <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
             <span>&copy; {new Date().getFullYear()} Litos</span>
-            <span>You do not need a mouse to use this site.</span>
             {/* Was new Date() at render, so it always read "updated this month"
                 whether or not anything had changed. Manufactured freshness is
                 exactly what the Guardrails ban. This is the real build date. */}
