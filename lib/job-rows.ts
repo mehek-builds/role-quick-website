@@ -36,6 +36,33 @@ const ATS_HOSTS = [
 ];
 
 /**
+ * The employer's domain for a job row, or null when we do not have one.
+ *
+ * PREFERS THE SERVER'S ANSWER, and that is the whole fix. This used to derive the domain from
+ * `career_url` alone, and on 2026-07-28 every one of the 51 polled sources had a JOB BOARD in that
+ * field — `job-boards.greenhouse.io/lyft`, `jobs.ashbyhq.com/linear` — because that is what a
+ * careers URL honestly is for these employers. So this function correctly returned null on 100 rows
+ * out of 100 and the logo never once appeared. The backend now resolves the employer's real domain
+ * from a verified mapping and sends it as `company_domain`.
+ *
+ * The careers-URL path is kept as a fallback rather than deleted: an operator may yet register a
+ * real company careers page, and when they do it is a perfectly good source. It keeps the ATS guard
+ * for the same reason it always had it.
+ */
+export function companyDomainForRow(row: {
+  company_domain?: string | null;
+  career_url?: string | null;
+}): string | null {
+  const served = row.company_domain?.trim().toLowerCase().replace(/^www\./, "").replace(/\.$/, "");
+  if (served && served.includes(".") && !isAtsHost(served)) return served;
+  return companyDomain(row.career_url);
+}
+
+function isAtsHost(host: string): boolean {
+  return ATS_HOSTS.some((ats) => host === ats || host.endsWith(`.${ats}`));
+}
+
+/**
  * The host a careers URL is served from, lowercased and minus `www.`, or null when the URL does not
  * identify a company.
  *
@@ -63,7 +90,7 @@ export function companyDomain(careerUrl: string | null | undefined): string | nu
      board's own domain sails through and every row from that source draws the board's logo. */
   host = host.replace(/\.$/, "");
   if (!host.includes(".")) return null;
-  if (ATS_HOSTS.some((ats) => host === ats || host.endsWith(`.${ats}`))) return null;
+  if (isAtsHost(host)) return null;
   return host;
 }
 

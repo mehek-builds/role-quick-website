@@ -1,6 +1,6 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { applicationKey, buildAppliedIndex, companyDomain, countNewToday, isAppliedStage, isJobApplied } from "./job-rows.ts";
+import { applicationKey, buildAppliedIndex, companyDomain, companyDomainForRow, countNewToday, isAppliedStage, isJobApplied } from "./job-rows.ts";
 import { isQaRenderFor } from "./qa-mode.ts";
 
 describe("companyDomain", () => {
@@ -254,5 +254,49 @@ describe("isQaRenderFor", () => {
     assert.equal(isQaRenderFor("localhost", "?other=1"), false);
     assert.equal(isQaRenderFor("localhost", "?qa=1"), true);
     assert.equal(isQaRenderFor("localhost", "?qa"), true, "has() is presence, not value");
+  });
+});
+
+describe("companyDomainForRow", () => {
+  test("the server's answer wins, because the careers URL is a job board on every real source", () => {
+    // This is the whole bug: every polled source had a board URL in career_url, so deriving from it
+    // returned null on 100 rows out of 100 and the logo never appeared once.
+    assert.equal(
+      companyDomainForRow({ company_domain: "linear.app", career_url: "https://jobs.ashbyhq.com/linear" }),
+      "linear.app",
+    );
+  });
+
+  test("falls back to a real careers URL when the server has no mapping", () => {
+    assert.equal(companyDomainForRow({ company_domain: null, career_url: "https://ramp.com/careers" }), "ramp.com");
+    assert.equal(companyDomainForRow({ career_url: "https://ramp.com/careers" }), "ramp.com");
+  });
+
+  test("no mapping and a board careers URL is null, so the row shows an initial", () => {
+    assert.equal(
+      companyDomainForRow({ company_domain: null, career_url: "https://job-boards.greenhouse.io/lyft" }),
+      null,
+    );
+    assert.equal(companyDomainForRow({}), null);
+  });
+
+  test("a served value is normalized the same way a derived one is", () => {
+    assert.equal(companyDomainForRow({ company_domain: "  WWW.Ramp.com. " }), "ramp.com");
+  });
+
+  test("a served value that is somehow a job board is refused, not trusted", () => {
+    // Defence in depth: the backend should never send this, and if it ever does the row must not
+    // paint Greenhouse's logo on an employer.
+    assert.equal(
+      companyDomainForRow({ company_domain: "boards.greenhouse.io", career_url: "https://ramp.com/careers" }),
+      "ramp.com",
+      "it falls through to the careers URL rather than using the board",
+    );
+    assert.equal(companyDomainForRow({ company_domain: "greenhouse.io" }), null);
+  });
+
+  test("a served value that is not a domain is ignored", () => {
+    assert.equal(companyDomainForRow({ company_domain: "notadomain" }), null);
+    assert.equal(companyDomainForRow({ company_domain: "" }), null);
   });
 });
