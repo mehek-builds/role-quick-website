@@ -78,7 +78,8 @@ export function FocusStep({
     <StartShell
       step="focus"
       title="Tell us what you want."
-      sub="Choose what you want next."
+      /* sub removed 2026-07-28: the rail already reads "What you want" and
+         the title already asks. Three statements of one question. */
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -290,7 +291,8 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           </>
         ) : (
           <>
-            <p className="text-base text-ink">Choose your resume</p>
+            {/* Label removed 2026-07-28: the button below it said "Choose a
+                file" and the step title says "Start with your resume." */}
             <p className="shrink-0 text-right font-mono text-xs text-muted">
               PDF or DOCX<br />10 MB max
             </p>
@@ -522,7 +524,9 @@ export function GapsStep({
     <StartShell
       step="gaps"
       title={`${n === 1 ? "One question left" : n === 2 ? "Two questions left" : "A few questions left"} that job didn't ask.`}
-      sub="Most forms ask for these. This is the last of the boring part."
+      /* "This is the last of the boring part." came off 2026-07-28: the flow
+         narrating its own tedium, which does not make it shorter. */
+      sub="Most forms ask for these."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -645,7 +649,9 @@ export function TargetStep({
         {/* target_roles has been written by the parser since v0 and read by nothing. First use. */}
         <p className="mt-0.5 text-xs text-faint">
           {suggestedTitles.length > 0
-            ? "Pulled from your resume. Drop any that are wrong."
+            /* Was "Pulled from your resume. Drop any that are wrong." The step
+               sub forty words above already says both halves. */
+            ? "Drop any that do not fit."
             : "Add the titles you'd actually accept."}
         </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
@@ -744,10 +750,10 @@ export function DoneStep({
             now refuses to enable it until they have approved three submissions themselves, so
             offering it here would have been a checkbox that 403s the whole finish action. It
             appears in Settings once it is theirs to make. */}
-        <p className="py-4 text-sm leading-6 text-muted">
-          Litos asks you before it sends anything. Once you have approved a few applications
-          yourself and seen what it fills in, you can let it send without asking, from Settings.
-        </p>
+        {/* Removed 2026-07-28. It described the auto-submit setting, which is
+            deliberately NOT on this screen (see the note above), so it was the
+            page explaining a control the reader cannot reach. Settings says it
+            at the moment it becomes theirs to make. */}
         <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
           <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
           <span>
@@ -759,8 +765,10 @@ export function DoneStep({
         </label>
       </div>
 
+      {/* "both" was wrong, and had been since the auto-submit checkbox was
+          pulled off this screen: one control is offered here, not two. */}
       <p className="mt-4 text-[13px] leading-5 text-muted">
-        You can change both any time in Account. Litos never answers a CAPTCHA, the puzzle that checks you are human, and never answers anything you have to swear to.
+        You can change this any time in Account. Litos never answers a CAPTCHA, the puzzle that checks you are human, and never answers anything you have to swear to.
       </p>
 
       <div className="mt-6">

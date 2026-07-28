@@ -25,6 +25,13 @@ export function Voices() {
   return (
     <div className="mx-auto max-w-5xl">
       <div className="grid grid-cols-1 items-center gap-10 sm:grid-cols-[minmax(0,360px)_minmax(0,1fr)] sm:gap-14">
+        {/* One heading, not three. This carried an eyebrow ("What testers
+            said"), a headline ("In their words.") and a subhead ("Real words
+            from the people who tested it.") over a single quote: the same
+            sentence in three type sizes. The subhead had also gone stale when
+            the other four quotes were deleted, since "people" was plural for
+            one voice. The eyebrow survives because it is the one that says
+            WHOSE words these are, which is the whole claim. */}
         <div>
           <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
             What testers said
@@ -32,9 +39,6 @@ export function Voices() {
           <h2 className="mt-3 text-section font-[450] leading-[1.1] tracking-[-0.02em] text-ink">
             In their words.
           </h2>
-          <p className="mt-3 text-base leading-7 text-muted">
-            Real words from the people who tested it.
-          </p>
         </div>
 
         <blockquote className="rq-glass px-7 py-8 sm:px-9 sm:py-9">

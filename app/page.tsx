@@ -55,7 +55,13 @@ const FAQ_ITEMS = [
   },
   {
     q: "Is my resume safe?",
-    a: "Yes. We use your resume and answers only to fill in your own job applications. In your browser, the extension reads only the job page you are on. On our side, Litos looks at job boards to find you roles, and it opens the company's form itself if you ask it to send. We never sell or share your data, and we never will. The privacy page lists every part of this.",
+    /* The deletion promise on the end of this answer arrived here when the
+       refusal trio above the accordion was deleted. It was the one clause in
+       that block that was not already said somewhere else, and 10 of 10
+       audited competitors say nothing about what happens to a resume on
+       account deletion. "You can delete everything" rather than "one click",
+       because the mechanism is an email to support. */
+    a: "Yes. We use your resume and answers only to fill in your own job applications. In your browser, the extension reads only the job page you are on. On our side, Litos looks at job boards to find you roles, and it opens the company's form itself if you ask it to send. We never sell or share your data, and we never will. You can delete everything we hold whenever you want. The privacy page lists every part of this.",
   },
   /* The support question. Until now the site had no answer to "it broke", and
      no contact route at all outside the data-request address buried in
@@ -341,7 +347,13 @@ export default function Home() {
                   </p>
                   {/* Machine voice: what the fill actually does, as data. */}
                   <div className="mt-8 space-y-2.5 text-sm leading-6">
-                    <p className="text-muted">We fill in your name, your links, and the yes or no questions.</p>
+                    {/* "the yes or no questions" was too wide. Work-eligibility
+                        questions are yes or no and Litos never answers them
+                        (WORK_ELIGIBILITY_QUESTION, extension adapters), so the
+                        old line promised the one behaviour the product refuses.
+                        The mockup beside this now shows both declined. */}
+                    <p className="text-muted">We fill in your name, your links, and the screening questions.</p>
+                    <p className="text-muted">Work authorization and sponsorship are always left for you. The rules differ by country.</p>
                     <p className="text-muted">We attach your new resume.</p>
                     {/* The race-and-gender line was REMOVED from this list on
                         2026-07-28 (Mehek's call: too specified for the
@@ -562,43 +574,26 @@ export default function Home() {
               <h2 className="text-center text-section font-[450] tracking-[-0.02em] text-ink">
                 Questions.
               </h2>
-              {/* The three answers that decide whether a skeptic installs were
-                  locked inside collapsed <details>, so they were never read.
-                  State them once, open, above the accordion. */}
-              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                {[
-                  ["Never invented", "We move and rewrite your real work. We never add a job, a skill, or a number."],
-                  ["Never auto-sent", "Nothing is sent until you say so. The writing stays yours."],
-                  // The deletion promise came off the hero on 2026-07-28 and
-                  // lives here now. It is the half no competitor has: 10 of 10
-                  // products audited say nothing about what happens to a resume
-                  // on account deletion. Worded "you can delete everything"
-                  // rather than "one click", because the mechanism is an email
-                  // to support, and a promised button would be a small lie on
-                  // the one subject where it costs the most.
-                  //
-                  // "We only read the job page you are on" was true when Litos
-                  // was only an extension. It is not the whole product any
-                  // more: the backend watches job boards to find you roles, it
-                  // drives the employer's portal itself when you ask it to
-                  // send, and if you connect your email it looks for a sign-in
-                  // code. The extension half of the claim is still exactly
-                  // true and still worth saying, so it is scoped rather than
-                  // dropped, and the rest points at /privacy instead of
-                  // pretending it does not exist.
-                  ["Never sold", "In your browser, Litos reads only the job page you are on. On our side it finds jobs for you and, if you ask, sends the application. We never sell your data, and you can delete everything whenever you want."],
-                ].map(([label, body]) => (
-                  <div key={label} className="rq-glass px-5 py-5">
-                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-                      {label}
-                    </p>
-                    <p className="mt-2.5 text-sm leading-6 text-muted">{body}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="rq-glass mt-6 px-6">
-                {FAQ_ITEMS.map(({ q, a }) => (
-                  <details key={q} className="group border-b border-border">
+              {/* The "Never invented / Never auto-sent / Never sold" trio was
+                  REMOVED 2026-07-28. It sat directly on top of the accordion
+                  and compressed FAQ items 1, 2 and 5, which are printed
+                  underneath it: the same three refusals, twice, a hundred
+                  pixels apart.
+
+                  It was added because the answers were hidden in collapsed
+                  <details> and never read. That reason is handled instead by
+                  opening the first item, which costs a boolean rather than a
+                  second copy of the copy.
+
+                  One clause in it was NOT a duplicate: the deletion promise,
+                  which 10 of 10 audited competitors say nothing about. That has
+                  been folded into FAQ item 5 rather than lost with the block. */}
+              <div className="rq-glass mt-10 px-6">
+                {FAQ_ITEMS.map(({ q, a }, i) => (
+                  /* First one open. This is what the deleted trio was really
+                     for: the objection that decides an install should not be
+                     behind a click. One boolean, not a second block of copy. */
+                  <details key={q} open={i === 0} className="group border-b border-border">
                     <summary className="flex cursor-pointer list-none items-baseline justify-between gap-6 py-5 text-left text-lg font-medium text-ink [&::-webkit-details-marker]:hidden">
                       {q}
                       <span
@@ -645,7 +640,9 @@ export default function Home() {
                     Free
                   </p>
                   <p className="mt-2.5 text-heading font-medium text-ink">$0</p>
-                  <p className="mt-1 text-sm text-muted">Every month, forever.</p>
+                  {/* "Every month, forever." came off 2026-07-28. It sat under
+                      a $0 that already says it, and the caps beneath it are
+                      per month in their own words. */}
                   <ul className="mt-5 space-y-2 text-sm leading-6 text-muted">
                     <li>{FREE_LIMITS.resumes} tailored resumes a month, one for each application.</li>
                     <li>{FREE_LIMITS.contacts} checked contacts a month.</li>

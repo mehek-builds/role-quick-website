@@ -359,8 +359,11 @@ export function ApplicationFormMockup() {
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
           Application · Greenhouse
         </p>
+        {/* 21, not 23: the two work-eligibility questions above are declined
+            now, so the counter has to come down with them or the picture
+            contradicts itself. */}
         <span className="shrink-0 rounded-full bg-teal-soft px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] text-teal-ink">
-          23 of 25 filled
+          21 of 25 filled
         </span>
       </div>
       <p className="mt-2 text-[13px] font-semibold text-ink">
@@ -387,9 +390,31 @@ export function ApplicationFormMockup() {
           </div>
         </div>
         <FormField label="LinkedIn profile" value="linkedin.com/in/alexrivera" />
+        {/* NOT filled, and this is not a styling choice.
+            Litos never answers work-eligibility questions. Every adapter routes
+            them through WORK_ELIGIBILITY_QUESTION / workEligibilitySkipReason()
+            in the extension's lib/adapters/generic.ts and skips them, because
+            the profile holds one global flag while the question is scoped to
+            the role's location, so deriving an answer shipped a false
+            declaration on non-local roles (live QA 2026-07-16, Lever/Xsolla).
+            The extension's own setup screen says the stored values are for the
+            student's reference and are never used to answer a form, and the
+            store listing promises "never answers questions about work
+            authorization or visa sponsorship".
+            This mockup showed both filled, with a green tick, which advertised
+            the product doing the one thing it deliberately refuses to do, on a
+            legally sensitive field. Leave these declined. */}
         <div className="grid grid-cols-2 gap-2">
-          <FormField label="Authorized to work in the U.S.? *" value="Yes" select />
-          <FormField label="Require sponsorship? *" value="Yes" select />
+          <FormField
+            label="Authorized to work in the U.S.? *"
+            value="Left for you, rules differ by country."
+            filled={false}
+          />
+          <FormField
+            label="Require sponsorship? *"
+            value="Left for you, rules differ by country."
+            filled={false}
+          />
         </div>
         <FormField label="How did you hear about us?" value="Company careers page" select />
         <FormField

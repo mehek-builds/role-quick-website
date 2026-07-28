@@ -77,13 +77,20 @@ export default function LitosVsSimplify() {
             thing to weigh, and it points at them.
           </Row>
 
+          {/* The "forty-five real resumes from five university career centres"
+              sentence came out 2026-07-28, with the same line on the homepage
+              and for the same reason (Mehek's call): it is our QA process, not
+              the reader's decision. On a comparison page it is worse than on the
+              homepage, because the question here is which tool to pick and how
+              many fixtures we regression-tested against does not answer it.
+
+              It stays on /for-career-centres, deliberately and not by
+              oversight. That page exists to answer "has this been tested on
+              resumes like our students'?", which is the one audience for whom
+              the number IS the answer. */}
           <Row h="Where Litos is different">
             Litos rebuilds the resume rather than swapping keywords into it, and
-            the rebuild is the thing it is judged on. Forty-five real resumes
-            from five university career centres were run through it, chosen to be
-            awkward: federal and military prose, nursing, social work,
-            biochemistry, music performance. They exposed thirteen defects, which
-            were fixed.
+            the rebuild is the thing it is judged on.
           </Row>
 
           <Row h="What happens at the send button">

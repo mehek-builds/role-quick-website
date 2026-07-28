@@ -772,9 +772,8 @@ export default function Applications() {
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
                 <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} />
-                <p className="mt-1.5 text-[11px] text-faint">
-                  Point at any highlighted term to see it light up on both sides.
-                </p>
+                {/* "Point at any highlighted term to see it light up on both
+                    sides." came off 2026-07-28: instructions for a hover. */}
               </div>
             </div>
 
@@ -848,29 +847,24 @@ export default function Applications() {
               </ul>
             )}
           </Card> : <Card className="p-6">
-            <p className="text-xs text-muted">Cover letter on demand</p>
-            <h2 className="mt-2 text-lg font-medium text-ink">{review.cover_letter_supported === false ? "This company does not take a cover letter." : "Litos will check the company's form first."}</h2>
+            {/* Was an eyebrow, a headline and a two-sentence body: three tiers
+                of type for one idea the headline already carried. */}
+            <h2 className="text-lg font-medium text-ink">{review.cover_letter_supported === false ? "This company does not take a cover letter." : "Litos will check the company's form first."}</h2>
             <p className="mt-1 text-sm leading-6 text-muted">
               {review.cover_letter_supported === false
-                ? "This application will continue without manufacturing a cover letter."
-                : "If the application includes a cover-letter file attachment, Litos will generate and attach a tailored letter. It will do this even when the field is marked optional."}
+                ? "This application will continue without one."
+                : "If the form has a cover-letter attachment, Litos writes one and attaches it, even when it is marked optional."}
             </p>
           </Card>}
 
-          {/* The action bar used to carry three stacked sentences and a two-part colour legend at
-              11px. A legend belongs beside the thing it explains, so it sits directly under the two
-              panes now, and the bar is left with one sentence and one button. */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
-            <span className="inline-flex items-center gap-1.5">
-              <mark className="rounded bg-brand-soft px-1 text-brand-ink">Blue</mark>
-              words you already had
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <mark className="rounded-[3px] border-b-2 border-positive bg-positive-soft px-1 text-positive">Green</mark>
-              words we added for this job
-            </span>
-          </div>
-
+          {/* The Blue/Green legend was REMOVED 2026-07-28. This screen carried
+              two legends for one colour code: MatchLegend above the panes and
+              this one below them. Not merely similar, identical Tailwind
+              classes, with different words for the same two colours.
+              MatchLegend wins: it names all three tones rather than two, and
+              it says what the colour MEANS rather than what it IS. Two names
+              for one colour is worse than no name. Guarded by R-046 in
+              tests/review-highlighting.test.mjs. */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
             <p className="text-sm text-ink">Litos fills the form with your saved answers and this resume.</p>
             <div className="flex gap-2">

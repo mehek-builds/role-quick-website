@@ -108,9 +108,10 @@ export default function ResumeWorkspace() {
     <div className="space-y-8">
       <div>
         <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Resume</h1>
+        {/* The second sentence explained the system to itself. A page called
+            Resume, holding the resume, does not need to justify holding it. */}
         <p className="mt-1 text-sm text-muted">
-          Your main resume and everything you have done. Every resume we make is built
-          from what lives here, so the richer it is, the better the fit.
+          Your main resume and everything you have done.
         </p>
       </div>
 
@@ -166,9 +167,11 @@ export default function ResumeWorkspace() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-medium text-ink">Everything you have done</h2>
+            {/* "We pick the ones that fit each job" is the same promise the
+                whole product makes on every screen. The heading plus the
+                first sentence is the whole idea. */}
             <p className="mt-1 text-sm text-muted">
               Every job, project, and different way you have written a line.
-              We pick the ones that fit each job.
             </p>
           </div>
           <div className="flex items-center gap-3">
