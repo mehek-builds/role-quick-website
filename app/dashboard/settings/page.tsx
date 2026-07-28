@@ -562,8 +562,15 @@ export default function Settings() {
           that id existed nowhere, so the button landed on Settings and scrolled
           to nothing. Found 2026-07-28 by the new anchor guard in
           tests/route-integrity.test.mjs, which now fails if it goes missing
-          again. */}
-      <Card className="p-6" id="application-details">
+          again.
+
+          scroll-mt-24 is the other half, and screenshots are what caught it:
+          the jump put this card's top at y=0, and the dashboard's sticky header
+          runs to y=73, so the section's own heading landed 48px BEHIND the
+          header. Every numeric check passed ("cardTop 0, inView true") while
+          the thing the reader came for was invisible. Same scroll-margin the
+          homepage sections use. */}
+      <Card className="scroll-mt-24 p-6" id="application-details">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-medium text-ink">Answers you give every time</h2>
