@@ -73,6 +73,9 @@ export function Header() {
           <a href="/#product" className="transition-colors hover:text-ink">
             Product
           </a>
+          <a href="/browse-jobs" className="transition-colors hover:text-ink">
+            Jobs
+          </a>
           <a href="/try" className="transition-colors hover:text-ink">
             Try it free
           </a>
