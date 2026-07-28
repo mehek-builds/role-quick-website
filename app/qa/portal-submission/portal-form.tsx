@@ -245,7 +245,10 @@ function BreezyFields() {
     {/* Long-form answer is a TEXTAREA, not a file input - why breezy's cover-letter entry in
         COVER_LETTER_UPLOAD_SELECTORS is a deliberately never-matching selector. */}
     <label className="col-span-full block text-sm text-[#31312d]">Summary<textarea name="cSummary" className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>
-    <Honeypot name="hp_7f2b" />
+    {/* Faithful to the live form: Breezy's trap carries NO label copy and NO placeholder hint, so
+        the "leave this field blank" pattern that catches BambooHR's does nothing here. Prefix and
+        ancestor geometry are the only tells. Giving it copy would make the fixture the easy case. */}
+    <Honeypot name="hp_7f2b" label="" />
     {/* Two consent checkboxes. Never ticked. */}
     <label className="block text-sm text-[#31312d]"><input type="checkbox" name="smsConsent" className="mr-2" />Text me about this application</label>
     <label className="block text-sm text-[#31312d]"><input type="checkbox" name="gdprAgreement" className="mr-2" />I have read the Privacy Notice and consent</label>
