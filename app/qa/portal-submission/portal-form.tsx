@@ -2,7 +2,15 @@
 
 import { createElement, useState } from "react";
 
-export type Board = "greenhouse" | "lever" | "ashby" | "smartrecruiters" | "workable" | "jazzhr" | "paylocity";
+// The board union comes from ./boards, which is the single list both route files also read. Keeping
+// one source is what stops the drift that already happened once: the ?board= route was never updated
+// when Workable, JazzHR and Paylocity shipped, so ?board=workable rendered a GREENHOUSE form while
+// the backend resolved that url to controlled_workable - a run that exercised the wrong adapter and
+// would still have looked like a pass.
+import type { BoardName as Board } from "./boards";
+
+export type { Board };
+
 
 export function PortalForm({ board, caseId }: { board: Board; caseId: string }) {
   const confirmationId = `LITOS-QA-${caseId.toUpperCase()}`;
@@ -29,11 +37,23 @@ export function PortalForm({ board, caseId }: { board: Board; caseId: string }) 
     return <PaylocityWizard step={step} setStep={setStep} lastStep={LAST_STEP} confirmationId={confirmationId} />;
   }
 
+  // BambooHR returns early for the same reason Paylocity does, and carries the same warning: it must
+  // stay ABSENT from the single-step field list below, or TypeScript's narrowing after this return
+  // makes `board === "bamboohr"` an impossible comparison that fails `next build`.
+  //
+  // Its own reason for being here: on the live form the fields do not exist in the DOM at all until
+  // "Apply for This Job" is pressed, and /careers/{id}/apply is a blank page. A fixture that rendered
+  // the fields immediately would let an adapter that never clicks the button pass here and find
+  // nothing on the real form.
+  if (board === "bamboohr") {
+    return <BambooHrForm confirmationId={confirmationId} />;
+  }
+
   if (submitted) {
     return <main className="min-h-screen bg-[#f7f7f3] px-6 py-16"><section className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-10 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5e9] text-2xl text-[#24713b]">✓</div><h1 className="mt-5 text-3xl font-semibold text-[#151512]">Thank you. Your application was received.</h1><p className="mt-3 text-[#63635d]">This is a Litos test page. No employer got this application.</p><p className="mt-5 font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p></section></main>;
   }
 
-  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}</div><button type="submit" className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
+  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}{board === "rippling" && <RipplingFields />}{board === "breezy" && <BreezyFields />}</div><button type="submit" data-testid={board === "rippling" ? "Apply" : undefined} className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
 }
 
 function GreenhouseFields() {
@@ -177,6 +197,118 @@ function PaylocityFields() {
   </>;
 }
 
+// ─── 2026-07-29 captures. Same rule as above: every trap below is reproduced from a real form. ────
+
+// Rippling (ats.rippling.com). THE trap: both `name` and `id` are randomised per render, so the
+// fixture randomises them too. An adapter that matches either passes on one render and fails on the
+// next, and only a fixture that actually randomises can catch that.
+function RipplingFields() {
+  // Deliberately opaque, in the shape Rippling emits (name="Z9gMtYRYFO", id="field-8").
+  const junk = (n: number) => ({ id: `field-${n}`, name: Math.random().toString(36).slice(2, 12) });
+  return <>
+    <TestIdField testId="input-first_name" label="First name" {...junk(8)} />
+    <TestIdField testId="input-last_name" label="Last name" {...junk(12)} />
+    <TestIdField testId="input-email" label="Email" type="email" {...junk(16)} />
+    <TestIdField testId="input-phone_number" label="Phone number" {...junk(31)} />
+    <TestIdField testId="input-current_company" label="Current company" {...junk(27)} />
+    {/* Two file inputs, the same hazard as Workable's avatar. Both carry a data-testid. */}
+    <FileField name="" dataTestId="input-resume" label="Resume" />
+    <FileField name="" dataTestId="input-cover_letter" label="Cover letter" required={false} />
+    {/* THE OTHER trap: all three comboboxes share ONE data-testid, so they cannot be told apart by
+        selector at all. Reading the label above each identifies them as pronouns, phone country code
+        and race. Two are the applicant's own to declare, so there is nothing here to fill and the
+        ambiguity never has to be resolved. */}
+    <TestIdField testId="input-select-search-input" label="Pronouns" ariaLabel="Search" {...junk(20)} />
+    <TestIdField testId="input-select-search-input" label="Country code" ariaLabel="Search" {...junk(34)} />
+    <TestIdField testId="input-select-search-input" label="Please identify your race" ariaLabel="Select..." {...junk(61)} />
+    {/* Marketing consent. Never ticked. */}
+    <fieldset className="col-span-full text-sm text-[#31312d]"><legend>Text messages</legend>
+      <label className="mr-4"><input type="radio" name="sms_opt_in" data-testid="radio-sms_opt_in" className="mr-1" />Yes - I consent to receiving text messages</label>
+      <label><input type="radio" name="sms_opt_in" data-testid="radio-sms_opt_in" className="mr-1" />No</label>
+    </fieldset>
+  </>;
+}
+
+// BreezyHR (*.breezy.hr). Stable c-prefixed names, ONE full-name field, and a honeypot that is the
+// most instructive thing captured all session.
+function BreezyFields() {
+  return <>
+    {/* cName is a single full-name field. An adapter that splits into first/last finds nothing. */}
+    <Field name="cName" label="Full Name" required />
+    <Field name="cEmail" label="Email Address" type="email" required />
+    <Field name="cPhoneNumber" label="Phone Number" />
+    <Field id="fullAddress" name="cAddress" label="Address" />
+    <FileField id="main-attachment" name="cResume" label="Resume" />
+    {/* Long-form answer is a TEXTAREA, not a file input - why breezy's cover-letter entry in
+        COVER_LETTER_UPLOAD_SELECTORS is a deliberately never-matching selector. */}
+    <label className="col-span-full block text-sm text-[#31312d]">Summary<textarea name="cSummary" className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>
+    <Honeypot name="hp_7f2b" />
+    {/* Two consent checkboxes. Never ticked. */}
+    <label className="block text-sm text-[#31312d]"><input type="checkbox" name="smsConsent" className="mr-2" />Text me about this application</label>
+    <label className="block text-sm text-[#31312d]"><input type="checkbox" name="gdprAgreement" className="mr-2" />I have read the Privacy Notice and consent</label>
+  </>;
+}
+
+// BambooHR. The form does not exist until the button is pressed, so the fixture behaves that way.
+function BambooHrForm({ confirmationId }: { confirmationId: string }) {
+  const [open, setOpen] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  if (sent) {
+    return <main className="min-h-screen bg-[#f7f7f3] px-6 py-16"><section className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-10 text-center"><h1 className="mt-5 text-3xl font-semibold text-[#151512]">Thank you. Your application was received.</h1><p className="mt-3 text-[#63635d]">This is a Litos test page. No employer got this application.</p><p className="mt-5 font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p></section></main>;
+  }
+
+  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><div className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8">
+    <p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled bamboohr verification portal</p>
+    <h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1>
+    {!open && <>
+      <p className="mt-2 text-sm text-[#63635d]">The application fields are not in the DOM until this button is pressed, exactly as on a live BambooHR posting.</p>
+      <button type="button" onClick={() => setOpen(true)} className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Apply for This Job</button>
+    </>}
+    {open && <form data-litos-controlled-portal data-board="bamboohr" onSubmit={(e) => { e.preventDefault(); setSent(true); }}>
+      <div className="mt-8 grid gap-5 sm:grid-cols-2">
+        <Honeypot name="nickname_hpcsaf" label="Please leave this field blank" />
+        <Field name="firstName" label="First Name" required /><Field name="lastName" label="Last Name" required />
+        <Field name="email" label="Email" type="email" required /><Field name="phone" label="Phone" required />
+        <Field name="streetAddress.value" label="Address" required /><Field name="city.value" label="City" required />
+        <Field name="zip.value" label="ZIP" required />
+        <Field name="desiredPay" label="Desired Pay" /><Field name="websiteUrl" label="Website, Blog or Portfolio" />
+        <Field name="linkedinUrl" label="LinkedIn URL" />
+        {/* The resume input carries NO name and NO stable id - aria-label is the only hook. */}
+        <FileField name="" ariaLabel="file-input" label="Resume" />
+        {/* TRAP: BambooHR gates on reCAPTCHA. Its presence is what must drive a run to a blocker
+            rather than a submit - portalCanAutoSubmit('bamboohr') is false for this reason. */}
+        <textarea name="g-recaptcha-response" className="hidden" readOnly value="" />
+        <div data-litos-fixture-note className="col-span-full rounded-lg bg-[#fff4e5] p-3 text-xs text-[#7a5a1e]">This fixture carries a reCAPTCHA field, so a BambooHR run must stop here and hand off.</div>
+      </div>
+      {/* TRAP: TWO type="submit" buttons, and "Cancel" is one of them. A generic
+          button[type="submit"] selector is ambiguous on this form. */}
+      <button type="submit" className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit Application</button>
+      <button type="submit" className="mt-8 ml-3 rounded-full border border-[#cfcfc6] px-6 py-3 font-medium text-[#63635d]">Cancel</button>
+    </form>}
+  </div></main>;
+}
+
+// A honeypot as the live forms actually build them, and the reason this component exists rather than
+// a `hidden` attribute: the INPUT ITSELF is fully visible by every computed-style test - opacity 1,
+// visibility visible, display block, real width and height. It is concealed only by an ancestor with
+// height 0 and overflow hidden. Captured this way on both Breezy and BambooHR on 2026-07-29.
+//
+// So a guard that checks the element's own style passes it straight through and fills it, which is
+// how a form silently rejects an application. Only ancestor geometry catches this. Reproducing it
+// faithfully is the whole value of the fixture; `display: none` would prove nothing.
+function Honeypot({ name, label = "Please leave this field blank" }: { name: string; label?: string }) {
+  return <div className="apply-field-extra" style={{ height: 0, overflow: "hidden" }} aria-hidden>
+    <label className="block text-sm text-[#31312d]">{label}<input name={name} id={name} type="text" tabIndex={-1} placeholder="Enter your text here" className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>
+  </div>;
+}
+
+// Rippling's fields are identified by data-testid alone, so this variant makes the testid primary and
+// the name/id deliberately junk.
+function TestIdField({ testId, id, name, label, type = "text", ariaLabel }: { testId: string; id?: string; name?: string; label: string; type?: string; ariaLabel?: string }) {
+  return <label className="block text-sm text-[#31312d]">{label}<input id={id} name={name} data-testid={testId} type={type} aria-label={ariaLabel} placeholder={label} className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>;
+}
+
 function Field({ id, name, label, type = "text", required = false, ariaLabel, noName = false }: { id?: string; name?: string; label: string; type?: string; required?: boolean; ariaLabel?: string; noName?: boolean }) {
   // noName exists for Paylocity, whose real fields carry an id and NO name attribute at all. The
   // default `name ?? id` fallback would quietly give them a name, and an adapter matching by name
@@ -185,11 +317,11 @@ function Field({ id, name, label, type = "text", required = false, ariaLabel, no
   return <label className="block text-sm text-[#31312d]">{label}<input id={id} name={noName ? undefined : (name ?? id)} type={type} required={required} aria-label={ariaLabel} className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>;
 }
 
-function FileField({ id, name, bare = false, dataUi, label = "Resume", required = true }: { id?: string; name: string; bare?: boolean; dataUi?: string; label?: string; required?: boolean }) {
+function FileField({ id, name, bare = false, dataUi, dataTestId, ariaLabel, label = "Resume", required = true }: { id?: string; name: string; bare?: boolean; dataUi?: string; dataTestId?: string; ariaLabel?: string; label?: string; required?: boolean }) {
   // Defaults to required, matching every pre-existing fixture's single resume input. The Workable
   // and Paylocity fixtures render SEVERAL file inputs (photo, cover letter, additional files), and
   // those pass required={false}: marking them required would make the fixture's own required-field
   // sweep report blockers for documents the student was never actually asked for.
-  const input = <input id={id} name={name} data-ui={dataUi} type="file" accept="application/pdf" required={required} className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" />;
+  const input = <input id={id} name={name} data-ui={dataUi} data-testid={dataTestId} aria-label={ariaLabel} type="file" accept="application/pdf" required={required} className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" />;
   return bare ? input : <label className="block text-sm text-[#31312d]">{label}{input}</label>;
 }
