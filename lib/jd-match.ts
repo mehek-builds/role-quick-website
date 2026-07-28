@@ -153,6 +153,10 @@ export type Stage = "saved" | "applied" | "interview" | "offer" | "closed";
 
 export type BoardCard = {
   id: string;
+  /* The monitored posting this application was started from, or null. NOT the card's own id.
+     Null on every application recorded before 2026-07-28 and on anything generated from the
+     extension or a hand-typed link, so readers must keep a path that works without it. */
+  job_id: string | null;
   company: string;
   role: string;
   created_at: string | null;

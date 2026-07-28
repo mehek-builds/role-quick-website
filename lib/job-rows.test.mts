@@ -1,6 +1,6 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { applicationKey, companyDomain, countNewToday, isAppliedStage } from "./job-rows.ts";
+import { applicationKey, buildAppliedIndex, companyDomain, countNewToday, isAppliedStage, isJobApplied } from "./job-rows.ts";
 import { isQaRenderFor } from "./qa-mode.ts";
 
 describe("companyDomain", () => {
@@ -133,6 +133,83 @@ describe("isAppliedStage", () => {
   test("an unknown stage is not applied", () => {
     assert.equal(isAppliedStage("archived"), false);
     assert.equal(isAppliedStage(""), false);
+  });
+});
+
+describe("buildAppliedIndex / isJobApplied", () => {
+  const card = (over: Partial<{ job_id: string | null; company: string; role: string; stage: string }> = {}) => ({
+    job_id: null as string | null,
+    company: "Google",
+    role: "Software Engineer",
+    stage: "applied",
+    ...over,
+  });
+  const job = (over: Partial<{ id: string; company_name: string; title: string }> = {}) => ({
+    id: "job-mtv",
+    company_name: "Google",
+    title: "Software Engineer",
+    ...over,
+  });
+
+  test("an exact job-id match marks the row", () => {
+    const index = buildAppliedIndex([card({ job_id: "job-mtv" })]);
+    assert.equal(isJobApplied(job({ id: "job-mtv" }), index), true);
+  });
+
+  /* THE BUG THIS WHOLE CHANGE EXISTS FOR. Google reposts one title in Mountain View, New York and
+     London. Applying to one used to mark all three, and a row that wrongly says "Applied" is an
+     application the student never sends. */
+  test("an id match on one posting does NOT mark a sibling with the same company and title", () => {
+    const index = buildAppliedIndex([card({ job_id: "job-mtv" })]);
+    assert.equal(isJobApplied(job({ id: "job-mtv" }), index), true, "the one applied to");
+    assert.equal(isJobApplied(job({ id: "job-nyc" }), index), false, "New York was never applied to");
+    assert.equal(isJobApplied(job({ id: "job-lon" }), index), false, "nor was London");
+  });
+
+  /* The other half of the same rule: a card WITH an id must not also register its company+role,
+     or the siblings above would match on the fallback and nothing would have been fixed. */
+  test("a card with an id contributes no company+role key", () => {
+    const index = buildAppliedIndex([card({ job_id: "job-mtv" })]);
+    assert.equal(index.keys.size, 0);
+    assert.deepEqual([...index.ids], ["job-mtv"]);
+  });
+
+  test("the company+role fallback still marks a card that has no job_id", () => {
+    // Every application recorded before ids were written, and anything from the extension.
+    const index = buildAppliedIndex([card({ job_id: null })]);
+    assert.equal(isJobApplied(job({ id: "job-mtv" }), index), true);
+    assert.equal(isJobApplied(job({ id: "job-nyc" }), index), true, "still lossy, and unfixably so");
+  });
+
+  test("the fallback keeps normalising company and role as it did", () => {
+    const index = buildAppliedIndex([card({ job_id: null, company: "Google, Inc." })]);
+    assert.equal(isJobApplied(job({ company_name: "Google" }), index), true);
+  });
+
+  test("old and new cards coexist, each matching its own way", () => {
+    const index = buildAppliedIndex([
+      card({ job_id: "job-mtv" }),
+      card({ job_id: null, company: "Stripe", role: "Data Analyst" }),
+    ]);
+    assert.equal(isJobApplied(job({ id: "job-mtv" }), index), true);
+    assert.equal(isJobApplied(job({ id: "job-nyc" }), index), false, "the id path stays precise");
+    assert.equal(isJobApplied(job({ id: "x", company_name: "Stripe", title: "Data Analyst" }), index), true);
+  });
+
+  test("a stage that is not an application is indexed by neither path", () => {
+    const index = buildAppliedIndex([
+      card({ job_id: "job-mtv", stage: "saved" }),
+      card({ job_id: null, company: "Stripe", role: "Data Analyst", stage: "closed" }),
+    ]);
+    assert.equal(index.ids.size, 0);
+    assert.equal(index.keys.size, 0);
+    assert.equal(isJobApplied(job({ id: "job-mtv" }), index), false);
+  });
+
+  /* Null is "the board has not answered", not "nothing is applied". It must not paint a green
+     statement the student cannot act on. */
+  test("a null index never claims a row is applied", () => {
+    assert.equal(isJobApplied(job(), null), false);
   });
 });
 
