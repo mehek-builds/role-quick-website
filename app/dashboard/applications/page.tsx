@@ -755,6 +755,10 @@ export default function Applications() {
               scroll INSIDE themselves against a shared height. The page holds still; the panes
               move. The gap list sits under the JD, which is where the dead space was. */}
           <RequirementProvider index={requirementIndex}>
+            {/* Marks the review surface for the marketing capture script, which
+                needs the score/legend header and both columns as ONE region:
+                the highlights are meaningless without the key. */}
+            <div data-hero-review>
             <div className="rounded-card border border-border bg-surface-alt px-5 py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
                 <div className="min-w-0">
@@ -825,6 +829,7 @@ export default function Applications() {
                   </div>
                 </div>
               </section>
+            </div>
             </div>
           </RequirementProvider>
 

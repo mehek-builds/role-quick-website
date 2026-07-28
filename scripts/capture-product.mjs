@@ -107,12 +107,20 @@ const SHOTS = [
        the posting beside the tailored resume with the match legend above. */
     scrollTo: "text=Point at any highlighted term",
     scrollPad: 96,
-    /* Crop to the resume panel alone, at 1:1. The whole two-column review
-       screen is 1216px wide and had to be scaled to about 0.8 to fit the hero
-       stage, which put its 13px type under 11px: the exact "shrink it to fit,
-       then animate the blur" failure. The tailored resume with the posting's
-       terms lit up on it IS the claim, and on its own it is legible. */
-    element: 'section:has(p:text-is("Your resume for this job"))',
+    /* Crop to the review surface: the score-and-legend header PLUS both
+       columns.
+     *
+     * The previous crop took the resume panel alone, which threw away the key.
+       A visitor saw blue chips and one green underlined word with no way to
+       know what either meant, under a caption claiming the posting's words were
+       lit up "where your work matches" — with the posting not in frame. The
+       legend names all three highlight types, and the JD column carries the
+       single most credible pixel on the site: Node.js in orange, with "This
+       posting asks for 1 thing your resume does not mention." A resume tool
+       printing what you are missing is worth more than any highlight. */
+    element: '[data-hero-review]',
+    clipTo: { height: 620 },
+    hide: ["header.sticky"],
     story: 2,
     cap: "You read it before it goes",
     note: "The resume Litos wrote for this one job. The posting's own words are lit up where your work matches. Change anything before it goes.",
@@ -294,6 +302,18 @@ async function shoot(browser, shot, outDir) {
   /* Webfonts land after networkidle often enough to matter: an unpatched run
      photographs the fallback face and the whole capture reads as a different
      product. */
+  /* `hide` removes chrome that overlaps the region being cropped. The
+     dashboard's sticky header sat on top of the review surface, so the crop
+     arrived with a nav bar across it that is not part of what the frame
+     claims to show. This hides furniture only; it never hides product state.
+     The auth-banner assertion below still runs, so nothing can be hidden to
+     make a broken screen look whole. */
+  if (shot.hide) {
+    await page.addStyleTag({
+      content: `${shot.hide.join(", ")} { display: none !important; }`,
+    });
+  }
+
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
 
@@ -327,7 +347,22 @@ async function shoot(browser, shot, outDir) {
   const selector = shot.element ?? (shot.clip ? shot.wait : null);
   const target = selector ? page.locator(selector).first() : page;
   const file = join(outDir, `${shot.name}.png`);
-  await target.screenshot({ path: file, ...(selector ? {} : { fullPage: false }) });
+
+  /* `clipTo` caps a region that is taller than the stage can use, cutting from
+     the BOTTOM so the top of the surface (which is where the header and the key
+     live) always survives. Without it the only way to shorten a frame was to
+     pick a smaller element, which is how the legend got cropped off in the
+     first place. */
+  if (selector && shot.clipTo) {
+    const b = await target.boundingBox();
+    if (!b) throw new Error(`${shot.name}: ${selector} has no box`);
+    await page.screenshot({
+      path: file,
+      clip: { x: b.x, y: b.y, width: b.width, height: Math.min(b.height, shot.clipTo.height) },
+    });
+  } else {
+    await target.screenshot({ path: file, ...(selector ? {} : { fullPage: false }) });
+  }
 
   /* WebP alongside the PNG, because these land above the fold and the hero
      frame is a live LCP candidate. The film frames are already webp at ~62KB
@@ -343,7 +378,10 @@ async function shoot(browser, shot, outDir) {
   if (shot.element) {
     const measured = await target.boundingBox();
     if (!measured) throw new Error(`${shot.name}: element ${shot.element} has no box`);
-    box = { width: Math.round(measured.width), height: Math.round(measured.height) };
+    box = {
+      width: Math.round(measured.width),
+      height: Math.round(shot.clipTo ? Math.min(measured.height, shot.clipTo.height) : measured.height),
+    };
   }
   await page.close();
 
