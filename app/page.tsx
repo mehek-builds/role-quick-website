@@ -284,44 +284,28 @@ export default function Home() {
                     work first, in their words. A robot reads it before a
                     person does, so we build one it can read.
                   </p>
-                  {/* Alex Rivera is a sample applicant, and the numbers inside
-                      that resume ("80 students", "800 student users") are his,
-                      not ours. Unlabelled, a skimmer reads them as Litos proof.
-                      Says "applicant", not "student": this label is the one line
-                      that names who the example IS, so calling him a student
-                      told every non-student the tool was not for them.
+                  {/* Two mono lines were REMOVED here 2026-07-28, on Mehek's
+                      call, under the same rule as the rest of the deletion
+                      pass: if it can go without hurting the message, it goes.
 
-                      This label used to live in #formats. When that band was
-                      deleted the label had to come with it, because the demo it
-                      describes is HERE and still shows his name and his numbers.
-                      Both this line and the machine-readability sentence above
-                      were written into the deletion commit and then silently
-                      dropped by a cherry-pick auto-merge, so for one deploy the
-                      page showed a fake applicant's metrics with nothing saying
-                      he was fake. Do not separate this label from the demo. */}
-                  <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Not a real applicant. Just an example.
-                  </p>
-                  {/* The rigour claim, and the ONLY form of it that is true.
-                      The approved change was an institution proof row, the
-                      Simplify move ("Recommended by Harvard, Stanford, and top
-                      career centers"). Litos has no such relationship. What it
-                      has is that 45 public sample resumes from five career
-                      centres were driven through this builder, which found and
-                      fixed 13 defects. Putting the universities' names or marks
-                      on the page would convert "we tested against their
-                      coursework" into "they endorse us", which is a fabricated
-                      endorsement and misrepresents five real institutions.
+                      "Not a real applicant. Just an example." labelled the
+                      resume in the demo below. The demo is a resume with a
+                      name, a university email and a phone number on it. It
+                      reads as an example because it is one, and the label was
+                      the page explaining itself to itself. It had also just
+                      been re-added and wrapped in a test guard on the argument
+                      that a skimmer would read the sample's numbers as ours;
+                      that argument did not survive looking at the thing.
 
-                      So the number ships and the names do not. It is a claim
-                      about our own work rather than borrowed authority, which
-                      makes it both honest and, for a builder, more relevant:
-                      the question a student has is whether it handles a resume
-                      like theirs. Mono because it is a measurement.
-                      Source: vault litos-onboarding-15-resume-run-2026-07-27. */}
-                  <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    Tested on 45 real resumes from five university career centres
-                  </p>
+                      "Tested on 45 real resumes from five university career
+                      centres" was QA process, not the product. The message of
+                      this section is that we rebuild the resume for the job.
+                      How many fixtures the builder was regression-tested
+                      against is not that, and the number is small enough to
+                      read as a limit rather than as rigour.
+
+                      Both are recoverable from git if the case for either ever
+                      gets stronger than "it felt safer to say it". */}
                   <PillarLink href="/try?step=resume">See it rebuild a resume</PillarLink>
                 </div>
               </Reveal>
@@ -429,14 +413,14 @@ export default function Home() {
                   <p className="mt-3 text-[13px] text-muted">
                     You can change any of this in Settings.
                   </p>
+
+                  {/* "This is a picture we made. Real screenshots are below."
+                      stood here and in #outreach, and #captures states the same
+                      distinction a third time in its own intro. Removed
+                      2026-07-28: two of the three were the page explaining its
+                      own illustrations. #captures still draws the line once,
+                      where it belongs, next to the real screenshots. */}
                   <PillarLink href="/try?step=autofill">See it fill a form</PillarLink>
-                  {/* These panels are built in the DOM, not captured from a
-                      live session. They reproduce the extension's real
-                      output, but a reader is entitled to know which one
-                      they are looking at before treating it as evidence. */}
-                  <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    This is a picture we made. Real screenshots are below.
-                  </p>
                 </div>
               </div>
             </Reveal>
@@ -477,9 +461,6 @@ export default function Home() {
                     <p className="text-muted">We write a short note that sounds like you.</p>
                     <p className="text-muted">We leave the send button to you.</p>
                   </div>
-                  <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    This is a picture we made. Real screenshots are below.
-                  </p>
                   <PillarLink href="/try?step=outreach">See it write an email</PillarLink>
                 </div>
                 <div>
