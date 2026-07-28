@@ -7,43 +7,80 @@ import { readFileSync } from "node:fs";
    EMPLOYER (posted) or about us (found), and pageWindow is the only thing
    standing between a 300-page board and a nav bar with 300 links in it. */
 
-const { agoLabel, pageWindow, pageCount, PER_PAGE } = await import(
-  "../lib/browse-jobs.ts"
-);
+const { agoLabel, pageWindow, pageCount, locationLabel, countLabel, PER_PAGE } =
+  await import("../lib/browse-jobs.ts");
 
 const DAY = 86_400_000;
 const NOW = Date.parse("2026-07-28T12:00:00Z");
 const at = (days) => new Date(NOW - days * DAY).toISOString();
+const job = (over) => ({ posted_at: null, first_seen_at: at(1), ats_name: "lever", ...over });
 
 describe("agoLabel", () => {
-  test("says POSTED only when the employer gave us a date", () => {
+  test("says POSTED where the board gave a real publish date", () => {
+    for (const ats of ["lever", "ashby"]) {
+      assert.equal(
+        agoLabel(job({ posted_at: at(3), ats_name: ats }), NOW),
+        "POSTED 3 DAYS AGO",
+      );
+    }
+  });
+
+  test("says UPDATED on Greenhouse, whose date is not a publish date", () => {
+    /* Greenhouse's board API exposes only updated_at, which moves every time
+       anyone edits the posting: 620 of 5,920 Greenhouse rows carried today's
+       date on the day they were first pulled. Calling that POSTED would print
+       "POSTED TODAY" down the whole page, which is the competitor's "Just now"
+       with our name on it. */
     assert.equal(
-      agoLabel({ posted_at: at(3), first_seen_at: at(1) }, NOW),
-      "POSTED 3 DAYS AGO",
-    );
-    /* The competitor stamps every row "Just now" regardless. When the board
-       gives no date, the honest sentence is about when we saw it. */
-    assert.equal(
-      agoLabel({ posted_at: null, first_seen_at: at(3) }, NOW),
-      "FOUND 3 DAYS AGO",
+      agoLabel(job({ posted_at: at(3), ats_name: "greenhouse" }), NOW),
+      "UPDATED 3 DAYS AGO",
     );
   });
 
+  test("says FOUND when there is no employer date at all", () => {
+    assert.equal(agoLabel(job({ posted_at: null, first_seen_at: at(3) }), NOW), "FOUND 3 DAYS AGO");
+  });
+
   test("reads naturally at the edges", () => {
-    assert.equal(agoLabel({ posted_at: at(0), first_seen_at: at(0) }, NOW), "POSTED TODAY");
-    assert.equal(agoLabel({ posted_at: at(1), first_seen_at: at(1) }, NOW), "POSTED YESTERDAY");
-    assert.equal(agoLabel({ posted_at: at(45), first_seen_at: at(45) }, NOW), "POSTED 1 MONTH AGO");
-    assert.equal(agoLabel({ posted_at: at(90), first_seen_at: at(90) }, NOW), "POSTED 3 MONTHS AGO");
+    assert.equal(agoLabel(job({ posted_at: at(0) }), NOW), "POSTED TODAY");
+    assert.equal(agoLabel(job({ posted_at: at(1) }), NOW), "POSTED YESTERDAY");
+    assert.equal(agoLabel(job({ posted_at: at(45) }), NOW), "POSTED 1 MONTH AGO");
+    assert.equal(agoLabel(job({ posted_at: at(90) }), NOW), "POSTED 3 MONTHS AGO");
   });
 
   test("a future timestamp does not render as a negative age", () => {
     /* Boards do publish tomorrow-dated postings. "POSTED -1 DAYS AGO" is the
        kind of thing that ships because nobody thinks to try it. */
-    assert.equal(agoLabel({ posted_at: at(-2), first_seen_at: at(-2) }, NOW), "POSTED TODAY");
+    assert.equal(agoLabel(job({ posted_at: at(-2) }), NOW), "POSTED TODAY");
   });
 
   test("an unparseable timestamp renders nothing rather than NaN", () => {
-    assert.equal(agoLabel({ posted_at: "not a date", first_seen_at: "also not" }, NOW), null);
+    assert.equal(agoLabel(job({ posted_at: "not a date" }), NOW), null);
+  });
+});
+
+describe("locationLabel", () => {
+  test("passes a real location straight through", () => {
+    assert.equal(locationLabel({ location: "New York, NY", remote: false }), "New York, NY");
+  });
+
+  test("does not print an employer's leftover template text", () => {
+    /* Stripe publishes three live postings whose location is the literal word
+       "LOCATION". Rendering it verbatim makes our page look broken for a
+       mistake made on theirs. */
+    assert.equal(locationLabel({ location: "LOCATION", remote: false }), "Location not given");
+    assert.equal(locationLabel({ location: "TBD", remote: true }), "Remote");
+    assert.equal(locationLabel({ location: null, remote: true }), "Remote");
+    assert.equal(locationLabel({ location: "  ", remote: false }), "Location not given");
+  });
+});
+
+describe("countLabel", () => {
+  test("prints a bare numeral, because a mono comma reads as a typo", () => {
+    /* In Azeret Mono every glyph gets the same advance, so "7,106" renders on
+       the page as "7 , 106" — in the one number the whole page is judged on. */
+    assert.equal(countLabel(7106), "7106");
+    assert.ok(!countLabel(7106).includes(","));
   });
 });
 

@@ -77,15 +77,26 @@ export async function fetchJobs({
   }
 }
 
-/* "POSTED 3 DAYS AGO" beats a date nobody converts in their head, and the
-   distinction between the two labels is load-bearing: posted_at is the
-   employer's own timestamp, first_seen_at is only when Litos noticed. Calling
-   the second one "posted" would be inventing a fact about someone else's
-   posting, which is exactly the claim the competitor makes when it stamps
-   every row "Just now". */
-export function agoLabel(job: Pick<BrowseJob, "posted_at" | "first_seen_at">, now = Date.now()) {
+/* "POSTED 3 DAYS AGO" beats a date nobody converts in their head, and which
+   word goes in front of it is load-bearing.
+
+   posted_at does not mean the same thing on all three boards, which the first
+   version of this page got wrong. Lever gives createdAt and Ashby gives
+   publishedAt: both are genuinely when the job went up, and both go back years
+   in our data. Greenhouse's board API exposes only updated_at, which moves
+   every time anyone edits the posting — 620 of 5,920 Greenhouse rows carried
+   today's date on the day they were first pulled. Printing POSTED TODAY across
+   a whole page off the back of that is precisely the claim this page exists
+   not to make, so Greenhouse says UPDATED, which is what the number is.
+
+   And when there is no employer timestamp at all, the honest sentence is about
+   us: FOUND, meaning when Litos first saw it. */
+export function agoLabel(
+  job: Pick<BrowseJob, "posted_at" | "first_seen_at" | "ats_name">,
+  now = Date.now(),
+) {
   const stamp = job.posted_at ?? job.first_seen_at;
-  const verb = job.posted_at ? "POSTED" : "FOUND";
+  const verb = !job.posted_at ? "FOUND" : job.ats_name === "greenhouse" ? "UPDATED" : "POSTED";
   const at = Date.parse(stamp);
   if (Number.isNaN(at)) return null;
   const days = Math.floor((now - at) / 86_400_000);
@@ -118,4 +129,24 @@ export function pageWindow(current: number, pages: number, span = 2): (number | 
 
 export function pageCount(total: number): number {
   return Math.max(1, Math.ceil(total / PER_PAGE));
+}
+
+/* Employers leave the template text in. Stripe publishes three live postings
+   whose location is the literal word "LOCATION", and rendering that verbatim
+   makes our page look broken for a mistake made on theirs. Anything that is
+   plainly a placeholder falls back to what we do know. */
+const PLACEHOLDER = /^(location|city|remote\?|n\/?a|tbd|various|multiple)$/i;
+
+export function locationLabel(job: Pick<BrowseJob, "location" | "remote">): string {
+  const raw = job.location?.trim();
+  if (raw && !PLACEHOLDER.test(raw)) return raw;
+  return job.remote ? "Remote" : "Location not given";
+}
+
+/* Bare mono numerals, per DESIGN.md. Deliberately no thousands separator: in
+   Azeret Mono every glyph gets the same advance, so a comma sits alone in a
+   full-width cell and "7,106" reads on the page as "7 , 106", which looks like
+   a typo in the one number the page is judged on. */
+export function countLabel(n: number): string {
+  return String(n);
 }

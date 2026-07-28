@@ -3,7 +3,9 @@ import { Header } from "@/components/Header";
 import { STORE_URL } from "@/lib/config";
 import {
   agoLabel,
+  countLabel,
   fetchJobs,
+  locationLabel,
   pageCount,
   pageWindow,
   PER_PAGE,
@@ -26,11 +28,13 @@ export const metadata: Metadata = {
  * straight down the page (Mehek, 2026-07-28). Full-width bars spend one job per
  * ~80px of scroll and leave two thirds of every row empty.
  *
- * TWO, the count is the real row count, and the timestamps are real. Theirs
- * advertises 644,546 jobs "updated hourly" over a list where every single card
- * claims it was posted "Just now". Ours prints what the query counted, and a
- * card says POSTED only when the employer's own board gave us a date; when it
- * did not, it says FOUND, because that is a fact about us and not about them.
+ * TWO, the count is the real row count, and the timestamps say what they mean.
+ * Theirs advertises 644,546 jobs "updated hourly" over a list where every card
+ * claims it was posted "Just now". Ours prints what the query counted, and each
+ * card names its own timestamp honestly: POSTED where the board gave a real
+ * publish date, UPDATED on Greenhouse (whose API exposes only updated_at, which
+ * moves on every edit), FOUND where there is no employer date at all and the
+ * only true statement is when we saw it. See agoLabel in lib/browse-jobs.ts.
  *
  * Server-rendered, plain GET form, no client state: a search is a real URL that
  * can be shared, linked and crawled. */
@@ -47,7 +51,7 @@ function Tile({ job }: { job: BrowseJob }) {
       <p className="text-[15px] font-medium leading-snug text-ink">{job.title}</p>
       <p className="mt-1 text-small text-muted">{job.company_name}</p>
       <p className="mt-auto truncate pt-4 text-small text-faint">
-        {job.location || (job.remote ? "Remote" : "Location not given")}
+        {locationLabel(job)}
       </p>
       {ago && (
         <p className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">
@@ -91,7 +95,7 @@ export default async function BrowseJobs({
         <p className="mt-4 max-w-[62ch] text-base leading-7 text-muted">
           {ok ? (
             <>
-              <span className="font-mono text-ink">{total.toLocaleString("en-US")}</span>{" "}
+              <span className="font-mono text-ink">{countLabel(total)}</span>{" "}
               open jobs, read straight off each company&rsquo;s own job board and
               checked again every day. Open one and Litos writes the resume for it
               and fills in the form.
@@ -127,7 +131,7 @@ export default async function BrowseJobs({
 
         {q && ok && (
           <p className="mt-4 font-mono text-machine text-muted">
-            {total.toLocaleString("en-US")} {total === 1 ? "match" : "matches"} for
+            {countLabel(total)} {total === 1 ? "match" : "matches"} for
             &ldquo;{q}&rdquo;.{" "}
             <a href="/browse-jobs" className="underline underline-offset-2 hover:text-ink">
               Clear
@@ -199,7 +203,7 @@ export default async function BrowseJobs({
               </a>
             )}
             <span className="ml-3 text-faint">
-              page {current} of {pages.toLocaleString("en-US")} · {PER_PAGE} per page
+              page {current} of {countLabel(pages)} · {PER_PAGE} per page
             </span>
           </nav>
         )}
