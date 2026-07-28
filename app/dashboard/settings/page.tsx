@@ -472,8 +472,14 @@ export default function Settings() {
         <p className="mt-4 text-xs leading-5 text-faint">Litos still stops and waits for you when something is missing, when two answers do not match, when a question is about you personally, when a site checks you are human, or when it is not sure.</p>
       </Card>
 
-      {/* Application profile */}
-      <Card className="p-6">
+      {/* Application profile.
+          id="application-details" is load-bearing: /dashboard/profile's "Edit
+          details" button links to /dashboard/settings#application-details, and
+          that id existed nowhere, so the button landed on Settings and scrolled
+          to nothing. Found 2026-07-28 by the new anchor guard in
+          tests/route-integrity.test.mjs, which now fails if it goes missing
+          again. */}
+      <Card className="p-6" id="application-details">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-medium text-ink">Answers you give every time</h2>

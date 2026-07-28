@@ -119,6 +119,54 @@ test("every internal link points at a route that exists", () => {
   );
 });
 
+/* ---------- 2b. every in-page anchor points at an id that exists ---------- */
+
+/* Why this exists, and it is not hypothetical: on 2026-07-28 the #formats band
+ * was deleted and folded into #documents, and TWO "skip ahead" controls kept
+ * pointing at href="#formats". Both shipped to production. Both did nothing
+ * when clicked.
+ *
+ * This file already existed to prevent exactly that class of bug, and it missed
+ * it, because internalHrefs() only matches hrefs beginning with "/" and
+ * explicitly strips the fragment: `href="(\/[^"#?]*)(?:[?#][^"]*)?"`. A bare
+ * href="#formats" never entered the check at all, and "/#pricing" was checked
+ * as "/" with the fragment thrown away.
+ *
+ * A dead fragment is quieter than a dead route: no 404, no error, the page just
+ * sits there. That is worse, not better. */
+
+function fragments(text) {
+  const out = [];
+  for (const m of text.matchAll(/href="[^"]*#([A-Za-z][\w-]*)"/g)) out.push(m[1]);
+  return out;
+}
+
+function definedIds(text) {
+  const out = [];
+  for (const m of text.matchAll(/\bid="([A-Za-z][\w-]*)"/g)) out.push(m[1]);
+  return out;
+}
+
+test("every in-page anchor points at an id that exists", () => {
+  /* Ids are collected across the whole source tree rather than per-file: a
+     section id lives in app/page.tsx while the link to it lives in
+     components/cinema/CinematicHero.tsx, and both render into one document. */
+  const ids = new Set();
+  for (const f of sources) for (const id of definedIds(readFileSync(f, "utf8"))) ids.add(id);
+
+  const dead = [];
+  for (const file of sources) {
+    for (const frag of fragments(readFileSync(file, "utf8"))) {
+      if (!ids.has(frag)) dead.push(`${relative(ROOT, file)} -> #${frag}`);
+    }
+  }
+  assert.deepEqual(
+    dead,
+    [],
+    `Anchors pointing at an id that does not exist:\n  ${dead.join("\n  ")}`,
+  );
+});
+
 /* ---------- 3. the routes a stranger must be able to reach ---------- */
 
 /* These are the funnel. If any one of them stops existing, acquisition breaks

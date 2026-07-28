@@ -96,7 +96,7 @@
      needs a seventh entry.
 
      ONE documented exemption: components that draw a miniature PICTURE of a UI
-     (Mockups, TrySimulator, HeroBackdrop, PacketDemo, the /start resume
+     (Mockups, TrySimulator, PacketDemo, the /start resume
      paper). Those are illustrations at reduced scale, not type a human reads at
      that size, and they legitimately need arbitrary values. Everything else is
      type, and type uses the scale. */
@@ -302,30 +302,8 @@ html {
   -webkit-backdrop-filter: blur(18px) saturate(1.15);
 }
 
-/* Film grain: SVG turbulence tile jittered in steps. Multiplied over the
-   light film it reads as paper tooth, not noise. */
-.rq-grain {
-  inset: -50%;
-  width: 200%;
-  height: 200%;
-  /* No opacity here. It used to be 0.05 and silently beat the utility class the
-     page sets (opacity-[0.04] site-wide vs the film's own), so the "one tone
-     quieter" decision never actually rendered (audit finding 45). */
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='260' height='260'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  animation: rq-grain 0.9s steps(8) infinite;
-}
-@keyframes rq-grain {
-  0% { transform: translate(0, 0); }
-  12.5% { transform: translate(-2%, -3%); }
-  25% { transform: translate(1.5%, -1%); }
-  37.5% { transform: translate(-1%, 2.5%); }
-  50% { transform: translate(2.5%, 1%); }
-  62.5% { transform: translate(-2.5%, 0.5%); }
-  75% { transform: translate(1%, -2.5%); }
-  87.5% { transform: translate(2%, 2%); }
-  100% { transform: translate(0, 0); }
-}
+/* .rq-grain and its @keyframes were removed 2026-07-28 with the grain layer
+   in CinematicPage.tsx. See the note there. */
 
 @media (max-width: 639px) {
   .dashboard-shell main button,
@@ -376,14 +354,11 @@ html {
   .rq-cine {
     height: 100svh;
   }
-  /* .rq-siterail left this list 2026-07-28: the rail itself was deleted. */
+  /* .rq-siterail, .rq-cine-dust and .rq-grain all left this block on
+     2026-07-28 along with the layers themselves. */
   .rq-cine-card-4,
-  .rq-cine-hint,
-  .rq-cine-dust {
+  .rq-cine-hint {
     display: none;
-  }
-  .rq-grain {
-    animation: none;
   }
   /* Reduced motion gets the product, not the poster. The frame-0 request at
      mount is not behind a reduced-motion guard, so the canvas really does

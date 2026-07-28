@@ -37,11 +37,13 @@ export function CinematicPage() {
 
   return (
     <>
-      {/* site-wide film grain over everything, including the fixed stage */}
-      <div
-        className="rq-grain pointer-events-none fixed z-10 opacity-[0.04]"
-        aria-hidden
-      />
+      {/* The site-wide film grain was REMOVED 2026-07-28. An SVG turbulence
+          tile at 0.04 opacity, multiply-blended, re-jittered eight steps a
+          second, fixed over the whole page forever. At that opacity it is
+          below the threshold anyone perceives on a white canvas, and it ran
+          a CSS animation on every frame of every page for it. The chapter
+          tint and the vignette carry the film's atmosphere; they are the two
+          layers that actually read. */}
       {/* The site rail (a rotated chapter label plus a vertical fill bar down
           the right edge) was REMOVED 2026-07-28 in the deletion pass. It was
           the page's second scroll-progress indicator alongside ScrollProgress,
