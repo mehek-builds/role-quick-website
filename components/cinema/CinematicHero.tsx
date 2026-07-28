@@ -618,8 +618,8 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               Apply <span className="text-brand-ink">in seconds.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted">
-              Open a job. We fix your resume, fill in the form, and write
-              the email. You hit send.
+              Nothing is reused. Every job gets its own resume, form, and
+              email.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               {/* Desktop only: a phone cannot install a Chrome extension, and the
@@ -657,25 +657,14 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
                 handoff itself, and give a real door instead of a dead end. */}
             <ReturningVisitor />
             <MobileSendLink source="hero" className="mt-6 sm:hidden" />
-            {/* The deletion half was missing, and it is the half nobody else has.
-                This caption already carried the COLLECTION claim (what we read)
-                and the SALE claim (we do not). /privacy goes further than any of
-                the ten products audited: resume files are deleted after 30 days,
-                and one email exports or deletes everything. None of that reached
-                a marketing surface, so the best trust asset Litos owns was
-                invisible to anyone deciding whether to install.
-
-                Worded as "delete all of it" rather than "one click", because the
-                mechanism really is an email to support, and a caption that
-                promised a button would be a small lie on the exact subject where
-                one costs the most. */}
-            <p className="mt-5 text-[13px] text-muted">
-              We only read the job you are on. We never sell your data, and you
-              can delete all of it whenever you want.{" "}
-              <a href="/privacy" data-inline-link className="underline decoration-border underline-offset-2 hover:text-ink">
-                Privacy
-              </a>
-            </p>
+            {/* The privacy caption that used to sit here (collection, no-sale,
+                deletion) moved into the refusal trio in #faq, app/page.tsx.
+                Mehek's call 2026-07-28: two body blocks of near-equal length
+                under the H1 read as noise, and two thirds of that caption was
+                already said verbatim in the trio and the FAQ, against the
+                say-once rule. This gives up the ledger 07-05 property of
+                proof at the decision point (S26, under the hero CTA); /try
+                and the footer still carry /privacy. */}
           </div>
         </div>
 

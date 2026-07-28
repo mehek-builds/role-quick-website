@@ -539,7 +539,14 @@ export default function Home() {
                 {[
                   ["Never invented", "We move and rewrite your real work. We never add a job, a skill, or a number."],
                   ["Never auto-sent", "Nothing is sent until you say so. The writing stays yours."],
-                  ["Never sold", "We only read the job page you are on. We never sell your data."],
+                  // The deletion promise came off the hero on 2026-07-28 and
+                  // lives here now. It is the half no competitor has: 10 of 10
+                  // products audited say nothing about what happens to a resume
+                  // on account deletion. Worded "you can delete everything"
+                  // rather than "one click", because the mechanism is an email
+                  // to support, and a promised button would be a small lie on
+                  // the one subject where it costs the most.
+                  ["Never sold", "We only read the job page you are on. We never sell your data, and you can delete everything whenever you want."],
                 ].map(([label, body]) => (
                   <div key={label} className="rq-glass px-5 py-5">
                     <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
