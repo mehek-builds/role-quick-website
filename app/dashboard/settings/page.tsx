@@ -135,6 +135,20 @@ export default function Settings() {
    * calls in the loader are ever split so the card lands after `me`, this fires
    * too early and silently stops working. Keep them in one tick.
    *
+   * KNOWN LIMITS, left in deliberately. A second review pass raised three more
+   * and none of them is reachable in this app, so none is worth machinery:
+   *   - `scrollY > 40` infers intent from position rather than observing a real
+   *     interaction, so a restored position under 40px would not stop the jump.
+   *     The cost when it misfires is a 40px correction nobody perceives.
+   *   - `hashchange` also fires on back/forward, so history traversal to a
+   *     fragment entry re-jumps. That is the same place the browser was going.
+   *   - pushState/replaceState do not emit `hashchange`, so a same-route
+   *     fragment link would not be caught. There is no such link: the only
+   *     inbound one is from /dashboard/profile, a different route, which
+   *     remounts this component and re-runs the effect through `me`.
+   * Grep before "fixing" any of these: if a same-route fragment link ever
+   * lands on this page, the third one becomes real.
+   *
    * Three things the first version of this got wrong, found by an adversarial
    * review pass on 2026-07-28:
    *
