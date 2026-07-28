@@ -8,6 +8,11 @@ type TryEvent =
   | "path_chosen"
   | "packet_complete"
   | "install_click"
+  /* Which of the four hero screenshots a visitor stepped to by hand. The
+     sequence plays itself once, so a click here means they wanted a longer
+     look at that specific step: it is the only read we get on which proof
+     actually lands. */
+  | "hero_proof_step"
   | "send_link_submit";
 
 /* Onboarding funnel (/start).

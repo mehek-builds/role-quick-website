@@ -1,0 +1,60 @@
+{
+  "hero-1-job": {
+    "w": 380,
+    "h": 580,
+    "src": "/product/hero-1-job.png",
+    "cap": "Litos spots the job",
+    "note": "Open a job posting. Litos reads it off the page, so there is nothing to paste.",
+    "alt": "The Litos popup open on a Figma software engineer posting, showing the detected role with a Fill this form button and a Find people button.",
+    "story": 1
+  },
+  "hero-2-review": {
+    "w": 1280,
+    "h": 860,
+    "src": "/product/hero-2-review.png",
+    "cap": "You read it before it goes",
+    "note": "The posting on one side, the resume Litos built for it on the other. Change anything before it goes.",
+    "alt": "The Litos dashboard showing a filled application for Acme Labs: the tailored resume beside the answers Litos wrote, each one editable.",
+    "story": 2
+  },
+  "hero-3-contacts": {
+    "w": 380,
+    "h": 580,
+    "src": "/product/hero-3-contacts.png",
+    "cap": "It finds people to email",
+    "note": "Real people at that company, with the ones most likely to write back at the top.",
+    "alt": "The Litos contacts panel listing four people at Figma, ranked by likelihood of a reply, each marked either Email checked or Email is a guess.",
+    "story": 3
+  },
+  "hero-4-draft": {
+    "w": 380,
+    "h": 580,
+    "src": "/product/hero-4-draft.png",
+    "cap": "And writes the email",
+    "note": "A short email drawn from your own work, ready to send from Gmail.",
+    "alt": "The Litos draft editor showing a short email to Marcus Lee about the software engineer role, ready to edit before sending.",
+    "story": 4
+  },
+  "dashboard-emails": {
+    "w": 1400,
+    "h": 933,
+    "src": "/product/dashboard-emails.png",
+    "cap": "After you send",
+    "alt": "The Litos dashboard Emails page, listing drafts that were written, sent, and replied to."
+  },
+  "store-1-onboarding": {
+    "w": 1280,
+    "h": 800,
+    "src": "/product/store-1-onboarding.png"
+  },
+  "store-2-main": {
+    "w": 1280,
+    "h": 800,
+    "src": "/product/store-2-main.png"
+  },
+  "store-3-contacts": {
+    "w": 1280,
+    "h": 800,
+    "src": "/product/store-3-contacts.png"
+  }
+}

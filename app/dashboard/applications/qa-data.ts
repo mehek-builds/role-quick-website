@@ -68,11 +68,11 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
   stripe: qaVariant(QA_PACKET, {
     id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b02",
     company: "Stripe",
-    role: "Software Engineering Intern",
+    role: "Software Engineer",
     ats: "Lever",
     score: 82,
-    jd: "Stripe is hiring a Software Engineering Intern to build reliable TypeScript services and React tools. You will improve payment workflows, write tested code, analyze production performance, and collaborate across engineering and product. Experience with Node.js, PostgreSQL, and accessible interfaces is valued.",
-    title: "Software Engineering Intern",
+    jd: "Stripe is hiring a Software Engineer to build reliable TypeScript services and React tools. You will improve payment workflows, write tested code, analyze production performance, and collaborate across engineering and product. Experience with Node.js, PostgreSQL, and accessible interfaces is valued.",
+    title: "Software Engineer",
     bullets: [
       "Built reliable TypeScript services that automated 18 operational handoffs and reduced turnaround time by 42%.",
       "Shipped tested React tools for 6 teams and documented production recovery paths.",
@@ -84,10 +84,10 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
   notion: qaVariant(QA_PACKET, {
     id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b03",
     company: "Notion",
-    role: "Product Design Intern",
+    role: "Product Designer",
     ats: "Ashby",
     score: 74,
-    jd: "Notion is looking for a Product Design Intern who can turn complex workflows into calm, accessible product experiences. You will prototype in Figma, partner with engineers, test interaction details, and communicate clear design rationale. Experience designing dashboards and systems for real users is preferred.",
+    jd: "Notion is looking for a Product Designer who can turn complex workflows into calm, accessible product experiences. You will prototype in Figma, partner with engineers, test interaction details, and communicate clear design rationale. Experience designing dashboards and systems for real users is preferred.",
     title: "Product Designer",
     bullets: [
       "Designed accessible workflow dashboards in Figma and React for 6 client teams.",
@@ -106,10 +106,10 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
   figma: qaVariant(QA_PACKET, {
     id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b04",
     company: "Figma",
-    role: "Data Analyst Intern",
+    role: "Data Analyst",
     ats: "Workday",
     score: 79,
-    jd: "Figma is hiring a Data Analyst Intern to define product metrics, build trustworthy dashboards, and translate behavioral data into clear recommendations. You will work with SQL, PostgreSQL, experimentation, and cross-functional product teams. Strong communication and careful data validation are required.",
+    jd: "Figma is hiring a Data Analyst to define product metrics, build trustworthy dashboards, and translate behavioral data into clear recommendations. You will work with SQL, PostgreSQL, experimentation, and cross-functional product teams. Strong communication and careful data validation are required.",
     title: "Data Analyst",
     bullets: [
       "Built trustworthy PostgreSQL dashboards that tracked 18 workflow handoffs across 6 teams.",
@@ -122,10 +122,10 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
   vercel: qaVariant(QA_PACKET, {
     id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b05",
     company: "Vercel",
-    role: "Developer Advocate Intern",
+    role: "Developer Advocate",
     ats: "Greenhouse",
     score: 77,
-    jd: "Vercel is seeking a Developer Advocate Intern to teach developers through clear technical content, product demos, and community programs. You will build examples with React and TypeScript, explain complex workflows, gather developer feedback, and partner with product engineering. Strong writing and public communication are essential.",
+    jd: "Vercel is seeking a Developer Advocate to teach developers through clear technical content, product demos, and community programs. You will build examples with React and TypeScript, explain complex workflows, gather developer feedback, and partner with product engineering. Strong writing and public communication are essential.",
     title: "Developer Advocate",
     bullets: [
       "Built React and TypeScript product demos that explained workflow automation to 6 client teams.",
@@ -160,10 +160,10 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
   deepgram: qaVariant(QA_PACKET, {
     id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b06",
     company: "Deepgram",
-    role: "Software Engineering Intern",
+    role: "Software Engineer",
     ats: "Ashby",
     score: 81,
-    jd: "Deepgram is hiring a Software Engineering Intern to build reliable voice AI infrastructure and developer tools with TypeScript, Python, and distributed systems.",
+    jd: "Deepgram is hiring a Software Engineer to build reliable voice AI infrastructure and developer tools with TypeScript, Python, and distributed systems.",
     title: "Software Engineer",
     bullets: [
       "Built reliable TypeScript services that automated 18 operational handoffs.",
