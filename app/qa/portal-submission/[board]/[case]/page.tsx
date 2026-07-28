@@ -1,4 +1,5 @@
-import { PortalForm, type Board } from "../../portal-form";
+import { PortalForm } from "../../portal-form";
+import { toBoard } from "../../boards";
 
 export default async function ControlledPortalCase({
   params,
@@ -6,12 +7,8 @@ export default async function ControlledPortalCase({
   params: Promise<{ board: string; case: string }>;
 }) {
   const route = await params;
-  // Kept as an explicit allowlist rather than a cast: the board name comes straight off the URL, and
-  // it is what selects which fixture DOM renders. Anything unrecognised falls back to greenhouse.
-  const BOARDS = ["lever", "ashby", "smartrecruiters", "workable", "jazzhr", "paylocity"] as const;
-  const board: Board = (BOARDS as readonly string[]).includes(route.board)
-    ? (route.board as Board)
-    : "greenhouse";
+  // Shared with the ?board= route via toBoard, so the two entry points into the harness cannot drift.
+  const board = toBoard(route.board);
   const caseId = route.case.replace(/[^a-z0-9-]/gi, "").slice(0, 32) || `${board}-01`;
   return <PortalForm board={board} caseId={caseId} />;
 }
