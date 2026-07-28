@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 /* The board's two pure helpers. Both look trivial and both have a way of being
    quietly wrong: agoLabel decides whether the page states a fact about the
@@ -129,6 +129,35 @@ describe("the board's layout", () => {
     const tile = page.match(/className="group flex[^"]*"/);
     assert.ok(tile, "could not find the tile's className");
     assert.match(tile[0], /\bmin-w-0\b/, "the tile needs min-w-0 or the board scrolls sideways on mobile");
+  });
+});
+
+describe("company marks", () => {
+  test("every mapped company has its file committed", async () => {
+    /* The map and the image files are two halves of one thing, and only one of
+       them shows up in a diff. A name added to the map without running
+       scripts/fetch-company-logos.mjs ships a broken <img> to production, which
+       renders as an empty box on every one of that company's tiles. */
+    const { COMPANY_DOMAINS, logoSlug } = await import("../lib/company-logos.ts");
+    const dir = new URL("../public/company/", import.meta.url);
+    const missing = Object.keys(COMPANY_DOMAINS).filter(
+      (c) => !existsSync(new URL(`${logoSlug(c)}.png`, dir)),
+    );
+    assert.deepEqual(
+      missing,
+      [],
+      `no mark on disk for: ${missing.join(", ")}. Run: node --experimental-strip-types scripts/fetch-company-logos.mjs`,
+    );
+  });
+
+  test("a company with no mark falls back instead of breaking", async () => {
+    const { logoPath, monogram } = await import("../lib/company-logos.ts");
+    /* Chime and Gusto are deliberately unmapped (they 403 every asset request),
+       and the backend's source list can add a company at any time. Either way
+       the board must degrade to an initial, not to an empty image box. */
+    assert.equal(logoPath("Chime"), null);
+    assert.equal(monogram("Chime"), "C");
+    assert.equal(logoPath("Stripe"), "/company/stripe.png");
   });
 });
 
