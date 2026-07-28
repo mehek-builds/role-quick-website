@@ -40,6 +40,7 @@ import { ErrorNote } from "@/components/app/ui";
 import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
+import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { focusSeed } from "@/lib/rolesFeed";
 import type { RoleType } from "@/lib/api";
 import { StepRail } from "@/components/start/ui";
@@ -261,6 +262,16 @@ export default function Start() {
           onLater={later}
           onDone={() => {
             stepDone("focus");
+            void refresh();
+          }}
+        />
+      );
+
+    case "sponsorship":
+      return (
+        <SponsorshipStep
+          onDone={() => {
+            stepDone("sponsorship");
             void refresh();
           }}
         />

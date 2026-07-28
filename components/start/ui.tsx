@@ -30,6 +30,9 @@ import type { OnboardingStep } from "@/lib/api";
    wrong. Approved 2026-07-27 as override 1 of 10 (DESIGN.md). */
 export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
   { key: "focus", label: "What you want", weight: 1 },
+  /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
+     in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
+  { key: "sponsorship", label: "Work visa", weight: 1 },
   { key: "resume", label: "Your resume", weight: 2 },
   { key: "base", label: "Your one page", weight: 2 },
   { key: "install", label: "Add to Chrome", weight: 2 },

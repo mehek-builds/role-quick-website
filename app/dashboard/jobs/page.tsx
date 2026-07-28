@@ -47,6 +47,10 @@ export default function JobsPage() {
      Both are needed to describe the list truthfully: see the footer. */
   const [rankedPool, setRankedPool] = useState<number | null>(null);
   const [poolExhausted, setPoolExhausted] = useState(false);
+  /* Whether the board being shown is the sponsor-only one. Read off the RESPONSE rather than off
+     the account, because the server is what decides it: an account that declared a need for
+     sponsorship at setup gets the filter whether or not this page asks for it. */
+  const [sponsorOnly, setSponsorOnly] = useState(false);
   /* Null until the board answers. An empty index would mean "you have applied to nothing", which is
      a different claim from "we do not know yet". */
   const [applied, setApplied] = useState<AppliedIndex | null>(null);
@@ -95,6 +99,7 @@ export default function JobsPage() {
           setHasMore(result.has_more === true);
           setRankedPool(result.ranked_pool ?? null);
           setPoolExhausted(result.pool_exhausted === true);
+          setSponsorOnly(result.sponsor_only === true);
           /* A new filter starts a new list, so any in-flight "load more" spinner belongs to a list
              that no longer exists. Without this it could stay lit forever. */
           setLoadingMore(false);
@@ -141,6 +146,10 @@ export default function JobsPage() {
       setHasMore(result.has_more === true);
       setRankedPool(result.ranked_pool ?? null);
       setPoolExhausted(result.pool_exhausted === true);
+      /* Carried forward from every page, not just the first. The banner is the only thing telling
+         the reader their list is filtered, and leaving it on page one's answer means a filter that
+         turns on mid-session shows a filtered list under no explanation. */
+      setSponsorOnly(result.sponsor_only === true);
       setError(null);
     } catch (reason) {
       if (activeFilter.current !== key) return;
@@ -184,6 +193,20 @@ export default function JobsPage() {
           Remote only
         </label>
       </Card>
+
+      {/* Said once, above the list, and only when the list is actually filtered. A board that is
+          quietly missing a thousand postings is the thing this feature must never be: someone who
+          does not know their list is filtered cannot tell "no jobs match" from "we are hiding the
+          ones that will not sponsor you". */}
+      {sponsorOnly && (
+        <p className="rounded-inner border border-border bg-surface-alt px-4 py-3 text-xs leading-5 text-muted">
+          Showing only jobs where we could confirm the company sponsors work visas, from H-1B
+          filings and what each job post says.{" "}
+          <Link href="/dashboard/settings#visa-sponsorship" className="text-brand-ink underline underline-offset-2">
+            Why am I seeing this?
+          </Link>
+        </p>
+      )}
 
       {error && <ErrorNote message={error} />}
 
@@ -277,6 +300,7 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
             </a>
           </h2>
           <MatchBadge score={job.match_score} />
+          <SponsorBadge evidence={job.sponsorship_evidence} />
         </div>
         <p className="mt-1 truncate text-sm text-muted">
           {job.company_name}
@@ -306,6 +330,34 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
         </Link>
       )}
     </Card>
+  );
+}
+
+/**
+ * Why this posting is on the board of someone who needs a visa sponsored.
+ *
+ * Absent when nothing confirms it, and that is the common case: most postings say nothing about
+ * sponsorship. Absence here means "we do not know", NEVER "they will not sponsor" - inventing an
+ * employer's policy from silence is the one claim this whole feature is built to avoid making.
+ *
+ * Grey, not green. DESIGN.md reserves the positive colour for "it happened", and this is evidence
+ * rather than an outcome: a company that filed petitions before has not agreed to sponsor anyone
+ * reading this page. The title attribute carries which of the two kinds of evidence it was, because
+ * the difference matters to the person deciding whether to spend an evening on the application.
+ */
+function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_evidence"] }) {
+  if (!evidence) return null;
+  return (
+    <span
+      className="shrink-0 rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[11px] font-medium text-muted"
+      title={
+        evidence === "posting_offers"
+          ? "This job post says visa sponsorship is available"
+          : "This company has approved H-1B petitions on file with USCIS. That is not a promise to sponsor you."
+      }
+    >
+      {evidence === "posting_offers" ? "Sponsorship offered" : "Sponsors visas"}
+    </span>
   );
 }
 
