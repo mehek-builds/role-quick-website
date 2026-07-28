@@ -45,6 +45,11 @@ export const RETIRED = [
   ["job-board scan", "we check for new ones"],
   ["monitored jobs", "the jobs we watch for you"],
   ["throughput", "applications you sent"],
+  // Ad-tech vocabulary. The card heading was renamed in the terminology pass and
+  // four other strings were missed, which is exactly why this belongs in the list
+  // rather than being fixed one-off. The API path /profile/targeting and the
+  // component name are untouched: the gate only reads prose-shaped strings.
+  ["targeting", "the jobs you want"],
   ["filler verb", "a weak word"],
   // Compliance vocabulary shown raw
   ["attestation", "something you have to swear to"],
@@ -92,7 +97,15 @@ const TAILWINDISH =
 export function userFacingStrings(src) {
   const code = stripComments(src);
   const out = [];
-  for (const m of code.matchAll(/>([^<>{}]{4,})</g)) out.push(m[1]);
+  /* JSX text nodes. The `[^<>{}]` class alone spans newlines, so a `>` and a `<`
+     several lines apart swallow the code between them and the whole blob counts
+     as visible text. That produced false hits on identifiers (`const [targeting,
+     setTargeting] = useState`) which is exactly how a gate earns a reputation for
+     crying wolf and gets switched off. Prose does not contain `;` or `=`. */
+  for (const m of code.matchAll(/>([^<>{}]{4,})</g)) {
+    if (/[;=]/.test(m[1])) continue;
+    out.push(m[1]);
+  }
   for (const m of code.matchAll(/(['"`])([^'"`\\\n]{6,})\1/g)) {
     const t = m[2];
     if (!t.includes(" ")) continue;

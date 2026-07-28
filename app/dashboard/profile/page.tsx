@@ -72,7 +72,7 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8">
       <div>
-        <PageHeader title="Profile" sub="Resume, targeting, and saved answers." />
+        <PageHeader title="Profile" sub="Your resume, the jobs you want, and your saved answers." />
       </div>
 
       {!profile || !applicationProfile ? (
@@ -118,7 +118,7 @@ export default function ProfilePage() {
         <Card className="p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">Job targeting</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">The jobs you want</p>
               <h2 className="mt-2 text-lg font-medium text-ink">Software engineering</h2>
               <p className="mt-1 text-sm text-muted">Internships and new-grad roles · Summer 2027</p>
             </div>

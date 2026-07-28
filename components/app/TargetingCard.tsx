@@ -42,7 +42,7 @@ export default function TargetingCard() {
         const targeting = await getTargeting();
         if (!cancelled) setT(targeting);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Could not load targeting.");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Could not load the jobs you want.");
       }
       // grad_year lives on the parsed resume and only feeds the period options. Fetched separately
       // and allowed to fail: a student who skipped the upload has no profile, and periodsFor(0)
@@ -94,7 +94,7 @@ export default function TargetingCard() {
       });
       setSavedAt(Date.now());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save targeting.");
+      setError(e instanceof Error ? e.message : "Could not save that.");
     } finally {
       setSaving(false);
     }
