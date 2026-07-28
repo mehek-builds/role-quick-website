@@ -130,15 +130,73 @@ export default function Settings() {
    * live and the jump still did not happen.
    *
    * Keyed on `me` because that is the state that flips this page from shimmer
-   * to content. One frame of rAF lets the new subtree lay out before measuring. */
+   * to content: the early return above renders <ShimmerRows> while it is null
+   * and the whole page, including the card, once it is not. If those setState
+   * calls in the loader are ever split so the card lands after `me`, this fires
+   * too early and silently stops working. Keep them in one tick.
+   *
+   * KNOWN LIMITS, left in deliberately. A second review pass raised three more
+   * and none of them is reachable in this app, so none is worth machinery:
+   *   - `scrollY > 40` infers intent from position rather than observing a real
+   *     interaction, so a restored position under 40px would not stop the jump.
+   *     The cost when it misfires is a 40px correction nobody perceives.
+   *   - `hashchange` also fires on back/forward, so history traversal to a
+   *     fragment entry re-jumps. That is the same place the browser was going.
+   *   - pushState/replaceState do not emit `hashchange`, so a same-route
+   *     fragment link would not be caught. There is no such link: the only
+   *     inbound one is from /dashboard/profile, a different route, which
+   *     remounts this component and re-runs the effect through `me`.
+   * Grep before "fixing" any of these: if a same-route fragment link ever
+   * lands on this page, the third one becomes real.
+   *
+   * Three things the first version of this got wrong, found by an adversarial
+   * review pass on 2026-07-28:
+   *
+   * 1. It could yank someone who was already reading. A visitor who arrives
+   *    with a fragment and starts scrolling during the several seconds of data
+   *    load would be dragged back the moment `me` landed. The load-time jump
+   *    now stands down if they have scrolled at all. An explicit click is
+   *    different: that IS a request to move, so hashchange ignores the guard.
+   * 2. It never fired on hash-only navigation. If the page is already loaded,
+   *    `me` does not change, so a second fragment link did nothing here. The
+   *    browser usually handles that case natively, which is why it was not
+   *    visible, but "usually" is not a guarantee worth resting on.
+   * 3. It did not decode the fragment, so an id with an escaped character
+   *    would never match. Nothing on this page needs it today. Both the
+   *    decoded and raw forms are tried, so a malformed escape degrades to the
+   *    old behaviour instead of throwing. */
   useEffect(() => {
     if (!me) return;
-    const id = window.location.hash.slice(1);
-    if (!id) return;
-    const raf = requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView({ block: "start" });
-    });
-    return () => cancelAnimationFrame(raf);
+    let cancelled = false;
+    let raf = 0;
+
+    const jump = (respectExistingScroll: boolean) => {
+      const raw = window.location.hash.slice(1);
+      if (!raw) return;
+      let decoded = raw;
+      try {
+        decoded = decodeURIComponent(raw);
+      } catch {
+        /* malformed escape: fall back to the raw fragment */
+      }
+      if (respectExistingScroll && window.scrollY > 40) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        if (cancelled) return;
+        const el =
+          document.getElementById(decoded) ?? document.getElementById(raw);
+        el?.scrollIntoView({ block: "start" });
+      });
+    };
+
+    jump(true);
+    const onHashChange = () => jump(false);
+    window.addEventListener("hashchange", onHashChange);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      window.removeEventListener("hashchange", onHashChange);
+    };
   }, [me]);
 
   function patch(p: Partial<ApplicationProfile>) {
