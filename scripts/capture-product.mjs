@@ -137,49 +137,91 @@ const SHOTS = [
        nearly the whole artifact sits above the cut at 1:1. */
     name: "hero-band",
     url: () => `${site}/dashboard/applications?qa=1`,
+    /* WIDENING THE VIEWPORT DOES NOT WIDEN THIS BAND. Measured 2026-07-28: shot
+       at 1600x1100 the element still comes back 1104px, because the dashboard
+       caps itself — app/dashboard/layout.tsx has `main.mx-auto max-w-6xl px-6`,
+       so 1152 - 48 = 1104 at every window size a user can open. 1280 is kept
+       because it is the smallest viewport that already yields the full width.
+       This matters to the hero: the fold artifact can only bleed off the right
+       edge of a 1440 window if the bitmap is wider than 1272, and it cannot be
+       until that container cap moves. Do not re-run this at 1600 expecting a
+       wider frame. */
     viewport: { width: 1280, height: 1000 },
     wait: "main",
     scrollTo: "text=Point at any highlighted term",
-    scrollPad: 96,
+    /* 132, not 96: Playwright clamps a non-fullPage clip to the viewport, so at
+       96 the surface started at y=495 of a 1000px viewport and the 516px band
+       came back 505px tall. 132 puts the top at 484 and the full band fits. */
+    scrollPad: 132,
     element: "[data-hero-review]",
     clipTo: { height: 516 },
-    hide: ["header.sticky"],
+    /* The legend's hover hint is hidden, not cropped: it sits BETWEEN the score
+       ring and the two columns, so no top or bottom cut can reach it without
+       taking the swatches or the resume with it.
+     *
+     * It has to go because it is an imperative addressed to someone using the
+       app — "Point at any highlighted term" — printed on a still image nobody
+       can point at, so the hero opens by promising something it structurally
+       cannot do, and a reduced-motion visitor gets no demonstration at all. It
+       is also the cheapest word count above the fold: the highlights survive on
+       both panels and carry the meaning without being narrated.
+     *
+     * This is furniture, not product state. The 86, the three swatches, the lit
+       terms and the "does not mention" refusal line are all still in frame. */
+    hide: ["header.sticky", "[data-hero-review] > div:first-child > div.mt-3 > p"],
     freezeClock: "2026-07-21T12:00:09.000Z",
     alt: "The Litos review screen: a strong-match score of 86, the highlight legend, the job posting with its requirements lit up, and the tailored resume beside it.",
   },
   {
-    /* The same band, hovered. Pairs with hero-band for the one settle. */
-    name: "hero-band-lit",
-    url: () => `${site}/dashboard/applications?qa=1`,
-    viewport: { width: 1280, height: 1000 },
-    wait: "main",
-    scrollTo: "text=Point at any highlighted term",
-    scrollPad: 96,
-    hover: 'mark:has-text("TypeScript")',
-    element: "[data-hero-review]",
-    clipTo: { height: 516 },
-    hide: ["header.sticky"],
-    freezeClock: "2026-07-21T12:00:09.000Z",
-    alt: "The same Litos review screen with TypeScript pointed at, lit up on the posting and on the applicant's own bullet at the same time.",
-  },
-  {
-    /* MOBILE fold artifact. At 390px the 1104px review band is anchored left
-       and hard-cropped, so the whole phone fold is the JOB DESCRIPTION column:
-       the tailored resume, the 86 ring and the refusal line are all off-screen.
-       The one asset chosen because it contains the OUTPUT was delivering, on
-       phones, a picture of the input. Same real screen, cropped to the output. */
+    /* MOBILE fold artifact, and the same surface the desktop band shoots.
+       It used to be the RESUME COLUMN ALONE, cut out of the 1280 shot, and
+       twelve reviewers independently reported the same collapse: with no 86
+       ring, no legend, no posting and no refusal line in frame, the blue and
+       green highlights on the phone were unexplained decoration under a
+       caption about "this posting". The evidence and its key travel together
+       or neither means anything. */
     name: "hero-band-mobile",
     url: () => `${site}/dashboard/applications?qa=1`,
-    viewport: { width: 1280, height: 1000 },
+    /* Shot at phone width rather than cropped out of the desktop band. Below
+       xl the review grid stacks to one column, so a narrow viewport is the
+       only way to get the score header, the legend and a document column into
+       one vertical strip. 430 is the widest common phone; 1400 tall so the
+       620px band below is never clamped to the viewport. */
+    viewport: { width: 430, height: 1400 },
     wait: "main",
     scrollTo: "text=Point at any highlighted term",
-    scrollPad: 96,
-    element: 'section:has(p:text-is("Your resume for this job"))',
-    clipFromY: 256,
-    clipTo: { height: 412 },
-    hide: ["header.sticky"],
+    /* 200, not 96. The anchor sits 144px BELOW the top of the review surface
+       once the header wraps at phone width, so a 96 pad scrolled the 86 ring
+       off the top of the viewport and Playwright clamped the clip to it — the
+       first run came back starting mid-ring. Any pad over ~145 works; 200
+       leaves the surface 56px clear of the top edge. */
+    scrollPad: 200,
+    element: "[data-hero-review]",
+    /* 542: the crop OPENS on the refusal, not on the posting. Measured on this
+       page at 430 wide with the hides below already applied, not guessed —
+       [data-hero-review] sat at viewport y=4 and the hairline-topped gap block
+       (the "asks for 1 thing your resume does not mention" line plus its
+       Node.js chip) at y=546.5, so 546.5 - 4 = 542.5. The refusal paragraph's
+       own box is 17px lower; taking the block's top border instead keeps the
+       hairline and its padding, so the frame does not open mid-sentence.
+     *
+     * WHY re-cut: at 430 the grid stacks JOB DESCRIPTION above the resume, so a
+       crop starting at 0 spends its whole visible height on the INPUT. Eighteen
+       of twenty reviewers read the phone frame as a picture of a job posting
+       under a caption promising a resume. From 565, "Your resume for this job"
+       lands 147px into the crop and the lit bullets follow it, so the headline
+       capability is the first thing the fold shows. */
+    clipFromY: 565,
+    /* 620, so the bottom edge is cut by the phone fold rather than floating
+       above it: the frame is clamped to calc(100svh-349px), which is 495px on a
+       390x844 phone, and 620 still outruns that. */
+    clipTo: { height: 620 },
+    /* The hover hint goes for the same reason it goes on the desktop band: a
+       still cannot obey "point at any highlighted term", and here it would also
+       eat fold height that the resume needs. */
+    hide: ["header.sticky", "[data-hero-review] > div:first-child > div.mt-3 > p"],
     freezeClock: "2026-07-21T12:00:09.000Z",
-    alt: "The tailored resume Litos built for this job, with the posting's own requirements highlighted on the applicant's bullets.",
+    alt: "On a phone: Litos saying this posting asks for one thing the resume does not mention, with the missing skill marked, and below it the resume Litos wrote for this job with the posting's own terms lit on the applicant's bullets.",
   },
   {
     /* A SHORT cut of the real popup. The fold artifact is the dashboard review
@@ -413,6 +455,21 @@ async function shoot(browser, shot, outDir) {
 
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
+
+  if (process.env.MEASURE_REFUSAL) {
+    console.log("MEASURE", JSON.stringify(await page.evaluate(() => {
+      const root = document.querySelector("[data-hero-review]").getBoundingClientRect().top;
+      const p = [...document.querySelectorAll("p")].find((el) => el.textContent.includes("your resume does"));
+      const block = p.closest("div.mt-5");
+      const label = [...document.querySelectorAll("*")].find((el) => !el.children.length && /resume for this job/i.test(el.textContent));
+      return {
+        root,
+        blockTop: block.getBoundingClientRect().top - root,
+        pTop: p.getBoundingClientRect().top - root,
+        labelTop: label.getBoundingClientRect().top - root,
+      };
+    })));
+  }
 
   /* The harness renders an auth-error banner when a screen fetches without a
      session. Previously a person hid these by hand before capturing. Assert

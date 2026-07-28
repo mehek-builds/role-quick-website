@@ -70,10 +70,10 @@
     "alt": "The Litos extension popup on a job page, showing the detected role at Figma and buttons to fill the form or find people."
   },
   "hero-band-mobile": {
-    "w": 544,
-    "h": 412,
+    "w": 398,
+    "h": 620,
     "src": "/product/hero-band-mobile.webp",
-    "alt": "The tailored resume Litos built for this job, with the posting's own requirements highlighted on the applicant's bullets."
+    "alt": "On a phone: Litos saying this posting asks for one thing the resume does not mention, with the missing skill marked, and below it the resume Litos wrote for this job with the posting's own terms lit on the applicant's bullets."
   },
   "hero-band-lit": {
     "w": 1104,

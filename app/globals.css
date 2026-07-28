@@ -100,7 +100,12 @@
      paper). Those are illustrations at reduced scale, not type a human reads at
      that size, and they legitimately need arbitrary values. Everything else is
      type, and type uses the scale. */
-  --text-display: clamp(2.25rem, 6.2vw, 4.75rem); /* 36 to 76px, hero only */
+  /* The floor was 2.25rem, so the token RESOLVED to 36px at 390 wide and 46px
+     at 744 — both inside the 20-to-64px band this same block forbids. The scale
+     was violated on every phone and every small tablet by the token that
+     defines it. 4rem is the band's own ceiling, so the display tier is now legal
+     at every width instead of only above ~1032px. */
+  --text-display: clamp(4rem, 6.2vw, 4.75rem); /* 64 to 76px, hero only */
   --text-display--line-height: 1.02;
   --text-display--letter-spacing: -0.03em;
   --text-heading: 1.25rem;     /* 20px, a heading INSIDE a card. Top of the gap. */
@@ -197,29 +202,41 @@ select:focus-visible,
   animation: rq-enter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* The hero's one settle: the lit capture arriving over the idle one.
+/* The hero's one settle: a white panel over the right half of the capture
+   lifting, so the posting is read before the resume built from it.
    Same reasoning as .rq-enter directly above, and the same house rule — the
-   SETTLED state is the CSS default (opacity 1) and the animation only plays
-   the arrival, with `both` holding the from-state during the delay. So the
-   finished frame is what the server sends and what a visitor gets if JS never
-   runs at all.
+   SETTLED state is the CSS default (the panel at opacity 0, the whole
+   screenshot visible) and the animation only plays the uncover, with `both`
+   holding the from-state during the delay. So the finished frame is what the
+   server sends and what a visitor gets if JS never runs at all.
 
-   This replaced a useState + IntersectionObserver pair. That version had a real
-   defect, reproduced by a research agent: with the browser tab not fronted the
-   observer never fired, so the overlay sat at opacity 0 indefinitely and the
-   settle simply never happened. Moving it to CSS removes the observer, the
-   React state and the hydration dependency in one go. */
-@keyframes rq-hero-lit {
+   This replaced a cross-fade of a second, hovered capture of the same screen,
+   which itself replaced a useState + IntersectionObserver pair. The observer
+   version had a real defect: with the tab not fronted it never fired, so the
+   settle simply never happened. The cross-fade version had a worse one — it
+   ended on the weaker picture, and paid 83KB for a 1% pixel change. One
+   capture, covered and uncovered, costs no bytes and ends on all the evidence.
+
+   The uncover is a clip-path WIPE, not an opacity fade. A solid rectangle
+   dissolving its opacity has no direction, so it never rendered the causal
+   order the panel exists to state (posting first, resume built from it
+   second), and a panel dissolving over content is the universal idiom for
+   CONTENT HAS NOT LOADED, the exact charge the greeked bars were deleted for.
+   A hard edge travelling left to right reads as an uncover instead. clip-path
+   is compositor-safe and cannot smuggle a colour in. */
+@keyframes rq-hero-uncover {
   from {
-    opacity: 0;
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
   }
   to {
     opacity: 1;
+    clip-path: inset(0 0 0 100%);
   }
 }
-.rq-hero-lit {
-  opacity: 1;
-  animation: rq-hero-lit 420ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both;
+.rq-hero-uncover {
+  opacity: 0;
+  animation: rq-hero-uncover 520ms cubic-bezier(0.16, 1, 0.3, 1) 160ms both;
 }
 
 /* A line of the base resume arriving on the page as the model decides it (/start, base step).
@@ -459,9 +476,9 @@ html {
   .rq-enter {
     animation: none;
   }
-  /* Base opacity is already 1, so killing the animation lands on the settled
-     frame rather than on the empty one. */
-  .rq-hero-lit {
+  /* The panel's base opacity is already 0, so killing the animation lands on
+     the fully uncovered capture — the strongest frame, not a covered one. */
+  .rq-hero-uncover {
     animation: none;
   }
   .rq-log-row {
