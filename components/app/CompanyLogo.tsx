@@ -55,7 +55,16 @@ export function CompanyLogo({
           alt=""
           width={24}
           height={24}
-          loading="lazy"
+          /* NOT lazy, and this is load-bearing. Measured on trylitos.com 2026-07-29: with
+             loading="lazy" not one of the 41 logos on the first page ever loaded — every circle
+             rendered empty, including rows sitting in the viewport. Because the image never
+             errored, the monogram fallback never ran either, so the row showed NOTHING rather
+             than a letter. Setting the same element to eager painted it immediately, and probing
+             the URL from that page returned a 64px image: neither the icon nor the network was
+             ever the problem.
+             Lazy loading is for large images below the fold. These are ~1KB, sit at the left edge
+             of every row, and ARE the row's identity. Deferring them bought nothing and cost the
+             entire feature. tests/company-logo.test.mjs keeps it that way. */
           referrerPolicy="no-referrer"
           onError={() => setBroken(true)}
           className="h-6 w-6 object-contain"
