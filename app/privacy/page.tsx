@@ -208,11 +208,20 @@ export default function Privacy() {
           </p>
         </Section>
 
+        {/* mehekbuilds@gmail.com is the ONE address users are given, Mehek's
+            call 2026-07-28. This page used to give mehekman@usc.edu, which made
+            four different support contacts across the product: this page, the
+            Chrome Web Store listing (mehekbuilds@), /v1/meta (which was still
+            serving the dead hello@rolequick.com until the same day), and the
+            /contact form's server-side CONTACT_INBOX. The address that fulfils
+            the deletion promise is the one that matters most to get right, and
+            it should not be a personal university address. Do not reintroduce
+            another one here. */}
         <Section title="Export and deletion">
           <p>
             Email{" "}
-            <a href="mailto:mehekman@usc.edu" className="text-ink underline">
-              mehekman@usc.edu
+            <a href="mailto:mehekbuilds@gmail.com" className="text-ink underline">
+              mehekbuilds@gmail.com
             </a>{" "}
             from your account address to export or delete everything Litos
             stores about you.
@@ -239,8 +248,8 @@ export default function Privacy() {
         <Section title="Questions">
           <p>
             Same address:{" "}
-            <a href="mailto:mehekman@usc.edu" className="text-ink underline">
-              mehekman@usc.edu
+            <a href="mailto:mehekbuilds@gmail.com" className="text-ink underline">
+              mehekbuilds@gmail.com
             </a>
             . You will get an answer from a person.
           </p>
