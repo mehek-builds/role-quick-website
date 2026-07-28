@@ -31,17 +31,23 @@ describe("Litos vocabulary", () => {
   test("the three steps carry one name each", () => {
     const home = readFileSync("app/page.tsx", "utf8");
     const film = readFileSync("components/cinema/CinematicHero.tsx", "utf8");
-    const rail = readFileSync("components/cinema/CinematicPage.tsx", "utf8");
-    /* The film, the section chips and the scroll rail are three separate copies
-       of the same three step names. They drifted apart once already: the film
-       said Documents / Autofill / Outreach while the sections said Documents /
-       Forms / Emails, on the same scroll. */
-    for (const [name, src] of [["film", film], ["rail", rail]]) {
-      assert.match(src, /01 · Resume/, `${name} should name step 1 "Resume"`);
-      assert.match(src, /02 · Forms/, `${name} should name step 2 "Forms"`);
-      assert.match(src, /03 · Emails/, `${name} should name step 3 "Emails"`);
-    }
-    assert.match(home, /01 · Resume/, "the section chips should name step 1 \"Resume\"");
+    /* The film chapters and the section chips are two separate copies of the
+       same three step names. They drifted apart once already: the film said
+       Documents / Autofill / Outreach while the sections said Documents /
+       Forms / Emails, on the same scroll.
+
+       There used to be a THIRD copy, in the scroll rail's SECTIONS table
+       (components/cinema/CinematicPage.tsx). The rail was deleted on
+       2026-07-28 in the deletion pass, so that copy is gone and this test no
+       longer reads that file. Deleting a duplicate is the strongest possible
+       fix for a drift guard: one fewer place to disagree. If a rail or any
+       other third listing of the step names ever comes back, add it here. */
+    assert.match(film, /01 · Resume/, 'film should name step 1 "Resume"');
+    assert.match(film, /02 · Forms/, 'film should name step 2 "Forms"');
+    assert.match(film, /03 · Emails/, 'film should name step 3 "Emails"');
+    assert.match(home, /01 · Resume/, 'the section chips should name step 1 "Resume"');
+    assert.match(home, /02 · Forms/, 'the section chips should name step 2 "Forms"');
+    assert.match(home, /03 · Emails/, 'the section chips should name step 3 "Emails"');
   });
 
   test("the audience is named one way", () => {

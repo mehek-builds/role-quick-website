@@ -1,12 +1,9 @@
 import { Header } from "@/components/Header";
-import { CalibrateCard } from "@/components/CalibrateCard";
 import {
   ApplicationFormMockup,
-  ResumeFormatDemo,
   ResumeMatchDemo,
 } from "@/components/Mockups";
 import { OutreachDemo } from "@/components/OutreachDemo";
-import { ApplicantField } from "@/components/ApplicantField";
 import { Reveal, CountUp } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
@@ -14,7 +11,6 @@ import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { PacketDemo } from "@/components/PacketDemo";
 import { InstallLink } from "@/components/InstallLink";
-import { StickyCTA } from "@/components/StickyCTA";
 import { RealCaptures } from "@/components/RealCaptures";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
@@ -26,7 +22,6 @@ const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString
   month: "long",
   year: "numeric",
 });
-import { ROLES } from "@/lib/rolesFeed";
 import {
   FREE_LIMITS,
   PRO_LIMITS,
@@ -171,9 +166,6 @@ function PillarLink({ href, children }: { href: string; children: React.ReactNod
   );
 }
 
-/* Counted, never typed: if the feed changes, this changes with it. */
-const HARD_DEADLINE_COUNT = ROLES.filter((r) => r.deadline).length;
-
 export default function Home() {
   return (
     <div className="flex flex-col flex-1">
@@ -190,8 +182,6 @@ export default function Home() {
         Skip to content
       </a>
       <Header />
-      <CalibrateCard />
-      <StickyCTA />
 
       <main className="flex-1">
         {/* The scroll film: pinned canvas scrub of the generated film,
@@ -255,44 +245,28 @@ export default function Home() {
                 people apply for one job. Six of them get an interview. One
                 gets the job. We help yours stand out.
               </p>
-              <ApplicantField />
+              {/* The 250-dot applicant field was REMOVED 2026-07-28 in the
+                  deletion pass. It rendered 250 nodes on a stagger to
+                  illustrate a statistic about the job market rather than
+                  about Litos, and the number above plus this sentence say
+                  the whole thing. */}
             </Reveal>
           </div>
         </section>
 
-        {/* ATS formatting: mess in, machine-readable out */}
-        <section id="formats" className="relative">
-          <Wash soft />
-          <div className="relative mx-auto max-w-5xl px-6 py-36">
-          <Reveal>
-            <div className="mx-auto max-w-[560px] text-center">
-              <h2 className="text-section font-[450] tracking-[-0.02em] text-ink">
-                A robot reads it first.
-              </h2>
-              <p className="mt-4 text-base leading-7 text-muted">
-                Job sites scan your resume with software. If it cannot read
-                yours, no person ever sees it. We build one it can read.
-              </p>
-              {/* Alex Rivera is a sample applicant, and the numbers inside
-                  that resume ("80 students", "800 student users") are his,
-                  not ours. Unlabelled, a skimmer reads them as Litos proof.
-                  Says "applicant", not "student": this label is the one line
-                  that names who the example IS, so calling him a student
-                  told every non-student the tool was not for them. */}
-              <p className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Not a real applicant. Just an example.
-              </p>
-            </div>
-          </Reveal>
-          <Reveal>
-            <div className="mt-14" data-parallax="24">
-              <div data-demo><ResumeFormatDemo /></div>
-            </div>
-          </Reveal>
-          </div>
-        </section>
+        {/* Documents — pinned act: the real rebuild held over the live film.
+            The separate #formats band ("A robot reads it first", with its own
+            mess-in / clean-out demo) was REMOVED 2026-07-28 in the deletion
+            pass. It made the same argument as this section, directly above
+            this section, and the FAQ makes it a third time. Machine
+            readability is the one claim it owned that this section did not,
+            so that sentence is folded into the body copy below and the rest
+            is gone. Do not re-add it as its own band.
 
-        {/* Documents — pinned act: the real rebuild held over the live film */}
+            Note for whoever restores it: ResumeFormatDemo in Mockups.tsx (and
+            MessyResumeMockup / CleanResumeMockup, which only it composes) is
+            now unreferenced. It was left in place rather than deleted, since
+            it is a library file the /try surface also draws from. */}
         <section id="documents" className="relative scroll-mt-24">
           <Wash tint="brand" soft />
           <div className="relative sm:h-[188svh]">
@@ -542,7 +516,10 @@ export default function Home() {
                 {[
                   ["Jobs", "We watch for roles that fit and put them in one list. You did not have to find them."],
                   ["Applications", "Every application in one place, with what is ready, what needs you, and what was sent."],
-                  ["Sending", "Ask Litos to send, and it fills in the company's form itself and waits for their confirmation."],
+                  /* The "Sending" card was REMOVED 2026-07-28 in the deletion
+                     pass: #autofill already explains, in more detail and with
+                     the 15-second stop, that Litos can drive the employer's
+                     form itself. This restated it in a card. */
                   ["Interviews", "When a job is ready, we pull the questions the posting is really asking, out of the posting."],
                 ].map(([label, body]) => (
                   <div key={label} className="rq-glass px-6 py-5">
@@ -559,8 +536,8 @@ export default function Home() {
 
         {/* Voices: the film has just finished proving the mechanism, which is
             the exact moment the honest question becomes "does it work for
-            anyone other than the demo?". The same five beta quotes that ship
-            on the store listing answer it, in the same anonymized form. */}
+            anyone other than the demo?". The lead beta quote that ships on the
+            store listing answers it, in the same anonymized form. */}
         <section id="voices" className="relative scroll-mt-24">
           <Wash soft />
           <div className="relative px-6 py-32">
@@ -570,42 +547,18 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Try it: the reel is the trailer, /try is the demo booth. One settled
-            section, no scrub choreography - the film stage runs behind it. */}
-        <section id="try" className="relative scroll-mt-24">
-          <Wash tint="brand" soft />
-          <div className="relative mx-auto max-w-2xl px-6 py-32 text-center">
-            <Reveal>
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Your application is ready
-              </p>
-              <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
-                Now you try.
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-base leading-7 text-muted">
-                Try it on a pretend job. Or paste your own resume and watch
-                it work. You do not have to install anything.
-              </p>
-              <a
-                href="/try"
-                className="mt-8 inline-flex min-h-[44px] items-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink"
-              >
-                Try it free
-              </a>
-              {/* The page gave nobody a reason to act today. This is the
-                  only honest one available: it is counted from the role
-                  feed at render, so it cannot drift into a claim the data
-                  does not support, and it names no date that could quietly
-                  expire. Feed honesty rules live in lib/rolesFeed.ts. */}
-              <p className="mt-6 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-                {/* "jobs we track" also names the per-user job monitor inside
-                    the product ("Every job Litos has found for you"), so this
-                    marketing feed needed its own words. */}
-                {HARD_DEADLINE_COUNT} of the {ROLES.length} roles in our open list have a closing date
-              </p>
-            </Reveal>
-          </div>
-        </section>
+        {/* The #try band ("Now you try", one outline button to /try, plus the
+            counted open-roles line) was REMOVED 2026-07-28 in the deletion
+            pass. /try was already reachable from the header nav, the hero, the
+            #product chapter and all three pillar links, so this was the
+            seventh door to one room and it cost a full viewport at the point
+            the page should be closing.
+
+            The one thing that died with it is the counted deadline line, which
+            was the page's only reason-to-act-today. If that urgency is wanted
+            back, it belongs next to the install button in #close, not in a
+            section of its own. lib/rolesFeed.ts still exports ROLES and is
+            still used by /start, so the count is a two-line restore. */}
 
         {/* FAQ: the objections a skeptic actually has, answered plainly. */}
         <section id="faq" className="relative scroll-mt-24">

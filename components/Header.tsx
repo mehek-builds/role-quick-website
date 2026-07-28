@@ -10,13 +10,20 @@ import { track } from "@/lib/analytics";
    Cinema chrome rule: while the viewer scrolls DOWN through the film the
    pill retires upward so headlines and cards never collide with it; any
    scroll UP (or reaching the top) brings it straight back. Reduced motion
-   keeps it parked permanently. */
+   keeps it parked permanently.
+
+   Two things came out on 2026-07-28 in the deletion pass:
+
+   - The mobile hamburger and its glass sheet. Every link behind it was an
+     anchor on the page the visitor is already scrolling, plus a second copy
+     of Add to Chrome, and the footer carries all four. On phones the pill is
+     now the wordmark and the one ask, which is what the pill is for.
+   - Sign in. It sat next to the primary CTA above the fold, competing with
+     it for an audience that by definition does not have an account yet.
+     /login is still reached from the #close section. */
 export function Header() {
   const [hidden, setHidden] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const lastY = useRef(0);
-  const menuOpenRef = useRef(false);
-  menuOpenRef.current = menuOpen;
 
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -27,7 +34,6 @@ export function Header() {
       /* ignore sub-jitter deltas so Lenis easing can't flicker the pill */
       if (Math.abs(dy) < 6) return;
       lastY.current = y;
-      if (menuOpenRef.current) return; /* never hide an open menu */
       if (y < 120) {
         setHidden(false);
         return;
@@ -45,8 +51,6 @@ export function Header() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-
-  const closeMenu = () => setMenuOpen(false);
 
   return (
     <header
@@ -84,16 +88,8 @@ export function Header() {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          <a
-            href="/login"
-            className="inline-flex min-h-[44px] items-center rounded-full px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-white/70"
-          >
-            Sign in
-          </a>
-          {/* Color v1.1: action blue repeats on every true CTA, so the primary
-              action reads as primary at a glance next to the quiet Sign in. */}
-          {/* Was sm:block, which left the mobile header with no CTA at all:
-              logo + Sign in, and the only ask hidden behind the hamburger. */}
+          {/* Color v1.1: action blue repeats on every true CTA. With Sign in
+              gone this is the only control in the pill, which is the point. */}
           <a
             href={STORE_URL}
             onClick={() => track("install_click", { source: "header" })}
@@ -101,84 +97,8 @@ export function Header() {
           >
             Add to Chrome
           </a>
-          {/* Mobile: the film hides the desktop nav, so Product, Try it and
-              FAQ still need a door. One button, one glass sheet. */}
-          <button
-            type="button"
-            aria-expanded={menuOpen}
-            aria-label={menuOpen ? "Close menu" : "Open menu"}
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex h-11 w-11 items-center justify-center rounded-full text-ink transition-colors hover:bg-white/70 sm:hidden"
-          >
-            <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
-              {menuOpen ? (
-                <path
-                  d="m6 6 12 12M18 6 6 18"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              ) : (
-                <path
-                  d="M4.5 8h15M4.5 16h15"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              )}
-            </svg>
-          </button>
         </div>
       </div>
-      {menuOpen && (
-        <nav
-          className="rq-glass mx-auto mt-2 max-w-5xl rounded-card px-3 py-2 sm:hidden"
-          /* near-opaque: the sheet floats over the hero's own glass card, and
-             glass-on-glass leaves the links unreadable */
-          style={{ background: "rgba(255,255,255,0.92)" }}
-        >
-          <a
-            href="/#product"
-            onClick={closeMenu}
-            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
-          >
-            Product
-          </a>
-          <a
-            href="/try"
-            onClick={closeMenu}
-            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
-          >
-            Try it free
-          </a>
-          <a
-            href="/#pricing"
-            onClick={closeMenu}
-            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
-          >
-            Pricing
-          </a>
-          <a
-            href="/#faq"
-            onClick={closeMenu}
-            className="block rounded-card px-4 py-3 text-base font-medium text-ink transition-colors hover:bg-white/70"
-          >
-            FAQ
-          </a>
-          <div className="px-1.5 pb-2 pt-2">
-            <a
-              href={STORE_URL}
-              onClick={() => {
-                track("install_click", { source: "mobile-menu" });
-                closeMenu();
-              }}
-              className="block rounded-full bg-brand px-4 py-3 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
-              Add to Chrome
-            </a>
-          </div>
-        </nav>
-      )}
     </header>
   );
 }
