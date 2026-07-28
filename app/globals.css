@@ -197,6 +197,31 @@ select:focus-visible,
   animation: rq-enter 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* The hero's one settle: the lit capture arriving over the idle one.
+   Same reasoning as .rq-enter directly above, and the same house rule — the
+   SETTLED state is the CSS default (opacity 1) and the animation only plays
+   the arrival, with `both` holding the from-state during the delay. So the
+   finished frame is what the server sends and what a visitor gets if JS never
+   runs at all.
+
+   This replaced a useState + IntersectionObserver pair. That version had a real
+   defect, reproduced by a research agent: with the browser tab not fronted the
+   observer never fired, so the overlay sat at opacity 0 indefinitely and the
+   settle simply never happened. Moving it to CSS removes the observer, the
+   React state and the hydration dependency in one go. */
+@keyframes rq-hero-lit {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.rq-hero-lit {
+  opacity: 1;
+  animation: rq-hero-lit 420ms cubic-bezier(0.16, 1, 0.3, 1) 520ms both;
+}
+
 /* A line of the base resume arriving on the page as the model decides it (/start, base step).
    Opacity and transform ONLY: resumes in this product are black and white, and those are the two
    properties that cannot smuggle a color in. Shorter and smaller than .rq-enter (a resume line is
@@ -432,6 +457,11 @@ html {
     transition: none;
   }
   .rq-enter {
+    animation: none;
+  }
+  /* Base opacity is already 1, so killing the animation lands on the settled
+     frame rather than on the empty one. */
+  .rq-hero-lit {
     animation: none;
   }
   .rq-log-row {

@@ -1,6 +1,3 @@
-"use client";
-
-import { useEffect, useRef, useState } from "react";
 import captures from "@/lib/captures.json";
 import { InstallLink } from "@/components/InstallLink";
 
@@ -93,39 +90,10 @@ const COVERAGE = [
 ] as const;
 
 export function HeroScene() {
-  /* Settles on the LIT frame and stays there. Reduced motion renders it
-     immediately: the settled state is the message, and the previous draft
-     degraded to the "nothing has happened yet" frame. */
-  const [lit, setLit] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce) {
-      /* Deferred rather than set synchronously: a setState in the effect body
-         cascades a render. One tick is imperceptible and keeps the settled
-         frame the first thing a reduced-motion visitor sees. */
-      const t = setTimeout(() => setLit(true), 0);
-      return () => clearTimeout(t);
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((e) => e.isIntersecting)) return;
-        io.disconnect();
-        setTimeout(() => setLit(true), 520);
-      },
-      { threshold: 0.25 },
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
   if (!SHOT) return null;
 
   return (
-    <div ref={ref}>
+    <div>
       {/* Left-aligned, three blocks, one rhythm.
        *
        * The centred seven-block stack ran 450px and left the product at a third
@@ -164,7 +132,7 @@ export function HeroScene() {
                 <a
                   href="/try"
                   data-inline-link
-                  className="underline decoration-border underline-offset-2 hover:text-ink"
+                  className="underline decoration-border underline-offset-2 transition-colors duration-150 hover:text-ink"
                 >
                   Try it free, no account needed
                 </a>
@@ -246,9 +214,7 @@ export function HeroScene() {
               height={SHOT_LIT.h}
               loading="eager"
               decoding="async"
-              className={`absolute inset-0 hidden h-auto w-full rounded-card border border-border bg-surface shadow-overlay sm:block ${
-                lit ? "opacity-100" : "opacity-0"
-              } motion-safe:transition-opacity motion-safe:duration-[420ms] motion-safe:ease-[cubic-bezier(.2,.6,.2,1)]`}
+              className="rq-hero-lit absolute inset-0 hidden h-auto w-full rounded-card border border-border bg-surface shadow-overlay sm:block"
             />
           )}
         </div>
