@@ -129,6 +129,25 @@ const SHOTS = [
     alt: "The resume Litos built for the Acme Labs product engineer job, with terms from the posting highlighted where the applicant's own work matches them.",
   },
   {
+    /* A SHORTER cut of the same review surface. The full 620px frame only
+       clears about 300px of a 900px fold, so a third of the hero is product and
+       two thirds is copy. This band keeps everything that carries a claim — the
+       match ring, the three-swatch legend, the posting's highlighted sentence
+       and the first tailored bullets — and drops the whitespace under them, so
+       nearly the whole artifact sits above the cut at 1:1. */
+    name: "hero-band",
+    url: () => `${site}/dashboard/applications?qa=1`,
+    viewport: { width: 1280, height: 1000 },
+    wait: "main",
+    scrollTo: "text=Point at any highlighted term",
+    scrollPad: 96,
+    element: "[data-hero-review]",
+    clipTo: { height: 516 },
+    hide: ["header.sticky"],
+    freezeClock: "2026-07-21T12:00:09.000Z",
+    alt: "The Litos review screen: a strong-match score of 86, the highlight legend, the job posting with its requirements lit up, and the tailored resume beside it.",
+  },
+  {
     name: "hero-3-contacts",
     url: () => `http://localhost:${VITE_PORT}/preview.html?shot=contacts`,
     clip: { width: 380, height: 580 },

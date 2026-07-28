@@ -56,7 +56,15 @@ import { InstallLink } from "@/components/InstallLink";
  * was invisible without JS. */
 
 type Shot = { w: number; h: number; src: string; alt?: string };
-const SHOT = (captures as Record<string, Shot>)["hero-2-review"];
+/* hero-band, not hero-2-review: the same review surface cut to 516px instead
+   of 620px. The taller frame only cleared about 300px of a 900px fold, so a
+   third of the hero was product and two thirds was copy — the most-repeated
+   charge across 25 critics. The band drops the whitespace under the columns and
+   keeps every element that carries a claim: the 86 match ring, the three-swatch
+   legend, the posting with its requirements lit, the "1 thing your resume does
+   not mention" refusal with its Node.js chip, and both tailored bullets with
+   their highlights. Nothing that argues anything was cut. */
+const SHOT = (captures as Record<string, Shot>)["hero-band"];
 
 /* Fills on five, submits on three. The previous card said "Works on:
    Greenhouse, Lever, Ashby, Workday and LinkedIn", which collapsed those two
@@ -74,29 +82,28 @@ export function HeroScene() {
 
   return (
     <div className="mx-auto w-full max-w-7xl px-6">
-      {/* Stacked, not two-column.
+      {/* Copy, then the artifact, then the detail.
        *
-       * The two-column draft put the capture in a ~700px column and bled it off
-       * the right, which cut off the RESUME — the actual output, and the only
-       * reason this frame was chosen. A 1104px two-column artifact cannot sit
-       * inside a half-width column at 1:1; the only ways out are shrinking it
-       * (forbidden, that is what puts 13px type under 11px) or hiding half of
-       * it. So the copy goes above and the capture spans the full container,
-       * where 1104 fits inside 1232 at true size, and runs PAST THE BOTTOM
-       * FOLD instead. That is Attio's move: crop with the viewport, never with
-       * a scale transform. */}
+       * The claim and the coverage rows used to sit BETWEEN the CTA and the
+       * picture, which pushed the product to y=603 of a 900px fold — a third of
+       * the hero was product and two thirds was copy, the single most-repeated
+       * charge across 25 critics. The claim is now a callout ON the frame,
+       * which is Cal AI's move (the payoff number belongs outside the UI, in
+       * type larger than anything inside it), and the coverage detail moves
+       * below the artifact where it answers a question the visitor has already
+       * started asking. */}
       <div className="mx-auto max-w-[680px] text-center">
         <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">
           Free Chrome extension for job seekers
         </p>
-        <h1 className="mt-4 text-display font-[450] text-ink">
+        <h1 className="mt-3 text-display font-[450] text-ink">
           Apply <span className="text-brand-ink">in seconds.</span>
         </h1>
-        <p className="mx-auto mt-5 max-w-[460px] text-body text-muted">
+        <p className="mx-auto mt-4 max-w-[460px] text-body text-muted">
           Nothing is reused. Every job gets its own resume, form, and email.
         </p>
 
-        <div className="mt-7 flex flex-col items-center gap-3">
+        <div className="mt-6 flex flex-col items-center gap-2.5">
           <InstallLink
             source="hero"
             className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-body font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
@@ -115,50 +122,52 @@ export function HeroScene() {
             .
           </p>
         </div>
+      </div>
 
-        {/* The receipt, promoted off the 11px floor and above the fold. It was
-            centred at the type FLOOR in muted grey, below a stage that ended
-            past the cut, so the headline asserted "in seconds" and the only
-            number backing it was off-screen. 23 of 25 critics flagged it. A log
-            line is not painted evidence, so promoting it fabricates nothing. */}
-        <div className="mt-8 flex items-baseline justify-center gap-3">
-          <p className="text-section font-[450] text-ink">9 seconds</p>
-          <p className="font-mono text-machine uppercase tracking-[0.08em] text-faint">
-            19:42:07 found → 19:42:16 ready
-          </p>
+      <div className="relative mt-9">
+        {/* Runs off the bottom of the viewport. Anchored left below xl so the
+            crop cuts ONE edge and every line still begins properly. */}
+        <div className="flex justify-start overflow-hidden xl:justify-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={SHOT.src}
+            alt={SHOT.alt ?? ""}
+            width={SHOT.w}
+            height={SHOT.h}
+            style={{ width: SHOT.w }}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            className="block max-w-none rounded-card border border-border bg-surface shadow-overlay"
+          />
         </div>
 
-        <dl className="mx-auto mt-6 flex max-w-[560px] flex-col gap-1.5 border-t border-border pt-5 text-left sm:flex-row sm:justify-center sm:gap-8">
-          {COVERAGE.map(([verb, sites]) => (
-            <div key={verb} className="flex gap-2.5 text-small">
-              <dt className="shrink-0 font-mono text-label uppercase tracking-[0.08em] text-faint">
-                {verb}
-              </dt>
-              <dd className="text-muted">{sites}</dd>
-            </div>
-          ))}
-        </dl>
+        {/* The claim, as a callout breaking the frame's top edge, centred over
+            the empty middle of the header row so it occludes nothing. Set
+            larger than any type inside the screenshot, because a number that
+            matters does not belong buried in the UI. "<" is a real glyph rather
+            than the word "under": the machine voice is where this brand puts
+            its numbers, and a ceiling is the honest shape of the promise. */}
+        <div className="pointer-events-none absolute -top-5 left-1/2 hidden -translate-x-1/2 rounded-card border border-border bg-surface px-5 py-3 text-center shadow-overlay sm:block">
+          <p className="text-section font-[450] leading-none text-ink">
+            <span className="font-mono text-muted">&lt;</span>&thinsp;30 seconds
+          </p>
+          <p className="mt-1.5 font-mono text-label uppercase tracking-[0.08em] text-faint">
+            Job found → ready to send
+          </p>
+        </div>
       </div>
 
-      {/* Full size, running off the bottom of the viewport. Centred only once
-          the container is wide enough to hold it; below that it anchors LEFT so
-          the crop runs off ONE edge and every line still begins properly. The
-          centred version cut both sides at 390px and sheared the reading edge,
-          which is the exact failure all 25 critics measured in the last draft. */}
-      <div className="mt-12 flex justify-start overflow-hidden xl:justify-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={SHOT.src}
-          alt={SHOT.alt ?? ""}
-          width={SHOT.w}
-          height={SHOT.h}
-          style={{ width: SHOT.w }}
-          loading="eager"
-          fetchPriority="high"
-          decoding="async"
-          className="block max-w-none rounded-card border border-border bg-surface shadow-overlay"
-        />
-      </div>
+      <dl className="mx-auto mt-8 flex max-w-[720px] flex-col gap-2 border-t border-border pt-5 sm:flex-row sm:justify-center sm:gap-10">
+        {COVERAGE.map(([verb, sites]) => (
+          <div key={verb} className="flex gap-2.5 text-small">
+            <dt className="shrink-0 font-mono text-label uppercase tracking-[0.08em] text-faint">
+              {verb}
+            </dt>
+            <dd className="text-muted">{sites}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }

@@ -56,5 +56,11 @@
     "w": 1280,
     "h": 800,
     "src": "/product/store-3-contacts.webp"
+  },
+  "hero-band": {
+    "w": 1104,
+    "h": 516,
+    "src": "/product/hero-band.webp",
+    "alt": "The Litos review screen: a strong-match score of 86, the highlight legend, the job posting with its requirements lit up, and the tailored resume beside it."
   }
 }
