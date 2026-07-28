@@ -22,6 +22,13 @@ export type BrowseJob = {
   locations: string[];
   openings: number;
   apply_url: string;
+  /* Why this role is safe to show somebody who needs a visa sponsored, or null when nothing
+     confirms it. Null is "we do not know", never "they will not sponsor": most postings say
+     nothing, and a card that read "no sponsorship" off the back of silence would be inventing an
+     employer's policy. A group whose copies disagree also gets null, because a single tile cannot
+     honestly speak for a role that is open in a country the company sponsors in and one it is
+     not. */
+  sponsorship_evidence?: "posting_offers" | "employer_h1b_filings" | null;
   remote: boolean;
   posted_at: string | null;
   first_seen_at: string;
@@ -31,7 +38,16 @@ export type BrowseJob = {
 /* The board's three fields. All optional, all AND together, any combination
    works on its own — a visitor who fills in only "city" and presses Search gets
    every role in that city. */
-export type Filters = { title?: string; company?: string; location?: string; q?: string };
+export type Filters = {
+  title?: string;
+  company?: string;
+  location?: string;
+  q?: string;
+  /* "only show me employers who sponsor a work visa". A string rather than a boolean because it is
+     read from and written back into a query string by a plain GET form, and "true"/undefined is
+     what a checkbox in such a form produces. */
+  sponsor_only?: string;
+};
 
 export type JobsPage = {
   jobs: BrowseJob[];
@@ -52,7 +68,7 @@ export async function fetchJobs(
     limit: String(PER_PAGE),
     offset: String((Math.max(1, page) - 1) * PER_PAGE),
   });
-  for (const key of ["title", "company", "location", "q"] as const) {
+  for (const key of ["title", "company", "location", "q", "sponsor_only"] as const) {
     const value = filters[key]?.trim();
     if (value) params.set(key, value);
   }
@@ -201,10 +217,14 @@ export function countLabel(n: number): string {
    board does. */
 export type Facets = { companies: string[]; locations: string[]; titles: string[] };
 
-export async function fetchFacets(): Promise<Facets> {
+export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
   const { API_URL } = await import("./config");
   try {
-    const response = await fetch(`${API_URL}/jobs/facets`, {
+    /* The suggestions have to describe the board being looked at. Offering a company we cannot
+       confirm sponsors, to somebody browsing with the filter on, sends them to a search that
+       returns nothing and reads as a broken board. */
+    const query = sponsorOnly ? "?sponsor_only=true" : "";
+    const response = await fetch(`${API_URL}/jobs/facets${query}`, {
       headers: { Accept: "application/json" },
       next: { revalidate: 3600 },
       signal: AbortSignal.timeout(10_000),

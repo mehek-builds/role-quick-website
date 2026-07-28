@@ -191,6 +191,18 @@ export type MonitoredJob = {
    * resume yet. In all of those cases the honest row shows no number at all.
    */
   match_score?: number | null;
+  /**
+   * Why this posting is safe to show someone who needs a visa sponsored, or null when nothing
+   * confirms it.
+   *
+   *   "posting_offers"        this job description says sponsorship is available
+   *   "employer_h1b_filings"  the employer has approved H-1B petitions on file with USCIS
+   *
+   * NULL IS THE DEFAULT AND MEANS NOTHING IS KNOWN, which is not the same as "will not sponsor" and
+   * must never be rendered as one. Most postings say nothing at most companies, and a badge reading
+   * "no sponsorship" off the back of silence would be the product inventing an employer's policy.
+   */
+  sponsorship_evidence?: "posting_offers" | "employer_h1b_filings" | null;
 };
 
 /**
@@ -209,7 +221,53 @@ export type JobsPage = {
   ranked_pool?: number | null;
   /** True when postings matched that were never ranked, so the list can say why it stopped. */
   pool_exhausted?: boolean;
+  /** True when this list only holds employers whose sponsorship Litos could confirm. */
+  sponsor_only?: boolean;
 };
+
+/**
+ * VISA SPONSORSHIP: what the account declared, and what the board is doing about it.
+ *
+ * `locked` is the part worth reading twice. Someone who said during setup that they need
+ * sponsorship has the filter on permanently, and the settings screen has to SAY that rather than
+ * render a switch that quietly refuses - the server rejects turning it off either way, so a control
+ * that looks live would just be a lie the page repeats.
+ */
+export type SponsorshipState = {
+  declared_at_onboarding: boolean | null;
+  declared_at: string | null;
+  answer: SponsorshipAnswer | null;
+  setting_enabled: boolean;
+  sponsor_only_board: boolean;
+  locked: boolean;
+  evidence?: {
+    source: string;
+    fiscal_years: number[];
+    confirmed_employers: number;
+    checked_employers: number;
+  };
+};
+
+/** Three of these four mean "filter the board". Only "no" leaves it whole. */
+export type SponsorshipAnswer = "needs_now" | "needs_future" | "not_authorized" | "no";
+
+export function getSponsorship() {
+  return api<SponsorshipState>("/sponsorship");
+}
+
+export function declareSponsorship(answer: SponsorshipAnswer) {
+  return api<SponsorshipState>("/onboarding/sponsorship", {
+    method: "POST",
+    body: JSON.stringify({ answer }),
+  });
+}
+
+export function setSponsorFilter(enabled: boolean) {
+  return api<SponsorshipState>("/sponsorship/filter", {
+    method: "PUT",
+    body: JSON.stringify({ enabled }),
+  });
+}
 
 export type ResumeEntry = {
   type?: "job" | "project" | "leadership";
@@ -343,7 +401,7 @@ export type ParsedProfile = {
   bank_seeded?: number;
 };
 
-export type OnboardingStep = "focus" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
+export type OnboardingStep = "focus" | "sponsorship" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
 
 export type OnboardingState = {
   /** Unattended submission is earned: the server refuses to enable it until the student has
@@ -357,6 +415,10 @@ export type OnboardingState = {
   step: OnboardingStep;
   completed_at: string | null;
   has_focus: boolean;
+  /** Whether the one-time visa-sponsorship question has been answered. Absent on older backends. */
+  has_sponsorship_answer?: boolean;
+  sponsorship_answer?: SponsorshipAnswer | null;
+  sponsorship_required?: boolean | null;
   has_resume: boolean;
   has_base_resume: boolean;
   has_applied: boolean;

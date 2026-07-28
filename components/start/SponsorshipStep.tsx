@@ -1,0 +1,146 @@
+"use client";
+
+/* 01 VISA
+ *
+ * The one question in setup that permanently changes WHICH JOBS EXIST for this person.
+ *
+ * Everything else in /start is a preference: change your mind and the next screen reflects it. This
+ * answer is written once and cannot be edited, so the screen has three jobs, and the third is the
+ * one that is easy to skip. It has to ask in words a job seeker actually uses, it has to say what
+ * the answer will DO, and it has to say - before the answer is given, not after - that it is
+ * permanent. A consequence disclosed afterwards is not a disclosure.
+ *
+ * It also states the thing this answer is NOT for. Litos never types a work-authorization answer
+ * into an employer's form (R-004: those questions are location-scoped, and replaying a global
+ * answer once shipped a false legal declaration on a live application). This screen is about which
+ * jobs get shown. The refusal list on the resume step makes the same promise; it is repeated here
+ * because this is where somebody would reasonably assume the opposite.
+ */
+
+import { useState } from "react";
+import { declareSponsorship, type SponsorshipAnswer } from "@/lib/api";
+import { ErrorNote, PendingLabel } from "@/components/app/ui";
+import { LaterLink, PrimaryButton, StartShell } from "./ui";
+
+/* Written for the plain-language bar: everyday words, short sentences, and the two "yes" answers
+   phrased the way people describe their own situation rather than the way an immigration form
+   does. "Sponsorship" appears in the explanation, not in the choices, because the choices have to
+   be answerable by somebody who has never heard the word. */
+const OPTIONS: { value: SponsorshipAnswer; label: string; hint: string }[] = [
+  {
+    value: "needs_now",
+    label: "Yes, I need one now",
+    hint: "You need a company to sponsor a work visa before you can start.",
+  },
+  {
+    value: "needs_future",
+    label: "Not yet, but I will later",
+    hint: "Common on a student visa: you can work now, and you will need a sponsor to keep working.",
+  },
+  {
+    value: "not_authorized",
+    label: "I cannot work there yet",
+    hint: "You do not have the right to work in the country you are applying to.",
+  },
+  {
+    value: "no",
+    label: "No, I can already work there",
+    hint: "You are a citizen, a permanent resident, or you already hold a work permit.",
+  },
+];
+
+export function SponsorshipStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
+  const [answer, setAnswer] = useState<SponsorshipAnswer | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (!answer) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await declareSponsorship(answer);
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save that.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <StartShell
+      step="sponsorship"
+      title="Do you need a work visa?"
+      sub="We ask once. Your answer decides which jobs we show you."
+    >
+      {error && <div className="mb-4"><ErrorNote message={error} /></div>}
+
+      <fieldset className="mb-7 space-y-2.5">
+        <legend className="sr-only">Do you need a company to sponsor a work visa?</legend>
+        {OPTIONS.map((option) => {
+          const on = answer === option.value;
+          return (
+            <label
+              key={option.value}
+              className={`flex cursor-pointer gap-3 rounded-inner border px-4 py-3.5 transition-colors ${
+                on ? "border-brand bg-brand-soft" : "border-border hover:border-faint"
+              }`}
+            >
+              <input
+                type="radio"
+                name="sponsorship"
+                value={option.value}
+                checked={on}
+                onChange={() => setAnswer(option.value)}
+                className="mt-1 accent-brand"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm text-ink">{option.label}</span>
+                <span className="mt-0.5 block text-xs text-muted">{option.hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
+
+      {/* Shown before the answer is given, not after it is saved. Same reason the countdown on the
+          store listing is 15 seconds and not 9: a consequence a person learns about afterwards is
+          not one they agreed to. */}
+      <div className="mb-8 overflow-hidden rounded-inner border border-border">
+        <div className="border-b border-border bg-surface-alt px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
+          What your answer does
+        </div>
+        <dl className="divide-y divide-border text-sm">
+          <div className="px-4 py-3">
+            <dt className="text-ink">If you need a visa</dt>
+            <dd className="mt-1 text-xs text-muted">
+              Your job list only shows companies we can confirm sponsor visas. We check H-1B
+              filings with the US government, and what each job post says about sponsorship.
+            </dd>
+          </div>
+          <div className="px-4 py-3">
+            <dt className="text-ink">This answer is permanent</dt>
+            <dd className="mt-1 text-xs text-muted">
+              You cannot switch it off later. Forgetting it once should not put you back in front of
+              jobs that will turn you down at the last question.
+            </dd>
+          </div>
+          <div className="px-4 py-3">
+            <dt className="text-ink">We never fill it in for you</dt>
+            <dd className="mt-1 text-xs text-muted">
+              Job forms ask about the country the job is in, so we always leave that question for
+              you to answer yourself.
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <PrimaryButton onClick={() => void save()} disabled={busy || answer === null}>
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
+        </PrimaryButton>
+        <LaterLink onClick={onLater} />
+      </div>
+    </StartShell>
+  );
+}

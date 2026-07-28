@@ -107,6 +107,14 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
         )}
         {ago}
       </p>
+      {/* Only ever shown when there IS evidence. Silence stays silent: a tile that said "no
+          sponsorship" because a posting did not mention it would be stating an employer's policy
+          that nobody at that employer has stated. */}
+      {job.sponsorship_evidence && (
+        <p className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">
+          {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Sponsors visas"}
+        </p>
+      )}
     </a>
   );
 }
@@ -196,23 +204,28 @@ export default async function BrowseJobs({
     location?: string;
     q?: string;
     page?: string;
+    sponsor_only?: string;
   }>;
 }) {
   const params = await searchParams;
   const clean = (v?: string) => (v ?? "").slice(0, 80).trim();
   /* `q` is still read, unlabelled, so links minted while the board had one
      general search box keep working instead of silently returning everything. */
+  /* Only ever the literal "true". Echoing whatever arrived would put an attacker-chosen string in
+     the checkbox's value and in every pagination link on the page. */
+  const sponsorOnly = params.sponsor_only === "true";
   const filters: Filters = {
     title: clean(params.title),
     company: clean(params.company),
     location: clean(params.location),
     q: clean(params.q),
+    sponsor_only: sponsorOnly ? "true" : "",
   };
   const searching = Boolean(filters.title || filters.company || filters.location || filters.q);
   const requested = Math.max(1, Number(params.page) || 1);
   const [{ jobs, total, ok }, facets] = await Promise.all([
     fetchJobs(filters, requested),
-    fetchFacets(),
+    fetchFacets(sponsorOnly),
   ]);
   const pages = pageCount(total);
   const current = Math.min(requested, pages);
@@ -277,6 +290,21 @@ export default async function BrowseJobs({
             options={facets.locations}
           />
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
+          {/* A fourth control, and the only one that is not a search term: it changes which jobs
+              are eligible rather than which match. It sits on its own row under the three fields
+              so it is not read as a fourth thing to type in.
+              A checkbox in a GET form submits nothing when unticked, which is exactly the wanted
+              behaviour: the parameter simply disappears from the URL. */}
+          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-4">
+            <input
+              type="checkbox"
+              name="sponsor_only"
+              value="true"
+              defaultChecked={sponsorOnly}
+              className="size-4 accent-brand"
+            />
+            Only jobs where the company sponsors a work visa
+          </label>
           <button
             type="submit"
             className="min-h-[44px] rounded-control bg-brand px-6 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:col-span-3 lg:col-span-1 lg:self-end"
@@ -284,6 +312,15 @@ export default async function BrowseJobs({
             Search
           </button>
         </form>
+
+        {sponsorOnly && ok && (
+          <p className="mt-4 max-w-[62ch] text-small leading-6 text-muted">
+            Showing only companies with approved H-1B petitions on file with USCIS, plus roles whose
+            job post says sponsorship is available. A post that rules sponsorship out is hidden even
+            when the company sponsors for other roles. A filing record is not a promise to sponsor
+            you.
+          </p>
+        )}
 
         {searching && ok && (
           <p className="mt-4 font-mono text-machine text-muted">

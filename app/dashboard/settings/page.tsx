@@ -14,7 +14,10 @@ import {
   type EmailProvider,
   getEmailConnections,
   getOnboardingState,
+  getSponsorship,
   getToken,
+  setSponsorFilter,
+  type SponsorshipState,
   Me,
   setSession,
   setAutomationSettings,
@@ -55,6 +58,9 @@ export default function Settings() {
     required: number;
     remaining: number;
   } | null>(null);
+  const [sponsorship, setSponsorship] = useState<SponsorshipState | null>(null);
+  const [sponsorBusy, setSponsorBusy] = useState(false);
+  const [sponsorError, setSponsorError] = useState<string | null>(null);
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
@@ -75,11 +81,14 @@ export default function Settings() {
       try {
         const callbackProvider = new URLSearchParams(window.location.search).get("connection") as EmailProvider | null;
         const callbackStatus = new URLSearchParams(window.location.search).get("status");
-        const [meRes, profileRes, onboardingRes, initialConnections] = await Promise.all([
+        const [meRes, profileRes, onboardingRes, initialConnections, sponsorRes] = await Promise.all([
           api<Me>("/me"),
           api<ApplicationProfile>("/profile/application").catch(() => ({})),
           getOnboardingState(),
           getEmailConnections(),
+          /* Null on a backend that predates this, which renders no card at all rather than an
+             empty one. The two repos deploy separately and in either order. */
+          getSponsorship().catch(() => null),
         ]);
         let connectionRes = initialConnections;
         if (callbackStatus === "success" && callbackProvider) {
@@ -95,6 +104,7 @@ export default function Settings() {
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(onboardingRes.automatic_verification_enabled);
         setEmailConnections(connectionRes);
+        setSponsorship(sponsorRes);
         if (callbackProvider && callbackStatus) {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
           const connected = connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected);
@@ -555,6 +565,74 @@ export default function Settings() {
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos still stops and waits for you when something is missing, when two answers do not match, when a question is about you personally, when a site checks you are human, or when it is not sure.</p>
       </Card>
+
+      {/* VISA SPONSORSHIP.
+          Its own card rather than a row inside "Answers you give every time", because it is not an
+          answer Litos gives: it never reaches an employer's form (R-004), it decides which jobs
+          exist on your board. Filed next to the automation card for the same reason - both are
+          about what the product does on your behalf.
+
+          The switch is deliberately dead when `locked`. Someone who declared a need for
+          sponsorship during setup cannot turn the filter off (the server refuses either way), and a
+          control that looks live and silently fails is worse than one that explains why it is
+          fixed. */}
+      {sponsorship && (
+        <Card className="p-6" id="visa-sponsorship">
+          <h2 className="text-base font-medium text-ink">Jobs that sponsor a work visa</h2>
+          <p className="mt-1 text-sm leading-6 text-muted">
+            When this is on, your job list only shows companies we can confirm sponsor visas.
+          </p>
+          {sponsorError && <div className="mt-4"><ErrorNote message={sponsorError} /></div>}
+          <label className="mt-5 flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+            <span>
+              <span className="block text-sm font-medium text-ink">Only show jobs where sponsorship is confirmed</span>
+              <span className="mt-1 block text-xs leading-5 text-muted">
+                We check H-1B filings with the US government, and what each job post says about
+                sponsorship. A post that rules sponsorship out is hidden even when the company
+                sponsors for other roles.
+              </span>
+              {sponsorship.locked && (
+                <span className="mt-2 block text-xs leading-5 text-warn">
+                  You told us during setup that you need a work visa, so this stays on. Contact
+                  support if that has changed.
+                </span>
+              )}
+              {sponsorship.evidence && (
+                <span className="mt-2 block text-xs leading-5 text-faint">
+                  {sponsorship.evidence.confirmed_employers} of the{" "}
+                  {sponsorship.evidence.checked_employers} companies Litos watches have approved
+                  H-1B petitions on file for FY{sponsorship.evidence.fiscal_years[0]} to FY
+                  {sponsorship.evidence.fiscal_years[sponsorship.evidence.fiscal_years.length - 1]}.
+                  Source: {sponsorship.evidence.source}.
+                </span>
+              )}
+            </span>
+            <input
+              aria-label="Only show jobs where sponsorship is confirmed"
+              type="checkbox"
+              checked={sponsorship.sponsor_only_board}
+              disabled={sponsorBusy || sponsorship.locked}
+              onChange={async (event) => {
+                setSponsorBusy(true);
+                setSponsorError(null);
+                try {
+                  const next = await setSponsorFilter(event.target.checked);
+                  setSponsorship({ ...next, evidence: sponsorship.evidence });
+                } catch (reason) {
+                  setSponsorError(reason instanceof Error ? reason.message : "Could not change that.");
+                } finally {
+                  setSponsorBusy(false);
+                }
+              }}
+              className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+            />
+          </label>
+          <p className="mt-4 text-xs leading-5 text-faint">
+            A filing record is not a promise to sponsor you. It is proof the company has sponsored
+            people before.
+          </p>
+        </Card>
+      )}
 
       {/* Application profile.
           id="application-details" is load-bearing: /dashboard/profile's "Edit
