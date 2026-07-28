@@ -13,9 +13,11 @@ import { track } from "@/lib/analytics";
    the three pillar tints. Frosted glass cards carry the copy, one chapter at
    a time. The film IS the pitch: chaos in, one packet out.
 
-   Six effects, one system: film scrub + grain + particles + vignette +
-   glass cards + chapter tints. Pacing comes from Lenis (SmoothScroll) and
-   the scrubbed timeline. The opening act is live: the Application Roll
+   Four effects, one system: film scrub + vignette + glass cards + chapter
+   tints. (Was six. Grain and drifting paper particles came out 2026-07-28:
+   both sat under the perceptual threshold on a white canvas and both cost a
+   permanent animation loop to do it.) Pacing comes from Lenis (SmoothScroll)
+   and the scrubbed timeline. The opening act is live: the Application Roll
    (paperRollEngine) prints the job hunt behind the hero card until the
    first scroll dissolves it into the scrub. Reduced motion / no JS: the
    section collapses to one static viewport (CSS only) with the hero card
@@ -460,7 +462,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           ref={filmRef}
           className="rq-cine-film absolute inset-0 h-full w-full opacity-0 transition-opacity duration-700"
         />
-        {/* 1b · the opening: the live Application Roll printing the job
+        {/* 2 · the opening: the live Application Roll printing the job
             hunt behind the hero card; the whole stage dissolves into 1
             (the scrub) on first scroll */}
         <div ref={openRef} className="absolute inset-0 h-full w-full">
@@ -470,7 +472,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             className="absolute inset-0 h-full w-full opacity-0"
           />
         </div>
-        {/* 1c · the static product still, reduced motion only.
+        {/* 3 · the static product still, reduced motion only.
             Until now a reduced-motion visitor got film frame 0 behind the
             hero card, and frame 0 is scattered application pages: the
             PROBLEM, not the product. So the one audience that cannot watch
@@ -513,9 +515,9 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           </div>
           <div className="absolute inset-0 bg-white/[0.72]" />
         </div>
-        {/* 5 · chapter tint (multiply, whisper) */}
+        {/* 4 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
-        {/* 4 · vignette — gentle, the brand stays light */}
+        {/* 5 · vignette — gentle, the brand stays light */}
         <div
           className="absolute inset-0"
           style={{
