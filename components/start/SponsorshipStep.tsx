@@ -20,7 +20,7 @@
 import { useState } from "react";
 import { declareSponsorship, type SponsorshipAnswer } from "@/lib/api";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
-import { LaterLink, PrimaryButton, StartShell } from "./ui";
+import { PrimaryButton, StartShell } from "./ui";
 
 /* Written for the plain-language bar: everyday words, short sentences, and the two "yes" answers
    phrased the way people describe their own situation rather than the way an immigration form
@@ -49,7 +49,12 @@ const OPTIONS: { value: SponsorshipAnswer; label: string; hint: string }[] = [
   },
 ];
 
-export function SponsorshipStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
+/* NO "Finish later" ON THIS ONE SCREEN, and it is the only step in the flow without it.
+ * Every other step defers a task. Deferring this one produces a specific harm: the account reads as
+ * "never asked", which leaves the board whole, so the person this exists to protect spends their
+ * first session on jobs that will not sponsor them. It is four radio buttons, and it is the gate to
+ * everything after it. */
+export function SponsorshipStep({ onDone }: { onDone: () => void }) {
   const [answer, setAnswer] = useState<SponsorshipAnswer | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,12 +140,9 @@ export function SponsorshipStep({ onDone, onLater }: { onDone: () => void; onLat
         </dl>
       </div>
 
-      <div className="flex items-center gap-3">
-        <PrimaryButton onClick={() => void save()} disabled={busy || answer === null}>
-          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
-        </PrimaryButton>
-        <LaterLink onClick={onLater} />
-      </div>
+      <PrimaryButton onClick={() => void save()} disabled={busy || answer === null}>
+        {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
+      </PrimaryButton>
     </StartShell>
   );
 }

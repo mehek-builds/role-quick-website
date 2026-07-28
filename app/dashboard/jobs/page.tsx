@@ -146,6 +146,10 @@ export default function JobsPage() {
       setHasMore(result.has_more === true);
       setRankedPool(result.ranked_pool ?? null);
       setPoolExhausted(result.pool_exhausted === true);
+      /* Carried forward from every page, not just the first. The banner is the only thing telling
+         the reader their list is filtered, and leaving it on page one's answer means a filter that
+         turns on mid-session shows a filtered list under no explanation. */
+      setSponsorOnly(result.sponsor_only === true);
       setError(null);
     } catch (reason) {
       if (activeFilter.current !== key) return;
