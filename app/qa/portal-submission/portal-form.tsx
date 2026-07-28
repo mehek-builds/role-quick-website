@@ -211,7 +211,10 @@ function RipplingFields() {
     <TestIdField testId="input-email" label="Email" type="email" {...junk(16)} />
     <TestIdField testId="input-phone_number" label="Phone number" {...junk(31)} />
     <TestIdField testId="input-current_company" label="Current company" {...junk(27)} />
-    {/* Two file inputs, the same hazard as Workable's avatar. Both carry a data-testid. */}
+    {/* Two file inputs, both with a data-testid. Weaker than Workable's avatar trap and worth
+        stating precisely: resume comes first here and on the live form, so a bare input[type=file]
+        happens to resolve correctly today. Measured, not assumed. The captured selector still ships
+        because "correct while the DOM order holds" is not a property worth relying on. */}
     <FileField name="" dataTestId="input-resume" label="Resume" />
     <FileField name="" dataTestId="input-cover_letter" label="Cover letter" required={false} />
     {/* THE OTHER trap: all three comboboxes share ONE data-testid, so they cannot be told apart by
@@ -290,13 +293,14 @@ function BambooHrForm({ confirmationId }: { confirmationId: string }) {
 }
 
 // A honeypot as the live forms actually build them, and the reason this component exists rather than
-// a `hidden` attribute: the INPUT ITSELF is fully visible by every computed-style test - opacity 1,
-// visibility visible, display block, real width and height. It is concealed only by an ancestor with
-// height 0 and overflow hidden. Captured this way on both Breezy and BambooHR on 2026-07-29.
+// a `hidden` attribute: the INPUT ITSELF is fully visible - opacity 1, visibility visible, display
+// block, real width and height. It is concealed only by an ancestor with height 0 and overflow
+// hidden. Captured this way on both Breezy and BambooHR on 2026-07-29.
 //
-// So a guard that checks the element's own style passes it straight through and fills it, which is
-// how a form silently rejects an application. Only ancestor geometry catches this. Reproducing it
-// faithfully is the whole value of the fixture; `display: none` would prove nothing.
+// Measured against this fixture: Playwright's isVisible() returns TRUE for it. So neither a
+// computed-style check nor isVisible() catches it - only ancestor geometry does, and a filled
+// honeypot means the employer silently discards the application. Reproducing it faithfully is the
+// whole value of the fixture; `display: none` would prove nothing.
 function Honeypot({ name, label = "Please leave this field blank" }: { name: string; label?: string }) {
   return <div className="apply-field-extra" style={{ height: 0, overflow: "hidden" }} aria-hidden>
     <label className="block text-sm text-[#31312d]">{label}<input name={name} id={name} type="text" tabIndex={-1} placeholder="Enter your text here" className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>
