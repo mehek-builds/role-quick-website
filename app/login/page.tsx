@@ -395,14 +395,17 @@ export default function Login() {
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <Link href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/brand/litos-mark.svg" alt="" className="h-7 w-7" />
-        <span className="text-lg font-semibold tracking-tight text-ink">Litos</span>
+        <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
+        {/* One wordmark: 16px, weight 500, same as the marketing header, the
+            dashboard header and the footer. This came back at 18px/600 when the
+            page was rebuilt (audit finding 1, regressed). */}
+        <span className="text-base font-medium tracking-tight text-ink">Litos</span>
       </Link>
 
       <div className="w-full max-w-sm rounded-card border border-border bg-surface p-8">
         {step === "credentials" ? (
           <div>
-            <h1 className="text-xl font-semibold tracking-tight text-ink">
+            <h1 className="text-heading font-medium text-ink">
               {claimMode
                 ? "Save your work"
                 : flow === "signup"
@@ -573,7 +576,7 @@ export default function Login() {
           </div>
         ) : step === "code" ? (
           <form onSubmit={submitCode}>
-            <h1 className="text-xl font-semibold tracking-tight text-ink">Check your email</h1>
+            <h1 className="text-heading font-medium text-ink">Check your email</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
               We requested a six-digit code for <span className="text-ink">{email}</span>.
               It expires in 10 minutes.
@@ -631,7 +634,7 @@ export default function Login() {
           </form>
         ) : (
           <form onSubmit={submitNewPassword}>
-            <h1 className="text-xl font-semibold tracking-tight text-ink">Pick a new password</h1>
+            <h1 className="text-heading font-medium text-ink">Pick a new password</h1>
             <p className="mt-2 text-sm leading-6 text-muted">
               Your email is verified. This will sign out every older Litos session.
             </p>
