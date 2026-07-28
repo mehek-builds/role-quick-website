@@ -183,6 +183,8 @@ export type MonitoredJob = {
   is_active?: boolean;
   /** The company's own careers page. Every other URL here belongs to the job board. */
   career_url?: string | null;
+  /** The employer's own domain, resolved server-side. Null when we have no verified one. */
+  company_domain?: string | null;
   /**
    * 0-100, how much of what this posting asks for is on your main resume.
    *

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { companyDomain } from "@/lib/job-rows";
+import { companyDomainForRow } from "@/lib/job-rows";
 
 /**
  * The company's icon beside a job row, with its initial as the answer when there is no icon.
@@ -30,11 +30,14 @@ const FAVICON_PX = 64;
 export function CompanyLogo({
   company,
   careerUrl,
+  companyDomain,
 }: {
   company: string;
   careerUrl: string | null | undefined;
+  /** The employer's domain as resolved by the backend. Preferred over the careers URL. */
+  companyDomain?: string | null;
 }) {
-  const domain = companyDomain(careerUrl);
+  const domain = companyDomainForRow({ company_domain: companyDomain, career_url: careerUrl });
   // Reset by key at the call site is unnecessary: a row is keyed by job id and a job's company
   // does not change under it.
   const [broken, setBroken] = useState(false);
