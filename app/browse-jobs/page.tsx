@@ -46,7 +46,7 @@ function Tile({ job }: { job: BrowseJob }) {
       href={job.apply_url}
       target="_blank"
       rel="noreferrer"
-      className="group flex min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
+      className="group flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
     >
       <p className="text-[15px] font-medium leading-snug text-ink">{job.title}</p>
       <p className="mt-1 text-small text-muted">{job.company_name}</p>

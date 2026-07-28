@@ -116,6 +116,22 @@ describe("pageCount", () => {
   });
 });
 
+describe("the board's layout", () => {
+  test("a tile can shrink below its own nowrap content", () => {
+    /* The location line is `truncate`, which is white-space: nowrap, and a grid
+       item defaults to min-width: auto — so the track grew to fit the longest
+       unwrapped location instead of clipping it. On a 375px phone the document
+       came out 809px wide and the whole page scrolled sideways, while desktop
+       looked perfect and review showed nothing. min-w-0 is what lets truncate
+       do its job. Asserted rather than eyeballed because the failure is
+       invisible everywhere except on a phone. */
+    const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
+    const tile = page.match(/className="group flex[^"]*"/);
+    assert.ok(tile, "could not find the tile's className");
+    assert.match(tile[0], /\bmin-w-0\b/, "the tile needs min-w-0 or the board scrolls sideways on mobile");
+  });
+});
+
 describe("the board's honesty", () => {
   test("the page does not describe a crawled board as hand-checked", () => {
     /* It shipped that way for one commit: the copy was written for a 47-row
