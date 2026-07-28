@@ -413,14 +413,14 @@ export default function Home() {
                   <p className="mt-3 text-[13px] text-muted">
                     You can change any of this in Settings.
                   </p>
+
+                  {/* "This is a picture we made. Real screenshots are below."
+                      stood here and in #outreach, and #captures states the same
+                      distinction a third time in its own intro. Removed
+                      2026-07-28: two of the three were the page explaining its
+                      own illustrations. #captures still draws the line once,
+                      where it belongs, next to the real screenshots. */}
                   <PillarLink href="/try?step=autofill">See it fill a form</PillarLink>
-                  {/* These panels are built in the DOM, not captured from a
-                      live session. They reproduce the extension's real
-                      output, but a reader is entitled to know which one
-                      they are looking at before treating it as evidence. */}
-                  <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    This is a picture we made. Real screenshots are below.
-                  </p>
                 </div>
               </div>
             </Reveal>
@@ -461,9 +461,6 @@ export default function Home() {
                     <p className="text-muted">We write a short note that sounds like you.</p>
                     <p className="text-muted">We leave the send button to you.</p>
                   </div>
-                  <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                    This is a picture we made. Real screenshots are below.
-                  </p>
                   <PillarLink href="/try?step=outreach">See it write an email</PillarLink>
                 </div>
                 <div>
