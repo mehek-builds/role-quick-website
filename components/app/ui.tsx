@@ -6,15 +6,20 @@ import { ThinkingOrb, type OrbState } from "thinking-orbs";
    (review view): quiet surfaces, pill chips, shimmer loading, match-score ring.
    Color encodes what something is (pillar), never how urgently to act. */
 
+/* `id` is optional and exists so a Card can be an anchor target. Settings needs
+   it: /dashboard/profile links to /dashboard/settings#application-details, and
+   without a forwarded id that link lands on the page and scrolls nowhere. */
 export function Card({
   children,
   className = "",
+  id,
 }: {
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
-    <div className={`rounded-card border border-border bg-surface ${className}`}>
+    <div id={id} className={`rounded-card border border-border bg-surface ${className}`}>
       {children}
     </div>
   );

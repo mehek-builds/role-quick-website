@@ -5,8 +5,6 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
-import { MobileSendLink } from "@/components/MobileSendLink";
-import { ReturningVisitor, useHasSeenFilm } from "@/components/ReturningVisitor";
 import { track } from "@/lib/analytics";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
@@ -15,9 +13,11 @@ import { track } from "@/lib/analytics";
    the three pillar tints. Frosted glass cards carry the copy, one chapter at
    a time. The film IS the pitch: chaos in, one packet out.
 
-   Six effects, one system: film scrub + grain + particles + vignette +
-   glass cards + chapter tints. Pacing comes from Lenis (SmoothScroll) and
-   the scrubbed timeline. The opening act is live: the Application Roll
+   Four effects, one system: film scrub + vignette + glass cards + chapter
+   tints. (Was six. Grain and drifting paper particles came out 2026-07-28:
+   both sat under the perceptual threshold on a white canvas and both cost a
+   permanent animation loop to do it.) Pacing comes from Lenis (SmoothScroll)
+   and the scrubbed timeline. The opening act is live: the Application Roll
    (paperRollEngine) prints the job hunt behind the hero card until the
    first scroll dissolves it into the scrub. Reduced motion / no JS: the
    section collapses to one static viewport (CSS only) with the hero card
@@ -54,8 +54,6 @@ const TINTS = [
   "rgba(251,239,232,0.5)", // coral-soft
   "rgba(255,255,255,0)",
 ];
-/* Particle colors per chapter (ink at rest, pillar inks mid-film). */
-const DUST = ["#a3a19a", "#6b84e8", "#68ad95", "#dd9273", "#a3a19a"];
 
 const CHAPTERS = [
   { at: 0.0, label: "00 · Job found" },
@@ -66,11 +64,9 @@ const CHAPTERS = [
 ];
 
 export function CinematicHero({ storeUrl }: { storeUrl: string }) {
-  const hasSeenFilm = useHasSeenFilm();
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const filmRef = useRef<HTMLCanvasElement>(null);
-  const dustRef = useRef<HTMLCanvasElement>(null);
   const rollRef = useRef<HTMLDivElement>(null);
   const openRef = useRef<HTMLDivElement>(null);
   const openDoneRef = useRef(false);
@@ -305,68 +301,12 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
     };
   }, []);
 
-  /* ---- particles: drifting paper dust, tinted by the active chapter ---- */
-  useEffect(() => {
-    const canvas = dustRef.current;
-    const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    let raf = 0;
-    let running = true;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const fit = () => {
-      canvas.width = canvas.clientWidth * dpr;
-      canvas.height = canvas.clientHeight * dpr;
-    };
-    fit();
-    window.addEventListener("resize", fit);
-
-    const N = 34;
-    const dots = Array.from({ length: N }, () => ({
-      x: Math.random(),
-      y: Math.random(),
-      r: 0.6 + Math.random() * 1.7,
-      vy: 0.00012 + Math.random() * 0.00028,
-      vx: (Math.random() - 0.5) * 0.00012,
-      a: 0.12 + Math.random() * 0.3,
-      ph: Math.random() * Math.PI * 2,
-    }));
-
-    const tick = (t: number) => {
-      if (!running) return;
-      const { width: w, height: h } = canvas;
-      ctx.clearRect(0, 0, w, h);
-      ctx.fillStyle = DUST[chapterRef.current];
-      for (const d of dots) {
-        d.y -= d.vy;
-        d.x += d.vx + Math.sin(t / 4000 + d.ph) * 0.00005;
-        if (d.y < -0.02) { d.y = 1.02; d.x = Math.random(); }
-        if (d.x < -0.02) d.x = 1.02;
-        if (d.x > 1.02) d.x = -0.02;
-        ctx.globalAlpha = d.a * (0.7 + 0.3 * Math.sin(t / 1600 + d.ph));
-        ctx.beginPath();
-        ctx.arc(d.x * w, d.y * h, d.r * dpr, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-      raf = requestAnimationFrame(tick);
-    };
-    /* only animate while the pinned hero is on screen */
-    const io = new IntersectionObserver(([e]) => {
-      const active = e.isIntersecting;
-      if (active && !raf) raf = requestAnimationFrame(tick);
-      if (!active && raf) { cancelAnimationFrame(raf); raf = 0; }
-    });
-    io.observe(canvas);
-
-    return () => {
-      running = false;
-      io.disconnect();
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("resize", fit);
-    };
-  }, []);
+  /* The drifting paper-dust particle layer was REMOVED 2026-07-28. 34 dots
+     on a permanent requestAnimationFrame loop, at 0.12-0.42 alpha over a
+     white page, behind grain and a vignette. Below the threshold anyone
+     notices and above zero on every frame the hero is on screen. Its
+     chapter-tinted DUST palette went with it; the chapter tint layer that
+     actually reads is still here. */
 
   /* ---- the scrubbed timeline: frames, cards, tint, rail ---- */
   useGSAP(
@@ -522,7 +462,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           ref={filmRef}
           className="rq-cine-film absolute inset-0 h-full w-full opacity-0 transition-opacity duration-700"
         />
-        {/* 1b · the opening: the live Application Roll printing the job
+        {/* 2 · the opening: the live Application Roll printing the job
             hunt behind the hero card; the whole stage dissolves into 1
             (the scrub) on first scroll */}
         <div ref={openRef} className="absolute inset-0 h-full w-full">
@@ -532,7 +472,7 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             className="absolute inset-0 h-full w-full opacity-0"
           />
         </div>
-        {/* 1c · the static product still, reduced motion only.
+        {/* 3 · the static product still, reduced motion only.
             Until now a reduced-motion visitor got film frame 0 behind the
             hero card, and frame 0 is scattered application pages: the
             PROBLEM, not the product. So the one audience that cannot watch
@@ -575,11 +515,9 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
           </div>
           <div className="absolute inset-0 bg-white/[0.72]" />
         </div>
-        {/* 5 · chapter tint (multiply, whisper) */}
+        {/* 4 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
-        {/* 2 · paper dust */}
-        <canvas ref={dustRef} className="rq-cine-dust absolute inset-0 h-full w-full" />
-        {/* 4 · vignette — gentle, the brand stays light */}
+        {/* 5 · vignette — gentle, the brand stays light */}
         <div
           className="absolute inset-0"
           style={{
@@ -639,24 +577,35 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               >
                 Try it free
               </a>
-              {/* #product is the film's own section (top of page): pointing
-                  here sent "skip" back to where the viewer already was. The
-                  first section past the opening act is #formats. */}
-              {/* ReturningVisitor renders its own skip pill, so on a return visit
-                  this would be the second control doing the same jump. */}
-              {!hasSeenFilm && (
-                <a
-                  href="#formats"
-                  className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
-                >
-                  Skip ahead ↓
-                </a>
-              )}
+              {/* BROKEN LINK, FIXED 2026-07-28. This pointed at #formats, and
+                  #formats was deleted on 2026-07-28 when its band was folded
+                  into #documents. The link shipped to production and did
+                  nothing when clicked. tests/route-integrity.test.mjs exists
+                  for exactly this class of bug but only checked ROUTES, not
+                  in-page fragments; it checks both now.
+
+                  #documents is the right target on its own merits: it is the
+                  first deep-dive past the opening act, which is what a reader
+                  pressing "skip" is asking for.
+
+                  The gate around this (!hasSeenFilm) went with ReturningVisitor,
+                  which rendered a second, competing skip pill on return visits.
+                  One skip control, always shown. */}
+              <a
+                href="#documents"
+                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+              >
+                Skip ahead ↓
+              </a>
             </div>
-            {/* Phones can't install a Chrome extension. Say so once, in the
-                handoff itself, and give a real door instead of a dead end. */}
-            <ReturningVisitor />
-            <MobileSendLink source="hero" className="mt-6 sm:hidden" />
+            {/* The mobile QR handoff (MobileSendLink) was REMOVED here
+                2026-07-28. A QR code and a copy-link button inside the hero
+                card, on the first screen, before a phone visitor knows what
+                Litos is. The mobile primary CTA above is "Try it free", which
+                works on a phone, and /install still carries the handoff for
+                anyone who wants the link. MobileSendLink itself stays: /try's
+                DonePanel uses it, at the point someone has actually seen the
+                product work. */}
             {/* The privacy caption that used to sit here (collection, no-sale,
                 deletion) moved into the refusal trio in #faq, app/page.tsx.
                 Mehek's call 2026-07-28: two body blocks of near-equal length
