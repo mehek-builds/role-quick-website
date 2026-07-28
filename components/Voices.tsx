@@ -1,4 +1,4 @@
-/* The five beta quotes that already ship on the Chrome Web Store listing
+/* The lead beta quote, which also ships on the Chrome Web Store listing
    (store-assets-v2/src/shot-6-voices.html, carousel position 2).
 
    Provenance, and the reason none of this is dressed up: these are real
@@ -8,17 +8,18 @@
    call on this set. Each one reads as its own review rather than as a batch
    from one group. Do not add names, roles, schools, photos, or outcome
    numbers to this component without a new source for them. */
+/* The 2x2 grid of four supporting quotes was REMOVED 2026-07-28 in the
+   deletion pass. All four were anonymous and three of them ("just fast,
+   start to finish", "actually feels easy now", "the repetitive stuff is
+   just gone") made the same unfalsifiable speed claim in different words,
+   so the grid added length without adding evidence. The lead quote is the
+   only one carrying a number, which is the only part a skeptic can weigh.
+   The four are preserved in the store listing (store-assets-v2
+   src/shot-6-voices.html) if they are ever wanted back. */
 const LEAD = {
   head: "Ten applications in an hour.",
   tail: "Just tailoring my resume used to take me that long for one role.",
 };
-
-const QUOTES = [
-  "I finally have time for actual informational interviews instead of typing the same answers into every single form.",
-  "Honestly the whole thing is just fast, start to finish.",
-  "Job hunting actually feels easy now.",
-  "All the repetitive stuff is just gone.",
-];
 
 export function Voices() {
   return (
@@ -48,24 +49,6 @@ export function Voices() {
             Anonymous
           </footer>
         </blockquote>
-      </div>
-
-      {/* 2x2, not 3-up: with three columns the fourth quote left a bare cell
-          in the corner, which read as a missing card rather than a choice. */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:mt-6 sm:grid-cols-2">
-        {QUOTES.map((q) => (
-          <blockquote
-            key={q}
-            className="rq-glass flex flex-col px-6 py-6"
-          >
-            <p className="flex-1 text-base leading-[1.55] text-ink">
-              &ldquo;{q}&rdquo;
-            </p>
-            <footer className="mt-4 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-              Anonymous
-            </footer>
-          </blockquote>
-        ))}
       </div>
     </div>
   );
