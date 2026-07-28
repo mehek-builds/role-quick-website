@@ -121,6 +121,8 @@ test("an undefined entry type is treated as Experience, not a new section", () =
 // ---- Component-level guards for the fixes that are structural, not pure ----
 
 const dashboard = await readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8");
+// The three highlight tones moved out of the page and into their own component in cb650c3.
+const requirementText = await readFile(new URL("../components/app/RequirementText.tsx", import.meta.url), "utf8");
 
 test("R-051b: resume fields wrap instead of clipping", () => {
   // A single-line <input> truncated the education headline to "Marshall School of B". EditableLine
@@ -160,10 +162,34 @@ test("R-046: the legend names both marks, not just one", () => {
   assert.doesNotMatch(dashboard, /wording tailoring changed for this posting/);
 });
 
-test("R-046: the two highlight tones are visually distinct", () => {
+test("R-046: the highlight tones are visually distinct", () => {
   // Both were brand-blue and differed only by a border, despite meaning opposite things.
-  const highlight = dashboard.slice(dashboard.indexOf("const HighlightedText"));
-  assert.match(highlight.slice(0, 1200), /tone === "edited" \? "[^"]*positive/);
+  //
+  // This test used to grep the dashboard page for `const HighlightedText`. That component was
+  // deleted in cb650c3, which split the marks into three tones and moved them into
+  // components/app/RequirementText.tsx. indexOf returned -1, slice(-1) took the last character,
+  // and the test failed against a one-character string for three weeks. It asserts the same
+  // invariant against the file that now owns the tones.
+  //
+  // Distinct means distinct COLOUR FAMILY, not merely a distinct string: the earlier bug was two
+  // marks that both read as brand-blue and differed only by a border.
+  assert.match(requirementText, /covered:\s*"[^"]*\bbg-brand-soft\b/);
+  assert.match(requirementText, /missing:\s*"[^"]*\bbg-warn-soft\b/);
+  assert.match(requirementText, /edited:\s*"[^"]*\bbg-positive-soft\b/);
+
+  const families = ["brand", "warn", "positive"];
+  const tones = ["covered", "missing", "edited"].map((tone) => {
+    const line = requirementText.match(new RegExp(`\\n\\s*${tone}:\\s*"([^"]*)"`))?.[1] ?? "";
+    return families.filter((family) => line.includes(`-${family}`));
+  });
+  assert.deepEqual(
+    tones,
+    [["brand"], ["warn"], ["positive"]],
+    "each tone must use exactly one colour family, and no two may share it",
+  );
+
+  // Colour is never the only carrier: every mark states its meaning to a screen reader.
+  assert.match(requirementText, /aria-label=\{`\$\{children\} — \$\{TONE_LABEL\[tone\]\}`\}/);
 });
 
 test("the submitting screen names the dashboard authorization", () => {
