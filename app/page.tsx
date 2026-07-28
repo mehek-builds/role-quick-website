@@ -4,7 +4,7 @@ import {
   ResumeMatchDemo,
 } from "@/components/Mockups";
 import { OutreachDemo } from "@/components/OutreachDemo";
-import { Reveal, CountUp } from "@/components/Motion";
+import { Reveal } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { Wash } from "@/components/cinema/Wash";
@@ -237,28 +237,12 @@ export default function Home() {
           </div>
         </section>
 
-        {/* The number. Background changes mark section boundaries from here
-            down (deep-dive pacing rule) — no hairline dividers between bands. */}
-        <section id="odds" className="relative">
-          <Wash tint="warm" soft />
-          <div className="relative mx-auto max-w-3xl px-6 py-32 text-center">
-            <Reveal>
-              <h2 className="sr-only">How many people you are up against</h2>
-              <p className="font-mono text-display tracking-[-0.04em] text-ink">
-                <CountUp to={250} />
-              </p>
-              <p className="mx-auto mt-6 max-w-sm text-base leading-7 text-muted">
-                people apply for one job. Six of them get an interview. One
-                gets the job. We help yours stand out.
-              </p>
-              {/* The 250-dot applicant field was REMOVED 2026-07-28 in the
-                  deletion pass. It rendered 250 nodes on a stagger to
-                  illustrate a statistic about the job market rather than
-                  about Litos, and the number above plus this sentence say
-                  the whole thing. */}
-            </Reveal>
-          </div>
-        </section>
+        {/* The "250 people apply for one job" section stood here and is gone.
+            It was a statistic about the job market, not about Litos: it spent
+            a full viewport telling the reader the odds are bad without saying
+            anything the product does about them. Background changes still mark
+            section boundaries from here down (deep-dive pacing rule) — no
+            hairline dividers between bands. */}
 
         {/* Documents — pinned act: the real rebuild held over the live film.
             The separate #formats band ("A robot reads it first", with its own
