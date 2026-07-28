@@ -6,8 +6,14 @@ import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
 import { fetchBoard } from "@/lib/jd-match";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+import { applicationKey, countNewToday, isAppliedStage } from "@/lib/job-rows";
+import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 
+/* The filters, as one string. It is the pagination key as well as the query: a page of results
+   only belongs to the list on screen if it was fetched under the same filters, and comparing this
+   is how a late "load more" response is stopped from appending rows that answer a question the
+   student has already changed. */
 function jobParams(query: string, location: string, remoteOnly: boolean, offset: number) {
   const params = new URLSearchParams({ offset: String(offset) });
   if (query.trim()) params.set("q", query.trim());
@@ -16,26 +22,16 @@ function jobParams(query: string, location: string, remoteOnly: boolean, offset:
   return params;
 }
 
-/* Company and role, flattened enough that "Airbnb, Inc." and "Airbnb" are the same employer and
-   "Senior  Product Analyst" is the same role as "Senior Product Analyst". Deliberately NOT clever:
-   this decides whether a row says "Applied", and a loose rule that folded two different postings at
-   one company together would tell a student they had applied to something they had not. */
-function applicationKey(company: string, role: string): string {
-  const flatten = (value: string) =>
-    value
-      .toLowerCase()
-      .replace(/[.,]/g, "")
-      .replace(/\b(inc|llc|ltd|corp|corporation|co)\b/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  return `${flatten(company)}::${flatten(role)}`;
+function filterKey(query: string, location: string, remoteOnly: boolean): string {
+  return `${query.trim()}|${location.trim()}|${remoteOnly}`;
 }
 
-/** Postings first seen since midnight, which is what "new today" means to the person reading it. */
-function countNewToday(jobs: MonitoredJob[]): number {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
-  return jobs.filter((job) => new Date(job.first_seen_at).getTime() >= midnight.getTime()).length;
+/* Appending a page can repeat a row. The server ranks a live pool on every request, so a posting
+   that was rank 49 when page 1 was served can be rank 51 by the time page 2 is, and arrive twice.
+   Two identical React keys is a crash; the same job listed twice is a lie about the board. */
+function appendUnseen(current: MonitoredJob[], incoming: MonitoredJob[]): MonitoredJob[] {
+  const seen = new Set(current.map((job) => job.id));
+  return [...current, ...incoming.filter((job) => !seen.has(job.id))];
 }
 
 export default function JobsPage() {
@@ -47,22 +43,24 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  /* How many postings the server actually ranked, and whether more existed that it never scored.
+     Both are needed to describe the list truthfully: see the footer. */
+  const [rankedPool, setRankedPool] = useState<number | null>(null);
+  const [poolExhausted, setPoolExhausted] = useState(false);
   /* Null until the board answers. An empty Set would mean "you have applied to nothing", which is
      a different claim from "we do not know yet". */
   const [applied, setApplied] = useState<Set<string> | null>(null);
   /* Null while we work out whether this is a QA render, so neither branch fires a request first. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
-  const requestVersion = useRef(0);
+  /* The filters a response must have been fetched under to be allowed into the list. A plain
+     counter was not enough: the filter effect and loadMore both read the same counter, so neither
+     could tell the other's response apart from its own, and a load-more that finished after a
+     keystroke appended page 3 of the OLD filter onto page 1 of the NEW one. */
+  const activeFilter = useRef(filterKey("", "", false));
 
-  /* Same gate the dashboard shell uses: localhost AND an explicit ?qa=1. Fixtures can never be
-     reached in production, and the check is not a hostname test alone. */
+  /* Same gate as the rest of the product, in one tested place (lib/qa-mode.ts). */
   useEffect(() => {
-    queueMicrotask(() =>
-      setQaMode(
-        window.location.hostname === "localhost" &&
-          new URLSearchParams(window.location.search).has("qa"),
-      ),
-    );
+    queueMicrotask(() => setQaMode(isQaRender()));
   }, []);
 
   useEffect(() => {
@@ -72,8 +70,10 @@ export default function JobsPage() {
       if (cancelled) return;
       const page = qaJobsPage();
       setJobs(page.jobs);
-      setRanked(page.ranked);
-      setHasMore(page.has_more);
+      setRanked(page.ranked === true);
+      setHasMore(page.has_more === true);
+      setRankedPool(page.ranked_pool ?? null);
+      setPoolExhausted(page.pool_exhausted ?? false);
       setApplied(new Set(QA_APPLIED.map((card) => applicationKey(card.company, card.role))));
     });
     return () => {
@@ -84,18 +84,26 @@ export default function JobsPage() {
   useEffect(() => {
     if (qaMode !== false) return;
     let cancelled = false;
-    const version = ++requestVersion.current;
+    const key = filterKey(query, location, remoteOnly);
+    activeFilter.current = key;
     const timer = window.setTimeout(() => {
       api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, 0).toString()}`)
         .then((result) => {
-          if (!cancelled && requestVersion.current === version) {
-            setJobs(result.jobs);
-            setRanked(result.ranked);
-            setHasMore(result.has_more);
-            setError(null);
-          }
+          if (cancelled || activeFilter.current !== key) return;
+          setJobs(result.jobs);
+          setRanked(result.ranked === true);
+          setHasMore(result.has_more === true);
+          setRankedPool(result.ranked_pool ?? null);
+          setPoolExhausted(result.pool_exhausted === true);
+          /* A new filter starts a new list, so any in-flight "load more" spinner belongs to a list
+             that no longer exists. Without this it could stay lit forever. */
+          setLoadingMore(false);
+          setError(null);
         })
-        .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "Could not load the jobs we watch for you."));
+        .catch((reason) => {
+          if (cancelled || activeFilter.current !== key) return;
+          setError(reason instanceof Error ? reason.message : "Could not load the jobs we watch for you.");
+        });
     }, 250);
     return () => {
       cancelled = true;
@@ -116,7 +124,7 @@ export default function JobsPage() {
         setApplied(
           new Set(
             cards
-              .filter((card) => card.stage !== "saved")
+              .filter((card) => isAppliedStage(card.stage))
               .map((card) => applicationKey(card.company, card.role)),
           ),
         );
@@ -129,18 +137,26 @@ export default function JobsPage() {
 
   const loadMore = useCallback(async () => {
     if (!jobs || loadingMore || !hasMore) return;
-    const version = requestVersion.current;
+    const key = activeFilter.current;
     setLoadingMore(true);
     try {
       const result = await api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, jobs.length).toString()}`);
-      if (requestVersion.current !== version) return;
-      setJobs((current) => (current ? [...current, ...result.jobs] : result.jobs));
-      setHasMore(result.has_more);
+      // Only merge if the student is still looking at the list this answers.
+      if (activeFilter.current !== key) return;
+      setJobs((current) => (current ? appendUnseen(current, result.jobs) : result.jobs));
+      setHasMore(result.has_more === true);
+      setRankedPool(result.ranked_pool ?? null);
+      setPoolExhausted(result.pool_exhausted === true);
       setError(null);
     } catch (reason) {
-      if (requestVersion.current === version) setError(reason instanceof Error ? reason.message : "Could not load any more jobs.");
+      if (activeFilter.current !== key) return;
+      setError(reason instanceof Error ? reason.message : "Could not load any more jobs.");
     } finally {
-      if (requestVersion.current === version) setLoadingMore(false);
+      /* Unconditional. The spinner is this component's state, not the response's: guarding it on
+         the filter still matching meant that changing the search mid-request left the button stuck
+         reading "Loading..." and disabled for the rest of the session. The filter check belongs on
+         the DATA, above, and it is there. */
+      setLoadingMore(false);
     }
   }, [hasMore, jobs, loadingMore, location, query, remoteOnly]);
 
@@ -200,17 +216,32 @@ export default function JobsPage() {
 
           {/* One line, and every part of it is a fact: how many are loaded, whether more exist, and
               what put them in this order. It says "your resume", not "your profile", because the
-              resume is what the score was computed against and a student can go change it. */}
+              resume is what the score was computed against and a student can go change it.
+              It also names the pool. A bare "sorted by fit" reads as a claim about the whole board,
+              and the sort only ever saw the newest RANKING_POOL postings — the backend has always
+              reported that number and nothing was showing it. */}
           <p className="pt-1 text-center text-xs text-muted">
             {jobs.length} role{jobs.length === 1 ? "" : "s"} loaded
             {hasMore ? ", more to load" : ""}
-            {ranked ? " · sorted by fit to your resume" : " · newest first"}
+            {ranked
+              ? rankedPool !== null && poolExhausted
+                ? ` · best fit of the ${rankedPool} newest roles`
+                : " · sorted by fit to your resume"
+              : " · newest first"}
           </p>
 
           {hasMore && (
             <Button type="button" onClick={() => void loadMore()} disabled={loadingMore} variant="secondary" className="mx-auto">
               {loadingMore ? "Loading..." : "Show more roles"}
             </Button>
+          )}
+
+          {/* The end of the ranking is not the end of the board, and saying nothing here let the
+              list imply it was. Only shown once there is nothing more to page through. */}
+          {!hasMore && poolExhausted && (
+            <p className="text-center text-xs text-faint">
+              More roles exist than Litos ranks at once. Search or filter to rank a different set.
+            </p>
           )}
         </>
       )}

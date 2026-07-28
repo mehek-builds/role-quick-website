@@ -193,13 +193,22 @@ export type MonitoredJob = {
   match_score?: number | null;
 };
 
-/** What GET /jobs answers. `ranked` is false whenever there was no resume to rank against. */
+/**
+ * What GET /jobs answers. `ranked` is false whenever there was no resume to rank against.
+ *
+ * Everything past `jobs` is optional because a deployed backend that predates the ranking work
+ * omits it, and declaring it required would be the type asserting a guarantee the wire does not
+ * make. Every reader treats absent as the unranked case, which is the correct thing to say against
+ * an older backend, so the two repos can ship in either order.
+ */
 export type JobsPage = {
   jobs: MonitoredJob[];
-  has_more: boolean;
-  ranked: boolean;
+  has_more?: boolean;
+  ranked?: boolean;
   /** How many postings were scored to produce this ordering, or null when nothing was ranked. */
-  ranked_pool: number | null;
+  ranked_pool?: number | null;
+  /** True when postings matched that were never ranked, so the list can say why it stopped. */
+  pool_exhausted?: boolean;
 };
 
 export type ResumeEntry = {

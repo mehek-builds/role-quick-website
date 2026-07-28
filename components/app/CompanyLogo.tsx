@@ -1,18 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { companyDomain } from "@/lib/job-rows";
 
 /**
  * The company's icon beside a job row, with its initial as the answer when there is no icon.
  *
- * WHERE THE DOMAIN COMES FROM, AND WHY IT IS NOT THE APPLY LINK
- * ------------------------------------------------------------
- * A posting's apply_url and posting_url both point at the job board, so deriving a company from
- * either paints the same Greenhouse icon on every row in the list. The only field that can carry
- * the company's own domain is the careers URL its source was registered with — and operators
- * sometimes register the board URL there too, which is why ATS hosts are rejected below rather
- * than trusted. A wrong logo is worse than no logo: it tells the student this row is a different
- * company than it is.
+ * The domain rule lives in `lib/job-rows.ts` (and is tested there): only the careers URL can carry
+ * the employer's own domain, and a careers URL that points at the job board identifies no company,
+ * so those rows fall back rather than painting the board's logo on the row.
  *
  * WHAT LEAVES THE PAGE
  * --------------------
@@ -26,35 +22,10 @@ import { useState } from "react";
  * a list of mixed rows still reads as one column rather than as a column with holes in it.
  */
 
-/** Job boards, not companies. A careers URL on one of these tells us nothing about the employer. */
-const ATS_HOSTS = [
-  "greenhouse.io",
-  "lever.co",
-  "ashbyhq.com",
-  "myworkdayjobs.com",
-  "workable.com",
-  "jazzhr.com",
-  "applytojob.com",
-  "paylocity.com",
-  "bamboohr.com",
-  "smartrecruiters.com",
-  "icims.com",
-  "taleo.net",
-];
-
-/** The company's registrable domain, or null when the URL does not identify a company. */
-export function companyDomain(careerUrl: string | null | undefined): string | null {
-  if (!careerUrl) return null;
-  let host: string;
-  try {
-    host = new URL(careerUrl).hostname.toLowerCase().replace(/^www\./, "");
-  } catch {
-    return null;
-  }
-  if (!host.includes(".")) return null;
-  if (ATS_HOSTS.some((ats) => host === ats || host.endsWith(`.${ats}`))) return null;
-  return host;
-}
+/** Named so the third-party dependency is greppable if the 2026-07-28 decision is revisited. */
+const FAVICON_ENDPOINT = "https://www.google.com/s2/favicons";
+/** 2x the 24px render, so the icon is sharp on a retina screen. */
+const FAVICON_PX = 64;
 
 export function CompanyLogo({
   company,
@@ -77,7 +48,7 @@ export function CompanyLogo({
       {showIcon ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
-          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`}
+          src={`${FAVICON_ENDPOINT}?domain=${encodeURIComponent(domain)}&sz=${FAVICON_PX}`}
           alt=""
           width={24}
           height={24}

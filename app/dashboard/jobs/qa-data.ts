@@ -22,8 +22,11 @@ function hoursAgo(hours: number): string {
 export function qaJobsPage(): JobsPage {
   return {
     ranked: true,
-    ranked_pool: 62,
+    ranked_pool: 100,
     has_more: true,
+    /* On purpose: the fixture shows the state where the ranking stopped short of the board, so the
+       disclosure line under the list is visible while reviewing. */
+    pool_exhausted: true,
     jobs: [
       {
         id: "qa-1",

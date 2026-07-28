@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
 import { fetchFunnel } from "@/lib/jd-match";
+import { isQaRender } from "@/lib/qa-mode";
 import {
   ChatIcon,
   ClipboardIcon,
@@ -68,7 +69,7 @@ export default function DashboardLayout({
 
   useEffect(() => {
     queueMicrotask(() => {
-      if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("qa")) {
+      if (isQaRender()) {
         setQaMode(true);
         setReady(true);
         return;
