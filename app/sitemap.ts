@@ -18,6 +18,7 @@ import { SITE_URL } from "@/lib/config";
 const ROUTES: { path: string; priority: number }[] = [
   { path: "", priority: 1 },
   { path: "/try", priority: 0.8 },
+  { path: "/browse-jobs", priority: 0.8 },
   { path: "/litos-vs-simplify", priority: 0.8 },
   { path: "/for-career-centres", priority: 0.7 },
   { path: "/login", priority: 0.6 },
