@@ -138,7 +138,11 @@ export function qaJobsPage(): JobsPage {
   };
 }
 
-/** The one the fixture student has already applied to, keyed the way the page keys a row. */
-export const QA_APPLIED: Array<{ company: string; role: string }> = [
-  { company: "Ramp", role: "Product Analyst" },
+/** The one the fixture student has already applied to, shaped the way a real board card is so the
+ *  QA render exercises the same `buildAppliedIndex` the live page does rather than a parallel path.
+ *
+ *  It carries `job_id`, matching the "qa-1" row above, because that is now the primary match. The
+ *  `stage` is load-bearing too: the index only counts stages that mean an application was sent. */
+export const QA_APPLIED: Array<{ job_id: string | null; company: string; role: string; stage: string }> = [
+  { job_id: "qa-1", company: "Ramp", role: "Product Analyst", stage: "applied" },
 ];

@@ -41,6 +41,12 @@ type NewApplicationDraft = {
   role: string;
   portalUrl: string;
   jobDescription: string;
+  /* Set only when the draft was opened from a posting on the jobs list. It is recorded on the
+     application so that list can later mark this exact posting "Applied" instead of every posting
+     sharing its company and title. Null for a hand-typed link, which points at no posting we
+     watch, and the student can edit the company and role here anyway, so the id must not survive
+     that and claim a row it no longer describes, which is why nothing below carries it over. */
+  jobId: string | null;
 };
 
 const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
@@ -48,6 +54,7 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   role: "",
   portalUrl: "",
   jobDescription: "",
+  jobId: null,
 };
 
 export default function Applications() {
@@ -268,7 +275,7 @@ export default function Applications() {
         setShowNewApplication(false);
         setNotice("Your resume is ready. Compare it with the job below.");
       } else {
-        setNewApplication({ company: pendingJob.company_name, role: pendingJob.title, portalUrl: pendingJob.apply_url, jobDescription: pendingJob.description });
+        setNewApplication({ company: pendingJob.company_name, role: pendingJob.title, portalUrl: pendingJob.apply_url, jobDescription: pendingJob.description, jobId: pendingJob.id });
         setShowNewApplication(true);
         setNotice("No resume for this job yet. Make one when you want to apply.");
       }
@@ -303,6 +310,19 @@ export default function Applications() {
     () => (matchResult ? buildRequirementIndex(matchResult.matched, matchResult.missing) : EMPTY_REQUIREMENT_INDEX),
     [matchResult],
   );
+
+  /* Every edit the student makes to the draft goes through here so the posting id cannot outlive
+     the posting it describes. Retyping the company or the role means this is no longer the job
+     that was opened from the list, and an id kept across that edit would mark THAT row "Applied"
+     on the strength of an application to something else: the same false positive the id exists to
+     remove, just arrived at from the other direction. Changing the link or the description is not
+     a change of identity, so those leave it alone. */
+  function applyDraftEdit(next: NewApplicationDraft) {
+    setNewApplication((current) => {
+      const identityChanged = next.company !== current.company || next.role !== current.role;
+      return identityChanged ? { ...next, jobId: null } : next;
+    });
+  }
 
   async function fetchJobDescription() {
     const portalUrl = newApplication.portalUrl.trim();
@@ -368,6 +388,9 @@ export default function Applications() {
           company,
           role,
           jd_text: jobDescription,
+          /* Omitted rather than sent as null when this did not come from a posting: the backend
+             field is optional, and only a present id gets written into the stored job_context. */
+          ...(newApplication.jobId ? { job_id: newApplication.jobId } : {}),
           application: {
             ats_name: portalName(portalUrl),
             portal_url: portalUrl,
@@ -643,7 +666,7 @@ export default function Applications() {
       {showNewApplication && (
         <NewApplicationPanel
           value={newApplication}
-          onChange={setNewApplication}
+          onChange={applyDraftEdit}
           onGenerate={createApplication}
           creating={creating}
           onFetchJobDescription={fetchJobDescription}

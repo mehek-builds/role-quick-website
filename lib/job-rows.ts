@@ -84,11 +84,16 @@ function flatten(value: string): string {
  * The identity two records of the same application share, so a row the student already applied to
  * can say so.
  *
- * KNOWN AND ACCEPTED IMPRECISION. The board stores only `{company, role}` per application — there
- * is no job id and no location on that side — so two postings that share a company and a title are
- * indistinguishable here, and applying to one marks both. Large employers repost one title across
- * cities, so this is not exotic. Fixing it properly means carrying the monitored job's id into the
- * generated resume's `job_context`, which is a schema change and is tracked separately.
+ * THE FALLBACK, not the primary rule any more. Applications started from the jobs list since
+ * 2026-07-28 carry the posting's own id (`BoardCard.job_id`) and are matched on that instead, by
+ * `buildAppliedIndex` below. This is what remains for rows that have no id and never will: every
+ * application recorded before that date, plus anything generated from the extension or a
+ * hand-typed link, where there is no monitored posting to point at.
+ *
+ * On those rows the original imprecision still stands, and it is unfixable rather than merely
+ * unfixed: the data to tell two reqs apart was never written. Company and role are all there is,
+ * so two postings sharing both are indistinguishable and applying to one marks both. That is why
+ * the id path exists and why it must not fall through to here when it has an id to use.
  *
  * Given that, the flattening stays as narrow as it can be. It folds "Airbnb, Inc." into "Airbnb"
  * and collapses runs of whitespace, and nothing else:
@@ -119,6 +124,69 @@ const APPLIED_STAGES = new Set(["applied", "interview", "offer"]);
 
 export function isAppliedStage(stage: string): boolean {
   return APPLIED_STAGES.has(stage);
+}
+
+/** What the applied check needs off a board card. Structural on purpose, so the tests can build one
+ *  without importing the whole API surface. `BoardCard` satisfies it. */
+type AppliedCard = {
+  job_id?: string | null;
+  company: string;
+  role: string;
+  stage: string;
+};
+
+/** What the applied check needs off a job row. `MonitoredJob` satisfies it. */
+type AppliedJob = {
+  id: string;
+  company_name: string;
+  title: string;
+};
+
+/**
+ * The two ways a board card can claim a jobs-list row, kept apart.
+ *
+ * `ids` holds postings the student demonstrably applied to. `keys` is the company+role fallback
+ * described on `applicationKey`, and it is lossy.
+ */
+export type AppliedIndex = { ids: Set<string>; keys: Set<string> };
+
+/**
+ * Index the applied cards so a row can ask whether it is one of them.
+ *
+ * THE LOAD-BEARING LINE IS THE `else`. A card that carries a job id contributes to `ids` ONLY, and
+ * deliberately does not also register its company+role. Registering both would mean an application
+ * to the Mountain View posting still put "Airbnb::Software Engineer" in the fallback set, and the
+ * NYC posting would match on that and show "Applied" exactly as it wrongly did before. Adding the
+ * id would then have changed nothing a student could see. Precise identity, where we have it, has
+ * to REPLACE the imprecise one rather than sit alongside it.
+ *
+ * The reverse is also why the fallback cannot simply be deleted: a card with no id (anything
+ * recorded before ids were written, and anything from the extension) would match nothing at all,
+ * and every one of those applications would silently stop being marked.
+ */
+export function buildAppliedIndex(cards: AppliedCard[]): AppliedIndex {
+  const ids = new Set<string>();
+  const keys = new Set<string>();
+  for (const card of cards) {
+    if (!isAppliedStage(card.stage)) continue;
+    if (card.job_id) ids.add(card.job_id);
+    else keys.add(applicationKey(card.company, card.role));
+  }
+  return { ids, keys };
+}
+
+/**
+ * Whether this row is one the student already applied to.
+ *
+ * A null index means the board has not answered yet, which is NOT "you have applied to nothing":
+ * it returns false, so the row offers to apply. That asymmetry is the whole point of this page's
+ * error handling: a needless second visit to a posting is recoverable, a wrongly-shown "Applied"
+ * is a missed application and is not.
+ */
+export function isJobApplied(job: AppliedJob, index: AppliedIndex | null): boolean {
+  if (!index) return false;
+  if (index.ids.has(job.id)) return true;
+  return index.keys.has(applicationKey(job.company_name, job.title));
 }
 
 /**

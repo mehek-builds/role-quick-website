@@ -6,7 +6,7 @@ import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
 import { fetchBoard } from "@/lib/jd-match";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
-import { applicationKey, countNewToday, isAppliedStage } from "@/lib/job-rows";
+import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/lib/job-rows";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 
@@ -47,9 +47,9 @@ export default function JobsPage() {
      Both are needed to describe the list truthfully: see the footer. */
   const [rankedPool, setRankedPool] = useState<number | null>(null);
   const [poolExhausted, setPoolExhausted] = useState(false);
-  /* Null until the board answers. An empty Set would mean "you have applied to nothing", which is
+  /* Null until the board answers. An empty index would mean "you have applied to nothing", which is
      a different claim from "we do not know yet". */
-  const [applied, setApplied] = useState<Set<string> | null>(null);
+  const [applied, setApplied] = useState<AppliedIndex | null>(null);
   /* Null while we work out whether this is a QA render, so neither branch fires a request first. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
   /* The filters a response must have been fetched under to be allowed into the list. A plain
@@ -74,7 +74,7 @@ export default function JobsPage() {
       setHasMore(page.has_more === true);
       setRankedPool(page.ranked_pool ?? null);
       setPoolExhausted(page.pool_exhausted ?? false);
-      setApplied(new Set(QA_APPLIED.map((card) => applicationKey(card.company, card.role))));
+      setApplied(buildAppliedIndex(QA_APPLIED));
     });
     return () => {
       cancelled = true;
@@ -121,13 +121,7 @@ export default function JobsPage() {
     void fetchBoard()
       .then(({ cards }) => {
         if (cancelled) return;
-        setApplied(
-          new Set(
-            cards
-              .filter((card) => isAppliedStage(card.stage))
-              .map((card) => applicationKey(card.company, card.role)),
-          ),
-        );
+        setApplied(buildAppliedIndex(cards));
       })
       .catch(() => null);
     return () => {
@@ -209,7 +203,7 @@ export default function JobsPage() {
           <ul className="grid gap-3">
             {jobs.map((job) => (
               <li key={job.id}>
-                <JobRow job={job} applied={applied?.has(applicationKey(job.company_name, job.title)) ?? false} />
+                <JobRow job={job} applied={isJobApplied(job, applied)} />
               </li>
             ))}
           </ul>
