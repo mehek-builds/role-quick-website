@@ -18,6 +18,10 @@ export function PortalForm({ board, caseId }: { board: Board; caseId: string }) 
   //  2. The final step carries the acknowledgement/EEO/prior-conviction markers and NEVER renders a
   //     receipt from an advance click. A receipt reachable by advancing would let a regression
   //     manufacture a "submitted" for an application no employer received.
+  // Paylocity returns early below, so it is deliberately ABSENT from the single-step field list
+  // further down. Leaving a `board === "paylocity"` branch there is not merely dead code: after the
+  // early return TypeScript narrows `board` to exclude it, and the impossible comparison fails the
+  // production build (`next build` type-checks app code even though `tsc -p .` does not reach it).
   const multiStep = board === "paylocity";
   const LAST_STEP = 4;
 
@@ -29,7 +33,7 @@ export function PortalForm({ board, caseId }: { board: Board; caseId: string }) 
     return <main className="min-h-screen bg-[#f7f7f3] px-6 py-16"><section className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-10 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5e9] text-2xl text-[#24713b]">✓</div><h1 className="mt-5 text-3xl font-semibold text-[#151512]">Thank you. Your application was received.</h1><p className="mt-3 text-[#63635d]">This is a Litos test page. No employer got this application.</p><p className="mt-5 font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p></section></main>;
   }
 
-  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}{board === "paylocity" && <PaylocityFields />}</div><button type="submit" className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
+  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}</div><button type="submit" className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
 }
 
 function GreenhouseFields() {
