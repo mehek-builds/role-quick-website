@@ -181,6 +181,34 @@ export type MonitoredJob = {
   first_seen_at: string;
   ats_name: "greenhouse" | "lever" | "ashby";
   is_active?: boolean;
+  /** The company's own careers page. Every other URL here belongs to the job board. */
+  career_url?: string | null;
+  /**
+   * 0-100, how much of what this posting asks for is on your main resume.
+   *
+   * NULL IS NOT ZERO and must never be rendered as one. The scorer refuses to score a posting that
+   * lists too few real requirements, and it is also null for everyone signed out or without a main
+   * resume yet. In all of those cases the honest row shows no number at all.
+   */
+  match_score?: number | null;
+};
+
+/**
+ * What GET /jobs answers. `ranked` is false whenever there was no resume to rank against.
+ *
+ * Everything past `jobs` is optional because a deployed backend that predates the ranking work
+ * omits it, and declaring it required would be the type asserting a guarantee the wire does not
+ * make. Every reader treats absent as the unranked case, which is the correct thing to say against
+ * an older backend, so the two repos can ship in either order.
+ */
+export type JobsPage = {
+  jobs: MonitoredJob[];
+  has_more?: boolean;
+  ranked?: boolean;
+  /** How many postings were scored to produce this ordering, or null when nothing was ranked. */
+  ranked_pool?: number | null;
+  /** True when postings matched that were never ranked, so the list can say why it stopped. */
+  pool_exhausted?: boolean;
 };
 
 export type ResumeEntry = {
