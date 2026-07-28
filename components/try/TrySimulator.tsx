@@ -35,9 +35,19 @@ function after(step: Step, target: Step) {
 export function TrySimulator({
   initialStep,
   jobs,
+  autoplay = false,
 }: {
   initialStep?: string;
   jobs: TryJobCard[];
+  /* Hero mode. The simulator already plays itself once a path is chosen
+     (see the assembly effect below, and Mehek's 2026-07-08 note: the canned
+     path is a "watch", it should play). autoplay just makes that choice for
+     the viewer when the stage scrolls into view, so the homepage can open on
+     the product running instead of on a button that says it will run.
+
+     It still settles rather than loops, per DESIGN.md: one pass, then it
+     rests on the finished packet with a Replay affordance. */
+  autoplay?: boolean;
 }) {
   /* Deep links (/try?step=resume|autofill|outreach) land in canned mode
      with prior steps completed - the real path is chooser-only. */
@@ -147,6 +157,38 @@ export function TrySimulator({
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step]);
+
+  /* Hero autoplay. Starts the canned run the first time the stage is properly
+     on screen, so a visitor who lands mid-page does not arrive at a finished
+     packet with no idea what assembled it. Fires once; after that the viewer
+     owns it.
+
+     Reduced motion opts out entirely and leaves the chooser in place, which
+     keeps the same information reachable by choice rather than by animation. */
+  const rootRef = useRef<HTMLDivElement>(null);
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!autoplay || autoStarted.current) return;
+    const el = rootRef.current;
+    if (!el) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting || autoStarted.current) continue;
+          autoStarted.current = true;
+          io.disconnect();
+          chooseCanned();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+    // chooseCanned is stable for this purpose: it only sets state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoplay]);
 
   /* Field-by-field fill animation while the application act plays. */
   useEffect(() => {

@@ -86,7 +86,7 @@ export function HeroProof() {
   return (
     <div ref={stageRef} className="mx-auto w-full max-w-5xl">
       <div
-        className="relative overflow-hidden rounded-card border border-border bg-surface-alt shadow-[0_24px_60px_rgba(35,33,29,0.10)]"
+        className="relative overflow-hidden rounded-card border border-border bg-surface-alt shadow-overlay"
         onMouseEnter={() => setManual(true)}
       >
         {/* Decorative window chrome. No URL text: the extension steps happen on
@@ -128,29 +128,42 @@ export function HeroProof() {
                   }
                 >
                   {portrait && (
-                    <p className="hidden max-w-[320px] text-[19px] leading-[1.5] tracking-[-0.01em] text-ink sm:block">
+                    <p className="hidden max-w-[320px] text-heading font-[450] text-ink sm:block">
                       {shot.note}
                     </p>
                   )}
-                  {/* The wrapper is what carries the definite height. A bare
-                      `max-h-full` on a grid item does not clamp a replaced
-                      element reliably, and the popup rendered at its full 2x
-                      pixel size and burst out of the stage. */}
-                  <div className="flex h-full min-h-0 items-center justify-center">
+                  {/* Rendered at 1:1 and CROPPED by the stage, never scaled to
+                      fit.
+
+                      This is the whole difference between a hero that reads as
+                      the product and one that reads as decoration. Every frame
+                      is captured at the size its type was designed for, so a
+                      13px line in the app is 13px here. Fitting a window into
+                      the stage is what shrinks that to 10px and makes the
+                      screenshot unreadable, and animating unreadable pixels
+                      only draws the eye to something it cannot resolve.
+
+                      Below `sm` the stage is narrower than a 380px popup, so
+                      the frame is allowed to overflow and clip there too. */}
+                  {/* Left-aligned where the frame is wider than the stage, so
+                      the crop runs off ONE edge. Centring it clipped both
+                      sides and cut words in half at each end, which is worse
+                      than any amount of scaling: the eye has nowhere to start.
+                      Run off the right and every line still begins properly. */}
+                  <div className="flex h-full min-h-0 items-center justify-start overflow-hidden sm:justify-center">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={shot.src}
                       alt={shot.alt ?? ""}
                       width={shot.w}
                       height={shot.h}
+                      style={{ width: shot.w, height: shot.h }}
                       /* The first frame is the largest thing above the fold, so
                          it loads eagerly and the rest defer. */
                       loading={i === 0 ? "eager" : "lazy"}
                       fetchPriority={i === 0 ? "high" : "auto"}
                       decoding="async"
-                      className={`block rounded-inner border border-border bg-surface object-contain shadow-[0_10px_30px_rgba(35,33,29,0.08)] ${
-                        portrait ? "h-full w-auto max-w-full" : "h-auto max-h-full w-full"
-                      }`}
+                      className="block max-w-none shrink-0 rounded-inner border border-border bg-surface shadow-raised"
                     />
                   </div>
                 </div>
@@ -178,13 +191,13 @@ export function HeroProof() {
             onClick={() => go(i)}
             /* 44px floor: the mobile tap-target pass took this site from 21
                undersized targets to none, and a new control must not undo it. */
-            className={`min-h-[44px] rounded-inner border px-3 py-2.5 text-left text-[13px] leading-5 transition-colors ${
+            className={`min-h-[44px] rounded-inner border px-3 py-2.5 text-left text-small transition-colors ${
               i === active
                 ? "border-brand-ink/30 bg-brand-soft text-ink"
                 : "border-border bg-surface text-muted hover:text-ink"
             }`}
           >
-            <span className="block font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+            <span className="block font-mono text-label uppercase tracking-[0.08em] text-faint">
               Step {i + 1}
             </span>
             {shot.cap}
@@ -192,7 +205,7 @@ export function HeroProof() {
         ))}
       </div>
 
-      <p className="mt-4 text-center text-[13px] leading-6 text-muted">
+      <p className="mt-4 text-center text-small text-muted">
         Real screenshots of the app, taken from the code that ships. The names and
         companies in them are made up.
       </p>

@@ -9,12 +9,12 @@
     "story": 1
   },
   "hero-2-review": {
-    "w": 1280,
-    "h": 860,
+    "w": 544,
+    "h": 652,
     "src": "/product/hero-2-review.png",
     "cap": "You read it before it goes",
-    "note": "The posting on one side, the resume Litos built for it on the other. Change anything before it goes.",
-    "alt": "The Litos dashboard showing a filled application for Acme Labs: the tailored resume beside the answers Litos wrote, each one editable.",
+    "note": "The resume Litos wrote for this one job. The posting's own words are lit up where your work matches. Change anything before it goes.",
+    "alt": "The resume Litos built for the Acme Labs product engineer job, with terms from the posting highlighted where the applicant's own work matches them.",
     "story": 2
   },
   "hero-3-contacts": {

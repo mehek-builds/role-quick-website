@@ -106,10 +106,16 @@ const SHOTS = [
        the posting beside the tailored resume with the match legend above. */
     scrollTo: "text=Point at any highlighted term",
     scrollPad: 96,
+    /* Crop to the resume panel alone, at 1:1. The whole two-column review
+       screen is 1216px wide and had to be scaled to about 0.8 to fit the hero
+       stage, which put its 13px type under 11px: the exact "shrink it to fit,
+       then animate the blur" failure. The tailored resume with the posting's
+       terms lit up on it IS the claim, and on its own it is legible. */
+    element: 'section:has(p:text-is("Your resume for this job"))',
     story: 2,
     cap: "You read it before it goes",
-    note: "The posting on one side, the resume Litos built for it on the other. Change anything before it goes.",
-    alt: "The Litos dashboard showing a filled application for Acme Labs: the tailored resume beside the answers Litos wrote, each one editable.",
+    note: "The resume Litos wrote for this one job. The posting's own words are lit up where your work matches. Change anything before it goes.",
+    alt: "The resume Litos built for the Acme Labs product engineer job, with terms from the posting highlighted where the applicant's own work matches them.",
   },
   {
     name: "hero-3-contacts",
@@ -303,11 +309,34 @@ async function shoot(browser, shot, outDir) {
     );
   }
 
-  const target = shot.clip ? page.locator(shot.wait) : page;
-  const file = join(outDir, `${shot.name}.png`);
-  await target.screenshot({ path: file, ...(shot.clip ? {} : { fullPage: false }) });
+  /* `element` photographs ONE region of the page at its real size rather than
+     the whole viewport.
+   *
+   * This is the single most important option in the file, and it exists
+     because of how these heroes fail. A full 1280px dashboard window shrunk
+     into a 1024px stage renders 13px type at about 10px, and then the hero is
+     animating pixels nobody can resolve. Every product site that reads as
+     credible refuses to shrink: Linear runs its frame off the right edge,
+     Attio past the bottom fold, Grammarly and Simplify crop to one widget and
+     discard the rest. The bar to clear is that a first-time visitor can read
+     one specific, meaningful string within two seconds.
 
-  const box = shot.clip ?? shot.viewport;
+     So: crop to the region that carries the claim, keep it at 1:1, and let the
+     stage clip whatever does not fit. */
+  const selector = shot.element ?? (shot.clip ? shot.wait : null);
+  const target = selector ? page.locator(selector).first() : page;
+  const file = join(outDir, `${shot.name}.png`);
+  await target.screenshot({ path: file, ...(selector ? {} : { fullPage: false }) });
+
+  /* Measure what was actually shot rather than trusting a hand-written box.
+     An `element` region has no declared size, and a stale number here silently
+     rescales the capture on the page. */
+  let box = shot.clip ?? shot.viewport;
+  if (shot.element) {
+    const measured = await target.boundingBox();
+    if (!measured) throw new Error(`${shot.name}: element ${shot.element} has no box`);
+    box = { width: Math.round(measured.width), height: Math.round(measured.height) };
+  }
   await page.close();
 
   if (problems.length && process.env.VERBOSE) {
