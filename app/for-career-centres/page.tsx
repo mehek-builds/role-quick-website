@@ -103,7 +103,7 @@ export default function ForCareerCentres() {
 
           <Row q="Where does it actually work?">
             It fills forms on Greenhouse, Lever, Ashby, Workday and LinkedIn. It
-            can submit on Greenhouse, Lever and Ashby. Anywhere else it fills the
+            can submit on Greenhouse, Lever, Ashby and SmartRecruiters. Anywhere else it fills the
             form in and the student presses send. That list is deliberately short
             and honest rather than a claim about thousands of sites.
           </Row>

@@ -64,7 +64,7 @@ export default function LitosVsSimplify() {
             Coverage. Simplify autofills across Workday, Lever, Greenhouse and
             thousands of other boards, and it has been doing it at scale for
             years. Litos fills forms on Greenhouse, Lever, Ashby, Workday and
-            LinkedIn, and can press send on three of those. If you are applying
+            LinkedIn, and can press send on Greenhouse, Lever, Ashby and SmartRecruiters. If you are applying
             across a wide spread of company career sites, Simplify will fill in
             more of them than Litos will.
           </Row>

@@ -157,3 +157,29 @@ test("homepage pillar CTAs point at real /try steps", () => {
     );
   }
 });
+
+/* ---------- 5. every #anchor a link points at exists on the page ---------- */
+
+test("internal #anchors resolve to a real id on the homepage", () => {
+  /* Check 1 above deliberately strips the hash, so it proves "/" exists and
+     says nothing about whether "#pricing" does. An anchor that points at no id
+     is a link that silently does nothing, which is the same failure as a 404
+     with none of the evidence: no error, no redirect, the page just sits
+     there. Two new anchors shipped on 2026-07-28 (#pricing, #dashboard) and
+     nothing but this test would have caught a typo in either. */
+  const home = readFileSync(join(APP, "page.tsx"), "utf8");
+  const ids = new Set([...home.matchAll(/id="([a-z-]+)"/g)].map((m) => m[1]));
+
+  const sources = [join(APP, "page.tsx"), join(ROOT, "components/Header.tsx")];
+  const anchors = new Set();
+  for (const file of sources) {
+    for (const m of readFileSync(file, "utf8").matchAll(/href="\/#([a-z-]+)"/g)) {
+      anchors.add(m[1]);
+    }
+  }
+
+  assert.ok(anchors.size > 0, "expected homepage anchor links to exist");
+  for (const anchor of anchors) {
+    assert.ok(ids.has(anchor), `href="/#${anchor}" has no matching id on the homepage`);
+  }
+});

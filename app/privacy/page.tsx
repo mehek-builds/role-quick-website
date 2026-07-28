@@ -37,12 +37,14 @@ export default function Privacy() {
           Last updated: July 27, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
-          Litos is a Chrome extension and web dashboard. When you open a
-          job posting, it builds a resume tailored to that posting, fills out
-          the application form, and drafts an outreach email to a real person
-          at the company. This policy says exactly what that requires us to
-          read and store, in plain language. It will grow as the product does,
-          and the date above changes every time it does.
+          Litos is a Chrome extension and web dashboard. Open a job posting
+          yourself, or pick one Litos found for you, and it builds a resume
+          tailored to that posting, fills out the application form, and drafts
+          an outreach email to a real person at the company. This policy says
+          exactly what that requires us to read and store, in plain language.
+          Some of it happens in your browser and some of it happens on our
+          servers, and the sections below say which is which. It will grow as
+          the product does, and the date above changes every time it does.
         </p>
 
         <Section title="What the extension reads">
@@ -57,8 +59,11 @@ export default function Privacy() {
         <Section title="What we store">
           <p>
             We store your email. If you sign in with Google, we store an ID
-            that tells us it is you. We never get your Google password, your
-            files, or your inbox. We store the facts we read out of your
+            that tells us it is you. Signing in never gives us your Google
+            password, your files, or your inbox. (Connecting your email so
+            Litos can find a sign-in code is a separate thing you switch on
+            yourself. &ldquo;Codes sent to your email&rdquo;, below, says
+            exactly what that lets us see.) We store the facts we read out of your
             resume. We read the file once to get them, then we throw the file
             away. We store your answers, which reach us two ways: what you
             type in Settings, and what Litos watches you type into your first
