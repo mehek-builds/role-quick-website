@@ -80,8 +80,11 @@ test("a job type shows only when the posting stated one", () => {
   assert.equal(jobTypeLabel("  "), null);
 });
 
-test("both surfaces import the one formatter, so a job cannot read two ways", () => {
-  for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx"]) {
+test("every job surface imports the one formatter, so a job cannot read two ways", () => {
+  /* Three surfaces show a job: the public board, the dashboard list, and the dashboard home
+     (whose match card and pre-send review drawer both render one). Missing one is how the same
+     posting ends up with a salary on two screens and none on the third. */
+  for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx", "../app/dashboard/page.tsx"]) {
     const text = readFileSync(new URL(page, import.meta.url), "utf8");
     assert.match(text, /from "@\/lib\/pay"/, `${page} must format pay through lib/pay.ts`);
   }
@@ -90,7 +93,7 @@ test("both surfaces import the one formatter, so a job cannot read two ways", ()
 test("neither surface ships a placeholder for missing pay", () => {
   /* The board's standing rule, and the reason it says UPDATED rather than POSTED on Greenhouse
      rows. If a future edit adds "Not listed" or "Competitive" to a card, this fails the build. */
-  for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx", "../lib/pay.ts"]) {
+  for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx", "../app/dashboard/page.tsx", "../lib/pay.ts"]) {
     const text = readFileSync(new URL(page, import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
