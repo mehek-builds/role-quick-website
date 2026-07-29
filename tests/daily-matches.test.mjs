@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-  DAILY_PREPARED_RESUME_LIMIT,
+  AUTO_SUBMIT_PREPARED_LIMIT,
+  canGenerateFrom,
   countPreparedJobs,
   packetMatchesJob,
   rankJobs,
@@ -42,8 +43,10 @@ const jobs = [
 ];
 
 describe("daily match preparation", () => {
-  test("targets 30 ready resumes", () => {
-    assert.equal(DAILY_PREPARED_RESUME_LIMIT, 30);
+  /* 20, and only for students who turned automatic submission on. It was 30 for everyone, which
+     spent people's monthly resume quota building packets for jobs they never opened. */
+  test("builds ahead for 20 roles, and only under automatic submission", () => {
+    assert.equal(AUTO_SUBMIT_PREPARED_LIMIT, 20);
   });
 
   test("ranks target-title and resume-skill evidence ahead of recency", () => {
@@ -91,5 +94,38 @@ describe("resumeGenerationBody", () => {
     assert.equal(body.jd_text, jobs[0].description);
     assert.equal(body.application.portal_url, jobs[0].apply_url);
     assert.equal(body.contact.full_name, "Alex Rivera");
+  });
+});
+
+describe("canGenerateFrom", () => {
+  const fromPosting = {
+    company: "Acme Labs",
+    role: "Product Engineer",
+    portalUrl: "https://jobs.acme.test/1",
+    jobDescription: "Build React and TypeScript product systems for our platform team.",
+  };
+
+  test("a normal posting can be generated from without asking", () => {
+    assert.equal(canGenerateFrom(fromPosting), true);
+  });
+
+  /* "Apply now" generates immediately with nothing typed, so a posting that cannot be generated
+     from has to be caught before the request. Otherwise the student who filled in nothing is told
+     to "fill in all four boxes first". */
+  test("a stub description is caught before the request is spent", () => {
+    assert.equal(canGenerateFrom({ ...fromPosting, jobDescription: "See website." }), false);
+  });
+
+  test("a non-https link is caught", () => {
+    assert.equal(canGenerateFrom({ ...fromPosting, portalUrl: "http://jobs.acme.test/1" }), false);
+  });
+
+  test("an unparseable link is caught rather than thrown", () => {
+    assert.equal(canGenerateFrom({ ...fromPosting, portalUrl: "not a url" }), false);
+  });
+
+  test("missing company or role is caught", () => {
+    assert.equal(canGenerateFrom({ ...fromPosting, company: "   " }), false);
+    assert.equal(canGenerateFrom({ ...fromPosting, role: "" }), false);
   });
 });

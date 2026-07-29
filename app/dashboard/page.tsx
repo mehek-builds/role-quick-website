@@ -17,7 +17,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { Funnel } from "@/components/app/Funnel";
 import {
-  DAILY_PREPARED_RESUME_LIMIT,
+  AUTO_SUBMIT_PREPARED_LIMIT,
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
@@ -171,6 +171,9 @@ export default function Home() {
   const [applicationProfile, setApplicationProfile] = useState<ApplicationProfile | null>(null);
   const [packets, setPackets] = useState<GeneratedResume[]>([]);
   const [outreach, setOutreach] = useState<OutreachEvent[]>([]);
+  /* Starts false, not null, and stays false unless /onboarding/state says otherwise. The prewarm
+     below reads it, and "we do not know yet" must not build anything. */
+  const [autoSubmitEnabled, setAutoSubmitEnabled] = useState(false);
   const [qaMode, setQaMode] = useState(false);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
@@ -212,8 +215,12 @@ export default function Home() {
       api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
       api<ApplicationProfile>("/profile/application").catch(() => ({})),
       api<{ events?: OutreachEvent[] } | OutreachEvent[]>("/track/events").catch(() => []),
+      /* Whether to build any resume ahead of being asked. Defaulting to false on failure is the
+         safe direction: a missed build costs one wait, a wrong one spends a resume from the
+         student's monthly quota on a job they never opened. */
+      api<{ automatic_submission_enabled?: boolean }>("/onboarding/state").catch(() => ({ automatic_submission_enabled: false })),
     ])
-      .then(([meResult, jobsResult, targetingResult, profileResult, historyResult, applicationProfileResult, outreachResult]) => {
+      .then(([meResult, jobsResult, targetingResult, profileResult, historyResult, applicationProfileResult, outreachResult, onboardingResult]) => {
         if (cancelled) return;
         setMe(meResult);
         setLoadedAt(Date.now());
@@ -227,6 +234,7 @@ export default function Home() {
         setApplicationProfile(applicationProfileResult);
         setPackets(historyResult.resumes);
         setOutreach(Array.isArray(outreachResult) ? outreachResult : (outreachResult.events ?? []));
+        setAutoSubmitEnabled(onboardingResult.automatic_submission_enabled === true);
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "We could not load your jobs. Reload the page.");
@@ -237,7 +245,12 @@ export default function Home() {
   }, []);
 
   const rankedJobs = useMemo(() => rankJobs(jobs ?? [], targeting, profile), [jobs, profile, targeting]);
-  const dailyJobs = useMemo(() => rankedJobs.slice(0, DAILY_PREPARED_RESUME_LIMIT), [rankedJobs]);
+  /* The build-ahead queue, and ONLY that: nothing renders this list. Empty unless automatic
+     submission is on, which is what stops resumes being built for students who never asked. */
+  const dailyJobs = useMemo(
+    () => (autoSubmitEnabled ? rankedJobs.slice(0, AUTO_SUBMIT_PREPARED_LIMIT) : []),
+    [autoSubmitEnabled, rankedJobs],
+  );
   // Three, not five. Home is the summary and Jobs is the browse; showing most of the feed here
   // made the two pages the same page.
   const visibleJobs = useMemo(
@@ -314,7 +327,14 @@ export default function Home() {
     };
   }, [qaMode, reviewPacket?.id, reviewPacket?.spec._review?.status]);
 
+  /* Build resumes ahead of being asked, for automatic-submission students only.
+   *
+   * The opt-in is checked HERE as well as in dailyJobs, which is deliberate redundancy rather than
+   * an oversight. This loop spends a student's monthly resume quota and makes a model call per
+   * job, so the two things guarding it are the one gate that must not be edited away by accident.
+   * Everyone else gets a packet when they ask for one. */
   useEffect(() => {
+    if (!autoSubmitEnabled) return;
     if (qaMode || prewarmStarted.current || !me || !identity || !applicationProfile || dailyJobs.length === 0) return;
     if (!identity.full_name?.trim()) return;
     prewarmStarted.current = true;
@@ -363,7 +383,7 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [applicationProfile, dailyJobs, identity, me, packets, prewarmRetry, qaMode]);
+  }, [applicationProfile, autoSubmitEnabled, dailyJobs, identity, me, packets, prewarmRetry, qaMode]);
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];

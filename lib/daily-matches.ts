@@ -7,7 +7,19 @@ export type RankedJob = MonitoredJob & {
 
 export type ProfileIdentity = { full_name?: string; email?: string };
 
-export const DAILY_PREPARED_RESUME_LIMIT = 30;
+/**
+ * How many of the day's top matches get a resume built ahead of time, for students who have turned
+ * automatic submission ON.
+ *
+ * IT APPLIES TO NOBODY ELSE. Building a packet is a real cost: it spends a resume from the
+ * student's monthly quota and runs a model call, so doing it speculatively for everyone spent
+ * people's quota on jobs they never opened. With automatic submission on, the build-ahead is the
+ * point, because the runner needs a packet ready to send. With it off, the packet is created when
+ * the student asks for one.
+ *
+ * Replaces DAILY_PREPARED_RESUME_LIMIT (30), which fed the same loop for every account.
+ */
+export const AUTO_SUBMIT_PREPARED_LIMIT = 20;
 
 export function rankJobs(
   jobs: MonitoredJob[],
@@ -41,6 +53,37 @@ export function packetMatchesJob(packet: GeneratedResume, job: Pick<MonitoredJob
 
 export function countPreparedJobs(jobs: RankedJob[], packets: GeneratedResume[]): number {
   return jobs.filter((job) => packets.some((packet) => packetMatchesJob(packet, job))).length;
+}
+
+/** Shortest job description the generator will accept. Mirrors the backend's `jd_text` minimum. */
+export const MIN_JD_CHARS = 20;
+
+/**
+ * Whether a draft can be generated from without the request being rejected.
+ *
+ * Exists because "Apply now" generates immediately, with nothing typed by the student. A posting
+ * that arrives with a stub description or a link the generator refuses would otherwise spend the
+ * attempt and come back with "Fill in all four boxes first", which is nonsense to someone who
+ * filled in nothing. Checking first lets the page say what is actually missing.
+ *
+ * Deliberately the same shape as the guard inside createApplication, sharing MIN_JD_CHARS so the
+ * two cannot drift into disagreeing about what is generatable.
+ */
+export function canGenerateFrom(draft: {
+  company: string;
+  role: string;
+  portalUrl: string;
+  jobDescription: string;
+}): boolean {
+  if (!draft.company.trim() || !draft.role.trim()) return false;
+  if (draft.jobDescription.trim().length < MIN_JD_CHARS) return false;
+  const portalUrl = draft.portalUrl.trim();
+  if (!portalUrl) return false;
+  try {
+    return new URL(portalUrl).protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export function resumeGenerationBody(
