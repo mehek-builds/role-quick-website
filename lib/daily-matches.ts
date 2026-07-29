@@ -77,6 +77,20 @@ export function countPreparedJobs(jobs: RankedJob[], packets: GeneratedResume[])
   return jobs.filter((job) => packets.some((packet) => packetMatchesJob(packet, job))).length;
 }
 
+/** Whether this exact posting was submitted during the requested UTC day. */
+export function jobSubmittedOnDay(
+  job: Pick<MonitoredJob, "id" | "company_name" | "title">,
+  packets: GeneratedResume[],
+  dayKey: string,
+): boolean {
+  return packets.some((packet) => {
+    const review = packet.spec._review;
+    return packetMatchesJob(packet, job)
+      && review?.status === "submitted"
+      && review.submitted_at?.slice(0, 10) === dayKey;
+  });
+}
+
 /** Shortest job description the generator will accept. Mirrors the backend's `jd_text` minimum. */
 export const MIN_JD_CHARS = 20;
 

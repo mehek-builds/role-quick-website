@@ -1,0 +1,182 @@
+.stage {
+  position: relative;
+  width: 176px;
+  height: 150px;
+  overflow: visible;
+}
+
+.document {
+  --start-x: 0px;
+  --slot-top: 12px;
+  --slot-width: 66px;
+  --accent: var(--color-brand);
+  --tint: var(--color-brand-soft);
+  --delay: 0s;
+  position: absolute;
+  z-index: 1;
+  top: var(--slot-top);
+  left: 50%;
+  width: var(--slot-width);
+  height: 22px;
+  padding: 5px 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 5px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-rest);
+  opacity: 0;
+  transform-origin: center;
+  animation: slot-page 1.05s cubic-bezier(.16, 1, .3, 1) var(--delay) both;
+}
+
+.document::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.document::after {
+  content: "";
+  width: 100%;
+  height: 9px;
+  background:
+    linear-gradient(var(--tint), var(--tint)) 0 0 / 82% 3px no-repeat,
+    linear-gradient(var(--color-border), var(--color-border)) 0 6px / 58% 2px no-repeat;
+}
+
+.documentOne {
+  --start-x: -220px;
+  --slot-top: 12px;
+  --slot-width: 66px;
+  --accent: var(--color-brand);
+  --tint: var(--color-brand-soft);
+  --delay: .25s;
+}
+
+.documentTwo {
+  --start-x: 220px;
+  --slot-top: 36px;
+  --slot-width: 77px;
+  --accent: var(--color-teal);
+  --tint: var(--color-teal-soft);
+  --delay: .52s;
+}
+
+.documentThree {
+  --start-x: -220px;
+  --slot-top: 60px;
+  --slot-width: 87px;
+  --accent: var(--color-coral);
+  --tint: var(--color-coral-soft);
+  --delay: .79s;
+}
+
+.documentFour {
+  --start-x: 220px;
+  --slot-top: 84px;
+  --slot-width: 98px;
+  --accent: var(--color-ink);
+  --tint: var(--color-surface-alt);
+  --delay: 1.06s;
+}
+
+.mark {
+  position: absolute;
+  inset: 0 13px;
+  width: 150px;
+  height: 150px;
+  overflow: visible;
+}
+
+.mark path {
+  fill: var(--color-ink);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: resolve-slat .58s cubic-bezier(.16, 1, .3, 1) var(--slat-delay) both;
+}
+
+.mark path:nth-child(1) { --slat-delay: 1.08s; }
+.mark path:nth-child(2) { --slat-delay: 1.35s; }
+.mark path:nth-child(3) { --slat-delay: 1.62s; }
+.mark path:nth-child(4) { --slat-delay: 1.89s; }
+.mark path:nth-child(5) { --slat-delay: 2.22s; }
+
+.name,
+.message {
+  opacity: 0;
+  transform: translateY(8px);
+  animation: settle-copy .65s cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.name {
+  margin-top: 2px;
+  font-size: 16px;
+  line-height: 1.65;
+  font-weight: 500;
+  color: var(--color-ink);
+  animation-delay: 2.56s;
+}
+
+.message {
+  white-space: nowrap;
+  animation-delay: 2.86s;
+}
+
+@keyframes slot-page {
+  0% {
+    opacity: 0;
+    transform: translateX(calc(-50% + var(--start-x)));
+  }
+  14% { opacity: 1; }
+  66% {
+    height: 22px;
+    padding: 5px 6px;
+    border-radius: 5px;
+    background: var(--color-surface);
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+  100% {
+    height: 12px;
+    padding: 0;
+    border-color: var(--color-ink);
+    border-radius: 1px;
+    background: var(--color-ink);
+    opacity: 0;
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes resolve-slat {
+  from { opacity: 0; transform: scaleX(.98); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes settle-copy {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 639px) {
+  .message {
+    text-align: center;
+    white-space: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .document { display: none; }
+  .mark path,
+  .name,
+  .message {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
