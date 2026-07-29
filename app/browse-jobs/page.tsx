@@ -261,11 +261,13 @@ export default async function BrowseJobs({
         <p className="mt-4 max-w-[62ch] text-base leading-7 text-muted">
           {ok ? (
             <>
+              {/* Just the number (Mehek, 2026-07-29). The sentence used to
+                  explain where the postings come from, that a multi-city role is
+                  one card, and what Litos then does with it — three things the
+                  page already shows: the tiles carry "N openings", and the band
+                  at the bottom makes the offer. */}
               <span className="font-mono text-ink">{countLabel(total)}</span>{" "}
-              open roles, read straight off each company&rsquo;s own job board and
-              checked again every day. A role open in several cities is one card
-              here, not one per city. Open any of them and Litos writes the
-              resume for it and fills in the form.
+              open {total === 1 ? "role" : "roles"}.
             </>
           ) : (
             <>
