@@ -64,6 +64,32 @@ export type JobsPage = {
 
 export const PER_PAGE = 24;
 
+/**
+ * HOW STALE THE BOARD IS ALLOWED TO BE, in seconds.
+ *
+ * One number for the listings and the suggestions, because they describe the
+ * same board and a visitor who sees "Bengaluru" in the dropdown should get
+ * Bengaluru's jobs from the list.
+ *
+ * It was 300 for the listings and 900 for the suggestions, and the split was
+ * the problem. Next's Data Cache is stale-while-revalidate, so 900 meant a
+ * change to the city normaliser took EIGHT MINUTES to show up on the page after
+ * the backend was already serving it — the API was right and the board was
+ * wrong, which reads as a broken deploy rather than a cache.
+ *
+ * Sixty is chosen against what actually changes. The postings themselves move
+ * once a day, on the 06:00 UTC poll, so the freshness that matters is not the
+ * data drifting — it is a deploy or a fix landing and being visible. A minute
+ * is under the time it takes to go and look.
+ *
+ * The cost is bounded and small: these are two cache entries for the
+ * suggestions and one per distinct search URL for the listings, shared across
+ * every visitor by the edge, so the origin sees at most a handful of queries a
+ * minute rather than one per page view. Raising this back up will make a change
+ * look like it did not ship; tests/browse-jobs.test.mjs pins it.
+ */
+export const BOARD_REVALIDATE = 60;
+
 export async function fetchJobs(
   filters: Filters = {},
   page = 1,
@@ -88,10 +114,7 @@ export async function fetchJobs(
   try {
     const response = await fetch(`${API_URL}/jobs/grouped?${params}`, {
       headers: { Accept: "application/json" },
-      /* Postings move slowly (the source refreshes once a day) but the board is
-         the first thing a visitor sees, so a short window keeps it cheap
-         without ever showing yesterday's page after a refresh has landed. */
-      next: { revalidate: 300 },
+      next: { revalidate: BOARD_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { jobs: [], total: 0, ok: false };
@@ -241,10 +264,7 @@ export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
     const query = sponsorOnly ? "?v=2&sponsor_only=true" : "?v=2";
     const response = await fetch(`${API_URL}/jobs/facets${query}`, {
       headers: { Accept: "application/json" },
-      /* Fifteen minutes, not an hour: the suggestions follow the board, which
-         gains companies on the daily poll, and an hour meant a backend change
-         and a website deploy could not be verified in one sitting. */
-      next: { revalidate: 900 },
+      next: { revalidate: BOARD_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { companies: [], locations: [] };

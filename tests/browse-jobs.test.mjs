@@ -383,3 +383,33 @@ describe("the dropdowns read A to Z", () => {
     assert.equal(shown.length, 50);
   });
 });
+
+describe("the board does not lag behind the API", () => {
+  const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
+
+  test("listings and suggestions share one freshness window", async () => {
+    /* They describe the same board: a visitor offered "Bengaluru" in the
+       dropdown must get Bengaluru's jobs from the list. Two different windows
+       is how the suggestions ended up eight minutes behind an API that was
+       already correct, which reads as a broken deploy rather than a cache. */
+    const { BOARD_REVALIDATE } = await import("../lib/browse-jobs.ts");
+    assert.equal(typeof BOARD_REVALIDATE, "number");
+    const windows = [...lib.matchAll(/revalidate:\s*([A-Za-z_0-9]+)/g)].map((m) => m[1]);
+    assert.ok(windows.length >= 2, `expected both fetches to set one, found ${windows.length}`);
+    assert.ok(
+      windows.every((w) => w === "BOARD_REVALIDATE"),
+      `every fetch must use the shared constant, found ${windows.join(", ")}`,
+    );
+  });
+
+  test("a change is visible within a minute", async () => {
+    /* The number people notice. Raising it makes a shipped change look like it
+       did not ship — which is exactly the bug this replaced. */
+    const { BOARD_REVALIDATE } = await import("../lib/browse-jobs.ts");
+    assert.ok(
+      BOARD_REVALIDATE <= 60,
+      `${BOARD_REVALIDATE}s is long enough for a deploy to look broken`,
+    );
+    assert.ok(BOARD_REVALIDATE >= 30, "below 30s the origin pays for every visitor");
+  });
+});
