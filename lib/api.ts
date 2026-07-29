@@ -176,6 +176,11 @@ export type MonitoredJob = {
   location: string | null;
   department: string | null;
   employment_type: string | null;
+  /** What the employer published about pay, or null. All four move together. See lib/pay.ts. */
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  salary_interval?: string | null;
   description: string;
   apply_url: string;
   posting_url: string;

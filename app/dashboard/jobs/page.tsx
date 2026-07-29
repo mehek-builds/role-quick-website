@@ -9,6 +9,7 @@ import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/lib/job-rows";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { formatPay, jobTypeLabel } from "@/lib/pay";
 
 /* The filters, as one string. It is the pagination key as well as the query: a page of results
    only belongs to the list on screen if it was fetched under the same filters, and comparing this
@@ -279,6 +280,8 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
   const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]
     .filter(Boolean)
     .join(" · ");
+  const pay = formatPay(job);
+  const type = jobTypeLabel(job.employment_type);
 
   return (
     <Card className="flex flex-wrap items-center gap-4 p-4 transition-colors hover:border-faint sm:flex-nowrap sm:p-5">
@@ -306,6 +309,17 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
           {job.company_name}
           {place ? ` · ${place}` : ""}
         </p>
+        {/* Same rule as the public board, same formatter (lib/pay.ts), so the same job cannot read
+            one way here and another way on /browse-jobs. Absent pay and absent job type render
+            nothing at all rather than "Not listed": most postings publish neither, and a row that
+            filled that silence in would be stating something no employer stated. */}
+        {(pay || type) && (
+          <p className="mt-1 truncate text-sm text-ink">
+            {pay && <span className="font-medium">{pay}</span>}
+            {pay && type && <span className="text-faint"> · </span>}
+            {type && <span className="text-muted">{type}</span>}
+          </p>
+        )}
         <p className="mt-1.5 font-mono text-[11px] text-faint">
           Found {formatRelativeDate(job.first_seen_at)}
           {job.department ? ` · ${job.department}` : ""}

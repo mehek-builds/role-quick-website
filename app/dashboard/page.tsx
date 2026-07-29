@@ -24,6 +24,7 @@ import {
   type ProfileIdentity,
   type RankedJob,
 } from "@/lib/daily-matches";
+import { formatPay, jobTypeLabel, type PayFacts } from "@/lib/pay";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 
@@ -51,6 +52,10 @@ const QA_JOBS: MonitoredJob[] = [
     posted_at: new Date().toISOString(),
     first_seen_at: new Date().toISOString(),
     ats_name: "greenhouse",
+    salary_min: 145700,
+    salary_max: 200300,
+    salary_currency: "USD",
+    salary_interval: "year",
   },
   {
     id: "qa-job-2",
@@ -66,6 +71,10 @@ const QA_JOBS: MonitoredJob[] = [
     posted_at: new Date().toISOString(),
     first_seen_at: new Date().toISOString(),
     ats_name: "lever",
+    salary_min: 45,
+    salary_max: 55,
+    salary_currency: "USD",
+    salary_interval: "hour",
   },
   {
     id: "qa-job-3",
@@ -73,7 +82,9 @@ const QA_JOBS: MonitoredJob[] = [
     title: "Software Engineer",
     location: "Remote, US",
     department: "Engineering",
-    employment_type: "Full-time",
+    /* Publishes neither pay nor a job type, like most of the real board. This card must show
+       no pay line at all rather than gaining a placeholder. */
+    employment_type: null,
     description: "Build reliable voice AI infrastructure and developer tools with TypeScript, Python, APIs, and distributed systems.",
     apply_url: "https://jobs.ashbyhq.com/deepgram/qa",
     posting_url: "https://jobs.ashbyhq.com/deepgram/qa",
@@ -650,6 +661,26 @@ function DashboardRow({ label, detail, href }: { label: string; detail: string; 
   );
 }
 
+/* One pay line, used by every job surface on this page.
+ *
+ * Returns null when the employer published neither a salary nor a job type, which is the common
+ * case: two thirds of the board publishes no pay and Greenhouse states no employment type at all.
+ * Nothing is substituted for that silence - no "Competitive", no defaulted "Full-time" chip - so a
+ * figure on a card always means an employer published one. Same rule, same formatter as
+ * /dashboard/jobs and /browse-jobs. */
+function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFacts }) {
+  const pay = formatPay(job);
+  const type = jobTypeLabel(job.employment_type);
+  if (!pay && !type) return null;
+  return (
+    <p className="mt-1 truncate text-sm text-ink">
+      {pay && <span className="font-medium">{pay}</span>}
+      {pay && type && <span className="text-faint"> · </span>}
+      {type && <span className="text-muted">{type}</span>}
+    </p>
+  );
+}
+
 function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
   return (
     <Card className="overflow-hidden transition-colors hover:border-ink/30">
@@ -675,6 +706,11 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
                 "Remote, US · Remote". */}
             {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
           </p>
+          {/* Pay and job type, same formatter and same rule as /dashboard/jobs and the public
+              board (lib/pay.ts): shown only where the employer published it, and rendered as
+              nothing at all otherwise. This card is where the applicant decides whether the role
+              is worth a resume, so leaving the figure to the posting meant deciding without it. */}
+          <PayLine job={job} />
           {/* The ranker's reasons used to be dumped raw at 12px with nothing saying what they
               were. One word of framing turns a list of nouns into a sentence. */}
           {job.reasons.length > 0 && (
@@ -780,6 +816,8 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
             <p className="text-xs text-faint">Check before you send</p>
             <h2 id="review-title" className="mt-1 truncate text-xl font-medium tracking-[-0.02em] text-ink">{job.title}</h2>
             <p className="mt-1 truncate text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
+            {/* The last screen before an application is sent is the one place pay matters most. */}
+            <PayLine job={job} />
           </div>
           <button ref={closeButtonRef} type="button" onClick={onClose} className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border text-xl text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Close review">×</button>
         </header>
