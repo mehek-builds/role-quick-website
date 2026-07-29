@@ -87,7 +87,7 @@ export function AutopilotToggle({
   const id = "autopilot-switch";
 
   return (
-    <div className="flex flex-col items-end gap-1">
+    <div>
       <div className="flex items-center gap-2.5">
         <label htmlFor={id} className={`text-sm ${enabled ? "font-medium text-brand-ink" : "text-muted"}`}>
           Send without asking
@@ -111,13 +111,35 @@ export function AutopilotToggle({
           />
         </span>
       </div>
-      {locked && (
-        <p className="max-w-[19rem] text-right text-[11px] leading-4 text-warn">
-          Available after you have approved {eligibility?.required} applications yourself.{" "}
-          {eligibility?.remaining} to go.
-        </p>
-      )}
+      {/* The reason the switch is locked does NOT live here. A sentence this long inside the
+          header's flex row wrapped to two lines, orphaned "2 to go." on the second, and pushed
+          against the page's one filled CTA. It renders as its own full-width row instead: see
+          AutopilotLockNote. */}
     </div>
+  );
+}
+
+/**
+ * Why the switch will not move yet, on a line of its own.
+ *
+ * Kept out of the header cluster so a long sentence can never squeeze the controls beside it, and
+ * separate from the switch so the two can be placed independently. Renders nothing at all when the
+ * switch is available or already on, which is the common case.
+ */
+export function AutopilotLockNote({
+  enabled,
+  eligibility,
+}: {
+  enabled: boolean | null;
+  eligibility: ConsentEligibility | null;
+}) {
+  if (enabled || eligibility?.eligible !== false) return null;
+  return (
+    <p className="text-[13px] leading-5 text-warn">
+      Sending without asking becomes available after you have approved {eligibility.required}{" "}
+      applications yourself. {eligibility.remaining} to go. That way you have seen what Litos fills
+      in on a real form before it sends one without you.
+    </p>
   );
 }
 

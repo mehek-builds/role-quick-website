@@ -21,7 +21,7 @@ import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/lib/daily-mat
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
-import { AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
+import { AutopilotLockNote, AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/lib/jd-match";
 import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
@@ -790,6 +790,7 @@ export default function Applications() {
       </div>
 
       {autopilot.error && <ErrorNote message={autopilot.error} />}
+      {!selected && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
       {!selected && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard
           match={nextMatch}
