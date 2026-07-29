@@ -237,7 +237,11 @@ export default function Home() {
               Resume, application, email, tracked
             </p>
             <div className="pt-8">
-              <div data-demo><FlowDemoFit /></div>
+              {/* Centred, and w-full so the wrapper's width comes from the
+                  section rather than from the demo. FlowDemoFit reads its
+                  parent's width to choose a variant, so a content-sized
+                  wrapper would feed it its own answer. */}
+              <div data-demo className="flex w-full justify-center"><FlowDemoFit /></div>
             </div>
           </div>
         </section>
