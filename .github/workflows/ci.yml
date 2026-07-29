@@ -1,0 +1,53 @@
+# Run the checks this repo already has, on every change, without anyone
+# remembering to.
+#
+# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ — the
+# vocabulary gate, route integrity, the typography scale, the logo service's
+# SSRF allowlist — only held when somebody happened to run `npm test` locally.
+# They did not always: `main` sat red for a day on a stale assertion in
+# application-submission-gate, and a red suite is worse than no suite, because
+# once failure is normal nobody reads the output.
+#
+# Deliberately NO secrets and NO deploy step. The deploy workflow that used to
+# live here was deleted after its VERCEL_TOKEN expired and every run went red
+# for weeks unnoticed (see the vault's R-034). This one only ever reads the
+# code, so it cannot rot that way and cannot be blocked by a deploy cap.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same branch makes the previous run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Fast and highest-signal first, so a broken invariant is reported in
+      # under a minute rather than after a full build.
+      - name: Tests
+        run: npm test
+
+      # `next build` type-checks app/ regardless of tsc, and has caught a real
+      # production break that `npx tsc --noEmit` missed: tsc reports pre-existing
+      # TS5097 errors in .mts test files, so its output was treated as noise and
+      # the real error in app code was never reached (PR #88).
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app

@@ -156,7 +156,17 @@ test("the controlled portal mirrors every supported adapter without an employer 
   assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
   assert.doesNotMatch(page, /useSearchParams|Suspense/);
   assert.match(casePage, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
-  assert.match(portal, /type Board = "greenhouse" \| "lever" \| "ashby" \| "smartrecruiters"/);
+  /* The board union moved OUT of portal-form.tsx into boards.ts on 2026-07-28,
+     so that the two route files and the form could not disagree about which
+     board a URL means. This assertion followed it. Reading the shared module is
+     also the stronger check: it is now the single place a new adapter has to be
+     registered, so a board added to the harness without being added here would
+     still be caught. */
+  const boards = await readFile(new URL("../app/qa/portal-submission/boards.ts", import.meta.url), "utf8");
+  for (const adapter of ["greenhouse", "lever", "ashby", "smartrecruiters"]) {
+    assert.match(boards, new RegExp(`"${adapter}"`), `boards.ts is missing ${adapter}`);
+  }
+  assert.match(portal, /BoardName/, "portal-form must use the shared board type");
   assert.match(portal, /name="job_application\[resume\]"/);
   assert.match(portal, /name="job_application\[first_name\]"/);
   assert.match(portal, /name="job_application\[last_name\]"/);
