@@ -213,11 +213,17 @@ describe("the three search fields", () => {
   });
 
   test("each field offers suggestions without demanding one", () => {
-    /* The datalist is what makes a field both a dropdown and a free-text box.
-       Swapping it for a <select> would silently forbid searching for anything
-       we had not already indexed. */
-    assert.match(page, /<datalist/, "fields must offer a datalist");
+    /* Was an assertion that a <datalist> existed. The datalist is gone — the
+       page draws its own list now, because a browser-drawn popup cannot be made
+       to sit under its field or wear the page's type. What must not change is
+       the property the datalist was there for: suggestions are offered, never
+       required. A <select> would silently forbid searching for anything we had
+       not already indexed. */
+    const combo = readFileSync(new URL("../components/browse/ComboField.tsx", import.meta.url), "utf8");
+    assert.match(combo, /role="listbox"/, "fields must offer a list");
+    assert.match(combo, /type="text"/, "and the field itself must stay free text");
     assert.doesNotMatch(page, /<select\b/, "a select would reject free text");
+    assert.doesNotMatch(combo, /<select\b/, "a select would reject free text");
   });
 
   test("filters survive pagination", () => {
@@ -284,5 +290,56 @@ describe("the three dropdowns", () => {
     const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
     assert.ok(!/facets\.titles/.test(page), "the page must use the curated list");
     assert.ok(!/titles: string\[\]/.test(lib), "Facets must not still declare titles");
+  });
+});
+
+describe("the search fields are the page's own, not the browser's", () => {
+  const combo = readFileSync(new URL("../components/browse/ComboField.tsx", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
+
+  test("no datalist anywhere", () => {
+    /* A <datalist> popup is browser chrome: it renders in the system font at
+       the system size, sets its own width and places itself where it likes.
+       None of that is reachable from CSS, which is why it read as borrowed from
+       another application and sat off the field it belonged to. */
+    /* Matched on the JSX tag, not the word: both files explain in prose WHY
+       there is no datalist, and an over-broad regex failed on its own comments. */
+    assert.ok(!/<datalist[\s>]/.test(page.replace(/\/\*[\s\S]*?\*\//g, "")), "the page must not fall back to a datalist");
+    assert.ok(!/<datalist[\s>]/.test(combo.replace(/\/\*[\s\S]*?\*\//g, "")), "the field must not fall back to a datalist");
+  });
+
+  test("the list is positioned against the field, not the page", () => {
+    /* top-full + inset-x-0 is what puts it directly under the field at exactly
+       the field's width. Losing either is how it drifts again. */
+    assert.match(combo, /top-full/);
+    assert.match(combo, /inset-x-0/);
+    assert.match(combo, /className="relative/, "the wrapper must be the positioning context");
+  });
+
+  test("choosing with the keyboard does not submit the half-typed text", () => {
+    /* Enter picks the highlighted row and must preventDefault, or the form
+       searches for whatever was typed instead of what was chosen. */
+    assert.match(combo, /event\.key === "Enter" && open && active >= 0/);
+    assert.match(combo, /event\.preventDefault\(\);\s*\n\s*choose\(matches\[active\]\)/);
+  });
+
+  test("options commit on pointerdown, because click comes after blur", () => {
+    assert.match(combo, /onPointerDown=\{\(event\) => \{/);
+    assert.ok(!/onClick=\{\(\) => choose/.test(combo), "click fires too late to catch the choice");
+  });
+
+  test("it is a real form field and a real combobox", () => {
+    /* The value has to submit with the surrounding GET form, so a search stays
+       a shareable URL, and the roles are what make it usable without a mouse. */
+    assert.match(combo, /name=\{name\}/);
+    assert.match(combo, /role="combobox"/);
+    assert.match(combo, /role="listbox"/);
+    assert.match(combo, /role="option"/);
+    assert.match(combo, /aria-activedescendant/);
+  });
+
+  test("matching is substring, not prefix", () => {
+    /* Someone typing "engineer" means to find "Machine Learning Engineer". */
+    assert.match(combo, /\.toLowerCase\(\)\.includes\(needle\)/);
   });
 });
