@@ -343,3 +343,43 @@ describe("the search fields are the page's own, not the browser's", () => {
     assert.match(combo, /\.toLowerCase\(\)\.includes\(needle\)/);
   });
 });
+
+describe("the dropdowns read A to Z", () => {
+  test("options are alphabetical, case-insensitively", async () => {
+    /* The board carries "onemedical", "iHerb" and "tebra" next to "Stripe". A
+       plain sort puts every lower-case name after every capitalised one, which
+       is not what alphabetical means to a reader. */
+    const { alphabetical } = await import("../lib/job-titles.ts");
+    assert.deepEqual(
+      alphabetical(["Stripe", "onemedical", "Adyen", "iHerb", "tebra"]),
+      ["Adyen", "iHerb", "onemedical", "Stripe", "tebra"],
+    );
+  });
+
+  test("it sorts a copy, leaving the source list alone", async () => {
+    /* JOB_TITLES is stored in measured order so the counts beside each entry
+       stay meaningful. Sorting in place would quietly destroy that record. */
+    const { alphabetical, JOB_TITLES } = await import("../lib/job-titles.ts");
+    const before = [...JOB_TITLES];
+    alphabetical(JOB_TITLES);
+    assert.deepEqual(JOB_TITLES, before, "the stored order must survive");
+  });
+
+  test("every field is sorted, and Other is always last", async () => {
+    /* Other is not one of the options, it is the sentence telling you the box is
+       yours to type in — so it must not sort in among the O's. */
+    const { withOther, OTHER } = await import("../lib/job-titles.ts");
+    const out = withOther(["Zebra", "Other-Worldly Inc", "apple", "Mango"]);
+    assert.equal(out.at(-1), OTHER);
+    const body = out.slice(0, -1);
+    assert.deepEqual(body, [...body].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" })));
+    assert.deepEqual(body, ["apple", "Mango", "Other-Worldly Inc", "Zebra"]);
+  });
+
+  test("the offered titles come out A to Z", async () => {
+    const { withOther, JOB_TITLES } = await import("../lib/job-titles.ts");
+    const shown = withOther(JOB_TITLES).slice(0, -1);
+    assert.equal(shown[0], "Account Executive");
+    assert.equal(shown.length, 50);
+  });
+});

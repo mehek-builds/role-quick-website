@@ -22,8 +22,9 @@
  * do return work: Trader, Financial Analyst, Quantitative Researcher,
  * Quantitative Trader, Accountant, Business Analyst.
  *
- * Ordered by how much of the board each covers, because a datalist shows the
- * first entries before the reader types anything.
+ * Stored in the order they were measured, most of the board first, so the
+ * counts beside them stay readable as a record of what was checked. The board
+ * DISPLAYS them alphabetically (Mehek, 2026-07-29) — see `alphabetical`.
  */
 export const JOB_TITLES: string[] = [
   "Software Engineer", // 991
@@ -88,8 +89,19 @@ export const JOB_TITLES: string[] = [
  * anyone picking it wants. See `clean` in app/browse-jobs/page.tsx. */
 export const OTHER = "Other";
 
+/* A–Z, case-insensitively, so a board that carries "onemedical", "iHerb" and
+   "tebra" alongside "Stripe" does not scatter the lower-case names to the end.
+   Sorting is a DISPLAY decision only: which fifty appear is still decided by how
+   much of the board they account for, which is what makes them the right fifty
+   to offer. */
+export function alphabetical(options: string[]): string[] {
+  return [...options].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+}
+
+/* Other goes last, never sorted in among the O's: it is not one of the options,
+   it is the sentence that tells you the box is yours to type in. */
 export function withOther(options: string[]): string[] {
-  return [...options, OTHER];
+  return [...alphabetical(options), OTHER];
 }
 
 /** True when a submitted field value should be treated as no filter at all. */
