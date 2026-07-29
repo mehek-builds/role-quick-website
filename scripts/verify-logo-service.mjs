@@ -38,8 +38,10 @@ const check = (ok, label, detail = "") => {
   if (!ok) failures += 1;
 };
 
-async function logo(company, redirect = "follow") {
-  const res = await fetch(`${API}?c=${encodeURIComponent(company)}`, {
+async function logo(company, redirect = "follow", board = null) {
+  const qs = new URLSearchParams({ c: company });
+  if (board) qs.set("board", board);
+  const res = await fetch(`${API}?${qs}`, {
     redirect,
     signal: AbortSignal.timeout(30_000),
   });
@@ -48,6 +50,7 @@ async function logo(company, redirect = "follow") {
   const head = new TextDecoder().decode(buf.subarray(0, 120)).trim().toLowerCase();
   return {
     status: res.status,
+    source: res.headers.get("x-logo-source") ?? "",
     type,
     bytes: buf.length,
     cache: res.headers.get("cache-control") ?? "",
@@ -150,6 +153,45 @@ check(
   "the monogram is cached too, so failures are not re-probed",
   nonsense.cache.slice(0, 48),
 );
+
+/* --- 7. the board we poll beats guessing the name --- */
+console.log("\n7. the mark comes from the board we poll, not from the name");
+
+/* Block is THE case. Guessing from the name gives block.co, an NFT company;
+   their Greenhouse board links block.xyz, which is the real one. */
+const block = await logo("Block", "follow", "https://job-boards.greenhouse.io/block");
+check(block.isImage && !block.isMonogram, "Block resolved a real mark", `${block.type}, ${block.bytes}B`);
+check(
+  block.source.includes("block.xyz"),
+  "and it came from block.xyz, not the name-guess block.co",
+  block.source,
+);
+
+/* Ashby and Lever host the employer's own uploaded logo, keyed to the org. */
+const crisp = await logo("crisp", "follow", "https://jobs.ashbyhq.com/crisp");
+check(
+  crisp.isImage && !crisp.isMonogram,
+  "crisp resolved from its Ashby board despite being on the name denylist",
+  `${crisp.type}, ${crisp.source}`,
+);
+check(crisp.source.startsWith("ashby:"), "served from the ATS-hosted logo", crisp.source);
+
+/* --- 8. the board parameter cannot be pointed anywhere --- */
+console.log("\n8. the board parameter is not an open fetch");
+/* Our server fetches whatever `board` says, so the allowlist is the whole
+   defence. A refused board must fall back, never proxy. */
+for (const evil of [
+  "https://169.254.169.254/latest/meta-data/",
+  "http://localhost/admin",
+  "https://job-boards.greenhouse.io.evil.com/stripe",
+]) {
+  const r = await logo("Zzzq Nonexistent Holdings", "follow", evil);
+  check(
+    r.isMonogram && !r.source.includes("evil") && !r.source.includes("169.254"),
+    `refused ${evil.slice(0, 42)}`,
+    r.source || "no source header",
+  );
+}
 
 console.log(`\n${failures === 0 ? "PASS" : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);

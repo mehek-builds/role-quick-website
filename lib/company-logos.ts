@@ -250,6 +250,13 @@ export function monogram(company: string): string {
  *
  * Always returns a URL, never null, so the tile is one <img> that always renders
  * and never needs client-side fallback handling. */
-export function logoSrc(company: string): string {
-  return logoPath(company) ?? `/api/company-logo?c=${encodeURIComponent(company)}`;
+export function logoSrc(company: string, boardUrl?: string | null): string {
+  const committed = logoPath(company);
+  if (committed) return committed;
+  const params = new URLSearchParams({ c: company });
+  /* The board this employer is polled on. Passing it turns the lookup from
+     "guess a domain from the name" into "ask the board we already trust", which
+     is the difference between block.co and block.xyz. */
+  if (boardUrl) params.set("board", boardUrl);
+  return `/api/company-logo?${params.toString()}`;
 }

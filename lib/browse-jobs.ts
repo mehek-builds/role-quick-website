@@ -33,6 +33,10 @@ export type BrowseJob = {
   posted_at: string | null;
   first_seen_at: string;
   ats_name: string;
+  /* The employer's board on their ATS — the URL we poll. Carried onto the tile
+     so the logo service can ask that board who the company is, instead of
+     guessing from the name. */
+  career_url?: string | null;
 };
 
 /* The board's three fields. All optional, all AND together, any combination
