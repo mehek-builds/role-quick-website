@@ -21,8 +21,9 @@ import { packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
+import { AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
-import { resumeSpecText } from "@/lib/jd-match";
+import { fetchJdMatch, resumeSpecText } from "@/lib/jd-match";
 import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/lib/requirement-terms";
@@ -299,6 +300,82 @@ export default function Applications() {
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
   }, [applicationFilter, applicationSort, reviewablePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
+
+  /* ---- sending without being asked ----
+     The setting itself lives on the server and is shared with Account; this page reads it, shows
+     what it is doing while it is on, and gives the student the seconds in which to stop it. */
+  const autopilot = useAutopilot();
+
+  /* Statuses that mean "this one is finished and nothing is stopping it". Deliberately the same
+     list the "Ready" filter uses: two different definitions of ready on one page is how a student
+     ends up watching something send that the filter told them was not ready. */
+  const READY_TO_SEND = useMemo(() => ["resume_ready", "questions_ready", "ready_to_submit"], []);
+
+  const nextPacket = useMemo(
+    () =>
+      reviewablePackets
+        .filter((packet) => READY_TO_SEND.includes(packet.spec._review?.status ?? ""))
+        .sort((a, b) => packetTimestamp(b).localeCompare(packetTimestamp(a)))[0] ?? null,
+    [READY_TO_SEND, reviewablePackets],
+  );
+
+  /* Keyed by the packet it was measured against. A bare number would survive the card changing
+     underneath it and print one job's score on another job's row. */
+  const [nextScore, setNextScore] = useState<{ id: string; score: number | null } | null>(null);
+  useEffect(() => {
+    const jd = nextPacket?.spec._review?.jd_text;
+    if (!nextPacket || !jd) return;
+    let cancelled = false;
+    void fetchJdMatch(jd, resumeSpecText(nextPacket.spec), { company: nextPacket.job_context.company, role: nextPacket.job_context.role })
+      .then((result) => !cancelled && setNextScore({ id: nextPacket.id, score: result.scorable ? result.score : null }))
+      // No number rather than a wrong one.
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [nextPacket]);
+
+  const nextMatch: NextMatch | null = nextPacket
+    ? {
+        id: nextPacket.id,
+        company: nextPacket.job_context.company ?? "Company",
+        role: nextPacket.job_context.role ?? "Role",
+        score: nextScore?.id === nextPacket.id ? nextScore.score : null,
+      }
+    : null;
+
+  /* Counts what was actually sent since midnight, from the submitted_at the server stamped. A
+     count of "applications touched today" would climb every time a resume was regenerated, which
+     is the number every rival inflates. */
+  const appliedToday = useMemo(() => {
+    if (packets === null) return null;
+    const midnight = new Date();
+    midnight.setHours(0, 0, 0, 0);
+    return reviewablePackets.filter((packet) => {
+      const at = packet.spec._review?.submitted_at;
+      return at ? new Date(at).getTime() >= midnight.getTime() : false;
+    }).length;
+  }, [packets, reviewablePackets]);
+
+  /* What the countdown reaching zero does. It is the same POST the review screen's own send makes,
+     so an unattended send goes through the identical server path, quota and refusal rules as one
+     the student clicked. The backend still stops and asks when an answer is missing. */
+  const sendWithoutAsking = useCallback(
+    async (id: string) => {
+      const packet = (packets ?? []).find((item) => item.id === id);
+      if (!packet || qaMode) return;
+      try {
+        const result = await api<SubmissionResponse>(`/applications/${id}/submit-request`, {
+          method: "POST",
+          body: JSON.stringify({ questions: packet.spec._review?.questions ?? [] }),
+        });
+        setPackets((current) => current?.map((item) => (item.id === id ? { ...item, spec: { ...item.spec, _review: result.review } } : item)) ?? current);
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : "Could not send that application on its own. It is still here for you.");
+      }
+    },
+    [packets, qaMode],
+  );
   // The review surface is meant to be read without scrolling, so while it is open the page chrome
   // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
   // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
@@ -656,10 +733,35 @@ export default function Applications() {
         </div>
         {/* The selected packet's status already prints on its own row and inside the review
             surface; a third copy in the page header was noise. */}
-        <Button type="button" onClick={() => setShowNewApplication((current) => !current)}>
-          {showNewApplication ? "Close" : "Add a job link"}
-        </Button>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Always on the page header, including while one application is open. A packet
+              auto-selects on load, so gating this on the board view would have hidden the switch
+              on the screen almost every visit actually lands on. */}
+          <AutopilotToggle
+            enabled={autopilot.enabled}
+            eligibility={autopilot.eligibility}
+            saving={autopilot.saving}
+            onToggle={(next) => void autopilot.toggle(next)}
+          />
+          <Button type="button" onClick={() => setShowNewApplication((current) => !current)}>
+            {showNewApplication ? "Close" : "Add a job link"}
+          </Button>
+        </div>
       </div>
+
+      {autopilot.error && <ErrorNote message={autopilot.error} />}
+      {!selected && packets !== null && reviewablePackets.length > 0 && (
+        <NextMatchCard
+          match={nextMatch}
+          autopilot={Boolean(autopilot.enabled)}
+          appliedToday={appliedToday}
+          onSend={(id) => void sendWithoutAsking(id)}
+          onOpen={(id) => {
+            const packet = (packets ?? []).find((item) => item.id === id);
+            if (packet) selectPacket(packet);
+          }}
+        />
+      )}
 
       {error && <ErrorNote message={error} />}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
