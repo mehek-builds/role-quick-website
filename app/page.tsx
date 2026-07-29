@@ -9,7 +9,7 @@ import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
 import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
-import { PacketDemo } from "@/components/PacketDemo";
+import { FlowDemoFit } from "@/components/FlowDemo";
 import { InstallLink } from "@/components/InstallLink";
 import { RealCaptures } from "@/components/RealCaptures";
 import { ScrollProgress } from "@/components/ScrollProgress";
@@ -224,15 +224,24 @@ export default function Home() {
         <section className="relative xl:hidden">
           <Wash soft />
           <div className="relative px-6 pb-28 pt-10">
-            {/* sr-only: the assembling packet IS the visible heading here.
-                This is for the document outline, so screen readers and
-                crawlers get a complete one. */}
-            <h2 className="sr-only">Watch one application assemble</h2>
+            {/* sr-only: the demo IS the visible heading here. This is for the
+                document outline, so screen readers and crawlers get a
+                complete one. */}
+            <h2 className="sr-only">Watch Litos apply to a job, start to finish</h2>
+            {/* No duration claim. This is the same demo the hero runs, and it
+                is a 25-second loop rather than the 9-second one that stood
+                here, so the old "Nine seconds, start to finish" would have
+                been measurably false. What it lists instead is what the loop
+                actually shows, in the order it shows it. */}
             <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-              Nine seconds, start to finish
+              Resume, application, email, tracked
             </p>
             <div className="pt-8">
-              <div data-demo><PacketDemo /></div>
+              {/* Centred, and w-full so the wrapper's width comes from the
+                  section rather than from the demo. FlowDemoFit reads its
+                  parent's width to choose a variant, so a content-sized
+                  wrapper would feed it its own answer. */}
+              <div data-demo className="flex w-full justify-center"><FlowDemoFit /></div>
             </div>
           </div>
         </section>
