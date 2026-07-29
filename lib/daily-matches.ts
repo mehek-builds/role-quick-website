@@ -53,6 +53,16 @@ export function resumeGenerationBody(
     company: job.company_name,
     role: job.title,
     jd_text: job.description,
+    /* The posting this resume is for, recorded at creation so the jobs list can later mark exactly
+       this row "Applied" rather than every posting sharing its company and title.
+
+       IT HAS TO BE SET HERE, not only where the student fills the form by hand. This function feeds
+       the dashboard's prewarm loop, which generates a resume per matched job automatically, so it
+       is how most packets come into existence. And once a packet exists, opening the posting from
+       the jobs list takes the "existing packet" branch in app/dashboard/applications/page.tsx and
+       never calls /resume/generate at all. Leaving it out here therefore did not just miss the
+       prewarmed rows; it meant the id was almost never recorded for anyone. */
+    job_id: job.id,
     application: {
       ats_name: portalName(job.apply_url),
       portal_url: job.apply_url,
