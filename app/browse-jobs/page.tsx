@@ -14,6 +14,7 @@ import {
   type Filters,
 } from "@/lib/browse-jobs";
 import { logoSrc } from "@/lib/company-logos";
+import { isOther, JOB_TITLES, withOther } from "@/lib/job-titles";
 
 export const metadata: Metadata = {
   title: "Browse jobs",
@@ -218,7 +219,14 @@ export default async function BrowseJobs({
   }>;
 }) {
   const params = await searchParams;
-  const clean = (v?: string) => (v ?? "").slice(0, 80).trim();
+  /* "Other" is the last entry in all three dropdowns, and it has to mean NO
+     FILTER. Searching for the literal word would return the few postings with
+     "other" in the title, which is the opposite of what someone picking it
+     wants — they are being told the box is theirs to type in. */
+  const clean = (v?: string) => {
+    const value = (v ?? "").slice(0, 80).trim();
+    return isOther(value) ? "" : value;
+  };
   /* `q` is still read, unlabelled, so links minted while the board had one
      general search box keep working instead of silently returning everything. */
   /* Only ever the literal "true". Echoing whatever arrived would put an attacker-chosen string in
@@ -281,23 +289,23 @@ export default async function BrowseJobs({
           <Field
             name="title"
             label="Job title"
-            placeholder="e.g. software engineer"
+            placeholder="e.g. Software Engineer"
             value={filters.title ?? ""}
-            options={facets.titles}
+            options={withOther(JOB_TITLES)}
           />
           <Field
             name="company"
             label="Company"
             placeholder="e.g. Stripe"
             value={filters.company ?? ""}
-            options={facets.companies}
+            options={withOther(facets.companies)}
           />
           <Field
             name="location"
             label="City"
             placeholder="e.g. New York"
             value={filters.location ?? ""}
-            options={facets.locations}
+            options={withOther(facets.locations)}
           />
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
           {/* A fourth control, and the only one that is not a search term: it changes which jobs
