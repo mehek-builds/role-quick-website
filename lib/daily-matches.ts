@@ -46,7 +46,29 @@ export function rankJobs(
     .sort((a, b) => b.match - a.match || (b.posted_at ?? b.first_seen_at).localeCompare(a.posted_at ?? a.first_seen_at));
 }
 
-export function packetMatchesJob(packet: GeneratedResume, job: Pick<MonitoredJob, "company_name" | "title">): boolean {
+/**
+ * Whether this packet is the one for this posting.
+ *
+ * PREFERS THE POSTING ID, and when the packet has one it is the ONLY thing consulted. A packet
+ * built for the Mountain View req must not answer for the New York req of the same title, and
+ * company+role cannot tell those apart. That mattered more than it looked: this decides whether
+ * "Apply now" reuses an existing packet or builds a new one, so a wrong match showed the student a
+ * resume tailored to a different posting and skipped the build for the one they actually opened.
+ *
+ * The same rule as the "Applied" badge in lib/job-rows.ts, for the same reason: where a precise
+ * identity exists it has to REPLACE the imprecise one, not sit alongside it. Falling back to
+ * company+role for a packet that has an id would let the sibling match anyway and change nothing.
+ *
+ * The fallback stays for packets that have no id and never will: everything generated before the
+ * id was recorded, and anything from the extension, where there is no monitored posting to point
+ * at. Those keep the old imprecision, which is unfixable rather than merely unfixed.
+ */
+export function packetMatchesJob(
+  packet: GeneratedResume,
+  job: Pick<MonitoredJob, "id" | "company_name" | "title">,
+): boolean {
+  const packetJobId = packet.job_context.job_id;
+  if (packetJobId) return packetJobId === job.id;
   return normalized(packet.job_context.company) === normalized(job.company_name)
     && normalized(packet.job_context.role) === normalized(job.title);
 }

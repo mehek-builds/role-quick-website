@@ -67,6 +67,33 @@ describe("daily match preparation", () => {
     assert.equal(packetMatchesJob(packet, jobs[1]), false);
   });
 
+  /* THE BUG THIS CLOSES. Two reqs, same employer, same title, different city. A packet built for
+     one used to answer for the other, so opening the second from the jobs list showed a resume
+     tailored to the first and skipped building one for the posting actually opened. */
+  test("a packet that knows its posting does not answer for a sibling", () => {
+    const sibling = { ...jobs[0], id: "sibling", location: "New York" };
+    const packet = { job_context: { company: "Acme Labs", role: "Product Engineer", job_id: jobs[0].id } };
+    assert.equal(packetMatchesJob(packet, jobs[0]), true, "the posting it was built for");
+    assert.equal(packetMatchesJob(packet, sibling), false, "same company and title, different req");
+  });
+
+  test("a packet with no posting id still matches on company and role", () => {
+    // Everything generated before the id was recorded, and anything from the extension.
+    const packet = { job_context: { company: "Acme Labs", role: "Product Engineer" } };
+    assert.equal(packetMatchesJob(packet, jobs[0]), true);
+    assert.equal(packetMatchesJob(packet, { ...jobs[0], id: "sibling" }), true, "still lossy, unfixably");
+  });
+
+  test("a null posting id is treated as absent, not as a value to match", () => {
+    const packet = { job_context: { company: "Acme Labs", role: "Product Engineer", job_id: null } };
+    assert.equal(packetMatchesJob(packet, jobs[0]), true);
+  });
+
+  test("an id-bearing packet for a different job does not match on company and role either", () => {
+    const packet = { job_context: { company: "Acme Labs", role: "Product Engineer", job_id: "some-other-job" } };
+    assert.equal(packetMatchesJob(packet, jobs[0]), false);
+  });
+
   test("counts only jobs whose tailored packet is already available", () => {
     const ranked = rankJobs(jobs, null, null);
     const packets = [{ job_context: { company: "Acme Labs", role: "Product Engineer" } }];
