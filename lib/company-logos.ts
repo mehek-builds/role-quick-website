@@ -238,3 +238,18 @@ export function monogram(company: string): string {
   const first = company.trim()[0];
   return first ? first.toUpperCase() : "?";
 }
+
+/* Where the tile points for a company's mark.
+ *
+ * A curated company gets its committed file directly — no round trip, and those
+ * marks were approved by a human. Everything else goes to /api/company-logo,
+ * which resolves it live and answers with a monogram if it cannot. That is what
+ * keeps the board correct as the job monitor adds employers: a company that
+ * appeared an hour ago has a mark on the next request, and one that left the
+ * board is simply never asked for again.
+ *
+ * Always returns a URL, never null, so the tile is one <img> that always renders
+ * and never needs client-side fallback handling. */
+export function logoSrc(company: string): string {
+  return logoPath(company) ?? `/api/company-logo?c=${encodeURIComponent(company)}`;
+}
