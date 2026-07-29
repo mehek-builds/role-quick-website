@@ -230,10 +230,21 @@ export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
     /* The suggestions have to describe the board being looked at. Offering a company we cannot
        confirm sponsors, to somebody browsing with the filter on, sends them to a search that
        returns nothing and reads as a broken board. */
-    const query = sponsorOnly ? "?sponsor_only=true" : "";
+    /* `v` is a cache key, not a parameter the API reads.
+       Next's Data Cache survives a deployment, so when /jobs/facets changed
+       shape — 202 alphabetical companies and a `titles` field became 50 ranked
+       companies and no titles — the board went on serving the OLD payload for
+       an hour after both sides had shipped: the title dropdown was correct
+       while the company one still opened on "AQR" with 203 entries. Stale would
+       have been tolerable; the wrong shape is not, and another deploy does not
+       clear it. Bump this whenever the response shape changes. */
+    const query = sponsorOnly ? "?v=2&sponsor_only=true" : "?v=2";
     const response = await fetch(`${API_URL}/jobs/facets${query}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: 3600 },
+      /* Fifteen minutes, not an hour: the suggestions follow the board, which
+         gains companies on the daily poll, and an hour meant a backend change
+         and a website deploy could not be verified in one sitting. */
+      next: { revalidate: 900 },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { companies: [], locations: [] };
