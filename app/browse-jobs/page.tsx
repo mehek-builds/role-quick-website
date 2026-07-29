@@ -13,7 +13,7 @@ import {
   type BrowseJob,
   type Filters,
 } from "@/lib/browse-jobs";
-import { logoPath, monogram } from "@/lib/company-logos";
+import { logoSrc } from "@/lib/company-logos";
 
 export const metadata: Metadata = {
   title: "Browse jobs",
@@ -52,22 +52,24 @@ export const metadata: Metadata = {
  * No border, no tinted chip. DESIGN.md bans icons-in-coloured-circles, and the
  * marks already carry every colour on the page; framing each one would turn a
  * quiet grid into 24 competing badges. */
+/* The company's own mark, top-left of the tile (Mehek, 2026-07-28).
+ *
+ * Sized 28px and left un-cropped: these are hundreds of companies' marks at
+ * hundreds of aspect ratios, and `object-contain` inside a fixed box is what
+ * stops a wide wordmark being centre-cropped into nonsense.
+ *
+ * No border, no tinted chip. DESIGN.md bans icons-in-coloured-circles, and the
+ * marks already carry every colour on the page; framing each one would turn a
+ * quiet grid into 24 competing badges.
+ *
+ * There is no fallback branch here any more. logoSrc always returns a URL, and
+ * /api/company-logo answers with a monogram image when it cannot find a mark, so
+ * an unknown company degrades inside the request rather than in the browser. */
 function CompanyMark({ company, eager }: { company: string; eager?: boolean }) {
-  const src = logoPath(company);
-  if (!src) {
-    return (
-      <span
-        aria-hidden
-        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-inner border border-border font-mono text-small text-faint"
-      >
-        {monogram(company)}
-      </span>
-    );
-  }
   /* eslint-disable-next-line @next/next/no-img-element */
   return (
     <img
-      src={src}
+      src={logoSrc(company)}
       alt=""
       width={28}
       height={28}
