@@ -65,30 +65,37 @@ export type JobsPage = {
 export const PER_PAGE = 24;
 
 /**
- * HOW STALE THE BOARD IS ALLOWED TO BE, in seconds.
+ * HOW STALE EACH HALF OF THE BOARD IS ALLOWED TO BE, in seconds.
  *
- * One number for the listings and the suggestions, because they describe the
- * same board and a visitor who sees "Bengaluru" in the dropdown should get
- * Bengaluru's jobs from the list.
+ * Two numbers, not one, because the two fetches are nothing alike in cost.
  *
- * It was 300 for the listings and 900 for the suggestions, and the split was
- * the problem. Next's Data Cache is stale-while-revalidate, so 900 meant a
- * change to the city normaliser took EIGHT MINUTES to show up on the page after
- * the backend was already serving it — the API was right and the board was
- * wrong, which reads as a broken deploy rather than a cache.
+ * The suggestions are ONE query behind two cache keys (with and without the
+ * sponsor filter). The listings key on page x title x company x city x q x
+ * sponsor, and the three text filters are free text off the query string, so
+ * their key space is effectively unbounded — every distinct search is its own
+ * entry and its own origin miss. Giving both the same window would have bought
+ * the listings a 5x increase in grouped aggregates against a Hobby-tier Neon
+ * for freshness nobody asked for: the postings themselves only move on the
+ * 06:00 UTC poll, and the lag that was actually reported was the dropdown.
  *
- * Sixty is chosen against what actually changes. The postings themselves move
- * once a day, on the 06:00 UTC poll, so the freshness that matters is not the
- * data drifting — it is a deploy or a fix landing and being visible. A minute
- * is under the time it takes to go and look.
+ * A shared number would not even have bought consistency. Each cache entry is
+ * populated on its own first-request clock, so a common TTL does not
+ * synchronise them; the dropdown and the list can disagree by up to a window
+ * either way regardless.
  *
- * The cost is bounded and small: these are two cache entries for the
- * suggestions and one per distinct search URL for the listings, shared across
- * every visitor by the edge, so the origin sees at most a handful of queries a
- * minute rather than one per page view. Raising this back up will make a change
- * look like it did not ship; tests/browse-jobs.test.mjs pins it.
+ * WHAT ABSORBS THE LOAD, stated correctly because the first version of this
+ * comment got it wrong: /browse-jobs reads searchParams and sets no route-level
+ * `revalidate`, so it is dynamically rendered per request and there is NO
+ * edge-cached HTML. The only thing between a visitor and the backend is Next's
+ * Data Cache, which is per-deployment and not shared across regions — it is
+ * cold after every deploy.
+ *
+ * And SWR means "fresh on the NEXT load", not "fresh in 60 seconds": on a
+ * dynamic route Next serves the stale body and refreshes in the background, so
+ * the first visitor after expiry still sees the old value.
  */
-export const BOARD_REVALIDATE = 60;
+export const SUGGESTIONS_REVALIDATE = 60;
+export const LISTINGS_REVALIDATE = 300;
 
 export async function fetchJobs(
   filters: Filters = {},
@@ -114,7 +121,7 @@ export async function fetchJobs(
   try {
     const response = await fetch(`${API_URL}/jobs/grouped?${params}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: BOARD_REVALIDATE },
+      next: { revalidate: LISTINGS_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { jobs: [], total: 0, ok: false };
@@ -264,7 +271,7 @@ export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
     const query = sponsorOnly ? "?v=2&sponsor_only=true" : "?v=2";
     const response = await fetch(`${API_URL}/jobs/facets${query}`, {
       headers: { Accept: "application/json" },
-      next: { revalidate: BOARD_REVALIDATE },
+      next: { revalidate: SUGGESTIONS_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { companies: [], locations: [] };

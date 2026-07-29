@@ -384,32 +384,61 @@ describe("the dropdowns read A to Z", () => {
   });
 });
 
-describe("the board does not lag behind the API", () => {
-  const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
+describe("the board's cache windows", () => {
+  /* Comments are stripped first. The previous version of this test matched the
+     raw file, so a commented-out option counted as a real one. */
+  const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^[ \t]*\/\/.*$/gm, "");
 
-  test("listings and suggestions share one freshness window", async () => {
-    /* They describe the same board: a visitor offered "Bengaluru" in the
-       dropdown must get Bengaluru's jobs from the list. Two different windows
-       is how the suggestions ended up eight minutes behind an API that was
-       already correct, which reads as a broken deploy rather than a cache. */
-    const { BOARD_REVALIDATE } = await import("../lib/browse-jobs.ts");
-    assert.equal(typeof BOARD_REVALIDATE, "number");
-    const windows = [...lib.matchAll(/revalidate:\s*([A-Za-z_0-9]+)/g)].map((m) => m[1]);
-    assert.ok(windows.length >= 2, `expected both fetches to set one, found ${windows.length}`);
-    assert.ok(
-      windows.every((w) => w === "BOARD_REVALIDATE"),
-      `every fetch must use the shared constant, found ${windows.join(", ")}`,
+  test("every fetch sets a window, and only from a named constant", () => {
+    /* The version this replaced matched /revalidate:\s*([A-Za-z_0-9]+)/ against
+       the file text, which went GREEN on all of these:
+         next: { revalidate: BOARD_REVALIDATE * 5 }   <- the exact divergence
+                                                         the test existed to stop
+         next: { revalidate: X }, cache: "no-store"   <- Next then forces 0 and
+                                                         the board stops caching
+         a commented-out option, and a new fetch with no window at all.
+       Capturing the whole expression, and counting windows against fetch call
+       sites, closes all four. */
+    const windows = [...lib.matchAll(/next:\s*\{\s*revalidate:\s*([^}]+?)\s*\}/g)].map((m) =>
+      m[1].trim(),
     );
+    const fetches = [...lib.matchAll(/\bfetch\(/g)].length;
+    assert.equal(
+      windows.length,
+      fetches,
+      `${fetches} fetch call(s) but ${windows.length} cache window(s) — one is unwindowed`,
+    );
+    for (const w of windows) {
+      assert.match(
+        w,
+        /^(LISTINGS_REVALIDATE|SUGGESTIONS_REVALIDATE)$/,
+        `"${w}" is not a bare named constant — an expression here re-splits the windows`,
+      );
+    }
   });
 
-  test("a change is visible within a minute", async () => {
-    /* The number people notice. Raising it makes a shipped change look like it
-       did not ship — which is exactly the bug this replaced. */
-    const { BOARD_REVALIDATE } = await import("../lib/browse-jobs.ts");
+  test("no fetch pairs a window with an option that cancels it", () => {
+    /* `cache: "no-store"` next to `next.revalidate` makes Next discard both and
+       force revalidate: 0, so the board would silently stop caching entirely
+       while every assertion above still passed. */
+    assert.ok(!/cache:\s*["']no-store["']/.test(lib), "no-store cancels the revalidate window");
+    assert.ok(!/cache:\s*["']force-cache["']/.test(lib), "force-cache overrides the window");
+  });
+
+  test("the suggestions refresh quickly and the listings stay cheap", async () => {
+    /* Exact values, because the comment in lib/browse-jobs.ts argues for these
+       specific numbers. A range let 30 pass while the prose said 60.
+       The split is the point: the suggestions are 2 cache keys and one query,
+       the listings key on free-text filters and are effectively unbounded, so
+       they must NOT share a window. */
+    const { SUGGESTIONS_REVALIDATE, LISTINGS_REVALIDATE } = await import("../lib/browse-jobs.ts");
+    assert.equal(SUGGESTIONS_REVALIDATE, 60);
+    assert.equal(LISTINGS_REVALIDATE, 300);
     assert.ok(
-      BOARD_REVALIDATE <= 60,
-      `${BOARD_REVALIDATE}s is long enough for a deploy to look broken`,
+      SUGGESTIONS_REVALIDATE < LISTINGS_REVALIDATE,
+      "the cheap fetch is the one allowed to be aggressive",
     );
-    assert.ok(BOARD_REVALIDATE >= 30, "below 30s the origin pays for every visitor");
   });
 });
