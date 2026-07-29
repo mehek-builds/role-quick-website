@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { readFileSync } from "node:fs";
 
 /* The rules that keep a WRONG logo off a real job.
  *
@@ -311,5 +312,31 @@ describe("ownDomainFromBoard", () => {
 
   test("a token too short to anchor on resolves nothing", () => {
     assert.equal(ownDomainFromBoard(page("https://ab.com/x"), "jobs.lever.co", "ab"), null);
+  });
+});
+
+describe("the board URL actually reaches the logo service", () => {
+  /* This is the wiring, and it is the part that can rot silently.
+   *
+   * If a refactor drops boardUrl from the tile, or the API stops returning
+   * career_url, nothing breaks and nothing looks wrong: the route just falls
+   * back to guessing a domain from the company name — the exact path that put
+   * an NFT company's logo on Block. The board would keep rendering logos, some
+   * of them wrong, and no test would have failed. Hence these. */
+  const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
+  const lib = readFileSync(new URL("../lib/company-logos.ts", import.meta.url), "utf8");
+  const data = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
+
+  test("the tile hands the job's board URL to the mark", () => {
+    assert.match(page, /boardUrl=\{job\.career_url\}/, "the tile must pass job.career_url");
+  });
+
+  test("logoSrc forwards it as the board parameter", () => {
+    assert.match(lib, /params\.set\("board"/, "logoSrc must send board=");
+    assert.match(lib, /logoSrc\(company: string, boardUrl/, "logoSrc must accept a board URL");
+  });
+
+  test("the job type still carries career_url", () => {
+    assert.match(data, /career_url\?: string \| null/, "BrowseJob must keep career_url");
   });
 });

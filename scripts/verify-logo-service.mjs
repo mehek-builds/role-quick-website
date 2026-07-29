@@ -95,7 +95,7 @@ const { companies } = await (
   await fetch(`${BOARD}/jobs/facets`, { signal: AbortSignal.timeout(30_000) })
 ).json();
 const { COMPANY_DOMAINS } = await import("../lib/company-logos.ts");
-const { isDenied, domainCandidates } = await import("../lib/company-logo-source.ts");
+const { isDenied, domainCandidates, parseBoardUrl } = await import("../lib/company-logo-source.ts");
 
 const unmapped = companies.filter(
   (c) => !(c in COMPANY_DOMAINS) && !isDenied(c) && domainCandidates(c).length > 0,
@@ -192,6 +192,31 @@ for (const evil of [
     r.source || "no source header",
   );
 }
+
+/* --- 9. the contract that feeds all of this --- */
+console.log("\n9. the API still hands the board URL to the page");
+/* The cross-repo join, and the one thing a website test cannot hold on its own.
+   If the backend stops selecting career_url on /jobs/grouped, the tile passes
+   nothing, the route silently falls back to guessing a domain from the name,
+   and the board keeps rendering logos — some of them the wrong company's. No
+   unit test anywhere would fail. This is the check that would. */
+const grouped = await (
+  await fetch(`${BOARD}/jobs/grouped?limit=5`, { signal: AbortSignal.timeout(30_000) })
+).json();
+const rows = grouped.jobs ?? [];
+check(rows.length > 0, "the board API returned rows", String(rows.length));
+const withBoardUrl = rows.filter((j) => typeof j.career_url === "string" && j.career_url);
+check(
+  withBoardUrl.length === rows.length,
+  "every row carries career_url",
+  `${withBoardUrl.length}/${rows.length}`,
+);
+const parsable = withBoardUrl.filter((j) => parseBoardUrl(j.career_url));
+check(
+  parsable.length === withBoardUrl.length,
+  "and every one is a board the logo service will accept",
+  `${parsable.length}/${withBoardUrl.length}`,
+);
 
 console.log(`\n${failures === 0 ? "PASS" : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);
