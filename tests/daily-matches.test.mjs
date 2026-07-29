@@ -4,6 +4,7 @@ import {
   AUTO_SUBMIT_PREPARED_LIMIT,
   canGenerateFrom,
   countPreparedJobs,
+  jobSubmittedOnDay,
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
@@ -98,6 +99,27 @@ describe("daily match preparation", () => {
     const ranked = rankJobs(jobs, null, null);
     const packets = [{ job_context: { company: "Acme Labs", role: "Product Engineer" } }];
     assert.equal(countPreparedJobs(ranked, packets), 1);
+  });
+
+  test("finishes a daily match only after that exact posting was submitted today", () => {
+    const today = "2026-07-30";
+    const submitted = {
+      job_context: { company: "Acme Labs", role: "Product Engineer", job_id: jobs[0].id },
+      spec: { _review: { status: "submitted", submitted_at: `${today}T08:00:00.000Z` } },
+    };
+    const ready = {
+      ...submitted,
+      spec: { _review: { status: "ready_to_submit", submitted_at: null } },
+    };
+    const yesterday = {
+      ...submitted,
+      spec: { _review: { status: "submitted", submitted_at: "2026-07-29T23:59:59.000Z" } },
+    };
+
+    assert.equal(jobSubmittedOnDay(jobs[0], [submitted], today), true);
+    assert.equal(jobSubmittedOnDay(jobs[0], [ready], today), false);
+    assert.equal(jobSubmittedOnDay(jobs[0], [yesterday], today), false);
+    assert.equal(jobSubmittedOnDay(jobs[1], [submitted], today), false);
   });
 });
 

@@ -16,8 +16,10 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { Funnel } from "@/components/app/Funnel";
+import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import {
   AUTO_SUBMIT_PREPARED_LIMIT,
+  jobSubmittedOnDay,
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
@@ -262,12 +264,19 @@ export default function Home() {
     () => (autoSubmitEnabled ? rankedJobs.slice(0, AUTO_SUBMIT_PREPARED_LIMIT) : []),
     [autoSubmitEnabled, rankedJobs],
   );
-  // Three, not five. Home is the summary and Jobs is the browse; showing most of the feed here
-  // made the two pages the same page.
-  const visibleJobs = useMemo(
-    () => rankedJobs.filter((job) => !dismissed.includes(job.id)).slice(0, 3),
-    [dismissed, rankedJobs],
+  // Three, not five. These are today's finite matches, not a window that refills from the full
+  // Jobs browser. That gives "finished for the day" a real boundary.
+  const todayJobs = useMemo(() => rankedJobs.slice(0, 3), [rankedJobs]);
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const submittedToday = useMemo(
+    () => new Set(todayJobs.filter((job) => jobSubmittedOnDay(job, packets, todayKey)).map((job) => job.id)),
+    [packets, todayJobs, todayKey],
   );
+  const visibleJobs = useMemo(
+    () => todayJobs.filter((job) => !dismissed.includes(job.id) && !submittedToday.has(job.id)),
+    [dismissed, submittedToday, todayJobs],
+  );
+  const allTodaySubmitted = todayJobs.length > 0 && submittedToday.size === todayJobs.length;
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
     const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
@@ -588,14 +597,18 @@ export default function Home() {
       {jobs === null ? (
         <ShimmerRows rows={4} />
       ) : visibleJobs.length === 0 ? (
-        <EmptyState
-          title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
-          body={dismissed.length ? "You have looked at all of them. New jobs turn up when we next check the job boards." : "Fill in your profile so Litos can pick out the best jobs from the job boards it watches."}
-        >
-          <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/profile"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
-            {dismissed.length ? "Browse all jobs" : "Complete profile"}
-          </Link>
-        </EmptyState>
+        allTodaySubmitted ? (
+          <DailyMatchesComplete />
+        ) : (
+          <EmptyState
+            title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
+            body={dismissed.length ? "You have looked at all of them. New jobs turn up when we next check the job boards." : "Fill in your profile so Litos can pick out the best jobs from the job boards it watches."}
+          >
+            <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/profile"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+              {dismissed.length ? "Browse all jobs" : "Complete profile"}
+            </Link>
+          </EmptyState>
+        )
       ) : (
         <div className="space-y-3">
           {visibleJobs.map((job) => (
