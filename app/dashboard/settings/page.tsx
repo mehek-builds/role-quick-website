@@ -605,7 +605,13 @@ export default function Settings() {
                   on record. Sources: {sponsorship.evidence.source} (FY
                   {sponsorship.evidence.fiscal_years[0]} to FY
                   {sponsorship.evidence.fiscal_years[sponsorship.evidence.fiscal_years.length - 1]})
-                  {sponsorship.evidence.lca_source ? `, and ${sponsorship.evidence.lca_source}.` : "."}
+                  {sponsorship.evidence.lca_source
+                    ? `, and ${sponsorship.evidence.lca_source}${
+                        sponsorship.evidence.lca_quarters?.length
+                          ? ` (${sponsorship.evidence.lca_quarters[0].split("_")[0]})`
+                          : ""
+                      }.`
+                    : "."}
                 </span>
               )}
             </span>
