@@ -264,16 +264,16 @@ export default function Home() {
     () => (autoSubmitEnabled ? rankedJobs.slice(0, AUTO_SUBMIT_PREPARED_LIMIT) : []),
     [autoSubmitEnabled, rankedJobs],
   );
-  // Three, not five. These are today's finite matches, not a window that refills from the full
-  // Jobs browser. That gives "finished for the day" a real boundary.
-  const todayJobs = useMemo(() => rankedJobs.slice(0, 3), [rankedJobs]);
+  // The backend response is today's complete match set, and its size can vary. Home shows only
+  // the next three unfinished matches, but completion must account for every match in this set.
+  const todayJobs = rankedJobs;
   const todayKey = new Date().toISOString().slice(0, 10);
   const submittedToday = useMemo(
     () => new Set(todayJobs.filter((job) => jobSubmittedOnDay(job, packets, todayKey)).map((job) => job.id)),
     [packets, todayJobs, todayKey],
   );
   const visibleJobs = useMemo(
-    () => todayJobs.filter((job) => !dismissed.includes(job.id) && !submittedToday.has(job.id)),
+    () => todayJobs.filter((job) => !dismissed.includes(job.id) && !submittedToday.has(job.id)).slice(0, 3),
     [dismissed, submittedToday, todayJobs],
   );
   const allTodaySubmitted = todayJobs.length > 0 && submittedToday.size === todayJobs.length;
