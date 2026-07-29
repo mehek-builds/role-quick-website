@@ -587,9 +587,10 @@ export default function Settings() {
             <span>
               <span className="block text-sm font-medium text-ink">Only show jobs where sponsorship is confirmed</span>
               <span className="mt-1 block text-xs leading-5 text-muted">
-                We check H-1B filings with the US government, and what each job post says about
-                sponsorship. A post that rules sponsorship out is hidden even when the company
-                sponsors for other roles.
+                We check H-1B filings with the US government (approved petitions, and applications
+                the Labor Department certified), and what each job post says about sponsorship. A
+                post that rules sponsorship out is hidden even when the company sponsors for other
+                roles.
               </span>
               {sponsorship.locked && (
                 <span className="mt-2 block text-xs leading-5 text-warn">
@@ -600,10 +601,17 @@ export default function Settings() {
               {sponsorship.evidence && (
                 <span className="mt-2 block text-xs leading-5 text-faint">
                   {sponsorship.evidence.confirmed_employers} of the{" "}
-                  {sponsorship.evidence.checked_employers} companies Litos watches have approved
-                  H-1B petitions on file for FY{sponsorship.evidence.fiscal_years[0]} to FY
-                  {sponsorship.evidence.fiscal_years[sponsorship.evidence.fiscal_years.length - 1]}.
-                  Source: {sponsorship.evidence.source}.
+                  {sponsorship.evidence.checked_employers} companies Litos watches have H-1B filings
+                  on record. Sources: {sponsorship.evidence.source} (FY
+                  {sponsorship.evidence.fiscal_years[0]} to FY
+                  {sponsorship.evidence.fiscal_years[sponsorship.evidence.fiscal_years.length - 1]})
+                  {sponsorship.evidence.lca_source
+                    ? `, and ${sponsorship.evidence.lca_source}${
+                        sponsorship.evidence.lca_quarters?.length
+                          ? ` (${sponsorship.evidence.lca_quarters[0].split("_")[0]})`
+                          : ""
+                      }.`
+                    : "."}
                 </span>
               )}
             </span>

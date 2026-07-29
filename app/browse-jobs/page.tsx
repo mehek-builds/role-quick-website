@@ -321,8 +321,8 @@ export default async function BrowseJobs({
         {ok && (sponsorOnly || jobs.some((job) => job.sponsorship_evidence)) && (
           <p className="mt-4 max-w-[62ch] text-small leading-6 text-muted">
             {sponsorOnly
-              ? "Showing only companies with approved H-1B petitions on file with USCIS, plus roles whose job post says sponsorship is available. A post that rules sponsorship out is hidden even when the company sponsors for other roles. A filing record is not a promise to sponsor you."
-              : "SPONSORS VISAS means the company has approved H-1B petitions on file with USCIS. SPONSORSHIP OFFERED means the job post says so. A filing record is not a promise to sponsor you."}
+              ? "Showing only companies with H-1B filings on record with the US government, plus roles whose job post says sponsorship is available. A post that rules sponsorship out is hidden even when the company sponsors for other roles. A filing record is not a promise to sponsor you."
+              : "SPONSORS VISAS means the company has H-1B filings on record with the US government: approved petitions, or applications it filed and the Labor Department certified. SPONSORSHIP OFFERED means the job post says so. A filing record is not a promise to sponsor you."}
           </p>
         )}
 
