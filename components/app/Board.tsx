@@ -20,6 +20,22 @@ import { fetchBoard, moveCard, type BoardCard, type Stage } from "@/lib/jd-match
  * pointer-precision gesture to record a fact the student already knows. Two taps, always available,
  * beat a gesture that only works on one input device.
  */
+/** "Just now" / "3h ago" / "5d ago", the way the card reads it on a board. Anything past a month
+ *  falls back to a date, because "47d ago" is arithmetic the reader has to do. */
+function relativeTime(at: string | null): string {
+  if (!at) return "";
+  const ms = Date.now() - new Date(at).getTime();
+  if (Number.isNaN(ms)) return "";
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 2) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days <= 30) return `${days}d ago`;
+  return new Date(at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 const STAGE_LABEL: Record<Stage, string> = {
   saved: "Saved",
   applied: "Applied",
@@ -129,9 +145,13 @@ export function Board({
                     <p className="truncate text-[13px] font-medium text-ink">{card.role}</p>
                     <p className="truncate text-xs text-muted">{card.company}</p>
                   </button>
-                  {card.submission_status && (
-                    <p className="mt-1 text-[11px] text-faint">Litos: {card.submission_status.replace(/_/g, " ")}</p>
-                  )}
+                  {/* When it last moved, on every card. Without it a column is a set of names with
+                      no sense of which is live and which has been sitting untouched for a month,
+                      which is the question a board is looked at to answer. */}
+                  <p className="mt-1 text-[11px] text-faint">
+                    {relativeTime(card.moved_at ?? card.created_at)}
+                    {card.submission_status ? ` · Litos: ${card.submission_status.replace(/_/g, " ")}` : ""}
+                  </p>
                   <MoveControl card={card} stages={stages} busy={busy.has(card.id)} onMove={move} />
                 </li>
               ))}
