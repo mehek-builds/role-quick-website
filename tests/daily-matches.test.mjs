@@ -5,6 +5,7 @@ import {
   countPreparedJobs,
   packetMatchesJob,
   rankJobs,
+  resumeGenerationBody,
 } from "../lib/daily-matches.ts";
 
 const jobs = [
@@ -67,5 +68,28 @@ describe("daily match preparation", () => {
     const ranked = rankJobs(jobs, null, null);
     const packets = [{ job_context: { company: "Acme Labs", role: "Product Engineer" } }];
     assert.equal(countPreparedJobs(ranked, packets), 1);
+  });
+});
+
+describe("resumeGenerationBody", () => {
+  const identity = { full_name: "Alex Rivera", email: "alex@example.com" };
+  const applicationProfile = { phone: "+1 213 555 0100" };
+
+  /* The prewarm loop is how most packets are created, and once a packet exists, opening the posting
+     from the jobs list reuses it instead of generating again. So if the id is missing here it is
+     missing almost everywhere, and the "Applied" badge falls back to company+role for nearly every
+     application, which is the sibling bug this whole change exists to remove. */
+  test("records the posting id, so the Applied badge can be exact", () => {
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
+    assert.equal(body.job_id, jobs[0].id);
+  });
+
+  test("still sends everything the generate route needs", () => {
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
+    assert.equal(body.company, jobs[0].company_name);
+    assert.equal(body.role, jobs[0].title);
+    assert.equal(body.jd_text, jobs[0].description);
+    assert.equal(body.application.portal_url, jobs[0].apply_url);
+    assert.equal(body.contact.full_name, "Alex Rivera");
   });
 });
