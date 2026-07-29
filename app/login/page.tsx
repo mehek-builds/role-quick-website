@@ -549,18 +549,21 @@ export default function Login() {
                   type="button"
                   disabled={busy || guestBusy}
                   onClick={() => void continueAsGuest()} variant="secondary" block>
-                  {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Look around without signing up"}
+                  {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Guest mode"}
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-faint">
                   Your first week is free. No card needed. You only see this the first time.
                 </p>
                 {/* Both controls in this block can create an account: Google on a
-                    first sign-in, and looking around, which makes a guest one.
+                    first sign-in, and guest mode, which makes a guest one.
                     Neither passes through the signup flow, so without this line
                     the two easiest ways in would be the two with no agreement
-                    attached. Worded to cover both rather than repeated twice. */}
+                    attached. Worded to cover both rather than repeated twice.
+                    It NAMES the button, so the sentence keeps pointing at a
+                    control the reader can see; it said "looking around" while
+                    the button said "Look around without signing up". */}
                 <p className="mt-4 text-center text-xs leading-5 text-faint">
-                  Continuing with Google or looking around creates an account,
+                  Continuing with Google or using guest mode creates an account,
                   under the same{" "}
                   <a href="/terms" className="underline hover:text-muted">
                     Terms
