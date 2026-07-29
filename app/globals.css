@@ -537,6 +537,12 @@ html {
 }
 /* ---------- mock window ---------- */
 .rq-f-mock{position:relative;margin:0 auto;width:100%;max-width:56rem}
+/* The glow bleeds 40px past the frame on every side. At 768 that put the demo's
+   right edge at 784 in a 768 viewport and gave the whole page a 16px horizontal
+   scrollbar, so the root clips it. overflow-x rather than overflow: the demo is
+   as tall as its frame, and clipping vertically would eat the glow above and
+   below for nothing. */
+.rq-f-root{overflow-x:clip}
 .rq-f-mock-glow{position:absolute;inset:-40px;border-radius:2.5rem;pointer-events:none;
   background:radial-gradient(ellipse at center,rgba(107,132,232,.22),transparent 70%);filter:blur(40px)}
 .rq-f-mock-frame{position:relative;border-radius:20px;background:#fff;

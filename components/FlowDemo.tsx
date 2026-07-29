@@ -772,8 +772,10 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
                 ? <Tick key={i} className="rq-f-stick" />
                 : <i key={i} className={cx(["resume", "form", "email"][i] === stage && "rq-f-on")} />)}
           </span>
-          {orbState && <Orb state={orbState} px={20} />}
-          {s.autopilot && !orbState && <Orb state="working" px={20} />}
+          {/* No orb here. At 20px it sits beside three step marks of the same
+              weight and reads as a fourth step; the lit bar already says which
+              stage is working. The desktop variant keeps it, where it has room
+              and no row of marks to be confused with. */}
           {action
             ? <span className="rq-fp-act" style={{ transform: `scale(${st.endsWith("Click") ? 0.94 : 1})` }}>{action.label}</span>
             : sent && <span className="rq-fp-sent">Sent 19:42:31</span>}
