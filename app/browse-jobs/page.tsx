@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { ComboField } from "@/components/browse/ComboField";
 import { STORE_URL } from "@/lib/config";
 import {
   agoLabel,
@@ -122,58 +123,24 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
           sponsorship" because a posting did not mention it would be stating an employer's policy
           that nobody at that employer has stated. */}
       {job.sponsorship_evidence && (
-        <p className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">
+        /* The qualification lives ON the badge, the way it already does on the
+           dashboard, rather than in a paragraph under the search fields. The
+           explanation was removed from the page (Mehek, 2026-07-29: people know
+           what "sponsors visas" means, they do not need it spelled out) but a
+           claim about an employer's immigration practice still cannot travel
+           without it — "has filings on record" is evidence, never an offer. */
+        <p
+          title={
+            job.sponsorship_evidence === "posting_offers"
+              ? "This job post says visa sponsorship is available"
+              : "This company has H-1B filings on record with the US government: an approved petition, or an application it filed and the Labor Department certified. That is not a promise to sponsor you."
+          }
+          className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-faint"
+        >
           {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Sponsors visas"}
         </p>
       )}
     </a>
-  );
-}
-
-/* One search field: a label, an input, and a datalist of real values from the
- * board. The datalist is what makes this both a dropdown and a free-text box at
- * once — the browser offers the suggestions on focus and filters them as you
- * type, but nothing is rejected, so "Berlin" works whether or not it is in the
- * list. No JS, no combobox library, and it stays usable with the keyboard.
- *
- * The suggestions are capped server-side at 120 per field: a datalist of every
- * one of ~5,000 titles is slower to render than it is useful to read. */
-function Field({
-  name,
-  label,
-  placeholder,
-  value,
-  options,
-}: {
-  name: string;
-  label: string;
-  placeholder: string;
-  value: string;
-  options: string[];
-}) {
-  const listId = `${name}-options`;
-  return (
-    <label className="flex min-w-0 flex-col gap-1.5">
-      <span className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">
-        {label}
-      </span>
-      <input
-        type="search"
-        name={name}
-        defaultValue={value}
-        placeholder={placeholder}
-        list={options.length ? listId : undefined}
-        autoComplete="off"
-        className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink placeholder:text-faint focus:border-brand focus:outline-none"
-      />
-      {options.length > 0 && (
-        <datalist id={listId}>
-          {options.map((o) => (
-            <option key={o} value={o} />
-          ))}
-        </datalist>
-      )}
-    </label>
   );
 }
 
@@ -277,32 +244,33 @@ export default async function BrowseJobs({
           )}
         </p>
 
-        {/* Three fields, not one box (Mehek, 2026-07-28). Each is a native
-            combobox: an <input> with a <datalist>, so a visitor can pick a
-            suggestion OR type anything they like, and the same markup does
-            both with no JavaScript. They AND together and each works alone, so
-            filling in only the city and pressing Search is a valid search.
-            A plain GET form, so every result stays a shareable URL. */}
+        {/* Three fields, not one box (Mehek, 2026-07-28). Each is a combobox the
+            page owns rather than one the browser draws — see ComboField for why
+            a datalist could not be made to sit under its field or wear our
+            type. A visitor can pick a suggestion or type anything; the fields
+            AND together and each works alone, so filling in only the city and
+            pressing Search is a valid search. Still a plain GET form, so every
+            result stays a shareable URL. */}
         <form
           action="/browse-jobs"
           method="get"
           className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[900px] lg:grid-cols-[1fr_1fr_1fr_auto]"
         >
-          <Field
+          <ComboField
             name="title"
             label="Job title"
             placeholder="e.g. Software Engineer"
             value={filters.title ?? ""}
             options={withOther(JOB_TITLES)}
           />
-          <Field
+          <ComboField
             name="company"
             label="Company"
             placeholder="e.g. Stripe"
             value={filters.company ?? ""}
             options={withOther(facets.companies)}
           />
-          <Field
+          <ComboField
             name="location"
             label="City"
             placeholder="e.g. New York"
@@ -333,16 +301,6 @@ export default async function BrowseJobs({
           </button>
         </form>
 
-        {/* Shown whenever a badge is on the page, not only when the checkbox is ticked. The tiles
-            print "SPONSORS VISAS" on the default board too, and a claim about an employer's
-            immigration practice cannot carry its qualification on a different page. */}
-        {ok && (sponsorOnly || jobs.some((job) => job.sponsorship_evidence)) && (
-          <p className="mt-4 max-w-[62ch] text-small leading-6 text-muted">
-            {sponsorOnly
-              ? "Showing only companies with H-1B filings on record with the US government, plus roles whose job post says sponsorship is available. A post that rules sponsorship out is hidden even when the company sponsors for other roles. A filing record is not a promise to sponsor you."
-              : "SPONSORS VISAS means the company has H-1B filings on record with the US government: approved petitions, or applications it filed and the Labor Department certified. SPONSORSHIP OFFERED means the job post says so. A filing record is not a promise to sponsor you."}
-          </p>
-        )}
 
         {searching && ok && (
           <p className="mt-4 font-mono text-machine text-muted">
