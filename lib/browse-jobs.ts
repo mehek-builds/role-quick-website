@@ -64,6 +64,39 @@ export type JobsPage = {
 
 export const PER_PAGE = 24;
 
+/**
+ * HOW STALE EACH HALF OF THE BOARD IS ALLOWED TO BE, in seconds.
+ *
+ * Two numbers, not one, because the two fetches are nothing alike in cost.
+ *
+ * The suggestions are ONE query behind two cache keys (with and without the
+ * sponsor filter). The listings key on page x title x company x city x q x
+ * sponsor, and the three text filters are free text off the query string, so
+ * their key space is effectively unbounded — every distinct search is its own
+ * entry and its own origin miss. Giving both the same window would have bought
+ * the listings a 5x increase in grouped aggregates against a Hobby-tier Neon
+ * for freshness nobody asked for: the postings themselves only move on the
+ * 06:00 UTC poll, and the lag that was actually reported was the dropdown.
+ *
+ * A shared number would not even have bought consistency. Each cache entry is
+ * populated on its own first-request clock, so a common TTL does not
+ * synchronise them; the dropdown and the list can disagree by up to a window
+ * either way regardless.
+ *
+ * WHAT ABSORBS THE LOAD, stated correctly because the first version of this
+ * comment got it wrong: /browse-jobs reads searchParams and sets no route-level
+ * `revalidate`, so it is dynamically rendered per request and there is NO
+ * edge-cached HTML. The only thing between a visitor and the backend is Next's
+ * Data Cache, which is per-deployment and not shared across regions — it is
+ * cold after every deploy.
+ *
+ * And SWR means "fresh on the NEXT load", not "fresh in 60 seconds": on a
+ * dynamic route Next serves the stale body and refreshes in the background, so
+ * the first visitor after expiry still sees the old value.
+ */
+export const SUGGESTIONS_REVALIDATE = 60;
+export const LISTINGS_REVALIDATE = 300;
+
 export async function fetchJobs(
   filters: Filters = {},
   page = 1,
@@ -88,10 +121,7 @@ export async function fetchJobs(
   try {
     const response = await fetch(`${API_URL}/jobs/grouped?${params}`, {
       headers: { Accept: "application/json" },
-      /* Postings move slowly (the source refreshes once a day) but the board is
-         the first thing a visitor sees, so a short window keeps it cheap
-         without ever showing yesterday's page after a refresh has landed. */
-      next: { revalidate: 300 },
+      next: { revalidate: LISTINGS_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { jobs: [], total: 0, ok: false };
@@ -241,10 +271,7 @@ export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
     const query = sponsorOnly ? "?v=2&sponsor_only=true" : "?v=2";
     const response = await fetch(`${API_URL}/jobs/facets${query}`, {
       headers: { Accept: "application/json" },
-      /* Fifteen minutes, not an hour: the suggestions follow the board, which
-         gains companies on the daily poll, and an hour meant a backend change
-         and a website deploy could not be verified in one sitting. */
-      next: { revalidate: 900 },
+      next: { revalidate: SUGGESTIONS_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { companies: [], locations: [] };
