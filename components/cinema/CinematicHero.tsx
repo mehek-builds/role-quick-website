@@ -567,14 +567,16 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         {/* Vertically centred: two columns side by side are far shorter than
             the same content stacked, so there is slack to centre INTO. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:inset-0 sm:flex sm:flex-col sm:items-center sm:justify-center sm:px-8 sm:pt-6 lg:px-10">
-        {/* The demo column is a fixed 720, the width FlowDemo is drawn at, and
-            the copy takes whatever is left. It is not a proportional split:
-            shrinking the demo shrinks type inside a picture of a UI, whereas
-            the copy reflows, so the fixed side is the one that cannot give.
+        {/* The copy takes up to 520 and the demo takes the rest, capped at the
+            720 it is drawn at. Not the other way round: a fixed 720 demo column
+            starved the copy to 440 at 1280 and wrapped every one of the three
+            CTAs onto two lines. The demo scales cleanly and the copy does not,
+            so the demo is the side that gives. At 1440 it still gets its full
+            720; at 1280 it runs at 0.89.
 
             items-stretch (the grid default) so the two boxes share a bottom
             edge as well as a top one: one row of two equal panels. */}
-        <div className="mx-auto grid w-full max-w-6xl gap-8 xl:max-w-[1320px] xl:grid-cols-[minmax(0,1fr)_720px] xl:gap-10">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 xl:max-w-[1320px] xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] xl:gap-10">
           {/* max-w-2xl until the grid actually splits. Below xl the columns
               collapse to one and the card would otherwise stretch to the full
               max-w-6xl, giving a measure far past the ~660px the type scale
