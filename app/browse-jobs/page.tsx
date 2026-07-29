@@ -16,6 +16,7 @@ import {
 } from "@/lib/browse-jobs";
 import { logoSrc } from "@/lib/company-logos";
 import { isOther, JOB_TITLES, withOther } from "@/lib/job-titles";
+import { formatPay, jobTypeLabel } from "@/lib/pay";
 
 export const metadata: Metadata = {
   title: "Browse jobs",
@@ -93,6 +94,8 @@ function CompanyMark({
 function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
   const ago = agoLabel(job);
   const { shown, extra } = locationSummary(job);
+  const pay = formatPay(job);
+  const type = jobTypeLabel(job.employment_type);
   return (
     <a
       href={job.apply_url}
@@ -113,6 +116,19 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
           <span className="text-faint/80"> +{extra} more</span>
         )}
       </p>
+      {/* Pay and job type, on the line under the location — the position Handshake gives them, and
+          the one a reader's eye is already travelling down.
+          Either can be absent and usually is: two thirds of the board publishes no pay, and
+          Greenhouse states no job type at all. An absent one renders NOTHING rather than "Not
+          listed", so a figure on a tile always means the employer published one. When neither is
+          present the line does not render, and the tile looks exactly as it did before. */}
+      {(pay || type) && (
+        <p className="mt-1.5 text-small leading-snug text-ink">
+          {pay && <span className="font-medium">{pay}</span>}
+          {pay && type && <span className="text-faint"> · </span>}
+          {type && <span className="text-muted">{type}</span>}
+        </p>
+      )}
       <p className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">
         {job.openings > 1 && (
           <span>{job.openings} openings{ago ? " · " : ""}</span>

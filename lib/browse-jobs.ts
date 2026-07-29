@@ -33,6 +33,17 @@ export type BrowseJob = {
   posted_at: string | null;
   first_seen_at: string;
   ats_name: string;
+  /* What the employer published about pay, and what kind of job it is. Null on most rows, and
+     rendered as nothing at all — see lib/pay.ts.
+     On this endpoint these are GROUP aggregates: one tile is one role that may be open in 23
+     cities, and the API only fills them in when every city that published a figure agreed on the
+     currency and the period. A role paying USD in Austin and CAD in Toronto has no single range,
+     so it gets none rather than an invented one. */
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency?: string | null;
+  salary_interval?: string | null;
+  employment_type?: string | null;
   /* The employer's board on their ATS — the URL we poll. Carried onto the tile
      so the logo service can ask that board who the company is, instead of
      guessing from the name. */

@@ -44,6 +44,12 @@ export function qaJobsPage(): JobsPage {
         ats_name: "greenhouse",
         career_url: "https://ramp.com/careers",
         match_score: 94,
+        /* Pay states, which are otherwise hard to produce on demand and are the point of this
+           fixture. This row is the ordinary one: an annual range the employer published. */
+        salary_min: 145700,
+        salary_max: 200300,
+        salary_currency: "USD",
+        salary_interval: "year",
       },
       {
         id: "qa-2",
@@ -61,14 +67,19 @@ export function qaJobsPage(): JobsPage {
         ats_name: "ashby",
         career_url: "https://linear.app/careers",
         match_score: 91,
+        // A currency that is not dollars, to check the symbol is not hardcoded.
+        salary_min: 110000,
+        salary_max: 185000,
+        salary_currency: "EUR",
+        salary_interval: "year",
       },
       {
         id: "qa-3",
         company_name: "Notion",
-        title: "Product Manager, Growth",
+        title: "Product Management Intern (Fall 2026)",
         location: "New York, NY",
         department: "Product",
-        employment_type: "Full-time",
+        employment_type: "Internship",
         description: "",
         apply_url: "https://jobs.lever.co/notion/3",
         posting_url: "https://jobs.lever.co/notion/3",
@@ -78,6 +89,11 @@ export function qaJobsPage(): JobsPage {
         ats_name: "lever",
         career_url: "https://notion.so/careers",
         match_score: 89,
+        // An hourly rate on an internship: it must keep its exact figures rather than round to "$0K".
+        salary_min: 45,
+        salary_max: 55,
+        salary_currency: "USD",
+        salary_interval: "hour",
       },
       {
         id: "qa-4",
@@ -95,6 +111,11 @@ export function qaJobsPage(): JobsPage {
         ats_name: "greenhouse",
         career_url: "https://vercel.com/careers",
         match_score: 76,
+        // One published figure rather than a band: it must print once, not "$180K - $180K".
+        salary_min: 180000,
+        salary_max: 180000,
+        salary_currency: "USD",
+        salary_interval: "year",
       },
       {
         // Careers URL is the job board itself, so there is no company domain to draw an icon from.
@@ -104,7 +125,10 @@ export function qaJobsPage(): JobsPage {
         title: "Data Analyst, Operations",
         location: "Austin, TX",
         department: null,
-        employment_type: "Full-time",
+        /* THE COMMON CASE, and the one worth looking at: a Greenhouse posting states neither pay
+           nor job type, so this row shows neither. It must not gain a "Full-time" chip or a
+           "Not listed" salary — see lib/pay.ts. */
+        employment_type: null,
         description: "",
         apply_url: "https://boards.greenhouse.io/sierralabs/5",
         posting_url: "https://boards.greenhouse.io/sierralabs/5",
