@@ -219,7 +219,10 @@ export function countLabel(n: number): string {
    Cached for an hour — the company list changes when a source is added, which
    is a manual act, and the city and title lists move only as slowly as the
    board does. */
-export type Facets = { companies: string[]; locations: string[]; titles: string[] };
+/* `titles` is gone from the API deliberately: it returned the board's most
+   common RAW posting titles, and the field now offers a curated vocabulary of
+   role families from lib/job-titles.ts instead. */
+export type Facets = { companies: string[]; locations: string[] };
 
 export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
   const { API_URL } = await import("./config");
@@ -233,14 +236,13 @@ export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
       next: { revalidate: 3600 },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok) return { companies: [], locations: [], titles: [] };
+    if (!response.ok) return { companies: [], locations: [] };
     const body = await response.json();
     return {
       companies: Array.isArray(body.companies) ? body.companies : [],
       locations: Array.isArray(body.locations) ? body.locations : [],
-      titles: Array.isArray(body.titles) ? body.titles : [],
     };
   } catch {
-    return { companies: [], locations: [], titles: [] };
+    return { companies: [], locations: [] };
   }
 }

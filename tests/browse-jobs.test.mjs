@@ -242,3 +242,47 @@ describe("the board's honesty", () => {
     }
   });
 });
+
+describe("the three dropdowns", () => {
+  const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
+
+  test("the title field offers fifty role families, not raw postings", async () => {
+    /* Mehek, 2026-07-29: fifty common titles, nothing more. The suggestions
+       used to be the board's most common RAW titles, so the field opened on
+       "Senior Product Manager - Network Path" — a real posting, and not a thing
+       anyone types into a box labelled Job title. */
+    const { JOB_TITLES } = await import("../lib/job-titles.ts");
+    assert.equal(JOB_TITLES.length, 50, `expected 50 titles, got ${JOB_TITLES.length}`);
+    assert.equal(new Set(JOB_TITLES).size, 50, "the list must not repeat a title");
+    for (const t of JOB_TITLES) {
+      assert.ok(t.length < 40, `"${t}" reads like a posting, not a role family`);
+      assert.ok(!/[-–—(]/.test(t), `"${t}" carries posting punctuation`);
+    }
+  });
+
+  test("every field ends with Other", async () => {
+    const { withOther, OTHER } = await import("../lib/job-titles.ts");
+    assert.equal(withOther(["A", "B"]).at(-1), OTHER);
+    /* All three lists are wrapped, not just the curated one. */
+    assert.equal((page.match(/withOther\(/g) ?? []).length, 3, "all three fields need Other");
+  });
+
+  test("choosing Other means no filter, not a search for the word", async () => {
+    /* Searching the literal word would return the few postings with "other" in
+       the title, which is the opposite of what someone picking it wants. */
+    const { isOther } = await import("../lib/job-titles.ts");
+    for (const v of ["Other", "other", "  OTHER  "]) assert.ok(isOther(v), v);
+    for (const v of ["Software Engineer", "", undefined, "Otherworldly Inc"]) {
+      assert.ok(!isOther(v), String(v));
+    }
+    assert.match(page, /isOther\(value\) \? "" : value/, "clean() must drop an Other value");
+  });
+
+  test("the page no longer asks the API for titles", async () => {
+    /* The endpoint stopped returning them; reading a field that is gone would
+       silently leave the dropdown empty. */
+    const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
+    assert.ok(!/facets\.titles/.test(page), "the page must use the curated list");
+    assert.ok(!/titles: string\[\]/.test(lib), "Facets must not still declare titles");
+  });
+});
