@@ -5,7 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
 import { createPaperRoll } from "./paperRollEngine";
-import { PacketDemo } from "@/components/PacketDemo";
+import { FlowDemoFit } from "@/components/FlowDemo";
 import { track } from "@/lib/analytics";
 
 /* The scroll film. A 121-frame generated sequence (public/film/) is drawn on
@@ -459,14 +459,16 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
      caption asserted a policy, this shows the product doing the thing the
      headline claims, on a real posting, against the receipt clock.
 
-     Hidden below xl, and xl is measured rather than picked. The demo needs
-     about 600px to stay legible (a 348px panel plus a job column wide enough
-     to read) and the copy column needs about 380, which with the gap and the
-     page padding is roughly 1140px. Below that app/page.tsx renders it
-     directly beneath the hero instead. */
+     Hidden below xl, and xl is measured rather than picked. FlowDemo is drawn
+     at a fixed 720x476 and FlowDemoFit only ever shrinks it, so the column is
+     720 wide and the copy takes the rest. Below xl the two do not both fit at
+     an honest size, so app/page.tsx renders the same demo directly beneath the
+     hero instead, where the phone variant has room to breathe. */
   const demoNode = (
     <div className="rq-enter hidden w-full xl:block">
-      <div data-demo className="h-full xl:max-w-[600px]"><PacketDemo /></div>
+      <div data-demo className="flex h-full items-center justify-end">
+        <FlowDemoFit />
+      </div>
     </div>
   );
 
@@ -565,13 +567,14 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
         {/* Vertically centred: two columns side by side are far shorter than
             the same content stacked, so there is slack to centre INTO. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:inset-0 sm:flex sm:flex-col sm:items-center sm:justify-center sm:px-8 sm:pt-6 lg:px-10">
-        {/* The copy column takes 520 of the 1152 and the demo takes what is
-            left: the headline is the thing being read and the demo is the
-            thing being glanced at, so the split is not near-even.
+        {/* The demo column is a fixed 720, the width FlowDemo is drawn at, and
+            the copy takes whatever is left. It is not a proportional split:
+            shrinking the demo shrinks type inside a picture of a UI, whereas
+            the copy reflows, so the fixed side is the one that cannot give.
 
             items-stretch (the grid default) so the two boxes share a bottom
             edge as well as a top one: one row of two equal panels. */}
-        <div className="mx-auto grid w-full max-w-6xl gap-8 xl:grid-cols-[minmax(0,520px)_minmax(0,1fr)] xl:gap-10">
+        <div className="mx-auto grid w-full max-w-6xl gap-8 xl:max-w-[1320px] xl:grid-cols-[minmax(0,1fr)_720px] xl:gap-10">
           {/* max-w-2xl until the grid actually splits. Below xl the columns
               collapse to one and the card would otherwise stretch to the full
               max-w-6xl, giving a measure far past the ~660px the type scale
