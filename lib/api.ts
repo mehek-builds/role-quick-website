@@ -245,6 +245,9 @@ export type SponsorshipState = {
   evidence?: {
     source: string;
     fiscal_years: number[];
+    /** The second, more current source. Absent on a backend that predates it. */
+    lca_source?: string;
+    lca_quarters?: string[];
     confirmed_employers: number;
     checked_employers: number;
   };

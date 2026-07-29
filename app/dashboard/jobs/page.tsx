@@ -200,8 +200,8 @@ export default function JobsPage() {
           ones that will not sponsor you". */}
       {sponsorOnly && (
         <p className="rounded-inner border border-border bg-surface-alt px-4 py-3 text-xs leading-5 text-muted">
-          Showing only jobs where we could confirm the company sponsors work visas, from H-1B
-          filings and what each job post says.{" "}
+          Showing only jobs where we could confirm the company sponsors work visas, from its H-1B
+          filings with the US government and what each job post says.{" "}
           <Link href="/dashboard/settings#visa-sponsorship" className="text-brand-ink underline underline-offset-2">
             Why am I seeing this?
           </Link>
@@ -353,7 +353,7 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
       title={
         evidence === "posting_offers"
           ? "This job post says visa sponsorship is available"
-          : "This company has approved H-1B petitions on file with USCIS. That is not a promise to sponsor you."
+          : "This company has H-1B filings on record with the US government: an approved petition, or an application it filed and the Labor Department certified. That is not a promise to sponsor you."
       }
     >
       {evidence === "posting_offers" ? "Sponsorship offered" : "Sponsors visas"}
