@@ -17,7 +17,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
-import { packetMatchesJob } from "@/lib/daily-matches";
+import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
@@ -276,12 +276,37 @@ export default function Applications() {
         setShowNewApplication(false);
         setNotice("Your resume is ready. Compare it with the job below.");
       } else {
-        setNewApplication({ company: pendingJob.company_name, role: pendingJob.title, portalUrl: pendingJob.apply_url, jobDescription: pendingJob.description, jobId: pendingJob.id });
+        /* Arriving from "Apply now" IS the request, so build it now rather than showing a filled
+           form and asking again. Nothing here came from the student's typing: company, role, link
+           and description are all read off the posting.
+
+           The draft is passed to createApplication directly, not read back from state, because
+           setNewApplication has not committed yet in this tick. The panel is still opened so the
+           work is visible and the fields stay editable if the generation fails. */
+        const draft = {
+          company: pendingJob.company_name,
+          role: pendingJob.title,
+          portalUrl: pendingJob.apply_url,
+          jobDescription: pendingJob.description,
+          jobId: pendingJob.id,
+        };
+        setNewApplication(draft);
         setShowNewApplication(true);
-        setNotice("No resume for this job yet. Make one when you want to apply.");
+        if (canGenerateFrom(draft)) {
+          setNotice("Building your resume for this job.");
+          void createApplication(draft);
+        } else {
+          /* Some postings arrive with a stub description or a link the generator will not accept.
+             Firing anyway would spend the attempt and answer with "Fill in all four boxes first",
+             which is nonsense to someone who filled in nothing. Say what is actually missing. */
+          setNotice("This posting did not come with enough detail. Paste the job description below, then generate.");
+        }
       }
       setPendingJob(null);
     });
+    // createApplication is redeclared every render and is not a dependency worth chasing: the
+    // effect is keyed on pendingJob, which is cleared above, so it runs once per arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packets, pendingJob, selectPacket]);
 
   const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
@@ -432,12 +457,16 @@ export default function Applications() {
     }
   }
 
-  async function createApplication() {
-    const company = newApplication.company.trim();
-    const role = newApplication.role.trim();
-    const portalUrl = newApplication.portalUrl.trim();
-    const jobDescription = newApplication.jobDescription.trim();
-    if (!company || !role || !portalUrl || jobDescription.length < 20) {
+  /* Takes the draft explicitly rather than reading state, because arriving from "Apply now" builds
+     the draft and generates from it in the same tick. React has not committed setNewApplication by
+     then, so reading state here would generate from the PREVIOUS draft, or from an empty one on
+     first load. The panel's own button passes nothing and gets the state, as before. */
+  async function createApplication(draft: NewApplicationDraft = newApplication) {
+    const company = draft.company.trim();
+    const role = draft.role.trim();
+    const portalUrl = draft.portalUrl.trim();
+    const jobDescription = draft.jobDescription.trim();
+    if (!company || !role || !portalUrl || jobDescription.length < MIN_JD_CHARS) {
       setError("Fill in all four boxes first.");
       return;
     }
@@ -467,7 +496,7 @@ export default function Applications() {
           jd_text: jobDescription,
           /* Omitted rather than sent as null when this did not come from a posting: the backend
              field is optional, and only a present id gets written into the stored job_context. */
-          ...(newApplication.jobId ? { job_id: newApplication.jobId } : {}),
+          ...(draft.jobId ? { job_id: draft.jobId } : {}),
           application: {
             ats_name: portalName(portalUrl),
             portal_url: portalUrl,
