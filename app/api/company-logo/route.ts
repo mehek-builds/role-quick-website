@@ -3,11 +3,14 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { logoPath } from "@/lib/company-logos";
 import {
+  boardHostedLogo,
   domainCandidates,
   identifies,
   iconUrls,
   imageTypeOf,
   monogramSvg,
+  ownDomainFromBoard,
+  parseBoardUrl,
   pngInsideIco,
 } from "@/lib/company-logo-source";
 
@@ -30,6 +33,13 @@ import {
  * requested again and its cache entry expires. That is also why the cache is
  * keyed by company name rather than accumulated in a directory somebody has to
  * prune — there is no state to go stale, only answers that stop being asked for.
+ *
+ * WHERE THE IDENTITY COMES FROM. Preferably not the company's name. We poll
+ * each employer's board by a token we chose, so the page at that token is that
+ * company's by construction — asking IT who they are beats guessing a domain
+ * from their name, which is how block.co (an NFT company) nearly ended up on
+ * Block's jobs. Name-guessing survives only as a last resort, for boards that
+ * are bot-blocked or say nothing about themselves.
  *
  * FAILURE IS AN IMAGE, NOT AN ERROR. Anything unresolved returns the company's
  * initial as an SVG, with a 200. A 404 would need the tile to notice and swap
@@ -85,49 +95,113 @@ export async function GET(request: Request) {
   const controller = new AbortController();
   const budget = setTimeout(() => controller.abort(), 8000);
 
-  try {
-    for (const domain of domainCandidates(company)) {
-      const origin = `https://${domain}`;
-      let html: string;
+  /* One helper for "given a domain I trust, get its mark". Both paths below end
+     here; only the way they arrived at the domain differs. */
+  const markFromDomain = async (domain: string) => {
+    const origin = `https://${domain}`;
+    let html = "";
+    try {
+      html = await (await get(origin, controller.signal)).text();
+    } catch {
+      /* the icon may still sit at a well-known path */
+    }
+    for (const url of iconUrls(html, origin).slice(0, 6)) {
       try {
-        html = await (await get(origin, controller.signal)).text();
+        const res = await get(url, controller.signal);
+        const raw = new Uint8Array(await res.arrayBuffer());
+        if (!raw.length || raw.length > MAX_BYTES) continue;
+        let bytes: Uint8Array<ArrayBuffer> = raw;
+        let type = imageTypeOf(res.headers.get("content-type"), raw);
+        if (type === "image/x-icon") {
+          const inner = pngInsideIco(raw);
+          if (!inner) continue;
+          bytes = inner;
+          type = "image/png";
+        }
+        if (!type) continue;
+        return { bytes, type, source: domain };
+      } catch {
+        /* next icon */
+      }
+    }
+    return null;
+  };
+
+  try {
+    /* 1. THE BOARD WE POLL. Identity is not inferred here, so this wins. */
+    const board = parseBoardUrl(new URL(request.url).searchParams.get("board"));
+    if (board) {
+      let html = "";
+      try {
+        html = await (await get(board.url, controller.signal)).text();
+      } catch {
+        /* bot-blocked board; fall through to the name */
+      }
+
+      /* Ashby and Lever host the employer's own uploaded logo. Nothing to
+         corroborate: the URL is keyed to the organisation. */
+      const hosted = boardHostedLogo(html, board.ats);
+      if (hosted) {
+        try {
+          const res = await get(hosted, controller.signal);
+          const raw = new Uint8Array(await res.arrayBuffer());
+          const type = imageTypeOf(res.headers.get("content-type"), raw);
+          if (raw.length && raw.length <= MAX_BYTES && type && type !== "image/x-icon") {
+            const bytes = new Uint8Array(raw.byteLength);
+            bytes.set(raw);
+            return new NextResponse(bytes, {
+              status: 200,
+              headers: {
+                "Content-Type": type,
+                "Cache-Control": CACHE,
+                "X-Logo-Source": `${board.ats}:${board.token}`,
+              },
+            });
+          }
+        } catch {
+          /* fall through */
+        }
+      }
+
+      /* Greenhouse hosts no logo, but its boards link the employer's own site.
+         Anchored on the token, so this is a check rather than a guess. */
+      const owned = html ? ownDomainFromBoard(html, new URL(board.url).hostname, board.token) : null;
+      if (owned) {
+        const mark = await markFromDomain(owned);
+        if (mark) {
+          return new NextResponse(mark.bytes, {
+            status: 200,
+            headers: {
+              "Content-Type": mark.type,
+              "Cache-Control": CACHE,
+              "X-Logo-Source": `${board.ats}:${board.token} -> ${owned}`,
+            },
+          });
+        }
+      }
+    }
+
+    /* 2. LAST RESORT: guess a domain from the name. Everything that ever
+       attached the wrong company's logo came from here, which is why it runs
+       only once the board has had its say. */
+    for (const domain of domainCandidates(company)) {
+      let html = "";
+      try {
+        html = await (await get(`https://${domain}`, controller.signal)).text();
       } catch {
         continue;
       }
       if (!identifies(company, html)) continue;
-
-      for (const url of iconUrls(html, origin).slice(0, 6)) {
-        try {
-          const res = await get(url, controller.signal);
-          const raw = new Uint8Array(await res.arrayBuffer());
-          if (!raw.length || raw.length > MAX_BYTES) continue;
-
-          let bytes: Uint8Array<ArrayBuffer> = raw;
-          let type = imageTypeOf(res.headers.get("content-type"), raw);
-          if (type === "image/x-icon") {
-            /* Serve the PNG hiding inside the .ico where there is one; browsers
-               render a bare .ico unevenly and half of them are bitmaps this
-               module cannot touch. */
-            const inner = pngInsideIco(raw);
-            if (!inner) continue;
-            bytes = inner;
-            type = "image/png";
-          }
-          if (!type) continue;
-
-          return new NextResponse(bytes, {
-            status: 200,
-            headers: {
-              "Content-Type": type,
-              "Cache-Control": CACHE,
-              /* Which host the mark came from, so a wrong logo can be traced to
-                 a decision rather than guessed at. */
-              "X-Logo-Source": domain,
-            },
-          });
-        } catch {
-          /* next icon */
-        }
+      const mark = await markFromDomain(domain);
+      if (mark) {
+        return new NextResponse(mark.bytes, {
+          status: 200,
+          headers: {
+            "Content-Type": mark.type,
+            "Cache-Control": CACHE,
+            "X-Logo-Source": `name-guess:${domain}`,
+          },
+        });
       }
     }
   } catch {

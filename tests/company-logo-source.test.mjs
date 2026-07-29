@@ -197,3 +197,119 @@ describe("monogramSvg", () => {
     assert.match(monogramSvg(""), /\?</);
   });
 });
+
+/* ---- the mark taken from the board we already poll ---- */
+
+const { parseBoardUrl, boardHostedLogo, ownDomainFromBoard } = await import(
+  "../lib/company-logo-source.ts"
+);
+
+describe("parseBoardUrl", () => {
+  test("accepts the boards we actually poll", () => {
+    assert.deepEqual(parseBoardUrl("https://job-boards.greenhouse.io/stripe"), {
+      ats: "greenhouse",
+      token: "stripe",
+      url: "https://job-boards.greenhouse.io/stripe",
+    });
+    assert.equal(parseBoardUrl("https://jobs.lever.co/palantir/some-job")?.ats, "lever");
+    assert.equal(parseBoardUrl("https://jobs.ashbyhq.com/ramp")?.token, "ramp");
+    assert.equal(parseBoardUrl("https://boards.greenhouse.io/datadog")?.ats, "greenhouse");
+  });
+
+  test("refuses anything that is not one of those hosts — this is the SSRF gate", () => {
+    /* The board URL arrives as a query parameter and OUR SERVER fetches it.
+       Without an exact-hostname allowlist, anyone could point this at an
+       internal address and have the response handed back to them. Every case
+       here is a real shape of that attack. */
+    for (const bad of [
+      "http://job-boards.greenhouse.io/stripe", // http, not https
+      "https://job-boards.greenhouse.io.evil.com/stripe", // suffix trick
+      "https://evil.com/job-boards.greenhouse.io/stripe", // path trick
+      "https://localhost/admin",
+      "https://127.0.0.1/",
+      "https://169.254.169.254/latest/meta-data/", // cloud metadata
+      "file:///etc/passwd",
+      "https://jobs.lever.co", // no token
+      "",
+      null,
+      undefined,
+      "not a url",
+    ]) {
+      assert.equal(parseBoardUrl(bad), null, `should have refused ${String(bad)}`);
+    }
+  });
+
+  test("refuses a token that is not a plain slug", () => {
+    assert.equal(parseBoardUrl("https://jobs.lever.co/..%2f..%2fetc"), null);
+    assert.equal(parseBoardUrl("https://jobs.ashbyhq.com/a b"), null);
+  });
+});
+
+describe("boardHostedLogo", () => {
+  test("finds the logo Ashby and Lever host for the organisation", () => {
+    const ashby = `<img src="https://app.ashbyhq.com/api/images/org-theme-logo/7a158cac-9866-4881-95a8-bc946d3dca79/x">`;
+    assert.match(boardHostedLogo(ashby, "ashby"), /org-theme-logo/);
+    const lever = `<img src="https://lever-client-logos.s3.us-west-2.amazonaws.com/b8300af6.png">`;
+    assert.match(boardHostedLogo(lever, "lever"), /lever-client-logos/);
+  });
+
+  test("does not confuse Ashby's social banner with its logo", () => {
+    /* org-theme-social is a 745KB share image, not a square mark. */
+    const social = `<meta property="og:image" content="https://app.ashbyhq.com/api/images/org-theme-social/abc/x">`;
+    assert.equal(boardHostedLogo(social, "ashby"), null);
+  });
+
+  test("greenhouse hosts no logo, and saying so is the point", () => {
+    assert.equal(boardHostedLogo("<img src='https://anything'>", "greenhouse"), null);
+  });
+});
+
+describe("ownDomainFromBoard", () => {
+  const page = (...hrefs) => hrefs.map((h) => `<a href="${h}">x</a>`).join("");
+
+  test("finds the employer's real domain even when it is not a .com", () => {
+    /* Every one of these is a company whose NAME resolved to somebody else's
+       .com: block.co is an NFT company, imply.com sells LED panels, suki.com is
+       a German DIY supplier. The board gets them right. */
+    assert.equal(
+      ownDomainFromBoard(page("https://block.xyz/a", "https://block.xyz/b"), "job-boards.greenhouse.io", "block"),
+      "block.xyz",
+    );
+    assert.equal(
+      ownDomainFromBoard(page("https://imply.io/a", "https://imply.io/b"), "job-boards.greenhouse.io", "imply"),
+      "imply.io",
+    );
+  });
+
+  test("the token anchor rejects a vendor link even when it is the most common", () => {
+    /* `honor` resolved to datasubject.com purely because their board links a
+       "do not sell my data" page more than anything else. The anchor is what
+       turns most-linked-host from a guess into a check. */
+    const html = page(
+      "https://datasubject.com/1",
+      "https://datasubject.com/2",
+      "https://datasubject.com/3",
+      "https://joinhonor.com/careers",
+    );
+    assert.equal(ownDomainFromBoard(html, "job-boards.greenhouse.io", "honor"), "joinhonor.com");
+  });
+
+  test("returns null rather than a wrong answer when nothing relates to the token", () => {
+    const html = page("https://datasubject.com/1", "https://onetrust.com/2");
+    assert.equal(ownDomainFromBoard(html, "job-boards.greenhouse.io", "honor"), null);
+  });
+
+  test("ignores the board's own host and the usual third parties", () => {
+    const html = page(
+      "https://job-boards.greenhouse.io/stripe",
+      "https://linkedin.com/company/stripe",
+      "https://stripe.com/a",
+      "https://stripe.com/b",
+    );
+    assert.equal(ownDomainFromBoard(html, "job-boards.greenhouse.io", "stripe"), "stripe.com");
+  });
+
+  test("a token too short to anchor on resolves nothing", () => {
+    assert.equal(ownDomainFromBoard(page("https://ab.com/x"), "jobs.lever.co", "ab"), null);
+  });
+});

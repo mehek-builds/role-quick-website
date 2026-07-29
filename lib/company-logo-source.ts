@@ -204,3 +204,107 @@ export function imageTypeOf(contentType: string | null, bytes: Uint8Array): stri
   if (head.startsWith("<svg") || head.includes("<svg")) return "image/svg+xml";
   return null;
 }
+
+/* ---------------------------------------------------------------------------
+ * The company's mark, taken from the board we already poll.
+ *
+ * Everything above this line guesses a domain from a company's NAME, and that
+ * is where every wrong logo came from: block.co is an NFT company, imply.com
+ * sells LED panels, suki.com is a German DIY supplier. The guessing survives
+ * only as a last resort.
+ *
+ * This is the better source, and the reason is that identity is not inferred at
+ * all. We poll each employer's board by a token WE chose when the source was
+ * added — greenhouse/block, ashby/crisp — so the page at that token is that
+ * company's, by construction. Whatever it says about itself is authoritative.
+ *
+ * Measured on 30 random live sources: 14 gave a logo the ATS hosts directly,
+ * 10 more gave a verified domain, 6 gave nothing (mostly bot-blocked boards).
+ * It also recovers names guessing could never reach — rocketlabcorp.com,
+ * akunacapital.com, oldmissioncapital.com, sigmacomputing.com.
+ * ------------------------------------------------------------------------- */
+
+/* The only hosts a board URL may point at.
+ *
+ * This is an SSRF gate, not tidiness. The board URL arrives as a query
+ * parameter, so without this anyone could hand the route an internal address
+ * and have our server fetch it and hand back the body. The allowlist is the
+ * whole defence; keep it exact-match on hostname. */
+const BOARD_HOSTS: Record<string, "greenhouse" | "lever" | "ashby"> = {
+  "job-boards.greenhouse.io": "greenhouse",
+  "boards.greenhouse.io": "greenhouse",
+  "jobs.lever.co": "lever",
+  "jobs.ashbyhq.com": "ashby",
+};
+
+export type Board = { ats: "greenhouse" | "lever" | "ashby"; token: string; url: string };
+
+/* Returns null for anything not recognisably one of our boards. Callers must
+   treat null as "do not fetch", never as "fetch it anyway". */
+export function parseBoardUrl(raw: string | null | undefined): Board | null {
+  if (!raw) return null;
+  let u: URL;
+  try {
+    u = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== "https:") return null;
+  const ats = BOARD_HOSTS[u.hostname];
+  if (!ats) return null;
+  const token = u.pathname.split("/").filter(Boolean)[0];
+  if (!token || !/^[A-Za-z0-9._-]{1,100}$/.test(token)) return null;
+  return { ats, token, url: `https://${u.hostname}/${token}` };
+}
+
+/* Ashby and Lever host the employer's own uploaded logo and say so in the page.
+   Both are keyed to the organisation, so a hit here needs no corroboration. */
+export function boardHostedLogo(html: string, ats: Board["ats"]): string | null {
+  if (ats === "ashby") {
+    return /https:\/\/app\.ashbyhq\.com\/api\/images\/org-theme-logo\/[^"'\\\s>]+/.exec(html)?.[0] ?? null;
+  }
+  if (ats === "lever") {
+    return /https:\/\/lever-client-logos[^"'\\\s>]+/.exec(html)?.[0] ?? null;
+  }
+  return null;
+}
+
+/* Hosts that appear on employer career pages without belonging to the employer:
+   consent and privacy vendors, analytics, CDNs. `honor` resolved to
+   datasubject.com purely because their board links a "do not sell my data"
+   page more than once. */
+const NOT_THE_EMPLOYER =
+  /greenhouse|lever\.co|ashbyhq|linkedin|twitter|x\.com|facebook|instagram|youtube|glassdoor|google|w3\.org|schema\.org|gstatic|cloudflare|datasubject|onetrust|trustarc|cookiebot|osano|segment|hotjar|^fonts\./i;
+
+/* The employer's own domain, read off their board page and ANCHORED ON THE
+ * TOKEN.
+ *
+ * The anchor is what makes this safe. The most-linked outbound host is a good
+ * guess and no more — it picked datasubject.com for `honor`. Requiring the
+ * host's own label to relate to the board token turns a guess into a check,
+ * because the token is the slug the employer chose on their ATS and we recorded
+ * when we added them: greenhouse/block -> block.xyz, greenhouse/suki ->
+ * suki.ai, greenhouse/imply -> imply.io, all correct and none of them .com.
+ */
+export function ownDomainFromBoard(html: string, boardHost: string, token: string): string | null {
+  const tok = token.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (tok.length < 3) return null;
+  const hosts = new Map<string, number>();
+  for (const m of html.matchAll(/<a\b[^>]*href=["'](https?:\/\/[^"']+)["']/gi)) {
+    let host: string;
+    try {
+      host = new URL(m[1]).hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+    if (host === boardHost || NOT_THE_EMPLOYER.test(host)) continue;
+    if (/\.(css|js|png|jpe?g|svg|woff2?)($|\?)/i.test(m[1])) continue;
+    const root = host.split(".").slice(-2).join(".");
+    hosts.set(root, (hosts.get(root) ?? 0) + 1);
+  }
+  for (const [root] of [...hosts.entries()].sort((a, b) => b[1] - a[1])) {
+    const label = root.split(".")[0].toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (label.includes(tok) || tok.includes(label)) return root;
+  }
+  return null;
+}

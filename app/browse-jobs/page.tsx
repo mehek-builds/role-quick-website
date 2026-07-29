@@ -65,11 +65,19 @@ export const metadata: Metadata = {
  * There is no fallback branch here any more. logoSrc always returns a URL, and
  * /api/company-logo answers with a monogram image when it cannot find a mark, so
  * an unknown company degrades inside the request rather than in the browser. */
-function CompanyMark({ company, eager }: { company: string; eager?: boolean }) {
+function CompanyMark({
+  company,
+  boardUrl,
+  eager,
+}: {
+  company: string;
+  boardUrl?: string | null;
+  eager?: boolean;
+}) {
   /* eslint-disable-next-line @next/next/no-img-element */
   return (
     <img
-      src={logoSrc(company)}
+      src={logoSrc(company, boardUrl)}
       alt=""
       width={28}
       height={28}
@@ -91,7 +99,7 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
       className="group flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
     >
       <div className="flex min-w-0 items-start gap-3">
-        <CompanyMark company={job.company_name} eager={eager} />
+        <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">
           <p className="text-[15px] font-medium leading-snug text-ink">{job.title}</p>
           <p className="mt-1 text-small text-muted">{job.company_name}</p>
