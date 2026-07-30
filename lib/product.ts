@@ -1,6 +1,8 @@
+import packageMetadata from "../package.json";
+
 export const PRODUCT_NAME = "Litos";
 export const API_VERSION = "1";
-export const WEB_VERSION = "0.1.0";
+export const WEB_VERSION = packageMetadata.version;
 
 export const PRODUCT_FALLBACK = {
   name: PRODUCT_NAME,

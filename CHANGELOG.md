@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4] - 2026-07-30
+
+### Fixed
+
+- API compatibility requests now derive the web client version from package metadata so releases
+  cannot silently keep reporting an obsolete hard-coded version.
+
 ## [0.1.3] - 2026-07-26
 
 ### Fixed
