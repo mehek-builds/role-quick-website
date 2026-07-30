@@ -27,6 +27,7 @@ import {
   type RankedJob,
 } from "@/lib/daily-matches";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/lib/pay";
+import { loadDashboardInitialState } from "@/lib/dashboard-bootstrap";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 
@@ -220,34 +221,19 @@ export default function Home() {
     }
 
     let cancelled = false;
-    Promise.all([
-      api<Me>("/me"),
-      api<{ jobs: MonitoredJob[] }>("/jobs?offset=0"),
-      api<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, primary_period: null, backup_period: null })),
-      api<Partial<ParsedProfile>>("/profile").catch(() => ({ skills: [], target_roles: [] })),
-      api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
-      api<ApplicationProfile>("/profile/application").catch(() => ({})),
-      api<{ events?: OutreachEvent[] } | OutreachEvent[]>("/track/events").catch(() => []),
-      /* Whether to build any resume ahead of being asked. Defaulting to false on failure is the
-         safe direction: a missed build costs one wait, a wrong one spends a resume from the
-         student's monthly quota on a job they never opened. */
-      api<{ automatic_submission_enabled?: boolean }>("/onboarding/state").catch(() => ({ automatic_submission_enabled: false })),
-    ])
-      .then(([meResult, jobsResult, targetingResult, profileResult, historyResult, applicationProfileResult, outreachResult, onboardingResult]) => {
+    loadDashboardInitialState(api)
+      .then((initial) => {
         if (cancelled) return;
-        setMe(meResult);
+        setMe(initial.me);
         setLoadedAt(Date.now());
-        setJobs(jobsResult.jobs);
-        setTargeting(targetingResult);
-        setProfile(profileResult);
-        setIdentity({
-          full_name: "full_name" in profileResult ? profileResult.full_name : undefined,
-          email: meResult.email ?? undefined,
-        });
-        setApplicationProfile(applicationProfileResult);
-        setPackets(historyResult.resumes);
-        setOutreach(Array.isArray(outreachResult) ? outreachResult : (outreachResult.events ?? []));
-        setAutoSubmitEnabled(onboardingResult.automatic_submission_enabled === true);
+        setJobs(initial.jobs);
+        setTargeting(initial.targeting);
+        setProfile(initial.profile);
+        setIdentity(initial.identity);
+        setApplicationProfile(initial.applicationProfile);
+        setPackets(initial.packets);
+        setOutreach(initial.outreach);
+        setAutoSubmitEnabled(initial.autoSubmitEnabled);
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "We could not load your jobs. Reload the page.");
