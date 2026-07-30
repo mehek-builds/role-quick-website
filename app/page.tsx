@@ -31,8 +31,32 @@ const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString
    receipt is the one looping element). */
 
 /* Written from the real objections (data, spam, caps, why free), stated
-   plainly and only claiming what the product does today (Guardrails). */
-const FAQ_ITEMS = [
+   plainly and only claiming what the product does today (Guardrails).
+ *
+ * `a` STAYS A PLAIN STRING. StructuredData hands the same value to FAQPage as
+ * acceptedAnswer.text, which has to be text, so an answer cannot be JSX.
+ *
+ * That is why, until 2026-07-30, two answers named a page and neither was
+ * clickable: the support answer said "Use the contact form" and the privacy
+ * answer said "The privacy page lists every part of this", and there was no
+ * mechanism for a link in an answer at all. On the support answer that was the
+ * actual bug, since the whole point of the entry (audit finding S25) is giving
+ * a stuck person somewhere to go, and it named the destination without
+ * offering it.
+ *
+ * `links` fixes it without touching the schema: the phrase is declared here
+ * with its href, and LinkedAnswer splices the anchor into the rendered copy
+ * only. The schema still gets the flat string.
+ *
+ * If you reword an answer, check its `links` phrases still appear in it. The
+ * faq-links test fails the build if they do not, because a phrase that no
+ * longer matches would silently render as plain text again, which is exactly
+ * the bug this replaced. */
+const FAQ_ITEMS: {
+  q: string;
+  a: string;
+  links?: { text: string; href: string }[];
+}[] = [
   {
     q: "Will it make things up about me?",
     a: "No. Litos only uses what is already in your resume. It moves your real work around and rewrites it to fit the job. It never adds a job, a skill, or a number you did not do. You can see every change before it goes out.",
@@ -58,6 +82,7 @@ const FAQ_ITEMS = [
        account deletion. "You can delete everything" rather than "one click",
        because the mechanism is an email to support. */
     a: "Yes. We use your resume and answers only to fill in your own job applications. In your browser, the extension reads only the job page you are on. On our side, Litos looks at job boards to find you roles, and it opens the company's form itself if you ask it to send. We never sell or share your data, and we never will. You can delete everything we hold whenever you want. The privacy page lists every part of this.",
+    links: [{ text: "The privacy page", href: "/privacy" }],
   },
   /* The support question. Until now the site had no answer to "it broke", and
      no contact route at all outside the data-request address buried in
@@ -69,6 +94,7 @@ const FAQ_ITEMS = [
   {
     q: "Something is not working. Who do I ask?",
     a: "Use the contact form and tell us the job link you were on. A person built this and a person answers, so it is not instant, but it is a real reply. If Litos could not fill a form, that link is the single most useful thing you can send: it is how the site gets added.",
+    links: [{ text: "the contact form", href: "/contact" }],
   },
 ];
 
@@ -97,6 +123,46 @@ const PILLAR_ICONS: Record<string, React.ReactNode> = {
     </svg>
   ),
 };
+
+/* Renders an FAQ answer, turning each declared phrase into a link.
+ *
+ * The answer stays one flat string in FAQ_ITEMS so the FAQPage schema can use
+ * it verbatim; the anchors exist only in the rendered copy. Phrases are matched
+ * left to right, and each is searched only in the text after the previous
+ * match, so a phrase appearing twice links its first occurrence and not both.
+ *
+ * A phrase that does not appear is skipped rather than throwing, because a
+ * missing link is not worth a blank page in front of a reader. The faq-links
+ * test is what stops that reaching production. */
+function LinkedAnswer({
+  text,
+  links,
+}: {
+  text: string;
+  links?: { text: string; href: string }[];
+}) {
+  if (!links?.length) return <>{text}</>;
+
+  const parts: React.ReactNode[] = [];
+  let rest = text;
+  for (const { text: phrase, href } of links) {
+    const at = rest.indexOf(phrase);
+    if (at === -1) continue;
+    parts.push(rest.slice(0, at));
+    parts.push(
+      <a
+        key={href}
+        href={href}
+        className="underline decoration-border underline-offset-2 hover:text-ink"
+      >
+        {phrase}
+      </a>
+    );
+    rest = rest.slice(at + phrase.length);
+  }
+  parts.push(rest);
+  return <>{parts}</>;
+}
 
 /* The one pillar chip.
  *
@@ -587,7 +653,7 @@ export default function Home() {
                   which 10 of 10 audited competitors say nothing about. That has
                   been folded into FAQ item 5 rather than lost with the block. */}
               <div className="rq-glass mt-10 px-6">
-                {FAQ_ITEMS.map(({ q, a }, i) => (
+                {FAQ_ITEMS.map(({ q, a, links }, i) => (
                   /* First one open. This is what the deleted trio was really
                      for: the objection that decides an install should not be
                      behind a click. One boolean, not a second block of copy. */
@@ -601,7 +667,9 @@ export default function Home() {
                         +
                       </span>
                     </summary>
-                    <p className="pb-6 pr-10 text-base leading-7 text-muted">{a}</p>
+                    <p className="pb-6 pr-10 text-base leading-7 text-muted">
+                      <LinkedAnswer text={a} links={links} />
+                    </p>
                   </details>
                 ))}
               </div>
