@@ -7,6 +7,7 @@ import {
   getStoredEmail,
   type ApplicationReview,
   type ApplicationProfile,
+  type DashboardBootstrap,
   type GeneratedResume,
   type Me,
   type MonitoredJob,
@@ -220,34 +221,22 @@ export default function Home() {
     }
 
     let cancelled = false;
-    Promise.all([
-      api<Me>("/me"),
-      api<{ jobs: MonitoredJob[] }>("/jobs?offset=0"),
-      api<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, primary_period: null, backup_period: null })),
-      api<Partial<ParsedProfile>>("/profile").catch(() => ({ skills: [], target_roles: [] })),
-      api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
-      api<ApplicationProfile>("/profile/application").catch(() => ({})),
-      api<{ events?: OutreachEvent[] } | OutreachEvent[]>("/track/events").catch(() => []),
-      /* Whether to build any resume ahead of being asked. Defaulting to false on failure is the
-         safe direction: a missed build costs one wait, a wrong one spends a resume from the
-         student's monthly quota on a job they never opened. */
-      api<{ automatic_submission_enabled?: boolean }>("/onboarding/state").catch(() => ({ automatic_submission_enabled: false })),
-    ])
-      .then(([meResult, jobsResult, targetingResult, profileResult, historyResult, applicationProfileResult, outreachResult, onboardingResult]) => {
+    api<DashboardBootstrap>("/dashboard/bootstrap")
+      .then((bootstrap) => {
         if (cancelled) return;
-        setMe(meResult);
+        setMe(bootstrap.me);
         setLoadedAt(Date.now());
-        setJobs(jobsResult.jobs);
-        setTargeting(targetingResult);
-        setProfile(profileResult);
+        setJobs(bootstrap.jobs.jobs);
+        setTargeting(bootstrap.targeting);
+        setProfile(bootstrap.profile);
         setIdentity({
-          full_name: "full_name" in profileResult ? profileResult.full_name : undefined,
-          email: meResult.email ?? undefined,
+          full_name: "full_name" in bootstrap.profile ? bootstrap.profile.full_name : undefined,
+          email: bootstrap.me.email ?? undefined,
         });
-        setApplicationProfile(applicationProfileResult);
-        setPackets(historyResult.resumes);
-        setOutreach(Array.isArray(outreachResult) ? outreachResult : (outreachResult.events ?? []));
-        setAutoSubmitEnabled(onboardingResult.automatic_submission_enabled === true);
+        setApplicationProfile(bootstrap.application_profile);
+        setPackets(bootstrap.resume_history.resumes);
+        setOutreach(bootstrap.outreach);
+        setAutoSubmitEnabled(bootstrap.onboarding.automatic_submission_enabled === true);
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "We could not load your jobs. Reload the page.");

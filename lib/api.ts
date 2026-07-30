@@ -141,6 +141,27 @@ export type OutreachEvent = {
   contact: OutreachContact | null;
 };
 
+/** One first-screen read model. Versioned separately from the write-oriented resource APIs. */
+export type DashboardBootstrap = {
+  schema_version: 1;
+  me: Me;
+  jobs: JobsPage;
+  targeting: Targeting;
+  profile: Partial<ParsedProfile>;
+  resume_history: { resumes: GeneratedResume[] };
+  application_profile: ApplicationProfile;
+  outreach: OutreachEvent[];
+  onboarding: Pick<OnboardingState, "automatic_submission_enabled">;
+  warnings: Array<
+    | "targeting"
+    | "profile"
+    | "resume_history"
+    | "application_profile"
+    | "outreach"
+    | "onboarding"
+  >;
+};
+
 export type GeneratedResume = {
   id: string;
   /* job_id is the monitored posting this packet was built for. Absent on everything generated
