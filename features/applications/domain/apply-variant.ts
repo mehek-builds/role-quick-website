@@ -1,10 +1,10 @@
-import type { ResumeSpec } from "./api";
+import type { ResumeSpec } from "@/lib/api";
 
 
 // ---- similarity, kept in this module so it has no runtime imports ----
 //
 // This file is the only place a suggestion mutates the resume, so it is exercised directly by
-// lib/apply-variant.test.mts. Node's type-stripping test runner cannot resolve extensionless
+// apply-variant.test.mts. Node's type-stripping test runner cannot resolve extensionless
 // runtime imports, and the project forbids .ts extensions in imports (allowImportingTsExtensions
 // is off), so the two helpers it needs live here rather than being imported.
 
@@ -33,7 +33,7 @@ export function bulletOverlap(a: string, b: string): number {
   return shared / union;
 }
 
-/** Deliberately mirrors normalizeTerm in lib/requirement-terms.ts: punctuation separates, dots vanish. */
+/** Deliberately mirrors normalizeTerm in requirement-terms.ts: punctuation separates, dots vanish. */
 function normalizeBullet(raw: string): string {
   return raw
     .toLowerCase()

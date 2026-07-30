@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchResumeHealth, type ResumeHealth as Health } from "@/lib/jd-match";
+import { fetchResumeHealth, type ResumeHealth as Health } from "@/features/applications";
 import type { ResumeSpec } from "@/lib/api";
 
 /**

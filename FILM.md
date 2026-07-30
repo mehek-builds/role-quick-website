@@ -116,7 +116,7 @@ formed by ~85: the pacing curve in CinematicHero depends on that; if you
 reshoot, re-check those frame numbers. `scripts/render-film.mjs` is the
 no-credits local fallback renderer.
 
-## The six b-roll clips (`public/broll/`, ~2.1MB total)
+## The seven generated clips (`public/broll/`, ~2.1MB total)
 
 All seedance_2_0, 1080p, std mode, 16:9, `generate_audio: false`. Higgsfield
 account: Plus plan, ~605 credits left after this batch (45 credits per 5s
@@ -281,5 +281,5 @@ only a mobile-preset tab reliably paints scrolled screenshots. Trust the
 build, layout metrics via eval, network waterfalls (b-roll must fetch ONLY
 on intersection: look for lone 206s), and a real browser after deploy.
 
-Deploys are manual: `npx vercel deploy --prod --yes` (the GitHub Action's
-token is dead; see README).
+Production deploys from `main` through the Vercel Git integration. Do not run
+`vercel deploy --prod`; see README for the deploy and verification workflow.

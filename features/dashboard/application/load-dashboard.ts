@@ -38,7 +38,7 @@ function supportsLegacyFallback(error: unknown): boolean {
   return status === 404 || status === 501;
 }
 
-/** Keep wire-shape normalization out of the component so staggered deploys fail soft. */
+/** Keep wire-shape normalization out of the presentation layer so staggered deploys fail soft. */
 export function dashboardStateFromBootstrap(bootstrap: DashboardBootstrap): DashboardInitialState {
   const profile = bootstrap.profile && typeof bootstrap.profile === "object"
     ? bootstrap.profile

@@ -16,19 +16,19 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/lib/application-review";
-import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/lib/daily-matches";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
 import { ApplicationPacket } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
-import { fetchJdMatch, resumeSpecText } from "@/lib/jd-match";
-import { applyBankVariant, type ApplyOutcome } from "@/lib/apply-variant";
+import { fetchJdMatch, resumeSpecText } from "@/features/applications";
+import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
-import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/lib/requirement-terms";
-import type { JdMatchResponse } from "@/lib/jd-match";
+import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
+import type { JdMatchResponse } from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationFilter = "all" | "action" | "ready" | "submitted";
@@ -134,7 +134,7 @@ export default function Applications() {
   /**
    * Put one of the student's own stored bullets onto the tailored resume.
    *
-   * All the judgement lives in lib/apply-variant.ts, which is pure and tested. This only records
+   * All the judgement lives in the applications domain, which is pure and tested. This only records
    * what happened so the UI can report it and offer an undo.
    */
   const acceptBankVariant = useCallback((org: string, variant: string) => {
@@ -1544,4 +1544,3 @@ function applicationCardClasses(packet: GeneratedResume, selected: boolean): str
       : "border border-border bg-surface text-ink hover:border-brand/35 hover:bg-brand-soft/35";
   return selected ? `${semantic} ring-2 ring-brand ring-offset-2` : semantic;
 }
-

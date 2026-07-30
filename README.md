@@ -19,6 +19,7 @@ tailors your resume, fills the application, and drafts the outreach.
 | `DESIGN.md` | every visual law + the decision log. Non-negotiable. |
 | `FILM.md` | the scroll film: layer model, all generated clips, exact Higgsfield prompts + job ids, regeneration pipeline, the blend-isolation gotcha |
 | `PLAN.md` | the phased product plan (marketing site → account → workspace → billing) |
+| `ARCHITECTURE.md` | feature boundaries, dependency direction, and extension rules |
 | `AGENTS.md` | agent ground rules (Next.js 16 caveats, DESIGN.md supremacy) |
 
 ## Map
@@ -26,7 +27,7 @@ tailors your resume, fills the application, and drafts the outreach.
 ```
 app/
   page.tsx            the homepage: one continuous scroll film (see FILM.md)
-  login/ dashboard/   passwordless auth + 5-view product dashboard (real backend)
+  login/ dashboard/   passwordless auth + 7-view product dashboard (real backend)
   privacy/            dated privacy policy
 components/
   cinema/             the film system: CinematicHero (fixed stage + scrub +
@@ -38,8 +39,9 @@ components/
   Motion.tsx          Reveal / CountUp (scroll-settle; isolates blend modes,
                       so BRoll shots stay outside it)
 lib/                  config + typed API client for the Litos backend
+features/             feature-owned domain, application, and infrastructure code
 public/film/          121-frame base film (webp, canvas-scrubbed)
-public/broll/         6 generated clips + posters (lazy, blended into film)
+public/broll/         7 generated clips + 6 posters (lazy, blended into film)
 scripts/
   render-stills.mjs   renders the real-resume reference frames for the two
                       start/end-locked b-roll shots (see FILM.md)

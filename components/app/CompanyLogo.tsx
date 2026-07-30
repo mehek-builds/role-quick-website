@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { companyDomainForRow } from "@/lib/job-rows";
+import { companyDomainForRow } from "@/features/jobs";
 
 /**
  * The company's icon beside a job row, with its initial as the answer when there is no icon.
  *
- * The domain rule lives in `lib/job-rows.ts` (and is tested there): only the careers URL can carry
+ * The domain rule lives in the jobs feature (and is tested there): only the careers URL can carry
  * the employer's own domain, and a careers URL that points at the job board identifies no company,
  * so those rows fall back rather than painting the board's logo on the row.
  *

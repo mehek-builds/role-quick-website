@@ -6,7 +6,7 @@ import {
   type RequirementIndex,
   type TermTone,
   EMPTY_REQUIREMENT_INDEX,
-} from "@/lib/requirement-terms";
+} from "@/features/applications";
 
 /**
  * Hover link between the job description and the resume.

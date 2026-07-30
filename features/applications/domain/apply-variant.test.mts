@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { applyBankVariant, bulletOverlap } from "./apply-variant.ts";
-import type { ResumeSpec } from "./api.ts";
+import type { ResumeSpec } from "../../../lib/api.ts";
 
 function spec(bullets: string[], org = "Traeco", extra: Partial<ResumeSpec> = {}): ResumeSpec {
   return {

@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer } from "@/lib/jd-match";
+import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer } from "@/features/applications";
 import type { ResumeSpec } from "@/lib/api";
 import { useTermHover } from "./RequirementText";
-import type { ApplyOutcome } from "@/lib/apply-variant";
+import type { ApplyOutcome } from "@/features/applications";
 
 /**
  * The single number the review screen leads with: how much of what this posting actually asks for

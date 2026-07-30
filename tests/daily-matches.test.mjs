@@ -8,7 +8,7 @@ import {
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
-} from "../lib/daily-matches.ts";
+} from "../features/applications/domain/daily-matches.ts";
 
 const jobs = [
   {

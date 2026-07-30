@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchFunnel, type FunnelSummary } from "@/lib/jd-match";
+import { fetchFunnel, type FunnelSummary } from "@/features/applications";
 
 /**
  * The student's own throughput.
