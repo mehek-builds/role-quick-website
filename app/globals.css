@@ -489,7 +489,18 @@ html {
 .rq-fp-qrow{display:flex;align-items:center;gap:9px;height:27px;transition:opacity .3s linear}
 .rq-fp-qtitle{flex:1;min-width:0;font-size:12.5px;color:var(--gray-900);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rq-fp-stages{display:flex;gap:7px;margin-bottom:9px}
+.rq-fp-ask{display:flex;flex-direction:column;gap:6px}
+/* on its own in the body, so centre it there rather than leaving it at the top */
+.rq-fp-ask-solo{height:100%;justify-content:center;gap:11px;padding-bottom:14px}
+.rq-fp-ask-q{font-size:12px;line-height:1.35;color:var(--gray-900)}
+.rq-fp-ask-q b{font-weight:inherit;white-space:nowrap}
+.rq-fp-ask-row{display:flex;align-items:center;gap:7px}
+.rq-fp-ask-btn{font-size:11.5px;font-weight:500;line-height:1;padding:6px 14px;border-radius:9999px;
+  transition:transform .12s linear}
+.rq-fp-ask-no{color:var(--gray-500);border:1px solid var(--gray-200);background:#fff}
+.rq-fp-ask-yes{color:#fff;background:var(--brand-600);border:1px solid transparent}
+.rq-fp-ask-yes.rq-f-press{background:var(--brand-700);transform:scale(.95)}
+.rq-fp-stages{display:flex;gap:7px;margin-bottom:6px}
 .rq-fp-stage{flex:1;border:1px solid var(--gray-200);border-radius:12px;padding:6px 8px}
 .rq-fp-stage b{display:block;font-family:var(--font-mono);font-size:12px;font-weight:500;color:var(--gray-900)}
 .rq-fp-stage span{font-size:9.5px;color:var(--gray-400)}
@@ -502,7 +513,8 @@ html {
 .rq-fp-foot{display:flex;align-items:center;gap:9px;height:44px;padding:0 13px;
   border-top:1px solid var(--gray-200);background:var(--gray-50)}
 .rq-fp-act{margin-left:auto;font-size:11.5px;font-weight:500;color:#fff;background:var(--brand-600);
-  border-radius:9999px;padding:6px 14px;white-space:nowrap;transition:transform .18s linear}
+  border-radius:9999px;padding:6px 14px;white-space:nowrap;
+  transition:transform .18s linear,background .3s linear,color .3s linear}
 .rq-fp-sent{margin-left:auto;font-family:var(--font-mono);font-size:10px;color:var(--teal-ink)}
 
 /* The demo is a fixed 720x476 picture of a UI. Squashing the column would
@@ -594,6 +606,7 @@ html {
 .rq-f-page{position:relative;height:440px;overflow:hidden}
 @keyframes pageEnter{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 
+.rq-f-page-inner{position:relative}
 .rq-f-phead{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--gray-200)}
 .rq-f-ptitle{font-size:15px;font-weight:450;color:var(--gray-900);letter-spacing:-.02em;line-height:1.15}
 .rq-f-head-left{min-width:0;text-align:left}
@@ -680,12 +693,21 @@ html {
   padding:0 14px;border-top:1px solid var(--gray-200);background:var(--gray-50)}
 .rq-f-sent-note{font-family:var(--font-mono);font-size:10px;color:var(--teal-ink);margin-right:auto}
 .rq-f-steps{display:flex;align-items:center;gap:6px;margin-right:auto}
+/* fixed slots so the row does not jitter as 18px bars, 14px orbs and 13px
+   ticks take each other's places */
+.rq-f-slot{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.rq-f-slot .rq-f-orb{margin-right:0;opacity:1}
 .rq-f-steps i{width:18px;height:2px;border-radius:2px;background:var(--gray-200);transition:background .3s}
 .rq-f-steps i.rq-f-on{background:var(--gray-900)}
 .rq-f-stick{width:13px;height:13px;color:var(--teal)}
 .rq-f-orb{display:block;margin-right:10px;opacity:.85}
 .rq-f-act-pill{font-size:11px;font-weight:500;color:#fff;background:var(--brand-600);
-  border-radius:9999px;padding:5px 14px;transition:transform .18s linear}
+  border-radius:9999px;padding:5px 14px;
+  transition:transform .18s linear,background .3s linear,color .3s linear}
+/* the button exists for the whole stage; it is only live once the artifact is
+   finished, and it says so by being grey rather than by disappearing */
+.rq-f-act-wait{background:#fff;color:var(--gray-400);
+  box-shadow:inset 0 0 0 1px var(--gray-200)}
 .rq-f-jobrow-out{display:none}
 .rq-f-scene{height:100%;padding:14px 16px;text-align:left}
 
@@ -762,15 +784,39 @@ html {
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* applications */
-.rq-f-autowrap{margin-left:auto;display:flex;align-items:center;gap:8px;user-select:none}
-.rq-f-autolabel{font-family:var(--font-mono);font-size:11px;line-height:16px;font-weight:500;transition:color .3s;color:var(--gray-400)}
-.rq-f-autolabel.rq-f-on{color:var(--brand-600)}
-.rq-f-toggle{position:relative;display:inline-flex;width:32px;height:18px;border-radius:9999px;flex-shrink:0;
-  background:var(--gray-200);transition:background-color .25s linear,transform .25s linear}
-.rq-f-toggle.rq-f-on{background:var(--brand-600)}
-.rq-f-knob{position:absolute;top:2px;width:14px;height:14px;border-radius:9999px;background:#fff;
-  box-shadow:0 1px 2px rgba(0,0,0,.25)}
+/* The auto-submit prompt. Replaces the settings switch that used to sit in the
+   header: a switch made turning it on look like something the product does
+   quietly, and this makes it a decision the person takes.
 
+   Anchored where the switch was, and deliberately NOT a scrim-backed modal.
+   The beat before it is the first application landing on the board and
+   flashing, and dimming the page would hide exactly what the demo just
+   earned. */
+/* Bottom right, not under the header where the switch was. Anchored up there it
+   covered the right half of the next-match card, including its pill, for the
+   whole time it was up. Down here it sits over the empty lower half of the
+   Offer column: clear of that card, and clear of Applied on the left where the
+   first application lands and flashes. No pointer, because there is no longer a
+   control for it to point at. */
+.rq-f-ask{position:absolute;bottom:18px;right:20px;z-index:20;width:258px;
+  display:flex;flex-direction:column;gap:11px;padding:14px 15px 13px;
+  border:1px solid var(--gray-200);border-radius:16px;background:#fff;
+  box-shadow:var(--shadow-overlay);text-align:left}
+.rq-f-ask-q{font-size:13px;line-height:1.4;font-weight:450;color:var(--gray-900);text-wrap:balance}
+/* "auto-submit?" broke across lines at "auto-" and hyphenated a product term */
+.rq-f-ask-q b{font-weight:inherit;white-space:nowrap}
+.rq-f-ask-row{display:flex;align-items:center;justify-content:flex-end;gap:8px}
+.rq-f-ask-btn{font-size:12px;font-weight:500;line-height:1;padding:8px 16px;border-radius:9999px;
+  transition:background .18s linear,color .18s linear,transform .12s linear}
+.rq-f-ask-no{color:var(--gray-500);border:1px solid var(--gray-200);background:#fff}
+.rq-f-ask-no.rq-f-hover{background:var(--gray-50);color:var(--gray-900)}
+.rq-f-ask-yes{color:#fff;background:var(--brand-600);border:1px solid transparent}
+.rq-f-ask-yes.rq-f-hover{background:var(--brand-700)}
+.rq-f-ask-yes.rq-f-press{background:var(--brand-700);transform:scale(.95)}
+/* the header keeps a quiet receipt once the answer is yes, so the state the
+   person just chose is still legible after the prompt goes */
+.rq-f-autoon{margin-left:auto;font-family:var(--font-mono);font-size:11px;line-height:16px;
+  font-weight:500;color:var(--brand-600);user-select:none}
 .rq-f-subrow{display:flex;align-items:center;justify-content:space-between;padding:12px 20px 8px}
 .rq-f-label-mono{font-family:var(--font-mono);letter-spacing:.1em;text-transform:uppercase;font-size:9px;line-height:13.5px;
   color:var(--gray-400);display:inline-flex;align-items:center;gap:6px}

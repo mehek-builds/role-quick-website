@@ -25,8 +25,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import {
-  ACTIONS, AUTO_APPLY, AUTO_FLY, BLOOMBERG, BULLETS, COLUMNS, EMAIL, FEATURED,
-  FIELDS, GITHUB, IDX, JD_LINES, JOBS, NAV, ORB_STATE, QUEUE, REDDIT,
+  ACTION_MOVES, ACTIONS, ASK, AUTO_APPLY, AUTO_FLY, BLOOMBERG, BULLETS, COLUMNS,
+  EMAIL, FEATURED,
+  FIELDS, GITHUB, IDX, JD_LINES, JOBS, NAV, ORB_STATE, QUEUE, REDDIT, STAGE_ACTION,
   SEED_BOARD, STAGE, STEPS, type Board, type Job,
 } from "./flow/data";
 import {
@@ -213,7 +214,8 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
   const applyBtn = useRef<HTMLDivElement>(null);
   const actBtn = useRef<HTMLSpanElement>(null);
   const navApps = useRef<HTMLDivElement>(null);
-  const toggleWrap = useRef<HTMLDivElement>(null);
+  const yesBtn = useRef<HTMLSpanElement>(null);
+  const noBtn = useRef<HTMLSpanElement>(null);
   const appsTab = useRef<HTMLSpanElement>(null);
 
   const S = useRef<S>(freshState());
@@ -226,8 +228,6 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
   const cursorSpring = useRef<(() => void) | null>(null);
   const cursorPos = useRef({ x: 0, y: 0 });
   const cursorScale = useRef(1);
-  const knobX = useRef(2);
-  const knobSpring = useRef<(() => void) | null>(null);
   const accentTop = useRef<number | null>(null);
   const flashRaf = useRef(0);
   const prev = useRef({ page: "", feed: "", today: 0, autopilot: false, scanning: false, packet: false, counts: {} as Record<string, number> });
@@ -259,7 +259,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
       s.today += 1;
       s.feed = QUEUE[0];
     } else if (st === "landFlash") { startFlash(FEATURED.key, "blue"); }
-    else if (st === "toggleClick") { s.autopilot = true; }
+    else if (st === "askClick") { s.autopilot = true; }
     else if (st === "detect2") { s.feed = BLOOMBERG; }
     else if (AUTO_FLY.includes(st) && s.feed) {
       const j = s.feed;
@@ -310,7 +310,6 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
         const keep = s.stepIdx;
         Object.assign(s, freshState());
         void keep;
-        knobX.current = 2;
         flying.current.clear();
         flipRuns.current.clear();
         prev.current = { page: "", feed: "", today: 0, autopilot: false, scanning: false, packet: false, counts: {} };
@@ -361,7 +360,6 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
       document.removeEventListener("visibilitychange", onVis);
       cancelAnimationFrame(flashRaf.current);
       cursorSpring.current?.();
-      knobSpring.current?.();
       runsAtMount.forEach((k) => k());
     };
   }, [applyStepEffects, rerender]);
@@ -380,7 +378,6 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
       runFlip(el, pendingFlip.current, flying.current, flipRuns.current, lag, paintFlashes);
       pendingFlip.current = null;
     }
-    syncToggle(lag);
     syncNav(S.current.justReset, lag);
     placeCursor(lag);
 
@@ -445,9 +442,10 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
     };
 
     if (st === "move") put(rect(applyBtn.current));
-    else if (st.endsWith("Move") && actBtn.current) put(rect(actBtn.current), 0.5, 0.6);
+    else if (ACTION_MOVES.includes(st) && actBtn.current) put(rect(actBtn.current), 0.5, 0.6);
     else if (st === "navMove") put(rect(appsTab.current ?? navApps.current), 0.55, 0.55);
-    else if (st === "toggleMove") put(rect(toggleWrap.current), 0.88, 0.62);
+    else if (st === "askNo") put(rect(noBtn.current));
+    else if (st === "askYes" || st === "askBack" || st === "askClick") put(rect(yesBtn.current));
     else if (st === "idle") S.current.cursor = { x: box.width * 0.62, y: box.height * 0.5, shown: true };
     else if (st === "autoApply1") S.current.cursor = { x: box.width * 0.62, y: box.height * 0.78, shown: true };
 
@@ -483,23 +481,6 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
       if (p < 1) requestAnimationFrame(scaleTick);
     };
     requestAnimationFrame(scaleTick);
-  }
-
-  function syncToggle(lag: number) {
-    const knob = root.current?.querySelector<HTMLElement>(".rq-f-knob");
-    if (!knob) return;
-    const target = S.current.autopilot ? 15 : 2;
-    knob.style.transform = `translateX(${knobX.current}px)`;
-    if (knobX.current === target) return;
-    knobSpring.current?.();
-    knobSpring.current = springTo(
-      { x: knobX.current }, { x: target }, { stiffness: 500, damping: 30 },
-      (s) => {
-        knobX.current = s.x;
-        const k = root.current?.querySelector<HTMLElement>(".rq-f-knob");
-        if (k) k.style.transform = `translateX(${s.x}px)`;
-      }, undefined, lag,
-    );
   }
 
   function syncNav(instant: boolean, lag: number) {
@@ -692,7 +673,24 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
       </>
     );
 
+    /* The same question the desktop variant asks, so both variants tell one
+       story. It takes the whole body rather than sitting under the stage counts,
+       which needed 120px of a 112px window; the counts are back one beat later.
+       No hover states: there is no cursor on the phone, and faking one would
+       show a pointer a phone does not have. The press on Yes is real, because
+       that beat is the answer being given. */
+    const askBlock = (
+      <div className="rq-fp-ask rq-fp-ask-solo">
+        <span className="rq-fp-ask-q">Would you like to turn on <b>auto-submit?</b></span>
+        <span className="rq-fp-ask-row">
+          <span className="rq-fp-ask-btn rq-fp-ask-no">No</span>
+          <span className={cx("rq-fp-ask-btn rq-fp-ask-yes", st === "askClick" && "rq-f-press")}>Yes</span>
+        </span>
+      </div>
+    );
+
     const bodyPhone =
+      ASK.includes(st) ? askBlock :
       IDX[st] < IDX["jdScan"] ? queue :
       stage === "resume" ? (
         <>
@@ -766,19 +764,29 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
         <div className="rq-fp-body">{bodyPhone}</div>
 
         <div className="rq-fp-foot">
+          {/* Same rule as the desktop footer: the working stage's slot IS the
+              orb, and the tick replaces it on approval. This is also what earns
+              the orb its place back here, having been removed when it sat beside
+              the marks as a fourth one of them rather than as one of them. */}
           <span className="rq-f-steps">
-            {[0, 1, 2].map((i) =>
-              i < approved
-                ? <Tick key={i} className="rq-f-stick" />
-                : <i key={i} className={cx(["resume", "form", "email"][i] === stage && "rq-f-on")} />)}
+            {(["resume", "form", "email"] as const).map((name, i) => (
+              <span className="rq-f-slot" key={name}>
+                {i < approved
+                  ? <Tick className="rq-f-stick" />
+                  : name === stage && orbState
+                    ? <Orb state={orbState} px={13} />
+                    : <i className={cx(name === stage && "rq-f-on")} />}
+              </span>
+            ))}
           </span>
-          {/* No orb here. At 20px it sits beside three step marks of the same
-              weight and reads as a fourth step; the lit bar already says which
-              stage is working. The desktop variant keeps it, where it has room
-              and no row of marks to be confused with. */}
-          {action
-            ? <span className="rq-fp-act" style={{ transform: `scale(${st.endsWith("Click") ? 0.94 : 1})` }}>{action.label}</span>
-            : sent && <span className="rq-fp-sent">Sent 19:42:31</span>}
+          {sent
+            ? <span className="rq-fp-sent">Sent 19:42:31</span>
+            : stage && (
+              <span className={cx("rq-fp-act", !action && "rq-f-act-wait")} aria-disabled={!action}
+                style={{ transform: `scale(${st.endsWith("Click") ? 0.94 : 1})` }}>
+                {STAGE_ACTION[stage]}
+              </span>
+            )}
         </div>
       </div>
     );
@@ -796,19 +804,33 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
           <div className={cx("rq-f-packet", !prev.current.packet && "rq-f-anim")}>
             <div className="rq-f-packet-body" data-stage={stage}>{scene}</div>
             <div className="rq-f-packet-foot">
+              {/* Each stage owns one slot. While the stage is working the slot IS
+                  the orb, so the thing that is thinking sits exactly where its
+                  tick will land; the tick replaces it once the person approves.
+                  Fixed-width slots, or the row would jitter as 18px bars, 14px
+                  orbs and 13px ticks swapped places. */}
               <span className="rq-f-steps">
-                {[0, 1, 2].map((i) =>
-                  i < approved
-                    ? <Tick key={i} className="rq-f-stick" />
-                    : <i key={i} className={cx(["resume", "form", "email"][i] === stage && "rq-f-on")} />)}
+                {(["resume", "form", "email"] as const).map((name, i) => (
+                  <span className="rq-f-slot" key={name}>
+                    {i < approved
+                      ? <Tick className="rq-f-stick" />
+                      : name === stage && orbState
+                        ? <Orb state={orbState} px={16} />
+                        : <i className={cx(name === stage && "rq-f-on")} />}
+                  </span>
+                ))}
               </span>
-              {orbState && <Orb state={orbState} px={18} />}
               {sent
                 ? <span className="rq-f-sent-note">Sent 19:42:31</span>
-                : action && (
-                  <span ref={actBtn} className="rq-f-act-pill"
+                : stage && (
+                  /* Present for the whole stage, not just its two action beats,
+                     so the button the work is heading towards is visible while
+                     the work happens. Grey until the artifact is actually
+                     finished; `action` is truthy only on those beats. */
+                  <span ref={actBtn} className={cx("rq-f-act-pill", !action && "rq-f-act-wait")}
+                    aria-disabled={!action}
                     style={{ transform: `scale(${st.endsWith("Click") ? 0.94 : 1})` }}>
-                    {action.label}
+                    {STAGE_ACTION[stage]}
                   </span>
                 )}
             </div>
@@ -856,11 +878,33 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
     <div className={cx("rq-f-page-inner", prev.current.page !== s.page && "rq-f-anim")}>
       <div className="rq-f-phead">
         <div className="rq-f-head-left"><div className="rq-f-ptitle">Applications</div></div>
-        <div ref={toggleWrap} className="rq-f-autowrap">
-          <span className={cx("rq-f-autolabel", s.autopilot && "rq-f-on")}>Auto-submit</span>
-          <span className={cx("rq-f-toggle", s.autopilot && "rq-f-on")}><span className="rq-f-knob" /></span>
-        </div>
+        {s.autopilot && <span className="rq-f-autoon">Auto-submit on</span>}
       </div>
+
+      {/* The question, asked once, where the toggle used to sit.
+          A settings switch made turning auto-submit on look like a thing the
+          product does quietly; asking makes it a decision the person takes,
+          which is what actually happens and what the Guardrails promise.
+
+          A popover rather than a centred modal with a scrim: the beat right
+          before this one is the first application landing on the board and
+          flashing, and a scrim would hide the very thing the demo just earned.
+          Nothing is dimmed, so both read at once. */}
+      {/* askClick is kept in the condition on purpose: autopilot flips true in
+          that same beat, so gating on autopilot alone unmounted the card on the
+          very frame the click landed and the press never rendered. It leaves
+          one beat later, once the answer has visibly been taken. */}
+      {(!s.autopilot || st === "askClick") && s.page === "applications" && (
+        <div className={cx("rq-f-ask", prev.current.page !== s.page && "rq-f-anim")} role="group">
+          <span className="rq-f-ask-q">Would you like to turn on <b>auto-submit?</b></span>
+          <span className="rq-f-ask-row">
+            <span ref={noBtn} className={cx("rq-f-ask-btn rq-f-ask-no", st === "askNo" && "rq-f-hover")}>No</span>
+            <span ref={yesBtn}
+              className={cx("rq-f-ask-btn rq-f-ask-yes",
+                (st === "askYes" || st === "askBack") && "rq-f-hover", st === "askClick" && "rq-f-press")}>Yes</span>
+          </span>
+        </div>
+      )}
       <div className="rq-f-subrow">
         <span className="rq-f-label-mono">
           {s.autopilot
@@ -909,7 +953,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
   );
 
   return (
-    <div ref={root} className={cx("rq-f-root rq-f-mock", compact && "rq-f-compact")} role="img"
+    <div ref={root} className={cx("rq-f-root rq-f-mock", compact && "rq-f-compact")} data-step={st} role="img"
       aria-label="Litos finding a job, tailoring a resume to it, filling the application, writing the outreach email, and tracking the result.">
       <div className="rq-f-mock-glow" />
       <div className="rq-f-mock-frame">

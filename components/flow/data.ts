@@ -109,7 +109,10 @@ export const STEPS = [
   { name: "sendMove", ms: 560 }, { name: "sendClick", ms: 340 }, { name: "sent", ms: 850 },
   { name: "navMove", ms: 800 }, { name: "navClick", ms: 380 },
   { name: "swap", ms: 650 }, { name: "landFlash", ms: 850 },
-  { name: "toggleMove", ms: 850 }, { name: "toggleClick", ms: 420 },
+  // The prompt is up from "swap"; these are the person reading it, weighing
+  // both answers, and choosing. Auto-submit is never on until askClick.
+  { name: "askYes", ms: 780 }, { name: "askNo", ms: 660 },
+  { name: "askBack", ms: 540 }, { name: "askClick", ms: 400 },
   { name: "autoApply1", ms: 1250 }, { name: "autoFly1", ms: 750 },
   // a role turns up on its own, is announced, then lands in Applied
   { name: "detect2", ms: 1400 }, { name: "fly2", ms: 700 },
@@ -121,6 +124,9 @@ export type StepName = (typeof STEPS)[number]["name"];
 export const IDX: Record<string, number> =
   Object.fromEntries(STEPS.map((s, i) => [s.name, i]));
 export const LOOP_MS = STEPS.reduce((a, s) => a + s.ms, 0);
+
+/* The beats where the auto-submit question is on screen and being answered. */
+export const ASK = ["askYes", "askNo", "askBack", "askClick"];
 
 export const AUTO_APPLY = ["autoApply1"];
 export const AUTO_FLY = ["autoFly1", "fly2"];
@@ -178,6 +184,18 @@ export const ORB_STATE: Record<string, "searching" | "composing" | "solving" | "
   formOpen: "solving", fill1: "solving", fill2: "solving", fill3: "solving",
   emailOpen: "shaping", emailWrite: "shaping",
 };
+
+/* The label the stage's action carries, for the whole stage rather than only
+   its two action beats: the button is present from the moment the stage opens
+   so the person can see what it is building towards, greyed until it is real. */
+export const STAGE_ACTION: Record<"resume" | "form" | "email", string> = {
+  resume: "Approve resume", form: "Submit application", email: "Send email",
+};
+
+/* The three beats where the cursor travels to that button. Named explicitly:
+   testing st.endsWith("Move") also matched navMove, and only the accident of
+   the button being unmounted by then kept the cursor off it. */
+export const ACTION_MOVES = ["approveMove", "submitMove", "sendMove"];
 
 export const ACTIONS = [
   { steps: ["approveMove", "approveClick"], label: "Approve resume" },
