@@ -21,6 +21,7 @@ import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/lib/daily-mat
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
+import { ApplicationPacket } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/lib/jd-match";
@@ -61,6 +62,10 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
 export default function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /* The packet being looked at in the read-only viewer. Held as the packet itself rather than as an
+     id, so opening it cannot disturb selectedId and put the page onto the review flow for a packet
+     the user only wanted to LOOK at. */
+  const [revisiting, setRevisiting] = useState<GeneratedResume | null>(null);
   // Mirrors selectedId for in-flight async work to compare against. State reads inside an awaited
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
@@ -896,6 +901,14 @@ export default function Applications() {
             const packet = (packets ?? []).find((item) => item.id === id);
             if (packet) selectPacket(packet);
           }}
+          /* Revisit does NOT call selectPacket. Selecting drives the review flow and moves the
+             whole page onto a screen for that packet; looking at what was already sent should
+             leave the board exactly where it was, so this opens over the top and closes back to
+             the same scroll position. */
+          onRevisit={(id) => {
+            const packet = (packets ?? []).find((item) => item.id === id);
+            if (packet?.spec._review) setRevisiting(packet);
+          }}
         />
       ) : screen === "questions" ? (
         <QuestionsScreen
@@ -1041,6 +1054,16 @@ export default function Applications() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Rendered last and positioned fixed, so it lies over whichever screen the page is already
+          on and closing it returns the user to exactly that, untouched. */}
+      {revisiting?.spec._review && (
+        <ApplicationPacket
+          packet={revisiting}
+          review={revisiting.spec._review}
+          onClose={() => setRevisiting(null)}
+        />
       )}
     </div>
   );

@@ -311,7 +311,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
               <div>
                 <SectionHeading
                   id="packet-questions"
-                  eyebrow="03 · Autofill"
+                  eyebrow="03 · Forms"
                   title="Every question, and what was answered"
                   note={
                     packet.sent
@@ -353,7 +353,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
               <div>
                 <SectionHeading
                   id="packet-email"
-                  eyebrow="04 · Outreach"
+                  eyebrow="04 · Emails"
                   title="The email left in your Gmail"
                   note={packet.email.state}
                 />
