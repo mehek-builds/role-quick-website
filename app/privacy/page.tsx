@@ -34,7 +34,7 @@ export default function Privacy() {
           What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 27, 2026
+          Last updated: July 30, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. Open a job posting
@@ -184,10 +184,10 @@ export default function Privacy() {
 
         <Section title="Billing">
           <p>
-            Lemon Squeezy handles payments. We never see or keep your card
+            Stripe handles payments. We never see or keep your card
             number.
             Cancelling takes the same number of clicks as signing up. The link
-            is in your receipt email.
+            is in Settings.
           </p>
         </Section>
 

@@ -737,8 +737,7 @@ export default function Settings() {
                 that shows the real price, and it is always current. */}
             <p className="text-sm text-muted">
               <span className="font-medium text-ink">Need more room? </span>
-              Cancelling takes the same number of clicks as signing up, from
-              the link in your receipt email.
+              Cancelling takes the same number of clicks as signing up.
             </p>
             {me.is_guest ? <ButtonLink href="/login?claim=1&next=upgrade">
               Upgrade to Pro
@@ -751,7 +750,7 @@ export default function Settings() {
           </div>
         ) : me.tier === "pro" ? (
           <div className="mt-6 border-t border-border pt-5 text-sm text-muted">
-            You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel in Lemon Squeezy</a> : "Use the billing portal linked in your receipt email to manage or cancel."}
+            You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel your subscription</a> : "Contact support to manage or cancel."}
           </div>
         ) : null}
       </Card>

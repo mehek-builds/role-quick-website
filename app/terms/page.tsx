@@ -6,8 +6,8 @@ export const metadata = {
 
 /* Terms of service, including the refund policy.
  *
- * WHY THIS PAGE EXISTS AT ALL: Litos takes subscription payments through Lemon
- * Squeezy and, until this file, published no terms anywhere. There was no
+ * WHY THIS PAGE EXISTS AT ALL: Litos takes subscription payments through
+ * Stripe and, until this file, published no terms anywhere. There was no
  * refund policy, no cancellation terms, and no page for a buyer to read before
  * paying. That is an exposure independent of any product decision.
  *
@@ -19,9 +19,13 @@ export const metadata = {
  *      taken. US ROSCA and the FTC's negative-option rule say clearly and
  *      conspicuously; California's ARL says the same and USC students are the
  *      core audience. Hiding material terms is the thing those rules name.
- *   2. Lemon Squeezy is the merchant of record. Its seller terms require
- *      accurate, available refund terms, and it processes the refunds. Burying
- *      them risks the payment account, which costs more than any refund.
+ *   2. Stripe's services agreement requires accurate, available refund terms,
+ *      and refunds are issued through it. Burying them risks the payment
+ *      account, which costs more than any refund. This reason survived the
+ *      move off Lemon Squeezy on 2026-07-29; only the processor changed, and
+ *      with it the merchant of record, which is now Litos rather than the
+ *      processor. See the open tax question in the vault before writing any
+ *      VAT or sales-tax claim into this page.
  *   3. DESIGN.md's Guardrails are explicit: no dark patterns, and cancelling
  *      takes the same clicks as signing up. This is the same rule.
  *
@@ -39,8 +43,8 @@ export const metadata = {
    remaining half of this and lives in the backend repo: the clickwrap on the
    sign-in screen forms the agreement, and storing the version is what proves
    which text a given account accepted. */
-export const TERMS_VERSION = "2026-07-27";
-const TERMS_EFFECTIVE = "27 July 2026";
+export const TERMS_VERSION = "2026-07-30";
+const TERMS_EFFECTIVE = "30 July 2026";
 
 function Section({
   title,
@@ -139,8 +143,8 @@ export default function Terms() {
             recurring basis until you cancel.
           </p>
           <p>
-            Lemon Squeezy handles payments and is the merchant of record. Litos
-            never sees or stores your card number.
+            Stripe handles payments. Litos never sees or stores your card
+            number.
           </p>
           <p>
             Prices, what each plan includes, and the renewal period are shown on
@@ -152,7 +156,7 @@ export default function Terms() {
         <Section title="Cancelling">
           <p>
             Cancel any time. It takes the same number of clicks as signing up,
-            and the link is in your receipt email and in Settings.
+            and the link is in Settings.
           </p>
           <p>
             Cancelling stops the next charge. It does not end the period you have
