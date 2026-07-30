@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
 import { API_URL } from "@/lib/config";
+import { getStoredEmail, getToken, type Me } from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
 import { Button } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
@@ -43,6 +44,65 @@ export default function Contact() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  /* Prefills the email of whoever is signed in, so a support reply does not
+     open by asking which account this is.
+   *
+   * This page is PUBLIC, and that shapes the whole effect:
+   *
+   * - api("/me") is deliberately NOT used. It answers a 401 by clearing the
+   *   session and sending the browser to /login, which on a signed-in page is
+   *   right and here would throw every anonymous visitor off the only support
+   *   route the site has. A stale token in localStorage would do it too. So
+   *   /me is called with a plain fetch and any failure is swallowed.
+   * - /me is only called when a token exists. No token means nothing to ask
+   *   about, and an unauthenticated call would just 401.
+   * - localStorage is read first because it is synchronous and already holds
+   *   the address from sign-in, so the common case fills with no network at
+   *   all. /me then corrects it if the account email has since changed.
+   * - Nothing here ever overwrites typing. Both writes go through
+   *   fillIfUntouched, so someone who deliberately writes from a different
+   *   address keeps it. The field stays editable: this is a default, not a
+   *   lock, and people legitimately write in about an account they cannot get
+   *   into.
+   *
+   * queueMicrotask matches the dashboard's AccountFooter: localStorage does not
+   * exist during the server render, and setting state synchronously in the
+   * effect body would cascade a render before first paint. */
+  useEffect(() => {
+    let cancelled = false;
+    /* What this effect last wrote. Effect-local rather than state on purpose:
+       the effect runs once, so a state value captured here would be stuck at its
+       mount value and /me could never correct a stale stored address. */
+    let filled: string | null = null;
+
+    const fillIfUntouched = (next: string) => {
+      if (cancelled || !next) return;
+      setEmail((current) => (current === "" || current === filled ? next : current));
+      filled = next;
+    };
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const stored = getStoredEmail();
+      if (stored) fillIfUntouched(stored);
+
+      const token = getToken();
+      if (!token) return;
+      void fetch(`${API_URL}/me`, {
+        headers: { ...litosClientHeaders(), Authorization: `Bearer ${token}` },
+      })
+        .then((res) => (res.ok ? (res.json() as Promise<Me>) : null))
+        .then((me) => {
+          /* Guest sessions have no address to offer. */
+          if (me?.email) fillIfUntouched(me.email);
+        })
+        .catch(() => null);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -113,21 +173,19 @@ export default function Contact() {
               <label htmlFor="c-email" className="mt-6 block text-[13px] text-ink">
                 Your email
               </label>
-              {/* Asks for the ACCOUNT email, 2026-07-30. Without it a support
-                  reply starts by asking which account this is, which is a
-                  wasted round trip on a form whose top reason is "Something is
-                  not working".
+              {/* One line, on Mehek's call 2026-07-30. It named the account
+                  email and then explained the lookup, the reply and the data
+                  promise; signed in, the box is already filled and all three
+                  were answering questions nobody had.
 
-                  "if you have one" is deliberate and should stay. Two of the
-                  REASONS above, "Career centre or university" and "Something
-                  else", come from people who have never signed up, and a flat
-                  demand for an account email would read as a wall to them. The
-                  privacy promise stays too: it is the one sentence here that is
-                  a commitment rather than an instruction. */}
+                  Note what went with it: "nothing else is done with it" was the
+                  one commitment in this helper text rather than an instruction.
+                  The same promise is still made on /privacy, which the FAQ links
+                  to, but it is no longer made at the field. If it ever comes
+                  back, it comes back as its own short line and not appended
+                  here. */}
               <p className="mt-1 text-xs leading-5 text-faint">
-                Use the email on your Litos account if you have one, so we can
-                look you up. The reply goes there, and nothing else is done with
-                it.
+                The email associated with your account.
               </p>
               <input
                 id="c-email"
