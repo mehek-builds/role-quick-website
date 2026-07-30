@@ -360,7 +360,7 @@ export type ApplicationReview = {
   receipt?: {
     confirmation_text: string;
     final_url: string;
-    screenshot_url: string;
+    screenshot_url?: string;
     captured_at: string;
     reference_id?: string;
   };
