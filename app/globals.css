@@ -392,6 +392,12 @@ html {
     .rq-cine-still {
       display: block;
     }
+    .rq-cine-still-product {
+      background-image: url("/product/dashboard-emails.png");
+      background-position: top center;
+      background-repeat: no-repeat;
+      background-size: contain;
+    }
   }
   @media (min-width: 1280px) {
     .rq-cine-still {

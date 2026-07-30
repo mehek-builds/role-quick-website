@@ -2,6 +2,7 @@
 
 import { API_URL } from "./config";
 import { litosClientHeaders, type ProductMeta } from "./product";
+import { requestShareKey, shareInFlight } from "./in-flight";
 
 const TOKEN_KEY = "rq_token";
 const EMAIL_KEY = "rq_email";
@@ -61,13 +62,24 @@ export class ApiError extends Error {
   }
 }
 
+const inFlightGets = new Map<string, Promise<unknown>>();
+
 /** Authenticated fetch against the Litos backend. On 401 the session is
  *  cleared and the caller is bounced to /login. */
-export async function api<T>(
+export function api<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
   const token = getToken();
+  const dedupeKey = requestShareKey(path, token, init);
+  return shareInFlight(inFlightGets, dedupeKey, () => requestApi<T>(path, init, token));
+}
+
+async function requestApi<T>(
+  path: string,
+  init: RequestInit,
+  token: string | null,
+): Promise<T> {
   const headers = new Headers(init.headers);
   for (const [name, value] of Object.entries(litosClientHeaders())) {
     headers.set(name, value);
