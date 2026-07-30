@@ -3,10 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 
-/* The product, shown working (hero demo, second thing on the page): a job
-   posting in a browser with the Litos extension panel assembling the
-   packet live. Finished artifacts become actionable Review rows that jump
-   to their pillar section. Reduced-motion users get the finished scene. */
+/* The product, shown working: a job posting in a browser with the Litos
+   extension panel assembling the packet live. Finished artifacts become
+   actionable Review rows that jump to their pillar section. Reduced-motion
+   users get the finished scene.
+
+   This was the hero demo, second thing on the page, until PR #119 replaced
+   the hero with FlowDemo. It now renders in #packet, AFTER the three pillar
+   sections, as the recap that shows Resume, Forms and Emails happening as
+   one job rather than three. That is also why the Review rows still scroll
+   to #documents, #autofill and #outreach: from here they point back at
+   sections the viewer has already read. */
 
 /* The application on the left. This used to be four grey skeleton bars and a
    dead "Apply for this job" pill, which meant the demo showed the packet being

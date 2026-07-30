@@ -4,6 +4,7 @@ import {
   ResumeMatchDemo,
 } from "@/components/Mockups";
 import { OutreachDemo } from "@/components/OutreachDemo";
+import { PacketDemo } from "@/components/PacketDemo";
 import { Reveal } from "@/components/Motion";
 import { CinematicHero } from "@/components/cinema/CinematicHero";
 import { CinematicPage } from "@/components/cinema/CinematicPage";
@@ -468,6 +469,43 @@ export default function Home() {
               </div>
             </Reveal>
             </div>
+          </div>
+        </section>
+
+        {/* The packet. The three pillars above each show ONE act in
+            isolation, which is the right way to explain them and the wrong
+            way to convey that they are a single job. This is the recap: the
+            same three artifacts, made against one real posting, in one pass,
+            with the employer's form filling on the left as the evidence for
+            the panel's claims on the right.
+
+            It sits here rather than in the hero (where it ran until PR #119)
+            because it now depends on the pillars: its three phases are
+            Resume, Forms and Emails in that order, and its finished rows
+            scroll BACK to #documents, #autofill and #outreach. As a teaser
+            those links pointed forward at sections the viewer had not read.
+            As a recap they point back at ones they have, which is the
+            direction that actually helps.
+
+            No duration claim on the section. The panel states its own
+            "Ready · 9 seconds" inside the fiction of the demo, which is a
+            claim about the product finishing a packet, not about how long
+            this loop runs. Do not add a second one out here. */}
+        <section id="packet" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative px-6 py-32">
+            <Reveal>
+              <h2 className="text-center text-section font-[450] tracking-[-0.02em] text-ink">
+                One posting. All three, at once.
+              </h2>
+              <p className="mx-auto mt-4 max-w-xl text-center text-base leading-7 text-muted">
+                Resume, application and email are not three chores you do in
+                turn. They are one job, and this is it happening.
+              </p>
+              <div className="pt-12">
+                <div data-demo><PacketDemo /></div>
+              </div>
+            </Reveal>
           </div>
         </section>
 
