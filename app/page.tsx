@@ -59,28 +59,17 @@ const FAQ_ITEMS = [
        because the mechanism is an email to support. */
     a: "Yes. We use your resume and answers only to fill in your own job applications. In your browser, the extension reads only the job page you are on. On our side, Litos looks at job boards to find you roles, and it opens the company's form itself if you ask it to send. We never sell or share your data, and we never will. You can delete everything we hold whenever you want. The privacy page lists every part of this.",
   },
-  /* REMOVED 2026-07-30, on Mehek's call: the support question, "Something is
-     not working. Who do I ask?" It answered the "it broke" case and pointed at
-     the contact form, and it asked for the job link, saying that a link Litos
-     could not fill is the most useful thing a user can send because it is how
-     a new site gets added.
-
-     Two consequences to know before this stays gone:
-
-     - It was added to close audit finding S25, which was that the site had no
-       answer to "it broke" and no contact route outside the data-request
-       address buried in /privacy. The route itself SURVIVES: the footer
-       carries a Contact link, so a person looking for help can still find one.
-       What is gone is the answer at the moment of doubt.
-     - The request for the job link is now made nowhere on the site. That was a
-       product feedback loop, not just support copy: it is how unfillable
-       portals got reported and added. If ATS coverage requests dry up, this is
-       the first place to look.
-
-     Say-once still applies if it ever comes back: where Litos works is
-     answered in the autofill section, and the support answer must not become a
-     second copy of that list. It also deliberately promised a real reply
-     rather than a response time nobody staffs. */
+  /* The support question. Until now the site had no answer to "it broke", and
+     no contact route at all outside the data-request address buried in
+     /privacy: a stuck installer had nowhere to go, which is audit finding S25.
+     Deliberately about getting HELP rather than about coverage. Where it works
+     is already answered once, in the autofill section, and say-once means this
+     must not become a second copy of that list. It also sets an expectation it
+     can keep rather than promising a response time nobody staffs. */
+  {
+    q: "Something is not working. Who do I ask?",
+    a: "Use the contact form and tell us the job link you were on. A person built this and a person answers, so it is not instant, but it is a real reply. If Litos could not fill a form, that link is the single most useful thing you can send: it is how the site gets added.",
+  },
 ];
 
 /* The one icon set on the site: the brand deck's three pillar pictograms
