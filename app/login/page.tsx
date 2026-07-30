@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
+import { FlowDemoFit } from "@/components/FlowDemo";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -103,6 +104,20 @@ export default function Login() {
   const router = useRouter();
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim()
     || "719679889441-oto6bdqapcrdmcso8lsfs46qc4nvpb3s.apps.googleusercontent.com";
+  /* Whether the decorative panel's demo should exist at all. Starts false so the server render and
+     the first client render agree, then the effect promotes it on wide viewports. Being wrong for
+     one frame costs nothing here: the panel is aria-hidden decoration, and the alternative was
+     mounting an animating demo inside a display:none subtree on every phone. Matches the xl
+     breakpoint on the aside, and stays in step if the window is resized across it. */
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1280px)");
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
   const [step, setStep] = useState<Step>("credentials");
   const [flow, setFlow] = useState<Flow>("signin");
   const [email, setEmail] = useState("");
@@ -391,7 +406,10 @@ export default function Login() {
        Preview is lg and up only. Below that it would push the form itself
        under the fold, and the form is what the page is for.
        Approved 2026-07-27 as override 3 of 10 (DESIGN.md). */
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    /* The row turns on at the same width the panel does. Left at lg it was a
+       row with one child, which looks identical but states a pairing that is
+       no longer true, and the next person to move the panel would trust it. */
+    <div className="flex min-h-screen flex-col xl:flex-row">
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <Link href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -689,35 +707,78 @@ export default function Login() {
       </p>
       </div>
 
-      {/* The product, beside the form. Real capture, no device frame and no
-          drop shadow: the imagery law is real product UI, and a mockup chrome
-          around a screenshot is decoration pretending to be evidence.
+      {/* The product, beside the form. No device frame and no drop shadow: the
+          imagery law is real product UI, and a mockup chrome around a picture
+          of the product is decoration pretending to be evidence.
 
-          The extension on a posting rather than the dashboard, deliberately.
-          It is the moment the whole product turns on, and its portrait shape
-          fits a column, which is exactly why it was wrong for the hero. */}
+          THE HERO DEMO, the same FlowDemoFit the homepage runs, not the
+          extension capture that stood here until now. It is one visual or the
+          other by the law's one-per-section rule, so this is a choice between
+          them rather than an addition.
+
+          One demo, two places, deliberately. A visitor arrives at /login having
+          just watched this run on the homepage, and meeting the same picture
+          again is continuity rather than repetition: it is the thing they were
+          promised, still playing while they sign in. A second, different
+          composition here would be a new thing to read at the exact moment the
+          reader is trying to do something else.
+
+          Rendered rather than photographed, so it cannot go stale the way a PNG
+          of a shipped screen does. A change to the demo reaches this page on the
+          same deploy as the homepage. */}
+      {/* xl, not lg, and the padding came down from px-14 to px-8. Both are the
+          demo's measurements rather than taste.
+
+          FlowDemoFit switches composition, not just scale: under 480px of
+          container it stops being the desktop picture and becomes the phone
+          one. At lg the column was 46% of 1024 minus px-14, which is 358px, so
+          a laptop at 1024 got the PHONE demo standing in a desktop-shaped
+          column, 217px tall in a full-height panel. Widening alone could not
+          fix it: at 46% of 1024 the column is 471px before any padding at all,
+          under the threshold with nothing left to give.
+
+          So the panel now appears at 1280 and up, where 48% minus px-8 leaves
+          550px and the demo renders as the compact desktop picture at close to
+          full size, growing into the full composition past about 1600. Between
+          1024 and 1280 the form stands on its own, which is what it already
+          does on every narrower screen. */}
       <aside
         aria-hidden
-        className="hidden border-l border-border bg-surface-alt lg:flex lg:w-[46%] lg:shrink-0 lg:flex-col lg:justify-center lg:px-14 lg:py-16"
+        /* bg-brand-soft, not bg-surface-alt. The striping token is #faf9f7 and
+           the demo carries its own white backing, so a white card sat on a
+           near-white panel beside a white form column and the whole page read
+           as one flat white field with a hairline down it. The panel has to be
+           a GROUND for the demo, and #faf9f7 cannot be a ground for white.
+
+           brand-soft (#eef1fe) is the lightest tint the system already owns
+           and it is the Litos blue, so the demo now sits on something rather
+           than floating, without introducing a colour the palette does not
+           have. The form column stays pure white: the page keeps its white
+           canvas, and the tint is on the decorative half only. */
+        className="hidden border-l border-border bg-brand-soft xl:flex xl:w-[48%] xl:shrink-0 xl:flex-col xl:justify-center xl:px-8 xl:py-16"
       >
         {/* The "Inside Litos" eyebrow came off 2026-07-28. The panel is
-            aria-hidden decoration showing the extension on a posting; labelling
-            a picture of the product with the product's name is the caption
-            saying what the picture already says. */}
-        {/* Height-capped, not width-capped. The form column is the taller of
-            the two once its footnote is counted, and the row stretches to
-            match it, so a width-capped portrait image centred in that row ran
-            past the fold and the panel lost its last rows. Capping the height
-            keeps the whole capture on screen at any viewport.
-            (Said "two footnotes" until 2026-07-28, when one of the two was
-            deleted a few lines above. The cap is still right; the count was
-            not.) */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/product/extension-job.png"
-          alt=""
-          className="mt-6 max-h-[62svh] w-auto self-start rounded-inner border border-border"
-        />
+            aria-hidden decoration showing the product; labelling a picture of
+            the product with the product's name is the caption saying what the
+            picture already says. */}
+        {/* w-full, and the reason is load-bearing rather than stylistic:
+            FlowDemoFit measures its PARENT's clientWidth to choose between the
+            full, compact and phone compositions. A content-sized wrapper would
+            hand it back its own width as the answer and it would latch onto
+            whichever variant it happened to render first. Same wrapper the
+            homepage hero uses, for the same reason.
+
+            No height cap here. The demo scales itself to the width it is given
+            and this column is 48% minus px-8, which lands it just under
+            COMPACT_BELOW, so it renders the compact picture at close to full
+            size. The old height cap existed for a portrait PNG that could not
+            scale; this one has no fixed size to run past. */}
+        {/* Mounted on width, not hidden by CSS. `hidden xl:flex` is display only, so React still
+            mounted the demo on every phone: FlowDemoFit bails its measure on a zero-width parent
+            and keeps its initial `ok: true`, so the full desktop composition rendered inside a
+            display:none subtree, running its rAF loops and timer chain for a picture nobody could
+            see. The <img> this replaced cost one request; this cost battery on the auth path. */}
+        {wide && <div className="flex w-full justify-center"><FlowDemoFit /></div>}
       </aside>
     </div>
   );

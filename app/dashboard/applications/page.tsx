@@ -16,11 +16,12 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/lib/application-review";
 import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/lib/daily-matches";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
+import { ApplicationPacket } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/lib/jd-match";
@@ -61,6 +62,25 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
 export default function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  /* The packet being looked at in the read-only viewer, held as an ID and resolved against `packets`
+     at render. Separate from selectedId on purpose, so opening the viewer cannot put the page onto
+     the review flow for a packet the user only wanted to LOOK at.
+
+     It stored the packet OBJECT until review. That was wrong in a way that defeated the feature:
+     every update in this file replaces packets immutably (`setPackets((current) => current?.map(
+     ... ? { ...item, spec: { ...item.spec, _review: result.review } } : item))`), so the array got a
+     new object and the captured one went stale. The board and the autopilot countdown both stay
+     mounted behind the viewer, so an autopilot send landing while it was open left the screen
+     insisting "Built ..., not sent" about an application that had just gone out. Deriving means the
+     viewer follows the same data as the page, and closes itself if the packet leaves the window. */
+  const [revisitingId, setRevisitingId] = useState<string | null>(null);
+  const revisitingPacket = revisitingId ? (packets ?? []).find((item) => item.id === revisitingId) ?? null : null;
+  /* Stable identity. The viewer's focus-trap effect keys on its onClose, and an inline arrow here
+     gave it a new one on every render of this page: each parent commit tore the effect down and
+     rebuilt it, which ran the cleanup's `previous?.focus?.()` and threw focus out of an open
+     aria-modal dialog back onto the board behind it, then re-locked body scroll. A keyboard user
+     reading the answers got yanked back to Close every time the autopilot ticked. */
+  const closeRevisit = useCallback(() => setRevisitingId(null), []);
   // Mirrors selectedId for in-flight async work to compare against. State reads inside an awaited
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
@@ -896,6 +916,17 @@ export default function Applications() {
             const packet = (packets ?? []).find((item) => item.id === id);
             if (packet) selectPacket(packet);
           }}
+          /* Revisit does NOT call selectPacket. Selecting drives the review flow and moves the
+             whole page onto a screen for that packet; looking at what was already sent should
+             leave the board exactly where it was, so this opens over the top and closes back to
+             the same scroll position. */
+          onRevisit={setRevisitingId}
+          /* The ids the viewer can actually open, which is NOT the same set as openableIds.
+             `_review` is optional on the spec, and the mark used to render for every packet in
+             history while the handler quietly did nothing for the ones without a review: a fully
+             styled, focusable, labelled button that was inert on click and on Enter. A control
+             that cannot act should be absent, not dead. */
+          revisitableIds={new Set((packets ?? []).filter((item) => item.spec._review).map((item) => item.id))}
         />
       ) : screen === "questions" ? (
         <QuestionsScreen
@@ -1041,6 +1072,20 @@ export default function Applications() {
             </div>
           </div>
         </>
+      )}
+
+      {/* Rendered last and positioned fixed, so it lies over whichever screen the page is already
+          on and closing it returns the user to exactly that, untouched.
+
+          Resolved from `packets` every render rather than from a captured object, so what the
+          viewer shows is what the page knows. If the packet leaves the 50-row window, this falls
+          to null and the viewer closes rather than showing a record nothing can corroborate. */}
+      {revisitingPacket?.spec._review && (
+        <ApplicationPacket
+          packet={revisitingPacket}
+          review={revisitingPacket.spec._review}
+          onClose={closeRevisit}
+        />
       )}
     </div>
   );
@@ -1497,7 +1542,4 @@ function applicationCardClasses(packet: GeneratedResume, selected: boolean): str
   return selected ? `${semantic} ring-2 ring-brand ring-offset-2` : semantic;
 }
 
-function stripMetadata(spec: GeneratedResume["spec"]): ResumeSpec {
-  return { school: spec.school ?? "", degree: spec.degree ?? "", grad_date: spec.grad_date ?? "", coursework: spec.coursework ?? "", education_position: spec.education_position, experience: spec.experience ?? [], skills: spec.skills ?? [], skill_source: spec.skill_source };
-}
 

@@ -46,12 +46,24 @@ const STAGE_LABEL: Record<Stage, string> = {
 
 export function Board({
   onOpen,
+  onRevisit,
   openableIds,
+  revisitableIds,
 }: {
   onOpen?: (id: string) => void;
+  /** Open the packet that was built for this card: the resume, the posting and every answer.
+   *  Separate from onOpen, which resumes the review flow. Both need to exist, because "carry on
+   *  working on this" and "show me what already went out" are different intentions and collapsing
+   *  them means one of the two is unreachable. */
+  onRevisit?: (id: string) => void;
   /** Ids the parent can actually open. The board is unbounded relative to the 50-row history the
    *  parent holds, so past 50 applications the older cards looked clickable and did nothing. */
   openableIds?: ReadonlySet<string>;
+  /** Ids that have a packet to show. NOT the same set as openableIds: a packet can be openable in
+   *  the review flow while having no review to revisit, and the mark must be absent for those
+   *  rather than rendered and inert. Undefined means "same as openable", for callers that pass
+   *  onRevisit without the distinction. */
+  revisitableIds?: ReadonlySet<string>;
 }) {
   const [cards, setCards] = useState<BoardCard[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -101,6 +113,9 @@ export function Board({
   const openable = (card: BoardCard) =>
     card.reviewable && (openableIds === undefined || openableIds.has(card.id));
 
+  const revisitable = (card: BoardCard) =>
+    Boolean(onRevisit) && (revisitableIds === undefined ? openable(card) : revisitableIds.has(card.id));
+
   if (failed) {
     return (
       <p className="text-sm text-muted">
@@ -135,7 +150,7 @@ export function Board({
                 without bound and stretches every sibling to the tallest one. */}
             <ul className="mt-2 max-h-[60vh] space-y-2 overflow-y-auto pr-1">
               {column.map((card) => (
-                <li key={card.id} className="rounded-inner border border-border bg-surface p-3">
+                <li key={card.id} className="relative rounded-inner border border-border bg-surface p-3">
                   <button
                     type="button"
                     onClick={() => openable(card) && onOpen?.(card.id)}
@@ -152,7 +167,38 @@ export function Board({
                     {relativeTime(card.moved_at ?? card.created_at)}
                     {card.submission_status ? ` · Litos: ${card.submission_status.replace(/_/g, " ")}` : ""}
                   </p>
-                  <MoveControl card={card} stages={stages} busy={busy.has(card.id)} onMove={move} />
+                  {/* The move control keeps its right edge clear so the packet mark can sit in the
+                      actual corner rather than above it. */}
+                  <div className={revisitable(card) ? "pr-8" : ""}>
+                    <MoveControl card={card} stages={stages} busy={busy.has(card.id)} onMove={move} />
+                  </div>
+
+                  {/* THE PACKET MARK, bottom right. Always visible rather than on hover: a board is
+                      scanned, and a control that appears only under the cursor cannot be scanned
+                      for, nor touched at all on a phone. It is a sibling of the card's own button,
+                      never nested inside it, because a button inside a button is invalid HTML.
+                      24px is the mark; the ::after pushes the hit area to 40px. */}
+                  {revisitable(card) && (
+                    <button
+                      type="button"
+                      onClick={() => onRevisit?.(card.id)}
+                      aria-label={`See the application built for ${card.role} at ${card.company}: the resume, the posting and every answer`}
+                      title="See the application again"
+                      /* rounded-inner, not a one-off 7px. DESIGN.md defines exactly three radii and
+                         an arbitrary fourth is how a scale stops being one. */
+                      className="after:absolute after:-inset-2 after:content-[''] absolute bottom-[15px] right-3 flex h-6 w-6 items-center justify-center rounded-inner text-faint transition-colors hover:bg-brand-soft hover:text-brand-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                    >
+                      <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" aria-hidden="true">
+                        <path
+                          d="M7 1.5h3.5V5M5 10.5H1.5V7"
+                          stroke="currentColor"
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  )}
                 </li>
               ))}
               {column.length === 0 && (
