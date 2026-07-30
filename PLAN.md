@@ -39,11 +39,13 @@ Structural family borrowed from Letterstory's console
 Marketing site (`/`, `/privacy`) plus the full in-browser product app, built
 2026-07-04: `/login` (passwordless email-code auth, same JWT account system as
 the extension, with legacy `/auth/session` fallback) and `/dashboard` with
-five views calling `student-outreach-backend` directly from the client
+seven views calling `student-outreach-backend` directly from the client
 (`lib/api.ts`, `lib/config.ts`):
 
 - **Overview**: `/me` usage meters (pillar-colored), tier/trial chips, Pro
   upsell only when the backend returns `upgrade_url`, merged recent activity.
+- **Jobs**: monitored opportunities with compensation, freshness, applied-state,
+  and match context.
 - **Applications**: the brand deck's unified review view, one packet per job
   from `/resume/history` with match-score ring (`spec._quality.atsCoverage`),
   keyword chips, and the company-matched outreach event.
@@ -51,6 +53,8 @@ five views calling `student-outreach-backend` directly from the client
   expandable drafts.
 - **Resume**: PDF upload (`POST /profile` multipart), parsed-profile preview,
   full experience-bank editor (`GET/PUT /profile/experience-bank`).
+- **Profile**: targeting preferences and application identity used to rank and
+  prepare jobs.
 - **Settings**: account, application-details form
   (`GET/PUT /profile/application`, save round-trip verified live), plan +
   usage, data export/delete contact.

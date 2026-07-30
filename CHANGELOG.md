@@ -2,12 +2,12 @@
 
 ## [0.1.6] - 2026-07-31
 
-### Changed
+### For contributors
 
-- Dashboard applications, jobs, and loading behavior now live behind stable feature APIs with
-  explicit domain, application, and infrastructure boundaries.
-- Architecture checks protect those boundaries while preserving the existing resume generation,
-  application review, matching, and dashboard behavior.
+- Dashboard application, job, and loading code is now easier to change safely because stable
+  feature APIs separate domain, application, and infrastructure responsibilities.
+- Architecture checks require public feature entry points, prevent presentation code from importing
+  feature internals, and keep framework and infrastructure dependencies out of domain code.
 
 ## [0.1.5] - 2026-07-31
 
