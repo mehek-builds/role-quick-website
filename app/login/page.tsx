@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
-import { PacketPreview } from "@/components/PacketPreview";
+import { FlowDemoFit } from "@/components/FlowDemo";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -392,7 +392,10 @@ export default function Login() {
        Preview is lg and up only. Below that it would push the form itself
        under the fold, and the form is what the page is for.
        Approved 2026-07-27 as override 3 of 10 (DESIGN.md). */
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    /* The row turns on at the same width the panel does. Left at lg it was a
+       row with one child, which looks identical but states a pairing that is
+       no longer true, and the next person to move the panel would trust it. */
+    <div className="flex min-h-screen flex-col xl:flex-row">
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-16">
       <Link href="/" className="mb-10 flex items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -694,44 +697,58 @@ export default function Login() {
           imagery law is real product UI, and a mockup chrome around a picture
           of the product is decoration pretending to be evidence.
 
-          THE PACKET, not the extension capture that stood here until now. Both
-          satisfy the law (DESIGN.md: real product UI only, the mockup
-          components), and it is one visual or the other by the same law's
-          one-per-section rule, so this is a choice between them rather than an
-          addition.
+          THE HERO DEMO, the same FlowDemoFit the homepage runs, not the
+          extension capture that stood here until now. It is one visual or the
+          other by the law's one-per-section rule, so this is a choice between
+          them rather than an addition.
 
-          The packet wins the slot because of what the reader is doing. The
-          extension capture showed the product STARTING: a posting found, work
-          about to happen. Someone at the sign-in form has already decided to
-          use Litos; what they have not seen is what they get out of it, and the
-          packet is the output, complete, with the answers checkable underneath.
-          It also keeps its portrait shape, which is the practical reason the
-          extension capture was right for this column and wrong for the hero.
+          One demo, two places, deliberately. A visitor arrives at /login having
+          just watched this run on the homepage, and meeting the same picture
+          again is continuity rather than repetition: it is the thing they were
+          promised, still playing while they sign in. A second, different
+          composition here would be a new thing to read at the exact moment the
+          reader is trying to do something else.
 
           Rendered rather than photographed, so it cannot go stale the way a PNG
-          of a shipped screen does: it is the same components the dashboard
-          viewer uses, so a change to the packet's design reaches this page on
-          the same deploy. */}
+          of a shipped screen does. A change to the demo reaches this page on the
+          same deploy as the homepage. */}
+      {/* xl, not lg, and the padding came down from px-14 to px-8. Both are the
+          demo's measurements rather than taste.
+
+          FlowDemoFit switches composition, not just scale: under 480px of
+          container it stops being the desktop picture and becomes the phone
+          one. At lg the column was 46% of 1024 minus px-14, which is 358px, so
+          a laptop at 1024 got the PHONE demo standing in a desktop-shaped
+          column, 217px tall in a full-height panel. Widening alone could not
+          fix it: at 46% of 1024 the column is 471px before any padding at all,
+          under the threshold with nothing left to give.
+
+          So the panel now appears at 1280 and up, where 48% minus px-8 leaves
+          550px and the demo renders as the compact desktop picture at close to
+          full size, growing into the full composition past about 1600. Between
+          1024 and 1280 the form stands on its own, which is what it already
+          does on every narrower screen. */}
       <aside
         aria-hidden
-        className="hidden border-l border-border bg-surface-alt lg:flex lg:w-[46%] lg:shrink-0 lg:flex-col lg:justify-center lg:px-14 lg:py-16"
+        className="hidden border-l border-border bg-surface-alt xl:flex xl:w-[48%] xl:shrink-0 xl:flex-col xl:justify-center xl:px-8 xl:py-16"
       >
         {/* The "Inside Litos" eyebrow came off 2026-07-28. The panel is
             aria-hidden decoration showing the product; labelling a picture of
             the product with the product's name is the caption saying what the
             picture already says. */}
-        {/* Height-capped, not width-capped. The form column is the taller of
-            the two once its footnote is counted, and the row stretches to
-            match it, so a width-capped portrait visual centred in that row ran
-            past the fold and lost its last rows. The cap lives inside
-            PacketPreview, which clips with a fade instead of scaling its type
-            down to nothing.
-            (Said "two footnotes" until 2026-07-28, when one of the two was
-            deleted a few lines above. The cap is still right; the count was
-            not.) */}
-        <div className="mt-6 w-full self-start">
-          <PacketPreview />
-        </div>
+        {/* w-full, and the reason is load-bearing rather than stylistic:
+            FlowDemoFit measures its PARENT's clientWidth to choose between the
+            full, compact and phone compositions. A content-sized wrapper would
+            hand it back its own width as the answer and it would latch onto
+            whichever variant it happened to render first. Same wrapper the
+            homepage hero uses, for the same reason.
+
+            No height cap here. The demo scales itself to the width it is given
+            and this column is 46% minus px-14, which lands it just under
+            COMPACT_BELOW, so it renders the compact picture at close to full
+            size. The old height cap existed for a portrait PNG that could not
+            scale; this one has no fixed size to run past. */}
+        <div className="flex w-full justify-center"><FlowDemoFit /></div>
       </aside>
     </div>
   );
