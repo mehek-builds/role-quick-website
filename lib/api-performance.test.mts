@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { requestShareKey, shareInFlight } from "./in-flight.ts";
+import { normalizedScrollProgress } from "./scroll-progress.ts";
+
+test("scroll progress handles zero-height documents and clamps both bounds", () => {
+  assert.equal(normalizedScrollProgress(0, 720, 720), 0);
+  assert.equal(normalizedScrollProgress(100, 600, 720), 0);
+  assert.equal(normalizedScrollProgress(-20, 1720, 720), 0);
+  assert.equal(normalizedScrollProgress(500, 1720, 720), 0.5);
+  assert.equal(normalizedScrollProgress(1000, 1720, 720), 1);
+  assert.equal(normalizedScrollProgress(1200, 1720, 720), 1);
+});
 
 test("concurrent GET requests share one network call", async () => {
   let calls = 0;

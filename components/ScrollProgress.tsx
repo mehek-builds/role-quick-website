@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { normalizedScrollProgress } from "@/lib/scroll-progress";
 
 /* Three consecutive pinned acts (documents, autofill, outreach) each hold
    the viewport for roughly two screens of scrolling. Pinning is the point,
@@ -24,8 +25,11 @@ export function ScrollProgress() {
     let raf = 0;
     const paint = () => {
       raf = 0;
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      const progress = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      const progress = normalizedScrollProgress(
+        window.scrollY,
+        document.documentElement.scrollHeight,
+        window.innerHeight,
+      );
       if (barRef.current) barRef.current.style.transform = `scaleX(${progress})`;
     };
     const onScroll = () => {
