@@ -12,7 +12,6 @@ import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { FlowDemoFit } from "@/components/FlowDemo";
 import { InstallLink } from "@/components/InstallLink";
-import { RealCaptures } from "@/components/RealCaptures";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
@@ -23,13 +22,9 @@ const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString
   month: "long",
   year: "numeric",
 });
-import {
-  FREE_LIMITS,
-  PRO_LIMITS,
-  PRO_MONTHLY_PRICE,
-  PRO_YEARLY_MONTHLY_PRICE,
-  TRIAL_DAYS,
-} from "@/lib/pricing";
+/* The lib/pricing.ts imports (FREE_LIMITS, PRO_LIMITS, PRO_MONTHLY_PRICE,
+   PRO_YEARLY_MONTHLY_PRICE, TRIAL_DAYS) were dropped 2026-07-30 with the
+   #pricing section. lib/pricing.ts itself is untouched. */
 
 /* DESIGN.md v1.1: one idea per viewport, one line of copy where one line
    works, tonal pillar bands, motion that settles rather than loops (the
@@ -259,9 +254,13 @@ export default function Home() {
             mess-in / clean-out demo) was REMOVED 2026-07-28 in the deletion
             pass. It made the same argument as this section, directly above
             this section, and the FAQ makes it a third time. Machine
-            readability is the one claim it owned that this section did not,
-            so that sentence is folded into the body copy below and the rest
-            is gone. Do not re-add it as its own band.
+            readability was the one claim it owned that this section did not,
+            and that sentence was folded into the body copy below. It came
+            back out 2026-07-30, on Mehek's call: the heading and body now say
+            plainly that the resume is customized to the role, and nothing on
+            this band talks about a robot reading it. The FAQ still carries
+            the machine-readability claim. Do not re-add it as its own band,
+            and do not put "robot" back in this copy.
 
             Note for whoever restores it: ResumeFormatDemo in Mockups.tsx (and
             MessyResumeMockup / CleanResumeMockup, which only it composes) is
@@ -277,12 +276,12 @@ export default function Home() {
                     <PillarChip icon="resume" bg="bg-brand-soft" tone="text-brand-ink">01 · Resume</PillarChip>
                   </div>
                   <h2 className="mt-3 text-section font-[450] tracking-[-0.02em] text-ink">
-                    We rebuild it. We do not just swap words.
+                    A resume customized to every role.
                   </h2>
                   <p className="mt-2.5 text-sm leading-6 text-muted">
-                    We read what the job asks for. Then we put your best
-                    work first, in their words. A robot reads it before a
-                    person does, so we build one it can read.
+                    We read the job post. Then we rebuild your resume around
+                    what it asks for, leading with your best work, in their
+                    words.
                   </p>
                   {/* Two mono lines were REMOVED here 2026-07-28, on Mehek's
                       call, under the same rule as the rest of the deletion
@@ -329,92 +328,62 @@ export default function Home() {
                 <div className="rq-glass order-1 px-7 py-8 sm:order-2">
                   {/* The "While you read this" eyebrow was removed 2026-07-28:
                       invented timing, and it argued with the nine-seconds
-                      receipt the page states elsewhere. */}
+                      receipt the page states elsewhere. Do not re-add it. */}
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Forms</PillarChip>
                   <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
-                    You never type your phone number again.
+                    You autofill every application.
                   </h2>
                   <p className="mt-4 text-base leading-7 text-muted">
-                    Most forms ask 27 questions. It is the same answers
-                    every time. We fill them in, then wait for you to
-                    check.
+                    Most forms ask the same 27 questions. We fill them in,
+                    then wait for you to check.
                   </p>
-                  {/* Machine voice: what the fill actually does, as data. */}
-                  <div className="mt-8 space-y-2.5 text-sm leading-6">
-                    {/* "the yes or no questions" was too wide. Work-eligibility
-                        questions are yes or no and Litos never answers them
-                        (WORK_ELIGIBILITY_QUESTION, extension adapters), so the
-                        old line promised the one behaviour the product refuses.
-                        The mockup beside this now shows both declined. */}
-                    <p className="text-muted">We fill in your name, your links, and the screening questions.</p>
-                    <p className="text-muted">Work authorization and sponsorship are always left for you. The rules differ by country.</p>
-                    <p className="text-muted">We attach your new resume.</p>
-                    {/* The race-and-gender line was REMOVED from this list on
-                        2026-07-28 (Mehek's call: too specified for the
-                        homepage). It had been wrong twice in one day in
-                        opposite directions, first "we skip them", then a
-                        version that made the decline the headline and the
-                        student's own answer the exception, and the accurate
-                        version needed two sentences in a list of one-line
-                        beats. That length is the tell: it is documentation,
-                        and it belongs where documentation goes.
+                  {/* SIMPLIFIED 2026-07-30, on Mehek's call: this band was a
+                      lead paragraph, a five-line machine-voice list and a
+                      where-it-works paragraph. It is now the same shape as
+                      #documents above it, chip + heading + a two-line
+                      subheading, because the list had gone stale and the card
+                      was doing documentation's job.
 
-                        Do not re-add it here. It is stated in full in
-                        /privacy under "Questions about race and gender", in
-                        /dashboard/settings, and in the extension's own setup
-                        screen at the moment it asks. What the code does:
-                        the setup screen asks (optional gender/race/disability
-                        plus veteran status, saved to eeo_prefs), the adapters
-                        answer with what you gave, and blank fields fall back
-                        to a decline. */}
-                    {/* "and the send button" came out of this line because it was
-                        not true. Opt-in automatic submission ships, so a flat claim
-                        that the send button is always yours is the same absolute the
-                        2026-07-04 pass already softened everywhere else, and it had
-                        survived here.
+                      What came out, and where it still lives. Do not restore
+                      any of it here without deciding it belongs on a homepage:
 
-                        The replacement is stronger BECAUSE it is exact. Jobscan's
-                        human gate is the most-praised thing in its review corpus and
-                        LazyApply's absence of one is why its users report banned
-                        accounts, so this is the claim worth making loudly. Naming the
-                        one exception is what makes it believable.
+                      - Work authorization and sponsorship are left for you:
+                        /privacy, /dashboard/settings ("Work authorization is
+                        always asked, never inferred"), and the extension's
+                        setup screen. WORK_ELIGIBILITY_QUESTION in the extension
+                        adapters is the behaviour behind it.
+                      - Race and gender are declined by default: /privacy under
+                        "Questions about race and gender", /dashboard/settings,
+                        and the extension setup screen. It was pulled from this
+                        card on 2026-07-28 as too specified for a homepage, and
+                        that still holds.
+                      - Sending is off until you turn it on, then 15 seconds to
+                        stop it: /litos-vs-simplify, /for-career-centres and
+                        /privacy. COUNTDOWN_SECONDS in the extension's
+                        src/entrypoints/content.ts is 15, not the 9 the old
+                        ledger claimed.
+                      - The fill list and the send list: /litos-vs-simplify
+                        carries both. They differ because they run in different
+                        places, filling is the extension in your browser and
+                        sending is the backend driving the portal. Neither list
+                        belongs in hand-written marketing copy again, since the
+                        send list is whatever detectPortal accepts in the
+                        backend's portalSubmission.ts and it keeps changing.
 
-                        The duration was left out of the first version of this line
-                        because DESIGN.md said 9 seconds and /privacy said 15, and
-                        marketing must not pick a side in a contradiction between two
-                        of our own surfaces. The extension settles it: COUNTDOWN_SECONDS
-                        is 15 in src/entrypoints/content.ts. /privacy was right, the
-                        ledger was wrong and is now corrected, and the number goes in,
-                        because a hedge reads as one once the real figure exists.
+                      NOTE on what this cut actually loses. The consent claim
+                      itself is NOT lost: the FAQ's "Will it apply to jobs
+                      without me?" answers "Only if you turn that on ... You can
+                      turn it off in Settings", and states the four cases where
+                      it stops and asks. The homepage still tells a reader that
+                      submission is opt-in.
 
-                        Phrased as "sending stays off" rather than "we do not press
-                        send", because the line four rows down says we CAN press send on
-                        Greenhouse, Lever, Ashby and SmartRecruiters. Both were true with their implicit
-                        qualifiers and flatly contradictory read together, in the same
-                        card. This version states the default and the control, which is
-                        the part the reader is actually deciding about, and leaves the
-                        where-it-works nuance to the line that already owns it. */}
-                    <p className="text-muted">We leave the writing to you.</p>
-                    <p className="text-muted">
-                      Sending stays off until you turn it on. Then you get 15
-                      seconds to stop it.
-                    </p>
-                  </div>
-                  {/* The supported list was only ever in the meta
-                      description, so the page itself never said where this
-                      works. Fill and submit differ, and they differ because
-                      they run in different places: filling is the extension
-                      in your browser, sending is the backend driving the
-                      portal itself. The send list is whatever detectPortal
-                      accepts in the backend's portalSubmission.ts, which
-                      gained SmartRecruiters after this line was written. If
-                      that list changes again, this sentence changes with it. */}
-                  <p className="mt-5 text-[13px] leading-6 text-muted">
-                    We fill in forms on Greenhouse, Lever, Ashby, Workday and
-                    LinkedIn. We can press send for you on Greenhouse, Lever,
-                    Ashby and SmartRecruiters. Anywhere else we fill it in and
-                    you press send.
-                  </p>
+                      The one thing now missing from this page is the 15-second
+                      stop window. It survives on /litos-vs-simplify,
+                      /for-career-centres and /privacy. Decide whether the
+                      homepage needs the number at all: the FAQ makes the
+                      promise, and the figure is the receipt for it. If it goes
+                      back, it goes in the FAQ answer that already owns this
+                      subject, NOT as a second statement in this card. */}
 
                   {/* "This is a picture we made. Real screenshots are below."
                       stood here and in #outreach, and #captures states the same
@@ -442,7 +411,7 @@ export default function Home() {
                       with its opposite number in #autofill. Same reason. */}
                   <PillarChip icon="outreach" bg="bg-coral-soft" tone="text-coral-ink">03 · Emails</PillarChip>
                   <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
-                    Nobody reads applications. People read emails.
+                    An email to a real person at the company.
                   </h2>
                   <p className="mt-4 text-base leading-7 text-muted">
                     {/* Gmail, and only Gmail, is correct here: the draft is
@@ -450,17 +419,52 @@ export default function Home() {
                         src/lib/gmail.ts). Outlook exists in the product only
                         for reading a sign-in code, never for drafting, so
                         naming it here would be a new false claim. */}
-                    While the form fills, we find people who work there. We
-                    write the email and leave it in your Gmail. People from
-                    your school answer most, so they come first.
+                    We find people who work there, check their email
+                    addresses, and leave a short note in your Gmail that
+                    sounds like you.
                   </p>
-                  {/* Machine voice: what outreach actually does, as data. */}
-                  <div className="mt-8 space-y-2.5 text-sm leading-6">
-                    <p className="text-muted">We find people who work there.</p>
-                    <p className="text-muted">We check every email address, and tell you when we could not.</p>
-                    <p className="text-muted">We write a short note that sounds like you.</p>
-                    <p className="text-muted">We leave the send button to you.</p>
-                  </div>
+                  {/* SIMPLIFIED 2026-07-30, with #documents and #autofill, to
+                      chip + heading + a two-line subheading.
+
+                      The four-line list that stood here restated the lead
+                      paragraph rather than adding to it. "We find people who
+                      work there." was a word-for-word repeat of the paragraph's
+                      own first clause, and "We write a short note that sounds
+                      like you" repeated "we write the email". Only two lines in
+                      it were load-bearing, and both are folded into the
+                      paragraph above: address checking, and the draft landing
+                      in your Gmail rather than being sent.
+
+                      What came out, and where it stands now:
+
+                      - "We leave the send button to you" is gone as its own
+                        line. It survives as meaning, not as a promise: a note
+                        LEFT in your Gmail is one you have to send yourself.
+                        /litos-vs-simplify states it outright, under "What
+                        happens at the send button". Emails are never sent
+                        automatically, unlike portal submission, so if this band
+                        ever needs the guarantee back it is a true one.
+                      - "and tell you when we could not" is gone as copy, and
+                        does not need to be copy. OutreachDemo beside this card
+                        IS that claim: it badges contacts VERIFIED / LIKELY,
+                        then shows a NO VERIFIED EMAIL card reading "We couldn't
+                        verify an address for Rina, and we never guess one", and
+                        footers it "GUESSED ADDRESSES: ZERO". The demo also
+                        carries the alumni-first ordering, as an ALUM badge on
+                        the first contact. Shown beats stated, which is why the
+                        paragraph keeps only "check their email addresses" and
+                        lets the demo do the rest. If OutreachDemo is ever
+                        replaced with something that does not show the
+                        unverified path, this paragraph has to take the honesty
+                        half back.
+
+                      REMOVED and not replaced: "People from your school answer
+                      most, so they come first." Alumni-first ordering is real
+                      (personaOrder in the backend's resolve.ts, and
+                      StructuredData.tsx says "alumni first"), but "answer most"
+                      is a response-rate claim and nothing on this site sources
+                      it. It was the last unsourced outcome number in the three
+                      pillars. Do not put it back without the data. */}
                   <PillarLink href="/try?step=outreach">See it write an email</PillarLink>
                 </div>
                 <div>
@@ -509,67 +513,30 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Captures: the chapters above are drawn in the DOM so they can
-            move, which is right for a film and wrong as evidence. This is
-            the shipped product, screenshotted. */}
-        <section id="captures" className="relative scroll-mt-24">
-          <Wash soft />
-          <div className="relative px-6 py-32">
-            <Reveal>
-              <RealCaptures />
-            </Reveal>
-          </div>
-        </section>
+        {/* REMOVED 2026-07-30, on Mehek's call: two whole sections, #captures
+            and #dashboard.
 
-        {/* The dashboard. The three pillars describe the extension, which was
-            the whole product when they were written. It is now half of it: the
-            backend finds jobs, scores them against the resume, submits to the
-            portal itself, tracks what was sent, and drafts interview questions
-            from the posting. None of that was named anywhere on the marketing
-            site, while the page's own meta description already ended "submit
-            from your dashboard".
+            #captures was "This is the real thing." plus three real product
+            screenshots (extension on a job page, the contacts panel, the
+            dashboard Emails page), and it drew the made-it / shot-it line for
+            the whole page. It was the homepage's only real-screenshot
+            evidence. RealCaptures in components/RealCaptures.tsx is now
+            unreferenced and was LEFT IN PLACE, not deleted, so restoring this
+            is a two-line change. The three PNGs under public/product/ stay
+            regardless: /login and CinematicHero.tsx still use them.
 
-            Deliberately a list and not a fourth pillar: the pillars are the
-            act the film performs, and inflating them to four would break the
-            RESUME / FORMS / EMAILS rhythm the whole reel is cut to. Every line
-            here is a shipped route, named in the same words the dashboard nav
-            uses, so a visitor who signs up recognises what they were shown.
-            Nothing aspirational goes in this list. */}
-        <section id="dashboard" className="relative scroll-mt-24">
-          <Wash soft />
-          <div className="relative mx-auto max-w-3xl px-6 py-32">
-            <Reveal>
-              <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                And when you are not on a job page
-              </p>
-              <h2 className="mt-4 text-center text-section font-[450] tracking-[-0.02em] text-ink">
-                The rest of it lives in your dashboard.
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-center text-base leading-7 text-muted">
-                The extension works on a posting you opened. Everything below
-                happens whether your browser is open or not.
-              </p>
-              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {[
-                  ["Jobs", "We watch for roles that fit and put them in one list. You did not have to find them."],
-                  ["Applications", "Every application in one place, with what is ready, what needs you, and what was sent."],
-                  /* The "Sending" card was REMOVED 2026-07-28 in the deletion
-                     pass: #autofill already explains, in more detail and with
-                     the 15-second stop, that Litos can drive the employer's
-                     form itself. This restated it in a card. */
-                  ["Interviews", "When a job is ready, we pull the questions the posting is really asking, out of the posting."],
-                ].map(([label, body]) => (
-                  <div key={label} className="rq-glass px-6 py-5">
-                    <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-                      {label}
-                    </p>
-                    <p className="mt-2.5 text-sm leading-6 text-muted">{body}</p>
-                  </div>
-                ))}
-              </div>
-            </Reveal>
-          </div>
-        </section>
+            #dashboard was "The rest of it lives in your dashboard." plus the
+            Jobs / Applications / Interviews cards. It was the only place the
+            homepage described the backend half of the product, the half that
+            runs whether the browser is open or not. Note for whoever comes
+            back to this: dashboard auto-apply is the PRIMARY flow, not the
+            extension, so the page now sells the secondary half only. Its own
+            comment already warned that inflating the pillars to four would
+            break the RESUME / FORMS / EMAILS rhythm, so if the dashboard needs
+            saying again it is not as a fourth pillar and not as these cards.
+
+            The reel now runs: three pillars, the packet recap, then voices,
+            FAQ and pricing. */}
 
         {/* Voices: the film has just finished proving the mechanism, which is
             the exact moment the honest question becomes "does it work for
@@ -642,72 +609,31 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Pricing. The site called itself free four times and never said what
-            free stops at, while the Chrome Web Store listing published the
-            caps and both prices and the backend enforced them
-            (middleware/quota.ts LIMITS + TRIAL_DAYS). Two public surfaces,
-            two different stories, on the one axis the competitor audit said
-            Litos wins: nine of ten rivals hide or obfuscate price, and this
-            was Litos quietly doing the same.
+        {/* REMOVED 2026-07-30, on Mehek's call: the whole #pricing section
+            ("What it costs.", the Free and Pro cards, and the cancellation
+            line). The "Pricing" links in Header.tsx and in this page's own
+            footer went with it, because tests/route-integrity.test.mjs fails
+            an anchor that points at no id.
 
-            Every number here is READ FROM the enforced values, not typed
-            beside them, so the page cannot drift from the server. If the caps
-            move, this section moves with them. */}
-        <section id="pricing" className="relative scroll-mt-24">
-          <Wash soft />
-          <div className="relative mx-auto max-w-3xl px-6 py-32">
-            <Reveal>
-              <h2 className="text-center text-section font-[450] tracking-[-0.02em] text-ink">
-                What it costs.
-              </h2>
-              <p className="mx-auto mt-4 max-w-md text-center text-base leading-7 text-muted">
-                Your first {TRIAL_DAYS} days have everything switched on, and
-                we do not ask for a card. After that you stay on free unless
-                you choose otherwise.
-              </p>
-              <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rq-glass px-6 py-6">
-                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-                    Free
-                  </p>
-                  <p className="mt-2.5 text-heading font-medium text-ink">$0</p>
-                  {/* "Every month, forever." came off 2026-07-28. It sat under
-                      a $0 that already says it, and the caps beneath it are
-                      per month in their own words. */}
-                  <ul className="mt-5 space-y-2 text-sm leading-6 text-muted">
-                    <li>{FREE_LIMITS.resumes} tailored resumes a month, one for each application.</li>
-                    <li>{FREE_LIMITS.contacts} checked contacts a month.</li>
-                    <li>{FREE_LIMITS.drafts} written emails a month.</li>
-                  </ul>
-                </div>
-                <div className="rq-glass px-6 py-6">
-                  <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
-                    Pro
-                  </p>
-                  <p className="mt-2.5 text-heading font-medium text-ink">
-                    ${PRO_MONTHLY_PRICE}
-                    <span className="text-sm font-normal text-muted"> a month</span>
-                  </p>
-                  <p className="mt-1 text-sm text-muted">
-                    Or ${PRO_YEARLY_MONTHLY_PRICE} a month if you pay for the year.
-                  </p>
-                  <ul className="mt-5 space-y-2 text-sm leading-6 text-muted">
-                    <li>{PRO_LIMITS.resumes.toLocaleString()} tailored resumes a month.</li>
-                    <li>{PRO_LIMITS.contacts} checked contacts a month.</li>
-                    <li>{PRO_LIMITS.drafts.toLocaleString()} written emails a month.</li>
-                  </ul>
-                </div>
-              </div>
-              <p className="mt-6 text-center text-[13px] leading-6 text-muted">
-                Cancelling takes the same number of clicks as signing up. The{" "}
-                <a href="/terms" className="underline decoration-border underline-offset-2 hover:text-ink">
-                  terms, cancellation and refund policy
-                </a>{" "}
-                are written down before you pay, not after.
-              </p>
-            </Reveal>
-          </div>
-        </section>
+            There is no separate /pricing route and there never was. This
+            section, reached by those two nav links, was the whole of pricing on
+            the website.
+
+            Read the deleted section's own rationale before restoring or
+            re-deleting this, because it was written against exactly this state:
+            the site called itself free four times and never said what free
+            stops at, while the Chrome Web Store listing published the caps and
+            both prices, and the backend enforced them. Nine of ten rivals hide
+            or obfuscate price and the competitor audit called transparent
+            pricing the axis Litos wins on. Deleting this puts the site back to
+            being the quieter of the two surfaces.
+
+            STILL PUBLISHING PRICES, and now unmatched by any page: the Chrome
+            Web Store listing, and /terms which states the cancellation and
+            refund policy this section linked to. lib/pricing.ts is now
+            unreferenced by the site (it was read here so the page could not
+            drift from middleware/quota.ts LIMITS and TRIAL_DAYS) and was LEFT
+            IN PLACE, values intact, so restoring is an import and a paste. */}
 
         {/* Close: the finale — by here the live film has collated the book */}
         <section id="close" className="relative">
@@ -775,7 +701,7 @@ export default function Home() {
               </p>
               <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
                 <li><a href="/#product" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Product</a></li>
-                <li><a href="/#pricing" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Pricing</a></li>
+                {/* Pricing removed 2026-07-30 with the #pricing section. */}
                 <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
                 <li><a href="/litos-vs-simplify" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Litos vs Simplify</a></li>
                 <li><a href={STORE_URL} className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Add to Chrome</a></li>

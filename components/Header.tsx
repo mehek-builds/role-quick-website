@@ -79,13 +79,15 @@ export function Header() {
           <a href="/try" className="transition-colors hover:text-ink">
             Try it free
           </a>
-          {/* Price belongs in the nav, not only in a section someone has to
-              scroll past the film to reach. Six of ten competitors have no
-              fetchable pricing page at all; being the exception is only worth
-              anything if it is findable. */}
-          <a href="/#pricing" className="transition-colors hover:text-ink">
-            Pricing
-          </a>
+          {/* The "Pricing" link was REMOVED 2026-07-30, with the homepage
+              #pricing section it pointed at. It has to go: an anchor pointing
+              at no id fails tests/route-integrity.test.mjs.
+
+              What it was here for, if pricing ever comes back: price belongs in
+              the nav, not only in a section someone has to scroll past the film
+              to reach. Six of ten competitors have no fetchable pricing page at
+              all, and being the exception is only worth anything if it is
+              findable. */}
           <a href="/#faq" className="transition-colors hover:text-ink">
             FAQ
           </a>
