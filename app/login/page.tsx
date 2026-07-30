@@ -730,7 +730,18 @@ export default function Login() {
           does on every narrower screen. */}
       <aside
         aria-hidden
-        className="hidden border-l border-border bg-surface-alt xl:flex xl:w-[48%] xl:shrink-0 xl:flex-col xl:justify-center xl:px-8 xl:py-16"
+        /* bg-brand-soft, not bg-surface-alt. The striping token is #faf9f7 and
+           the demo carries its own white backing, so a white card sat on a
+           near-white panel beside a white form column and the whole page read
+           as one flat white field with a hairline down it. The panel has to be
+           a GROUND for the demo, and #faf9f7 cannot be a ground for white.
+
+           brand-soft (#eef1fe) is the lightest tint the system already owns
+           and it is the Litos blue, so the demo now sits on something rather
+           than floating, without introducing a colour the palette does not
+           have. The form column stays pure white: the page keeps its white
+           canvas, and the tint is on the decorative half only. */
+        className="hidden border-l border-border bg-brand-soft xl:flex xl:w-[48%] xl:shrink-0 xl:flex-col xl:justify-center xl:px-8 xl:py-16"
       >
         {/* The "Inside Litos" eyebrow came off 2026-07-28. The panel is
             aria-hidden decoration showing the product; labelling a picture of
