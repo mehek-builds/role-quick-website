@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
+import { PacketPreview } from "@/components/PacketPreview";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -689,35 +690,48 @@ export default function Login() {
       </p>
       </div>
 
-      {/* The product, beside the form. Real capture, no device frame and no
-          drop shadow: the imagery law is real product UI, and a mockup chrome
-          around a screenshot is decoration pretending to be evidence.
+      {/* The product, beside the form. No device frame and no drop shadow: the
+          imagery law is real product UI, and a mockup chrome around a picture
+          of the product is decoration pretending to be evidence.
 
-          The extension on a posting rather than the dashboard, deliberately.
-          It is the moment the whole product turns on, and its portrait shape
-          fits a column, which is exactly why it was wrong for the hero. */}
+          THE PACKET, not the extension capture that stood here until now. Both
+          satisfy the law (DESIGN.md: real product UI only, the mockup
+          components), and it is one visual or the other by the same law's
+          one-per-section rule, so this is a choice between them rather than an
+          addition.
+
+          The packet wins the slot because of what the reader is doing. The
+          extension capture showed the product STARTING: a posting found, work
+          about to happen. Someone at the sign-in form has already decided to
+          use Litos; what they have not seen is what they get out of it, and the
+          packet is the output, complete, with the answers checkable underneath.
+          It also keeps its portrait shape, which is the practical reason the
+          extension capture was right for this column and wrong for the hero.
+
+          Rendered rather than photographed, so it cannot go stale the way a PNG
+          of a shipped screen does: it is the same components the dashboard
+          viewer uses, so a change to the packet's design reaches this page on
+          the same deploy. */}
       <aside
         aria-hidden
         className="hidden border-l border-border bg-surface-alt lg:flex lg:w-[46%] lg:shrink-0 lg:flex-col lg:justify-center lg:px-14 lg:py-16"
       >
         {/* The "Inside Litos" eyebrow came off 2026-07-28. The panel is
-            aria-hidden decoration showing the extension on a posting; labelling
-            a picture of the product with the product's name is the caption
-            saying what the picture already says. */}
+            aria-hidden decoration showing the product; labelling a picture of
+            the product with the product's name is the caption saying what the
+            picture already says. */}
         {/* Height-capped, not width-capped. The form column is the taller of
             the two once its footnote is counted, and the row stretches to
-            match it, so a width-capped portrait image centred in that row ran
-            past the fold and the panel lost its last rows. Capping the height
-            keeps the whole capture on screen at any viewport.
+            match it, so a width-capped portrait visual centred in that row ran
+            past the fold and lost its last rows. The cap lives inside
+            PacketPreview, which clips with a fade instead of scaling its type
+            down to nothing.
             (Said "two footnotes" until 2026-07-28, when one of the two was
             deleted a few lines above. The cap is still right; the count was
             not.) */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/product/extension-job.png"
-          alt=""
-          className="mt-6 max-h-[62svh] w-auto self-start rounded-inner border border-border"
-        />
+        <div className="mt-6 w-full self-start">
+          <PacketPreview />
+        </div>
       </aside>
     </div>
   );
