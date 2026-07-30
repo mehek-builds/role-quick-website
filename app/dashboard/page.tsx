@@ -7,7 +7,6 @@ import {
   getStoredEmail,
   type ApplicationReview,
   type ApplicationProfile,
-  type DashboardBootstrap,
   type GeneratedResume,
   type Me,
   type MonitoredJob,
@@ -28,6 +27,7 @@ import {
   type RankedJob,
 } from "@/lib/daily-matches";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/lib/pay";
+import { loadDashboardInitialState } from "@/lib/dashboard-bootstrap";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 
@@ -221,22 +221,19 @@ export default function Home() {
     }
 
     let cancelled = false;
-    api<DashboardBootstrap>("/dashboard/bootstrap")
-      .then((bootstrap) => {
+    loadDashboardInitialState(api)
+      .then((initial) => {
         if (cancelled) return;
-        setMe(bootstrap.me);
+        setMe(initial.me);
         setLoadedAt(Date.now());
-        setJobs(bootstrap.jobs.jobs);
-        setTargeting(bootstrap.targeting);
-        setProfile(bootstrap.profile);
-        setIdentity({
-          full_name: "full_name" in bootstrap.profile ? bootstrap.profile.full_name : undefined,
-          email: bootstrap.me.email ?? undefined,
-        });
-        setApplicationProfile(bootstrap.application_profile);
-        setPackets(bootstrap.resume_history.resumes);
-        setOutreach(bootstrap.outreach);
-        setAutoSubmitEnabled(bootstrap.onboarding.automatic_submission_enabled === true);
+        setJobs(initial.jobs);
+        setTargeting(initial.targeting);
+        setProfile(initial.profile);
+        setIdentity(initial.identity);
+        setApplicationProfile(initial.applicationProfile);
+        setPackets(initial.packets);
+        setOutreach(initial.outreach);
+        setAutoSubmitEnabled(initial.autoSubmitEnabled);
       })
       .catch((reason) => {
         if (!cancelled) setError(reason instanceof Error ? reason.message : "We could not load your jobs. Reload the page.");
