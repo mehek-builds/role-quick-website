@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6] - 2026-07-31
+
+### Changed
+
+- Dashboard applications, jobs, and loading behavior now live behind stable feature APIs with
+  explicit domain, application, and infrastructure boundaries.
+- Architecture checks protect those boundaries while preserving the existing resume generation,
+  application review, matching, and dashboard behavior.
+
 ## [0.1.5] - 2026-07-31
 
 ### Performance
