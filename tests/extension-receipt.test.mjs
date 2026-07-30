@@ -9,3 +9,8 @@ test("Chrome extension receipts do not require a managed-browser screenshot", ()
   assert.match(api, /screenshot_url\?: string/);
   assert.match(applications, /receipt\.screenshot_url && <img src=\{receipt\.screenshot_url\}/);
 });
+
+test("the new application button does not pass its click event as the draft", () => {
+  assert.match(applications, /onGenerate=\{\(\) => void createApplication\(\)\}/);
+  assert.doesNotMatch(applications, /onGenerate=\{createApplication\}/);
+});

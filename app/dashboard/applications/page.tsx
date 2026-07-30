@@ -830,7 +830,10 @@ export default function Applications() {
         <NewApplicationPanel
           value={newApplication}
           onChange={applyDraftEdit}
-          onGenerate={createApplication}
+          /* React click handlers receive the click event. Passing createApplication directly made
+             that event replace the optional draft argument, so the first .trim() crashed in
+             production instead of generating the application. */
+          onGenerate={() => void createApplication()}
           creating={creating}
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
@@ -1541,5 +1544,4 @@ function applicationCardClasses(packet: GeneratedResume, selected: boolean): str
       : "border border-border bg-surface text-ink hover:border-brand/35 hover:bg-brand-soft/35";
   return selected ? `${semantic} ring-2 ring-brand ring-offset-2` : semantic;
 }
-
 
