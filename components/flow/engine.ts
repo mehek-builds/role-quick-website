@@ -143,6 +143,13 @@ export const ENTRANCES: Record<string, Entrance> = {
     k: [{ opacity: 0, transform: "translateY(-12px)" }, { opacity: 1, transform: "translateY(0px)" }],
     o: { duration: 350, easing: "cubic-bezier(.25,.46,.45,.94)" },
   },
+  /* Arrives with the screen, slightly overshooting, so it reads as a thing that
+     turned up rather than a thing that was always there. Same curve as the
+     detect card, whose job is also "this just appeared". */
+  "rq-f-ask": {
+    k: [{ opacity: 0, transform: "translateY(8px) scale(.97)" }, { opacity: 1, transform: "translateY(0px) scale(1)" }],
+    o: { duration: 300, delay: 120, easing: "cubic-bezier(.34,1.4,.64,1)" },
+  },
   "rq-f-dcard": {
     k: [{ opacity: 0, transform: "scale(.96)" }, { opacity: 1, transform: "scale(1)" }],
     o: { duration: 280, easing: "cubic-bezier(.34,1.4,.64,1)" },
