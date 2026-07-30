@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
-import { sectionHeading, startsNewSection, statusLabel } from "@/lib/application-review";
+import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/lib/application-review";
 
 /* REVISITING AN APPLICATION, against real packet data.
  *
@@ -78,6 +78,18 @@ function ResumePaper({ spec, contact }: { spec: ResumeSpec; contact: string }) {
         </div>
       ))}
 
+      {/* Coursework was being dropped. It is part of the stored spec and part of the rendered
+          resume, so leaving it out made this pane quietly disagree with the PDF it claims to
+          show, on the screen where that disagreement matters most. */}
+      {spec.coursework && (
+        <>
+          <p className="mt-4 border-b border-neutral-300 pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]">
+            Coursework
+          </p>
+          <p className="mt-2">{spec.coursework}</p>
+        </>
+      )}
+
       {spec.skills.length > 0 && (
         <>
           <p className="mt-4 border-b border-neutral-300 pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]">
@@ -125,7 +137,21 @@ export function ApplicationPacket({
   const scroller = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState("packet-jd");
+  /* onClose read through a ref so the effect below can hold [] deps and run exactly once. Keying
+     the effect on onClose meant any caller passing an inline arrow rebuilt the focus trap on every
+     parent render, and the cleanup threw focus out of the dialog each time. A ref survives a caller
+     that forgets to memoise; the parent memoises too, but only one of those is enforceable here. */
+  const onCloseRef = useRef(onClose);
+  /* Assigned in an effect, not during render: writing a ref during render is a React rule
+     violation (react-hooks/refs) because it mutates state the renderer may discard. An effect with
+     no dep array runs after every commit, which is exactly the freshness this needs. */
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  /* Seeded to the resume, which is what the scroller actually shows on open. It said "packet-jd",
+     so the rail asserted Job description while the reader was looking at section 01, and stayed
+     wrong for any packet short enough never to scroll. */
+  const [active, setActive] = useState("packet-resume");
 
   const sent = review.status === "submitted";
   const role = packet.job_context.role || "This application";
@@ -133,6 +159,11 @@ export function ApplicationPacket({
   const questions = review.questions ?? [];
   const filledFields = review.filled_fields ?? [];
   const receipt = review.receipt;
+  const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
+  const builtAt = formatMoment(packet.created_at);
+  const when = sent
+    ? sentAt ? `Sent ${sentAt}` : "Sent"
+    : builtAt ? `Built ${builtAt}, not sent` : "Not sent";
   const jdParagraphs = (review.jd_text ?? "")
     .split(/\n{2,}/)
     .map((block) => block.trim())
@@ -147,7 +178,7 @@ export function ApplicationPacket({
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !dialog.current) return;
@@ -172,7 +203,7 @@ export function ApplicationPacket({
       document.body.style.overflow = overflow;
       previous?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   const rail = [
     { id: "packet-resume", label: "Resume" },
@@ -181,20 +212,36 @@ export function ApplicationPacket({
     ...(receipt ? [{ id: "packet-proof", label: "Proof" }] : []),
   ];
 
+  /* Coalesced to one measurement per frame, and the scroller's own rect is read once instead of
+     once per section. It measured four sections and re-read the container inside the loop on every
+     scroll event, so a momentum scroll forced five synchronous layouts per tick.
+
+     Lookups are scoped to the dialog rather than document.getElementById: the ids are not unique to
+     an instance, so a global lookup lets one viewer measure another one's sections. */
+  const rafPending = useRef(false);
   const onScroll = useCallback(() => {
-    const box = scroller.current;
-    if (!box) return;
-    const ids = ["packet-resume", "packet-jd", "packet-questions", "packet-proof"];
-    let current = ids[0];
-    for (const id of ids) {
-      const node = document.getElementById(id);
-      if (node && node.getBoundingClientRect().top - box.getBoundingClientRect().top <= 24) current = id;
-    }
-    setActive(current);
+    if (rafPending.current) return;
+    rafPending.current = true;
+    requestAnimationFrame(() => {
+      rafPending.current = false;
+      const box = scroller.current;
+      const root = dialog.current;
+      if (!box || !root) return;
+      const top = box.getBoundingClientRect().top;
+      const ids = ["packet-resume", "packet-jd", "packet-questions", "packet-proof"];
+      let current = ids[0];
+      for (const id of ids) {
+        const node = root.querySelector(`#${id}`);
+        if (node && node.getBoundingClientRect().top - top <= 24) current = id;
+      }
+      setActive(current);
+    });
   }, []);
 
   function jump(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    /* packet-resume routes to the top anchor; see the comment on #packet-top. */
+    const target = id === "packet-resume" ? "packet-top" : id;
+    dialog.current?.querySelector(`#${target}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
@@ -210,7 +257,7 @@ export function ApplicationPacket({
         role="dialog"
         aria-modal="true"
         aria-label={`Application packet: ${role} at ${company}`}
-        className="relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-[0_1px_2px_rgba(18,18,15,0.04),0_40px_80px_-32px_rgba(18,18,15,0.35)]"
+        className="relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay"
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
           <div className="min-w-0">
@@ -226,11 +273,10 @@ export function ApplicationPacket({
               >
                 {statusLabel(false, review.status)}
               </span>
-              <span>
-                {sent
-                  ? `Sent ${formatMoment(review.submitted_at ?? review.updated_at)}`
-                  : `Built ${formatMoment(packet.created_at)}, not sent`}
-              </span>
+              {/* created_at is `string | null` and submitted_at is optional, so these can both come
+                  back empty. Interpolating an empty string produced the literal "Built , not sent".
+                  Compute first, then choose a sentence that works without the date. */}
+              <span>{when}</span>
               {review.portal_url && (
                 <>
                   <span className="text-faint">·</span>
@@ -272,6 +318,16 @@ export function ApplicationPacket({
 
         <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] sm:p-6">
+          {/* A zero-height anchor at the very top of the scrolled content, OUTSIDE the sticky
+              column, purely so the Resume rail pill has something reachable to scroll to. The pill
+              used to target the resume heading itself, which is inside a lg:sticky column and is
+              therefore already at the top of the scroller at exactly the breakpoint where the rail
+              matters, so scrollIntoView on it was a no-op. Scrolling the CONTAINER instead was the
+              obvious fix and was worse: element.scrollTo with behavior smooth is silently ignored
+              in some engines, so the pill did nothing at all rather than sometimes nothing. Every
+              pill now moves through the one mechanism that is known to work here. */}
+          <div id="packet-top" aria-hidden="true" className="h-0" />
+          
             <div className="lg:sticky lg:top-0 lg:self-start">
               <SectionHeading
                 id="packet-resume"
@@ -279,7 +335,13 @@ export function ApplicationPacket({
                 title={sent ? "The resume they received" : "The resume that will go out"}
               />
               <div className="mt-3">
-                <ResumePaper spec={packet.spec} contact={contactLine(packet.spec)} />
+                {/* stripMetadata, not the raw spec. This is the first surface that renders
+                    ARBITRARY historical packets rather than the freshly generated one, and the
+                    types are a compile-time claim about stored JSON, not a runtime guarantee. The
+                    page beside this has defended these same fields for as long as it has existed;
+                    reading them raw here meant one packet predating a field threw during render and
+                    unmounted the whole Applications tree, submission poller included. */}
+                <ResumePaper spec={stripMetadata(packet.spec)} contact={contactLine(packet.spec)} />
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
@@ -345,11 +407,27 @@ export function ApplicationPacket({
                       <div key={question.id} className="bg-surface px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
                           <p className="min-w-0 text-[12px] font-medium leading-5 text-ink">{question.question}</p>
-                          <span className="shrink-0 rounded-full border border-teal/30 bg-teal-soft/60 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-teal-ink">
-                            {question.kind === "essay" ? "Written" : "Answered"}
+                          {/* The chip is a claim about this answer, so it has to be derived from
+                              whether there IS one. It used to render unconditionally, so a required
+                              question that was left blank got a teal "Answered" badge with "Left
+                              blank, and this one is required" printed directly underneath it. On a
+                              screen whose whole purpose is to be checkable, a badge that contradicts
+                              the line below it is worse than no badge. */}
+                          <span
+                            className={`shrink-0 rounded-full border px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] ${
+                              (question.answer ?? "").trim()
+                                ? "border-teal/30 bg-teal-soft/60 text-teal-ink"
+                                : question.required
+                                  ? "border-warn/30 bg-warn-soft text-warn"
+                                  : "border-border bg-surface-alt text-faint"
+                            }`}
+                          >
+                            {(question.answer ?? "").trim()
+                              ? question.kind === "essay" ? "Written" : "Answered"
+                              : "Blank"}
                           </span>
                         </div>
-                        {question.answer.trim() ? (
+                        {(question.answer ?? "").trim() ? (
                           <p className="mt-1.5 whitespace-pre-line text-[12px] leading-6 text-muted">
                             {question.answer}
                           </p>
@@ -430,10 +508,14 @@ export function ApplicationPacket({
                         Open the confirmation
                       </a>
                     </div>
+                    {/* Lazy + async decode: a receipt screenshot is a full-page capture sitting
+                        below the fold, and CSS width does not bound the decoded bitmap. */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={receipt.screenshot_url}
                       alt="The company's confirmation that the application arrived"
+                      loading="lazy"
+                      decoding="async"
                       className="h-auto w-full border-t border-border"
                     />
                   </div>

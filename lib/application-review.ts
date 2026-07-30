@@ -155,3 +155,34 @@ export function sectionHeading(type: string | undefined): string {
 export function startsNewSection(types: readonly (string | undefined)[], index: number): boolean {
   return index === 0 || sectionHeading(types[index - 1]) !== sectionHeading(types[index]);
 }
+
+/**
+ * A ResumeSpec with every field defaulted, from a packet whose stored spec may predate a field.
+ *
+ * Moved here from the applications page so the packet viewer can share it. The viewer was reading
+ * `spec.experience.map(...)` and `spec.skills.length` off the raw payload while the page beside it
+ * had been defending exactly those fields since before this existed, so one legacy packet threw
+ * during render and took the whole Applications tree down with it, poller included. Types are a
+ * compile-time claim about JSON, not a runtime guarantee.
+ */
+export function stripMetadata(spec: {
+  school?: string;
+  degree?: string;
+  grad_date?: string;
+  coursework?: string;
+  education_position?: "top" | "after_experience";
+  experience?: { type?: "job" | "project" | "leadership"; org: string; title: string; date_range: string; bullets: string[] }[];
+  skills?: string[];
+  skill_source?: Record<string, string>;
+}) {
+  return {
+    school: spec.school ?? "",
+    degree: spec.degree ?? "",
+    grad_date: spec.grad_date ?? "",
+    coursework: spec.coursework ?? "",
+    education_position: spec.education_position,
+    experience: (spec.experience ?? []).map((entry) => ({ ...entry, bullets: entry.bullets ?? [] })),
+    skills: spec.skills ?? [],
+    skill_source: spec.skill_source,
+  };
+}

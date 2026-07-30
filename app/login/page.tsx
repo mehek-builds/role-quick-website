@@ -104,6 +104,20 @@ export default function Login() {
   const router = useRouter();
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim()
     || "719679889441-oto6bdqapcrdmcso8lsfs46qc4nvpb3s.apps.googleusercontent.com";
+  /* Whether the decorative panel's demo should exist at all. Starts false so the server render and
+     the first client render agree, then the effect promotes it on wide viewports. Being wrong for
+     one frame costs nothing here: the panel is aria-hidden decoration, and the alternative was
+     mounting an animating demo inside a display:none subtree on every phone. Matches the xl
+     breakpoint on the aside, and stays in step if the window is resized across it. */
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1280px)");
+    const sync = () => setWide(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
   const [step, setStep] = useState<Step>("credentials");
   const [flow, setFlow] = useState<Flow>("signin");
   const [email, setEmail] = useState("");
@@ -755,11 +769,16 @@ export default function Login() {
             homepage hero uses, for the same reason.
 
             No height cap here. The demo scales itself to the width it is given
-            and this column is 46% minus px-14, which lands it just under
+            and this column is 48% minus px-8, which lands it just under
             COMPACT_BELOW, so it renders the compact picture at close to full
             size. The old height cap existed for a portrait PNG that could not
             scale; this one has no fixed size to run past. */}
-        <div className="flex w-full justify-center"><FlowDemoFit /></div>
+        {/* Mounted on width, not hidden by CSS. `hidden xl:flex` is display only, so React still
+            mounted the demo on every phone: FlowDemoFit bails its measure on a zero-width parent
+            and keeps its initial `ok: true`, so the full desktop composition rendered inside a
+            display:none subtree, running its rAF loops and timer chain for a picture nobody could
+            see. The <img> this replaced cost one request; this cost battery on the auth path. */}
+        {wide && <div className="flex w-full justify-center"><FlowDemoFit /></div>}
       </aside>
     </div>
   );

@@ -66,7 +66,7 @@ function SectionHeading({ id, eyebrow, title, note }: { id: string; eyebrow: str
    BLACK AND WHITE ONLY: hard rule across every surface that shows a resume. */
 function ResumePaper({ resume }: { resume: Packet["resume"] }) {
   return (
-    <div className="rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black shadow-[0_1px_2px_rgba(18,18,15,0.04)]">
+    <div className="rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black shadow-rest">
       <p className="text-[15px] font-semibold tracking-tight">{resume.name}</p>
       <p className="mt-1 text-[9px] text-neutral-600">{resume.contact}</p>
       {resume.sections.map((section) => (
@@ -106,7 +106,18 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
   const scroller = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState("packet-jd");
+  /* Same three corrections as the dashboard viewer, kept in step deliberately: this is the file
+     the design is iterated in, and a sandbox that behaves differently from the real thing stops
+     being a sandbox. onClose through a ref (so the focus trap is not rebuilt on every parent
+     render), and the rail seeded to the section the scroller actually opens on. */
+  const onCloseRef = useRef(onClose);
+  /* Assigned in an effect, not during render: writing a ref during render is a React rule
+     violation (react-hooks/refs) because it mutates state the renderer may discard. An effect with
+     no dep array runs after every commit, which is exactly the freshness this needs. */
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+  const [active, setActive] = useState("packet-resume");
 
   const questionCount = packet.questions.reduce((n, group) => n + group.items.length, 0);
 
@@ -122,7 +133,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !dialog.current) return;
@@ -147,24 +158,33 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
       document.body.style.overflow = overflow;
       previous?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   /* The rail tracks the scroll rather than only driving it, so it reports where
      the reader is instead of where they last clicked. */
+  const rafPending = useRef(false);
   const onScroll = useCallback(() => {
-    const box = scroller.current;
-    if (!box) return;
-    const marks = ["packet-resume", "packet-jd", "packet-questions", "packet-email"];
-    let current = marks[0];
-    for (const id of marks) {
-      const node = document.getElementById(id);
-      if (node && node.getBoundingClientRect().top - box.getBoundingClientRect().top <= 24) current = id;
-    }
-    setActive(current);
+    if (rafPending.current) return;
+    rafPending.current = true;
+    requestAnimationFrame(() => {
+      rafPending.current = false;
+      const box = scroller.current;
+      const root = dialog.current;
+      if (!box || !root) return;
+      const top = box.getBoundingClientRect().top;
+      const marks = ["packet-resume", "packet-jd", "packet-questions", "packet-email"];
+      let current = marks[0];
+      for (const id of marks) {
+        const node = root.querySelector(`#${id}`);
+        if (node && node.getBoundingClientRect().top - top <= 24) current = id;
+      }
+      setActive(current);
+    });
   }, []);
 
   function jump(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = id === "packet-resume" ? "packet-top" : id;
+    dialog.current?.querySelector(`#${target}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /* Resume is in the rail even though it is pinned beside the reader on
@@ -192,7 +212,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
         role="dialog"
         aria-modal="true"
         aria-label={`Application packet: ${packet.role} at ${packet.company}`}
-        className="relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-[0_1px_2px_rgba(18,18,15,0.04),0_40px_80px_-32px_rgba(18,18,15,0.35)]"
+        className="relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay"
       >
         {/* Header: what this packet is, and when it went out. */}
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
@@ -260,6 +280,16 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
 
         <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
           <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] sm:p-6">
+          {/* A zero-height anchor at the very top of the scrolled content, OUTSIDE the sticky
+              column, purely so the Resume rail pill has something reachable to scroll to. The pill
+              used to target the resume heading itself, which is inside a lg:sticky column and is
+              therefore already at the top of the scroller at exactly the breakpoint where the rail
+              matters, so scrollIntoView on it was a no-op. Scrolling the CONTAINER instead was the
+              obvious fix and was worse: element.scrollTo with behavior smooth is silently ignored
+              in some engines, so the pill did nothing at all rather than sometimes nothing. Every
+              pill now moves through the one mechanism that is known to work here. */}
+          <div id="packet-top" aria-hidden="true" className="h-0" />
+          
             {/* LEFT: the resume, pinned. It is one page by contract, so it fits
                 the pane without a second scrollbar. */}
             <div className="lg:sticky lg:top-0 lg:self-start">
