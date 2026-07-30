@@ -33,11 +33,20 @@ const LEAD = {
   tail: "Just tailoring my resume used to take me that long for one role.",
 };
 
-/* Verbatim from the paraphrased set on the store listing. If these are ever
-   reworded again, reword them there too, or two public surfaces start telling
-   slightly different stories about the same four people. */
+/* From the paraphrased set on the store listing. If these are ever reworded
+   again, reword them there too, or two public surfaces start telling slightly
+   different stories about the same four people.
+
+   CORRECTED 2026-07-30: the first quote said "actual informational
+   interviews". Mehek, who relayed these, says the tester actually said
+   "coffee chats", so the paraphrase had drifted from the person's own words.
+   Now it is what they said. The store listing shot still carries the old
+   wording and needs the same fix; see the note in the vault at
+   1-ventures/products/student-outreach/rolequick-store-listing-v2-2026-07-16.md.
+   This is the direction to correct in generally: the tester's own plain word
+   beat the professional-sounding one we had substituted for it. */
 const SUPPORTING = [
-  "I finally have time for actual informational interviews instead of typing the same answers into every single form.",
+  "I finally have time for actual coffee chats instead of typing the same answers into every single form.",
   "Honestly the whole thing is just fast, start to finish.",
   "All the repetitive stuff is just gone.",
   "Job hunting actually feels easy now.",
@@ -78,8 +87,8 @@ export function Voices() {
       </div>
 
       {/* The other four at body scale, so the lead keeps the hierarchy. Two
-          columns and not four: across four, the informational-interviews
-          quote wraps to five lines beside one-line neighbours. */}
+          columns and not four: across four, the coffee-chats quote (the long
+          one) wraps to five lines beside one-line neighbours. */}
       <div className="mt-3 grid grid-cols-1 gap-3 sm:mt-4 sm:grid-cols-2">
         {SUPPORTING.map((quote) => (
           <blockquote key={quote} className="rq-glass px-6 py-5">
