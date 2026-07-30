@@ -279,16 +279,17 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
         </div>
 
         <div ref={scroller} onScroll={onScroll} className="min-h-0 flex-1 overflow-y-auto">
-          <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] sm:p-6">
-          {/* A zero-height anchor at the very top of the scrolled content, OUTSIDE the sticky
-              column, purely so the Resume rail pill has something reachable to scroll to. The pill
-              used to target the resume heading itself, which is inside a lg:sticky column and is
-              therefore already at the top of the scroller at exactly the breakpoint where the rail
-              matters, so scrollIntoView on it was a no-op. Scrolling the CONTAINER instead was the
-              obvious fix and was worse: element.scrollTo with behavior smooth is silently ignored
-              in some engines, so the pill did nothing at all rather than sometimes nothing. Every
-              pill now moves through the one mechanism that is known to work here. */}
+          {/* A zero-height anchor at the top of the scrolled content, so the Resume rail pill has
+              something reachable to scroll to. The pill used to target the resume heading itself,
+              which lives in a lg:sticky column and is therefore already at the top of the scroller
+              at exactly the breakpoint where the rail matters, so scrollIntoView on it was a no-op.
+
+              It sits OUTSIDE the grid, and that is load-bearing. Placed inside, it became the
+              grid's FIRST CELL: the resume was pushed into the right column and the questions
+              column wrapped onto a second row, so the whole two-column layout came apart. A
+              zero-height element still takes a grid track. */}
           <div id="packet-top" aria-hidden="true" className="h-0" />
+          <div className="grid grid-cols-1 gap-6 p-5 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1fr)] sm:p-6">
           
             {/* LEFT: the resume, pinned. It is one page by contract, so it fits
                 the pane without a second scrollbar. */}
