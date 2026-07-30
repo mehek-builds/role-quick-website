@@ -113,8 +113,21 @@ export default function Contact() {
               <label htmlFor="c-email" className="mt-6 block text-[13px] text-ink">
                 Your email
               </label>
+              {/* Asks for the ACCOUNT email, 2026-07-30. Without it a support
+                  reply starts by asking which account this is, which is a
+                  wasted round trip on a form whose top reason is "Something is
+                  not working".
+
+                  "if you have one" is deliberate and should stay. Two of the
+                  REASONS above, "Career centre or university" and "Something
+                  else", come from people who have never signed up, and a flat
+                  demand for an account email would read as a wall to them. The
+                  privacy promise stays too: it is the one sentence here that is
+                  a commitment rather than an instruction. */}
               <p className="mt-1 text-xs leading-5 text-faint">
-                So the reply reaches you. Nothing else is done with it.
+                Use the email on your Litos account if you have one, so we can
+                look you up. The reply goes there, and nothing else is done with
+                it.
               </p>
               <input
                 id="c-email"
