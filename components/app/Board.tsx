@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchBoard, moveCard, type BoardCard, type Stage } from "@/lib/jd-match";
+import { fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
 
 /**
  * The application pipeline, as a board.

@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 /* Imported straight from the .ts, the way lib/daily-matches is: `npm test` runs node with
    --experimental-strip-types, so there is no build step between this test and the code the pages
    actually import. */
-import { formatPay, jobTypeLabel } from "../lib/pay.ts";
+import { formatPay, jobTypeLabel } from "../features/jobs/domain/pay.ts";
 
 const pay = (min, max, currency, interval) => ({
   salary_min: min,
@@ -86,14 +86,14 @@ test("every job surface imports the one formatter, so a job cannot read two ways
      posting ends up with a salary on two screens and none on the third. */
   for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx", "../app/dashboard/page.tsx"]) {
     const text = readFileSync(new URL(page, import.meta.url), "utf8");
-    assert.match(text, /from "@\/lib\/pay"/, `${page} must format pay through lib/pay.ts`);
+    assert.match(text, /from "@\/features\/jobs"/, `${page} must use the jobs feature formatter`);
   }
 });
 
 test("neither surface ships a placeholder for missing pay", () => {
   /* The board's standing rule, and the reason it says UPDATED rather than POSTED on Greenhouse
      rows. If a future edit adds "Not listed" or "Competitive" to a card, this fails the build. */
-  for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx", "../app/dashboard/page.tsx", "../lib/pay.ts"]) {
+  for (const page of ["../app/browse-jobs/page.tsx", "../app/dashboard/jobs/page.tsx", "../app/dashboard/page.tsx", "../features/jobs/domain/pay.ts"]) {
     const text = readFileSync(new URL(page, import.meta.url), "utf8")
       .replace(/\/\*[\s\S]*?\*\//g, "")
       .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")

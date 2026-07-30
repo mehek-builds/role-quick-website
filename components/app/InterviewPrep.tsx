@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchInterviewPrep, type InterviewPrep as Prep } from "@/lib/jd-match";
+import { fetchInterviewPrep, type InterviewPrep as Prep } from "@/features/applications";
 import type { ResumeSpec } from "@/lib/api";
 
 /**

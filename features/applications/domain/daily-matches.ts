@@ -1,4 +1,10 @@
-import type { ApplicationProfile, GeneratedResume, MonitoredJob, ParsedProfile, Targeting } from "./api";
+import type {
+  ApplicationProfile,
+  GeneratedResume,
+  MonitoredJob,
+  ParsedProfile,
+  Targeting,
+} from "@/lib/api";
 
 export type RankedJob = MonitoredJob & {
   match: number;
@@ -55,7 +61,7 @@ export function rankJobs(
  * "Apply now" reuses an existing packet or builds a new one, so a wrong match showed the student a
  * resume tailored to a different posting and skipped the build for the one they actually opened.
  *
- * The same rule as the "Applied" badge in lib/job-rows.ts, for the same reason: where a precise
+ * The same rule as the "Applied" badge in the jobs feature, for the same reason: where a precise
  * identity exists it has to REPLACE the imprecise one, not sit alongside it. Falling back to
  * company+role for a packet that has an id would let the sibling match anyway and change nothing.
  *

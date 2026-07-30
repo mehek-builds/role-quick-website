@@ -3,11 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { register } from "node:module";
 
-// The dashboard's pure review logic lives in lib/application-review.ts so it can be tested by
+// The dashboard's pure review logic lives in the applications domain so it can be tested by
 // behaviour rather than by grepping the component. Everything below is a regression found in live
 // QA on 2026-07-23 against a real Greenhouse posting (Five Rings, Summer Intern 2027).
 
-const lib = await import("../lib/application-review.ts");
+const lib = await import("../features/applications/domain/application-review.ts");
 const { normalizedTerms, explicitTerms, statusLabel, sectionHeading, startsNewSection, isLivePacketStatus, HIGHLIGHT_STOPWORDS } = lib;
 
 // ---- R-045: the highlighter matched function words ----

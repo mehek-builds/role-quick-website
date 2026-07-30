@@ -16,7 +16,7 @@ import {
 } from "@/lib/browse-jobs";
 import { logoSrc } from "@/lib/company-logos";
 import { isOther, JOB_TITLES, withOther } from "@/lib/job-titles";
-import { formatPay, jobTypeLabel } from "@/lib/pay";
+import { formatPay, jobTypeLabel } from "@/features/jobs";
 
 export const metadata: Metadata = {
   title: "Browse jobs",

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
-import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/lib/application-review";
+import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 
 /* REVISITING AN APPLICATION, against real packet data.
  *

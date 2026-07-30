@@ -25,9 +25,9 @@ import {
   resumeGenerationBody,
   type ProfileIdentity,
   type RankedJob,
-} from "@/lib/daily-matches";
-import { formatPay, jobTypeLabel, type PayFacts } from "@/lib/pay";
-import { loadDashboardInitialState } from "@/lib/dashboard-bootstrap";
+} from "@/features/applications";
+import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
+import { loadDashboardInitialState } from "@/features/dashboard";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { DashboardBootstrap } from "./api.ts";
-import { dashboardStateFromBootstrap, loadDashboardInitialState } from "./dashboard-bootstrap.ts";
+import type { DashboardBootstrap } from "../../../lib/api.ts";
+import { dashboardStateFromBootstrap, loadDashboardInitialState } from "./load-dashboard.ts";
 
 const completeBootstrap: DashboardBootstrap = {
   schema_version: 1,

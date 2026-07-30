@@ -1,4 +1,4 @@
-import type { MonitoredJob } from "./api";
+import type { MonitoredJob } from "@/lib/api";
 
 /* The pure logic behind a row on the jobs list.
  *

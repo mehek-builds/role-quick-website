@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { mergeDiscoveredQuestions, portalName, reviewablePackets } from "../lib/application-review.ts";
+import { mergeDiscoveredQuestions, portalName, reviewablePackets } from "../features/applications/domain/application-review.ts";
 
 describe("dashboard application review compatibility", () => {
   test("legacy resumes without review metadata cannot become dead selectable cards", () => {

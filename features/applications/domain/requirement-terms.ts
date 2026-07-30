@@ -1,4 +1,4 @@
-import type { JdTermView } from "./jd-match";
+import type { JdTermView } from "./match-model";
 
 /**
  * The shared vocabulary that links the job description to the resume.

@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test 'app/**/*.test.mts' 'lib/**/*.test.mts' tests/**/*.test.mjs",
+    "test": "node --experimental-strip-types --test 'app/**/*.test.mts' 'features/**/*.test.mts' 'lib/**/*.test.mts' tests/**/*.test.mjs",
     "verify:logos": "node --experimental-strip-types scripts/verify-logo-service.mjs",
     "verify:suggestions": "node --experimental-strip-types scripts/verify-board-suggestions.mjs"
   },

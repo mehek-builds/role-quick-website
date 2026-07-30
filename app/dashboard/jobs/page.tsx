@@ -4,12 +4,12 @@ import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
-import { fetchBoard } from "@/lib/jd-match";
+import { fetchBoard } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
-import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/lib/job-rows";
+import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
-import { formatPay, jobTypeLabel } from "@/lib/pay";
+import { formatPay, jobTypeLabel } from "@/features/jobs";
 
 /* The filters, as one string. It is the pagination key as well as the query: a page of results
    only belongs to the list on screen if it was fetched under the same filters, and comparing this

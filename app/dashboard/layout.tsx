@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
-import { fetchFunnel } from "@/lib/jd-match";
+import { fetchFunnel } from "@/features/applications";
 import { isQaRender } from "@/lib/qa-mode";
 import {
   ChatIcon,

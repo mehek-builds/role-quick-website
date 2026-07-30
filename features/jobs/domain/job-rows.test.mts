@@ -1,7 +1,7 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
 import { applicationKey, buildAppliedIndex, companyDomain, companyDomainForRow, countNewToday, isAppliedStage, isJobApplied } from "./job-rows.ts";
-import { isQaRenderFor } from "./qa-mode.ts";
+import { isQaRenderFor } from "../../../lib/qa-mode.ts";
 
 describe("companyDomain", () => {
   test("a company careers URL yields the company host", () => {
