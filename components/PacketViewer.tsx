@@ -202,10 +202,21 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
             </p>
             <h2 className="mt-1 truncate text-lg font-medium tracking-tight text-ink">{packet.role}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
-              <span className="rounded-full border border-teal/30 bg-teal-soft/60 px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-teal-ink">
+              {/* Teal is the autofill pillar and it reads as done. A packet that
+                  still needs the person is not done, so it takes the warn tone
+                  the rest of the app uses for the same state. */}
+              <span
+                className={`rounded-full border px-2 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.08em] ${
+                  packet.sent
+                    ? "border-teal/30 bg-teal-soft/60 text-teal-ink"
+                    : "border-warn/30 bg-warn-soft text-warn"
+                }`}
+              >
                 {packet.status}
               </span>
-              <span>{packet.appliedAt}</span>
+              <span>
+                {packet.sent ? `Sent ${packet.sentAt}` : `Built ${packet.builtAt}, not sent`}
+              </span>
               <span className="text-faint">·</span>
               <a
                 href={`https://${packet.postingUrl}`}
@@ -255,7 +266,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
               <SectionHeading
                 id="packet-resume"
                 eyebrow="01 · Resume"
-                title="The resume they received"
+                title={packet.sent ? "The resume they received" : "The resume that will go out"}
                 note={packet.resume.filename}
               />
               <div className="mt-3">
@@ -301,8 +312,12 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
                 <SectionHeading
                   id="packet-questions"
                   eyebrow="03 · Autofill"
-                  title={`Every question, and what was answered`}
-                  note="Read-only. This is the record of what the employer received."
+                  title="Every question, and what was answered"
+                  note={
+                    packet.sent
+                      ? "Read-only. This is the record of what the employer received."
+                      : "Nothing here has gone to the employer. This is what is waiting to."
+                  }
                 />
                 <div className="mt-3 space-y-5">
                   {packet.questions.map((group) => (

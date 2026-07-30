@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { PacketViewer } from "@/components/PacketViewer";
-import { DEMO_LIST, DEMO_PACKET } from "@/lib/packet-demo-data";
+import { DEMO_LIST, DEMO_PACKET, DEMO_PACKET_UNSENT, type Packet } from "@/lib/packet-demo-data";
 
 /* The applications list, carrying the new affordance.
  *
@@ -34,7 +34,7 @@ function Row({
   item: (typeof DEMO_LIST)[number];
   onOpen?: () => void;
 }) {
-  const submitted = item.status === "Submitted";
+  const submitted = item.status === "Sent";
   return (
     /* pb was 12 to clear a pill that is no longer there. The card gets its
        height back, and the glyph now sits inside the ordinary padding rather
@@ -60,6 +60,7 @@ function Row({
 
       <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
         {item.when} · {item.questionCount} questions filled
+        {!submitted && " · nothing sent yet"}
       </p>
 
       {/* The little something, bottom right. */}
@@ -91,7 +92,7 @@ function Row({
 }
 
 export function PacketSandbox() {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState<Packet | null>(null);
 
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-16">
@@ -100,22 +101,25 @@ export function PacketSandbox() {
       </p>
       <h1 className="mt-2 text-2xl font-medium tracking-tight text-ink">Applications</h1>
       <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
-        Every application carries a small mark in its bottom right corner. It opens the packet that
-        was sent: the resume on the left, the posting on the right, and every autofilled answer
-        underneath.
+        Every application carries a small mark in its bottom right corner. It opens the packet: the
+        resume on the left, the posting on the right, and every autofilled answer underneath. The
+        Figma row is the same viewer for an application that has not been sent yet, so the two can
+        be compared.
       </p>
 
       <div className="mt-8 space-y-3">
-        {DEMO_LIST.map((item) => (
-          <Row
-            key={item.id}
-            item={item}
-            onOpen={item.id === DEMO_PACKET.id ? () => setOpen(true) : undefined}
-          />
-        ))}
+        {DEMO_LIST.map((item) => {
+          const packet =
+            item.id === DEMO_PACKET.id ? DEMO_PACKET
+            : item.id === DEMO_PACKET_UNSENT.id ? DEMO_PACKET_UNSENT
+            : null;
+          return (
+            <Row key={item.id} item={item} onOpen={packet ? () => setOpen(packet) : undefined} />
+          );
+        })}
       </div>
 
-      {open && <PacketViewer packet={DEMO_PACKET} onClose={() => setOpen(false)} />}
+      {open && <PacketViewer packet={open} onClose={() => setOpen(null)} />}
     </main>
   );
 }
