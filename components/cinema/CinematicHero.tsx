@@ -4,7 +4,6 @@ import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useGSAP } from "@gsap/react";
-import { createPaperRoll } from "./paperRollEngine";
 import { FlowDemoFit } from "@/components/FlowDemo";
 import { track } from "@/lib/analytics";
 
@@ -246,19 +245,32 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
       stop: () => void;
     } | null = null;
     let inited = false;
+    let cancelled = false;
     const init = () => {
-      if (inited) return;
+      if (cancelled || inited) return;
       inited = true;
-      roll = createPaperRoll(holder);
-      /* the engine prerolls a full paper trail before its first frame, so
-         this fires over a fully-laid scene: dissolve in, never pop */
-      gsap.to(holder, { opacity: 1, duration: 0.8, ease: "power1.inOut" });
-      /* entered mid-page (anchor link): start hidden and parked */
-      if (window.scrollY > 2) {
-        openDoneRef.current = true;
-        gsap.set(stage, { autoAlpha: 0 });
-        roll.pause();
-      }
+      /* Three.js plus the roll engine are the homepage's largest client
+         dependency. The server-rendered poster already owns first paint, so
+         load the live scene after hydration instead of making every visitor
+         parse WebGL code before the page becomes interactive. */
+      void import("./paperRollEngine")
+        .then(({ createPaperRoll }) => {
+          if (cancelled) return;
+          roll = createPaperRoll(holder);
+          /* the engine prerolls a full paper trail before its first frame, so
+             this fires over a fully-laid scene: dissolve in, never pop */
+          gsap.to(holder, { opacity: 1, duration: 0.8, ease: "power1.inOut" });
+          /* entered mid-page (anchor link): start hidden and parked */
+          if (window.scrollY > 2) {
+            openDoneRef.current = true;
+            gsap.set(stage, { autoAlpha: 0 });
+            roll.pause();
+          }
+        })
+        .catch(() => {
+          /* The poster is the intentional fallback when WebGL cannot load. */
+          inited = false;
+        });
     };
     const sync = (p: number) => {
       if (!inited || !roll) return;
@@ -288,12 +300,15 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
        the stage can read zero-sized. rAF waits for the first paint; the
        timeout covers throttled or hidden tabs. Whichever fires first runs
        the init once. */
-    const startRaf = requestAnimationFrame(() =>
-      requestAnimationFrame(init)
-    );
+    let initRaf = 0;
+    const startRaf = requestAnimationFrame(() => {
+      initRaf = requestAnimationFrame(init);
+    });
     const timeout = setTimeout(init, 300);
     return () => {
+      cancelled = true;
       cancelAnimationFrame(startRaf);
+      if (initRaf) cancelAnimationFrame(initRaf);
       clearTimeout(timeout);
       syncOpeningRef.current = () => {};
       gsap.killTweensOf(stage);
@@ -527,11 +542,12 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
               apart and lets the rows, which are the part that shows what the
               product does, sit in the open. */}
           <div className="absolute inset-x-0 bottom-0 top-[14svh]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/product/dashboard-emails.png"
-              alt=""
-              className="h-full w-full object-contain object-top"
+            {/* CSS owns this image so browsers fetch it only when the
+                reduced-motion media query actually shows it. A hidden img
+                still downloaded 143KB for every full-motion visitor. */}
+            <div
+              aria-hidden="true"
+              className="rq-cine-still-product h-full w-full"
             />
           </div>
           <div className="absolute inset-0 bg-white/[0.72]" />

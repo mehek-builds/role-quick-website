@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { normalizedScrollProgress } from "@/lib/scroll-progress";
 
 /* Three consecutive pinned acts (documents, autofill, outreach) each hold
    the viewport for roughly two screens of scrolling. Pinning is the point,
@@ -12,8 +13,8 @@ import { useEffect, useState } from "react";
    that loop. It is the same ink as the section rail, and it hides under
    reduced motion, where the pins collapse anyway. */
 export function ScrollProgress() {
-  const [p, setP] = useState(0);
   const [reduced, setReduced] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -21,14 +22,24 @@ export function ScrollProgress() {
     const onMq = (e: MediaQueryListEvent) => setReduced(e.matches);
     mq.addEventListener("change", onMq);
 
-    const onScroll = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
-      setP(max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0);
+    let raf = 0;
+    const paint = () => {
+      raf = 0;
+      const progress = normalizedScrollProgress(
+        window.scrollY,
+        document.documentElement.scrollHeight,
+        window.innerHeight,
+      );
+      if (barRef.current) barRef.current.style.transform = `scaleX(${progress})`;
     };
-    onScroll();
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(paint);
+    };
+    paint();
     window.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
     return () => {
+      if (raf) cancelAnimationFrame(raf);
       mq.removeEventListener("change", onMq);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
@@ -43,8 +54,9 @@ export function ScrollProgress() {
       aria-hidden
     >
       <div
+        ref={barRef}
         className="h-full origin-left bg-ink/25"
-        style={{ transform: `scaleX(${p})` }}
+        style={{ transform: "scaleX(0)" }}
       />
     </div>
   );

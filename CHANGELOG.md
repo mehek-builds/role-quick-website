@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.5] - 2026-07-31
+
+### Performance
+
+- The homepage defers its Three.js paper-roll engine until after hydration and avoids downloading
+  the reduced-motion product still for full-motion visitors.
+- Scroll progress updates now paint through a single animation frame without rerendering React on
+  every scroll event.
+- Identical concurrent authenticated GET requests share one network call and are forgotten as soon
+  as they settle, preserving fresh later reads.
+
 ## [0.1.4] - 2026-07-30
 
 ### Fixed
