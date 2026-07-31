@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.7] - 2026-07-31
+
+### Added
+
+- Job seekers can browse and open eligible Workable postings from both public and dashboard
+  job surfaces.
+- Litos records privacy-filtered, deduplicated demand when an explicit target-role search
+  returns no results.
+
+### Changed
+
+- Dashboard job search now commits target-role demand only after Enter or blur, so partial typing
+  is not counted as unmet demand.
+- The privacy policy now explains how zero-result role and filter analytics are collected and
+  how personal-information-shaped searches are discarded.
+
 ## [0.1.6] - 2026-07-31
 
 ### For contributors
