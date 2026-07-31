@@ -195,6 +195,7 @@ export default function Settings() {
         if (cancelled) return;
         const el =
           document.getElementById(decoded) ?? document.getElementById(raw);
+        if (el instanceof HTMLDetailsElement) el.open = true;
         el?.scrollIntoView({ block: "start" });
       });
     };
@@ -402,9 +403,6 @@ export default function Settings() {
     <div className="space-y-8">
       <div>
         <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Account</h1>
-        <p className="mt-1 text-sm text-muted">
-          Account, application details, and plan.
-        </p>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -468,7 +466,9 @@ export default function Settings() {
           })}
         </div>
         {me.email && (
-          <form onSubmit={changePassword} className="mt-6 border-t border-border pt-6">
+          <details className="mt-6 border-t border-border pt-4">
+            <summary className="cursor-pointer text-sm font-medium text-ink">Password</summary>
+          <form onSubmit={changePassword} className="pt-4">
             <h3 className="text-sm font-medium text-ink">Set or change password</h3>
             <p className="mt-1 text-xs leading-5 text-muted">
               Use 15 to 128 characters. Changing it signs out every older session.
@@ -525,12 +525,15 @@ export default function Settings() {
               {passwordNotice && <span className="text-xs text-positive" role="status">{passwordNotice}</span>}
             </div>
           </form>
+          </details>
         )}
       </Card>
 
       <Card className="p-6">
-        <h2 className="text-base font-medium text-ink">Two things Litos can do on its own</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">These are two separate choices, and you can turn either off at any time. We check again right before anything is sent.</p>
+        <details>
+        <summary className="cursor-pointer text-base font-medium text-ink">Automation</summary>
+        <div className="pt-1">
+        <p className="text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
         <div className="mt-5 space-y-4">
           {/* Locked until the student has personally approved a few real submissions. LazyApply
               sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
@@ -563,7 +566,9 @@ export default function Settings() {
             <input aria-label="Read the code a company emails me" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
           </label>
         </div>
-        <p className="mt-4 text-xs leading-5 text-faint">Litos still stops and waits for you when something is missing, when two answers do not match, when a question is about you personally, when a site checks you are human, or when it is not sure.</p>
+        <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
+        </div>
+        </details>
       </Card>
 
       {/* VISA SPONSORSHIP.
@@ -578,10 +583,10 @@ export default function Settings() {
           fixed. */}
       {sponsorship && (
         <Card className="p-6" id="visa-sponsorship">
-          <h2 className="text-base font-medium text-ink">Jobs that sponsor a work visa</h2>
-          <p className="mt-1 text-sm leading-6 text-muted">
-            When this is on, your job list only shows companies we can confirm sponsor visas.
-          </p>
+          <details>
+          <summary className="cursor-pointer text-base font-medium text-ink">Visa sponsorship filter</summary>
+          <div className="pt-1">
+          <p className="text-sm leading-6 text-muted">Only show jobs where sponsorship is confirmed.</p>
           {sponsorError && <div className="mt-4"><ErrorNote message={sponsorError} /></div>}
           <label className="mt-5 flex items-start justify-between gap-5 rounded-inner border border-border p-4">
             <span>
@@ -639,6 +644,8 @@ export default function Settings() {
             A filing record is not a promise to sponsor you. It is proof the company has sponsored
             people before.
           </p>
+          </div>
+          </details>
         </Card>
       )}
 
@@ -656,15 +663,13 @@ export default function Settings() {
           header. Every numeric check passed ("cardTop 0, inView true") while
           the thing the reader came for was invisible. Same scroll-margin the
           homepage sections use. */}
-      <Card className="scroll-mt-24 p-6" id="application-details">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-medium text-ink">Answers you give every time</h2>
-            <p className="mt-1 text-sm text-muted">
-              What Litos types into forms. Phone, location, citizenship,
-              availability, and salary are encrypted at rest.
-            </p>
-          </div>
+      <details className="scroll-mt-24 rounded-card border border-border bg-surface" id="application-details">
+        <summary className="cursor-pointer p-6 text-base font-medium text-ink">
+          Application details
+          <span className="mt-1 block text-sm font-normal text-muted">Contact, links, and form answers</span>
+        </summary>
+        <div className="px-6 pb-6">
+        <div className="flex justify-end">
           <div className="flex items-center gap-3">
             {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
             <Button
@@ -715,12 +720,9 @@ export default function Settings() {
           <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="Company careers page" />
         </div>
 
-        <p className="mt-5 text-xs leading-5 text-faint">
-          Questions about race and gender always default to "I would rather not say"
-          and can only be changed by an explicit opt-in inside the extension.
-          Work authorization is always asked, never inferred.
-        </p>
-      </Card>
+        <p className="mt-5 text-xs leading-5 text-faint">Personal questions stay unanswered unless you choose an answer.</p>
+        </div>
+      </details>
 
       {/* Plan + usage */}
       <Card className="p-6">

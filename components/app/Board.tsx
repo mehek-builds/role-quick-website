@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
+import { userFacingError } from "@/lib/user-facing-error";
 
 /**
  * The application pipeline, as a board.
@@ -44,6 +45,13 @@ const STAGE_LABEL: Record<Stage, string> = {
   closed: "Closed",
 };
 
+function submissionLabel(status: string): string {
+  if (status === "submitted") return "Sent";
+  if (["needs_attention", "ready_for_final_approval", "failed"].includes(status)) return "Needs you";
+  if (["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "Getting ready";
+  return "Ready";
+}
+
 export function Board({
   onOpen,
   onRevisit,
@@ -71,6 +79,7 @@ export function Board({
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [moveError, setMoveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  const [activeStage, setActiveStage] = useState<Stage>("saved");
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +109,7 @@ export function Board({
       setCards((current) => (current ?? []).map((c) => (c.id === card.id ? { ...c, stage: from } : c)));
       // And say so. An empty catch snapped the card back with no message, so the student either
       // missed it and believed the interview was recorded, or saw an unexplained jump.
-      setMoveError(reason instanceof Error ? reason.message : "Could not save that move.");
+      setMoveError(userFacingError(reason, "Could not save that move."));
     } finally {
       setBusy((current) => {
         const next = new Set(current);
@@ -135,11 +144,18 @@ export function Board({
           {moveError}
         </p>
       )}
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 md:hidden" aria-label="Application stage">
+        {stages.map((stage) => (
+          <button key={stage} type="button" onClick={() => setActiveStage(stage)} aria-pressed={activeStage === stage} className={`shrink-0 rounded-full border px-3 py-2 text-xs ${activeStage === stage ? "border-brand bg-brand-soft text-brand-ink" : "border-border text-muted"}`}>
+            {STAGE_LABEL[stage]} · {cards.filter((card) => card.stage === stage).length}
+          </button>
+        ))}
+      </div>
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
       {stages.map((stage) => {
         const column = cards.filter((c) => c.stage === stage);
         return (
-          <section key={stage} aria-labelledby={`col-${stage}`} className="min-w-0">
+          <section key={stage} aria-labelledby={`col-${stage}`} className={`${activeStage === stage ? "block" : "hidden"} min-w-0 md:block`}>
             <div className="flex items-baseline justify-between border-b border-border pb-2">
               <h3 id={`col-${stage}`} className="text-[13px] font-medium text-ink">
                 {STAGE_LABEL[stage]}
@@ -165,7 +181,7 @@ export function Board({
                       which is the question a board is looked at to answer. */}
                   <p className="mt-1 text-[11px] text-faint">
                     {relativeTime(card.moved_at ?? card.created_at)}
-                    {card.submission_status ? ` · Litos: ${card.submission_status.replace(/_/g, " ")}` : ""}
+                    {card.submission_status ? ` · Litos: ${submissionLabel(card.submission_status)}` : ""}
                   </p>
                   {/* The move control keeps its right edge clear so the packet mark can sit in the
                       actual corner rather than above it. */}

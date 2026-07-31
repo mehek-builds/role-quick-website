@@ -29,6 +29,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import type { JdMatchResponse } from "@/features/applications";
+import { userFacingError } from "@/lib/user-facing-error";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationFilter = "all" | "action" | "ready" | "submitted";
@@ -264,8 +265,7 @@ export default function Applications() {
         setPackets(result.resumes);
         const requestedId = new URLSearchParams(window.location.search).get("application");
         const requested = reviewable.find((packet) => packet.id === requestedId);
-        const first = requested ?? reviewable[0];
-        if (first) selectPacket(first);
+        if (requested) selectPacket(requested);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
     return () => {
@@ -379,6 +379,7 @@ export default function Applications() {
      underneath it and print one job's score on another job's row. */
   const [nextScore, setNextScore] = useState<{ id: string; score: number | null } | null>(null);
   useEffect(() => {
+    if (selectedId) return;
     const jd = nextPacket?.spec._review?.jd_text;
     if (!nextPacket || !jd) return;
     let cancelled = false;
@@ -389,7 +390,7 @@ export default function Applications() {
     return () => {
       cancelled = true;
     };
-  }, [nextPacket]);
+  }, [nextPacket, selectedId]);
 
   const nextMatch: NextMatch | null = nextPacket
     ? {
@@ -772,11 +773,8 @@ export default function Applications() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Applications</h1>
-          {!reviewOpen && <p className="mt-1 text-sm text-muted">Review and track.</p>}
-          {/* Gated on `selected`, not on reviewOpen. A packet auto-selects on load, and it can land
-              on ANY of the screens (review, questions, portal, the submitted receipt), none of
-              which had a way back to the list. Gating on reviewOpen left every other screen a dead
-              end, which is how the board turned out to be unreachable. */}
+          {/* Every selected screen needs a way back to the mobile list. Desktop keeps the compact
+              switcher beside the detail, so this control would only repeat it there. */}
           {selected && spec && review && (
             <button
               type="button"
@@ -804,7 +802,7 @@ export default function Applications() {
             onToggle={(next) => void autopilot.toggle(next)}
           />
           <Button type="button" onClick={() => setShowNewApplication((current) => !current)}>
-            {showNewApplication ? "Close" : "Add a job link"}
+            {showNewApplication ? "Close" : "Add job"}
           </Button>
         </div>
       </div>
@@ -848,7 +846,7 @@ export default function Applications() {
       {selected && reviewablePackets.length > 1 && (
         /* Keep the switcher above every screen branch. Historical marker for the invariant:
            packet.job_context.role} · {packet.job_context.company} */
-        <section aria-labelledby="application-ledger-heading" className="border-y border-border">
+        <section aria-labelledby="application-ledger-heading" className="hidden border-y border-border lg:block">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-baseline gap-2">
               <h2 id="application-ledger-heading" className="sr-only">Your applications</h2>
@@ -1030,9 +1028,8 @@ export default function Applications() {
           {review.cover_letter_supported === true ? <Card className="p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs text-muted">Tailored cover letter</p>
-                <h2 className="mt-2 text-lg font-medium text-ink">Written for this job, from work you really did.</h2>
-                <p className="mt-1 text-sm text-muted">Every line points back to something already in your resume or in the work you told us about.</p>
+                <h2 className="text-lg font-medium text-ink">Cover letter</h2>
+                <p className="mt-1 text-sm text-muted">Written from your resume.</p>
               </div>
               <div className="flex gap-2">
                 {coverLetterDownloadUrl && <a href={coverLetterDownloadUrl} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">View PDF</a>}
@@ -1118,7 +1115,7 @@ function NewApplicationPanel({
     <Card className="p-6">
       <div className="max-w-2xl">
         <p className="text-xs text-muted">New application</p>
-        <h2 className="mt-2 text-xl font-medium text-ink">Make the resume for this job.</h2>
+        <h2 className="mt-2 text-xl font-medium text-ink">Add a job.</h2>
         <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -1133,7 +1130,7 @@ function NewApplicationPanel({
           type="button"
           onClick={onFetchJobDescription}
           disabled={extractingJd || !value.portalUrl.trim()} variant="secondary" className="mb-0.5 whitespace-nowrap">
-          {extractingJd ? <PendingLabel state="composing">Reading...</PendingLabel> : "Fetch from URL"}
+          {extractingJd ? <PendingLabel state="composing">Reading...</PendingLabel> : "Read job"}
         </Button>
       </div>
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
@@ -1345,7 +1342,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           <BlockerList reason={review.attention_reason} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed" ? review.submission_error ?? "The company's form would not accept it." : "You asked to check every application first. Look it over, then send it when you are happy."}
+            {review.status === "failed" ? userFacingError(review.submission_error, "Litos could not open the company’s form. Try again in a minute.") : "You asked to check every application first. Look it over, then send it when you are happy."}
           </p>
         )}
         {review.filled_fields && review.filled_fields.length > 0 && (
@@ -1421,9 +1418,10 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
 }
 
 function BlockerList({ reason }: { reason?: string }) {
-  const blockers = (reason ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+  const safeReason = userFacingError(reason, "Litos could not finish the company’s form. Try again in a minute.");
+  const blockers = reason ? safeReason.split("\n").map((line) => line.trim()).filter(Boolean) : [];
   if (blockers.length === 0) {
-    return <p className="mt-2 text-sm leading-6 text-muted">Finish the last step on the company's page.</p>;
+    return <p className="mt-2 text-sm leading-6 text-muted">Finish the last step on the company&apos;s page.</p>;
   }
   if (blockers.length === 1) {
     return <p className="mt-2 text-sm leading-6 text-muted">{blockers[0]}</p>;

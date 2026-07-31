@@ -1,6 +1,7 @@
 "use client";
 
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
+import { userFacingError } from "@/lib/user-facing-error";
 
 /* Shared in-app primitives, per brand deck sections 04 (shape/surface) and 07
    (review view): quiet surfaces, pill chips, shimmer loading, match-score ring.
@@ -240,8 +241,8 @@ export function EmptyState({
 
 export function ErrorNote({ message }: { message: string }) {
   return (
-    <p className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
-      {message}
+    <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
+      {userFacingError(message)}
     </p>
   );
 }

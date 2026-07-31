@@ -81,9 +81,9 @@ export const SEED_BOARD: Board = {
  *  preview, so each carries a base. Without it a board showing four cards sat
  *  next to a header claiming 129 applications sent today. */
 export const COLUMNS = [
-  { key: "applied" as const, label: "Applied", base: 141 },
-  { key: "interview" as const, label: "Interview", base: 10 },
-  { key: "offer" as const, label: "Offer", base: 1 },
+  { key: "applied" as const, label: "Applied", base: 2 },
+  { key: "interview" as const, label: "Interview", base: 0 },
+  { key: "offer" as const, label: "Offer", base: 0 },
 ];
 
 /** One noun per destination, matching the shipped dashboard nav. */
@@ -92,8 +92,7 @@ export const NAV = [
   { name: "Jobs", d: "M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" },
   { name: "Applications", d: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
   { name: "Emails", d: "M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" },
-  { name: "Resume", d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
-  { name: "Profile", d: "M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" },
+  { name: "Job search", d: "M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" },
 ];
 
 export const STEPS = [
@@ -104,9 +103,7 @@ export const STEPS = [
   // 2. the employer's form, filled, then submitted
   { name: "formOpen", ms: 600 }, { name: "fill1", ms: 700 }, { name: "fill2", ms: 650 },
   { name: "fill3", ms: 800 }, { name: "submitMove", ms: 560 }, { name: "submitClick", ms: 340 },
-  // 3. the email, written, then sent
-  { name: "emailOpen", ms: 480 }, { name: "emailWrite", ms: 1450 },
-  { name: "sendMove", ms: 560 }, { name: "sendClick", ms: 340 }, { name: "sent", ms: 850 },
+  { name: "sent", ms: 850 },
   { name: "navMove", ms: 800 }, { name: "navClick", ms: 380 },
   { name: "swap", ms: 650 }, { name: "landFlash", ms: 850 },
   // The prompt is up from "swap"; these are the person reading it, weighing
@@ -175,8 +172,8 @@ export const STAGE: Record<string, "resume" | "form" | "email"> = {
   formOpen: "form", fill1: "form", fill2: "form", fill3: "form",
   submitMove: "form", submitClick: "form",
   emailOpen: "email", emailWrite: "email",
-  sendMove: "email", sendClick: "email", sent: "email",
-  navMove: "email", navClick: "email",
+  sendMove: "email", sendClick: "email", sent: "form",
+  navMove: "form", navClick: "form",
 };
 
 export const ORB_STATE: Record<string, "searching" | "composing" | "solving" | "shaping"> = {
@@ -189,16 +186,15 @@ export const ORB_STATE: Record<string, "searching" | "composing" | "solving" | "
    its two action beats: the button is present from the moment the stage opens
    so the person can see what it is building towards, greyed until it is real. */
 export const STAGE_ACTION: Record<"resume" | "form" | "email", string> = {
-  resume: "Approve resume", form: "Submit application", email: "Send email",
+  resume: "Fill the form", form: "Send it", email: "Save email",
 };
 
 /* The three beats where the cursor travels to that button. Named explicitly:
    testing st.endsWith("Move") also matched navMove, and only the accident of
    the button being unmounted by then kept the cursor off it. */
-export const ACTION_MOVES = ["approveMove", "submitMove", "sendMove"];
+export const ACTION_MOVES = ["approveMove", "submitMove"];
 
 export const ACTIONS = [
-  { steps: ["approveMove", "approveClick"], label: "Approve resume" },
-  { steps: ["submitMove", "submitClick"], label: "Submit application" },
-  { steps: ["sendMove", "sendClick"], label: "Send email" },
+  { steps: ["approveMove", "approveClick"], label: "Fill the form" },
+  { steps: ["submitMove", "submitClick"], label: "Send it" },
 ];
