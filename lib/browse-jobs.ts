@@ -66,7 +66,10 @@ export type Filters = {
 
 export type JobsPage = {
   jobs: BrowseJob[];
+  /** Distinct company-title-ATS groups, which is also the number of board tiles. */
   total: number;
+  /** Raw postings behind those groups. Null only while an older backend is still deploying. */
+  postingsTotal: number | null;
   /* null when the API could not be reached at all, which the page has to show
      as a fault rather than as "no jobs match" — those look identical to a
      reader and only one of them is our problem to fix. */
@@ -135,17 +138,18 @@ export async function fetchJobs(
       next: { revalidate: LISTINGS_REVALIDATE },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok) return { jobs: [], total: 0, ok: false };
+    if (!response.ok) return { jobs: [], total: 0, postingsTotal: null, ok: false };
     const body = await response.json();
     return {
       jobs: Array.isArray(body.jobs)
         ? body.jobs.map((j: BrowseJob) => ({ ...j, locations: j.locations ?? [] }))
         : [],
       total: typeof body.total === "number" ? body.total : (body.jobs?.length ?? 0),
+      postingsTotal: typeof body.postings_total === "number" ? body.postings_total : null,
       ok: true,
     };
   } catch {
-    return { jobs: [], total: 0, ok: false };
+    return { jobs: [], total: 0, postingsTotal: null, ok: false };
   }
 }
 
@@ -246,12 +250,10 @@ export function locationSummary(
   return { shown: all.slice(0, show), extra: Math.max(0, all.length - show) };
 }
 
-/* Bare mono numerals, per DESIGN.md. Deliberately no thousands separator: in
-   Azeret Mono every glyph gets the same advance, so a comma sits alone in a
-   full-width cell and "7,106" reads on the page as "7 , 106", which looks like
-   a typo in the one number the page is judged on. */
+/* Inventory is read as a quantity, not an identifier. Thousands separators make the distinction
+   between 8,221 grouped roles and 10,246 openings scannable in the board headline. */
 export function countLabel(n: number): string {
-  return String(n);
+  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(n);
 }
 
 

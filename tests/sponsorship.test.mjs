@@ -40,7 +40,7 @@ describe("the public board carries the filter through every link", () => {
        differently from a board that failed to load. Asserted on the source rather than by calling
        fetchJobs: the module's `./config` import is extensionless and node --experimental-strip-types
        cannot resolve it, which is the same reason fetchJobs is not covered in browse-jobs.test.mjs. */
-    assert.match(browseLib, /return \{ jobs: \[\], total: 0, ok: false \}/);
+    assert.match(browseLib, /return \{ jobs: \[\], total: 0, postingsTotal: null, ok: false \}/);
   });
 });
 

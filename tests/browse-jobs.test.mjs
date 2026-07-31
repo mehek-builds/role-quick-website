@@ -115,11 +115,9 @@ describe("locationSummary", () => {
 });
 
 describe("countLabel", () => {
-  test("prints a bare numeral, because a mono comma reads as a typo", () => {
-    /* In Azeret Mono every glyph gets the same advance, so "7,106" renders on
-       the page as "7 , 106" — in the one number the whole page is judged on. */
-    assert.equal(countLabel(7106), "7106");
-    assert.ok(!countLabel(7106).includes(","));
+  test("uses thousands separators so roles and openings are scannable", () => {
+    assert.equal(countLabel(7106), "7,106");
+    assert.equal(countLabel(10246), "10,246");
   });
 });
 
@@ -168,6 +166,15 @@ describe("the board's layout", () => {
     const tile = page.match(/className="group flex[^"]*"/);
     assert.ok(tile, "could not find the tile's className");
     assert.match(tile[0], /\bmin-w-0\b/, "the tile needs min-w-0 or the board scrolls sideways on mobile");
+  });
+
+  test("the headline distinguishes grouped roles from raw openings", () => {
+    const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
+    const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
+    assert.match(lib, /body\.postings_total/);
+    assert.match(page, /postingsTotal === null/);
+    assert.match(page, /\{" "\}across\{" "\}/);
+    assert.match(page, /"opening" : "openings"/);
   });
 });
 
