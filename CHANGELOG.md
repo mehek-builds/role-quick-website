@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8] - 2026-07-31
+
+### Changed
+
+- The public job board now distinguishes distinct roles from the raw openings behind them, using
+  the format "8,221 roles across 10,246 openings."
+
 ## [0.1.7] - 2026-07-31
 
 ### Added

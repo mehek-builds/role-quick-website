@@ -224,7 +224,7 @@ export default async function BrowseJobs({
   };
   const searching = Boolean(filters.title || filters.company || filters.location || filters.q);
   const requested = Math.max(1, Number(params.page) || 1);
-  const [{ jobs, total, ok }, facets] = await Promise.all([
+  const [{ jobs, total, postingsTotal, ok }, facets] = await Promise.all([
     fetchJobs(filters, requested),
     fetchFacets(sponsorOnly),
   ]);
@@ -260,7 +260,14 @@ export default async function BrowseJobs({
                   page already shows: the tiles carry "N openings", and the band
                   at the bottom makes the offer. */}
               <span className="font-mono text-ink">{countLabel(total)}</span>{" "}
-              open {total === 1 ? "role" : "roles"}.
+              {total === 1 ? "role" : "roles"}
+              {postingsTotal === null ? "." : (
+                <>
+                  {" "}across{" "}
+                  <span className="font-mono text-ink">{countLabel(postingsTotal)}</span>{" "}
+                  {postingsTotal === 1 ? "opening" : "openings"}.
+                </>
+              )}
             </>
           ) : (
             <>
@@ -330,7 +337,10 @@ export default async function BrowseJobs({
 
         {searching && ok && (
           <p className="mt-4 font-mono text-machine text-muted">
-            {countLabel(total)} {total === 1 ? "role" : "roles"} matching{" "}
+            {countLabel(total)} {total === 1 ? "role" : "roles"}
+            {postingsTotal === null
+              ? " matching "
+              : ` across ${countLabel(postingsTotal)} ${postingsTotal === 1 ? "opening" : "openings"} matching `}
             {describeFilters(filters)}.{" "}
             <a href="/browse-jobs" className="underline underline-offset-2 hover:text-ink">
               Clear
