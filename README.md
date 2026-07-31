@@ -68,6 +68,15 @@ GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 
 Add `https://trylitos.com` and the Vercel preview origin to that client's authorized JavaScript origins.
 
+PostHog browser analytics requires these public deployment variables:
+
+```env
+NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN=your-project-token
+NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
+```
+
+Set both variables in Vercel Production and Preview. The project token is public by design and must never be replaced with a PostHog personal API key.
+
 Registered launch configs (vault `.claude/launch.json`):
 `litos-website` (dev, :3500) and `litos-website-prod`
 (build + start, :3501).

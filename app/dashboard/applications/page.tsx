@@ -30,6 +30,7 @@ import { RequirementProvider, RequirementText, MatchLegend } from "@/components/
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import type { JdMatchResponse } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
+import { track } from "@/lib/analytics";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationFilter = "all" | "action" | "ready" | "submitted";
@@ -422,6 +423,7 @@ export default function Applications() {
       const packet = (packets ?? []).find((item) => item.id === id);
       if (!packet || qaMode) return;
       try {
+        track("application_submission_requested", { source: "autopilot" });
         const result = await api<SubmissionResponse>(`/applications/${id}/submit-request`, {
           method: "POST",
           body: JSON.stringify({ questions: packet.spec._review?.questions ?? [] }),
@@ -550,6 +552,7 @@ export default function Applications() {
         selectPacket(created);
         setNewApplication(EMPTY_APPLICATION_DRAFT);
         setShowNewApplication(false);
+        track("application_generation_completed", { source: "job_link" });
         setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
         return;
       }
@@ -572,6 +575,7 @@ export default function Applications() {
       selectPacket(fallbackCreated);
       setNewApplication(EMPTY_APPLICATION_DRAFT);
       setShowNewApplication(false);
+      track("application_generation_completed", { source: "job_link" });
       setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.");
@@ -697,6 +701,7 @@ export default function Applications() {
     }
     moveToScreen("submitting");
     setError(null);
+    track("application_submission_requested", { source: qaMode ? "qa" : "review" });
     try {
       if (!qaMode) {
         const result = await api<SubmissionResponse>(`/applications/${selected.id}/submit-request`, {
@@ -1399,6 +1404,12 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
 
 function SubmissionReceipt({ review, role, company }: { review: ApplicationReview; role: string; company: string }) {
   const receipt = review.receipt;
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current) return;
+    captured.current = true;
+    track("application_submission_completed");
+  }, []);
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <CenteredState title="Sent to the company." body={`${role} at ${company} is complete. The company confirmed receipt.`} />

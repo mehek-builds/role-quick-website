@@ -23,6 +23,7 @@ import { GoogleSignInButton } from "./GoogleSignInButton";
 import { completeGoogleSession } from "./google-session";
 import { passwordFormProblem } from "./password-form";
 import { updatePasswordSession } from "./password-session";
+import { track } from "@/lib/analytics";
 
 type Step = "credentials" | "code" | "new-password";
 type Flow = "signin" | "signup" | "recovery" | "email-code";
@@ -225,6 +226,7 @@ export default function Login() {
         return;
       }
       setSession(data.token, normalized);
+      track("authentication_completed", { method: "password" });
       router.replace(await landingRoute());
     } catch {
       setError("Something went wrong. Check your internet and try again.");
@@ -263,6 +265,7 @@ export default function Login() {
       return "rejected";
     }
     setSession(result.token, result.email ?? email.trim().toLowerCase());
+    track("authentication_completed", { method: "email_verification" });
     router.replace(await landingRoute());
     return "success";
   }
@@ -282,6 +285,7 @@ export default function Login() {
         return;
       }
       setSession(data.token, null, true);
+      track("authentication_completed", { method: "guest" });
       router.replace("/start");
     } catch {
       setError("Something went wrong. Check your internet and try again.");
@@ -306,6 +310,7 @@ export default function Login() {
           returningUserRoute: landingRoute,
         });
         if (route) {
+          track("authentication_completed", { method: "google" });
           router.replace(route);
           return;
         }
@@ -349,6 +354,7 @@ export default function Login() {
           return;
         }
         setSession(data.token, email.trim().toLowerCase());
+        track("authentication_completed", { method: claimMode ? "email_claim" : "email_code" });
         const next = new URLSearchParams(window.location.search).get("next");
         if (next === "upgrade") {
           try {

@@ -1,5 +1,6 @@
 "use client";
 
+import posthog from "posthog-js";
 import { API_URL } from "./config";
 import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
@@ -38,16 +39,41 @@ export function getOrCreateGuestKey(): string {
   return created;
 }
 
+export function identifyVerifiedUser(email: string | null | undefined) {
+  const distinctId = email?.trim().toLowerCase();
+  if (!distinctId) return;
+  try {
+    posthog.identify(distinctId, { email: distinctId });
+  } catch {
+    /* analytics must never break authentication */
+  }
+}
+
+function resetAnalytics() {
+  try {
+    posthog.reset();
+  } catch {
+    /* analytics must never break authentication */
+  }
+}
+
 export function setSession(token: string, email?: string | null, isGuest = false) {
+  const normalizedEmail = email?.trim().toLowerCase() || null;
+  const previousEmail = getStoredEmail()?.trim().toLowerCase() || null;
+  if ((isGuest && previousEmail) || (normalizedEmail && previousEmail && normalizedEmail !== previousEmail)) {
+    resetAnalytics();
+  }
   window.localStorage.setItem(TOKEN_KEY, token);
-  if (email) window.localStorage.setItem(EMAIL_KEY, email);
+  if (normalizedEmail) window.localStorage.setItem(EMAIL_KEY, normalizedEmail);
   else window.localStorage.removeItem(EMAIL_KEY);
   window.localStorage.setItem(SESSION_MODE_KEY, isGuest ? "guest" : "verified");
   window.localStorage.setItem(HISTORY_KEY, "true");
   if (!isGuest) window.localStorage.removeItem(GUEST_KEY);
+  if (!isGuest) identifyVerifiedUser(normalizedEmail);
 }
 
 export function clearSession() {
+  resetAnalytics();
   window.localStorage.removeItem(TOKEN_KEY);
   window.localStorage.removeItem(EMAIL_KEY);
   window.localStorage.removeItem(SESSION_MODE_KEY);
