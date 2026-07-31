@@ -28,6 +28,7 @@ import { API_URL } from "@/lib/config";
 import { passwordFormProblem } from "@/app/login/password-form";
 import { updatePasswordSession } from "@/app/login/password-session";
 import { litosClientHeaders } from "@/lib/product";
+import { track } from "@/lib/analytics";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -294,6 +295,7 @@ export default function Settings() {
     try {
       const checkout = await createCheckout();
       if (!isLemonSqueezyCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
+      track("checkout_started");
       window.location.assign(checkout.url);
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : "Checkout is temporarily unavailable.");
@@ -311,6 +313,7 @@ export default function Settings() {
       link.href = url;
       link.download = `litos-export-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
+      track("account_data_exported");
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not export your data.");
@@ -379,6 +382,7 @@ export default function Settings() {
     setError(null);
     try {
       await api("/account", { method: "DELETE", body: JSON.stringify({ confirm_email: me.email }) });
+      track("account_deleted");
       clearSession();
       router.replace("/");
     } catch (err) {

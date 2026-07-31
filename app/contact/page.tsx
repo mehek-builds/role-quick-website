@@ -7,6 +7,7 @@ import { getStoredEmail, getToken, type Me } from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
 import { Button } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
+import { track } from "@/lib/analytics";
 
 /* The contact form.
  *
@@ -116,6 +117,7 @@ export default function Contact() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "That did not send.");
+      track("contact_form_submitted", { reason });
       setSent(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "That did not send.");
