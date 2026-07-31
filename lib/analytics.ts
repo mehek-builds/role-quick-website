@@ -79,3 +79,11 @@ export function track(
     /* analytics must never break the funnel */
   }
 }
+
+export function resetAnalytics() {
+  try {
+    posthog.reset();
+  } catch {
+    /* analytics must never break authentication */
+  }
+}

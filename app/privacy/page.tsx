@@ -34,7 +34,7 @@ export default function Privacy() {
           What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 30, 2026
+          Last updated: July 31, 2026
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. Open a job posting
@@ -76,6 +76,25 @@ export default function Privacy() {
             citizenship, your birthday, when you can start, and the pay you
             want. Your yes or no answers about being allowed to work are
             stored as plain yes or no, not locked.
+          </p>
+        </Section>
+
+        <Section title="Product analytics">
+          <p>
+            We use PostHog to understand which Litos pages and core actions are
+            useful, such as completing sign-in, generating an application, or
+            starting checkout. PostHog receives a random browser identifier,
+            the page path, basic browser and device information, and the named
+            action with limited context such as where the action started. We do
+            not send your email address or account identity to PostHog.
+          </p>
+          <p>
+            Automatic click and form tracking, session recording, and automatic
+            error capture are turned off. We do not send resume text, job
+            descriptions, application answers, contact messages, passwords,
+            codes, or form contents as analytics events. PostHog acts as our
+            analytics service provider and may process network information
+            needed to receive these events.
           </p>
         </Section>
 
@@ -173,11 +192,11 @@ export default function Privacy() {
 
         <Section title="Questions about race and gender">
           <p>
-            The extension's setup screen asks for these, and they are
+            The extension&apos;s setup screen asks for these, and they are
             optional. Whatever you enter is stored and used to answer the same
             questions on application forms, so you never type them twice.
             Leave them blank, which is what happens if you skip that section,
-            and Litos picks "I would rather not say" every time. It never
+            and Litos picks &ldquo;I would rather not say&rdquo; every time. It never
             works an answer out from anything else about you.
           </p>
         </Section>
@@ -203,8 +222,9 @@ export default function Privacy() {
           </p>
           <p>
             The resume you upload is read once to build your profile and is not
-            kept as a file. Everything else described above is kept for as long
-            as your account is open.
+            kept as a file. Account-linked product data described above is kept
+            for as long as your account is open. Anonymous product analytics is
+            retained separately and is not linked to your Litos account.
           </p>
         </Section>
 
@@ -227,10 +247,12 @@ export default function Privacy() {
             stores about you.
           </p>
           <p>
-            Deleting removes all of it. Your account. The facts we read from
-            your resume. Your answers, both the ones you typed and the ones we
-            watched you type. Your emails. Your form history. Every resume we
-            made, files and all. You cannot undo this.
+            Deleting removes all account-linked product data. Your account. The
+            facts we read from your resume. Your answers, both the ones you
+            typed and the ones we watched you type. Your emails. Your form
+            history. Every resume we made, files and all. Anonymous product
+            analytics is not linked to the account deletion request. You cannot
+            undo this.
           </p>
           <p>
             People are the one thing that stays. A person at a company is a

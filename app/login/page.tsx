@@ -360,6 +360,7 @@ export default function Login() {
           try {
             const checkout = await createCheckout();
             if (isLemonSqueezyCheckoutUrl(checkout.url)) {
+              track("checkout_started", { source: "post_login_upgrade" });
               window.location.assign(checkout.url);
               return;
             }

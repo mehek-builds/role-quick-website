@@ -8,7 +8,11 @@ if (token && host) {
     posthog.init(token, {
       api_host: host,
       defaults: "2026-01-30",
-      capture_exceptions: true,
+      autocapture: false,
+      capture_exceptions: false,
+      capture_pageview: true,
+      disable_external_dependency_loading: true,
+      disable_session_recording: true,
       debug: process.env.NODE_ENV === "development",
     });
   } catch (error) {
