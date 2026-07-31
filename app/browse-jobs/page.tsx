@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { ComboField } from "@/components/browse/ComboField";
-import { STORE_URL } from "@/lib/config";
 import {
   agoLabel,
   countLabel,
@@ -410,11 +409,16 @@ export default async function BrowseJobs({
             until you read it and press send yourself.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
+            {/* Was the store link. The install ask lives once now, in the
+                #packet demo on the landing page, where the extension is
+                visibly doing the work. This page is a job list, so the account
+                is the right door: it is also where the jobs below get watched
+                for you whether or not the browser is open. */}
             <a
-              href={STORE_URL}
+              href="/login"
               className="inline-flex min-h-[44px] items-center rounded-control bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
-              Add to Chrome
+              Get started
             </a>
             <a
               href="/try"

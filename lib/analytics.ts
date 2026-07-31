@@ -10,6 +10,12 @@ type TryEvent =
   | "path_chosen"
   | "packet_complete"
   | "install_click"
+  /* The site's primary ask is now the account, not the store: every marketing
+     CTA outside the #packet demo points at /login. install_click still exists
+     and is still the store's number, but it is now earned only by the one
+     button that sits under the demo, so the two are no longer measuring the
+     same click under different names. */
+  | "signin_click"
   | "send_link_submit";
 
 /* Onboarding funnel (/start).
