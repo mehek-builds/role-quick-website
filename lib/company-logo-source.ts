@@ -230,14 +230,15 @@ export function imageTypeOf(contentType: string | null, bytes: Uint8Array): stri
  * parameter, so without this anyone could hand the route an internal address
  * and have our server fetch it and hand back the body. The allowlist is the
  * whole defence; keep it exact-match on hostname. */
-const BOARD_HOSTS: Record<string, "greenhouse" | "lever" | "ashby"> = {
+const BOARD_HOSTS: Record<string, "greenhouse" | "lever" | "ashby" | "workable"> = {
   "job-boards.greenhouse.io": "greenhouse",
   "boards.greenhouse.io": "greenhouse",
   "jobs.lever.co": "lever",
   "jobs.ashbyhq.com": "ashby",
+  "apply.workable.com": "workable",
 };
 
-export type Board = { ats: "greenhouse" | "lever" | "ashby"; token: string; url: string };
+export type Board = { ats: "greenhouse" | "lever" | "ashby" | "workable"; token: string; url: string };
 
 /* Returns null for anything not recognisably one of our boards. Callers must
    treat null as "do not fetch", never as "fetch it anyway". */
@@ -274,7 +275,7 @@ export function boardHostedLogo(html: string, ats: Board["ats"]): string | null 
    datasubject.com purely because their board links a "do not sell my data"
    page more than once. */
 const NOT_THE_EMPLOYER =
-  /greenhouse|lever\.co|ashbyhq|linkedin|twitter|x\.com|facebook|instagram|youtube|glassdoor|google|w3\.org|schema\.org|gstatic|cloudflare|datasubject|onetrust|trustarc|cookiebot|osano|segment|hotjar|^fonts\./i;
+  /greenhouse|lever\.co|ashbyhq|workable\.com|linkedin|twitter|x\.com|facebook|instagram|youtube|glassdoor|google|w3\.org|schema\.org|gstatic|cloudflare|datasubject|onetrust|trustarc|cookiebot|osano|segment|hotjar|^fonts\./i;
 
 /* The employer's own domain, read off their board page and ANCHORED ON THE
  * TOKEN.

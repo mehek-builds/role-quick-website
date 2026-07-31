@@ -227,7 +227,7 @@ export type MonitoredJob = {
   remote: boolean;
   posted_at: string | null;
   first_seen_at: string;
-  ats_name: "greenhouse" | "lever" | "ashby";
+  ats_name: "greenhouse" | "lever" | "ashby" | "workable";
   is_active?: boolean;
   /** The company's own careers page. Every other URL here belongs to the job board. */
   career_url?: string | null;
