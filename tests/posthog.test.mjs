@@ -71,6 +71,15 @@ test("the privacy policy discloses PostHog and the disabled collection features"
   assert.match(source, /We do\s+not send your email address or account identity to PostHog/);
 });
 
+test("the privacy policy discloses extension analytics and its local retry queue", async () => {
+  const source = await read("app/privacy/page.tsx");
+  assert.match(source, /Chrome\s+extension actions/);
+  assert.match(source, /random browser or extension\s+installation identifier/);
+  assert.match(source, /does not\s+include the job URL, company or role name, resume, or form answers/);
+  assert.match(source, /queues up to 50 sanitized events/);
+  assert.match(source, /identifier changes when you sign out/);
+});
+
 test("the core conversion events remain instrumented", async () => {
   const files = await Promise.all([
     read("app/login/page.tsx"),
