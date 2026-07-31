@@ -175,7 +175,7 @@ export default function JobsPage() {
           {/* The headline is the ordering. It only claims to be about fit when the list actually
               was ranked against a resume, which is why it is not a constant. */}
           <h1 className="mt-1.5 text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">
-            {ranked ? "Top matches for you." : "Every job we found."}
+            {ranked ? "Top matches for you." : "Latest jobs."}
           </h1>
         </div>
         {newToday > 0 && (
@@ -185,6 +185,12 @@ export default function JobsPage() {
           </span>
         )}
       </div>
+
+      {!ranked && (
+        <p className="text-sm text-muted">
+          Add the jobs you want in <Link href="/dashboard/profile" className="font-medium text-brand-ink underline underline-offset-2">Job search</Link> to rank this list for you.
+        </p>
+      )}
 
       <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto]">
         <input aria-label="Search roles" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, skill, or keyword" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
@@ -340,7 +346,7 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
           href={`/dashboard/applications?job=${job.id}`}
           className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-brand px-6 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:basis-auto"
         >
-          Apply now
+          Apply
         </Link>
       )}
     </Card>

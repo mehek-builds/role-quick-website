@@ -28,6 +28,7 @@ import {
 } from "@/features/applications";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
+import { userFacingError } from "@/lib/user-facing-error";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 
@@ -491,7 +492,7 @@ export default function Home() {
           </p>
         </div>
         <Link href="/dashboard/applications?new=1" className="flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90">
-          Add a job link
+          Add job
         </Link>
       </section>
 
@@ -575,7 +576,6 @@ export default function Home() {
         <div className="flex items-end justify-between gap-4">
           <div>
             <h2 id="matches-heading" className="text-base font-medium text-ink">Your top jobs today</h2>
-            <p className="mt-1 text-xs text-muted">Picked to match what you said you want.</p>
           </div>
           <Link href="/dashboard/jobs" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
         </div>
@@ -845,7 +845,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
         </div>
 
         <footer className="border-t border-border bg-white px-5 py-4 sm:px-8">
-          {error && <p role="alert" className="mb-3 text-sm text-warn">{error}</p>}
+          {error && <p role="alert" className="mb-3 text-sm text-warn">{userFacingError(error)}</p>}
           {missingAnswers.length > 0 && <p className="mb-3 text-sm text-warn">{missingAnswers.length} answer{missingAnswers.length === 1 ? "" : "s"} needed.</p>}
           {needsAttention && <p className="mb-3 text-sm text-warn">This application needs you.</p>}
           <div className="flex flex-wrap items-center justify-between gap-3">

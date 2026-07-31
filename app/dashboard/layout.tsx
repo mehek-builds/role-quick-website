@@ -7,9 +7,7 @@ import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/ap
 import { fetchFunnel } from "@/features/applications";
 import { isQaRender } from "@/lib/qa-mode";
 import {
-  ChatIcon,
   ClipboardIcon,
-  DocumentIcon,
   GearIcon,
   HomeIcon,
   MailIcon,
@@ -26,22 +24,17 @@ const NAV = [
   { href: "/dashboard/jobs", label: "Jobs", Icon: SearchIcon },
   { href: "/dashboard/applications", label: "Applications", Icon: ClipboardIcon },
   { href: "/dashboard/outreach", label: "Emails", Icon: MailIcon },
-  { href: "/dashboard/resume", label: "Resume", Icon: DocumentIcon },
-  { href: "/dashboard/profile", label: "Profile", Icon: PersonIcon },
+  { href: "/dashboard/profile", label: "Job search", Icon: PersonIcon },
 ];
 
-/* Pinned to the bottom of the rail, away from the six places you go to do work. Contact is not a
-   seventh destination, and Account is somewhere you visit once and leave. */
+/* Pinned below the work destinations because Account is visited occasionally. */
 const UTILITY = [
-  { href: "/contact", label: "Contact", Icon: ChatIcon },
   { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
 ];
 
-/* Mobile keeps five, because a five-column bar is the widest that leaves a real touch target on a
-   360px phone. It is the same five the bar carried before the rail existed — Resume is the item
-   the rail adds, and it is reachable from Home and from any application, so it is the one that
-   gives up its column rather than Profile, which has no other entry point. */
-const MOBILE_NAV = NAV.filter((item) => item.href !== "/dashboard/resume");
+/* Five destinations preserve usable touch targets on a 360px phone. Resume and account controls
+   remain reachable from Job search and the mobile header. */
+const MOBILE_NAV = NAV;
 
 const ALL_DESTINATIONS = [...NAV, ...UTILITY];
 

@@ -6,6 +6,7 @@ import { api, ApiError, ExperienceEntry, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import { userFacingError } from "@/lib/user-facing-error";
 
 type ParsedProfile = Record<string, unknown>;
 
@@ -111,7 +112,7 @@ export default function ResumeWorkspace() {
         {/* The second sentence explained the system to itself. A page called
             Resume, holding the resume, does not need to justify holding it. */}
         <p className="mt-1 text-sm text-muted">
-          Your main resume and everything you have done.
+          Your resume and work history.
         </p>
       </div>
 
@@ -121,18 +122,18 @@ export default function ResumeWorkspace() {
       <Card className="p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-medium text-ink">Your main resume</h2>
+            <h2 className="text-base font-medium text-ink">Your resume</h2>
             <p className="mt-1 text-sm text-muted">
               {profile === null
                 ? <PendingLabel>Reading...</PendingLabel>
                 : profile === "missing"
                   ? "No resume uploaded yet. Upload a PDF and we will fill in the rest from it."
-                  : "Read and saved. Uploading a new PDF replaces it."}
+                  : "Saved from your uploaded PDF."}
             </p>
           </div>
           <div className="flex items-center gap-3">
             {profile !== null && profile !== "missing" && (
-              <Chip label="Parsed" kind="ready" />
+              <Chip label="Ready" kind="ready" />
             )}
             <Button
               onClick={() => fileRef.current?.click()}
@@ -166,12 +167,12 @@ export default function ResumeWorkspace() {
       <section>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-medium text-ink">Everything you have done</h2>
+            <h2 className="text-base font-medium text-ink">Work history</h2>
             {/* "We pick the ones that fit each job" is the same promise the
                 whole product makes on every screen. The heading plus the
                 first sentence is the whole idea. */}
             <p className="mt-1 text-sm text-muted">
-              Every job, project, and different way you have written a line.
+              Saved work Litos can use for each job.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -242,7 +243,7 @@ export default function ResumeWorkspace() {
 
                 <div className="mt-4">
                   <label className="block text-xs font-medium text-muted">
-                    Different ways to write this line (one per line)
+                    Resume bullets, one per line
                   </label>
                   <textarea
                     value={entry.bullet_variants.join("\n")}
@@ -258,7 +259,7 @@ export default function ResumeWorkspace() {
                 <div className="mt-3 flex items-end justify-between gap-4">
                   <div className="flex-1">
                     <Field
-                      label="Tags (comma-separated)"
+                      label="Skills, separated by commas"
                       value={(entry.tags ?? []).join(", ")}
                       onChange={(v) =>
                         patchEntry(i, { tags: v.split(",").map((t) => t.trim()) })
@@ -400,7 +401,7 @@ function EducationEditor({ school, degree, gradDate, onSaved }: { school: string
       onSaved(updated);
       setEditing(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not save your education.");
+      setError(userFacingError(reason, "Could not save your education."));
     } finally {
       setSaving(false);
     }
@@ -432,7 +433,7 @@ function EducationEditor({ school, degree, gradDate, onSaved }: { school: string
         <Field label="Degree" value={draft.degree} onChange={(degree) => setDraft({ ...draft, degree })} placeholder="Bachelor of Science in Computer Science" />
         <Field label="Graduation" value={draft.grad_date} onChange={(grad_date) => setDraft({ ...draft, grad_date })} placeholder="May 2028" />
       </div>
-      {error && <p className="mt-2 text-xs text-warn">{error}</p>}
+      {error && <p role="alert" className="mt-2 text-xs text-warn">{userFacingError(error)}</p>}
       <div className="mt-3 flex gap-2">
         <Button type="button" onClick={save} disabled={saving} >
           {saving ? "Saving..." : "Save education"}

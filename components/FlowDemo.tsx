@@ -4,8 +4,8 @@
  * FlowDemo — a miniature picture of the product working, for the hero.
  *
  * It plays one loop: five matched jobs, then the packet being made against a
- * real posting (the resume rewritten, the employer's form filled, the outreach
- * email written), each artifact approved by the person, then the board it all
+ * real posting (the resume rewritten and the employer's form filled), each
+ * artifact approved by the person, then the board it all
  * lands on and a second role arriving on its own once auto-submit is on.
  *
  * Two properties are deliberate and worth keeping:
@@ -681,7 +681,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
        that beat is the answer being given. */
     const askBlock = (
       <div className="rq-fp-ask rq-fp-ask-solo">
-        <span className="rq-fp-ask-q">Would you like to turn on <b>auto-submit?</b></span>
+        <span className="rq-fp-ask-q">Turn on <b>Send without asking?</b></span>
         <span className="rq-fp-ask-row">
           <span className="rq-fp-ask-btn rq-fp-ask-no">No</span>
           <span className={cx("rq-fp-ask-btn rq-fp-ask-yes", st === "askClick" && "rq-f-press")}>Yes</span>
@@ -751,7 +751,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
 
     return (
       <div ref={root} className="rq-f-root rq-fp" data-step={st} role="img"
-        aria-label="Litos tailoring a resume to a job, filling the application, writing the outreach email, and tracking the result.">
+      aria-label="Litos tailoring a resume to a job, filling the application, and tracking the result.">
         <div className="rq-fp-job">
           <LogoBox job={FEATURED} size={36} />
           <div className="rq-fp-jobmid">
@@ -769,7 +769,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
               the orb its place back here, having been removed when it sat beside
               the marks as a fourth one of them rather than as one of them. */}
           <span className="rq-f-steps">
-            {(["resume", "form", "email"] as const).map((name, i) => (
+            {(["resume", "form"] as const).map((name, i) => (
               <span className="rq-f-slot" key={name}>
                 {i < approved
                   ? <Tick className="rq-f-stick" />
@@ -810,7 +810,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
                   Fixed-width slots, or the row would jitter as 18px bars, 14px
                   orbs and 13px ticks swapped places. */}
               <span className="rq-f-steps">
-                {(["resume", "form", "email"] as const).map((name, i) => (
+                {(["resume", "form"] as const).map((name, i) => (
                   <span className="rq-f-slot" key={name}>
                     {i < approved
                       ? <Tick className="rq-f-stick" />
@@ -837,7 +837,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
           </div>
         ) : JOBS.slice(1).map((j, i) => jobRow(j, i + 1))}
       </div>
-      {!packetOpen && <div className="rq-f-joblistfoot">Sorted by fit to your profile</div>}
+      {!packetOpen && <div className="rq-f-joblistfoot">Matched to your resume</div>}
     </div>
   );
 
@@ -896,7 +896,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
           one beat later, once the answer has visibly been taken. */}
       {(!s.autopilot || st === "askClick") && s.page === "applications" && (
         <div className={cx("rq-f-ask", prev.current.page !== s.page && "rq-f-anim")} role="group">
-          <span className="rq-f-ask-q">Would you like to turn on <b>auto-submit?</b></span>
+          <span className="rq-f-ask-q">Turn on <b>Send without asking?</b></span>
           <span className="rq-f-ask-row">
             <span ref={noBtn} className={cx("rq-f-ask-btn rq-f-ask-no", st === "askNo" && "rq-f-hover")}>No</span>
             <span ref={yesBtn}
@@ -954,7 +954,7 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
 
   return (
     <div ref={root} className={cx("rq-f-root rq-f-mock", compact && "rq-f-compact")} data-step={st} role="img"
-      aria-label="Litos finding a job, tailoring a resume to it, filling the application, writing the outreach email, and tracking the result.">
+      aria-label="Litos finding a job, tailoring a resume to it, filling the application, and tracking the result.">
       <div className="rq-f-mock-glow" />
       <div className="rq-f-mock-frame">
         <div className="rq-f-titlebar">
@@ -994,11 +994,6 @@ export function FlowDemo({ compact = false, phone = false }: { compact?: boolean
               })}
             </nav>
             <div className="rq-f-side-foot">
-              <div className="rq-f-navitem">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5" aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-                </svg><span>Contact</span>
-              </div>
               <div className="rq-f-navitem">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

@@ -8,9 +8,10 @@ captures reviewed 2026-07-04). The deck stays canon for palette and shape;
 this file adds the usage laws that make the site feel like those brands.
 
 ## Product Context
-- **What this is:** Chrome extension + web dashboard. One detection event on a
-  job posting produces a tailored resume, a fully-filled application (never
-  auto-submitted), and a drafted outreach email.
+- **What this is:** Chrome extension + web dashboard. One job can produce a
+  tailored resume and a filled application. The user reviews it before sending,
+  unless they explicitly turn on Send without asking. Email drafts live in the
+  separate Emails flow.
 - **Who it's for:** College students mid-job-hunt. Stressed, busy, 19-22.
 - **Space:** Career tools (Wonsulting, Offerloop, Simplify) — a category that
   is badge-heavy, testimonial-stuffed, and urgency-colored. We are the opposite.
