@@ -81,15 +81,23 @@ export default function Privacy() {
 
         <Section title="Product analytics">
           <p>
-            We use PostHog to understand which Litos pages and core actions are
-            useful, such as completing sign-in, generating an application, or
-            starting checkout. When a job-title search returns no matches, we
+            We use PostHog to understand which Litos website pages and Chrome
+            extension actions are useful, such as opening the extension,
+            completing sign-in, generating or filling an application, recording
+            a submission outcome, drafting outreach, or starting checkout. When a
+            job-title search returns no matches, we
             also send the normalized job title and selected location, remote,
             and visa-sponsorship filters so we know which job sources to add.
             Entries that resemble an email address, phone number, or website
-            are discarded instead. PostHog receives a random browser identifier,
-            the page path, basic browser and device information, and the named
-            action with limited context such as where the action started. We do
+            are discarded instead. PostHog receives a random browser or extension
+            installation identifier, the website page path, basic browser and
+            device information, and the named action with limited context. For
+            extension fills, that context can include the application platform,
+            field counts, and whether an opt-in submission completed. It does not
+            include the job URL, company or role name, resume, or form answers.
+            The extension queues up to 50 sanitized events on your device while
+            delivery is unavailable and removes each one after PostHog accepts it.
+            The extension identifier changes when you sign out. We do
             not send your email address or account identity to PostHog.
           </p>
           <p>
