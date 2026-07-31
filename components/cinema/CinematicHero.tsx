@@ -63,7 +63,10 @@ const CHAPTERS = [
   { at: 0.92, label: "04 · Ready to send" },
 ];
 
-export function CinematicHero({ storeUrl }: { storeUrl: string }) {
+/* The `storeUrl` prop is gone with the CTAs that used it: neither the hero
+   floor nor the mid-film card links to the Chrome Web Store any more, so
+   threading the URL down from app/page.tsx was carrying nothing. */
+export function CinematicHero() {
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const filmRef = useRef<HTMLCanvasElement>(null);
@@ -637,20 +640,27 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             {/* The floor: everything actionable, grouped so it sits on the
                 bottom edge rather than trailing off the middle band. */}
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center xl:justify-start">
-              {/* Desktop only: a phone cannot install a Chrome extension, and the
-                  handoff card right below this says exactly that. Leading a phone
-                  with an action it cannot take was audit finding 47. */}
+              {/* Was "Add to Chrome, it's free", desktop-only, because a phone
+                  cannot install a Chrome extension (audit finding 47). The
+                  install ask now lives once, in #packet, beside the demo of the
+                  extension working; the first screen asks for the account
+                  instead. That also retires the sm: gate: an account opens on
+                  every device, so this is the primary action at every width and
+                  no longer needs a mobile understudy. */}
               <a
-                href={storeUrl}
-                onClick={() => track("install_click", { source: "hero" })}
-                className="hidden min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:inline-flex sm:w-auto"
+                href="/login"
+                onClick={() => track("signin_click", { source: "hero" })}
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
-                Add to Chrome, it&apos;s free
+                Get started, it&apos;s free
               </a>
-              {/* Works on every device, so on mobile it IS the primary action. */}
+              {/* Demoted to the quiet secondary at every width. It was styled as
+                  a second blue pill below sm to cover for the hidden install
+                  button; with a primary that renders on phones, two solid pills
+                  stacked would have been two primaries. */}
               <a
                 href="/try"
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto sm:bg-transparent sm:px-2 sm:py-0 sm:text-muted sm:hover:bg-transparent sm:hover:text-ink"
+                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
               >
                 Try it free
               </a>
@@ -715,11 +725,11 @@ export function CinematicHero({ storeUrl }: { storeUrl: string }) {
             </p>
             <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <a
-                href={storeUrl}
-                onClick={() => track("install_click", { source: "film-card" })}
+                href="/login"
+                onClick={() => track("signin_click", { source: "film-card" })}
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
-                Add to Chrome, it&apos;s free
+                Get started, it&apos;s free
               </a>
               {/* Was #product. That anchor now resolves to the top of the
                   page, so at 68% through the film this button would have

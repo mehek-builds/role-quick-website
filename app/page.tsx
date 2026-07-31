@@ -12,10 +12,10 @@ import { Wash } from "@/components/cinema/Wash";
 import { SmoothScroll } from "@/components/cinema/SmoothScroll";
 import { FlowDemoFit } from "@/components/FlowDemo";
 import { InstallLink } from "@/components/InstallLink";
+import { SignInLink } from "@/components/SignInLink";
 import { ScrollProgress } from "@/components/ScrollProgress";
 import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
-import { STORE_URL } from "@/lib/config";
 
 /* Stamped once at build time, not per render. */
 const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString("en-US", {
@@ -262,7 +262,7 @@ export default function Home() {
             Lenis paces the whole page. */}
         <SmoothScroll />
         <CinematicPage />
-        <CinematicHero storeUrl={STORE_URL} />
+        <CinematicHero />
 
         {/* The receipt chapter used to be a full section here: mono eyebrow,
             three PillarChips, the packet demo, and an "Or try it free" link.
@@ -575,6 +575,32 @@ export default function Home() {
               <div className="pt-12">
                 <div data-demo><PacketDemo /></div>
               </div>
+              {/* The only "Add to Chrome" left on the site (Mehek, 2026-07-31).
+                  It used to be the ask in the header, the hero, the mid-film
+                  card, the close, /browse-jobs and the end of /try: six asks for
+                  a store listing, most of them next to no evidence and two of
+                  them on screens a phone was reading. All of those now point at
+                  /login, which is the door that opens everywhere and leads to
+                  the half of the product that runs without the browser.
+
+                  The install ask survives here because here is the one place the
+                  extension is visibly doing the work: the demo directly above is
+                  the sidebar filling a real posting. Ask for the thing at the
+                  moment its proof is on screen, not before it and not five
+                  sections after it.
+
+                  No supporting caption under it. The ATS list and the
+                  nothing-sends-without-you promise are both already made in
+                  #autofill, and the demo above is better proof than either
+                  sentence. Button only. */}
+              <div className="mt-10 flex justify-center">
+                <InstallLink
+                  source="packet"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                >
+                  Add to Chrome, it&apos;s free
+                </InstallLink>
+              </div>
             </Reveal>
           </div>
         </section>
@@ -724,17 +750,24 @@ export default function Home() {
                   viewports after the page made them. The three coloured
                   dashes above carry the motif without narrating it. */}
               <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
-                <InstallLink
+                {/* Was "Add to Chrome, it's free" primary + "Sign in"
+                    secondary. The store ask moved up to #packet, next to the
+                    demo, and the account took the primary. The secondary could
+                    not simply stay as it was: two buttons to /login is one
+                    button wearing a costume. /try is the honest second option,
+                    and it is the one the film has been earning for the reader
+                    who is still not ready. */}
+                <SignInLink
                   source="close"
                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
                 >
-                  Add to Chrome, it&apos;s free
-                </InstallLink>
+                  Get started, it&apos;s free
+                </SignInLink>
                 <a
-                  href="/login"
+                  href="/try"
                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
                 >
-                  Sign in
+                  Try it free
                 </a>
               </div>
               {/* The "Job found -> ready to send - 9 seconds" receipt was
@@ -772,7 +805,10 @@ export default function Home() {
                 {/* Pricing removed 2026-07-30 with the #pricing section. */}
                 <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
                 <li><a href="/litos-vs-simplify" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Litos vs Simplify</a></li>
-                <li><a href={STORE_URL} className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Add to Chrome</a></li>
+                {/* Was the store link. The footer is site-wide chrome, so under
+                    the one-place rule it carries the account instead; the store
+                    is one scroll up, in #packet. */}
+                <li><a href="/login" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Get started</a></li>
               </ul>
             </div>
             <div>

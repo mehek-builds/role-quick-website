@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { STORE_URL } from "@/lib/config";
 import { track } from "@/lib/analytics";
 import { extractResumeText } from "@/lib/extract-resume";
 import {
@@ -628,12 +627,17 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
           ? "That was your resume on a real job. Litos does this on every job, whether you find it or we do."
           : "That is the whole thing. Litos does this on every job, with your resume, whether you find it or we do."}
       </p>
+      {/* Was the store link. Under the one-place rule the install ask is now
+          the #packet button on the landing page only; the simulator ends on the
+          account, which is also the thing that keeps the resume this panel just
+          built. MobileSendLink stays: a phone that does want the extension
+          still needs the handoff to a desktop. */}
       <a
-        href={STORE_URL}
-        onClick={() => track("install_click", { source: "try" })}
+        href="/login"
+        onClick={() => track("signin_click", { source: "try" })}
         className="block w-full rounded-full bg-brand px-5 py-2.5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
       >
-        Add to Chrome, it&apos;s free
+        Get started, it&apos;s free
       </a>
       <MobileSendLink source="try" className="sm:hidden" />
     </div>

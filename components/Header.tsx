@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { STORE_URL } from "@/lib/config";
-import { track } from "@/lib/analytics";
+import { SignInLink } from "@/components/SignInLink";
 
 /* Floating glass pill, not a white bar: the film shows around and through
    it, so the page reads as one surface from the first pixel.
@@ -95,13 +94,20 @@ export function Header() {
         <div className="flex items-center gap-2">
           {/* Color v1.1: action blue repeats on every true CTA. With Sign in
               gone this is the only control in the pill, which is the point. */}
-          <a
-            href={STORE_URL}
-            onClick={() => track("install_click", { source: "header" })}
+          {/* Was "Add to Chrome" pointing at the store. The install ask now
+              lives once, in #packet, beside the demo of the extension doing
+              the work; the header carries the account instead, which is the
+              one door that also opens on a phone. Deliberately NOT relabelled
+              "Sign in": the pill is still the only control up here, and it has
+              to read as an invitation to people who have no account yet. The
+              returning-user door is the same one, and /login says "Create
+              account" and "Look around without signing up" on arrival. */}
+          <SignInLink
+            source="header"
             className="inline-flex min-h-[44px] items-center rounded-full bg-brand px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 sm:px-4 sm:text-sm"
           >
-            Add to Chrome
-          </a>
+            Get started
+          </SignInLink>
         </div>
       </div>
     </header>
