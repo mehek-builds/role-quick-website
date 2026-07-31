@@ -10,9 +10,34 @@ test("PostHog initializes before hydration with privacy-sensitive collection dis
   assert.match(source, /NEXT_PUBLIC_POSTHOG_HOST/);
   assert.match(source, /autocapture:\s*false/);
   assert.match(source, /capture_exceptions:\s*false/);
+  assert.match(source, /capture_pageview:\s*"history_change"/);
   assert.match(source, /disable_external_dependency_loading:\s*true/);
   assert.match(source, /disable_session_recording:\s*true/);
+  assert.match(source, /before_send:\s*sanitizePostHogEvent/);
   assert.match(source, /posthog\.init/);
+});
+
+test("PostHog URL properties discard account IDs, queries, fragments, and referrers", async () => {
+  const { sanitizePostHogEvent } = await import("../lib/posthog-privacy.ts");
+  const event = sanitizePostHogEvent({
+    event: "$pageview",
+    properties: {
+      $current_url: "https://trylitos.com/dashboard/settings?connected_account_id=secret#done",
+      $initial_current_url: "https://trylitos.com/dashboard/applications?application=private-id",
+      $referrer: "https://accounts.example/callback?code=secret",
+      $utm_source: "private-campaign",
+      $set_once: {
+        $initial_current_url: "https://trylitos.com/dashboard/jobs?job=private-id",
+        $initial_referrer: "https://accounts.example/callback?code=secret",
+      },
+    },
+  });
+  assert.equal(event.properties.$current_url, "/dashboard/settings");
+  assert.equal(event.properties.$initial_current_url, "/dashboard/applications");
+  assert.deepEqual(event.properties.$set_once, { $initial_current_url: "/dashboard/jobs" });
+  assert.equal(event.properties.$referrer, undefined);
+  assert.equal(event.properties.$utm_source, undefined);
+  assert.doesNotMatch(JSON.stringify(event), /secret|private-id/);
 });
 
 test("analytics use the shared PostHog client instead of the legacy capture endpoint", async () => {

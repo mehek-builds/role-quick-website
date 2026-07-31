@@ -243,8 +243,8 @@ export default function Privacy() {
             <a href="mailto:mehekbuilds@gmail.com" className="text-ink underline">
               mehekbuilds@gmail.com
             </a>{" "}
-            from your account address to export or delete everything Litos
-            stores about you.
+            from your account address to export or delete your account-linked
+            Litos data.
           </p>
           <p>
             Deleting removes all account-linked product data. Your account. The

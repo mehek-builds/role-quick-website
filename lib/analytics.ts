@@ -1,4 +1,4 @@
-import posthog from "posthog-js";
+import posthog from "posthog-js/dist/module.slim";
 
 /* Funnel events for /try (design doc 2026-07-08). One metric matters:
    install click-through. Events log to console in dev and use the initialized
