@@ -63,7 +63,8 @@ type CoreEvent =
   | "application_submission_completed"
   | "checkout_started"
   | "account_data_exported"
-  | "account_deleted";
+  | "account_deleted"
+  | "job_search_zero_results";
 
 function device(): "desktop" | "mobile" {
   if (typeof window === "undefined") return "desktop";

@@ -92,3 +92,28 @@ test("the core conversion events remain instrumented", async () => {
     assert.match(source, new RegExp(`track\\(\\"${event}\\"`));
   }
 });
+
+test("zero-result target roles are monitored on both job surfaces with session deduplication", async () => {
+  const [analytics, demandClient, demandTracker, publicBoard, dashboard] = await Promise.all([
+    read("lib/analytics.ts"),
+    read("lib/job-search-demand-client.ts"),
+    read("lib/job-search-demand.ts"),
+    read("app/browse-jobs/page.tsx"),
+    read("app/dashboard/jobs/page.tsx"),
+  ]);
+  assert.match(analytics, /job_search_zero_results/);
+  assert.match(demandClient, /window\.sessionStorage/);
+  assert.match(demandClient, /track\("job_search_zero_results", properties\)/);
+  assert.match(demandTracker, /runtime\.seen\.has/);
+  assert.match(publicBoard, /ZeroResultJobSearchMonitor/);
+  assert.match(dashboard, /trackZeroResultJobSearch/);
+  assert.match(dashboard, /params\.set\("title", query\.trim\(\)\)/);
+  assert.doesNotMatch(dashboard, /params\.set\("q", query\.trim\(\)\)/);
+});
+
+test("the privacy policy discloses zero-result job-title monitoring", async () => {
+  const source = await read("app/privacy/page.tsx");
+  assert.match(source, /job-title search returns no matches/);
+  assert.match(source, /normalized job title/);
+  assert.match(source, /email address, phone number, or website/);
+});

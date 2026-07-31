@@ -265,6 +265,8 @@ export type MonitoredJob = {
  */
 export type JobsPage = {
   jobs: MonitoredJob[];
+  /** Total rows matching the current filters. Older backends may omit it. */
+  total?: number;
   has_more?: boolean;
   ranked?: boolean;
   /** How many postings were scored to produce this ordering, or null when nothing was ranked. */

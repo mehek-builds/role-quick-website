@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
 import { ComboField } from "@/components/browse/ComboField";
+import { ZeroResultJobSearchMonitor } from "@/components/browse/ZeroResultJobSearchMonitor";
 import {
   agoLabel,
   countLabel,
@@ -229,11 +230,21 @@ export default async function BrowseJobs({
   ]);
   const pages = pageCount(total);
   const current = Math.min(requested, pages);
+  /* Only the explicitly labeled title field is unmet role demand. Legacy `q` links can contain
+     companies, skills, or arbitrary keywords and must not be recast as target roles. */
+  const monitoredTargetRole = filters.title;
 
   return (
     <div className="flex min-h-svh flex-col bg-white">
       <Header />
       <main className="mx-auto w-full max-w-[1060px] flex-1 px-6 pb-28 pt-32">
+        {searching && ok && total === 0 && monitoredTargetRole && (
+          <ZeroResultJobSearchMonitor
+            targetRole={monitoredTargetRole}
+            location={filters.location}
+            sponsorOnly={sponsorOnly}
+          />
+        )}
         <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">
           Browse jobs
         </p>

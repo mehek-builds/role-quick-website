@@ -83,7 +83,11 @@ export default function Privacy() {
           <p>
             We use PostHog to understand which Litos pages and core actions are
             useful, such as completing sign-in, generating an application, or
-            starting checkout. PostHog receives a random browser identifier,
+            starting checkout. When a job-title search returns no matches, we
+            also send the normalized job title and selected location, remote,
+            and visa-sponsorship filters so we know which job sources to add.
+            Entries that resemble an email address, phone number, or website
+            are discarded instead. PostHog receives a random browser identifier,
             the page path, basic browser and device information, and the named
             action with limited context such as where the action started. We do
             not send your email address or account identity to PostHog.
@@ -92,7 +96,7 @@ export default function Privacy() {
             Automatic click and form tracking, session recording, and automatic
             error capture are turned off. We do not send resume text, job
             descriptions, application answers, contact messages, passwords,
-            codes, or form contents as analytics events. PostHog acts as our
+            codes, or other form contents as analytics events. PostHog acts as our
             analytics service provider and may process network information
             needed to receive these events.
           </p>

@@ -10,6 +10,7 @@ import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } fro
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { formatPay, jobTypeLabel } from "@/features/jobs";
+import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
 
 /* The filters, as one string. It is the pagination key as well as the query: a page of results
    only belongs to the list on screen if it was fetched under the same filters, and comparing this
@@ -17,7 +18,7 @@ import { formatPay, jobTypeLabel } from "@/features/jobs";
    student has already changed. */
 function jobParams(query: string, location: string, remoteOnly: boolean, offset: number) {
   const params = new URLSearchParams({ offset: String(offset) });
-  if (query.trim()) params.set("q", query.trim());
+  if (query.trim()) params.set("title", query.trim());
   if (location.trim()) params.set("location", location.trim());
   if (remoteOnly) params.set("remote", "true");
   return params;
@@ -62,6 +63,10 @@ export default function JobsPage() {
      could tell the other's response apart from its own, and a load-more that finished after a
      keystroke appended page 3 of the OLD filter onto page 1 of the NEW one. */
   const activeFilter = useRef(filterKey("", "", false));
+  /* Demand is recorded only after the student commits the title with Enter or blur. The board may
+     still filter live, but intermediate keystrokes and half-written titles are not sourcing data. */
+  const zeroResultIntent = useRef<string | null>(null);
+  const latestResult = useRef<{ key: string; total: number; sponsorOnly: boolean } | null>(null);
 
   /* Same gate as the rest of the product, in one tested place (lib/qa-mode.ts). */
   useEffect(() => {
@@ -101,6 +106,23 @@ export default function JobsPage() {
           setRankedPool(result.ranked_pool ?? null);
           setPoolExhausted(result.pool_exhausted === true);
           setSponsorOnly(result.sponsor_only === true);
+          const completed = {
+            key,
+            total: result.total ?? result.jobs.length,
+            sponsorOnly: result.sponsor_only === true,
+          };
+          latestResult.current = completed;
+          if (zeroResultIntent.current === key) {
+            zeroResultIntent.current = null;
+            trackZeroResultJobSearch({
+              targetRole: query,
+              location,
+              remoteOnly,
+              sponsorOnly: completed.sponsorOnly,
+              surface: "dashboard",
+              totalResults: completed.total,
+            });
+          }
           /* A new filter starts a new list, so any in-flight "load more" spinner belongs to a list
              that no longer exists. Without this it could stay lit forever. */
           setLoadingMore(false);
@@ -166,6 +188,22 @@ export default function JobsPage() {
 
   const newToday = useMemo(() => (jobs ? countNewToday(jobs) : 0), [jobs]);
   const filtering = query.trim() !== "" || location.trim() !== "" || remoteOnly;
+  const commitTargetRole = () => {
+    if (!query.trim()) return;
+    const key = filterKey(query, location, remoteOnly);
+    zeroResultIntent.current = key;
+    const completed = latestResult.current;
+    if (!completed || completed.key !== key) return;
+    zeroResultIntent.current = null;
+    trackZeroResultJobSearch({
+      targetRole: query,
+      location,
+      remoteOnly,
+      sponsorOnly: completed.sponsorOnly,
+      surface: "dashboard",
+      totalResults: completed.total,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -193,7 +231,7 @@ export default function JobsPage() {
       )}
 
       <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto]">
-        <input aria-label="Search roles" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search title, skill, or keyword" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
+        <input aria-label="Search job titles" value={query} onChange={(event) => setQuery(event.target.value)} onBlur={commitTargetRole} onKeyDown={(event) => { if (event.key === "Enter") commitTargetRole(); }} placeholder="Search job title" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
         <input aria-label="Filter by location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
         <label className="flex items-center gap-2 rounded-control border border-border px-4 py-2.5 text-sm text-ink transition-colors hover:border-brand focus-within:ring-2 focus-within:ring-brand/30">
           <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
