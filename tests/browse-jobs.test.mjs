@@ -7,7 +7,16 @@ import { existsSync, readFileSync } from "node:fs";
    EMPLOYER (posted) or about us (found), and pageWindow is the only thing
    standing between a 300-page board and a nav bar with 300 links in it. */
 
-const { agoLabel, pageWindow, pageCount, locationList, locationSummary, countLabel, PER_PAGE } =
+const {
+  agoLabel,
+  pageWindow,
+  pageCount,
+  locationList,
+  locationSummary,
+  countLabel,
+  parseJobsPageBody,
+  PER_PAGE,
+} =
   await import("../lib/browse-jobs.ts");
 
 const DAY = 86_400_000;
@@ -121,6 +130,54 @@ describe("countLabel", () => {
   });
 });
 
+describe("parseJobsPageBody", () => {
+  test("keeps grouped roles and raw openings as separate counts", () => {
+    assert.deepEqual(
+      parseJobsPageBody({
+        jobs: [{ id: "one", locations: null }],
+        total: 8_221,
+        postings_total: 10_246,
+      }),
+      {
+        jobs: [{ id: "one", locations: [] }],
+        total: 8_221,
+        postingsTotal: 10_246,
+        ok: true,
+      },
+    );
+  });
+
+  test("supports an older backend that has not deployed postings_total yet", () => {
+    assert.deepEqual(parseJobsPageBody({ jobs: [], total: 0 }), {
+      jobs: [],
+      total: 0,
+      postingsTotal: null,
+      ok: true,
+    });
+  });
+
+  test("treats malformed inventory as an API fault instead of false zero demand", () => {
+    const malformed = [
+      {},
+      { jobs: "not-an-array", total: 0 },
+      { jobs: [null], total: 1 },
+      { jobs: [], total: "many" },
+      { jobs: [], total: -1 },
+      { jobs: [{ id: "one" }], total: 0 },
+      { jobs: [], total: 4, postings_total: 3 },
+      { jobs: [], total: 0, postings_total: -1 },
+    ];
+    for (const body of malformed) {
+      assert.deepEqual(parseJobsPageBody(body), {
+        jobs: [],
+        total: 0,
+        postingsTotal: null,
+        ok: false,
+      });
+    }
+  });
+});
+
 describe("pageWindow", () => {
   test("a 300-page board never prints 300 links", () => {
     const w = pageWindow(150, 300);
@@ -170,8 +227,6 @@ describe("the board's layout", () => {
 
   test("the headline distinguishes grouped roles from raw openings", () => {
     const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
-    const lib = readFileSync(new URL("../lib/browse-jobs.ts", import.meta.url), "utf8");
-    assert.match(lib, /body\.postings_total/);
     assert.match(page, /postingsTotal === null/);
     assert.match(page, /\{" "\}across\{" "\}/);
     assert.match(page, /"opening" : "openings"/);

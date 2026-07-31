@@ -1,8 +1,8 @@
 /* The jobs board behind /browse-jobs.
  *
- * Reads the same public GET /jobs the extension uses, so the board is the live
+ * Reads the public GET /jobs/grouped endpoint, so the board is the live
  * contents of monitored_jobs: postings pulled straight off each company's own
- * Greenhouse, Lever or Ashby board by the daily job-monitor cron. Nothing here
+ * Greenhouse, Lever, Ashby, or Workable board by the daily job-monitor cron. Nothing here
  * is typed in by hand and nothing is invented.
  *
  * This page shipped once against a 47-row file checked into the repo, which is
@@ -16,8 +16,8 @@ export type BrowseJob = {
   id: string;
   company_name: string;
   title: string;
-  /* Every city this exact role at this exact company is open in. The API groups
-     by (company, title), so one tile is one job even when the employer posted it
+  /* Every city this exact role at this exact company and ATS family is open in. The API groups
+     by (company, title, ATS), so one tile is one job even when the employer posted it
      once per office — MongoDB posts a single role in 23 places. */
   locations: string[];
   openings: number;
@@ -111,6 +111,36 @@ export const PER_PAGE = 24;
 export const SUGGESTIONS_REVALIDATE = 60;
 export const LISTINGS_REVALIDATE = 300;
 
+export function parseJobsPageBody(body: unknown): JobsPage {
+  const failure: JobsPage = { jobs: [], total: 0, postingsTotal: null, ok: false };
+  if (typeof body !== "object" || body === null) return failure;
+  const payload = body as { jobs?: unknown; total?: unknown; postings_total?: unknown };
+  if (
+    !Array.isArray(payload.jobs)
+    || !payload.jobs.every((job) => typeof job === "object" && job !== null)
+    || !Number.isInteger(payload.total)
+    || (payload.total as number) < 0
+    || (payload.total as number) < payload.jobs.length
+    || (
+      payload.postings_total !== undefined
+      && (
+        !Number.isInteger(payload.postings_total)
+        || (payload.postings_total as number) < (payload.total as number)
+      )
+    )
+  ) return failure;
+  const jobs = Array.isArray(payload.jobs)
+    ? payload.jobs.map((job: BrowseJob) => ({ ...job, locations: job.locations ?? [] }))
+    : [];
+
+  return {
+    jobs,
+    total: payload.total as number,
+    postingsTotal: typeof payload.postings_total === "number" ? payload.postings_total : null,
+    ok: true,
+  };
+}
+
 export async function fetchJobs(
   filters: Filters = {},
   page = 1,
@@ -139,15 +169,7 @@ export async function fetchJobs(
       signal: AbortSignal.timeout(10_000),
     });
     if (!response.ok) return { jobs: [], total: 0, postingsTotal: null, ok: false };
-    const body = await response.json();
-    return {
-      jobs: Array.isArray(body.jobs)
-        ? body.jobs.map((j: BrowseJob) => ({ ...j, locations: j.locations ?? [] }))
-        : [],
-      total: typeof body.total === "number" ? body.total : (body.jobs?.length ?? 0),
-      postingsTotal: typeof body.postings_total === "number" ? body.postings_total : null,
-      ok: true,
-    };
+    return parseJobsPageBody(await response.json());
   } catch {
     return { jobs: [], total: 0, postingsTotal: null, ok: false };
   }
@@ -156,10 +178,10 @@ export async function fetchJobs(
 /* "POSTED 3 DAYS AGO" beats a date nobody converts in their head, and which
    word goes in front of it is load-bearing.
 
-   posted_at does not mean the same thing on all three boards, which the first
-   version of this page got wrong. Lever gives createdAt and Ashby gives
-   publishedAt: both are genuinely when the job went up, and both go back years
-   in our data. Greenhouse's board API exposes only updated_at, which moves
+   posted_at does not mean the same thing across board families, which the first
+   version of this page got wrong. Lever gives createdAt, Ashby gives publishedAt,
+   and Workable gives published_on: all are genuinely when the job went up.
+   Greenhouse's board API exposes only updated_at, which moves
    every time anyone edits the posting — 620 of 5,920 Greenhouse rows carried
    today's date on the day they were first pulled. Printing POSTED TODAY across
    a whole page off the back of that is precisely the claim this page exists
@@ -183,7 +205,7 @@ export function agoLabel(
   return `${verb} ${months} MONTH${months === 1 ? "" : "S"} AGO`;
 }
 
-/* A board of 7,000 postings is ~300 pages, so the numbered strip that fitted
+/* A board of 7,000 grouped roles is ~300 pages, so the numbered strip that fitted
    two pages cannot be printed in full: it would be a wall of links nobody uses
    and a slow render. First, last, and a window around wherever you are. */
 export function pageWindow(current: number, pages: number, span = 2): (number | "gap")[] {
@@ -259,7 +281,8 @@ export function countLabel(n: number): string {
 
 /* Suggestions for the three fields. A miss is not an error: the fields take
    free text, so an empty datalist costs a visitor nothing but the convenience.
-   Cached for an hour — the company list changes when a source is added, which
+   Cached for one minute because the board inventory changes daily and dropdown freshness is cheap.
+   The company list changes when a source is added, which
    is a manual act, and the city and title lists move only as slowly as the
    board does. */
 /* `titles` is gone from the API deliberately: it returned the board's most
