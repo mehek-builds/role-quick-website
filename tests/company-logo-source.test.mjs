@@ -215,6 +215,11 @@ describe("parseBoardUrl", () => {
     assert.equal(parseBoardUrl("https://jobs.lever.co/palantir/some-job")?.ats, "lever");
     assert.equal(parseBoardUrl("https://jobs.ashbyhq.com/ramp")?.token, "ramp");
     assert.equal(parseBoardUrl("https://boards.greenhouse.io/datadog")?.ats, "greenhouse");
+    assert.deepEqual(parseBoardUrl("https://apply.workable.com/suade/"), {
+      ats: "workable",
+      token: "suade",
+      url: "https://apply.workable.com/suade",
+    });
   });
 
   test("refuses anything that is not one of those hosts — this is the SSRF gate", () => {
@@ -225,6 +230,7 @@ describe("parseBoardUrl", () => {
     for (const bad of [
       "http://job-boards.greenhouse.io/stripe", // http, not https
       "https://job-boards.greenhouse.io.evil.com/stripe", // suffix trick
+      "https://apply.workable.com.evil.com/suade", // another suffix trick
       "https://evil.com/job-boards.greenhouse.io/stripe", // path trick
       "https://localhost/admin",
       "https://127.0.0.1/",

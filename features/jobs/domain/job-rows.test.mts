@@ -57,12 +57,13 @@ describe("companyDomain", () => {
   });
 
   test("every ATS the backend actually polls is blocked", () => {
-    // MonitoredJob["ats_name"] is greenhouse | lever | ashby. If the backend learns a new board and
+    // MonitoredJob["ats_name"] names every pollable ATS. If the backend learns a new board and
     // it is not listed here, that board's favicon lands on every row from it.
     for (const url of [
       "https://boards.greenhouse.io/acme",
       "https://jobs.lever.co/acme",
       "https://jobs.ashbyhq.com/acme",
+      "https://apply.workable.com/acme/",
     ]) {
       assert.equal(companyDomain(url), null, `${url} is polled by the backend and must be blocked`);
     }

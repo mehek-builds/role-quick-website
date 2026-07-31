@@ -227,7 +227,7 @@ export type MonitoredJob = {
   remote: boolean;
   posted_at: string | null;
   first_seen_at: string;
-  ats_name: "greenhouse" | "lever" | "ashby";
+  ats_name: "greenhouse" | "lever" | "ashby" | "workable";
   is_active?: boolean;
   /** The company's own careers page. Every other URL here belongs to the job board. */
   career_url?: string | null;
@@ -265,6 +265,8 @@ export type MonitoredJob = {
  */
 export type JobsPage = {
   jobs: MonitoredJob[];
+  /** Total rows matching the current filters. Older backends may omit it. */
+  total?: number;
   has_more?: boolean;
   ranked?: boolean;
   /** How many postings were scored to produce this ordering, or null when nothing was ranked. */
