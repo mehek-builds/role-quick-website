@@ -99,7 +99,6 @@ export function StepRail({ current }: { current: OnboardingStep }) {
 export function StartShell({
   step,
   title,
-  sub,
   children,
   aside,
   /* One screen in the flow is a two-column document view rather than a form, and a 2xl column
@@ -112,7 +111,6 @@ export function StartShell({
      the title BESIDE the paper rather than above it: stacked, the heading block pushes a full sheet
      below the fold, and a one-page resume you cannot see in one screen argues against itself. */
   title?: React.ReactNode;
-  sub?: React.ReactNode;
   children: React.ReactNode;
   aside?: React.ReactNode;
   wide?: boolean;
@@ -150,8 +148,7 @@ export function StartShell({
           {title}
         </h1>
       )}
-      {sub && <p className="mt-3 max-w-[46ch] text-base leading-7 text-muted">{sub}</p>}
-      <div className={`min-w-0 ${title || sub ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}>{children}</div>
+      <div className={`min-w-0 ${title ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}>{children}</div>
       {aside && <div className="mt-8">{aside}</div>}
     </main>
   );
