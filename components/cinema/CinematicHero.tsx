@@ -632,8 +632,7 @@ export function CinematicHero() {
                 Apply <span className="text-brand-ink xl:block">in seconds.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted xl:mx-0">
-                Nothing is reused. Every job gets its own resume, form, and
-                email.
+                You choose where to apply. Litos handles the rest.
               </p>
             </div>
 
@@ -652,43 +651,13 @@ export function CinematicHero() {
                 onClick={() => track("signin_click", { source: "hero" })}
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
               >
-                Get started, it&apos;s free
-              </a>
-              {/* Demoted to the quiet secondary at every width. It was styled as
-                  a second blue pill below sm to cover for the hidden install
-                  button; with a primary that renders on phones, two solid pills
-                  stacked would have been two primaries. */}
-              <a
-                href="/try"
-                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
-              >
-                Try it free
-              </a>
-              {/* BROKEN LINK, FIXED 2026-07-28. This pointed at #formats, and
-                  #formats was deleted on 2026-07-28 when its band was folded
-                  into #documents. The link shipped to production and did
-                  nothing when clicked. tests/route-integrity.test.mjs exists
-                  for exactly this class of bug but only checked ROUTES, not
-                  in-page fragments; it checks both now.
-
-                  #documents is the right target on its own merits: it is the
-                  first deep-dive past the opening act, which is what a reader
-                  pressing "skip" is asking for.
-
-                  The gate around this (!hasSeenFilm) went with ReturningVisitor,
-                  which rendered a second, competing skip pill on return visits.
-                  One skip control, always shown. */}
-              <a
-                href="#documents"
-                className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-muted transition-colors hover:text-ink"
-              >
-                Skip ahead ↓
+                Get started
               </a>
             </div>
             {/* The mobile QR handoff (MobileSendLink) was REMOVED here
                 2026-07-28. A QR code and a copy-link button inside the hero
                 card, on the first screen, before a phone visitor knows what
-                Litos is. The mobile primary CTA above is "Try it free", which
+                Litos is. The mobile primary CTA above is "Get started", which
                 works on a phone, and /install still carries the handoff for
                 anyone who wants the link. MobileSendLink itself stays: /try's
                 DonePanel uses it, at the point someone has actually seen the
