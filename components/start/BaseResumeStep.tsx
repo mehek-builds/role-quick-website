@@ -462,13 +462,6 @@ export function BaseResumeStep({
           <h1 className="max-w-full text-section font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-section">
             {phase === "compare" ? "Same you. One page." : "This is your resume now."}
           </h1>
-          <p className="mt-3 max-w-[60ch] text-base leading-7 text-muted">
-            {phase === "compare"
-              ? sourcePages > 1
-                ? `On the left is the ${sourcePages}-page resume you uploaded. On the right is the same history on one page, in the form that actually gets read.`
-                : "On the left is the resume you uploaded. On the right is the same history in the form that actually gets read."
-              : "Every application starts from this. Edit anything that is not right."}
-          </p>
         </div>
 
         {/* ── The original, only while comparing ──────────────────────────── */}

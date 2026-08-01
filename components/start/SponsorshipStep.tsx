@@ -76,7 +76,6 @@ export function SponsorshipStep({ onDone }: { onDone: () => void }) {
     <StartShell
       step="sponsorship"
       title="Do you need a work visa?"
-      sub="We ask once. Your answer decides which jobs we show you."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 

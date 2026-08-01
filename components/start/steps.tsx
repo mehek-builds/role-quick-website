@@ -94,7 +94,6 @@ export function FocusStep({
     <StartShell
       step="focus"
       title="Here's where we'd start."
-      sub="We used your experience and past titles to make a first guess. Change anything."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -304,7 +303,6 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       <StartShell
         step="resume"
         title="Here's what we read."
-        sub="You won't type any of this again. Anything wrong, fix it in Settings later."
       >
         <Receipt rows={rows} />
         {empty && (
@@ -335,7 +333,6 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     <StartShell
       step="resume"
       title="Tell us what you want."
-      sub="Upload your resume. We'll read your experience and suggest the jobs that fit."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -433,7 +430,6 @@ export function InstallStep({
       <StartShell
         step="install"
         title="Add Litos to Chrome."
-        sub="Litos does its work on the job posting itself. Add it to Chrome, then apply to one job as normal."
       >
         <div className="flex items-center gap-3">
           {/* Opening the store is not installing. This used to advance the flow from its own
@@ -467,7 +463,6 @@ export function InstallStep({
     <StartShell
       step="apply"
       title="Now apply to one job. All the way through."
-      sub="Fill every field yourself, this once. Litos watches and keeps what it learns, so the next one takes seconds."
       aside={<RefusalList />}
     >
       {/* The only screen in the flow that carries a voice, because it is the only one whose ask
@@ -605,7 +600,6 @@ export function GapsStep({
       title={`${n === 1 ? "One question left" : n === 2 ? "Two questions left" : "A few questions left"} that job didn't ask.`}
       /* "This is the last of the boring part." came off 2026-07-28: the flow
          narrating its own tedium, which does not make it shorter. */
-      sub="Most forms ask for these."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -708,7 +702,6 @@ export function TargetStep({
     <StartShell
       step="targeting"
       title="When do you want to start?"
-      sub="Pick your main hiring season and a backup."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -776,7 +769,6 @@ export function DoneStep({
     <StartShell
       step="done"
       title="Setup complete."
-      sub="One thing you can let Litos do on its own. It is off unless you turn it on."
     >
       <div className="divide-y divide-border border-y border-border">
         {/* The "send without asking me again" checkbox used to live here, and it was the single
