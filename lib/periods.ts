@@ -64,9 +64,10 @@ export function periodsFor(gradYear: number, now: Date = new Date()): Period[] {
  * The one they almost certainly mean.
  *
  * Summer is the internship term that matters - it is the one with real programs, real pay, and
- * real return offers - so the default is the last summer BEFORE they graduate, which is the one
- * that converts. A 2028 grad in July 2026 gets Summer 2027, not Summer 2028 (too late to convert)
- * and not Fall 2026 (a term they are in class for).
+ * real return offers - so the default is the next available summer before graduation. A student
+ * needs the next recruiting cycle, not a junior-year cycle several years away. A 2028 grad in
+ * July 2026 still gets Summer 2027, and a 2030 grad does too rather than silently jumping to 2028
+ * because the visible list was capped.
  *
  * Falls back to the first available period when there is no summer left, e.g. a final-year
  * student hunting full-time.
@@ -75,7 +76,7 @@ export function defaultPrimary(gradYear: number, now: Date = new Date()): string
   const periods = periodsFor(gradYear, now);
   if (periods.length === 0) return null;
   const summersBeforeGrad = periods.filter((p) => p.season === "summer" && (!gradYear || p.year < gradYear));
-  return (summersBeforeGrad[summersBeforeGrad.length - 1] ?? periods[0]).slug;
+  return (summersBeforeGrad[0] ?? periods[0]).slug;
 }
 
 /**
