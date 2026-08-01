@@ -31,7 +31,7 @@ function matchesType(title: string, roleTypes: RoleType[]): boolean {
     if (type === "internship") return internship;
     if (type === "co-op") return coOp;
     if (type === "new-grad") return newGrad;
-    return !internship && !coOp;
+    return !internship && !coOp && !newGrad;
   });
 }
 

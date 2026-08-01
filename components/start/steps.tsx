@@ -279,7 +279,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     const kb = Math.max(1, Math.round(file.size / 1024));
     const exp = parsed.experience?.length ?? 0;
     const proj = parsed.projects?.length ?? 0;
-    const seeded = parsed.bank_seeded ?? 0;
+    const banked = parsed.bank_total ?? parsed.bank_seeded ?? 0;
     const elapsed = parseSeconds === null ? "" : `${parseSeconds.toFixed(1)}s`;
     return [
       { k: "Received", v: `${file.name} · ${kb} KB` },
@@ -289,7 +289,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       { k: "Experience", v: `${exp} ${exp === 1 ? "entry" : "entries"}` },
       { k: "Projects", v: `${proj} ${proj === 1 ? "entry" : "entries"}` },
       { k: "Skills", v: `${parsed.skills?.length ?? 0} tagged` },
-      { t: elapsed, k: "Ready in", v: `${seeded} ${seeded === 1 ? "entry" : "entries"} banked`, done: true },
+      { t: elapsed, k: "Ready in", v: `${banked} ${banked === 1 ? "entry" : "entries"} banked`, done: true },
     ];
   }, [parsed, file, parseSeconds]);
 
@@ -299,7 +299,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     ).size;
     // Mirror the server's has_resume gate. Advancing on a partial parse only returns the student
     // to this same screen, which looks like a dead button rather than a validation failure.
-    const ready = !!parsed.full_name?.trim() && distinctRoles >= 5 && (parsed.bank_seeded ?? 0) > 0;
+    const ready = !!parsed.full_name?.trim() && distinctRoles >= 5 && (parsed.bank_total ?? parsed.bank_seeded ?? 0) > 0;
     return (
       <StartShell
         step="resume"
@@ -786,8 +786,10 @@ export function TargetStep({
 
 export function DoneStep({
   onFinish,
+  verificationEnabled,
 }: {
   onFinish: (settings: { automatic_submission_enabled?: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
+  verificationEnabled: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   return (
@@ -800,7 +802,7 @@ export function DoneStep({
           onClick={() => {
             setBusy(true);
             void onFinish({
-              automatic_verification_enabled: false,
+              automatic_verification_enabled: verificationEnabled,
             }).finally(() => setBusy(false));
           }}
           disabled={busy}

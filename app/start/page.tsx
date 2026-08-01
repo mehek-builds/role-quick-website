@@ -415,6 +415,7 @@ export default function Start() {
         <>
         {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
         <DoneStep
+          verificationEnabled={state.automatic_verification_enabled}
           onFinish={async (settings) => {
             try {
               await completeOnboarding(settings);
