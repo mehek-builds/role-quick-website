@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.9] - 2026-08-01
+
+### Changed
+
+- Onboarding now begins with a resume upload, then suggests five evidence-based job titles and a
+  likely employment type that applicants can change or extend before continuing.
+- The final targeting screen focuses only on application timing after job preferences are saved.
+
+### Fixed
+
+- Existing applicants no longer see the upload screen while saved resume details are loading, and
+  can retry a failed profile request without losing their onboarding position.
+- Custom job titles are case-insensitively deduplicated, keyboard accessible, and kept within API
+  limits with a consistent fallback category.
+
 ## [0.1.8] - 2026-07-31
 
 ### Changed

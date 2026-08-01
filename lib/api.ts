@@ -450,6 +450,7 @@ export type ParsedProfile = {
   projects: { name: string; description: string }[];
   school: string;
   grad_year: number;
+  currently_enrolled?: boolean;
   target_roles: string[];
   // How many experience_bank rows the parse seeded. Zero here on a first upload means
   // resume-gen will 400 later, so /start surfaces it rather than letting it fail at apply time.
