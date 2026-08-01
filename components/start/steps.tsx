@@ -13,60 +13,76 @@ import {
 } from "@/lib/api";
 import { STORE_URL } from "@/lib/config";
 import {
-  CATEGORIES,
-  MAX_CATEGORIES,
-  MAX_ROLE_TYPES,
   ROLE_TYPES,
   defaultBackup,
   defaultPrimary,
-  periodLabel,
   periodsFor,
 } from "@/lib/periods";
 import { Chip, FounderNote, LaterLink, PrimaryButton, Receipt, RefusalList, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
+import { JOB_TITLES } from "@/lib/job-titles";
+import { categoriesForRoles, inferResumeTargeting } from "@/lib/onboarding-role-inference";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
 
-/* The two targeting questions that do NOT need the resume, moved in front of it.
- *
- * Walking Simplify (2026-07-17): they ask for your resume FOURTH. Two cheap questions come first,
- * neither of which they need beforehand, and the effect is that you have already said yes twice
- * before the expensive ask lands. /start used to open on the upload.
- *
- * The honest version of that is a reorder, not a manufactured yes. `titles` seed from the parsed
- * resume and the period options are computed from grad_year, so those three genuinely cannot be
- * asked yet. Category and type can: a student knows what work they want before they upload
- * anything. So they move here, where they cost one tap and buy the resume screen some goodwill.
- *
- * Both are capped (3 and 2). An uncapped multi-select lets someone tick everything and quietly
- * destroy their own matching, because "interested in everything" and "hasn't chosen" become the
- * same answer. The cap is stated up front and the chips visibly disable at the limit, rather than
- * letting them select a fourth and bounce off a 400.
- */
 export function FocusStep({
   onDone,
   onLater,
-  seed,
+  profile,
 }: {
   onDone: () => void;
   onLater: () => void;
-  /* calibration handoff from the homepage card; taps arrive pre-answered */
-  seed?: { categories: string[]; roleTypes: RoleType[] } | null;
+  profile: ParsedProfile;
 }) {
-  const [categories, setCategories] = useState<string[]>(seed?.categories ?? []);
-  const [roleTypes, setRoleTypes] = useState<RoleType[]>(seed?.roleTypes ?? []);
+  const guess = useMemo(() => inferResumeTargeting(profile), [profile]);
+  const [selectedTitles, setSelectedTitles] = useState<string[]>(() => guess.roles[0] ? [guess.roles[0]] : []);
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>(() => [guess.roleType]);
+  const [newTitle, setNewTitle] = useState("");
+  const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const catFull = categories.length >= MAX_CATEGORIES;
-  const typeFull = roleTypes.length >= MAX_ROLE_TYPES;
+  const customMatches = useMemo(() => {
+    const needle = newTitle.trim().toLowerCase();
+    return JOB_TITLES
+      .filter((title) => !guess.roles.some((role) => role.toLowerCase() === title.toLowerCase()))
+      .filter((title) => !needle || title.toLowerCase().includes(needle))
+      .slice(0, 6);
+  }, [guess.roles, newTitle]);
+
+  useEffect(() => setActiveMatchIndex(0), [newTitle]);
+
+  function toggleTitle(title: string) {
+    setSelectedTitles((current) =>
+      current.includes(title)
+        ? current.filter((item) => item !== title)
+        : current.length < 12 ? [...current, title] : current,
+    );
+  }
+
+  function addTitle(title: string) {
+    const clean = title.trim();
+    if (!clean) return;
+    setSelectedTitles((current) =>
+      current.some((item) => item.toLowerCase() === clean.toLowerCase()) || current.length >= 12
+        ? current
+        : [...current, clean],
+    );
+    setNewTitle("");
+    setRoleMenuOpen(false);
+  }
 
   async function save() {
     setBusy(true);
     setError(null);
     try {
-      await putTargeting({ categories, role_types: roleTypes });
+      await putTargeting({
+        categories: categoriesForRoles(selectedTitles),
+        titles: selectedTitles,
+        role_types: roleTypes,
+      });
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
@@ -77,50 +93,112 @@ export function FocusStep({
   return (
     <StartShell
       step="focus"
-      title="Tell us what you want."
-      /* sub removed 2026-07-28: the rail already reads "What you want" and
-         the title already asks. Three statements of one question. */
+      title="Here's where we'd start."
+      sub="We used your experience and past titles to make a first guess. Change anything."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
-      {seed && (
-        <p className="mb-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Filled in from what you told us. Change anything.
-        </p>
-      )}
-
       <div className="mb-7">
         <div className="flex min-h-5 items-baseline justify-between">
-          <p className="text-sm text-ink">What job</p>
-          <span className="text-xs text-faint">Pick up to {MAX_CATEGORIES}</span>
+          <p className="text-sm text-ink">Jobs that fit</p>
+          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+            {guess.yearsExperience > 0 ? `About ${guess.yearsExperience} years read` : "From your resume"}
+          </span>
         </div>
         <div className="mt-2.5 flex flex-wrap gap-2">
-          {CATEGORIES.map((c) => {
-            const on = categories.includes(c.slug);
-            return (
-              <Chip
-                key={c.slug}
-                label={c.label}
-                on={on}
-                disabled={!on && catFull}
-                // Functional update: reading `categories` from the closure loses updates when
-                // two clicks land in the same tick, because both see the same stale array.
-                onClick={() =>
-                  setCategories((prev) =>
-                    prev.includes(c.slug) ? prev.filter((x) => x !== c.slug) : [...prev, c.slug],
-                  )
-                }
-              />
-            );
-          })}
+          {guess.roles.map((title) => (
+            <Chip
+              key={title}
+              label={title}
+              on={selectedTitles.includes(title)}
+              derived
+              onClick={() => toggleTitle(title)}
+            />
+          ))}
         </div>
+
+        <div className="relative mt-4 max-w-sm">
+          <label htmlFor="additional-role" className="text-xs text-faint">Add another job</label>
+          <div className="mt-1.5 flex gap-2">
+            <input
+              id="additional-role"
+              value={newTitle}
+              onChange={(event) => {
+                setNewTitle(event.target.value);
+                setRoleMenuOpen(true);
+              }}
+              onFocus={() => setRoleMenuOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addTitle(roleMenuOpen && customMatches[activeMatchIndex] ? customMatches[activeMatchIndex] : newTitle);
+                }
+                if (event.key === "Escape") setRoleMenuOpen(false);
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setRoleMenuOpen(true);
+                  setActiveMatchIndex((current) => Math.min(current + 1, Math.max(0, customMatches.length - 1)));
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveMatchIndex((current) => Math.max(0, current - 1));
+                }
+              }}
+              placeholder="Type any job title"
+              maxLength={80}
+              role="combobox"
+              aria-expanded={roleMenuOpen}
+              aria-controls="additional-role-options"
+              aria-activedescendant={roleMenuOpen && customMatches[activeMatchIndex] ? `additional-role-option-${activeMatchIndex}` : undefined}
+              autoComplete="off"
+              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+            />
+            <button
+              type="button"
+              onClick={() => addTitle(newTitle)}
+              disabled={!newTitle.trim()}
+              className="min-h-[44px] rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+          {roleMenuOpen && customMatches.length > 0 && (
+            <ul
+              id="additional-role-options"
+              role="listbox"
+              className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-inner border border-border bg-white py-1 shadow-overlay"
+            >
+              {customMatches.map((title, index) => (
+                <li
+                  key={title}
+                  id={`additional-role-option-${index}`}
+                  role="option"
+                  aria-selected={index === activeMatchIndex}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    addTitle(title);
+                  }}
+                  className={`cursor-pointer px-4 py-2 text-sm hover:text-ink ${index === activeMatchIndex ? "bg-surface-alt text-ink" : "text-muted hover:bg-surface-alt"}`}
+                >
+                  {title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {selectedTitles.some((title) => !guess.roles.includes(title)) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {selectedTitles.filter((title) => !guess.roles.includes(title)).map((title) => (
+              <Chip key={title} label={title} on onClick={() => toggleTitle(title)} />
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="mb-8">
-        <div className="flex min-h-5 items-baseline justify-between">
-          <p className="text-sm text-ink">Type</p>
-          <span className="text-xs text-faint">Pick up to {MAX_ROLE_TYPES}</span>
-        </div>
+        <p className="text-sm text-ink">Type</p>
+        <p className="mt-0.5 text-xs text-faint">We picked the most likely one. Choose a different type if needed.</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
             const slug = r.slug as RoleType;
@@ -130,12 +208,8 @@ export function FocusStep({
                 key={r.slug}
                 label={r.label}
                 on={on}
-                disabled={!on && typeFull}
-                onClick={() =>
-                  setRoleTypes((prev) =>
-                    prev.includes(slug) ? prev.filter((x) => x !== slug) : [...prev, slug],
-                  )
-                }
+                derived={slug === guess.roleType}
+                onClick={() => setRoleTypes(on ? [] : [slug])}
               />
             );
           })}
@@ -143,7 +217,7 @@ export function FocusStep({
       </div>
 
       <div className="flex items-center gap-3">
-        <PrimaryButton onClick={() => void save()} disabled={busy || categories.length === 0}>
+        <PrimaryButton onClick={() => void save()} disabled={busy || selectedTitles.length === 0 || roleTypes.length === 0}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
@@ -236,7 +310,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           </p>
         )}
         <div className="mt-6 flex items-center gap-3">
-          <PrimaryButton onClick={onDone}>Continue</PrimaryButton>
+          <PrimaryButton onClick={onDone}>See my matches</PrimaryButton>
           <button
             type="button"
             onClick={() => {
@@ -255,8 +329,8 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   return (
     <StartShell
       step="resume"
-      title="Start with your resume."
-      sub="We pull out the facts applications need."
+      title="Tell us what you want."
+      sub="Upload your resume. We'll read your experience and suggest the jobs that fit."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -590,40 +664,29 @@ export function GapsStep({
 
 /* ------------------------------------------------------------------ 05 TARGET */
 
-/* The three questions that NEEDED the resume, and could not have been asked at step 00:
- * titles are seeded from ParsedProfile.target_roles, and the period options are computed from
- * grad_year. Category and type were asked up front (see FocusStep). */
+/* Job titles and type are chosen immediately after the resume. This final targeting screen only
+ * asks for timing, which still depends on the graduation year read from that resume. */
 export function TargetStep({
   gradYear,
-  suggestedTitles,
   onDone,
   onLater,
 }: {
   gradYear: number;
-  suggestedTitles: string[];
   onDone: () => void;
   onLater: () => void;
 }) {
   const periods = useMemo(() => periodsFor(gradYear), [gradYear]);
-  const [titles, setTitles] = useState<string[]>(suggestedTitles.slice(0, 6));
   const [primary, setPrimary] = useState<string | null>(() => defaultPrimary(gradYear));
   const [backup, setBackup] = useState<string | null>(() => defaultBackup(gradYear));
-  const [newTitle, setNewTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Functional updater for the same reason as FocusStep: a stale closure loses rapid toggles.
-  function toggle<T>(_list: T[], v: T, set: React.Dispatch<React.SetStateAction<T[]>>) {
-    set((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]));
-  }
 
   async function save() {
     setBusy(true);
     setError(null);
-    // Partial by omission: categories and role_types were saved at step 00 and must not be
-    // clobbered with null here.
+    // Partial by omission: roles, categories and type were saved after the upload and must not be
+    // clobbered here.
     const body: Partial<Targeting> = {
-      titles: titles.length ? titles : null,
       primary_period: primary,
       backup_period: backup,
     };
@@ -639,43 +702,10 @@ export function TargetStep({
   return (
     <StartShell
       step="targeting"
-      title="Last thing."
-      sub="Your resume told us most of this. Correct anything that's wrong."
+      title="When do you want to start?"
+      sub="Pick your main hiring season and a backup."
     >
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
-
-      <div className="mb-7">
-        <p className="text-sm text-ink">Titles</p>
-        {/* target_roles has been written by the parser since v0 and read by nothing. First use. */}
-        <p className="mt-0.5 text-xs text-faint">
-          {suggestedTitles.length > 0
-            /* Was "Pulled from your resume. Drop any that are wrong." The step
-               sub forty words above already says both halves. */
-            ? "Drop any that do not fit."
-            : "Add the titles you'd actually accept."}
-        </p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {titles.map((t) => (
-            <Chip key={t} label={t} on derived onClick={() => toggle(titles, t, setTitles)} />
-          ))}
-        </div>
-        <div className="mt-3 flex gap-2">
-          <input
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && newTitle.trim()) {
-                e.preventDefault();
-                if (!titles.includes(newTitle.trim())) setTitles([...titles, newTitle.trim()]);
-                setNewTitle("");
-              }
-            }}
-            placeholder="Add a title"
-            aria-label="Add a title"
-            className="w-56 rounded-full border border-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
-          />
-        </div>
-      </div>
 
       <div className="mb-7">
         <p className="text-sm text-ink">When you want to start</p>

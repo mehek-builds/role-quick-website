@@ -12,10 +12,9 @@
  * ordinary on an application - so they are harvested at step 03 rather than asked here.
  *
  * Which leaves targeting: the only thing an application cannot teach us, because it is about the
- * next hundred postings rather than the one in front of them. Its five questions split on whether
- * they need the resume: category and type do not, so they open the flow at step 00 (where they
- * cost one tap and earn the upload some goodwill); titles and periods are derived from the parse,
- * so they close it at step 05.
+ * next hundred postings rather than the one in front of them. The resume comes first so its work
+ * history can seed five concrete roles, the likely employment type and the matching categories.
+ * The student corrects that guess before the rest of setup continues.
  *
  * Steps are DERIVED server-side from data that already exists (see routes/onboarding.ts), not
  * stored as a cursor, so "Finish later" and a fresh start are the same code path and neither can
@@ -41,8 +40,6 @@ import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
-import { focusSeed } from "@/lib/rolesFeed";
-import type { RoleType } from "@/lib/api";
 import { StepRail } from "@/components/start/ui";
 
 // An autofill_event is proof of install because only a running extension can POST one, so we poll
@@ -74,6 +71,7 @@ export default function Start() {
   // the contact line fills in as the first application teaches us, and the student can see that.
   const [appProfile, setAppProfile] = useState<ApplicationProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Client-side sub-step: the backend's "install" step covers both installing and applying,
   // since it cannot tell them apart. The click is the only signal we get.
   const [clickedInstall, setClickedInstall] = useState(false);
@@ -83,36 +81,23 @@ export default function Start() {
   const [skippedGaps, setSkippedGaps] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Calibration handoff: the homepage card saved hunt/field in
-  // localStorage (litos.profile.v1). Seed the Focus step so its taps
-  // arrive pre-answered; unlike query params this survives the login
-  // round-trip. Computed once; FocusStep only renders after the state
-  // fetch resolves, so there is no SSR/hydration divergence.
-  // Set once, alongside the QA state stub below, so the base step can replay a canned build.
+  // Set alongside the QA state stub below so the base step can replay a canned build.
   const [qaDemo, setQaDemo] = useState(false);
-
-  const [calibSeed] = useState<{
-    categories: string[];
-    roleTypes: RoleType[];
-  } | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem("litos.profile.v1");
-      if (!raw) return null;
-      const p = JSON.parse(raw) as { hunt?: string; field?: string };
-      const s = focusSeed(p.hunt ?? "", p.field ?? "");
-      return s
-        ? { categories: s.categories, roleTypes: s.roleTypes as RoleType[] }
-        : null;
-    } catch {
-      return null;
-    }
-  });
 
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
     setState(s);
     return s;
+  }, []);
+
+  const loadProfile = useCallback(async () => {
+    setProfileLoadError(null);
+    try {
+      setProfile(await api<ParsedProfile>("/profile"));
+      setAppProfile(await getApplicationProfile().catch(() => null));
+    } catch (reason) {
+      setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your resume details.");
+    }
   }, []);
 
   useEffect(() => {
@@ -122,7 +107,7 @@ export default function Start() {
       const params = new URLSearchParams(window.location.search);
       if (params.has("qa")) {
         const state: OnboardingState = {
-          step: (params.get("step") as OnboardingStep) ?? "focus",
+          step: (params.get("step") as OnboardingStep) ?? "resume",
           completed_at: null,
           has_focus: true,
           has_resume: true,
@@ -147,7 +132,19 @@ export default function Start() {
           full_name: "Mehek Mandal",
           school: "University of Southern California",
           grad_year: 2028,
-          target_roles: ["Software Engineer", "Product Engineer"],
+          target_roles: ["Software Engineer", "Product Engineer", "Frontend Engineer", "Full Stack Engineer", "Data Engineer"],
+          currently_enrolled: true,
+          skills: ["TypeScript", "React", "Python", "SQL"],
+          projects: [],
+          experience: [
+            {
+              company: "Litos",
+              title: "Software Engineering Intern",
+              start: "May 2025",
+              end: "August 2025",
+              description: "Built a TypeScript application",
+            },
+          ],
         } as ParsedProfile);
         setQaDemo(true);
         return;
@@ -163,14 +160,13 @@ export default function Start() {
         if (s.has_resume) {
           // Needed by the targeting screen's derived defaults and by the base screen's education
           // block, which takes school/degree/grad date from the parse rather than from the model.
-          setProfile(await api<ParsedProfile>("/profile").catch(() => null as unknown as ParsedProfile));
-          setAppProfile(await getApplicationProfile().catch(() => null));
+          await loadProfile();
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not load your setup.");
       }
     })();
-  }, [router, refresh]);
+  }, [loadProfile, router, refresh]);
 
   // Poll only while they are off applying. Anything else is a wasted request.
   useEffect(() => {
@@ -247,7 +243,7 @@ export default function Start() {
   if (!state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
-        <StepRail current="focus" />
+        <StepRail current="resume" />
         <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
         <div className="rq-shimmer mt-6 h-32 rounded-inner" />
       </div>
@@ -256,9 +252,46 @@ export default function Start() {
 
   switch (state.step) {
     case "focus":
+      // During a rolling backend deploy an older state response can still say "focus" before a
+      // resume exists. Keeping the upload here makes the new resume-first contract resilient to
+      // that short mixed-version window.
+      if (!state.has_resume) {
+        return (
+          <ResumeStep
+            onLater={later}
+            onDone={() => {
+              stepDone("resume");
+              void (async () => {
+                const s = await refresh();
+                if (s.has_resume) await loadProfile();
+              })();
+            }}
+          />
+        );
+      }
+      if (!profile) {
+        return (
+          <div className="mx-auto max-w-2xl px-6 py-16">
+            <StepRail current="focus" />
+            {profileLoadError ? (
+              <div className="mt-10">
+                <ErrorNote message={profileLoadError} />
+                <button type="button" onClick={() => void loadProfile()} className="mt-4 text-sm text-brand underline underline-offset-4">
+                  Try loading again
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+                <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+              </>
+            )}
+          </div>
+        );
+      }
       return (
         <FocusStep
-          seed={calibSeed}
+          profile={profile}
           onLater={later}
           onDone={() => {
             stepDone("focus");
@@ -285,10 +318,7 @@ export default function Start() {
             stepDone("resume");
             void (async () => {
               const s = await refresh();
-              if (s.has_resume) {
-                setProfile(await api<ParsedProfile>("/profile").catch(() => null as unknown as ParsedProfile));
-                setAppProfile(await getApplicationProfile().catch(() => null));
-              }
+              if (s.has_resume) await loadProfile();
             })();
           }}
         />
@@ -335,7 +365,6 @@ export default function Start() {
         return (
           <TargetStep
             gradYear={profile?.grad_year ?? 0}
-            suggestedTitles={profile?.target_roles ?? []}
             onLater={later}
             onDone={() => void refresh()}
           />
@@ -360,7 +389,6 @@ export default function Start() {
       return (
         <TargetStep
           gradYear={profile?.grad_year ?? 0}
-          suggestedTitles={profile?.target_roles ?? []}
           onLater={later}
           onDone={() => {
             stepDone("targeting");
