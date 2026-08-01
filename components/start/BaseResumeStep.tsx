@@ -416,6 +416,7 @@ export function BaseResumeStep({
   }, [editing, persist]);
 
   const finish = useCallback(async () => {
+    if (editing) return;
     setSaving(true);
     try {
       // Save before advancing. Anything they edited has to be on the server before the next step
@@ -426,7 +427,7 @@ export function BaseResumeStep({
       setError(e instanceof Error ? e.message : "Could not save your resume.");
       setSaving(false);
     }
-  }, [persist, onDone]);
+  }, [editing, persist, onDone]);
 
   const contact: ContactHeader = {
     full_name: parsed?.full_name ?? "",
@@ -439,6 +440,7 @@ export function BaseResumeStep({
   };
 
   const entryCount = (spec.experience ?? []).filter(Boolean).length;
+  const hasSource = !!sourceUrl;
 
   return (
     <StartShell step="base" wide>
@@ -448,7 +450,9 @@ export function BaseResumeStep({
       <div
         className={
           phase === "compare"
-            ? "grid gap-8 lg:grid-cols-2 lg:gap-x-10"
+            ? hasSource
+              ? "grid gap-8 lg:grid-cols-2 lg:gap-x-10"
+              : "grid gap-8"
             : "grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:grid-rows-[auto_minmax(0,1fr)] lg:gap-x-10 lg:gap-y-7"
         }
       >
@@ -456,16 +460,18 @@ export function BaseResumeStep({
         <div
           key="heading"
           className={`order-1 min-w-0 ${
-            phase === "compare" ? "lg:col-span-2" : "lg:col-start-2 lg:row-start-1"
+            phase === "compare" ? (hasSource ? "lg:col-span-2" : "text-center") : "lg:col-start-2 lg:row-start-1"
           }`}
         >
           <h1 className="max-w-full text-section font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-section">
-            {phase === "compare" ? "Same you. One page." : "This is your resume now."}
+            {phase === "compare"
+              ? hasSource ? "Same you. One page." : "One page, ready."
+              : "This is your resume now."}
           </h1>
         </div>
 
         {/* ── The original, only while comparing ──────────────────────────── */}
-        {phase === "compare" && (
+        {phase === "compare" && hasSource && (
           <div key="source" className={`order-2 mx-auto min-w-0 w-full ${SHEET_CAP.compare}`}>
             <PaneLabel>What you uploaded{sourcePages > 0 ? ` · ${sourcePages} ${sourcePages === 1 ? "page" : "pages"}` : ""}</PaneLabel>
             <SourceResume url={sourceUrl} pages={sourcePages} />
@@ -485,7 +491,7 @@ export function BaseResumeStep({
           key="new"
           className={`order-3 mx-auto min-w-0 w-full ${
             phase === "compare"
-              ? SHEET_CAP.compare
+              ? `${SHEET_CAP.compare} ${hasSource ? "" : "order-2"}`
               : `${SHEET_CAP.detail} lg:order-2 lg:col-start-1 lg:row-start-1 lg:row-span-2`
           }`}
         >
@@ -711,7 +717,7 @@ export function BaseResumeStep({
           )}
 
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <PrimaryButton onClick={() => void finish()} disabled={!finished || saving}>
+            <PrimaryButton onClick={() => void finish()} disabled={!finished || saving || editing}>
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Looks right"}
             </PrimaryButton>
             <button

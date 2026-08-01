@@ -348,7 +348,7 @@ export function Chip({
       aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
+      className={`min-h-11 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
         on
           ? "border-brand bg-brand-soft text-brand-ink"
           : "border-border bg-surface text-muted hover:border-ink/30"
