@@ -117,7 +117,12 @@ export function FocusStep({
           ))}
         </div>
 
-        <div className="relative mt-4 max-w-sm">
+        <div
+          className="relative mt-4 max-w-sm"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setRoleMenuOpen(false);
+          }}
+        >
           <label htmlFor="additional-role" className="text-xs text-faint">Add another job</label>
           <div className="mt-1.5 flex gap-2">
             <input

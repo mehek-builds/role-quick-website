@@ -55,14 +55,6 @@ const ROLE_FAMILIES: { match: RegExp; roles: string[]; category: string }[] = [
   },
 ];
 
-const DEFAULT_ROLES = [
-  "Software Engineer",
-  "Product Manager",
-  "Data Analyst",
-  "Business Analyst",
-  "Program Manager",
-];
-
 function cleanTitle(value: string): string {
   return value
     .replace(/\s+/g, " ")
@@ -100,19 +92,29 @@ export function inferRoleType(
   years = experienceYears(profile),
   currentYear = new Date().getFullYear(),
 ): RoleType {
-  const titles = (profile.experience ?? []).map((item) => item.title).join(" ");
-  if (/co-?op/i.test(titles)) return "co-op";
   if (years >= 2) return "full-time";
-  if (profile.currently_enrolled || profile.grad_year > currentYear + 1) return "internship";
+  const experiences = profile.experience ?? [];
+  const currentCoOp = experiences.some((item) => {
+    if (!/co-?op/i.test(item.title)) return false;
+    const end = item.end?.trim() ?? "";
+    return !end || /present|current|now/i.test(end) || yearFrom(end) === currentYear;
+  });
+  if (currentCoOp) return "co-op";
   if (profile.grad_year >= currentYear && profile.grad_year <= currentYear + 1) return "new-grad";
+  if (profile.currently_enrolled || profile.grad_year > currentYear + 1) return "internship";
+  const titles = experiences.map((item) => item.title).join(" ");
   if (/intern(ship)?/i.test(titles) && years < 2) return "internship";
   return "full-time";
 }
 
 export function categoriesForRoles(roles: string[], fallback: string[] = ["other"]): string[] {
-  const roleText = roles.join(" ");
   const categories = Array.from(new Set(
-    ROLE_FAMILIES.filter((family) => family.match.test(roleText)).map((family) => family.category),
+    ROLE_FAMILIES
+      .filter((family) => roles.some((role) =>
+        family.match.test(role)
+        || family.roles.some((knownRole) => knownRole.toLowerCase() === role.toLowerCase()),
+      ))
+      .map((family) => family.category),
   )).slice(0, 3);
   return categories.length > 0 ? categories : fallback.slice(0, 3);
 }
@@ -132,7 +134,6 @@ export function inferResumeTargeting(profile: ParsedProfile, currentYear = new D
     .sort((a, b) => Number(b.match.test(targetEvidence)) - Number(a.match.test(targetEvidence)));
   for (const family of matched) addUnique(roles, family.roles);
   addUnique(roles, (profile.experience ?? []).map((item) => item.title));
-  addUnique(roles, DEFAULT_ROLES);
 
   const categories = Array.from(new Set(matched.map((family) => family.category))).slice(0, 3);
   const yearsExperience = experienceYears(profile, currentYear);

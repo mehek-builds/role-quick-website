@@ -28,6 +28,16 @@ test("keeps the parser's strongest suggestion first and always returns five choi
   assert.ok(result.categories.includes("data-ml"));
 });
 
+test("does not invent unrelated careers when the resume has no supported family", () => {
+  const result = inferResumeTargeting(profile({
+    target_roles: ["Registered Nurse"],
+    experience: [{ company: "Hospital", title: "Staff Nurse", start: "2024", end: "Present", description: "Patient care" }],
+  }), 2026);
+
+  assert.deepEqual(result.roles, ["Registered Nurse", "Staff Nurse"]);
+  assert.deepEqual(result.categories, ["other"]);
+});
+
 test("guesses internship for a currently enrolled candidate", () => {
   const result = inferResumeTargeting(profile({
     currently_enrolled: true,
@@ -53,6 +63,9 @@ test("guesses full-time for an experienced graduate", () => {
 
 test("recomputes matching categories when the candidate changes the selected role", () => {
   assert.deepEqual(categoriesForRoles(["Product Designer"]), ["design"]);
+  assert.deepEqual(categoriesForRoles(["Product Engineer"]), ["software-engineering"]);
+  assert.deepEqual(categoriesForRoles(["Program Manager"]), ["product"]);
+  assert.deepEqual(categoriesForRoles(["Systems Engineer"]), ["hardware"]);
   assert.deepEqual(categoriesForRoles(["A role outside the catalog"]), ["other"]);
 });
 
@@ -70,6 +83,13 @@ test("infers co-op, new-grad, prior-intern, and no-evidence role types", () => {
 
 test("keeps an experienced professional full-time while they study part-time", () => {
   assert.equal(inferRoleType(profile({ currently_enrolled: true, grad_year: 2028 }), 10, 2026), "full-time");
+  assert.equal(inferRoleType(profile({
+    experience: [{ company: "Acme", title: "Engineering Co-op", start: "2016", end: "2016", description: "" }],
+  }), 10, 2026), "full-time");
+});
+
+test("guesses new-grad for a currently enrolled candidate graduating within a year", () => {
+  assert.equal(inferRoleType(profile({ currently_enrolled: true, grad_year: 2027 }), 0, 2026), "new-grad");
 });
 
 test("cleans internship suffixes and deduplicates role titles case-insensitively", () => {
