@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApplicationProfile,
-  OnboardingState,
   ParsedProfile,
   RoleType,
   Targeting,
+  getToken,
+  getTargeting,
   putApplicationProfile,
   putTargeting,
   uploadResume,
@@ -18,11 +19,12 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, FounderNote, LaterLink, PrimaryButton, Receipt, RefusalList, SkipLink, StartShell } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
 import { categoriesForRoles, inferResumeTargeting } from "@/lib/onboarding-role-inference";
+import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
 
@@ -98,12 +100,7 @@ export function FocusStep({
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="mb-7">
-        <div className="flex min-h-5 items-baseline justify-between">
-          <p className="text-sm text-ink">Jobs that fit</p>
-          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
-            {guess.yearsExperience > 0 ? `About ${guess.yearsExperience} years read` : "From your resume"}
-          </span>
-        </div>
+        <p className="text-sm text-ink">Jobs that fit</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {guess.roles.map((title) => (
             <Chip
@@ -202,7 +199,6 @@ export function FocusStep({
 
       <div className="mb-8">
         <p className="text-sm text-ink">Type</p>
-        <p className="mt-0.5 text-xs text-faint">We picked the most likely one. Choose a different type if needed.</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
             const slug = r.slug as RoleType;
@@ -242,6 +238,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function upload(f: File) {
+    if (busy) return;
     const isPdf = f.type === "application/pdf" || f.name.toLowerCase().endsWith(".pdf");
     const isDocx =
       f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -261,6 +258,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not read that resume.");
       setFile(null);
+      if (inputRef.current) inputRef.current.value = "";
     } finally {
       setBusy(false);
     }
@@ -281,7 +279,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
     const kb = Math.max(1, Math.round(file.size / 1024));
     const exp = parsed.experience?.length ?? 0;
     const proj = parsed.projects?.length ?? 0;
-    const seeded = parsed.bank_seeded ?? 0;
+    const banked = parsed.bank_total ?? parsed.bank_seeded ?? 0;
     const elapsed = parseSeconds === null ? "" : `${parseSeconds.toFixed(1)}s`;
     return [
       { k: "Received", v: `${file.name} · ${kb} KB` },
@@ -291,34 +289,36 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       { k: "Experience", v: `${exp} ${exp === 1 ? "entry" : "entries"}` },
       { k: "Projects", v: `${proj} ${proj === 1 ? "entry" : "entries"}` },
       { k: "Skills", v: `${parsed.skills?.length ?? 0} tagged` },
-      { t: elapsed, k: "Ready in", v: `${seeded} ${seeded === 1 ? "entry" : "entries"} banked`, done: true },
+      { t: elapsed, k: "Ready in", v: `${banked} ${banked === 1 ? "entry" : "entries"} banked`, done: true },
     ];
   }, [parsed, file, parseSeconds]);
 
   if (parsed) {
-    // bank_seeded === 0 is the difference between an account that works and one that looks fine
-    // and 400s at apply time. Say so here rather than letting it fail 12 minutes from now.
-    const empty = (parsed.bank_seeded ?? 0) === 0;
+    const distinctRoles = new Set(
+      (parsed.target_roles ?? []).map((role) => role.trim().toLowerCase()).filter(Boolean),
+    ).size;
+    // Mirror the server's has_resume gate. Advancing on a partial parse only returns the student
+    // to this same screen, which looks like a dead button rather than a validation failure.
+    const ready = !!parsed.full_name?.trim() && distinctRoles >= 5 && (parsed.bank_total ?? parsed.bank_seeded ?? 0) > 0;
     return (
       <StartShell
         step="resume"
         title="Here's what we read."
       >
         <Receipt rows={rows} />
-        {empty && (
+        {!ready && (
           <p className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-[13px] leading-6 text-warn">
-            We couldn&apos;t pull any experience out of that file, so tailored resumes won&apos;t
-            work yet. It usually means the PDF is an image rather than text. Try a different
-            export, or carry on and add entries by hand later.
+            We couldn&apos;t read enough from that file. Try another PDF or DOCX.
           </p>
         )}
         <div className="mt-6 flex items-center gap-3">
-          <PrimaryButton onClick={onDone}>See my matches</PrimaryButton>
+          {ready && <PrimaryButton onClick={onDone}>See my matches</PrimaryButton>}
           <button
             type="button"
             onClick={() => {
               setParsed(null);
               setFile(null);
+              if (inputRef.current) inputRef.current.value = "";
             }}
             className="px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
           >
@@ -339,16 +339,25 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       <div
         role="button"
         tabIndex={0}
-        onClick={() => inputRef.current?.click()}
+        aria-busy={busy}
+        aria-disabled={busy}
+        onClick={() => {
+          if (busy) return;
+          if (inputRef.current) inputRef.current.value = "";
+          inputRef.current?.click();
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
+            if (busy) return;
+            if (inputRef.current) inputRef.current.value = "";
             inputRef.current?.click();
           }
         }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
+          if (busy) return;
           const f = e.dataTransfer.files?.[0];
           if (f) void upload(f);
         }}
@@ -382,6 +391,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         className="hidden"
         onChange={(e) => {
           const f = e.target.files?.[0];
+          e.target.value = "";
           if (f) void upload(f);
         }}
       />
@@ -390,7 +400,10 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         Used only for your applications. Never sold.
       </p>
       <div className="mt-6 flex items-center gap-3">
-        <PrimaryButton onClick={() => inputRef.current?.click()} disabled={busy}>
+        <PrimaryButton onClick={() => {
+          if (inputRef.current) inputRef.current.value = "";
+          inputRef.current?.click();
+        }} disabled={busy}>
           {busy ? <PendingLabel onColor>Reading...</PendingLabel> : "Choose a file"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
@@ -401,29 +414,54 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
 
 /* ------------------------------------------------------ 02 INSTALL + 03 APPLY */
 
-type TryJob = { id: string; company: string; title: string; location: string; ats: string; applyUrl: string };
-
 /** One backend step ("install" until an autofill_event proves the extension exists), two phases
  *  here: the web app has no way to see the extension, so the click is the only signal we get. */
 export function InstallStep({
   phase,
   onInstalled,
   onLater,
+  targetingFallback,
+  allowSavedTargeting = true,
 }: {
   phase: "install" | "apply";
   onInstalled: () => void;
   onLater: () => void;
+  targetingFallback?: Pick<Targeting, "titles" | "role_types"> | null;
+  allowSavedTargeting?: boolean;
 }) {
-  const [jobs, setJobs] = useState<TryJob[] | null>(null);
+  const [feed, setFeed] = useState<OnboardingJob[] | null>(null);
+  const [savedTargeting, setSavedTargeting] = useState<Pick<Targeting, "titles" | "role_types"> | null>(null);
+  const jobs = useMemo(
+    () => feed === null ? null : rankOnboardingJobs(feed, savedTargeting ?? targetingFallback, 3),
+    [feed, savedTargeting, targetingFallback],
+  );
 
   useEffect(() => {
     if (phase !== "apply") return;
+    let cancelled = false;
     // The same live feed /try uses: real postings, real apply URLs, refreshed daily.
     fetch("/try-jobs.json")
       .then((r) => r.json())
-      .then((d) => setJobs((d.jobs ?? []).slice(0, 6)))
-      .catch(() => setJobs([]));
-  }, [phase]);
+      .then((d) => {
+        if (cancelled) return;
+        const feed = (d.jobs ?? []) as OnboardingJob[];
+        // Render useful resume-ranked choices immediately. The saved targeting request can be
+        // slow or unavailable in QA, and it should refine the list rather than hold it hostage.
+        setFeed(feed);
+        if (!allowSavedTargeting || !getToken()) return;
+        void getTargeting()
+          .then((targeting) => {
+            if (!cancelled) setSavedTargeting(targeting);
+          })
+          .catch(() => undefined);
+      })
+      .catch(() => {
+        if (!cancelled) setFeed([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, allowSavedTargeting]);
 
   if (phase === "install") {
     return (
@@ -431,7 +469,7 @@ export function InstallStep({
         step="install"
         title="Add Litos to Chrome."
       >
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {/* Opening the store is not installing. This used to advance the flow from its own
               onClick, so closing the store tab straight away still moved you to step 04. */}
           <a
@@ -453,8 +491,8 @@ export function InstallStep({
           >
             I have added it
           </button>
-          <LaterLink onClick={onLater} />
         </div>
+        <div className="mt-3"><LaterLink onClick={onLater} /></div>
       </StartShell>
     );
   }
@@ -462,18 +500,11 @@ export function InstallStep({
   return (
     <StartShell
       step="apply"
-      title="Now apply to one job. All the way through."
-      aside={<RefusalList />}
+      title="Apply to one job."
     >
-      {/* The only screen in the flow that carries a voice, because it is the only one whose ask
-          is genuinely hard to justify from the UI alone. */}
-      <div className="mb-6">
-        <FounderNote>
-          I know it&apos;s backwards to ask you to fill one in by hand when the whole point is that
-          Litos fills them. It&apos;s the only way it learns what these forms actually ask you,
-          and I&apos;d rather learn it from a real one than guess. This is the last one you type.
-        </FounderNote>
-      </div>
+      <p className="mb-5 text-sm leading-6 text-muted">
+        Fill this one out yourself. Litos learns the answers for next time.
+      </p>
       <div className="overflow-hidden rounded-inner border border-border">
         <div className="flex items-center justify-between border-b border-border bg-surface-alt px-4 py-2.5">
           <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
@@ -507,17 +538,14 @@ export function InstallStep({
                 </span>
               </span>
               <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.06em] text-faint">
-                {j.ats}
+                Open
               </span>
             </a>
           ))
         )}
       </div>
 
-      <p className="mt-5 text-[13px] leading-6 text-muted">
-        Or open any posting you already had open. We&apos;ll pick it up either way, and this page
-        moves on by itself once your application lands.
-      </p>
+      <p className="mt-4 text-[13px] leading-6 text-muted">Already have a job open? Use that instead.</p>
       <div className="mt-4">
         <LaterLink onClick={onLater} />
       </div>
@@ -553,8 +581,6 @@ export function GapsStep({
 
   const showGpa = gaps.includes("gpa") || gaps.includes("gpa_scale");
   const showSalary = gaps.includes("desired_salary") || gaps.includes("desired_salary_currency");
-  const n = [showGpa, gaps.includes("major"), showSalary, gaps.includes("languages")].filter(Boolean).length;
-
   async function save() {
     setBusy(true);
     setError(null);
@@ -568,18 +594,31 @@ export function GapsStep({
         (body as Record<string, string>)[k] = v.trim();
       }
     }
+    const hasGpa = !!body.gpa;
+    const hasGpaScale = !!body.gpa_scale;
+    if (hasGpa !== hasGpaScale) {
+      setError("Enter both your GPA and what it is out of.");
+      setBusy(false);
+      return;
+    }
+    const hasSalary = !!body.desired_salary;
+    const hasCurrency = !!body.desired_salary_currency;
+    if (hasSalary !== hasCurrency) {
+      setError("Enter both a salary and its currency, or leave both blank.");
+      setBusy(false);
+      return;
+    }
     try {
       if (Object.keys(body).length > 0) await putApplicationProfile(body);
-      onDone(false);
+      onDone(Object.keys(body).length === 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
       setBusy(false);
     }
   }
 
-  /* Every visible label is tied to its input by id. These were bare <label> elements with no
-     htmlFor and an aria-label on the input, so the label was announced twice and clicking it
-     focused nothing. */
+  /* Every visible label is tied to its first input by id. The remaining fields have concise
+     accessible names so paired values such as GPA and scale stay distinct to screen readers. */
   function field(key: string) {
     const meta = GAP_LABEL[key];
     return (
@@ -589,7 +628,8 @@ export function GapsStep({
         value={values[key] ?? ""}
         onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
         placeholder={meta.placeholder}
-        className="w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        aria-label={meta.label}
+        className="min-h-11 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     );
   }
@@ -597,7 +637,7 @@ export function GapsStep({
   return (
     <StartShell
       step="gaps"
-      title={`${n === 1 ? "One question left" : n === 2 ? "Two questions left" : "A few questions left"} that job didn't ask.`}
+      title="A few details."
       /* "This is the last of the boring part." came off 2026-07-28: the flow
          narrating its own tedium, which does not make it shorter. */
     >
@@ -608,10 +648,6 @@ export function GapsStep({
           <label htmlFor="gap-gpa" className="text-[13px] text-ink">GPA</label>
           {/* R-005: store the value AND the scale, then convert through a disclosed mapping.
               A bare 3.89 tells a UK form nothing, and guessing 97% would be a lie. */}
-          <p className="mt-1 text-xs leading-5 text-faint">
-            Stored the way you earned it. Some forms want a percentage instead, and we work that out
-            and show you the mapping first.
-          </p>
           <div className="mt-2 grid grid-cols-2 gap-3">
             {field("gpa")}
             {field("gpa_scale")}
@@ -629,9 +665,6 @@ export function GapsStep({
       {gaps.includes("languages") && (
         <div className="mb-5">
           <label htmlFor="gap-languages" className="text-[13px] text-ink">Which languages are you fluent in?</label>
-          <p className="mt-1 text-xs leading-5 text-faint">
-            Separate them with commas. Forms that ask get exactly this list, nothing inferred.
-          </p>
           <div className="mt-2">{field("languages")}</div>
         </div>
       )}
@@ -639,10 +672,6 @@ export function GapsStep({
       {showSalary && (
         <div className="mb-5">
           <label htmlFor="gap-desired_salary" className="text-[13px] text-ink">Desired salary</label>
-          <p className="mt-1 text-xs leading-5 text-faint">
-            Optional, and left blank on every form unless you set it. We need the currency too, or
-            the number means nothing on a posting priced somewhere else.
-          </p>
           <div className="mt-2 grid grid-cols-2 gap-3">
             {field("desired_salary")}
             {field("desired_salary_currency")}
@@ -687,7 +716,7 @@ export function TargetStep({
     // clobbered here.
     const body: Partial<Targeting> = {
       primary_period: primary,
-      backup_period: backup,
+      backup_period: backup === primary ? null : backup,
     };
     try {
       await putTargeting(body);
@@ -698,6 +727,14 @@ export function TargetStep({
     }
   }
 
+  function choosePrimary(value: string) {
+    setPrimary(value);
+    setBackup((current) => {
+      if (current !== value) return current;
+      return periods.find((period) => period.slug !== value)?.slug ?? null;
+    });
+  }
+
   return (
     <StartShell
       step="targeting"
@@ -706,27 +743,21 @@ export function TargetStep({
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="mb-7">
-        <p className="text-sm text-ink">When you want to start</p>
-        <p className="mt-0.5 text-xs text-faint">
-          {gradYear
-            ? `You graduate in ${gradYear}, so this is the one that matters.`
-            : "The season you are aiming at."}
-        </p>
+        <p className="text-sm text-ink">First choice</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {periods.map((p) => (
             <Chip
               key={p.slug}
               label={p.label}
               on={primary === p.slug}
-              onClick={() => setPrimary(p.slug)}
+              onClick={() => choosePrimary(p.slug)}
             />
           ))}
         </div>
       </div>
 
       <div className="mb-8">
-        <p className="text-sm text-ink">If that does not work out</p>
-        <p className="mt-0.5 text-xs text-faint">The next season you would take.</p>
+        <p className="text-sm text-ink">Backup</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {periods
             .filter((p) => p.slug !== primary)
@@ -754,56 +785,24 @@ export function TargetStep({
 /* -------------------------------------------------------------------- 06 DONE */
 
 export function DoneStep({
-  state,
   onFinish,
+  verificationEnabled,
 }: {
-  state: OnboardingState;
   onFinish: (settings: { automatic_submission_enabled?: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
+  verificationEnabled: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  // Not offered on this screen any more, and deliberately NOT carried through from state either:
-  // finishing onboarding must never be the thing that turns unattended submission on. An existing
-  // grant is untouched because the field is simply omitted from the patch below.
-  const [automaticVerification, setAutomaticVerification] = useState(state.automatic_verification_enabled);
   return (
     <StartShell
       step="done"
-      title="Setup complete."
+      title="You're ready."
     >
-      <div className="divide-y divide-border border-y border-border">
-        {/* The "send without asking me again" checkbox used to live here, and it was the single
-            most dangerous control in the product sitting on the screen where the student has the
-            least information: they have not yet watched Litos fill in one real form. The server
-            now refuses to enable it until they have approved three submissions themselves, so
-            offering it here would have been a checkbox that 403s the whole finish action. It
-            appears in Settings once it is theirs to make. */}
-        {/* Removed 2026-07-28. It described the auto-submit setting, which is
-            deliberately NOT on this screen (see the note above), so it was the
-            page explaining a control the reader cannot reach. Settings says it
-            at the moment it becomes theirs to make. */}
-        <label className="flex min-h-20 cursor-pointer items-start gap-3 py-4">
-          <input type="checkbox" checked={automaticVerification} onChange={(event) => setAutomaticVerification(event.target.checked)} className="mt-0.5 size-5 shrink-0 accent-brand" />
-          <span>
-            <span className="block text-base text-ink">Read the code a company emails me</span>
-            <span className="mt-1 block text-sm leading-6 text-muted">
-              Only while an application is running, only that code, and it is never saved.
-            </span>
-          </span>
-        </label>
-      </div>
-
-      {/* "both" was wrong, and had been since the auto-submit checkbox was
-          pulled off this screen: one control is offered here, not two. */}
-      <p className="mt-4 text-[13px] leading-5 text-muted">
-        You can change this any time in Account. Litos never answers a CAPTCHA, the puzzle that checks you are human, and never answers anything you have to swear to.
-      </p>
-
-      <div className="mt-6">
+      <div>
         <PrimaryButton
           onClick={() => {
             setBusy(true);
             void onFinish({
-              automatic_verification_enabled: automaticVerification,
+              automatic_verification_enabled: verificationEnabled,
             }).finally(() => setBusy(false));
           }}
           disabled={busy}

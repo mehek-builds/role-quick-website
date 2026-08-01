@@ -455,6 +455,9 @@ export type ParsedProfile = {
   // How many experience_bank rows the parse seeded. Zero here on a first upload means
   // resume-gen will 400 later, so /start surfaces it rather than letting it fail at apply time.
   bank_seeded?: number;
+  // Total usable bank rows after reconciliation. Unlike bank_seeded, this stays positive when a
+  // replacement upload matches entries already stored for the student.
+  bank_total?: number;
 };
 
 export type OnboardingStep = "focus" | "sponsorship" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";

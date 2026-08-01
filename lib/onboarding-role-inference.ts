@@ -76,14 +76,39 @@ function yearFrom(value: string): number | null {
 }
 
 export function experienceYears(profile: ParsedProfile, currentYear = new Date().getFullYear()): number {
-  let months = 0;
+  const intervals: Array<{ start: number; end: number }> = [];
   for (const experience of profile.experience ?? []) {
     const start = yearFrom(experience.start ?? "");
     if (!start) continue;
     const statedEnd = yearFrom(experience.end ?? "");
     const end = /present|current|now/i.test(experience.end ?? "") ? currentYear : statedEnd ?? start;
-    months += Math.max(3, (Math.max(start, end) - start) * 12);
+    const startMonth = start * 12;
+    intervals.push({
+      start: startMonth,
+      end: Math.max(startMonth + 3, Math.max(start, end) * 12),
+    });
   }
+
+  // Resume roles frequently overlap, especially for students balancing an internship, a campus
+  // job, research, and volunteering. Adding every row made four chronological years read as more
+  // than eleven and incorrectly pushed new graduates into the full-time track. Merge the dated
+  // intervals so elapsed experience can never exceed elapsed time.
+  intervals.sort((a, b) => a.start - b.start || a.end - b.end);
+  let months = 0;
+  let current: { start: number; end: number } | null = null;
+  for (const interval of intervals) {
+    if (!current) {
+      current = { ...interval };
+      continue;
+    }
+    if (interval.start <= current.end) {
+      current.end = Math.max(current.end, interval.end);
+      continue;
+    }
+    months += current.end - current.start;
+    current = { ...interval };
+  }
+  if (current) months += current.end - current.start;
   return Math.round((months / 12) * 10) / 10;
 }
 
@@ -92,7 +117,6 @@ export function inferRoleType(
   years = experienceYears(profile),
   currentYear = new Date().getFullYear(),
 ): RoleType {
-  if (years >= 5) return "full-time";
   const experiences = profile.experience ?? [];
   const currentCoOp = experiences.some((item) => {
     if (!/co-?op/i.test(item.title)) return false;
@@ -100,6 +124,14 @@ export function inferRoleType(
     return !end || /present|current|now/i.test(end) || yearFrom(end) === currentYear;
   });
   if (currentCoOp) return "co-op";
+  // A current student graduating within a year is looking for a new-grad role even when their
+  // resume contains several concurrent campus or volunteer positions. Only sustained prior
+  // professional tenure should override this, and the merged timeline below is the conservative
+  // proxy available from a resume.
+  if (profile.currently_enrolled && profile.grad_year >= currentYear && profile.grad_year <= currentYear + 1 && years < 5) {
+    return "new-grad";
+  }
+  if (years >= 5) return "full-time";
   if (profile.grad_year >= currentYear && profile.grad_year <= currentYear + 1) return "new-grad";
   if (profile.currently_enrolled || profile.grad_year > currentYear + 1) return "internship";
   const titles = experiences.map((item) => item.title).join(" ");

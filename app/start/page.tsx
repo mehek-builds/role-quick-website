@@ -21,7 +21,7 @@
  * disagree with reality.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApplicationProfile,
@@ -41,6 +41,7 @@ import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } fr
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { StepRail } from "@/components/start/ui";
+import { inferResumeTargeting } from "@/lib/onboarding-role-inference";
 
 // An autofill_event is proof of install because only a running extension can POST one, so we poll
 // for it while the student is off applying.
@@ -61,6 +62,10 @@ import { StepRail } from "@/components/start/ui";
 // to ~33 req/s at the tail for a delay nobody can perceive against a 12-minute form.
 const POLL_START_MS = 5000;
 const POLL_MAX_MS = 30000;
+const QA_TARGETING = {
+  titles: ["Software Engineer", "Product Engineer", "Frontend Engineer", "Full Stack Engineer", "Data Engineer"],
+  role_types: ["internship" as const],
+};
 
 export default function Start() {
   const router = useRouter();
@@ -83,6 +88,10 @@ export default function Start() {
 
   // Set alongside the QA state stub below so the base step can replay a canned build.
   const [qaDemo, setQaDemo] = useState(false);
+  const targetingFallback = useMemo(() => profile ? {
+    titles: profile.target_roles,
+    role_types: [inferResumeTargeting(profile).roleType],
+  } : null, [profile]);
 
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
@@ -106,8 +115,9 @@ export default function Start() {
     if (typeof window !== "undefined" && window.location.hostname === "localhost") {
       const params = new URLSearchParams(window.location.search);
       if (params.has("qa")) {
+        const qaStep = (params.get("step") as OnboardingStep) ?? "resume";
         const state: OnboardingState = {
-          step: (params.get("step") as OnboardingStep) ?? "resume",
+          step: qaStep,
           completed_at: null,
           has_focus: true,
           has_resume: true,
@@ -146,6 +156,7 @@ export default function Start() {
             },
           ],
         } as ParsedProfile);
+        setClickedInstall(qaStep === "apply");
         setQaDemo(true);
         return;
       }
@@ -346,6 +357,8 @@ export default function Start() {
       return (
         <InstallStep
           phase={clickedInstall ? "apply" : "install"}
+          targetingFallback={qaDemo ? QA_TARGETING : targetingFallback}
+          allowSavedTargeting={!qaDemo}
           onInstalled={() => {
             // Install and apply are one backend step, so the click is the only boundary we can
             // see. Without it, a student who installs and then abandons the application is
@@ -402,7 +415,7 @@ export default function Start() {
         <>
         {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
         <DoneStep
-          state={state}
+          verificationEnabled={state.automatic_verification_enabled}
           onFinish={async (settings) => {
             try {
               await completeOnboarding(settings);

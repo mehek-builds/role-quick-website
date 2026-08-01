@@ -29,23 +29,23 @@ import { PrimaryButton, StartShell } from "./ui";
 const OPTIONS: { value: SponsorshipAnswer; label: string; hint: string }[] = [
   {
     value: "needs_now",
-    label: "Yes, I need one now",
-    hint: "You need a company to sponsor a work visa before you can start.",
+    label: "Need sponsorship now",
+    hint: "A company must sponsor you before you start.",
   },
   {
     value: "needs_future",
-    label: "Not yet, but I will later",
-    hint: "Common on a student visa: you can work now, and you will need a sponsor to keep working.",
+    label: "Can work now, need sponsorship later",
+    hint: "Common when a student visa lets you work for a limited time.",
   },
   {
     value: "not_authorized",
-    label: "I cannot work there yet",
-    hint: "You do not have the right to work in the country you are applying to.",
+    label: "Not authorized yet",
+    hint: "You cannot currently work in the job's country.",
   },
   {
     value: "no",
-    label: "No, I can already work there",
-    hint: "You are a citizen, a permanent resident, or you already hold a work permit.",
+    label: "Already authorized",
+    hint: "You can already work in the job's country.",
   },
 ];
 
@@ -110,33 +110,9 @@ export function SponsorshipStep({ onDone }: { onDone: () => void }) {
       {/* Shown before the answer is given, not after it is saved. Same reason the countdown on the
           store listing is 15 seconds and not 9: a consequence a person learns about afterwards is
           not one they agreed to. */}
-      <div className="mb-8 overflow-hidden rounded-inner border border-border">
-        <div className="border-b border-border bg-surface-alt px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
-          What your answer does
-        </div>
-        <dl className="divide-y divide-border text-sm">
-          <div className="px-4 py-3">
-            <dt className="text-ink">If you need a visa</dt>
-            <dd className="mt-1 text-xs text-muted">
-              Your job list only shows companies we can confirm sponsor visas. We check H-1B
-              filings with the US government, and what each job post says about sponsorship.
-            </dd>
-          </div>
-          <div className="px-4 py-3">
-            <dt className="text-ink">This answer is permanent</dt>
-            <dd className="mt-1 text-xs text-muted">
-              You cannot switch it off later. Forgetting it once should not put you back in front of
-              jobs that will turn you down at the last question.
-            </dd>
-          </div>
-          <div className="px-4 py-3">
-            <dt className="text-ink">We never fill it in for you</dt>
-            <dd className="mt-1 text-xs text-muted">
-              Job forms ask about the country the job is in, so we always leave that question for
-              you to answer yourself.
-            </dd>
-          </div>
-        </dl>
+      <div className="mb-7 space-y-1 text-[13px] leading-5 text-muted">
+        <p>If you need sponsorship, we only show jobs from likely sponsors.</p>
+        <p>This answer is permanent. We never fill it in for you.</p>
       </div>
 
       <PrimaryButton onClick={() => void save()} disabled={busy || answer === null}>

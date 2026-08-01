@@ -117,6 +117,30 @@ test("ignores invalid dates and uses a minimum quarter-year for a dated role", (
   }), 2026), 0.3);
 });
 
+test("does not add concurrent student roles together as fake seniority", () => {
+  const student = profile({
+    currently_enrolled: true,
+    grad_year: 2027,
+    experience: [
+      { company: "Clinic", title: "Medical Scribe", start: "2022", end: "Present", description: "" },
+      { company: "Lab", title: "Research Assistant", start: "2023", end: "Present", description: "" },
+      { company: "Food Bank", title: "Volunteer", start: "2022", end: "Present", description: "" },
+    ],
+  });
+
+  assert.equal(experienceYears(student, 2026), 4);
+  assert.equal(inferRoleType(student, experienceYears(student, 2026), 2026), "new-grad");
+});
+
+test("still adds genuinely sequential experience intervals", () => {
+  assert.equal(experienceYears(profile({
+    experience: [
+      { company: "One", title: "Analyst", start: "2018", end: "2020", description: "" },
+      { company: "Two", title: "Manager", start: "2021", end: "2024", description: "" },
+    ],
+  }), 2026), 5);
+});
+
 test("caps inferred categories at three and preserves fallback categories", () => {
   assert.deepEqual(
     categoriesForRoles(["Software Data Product Design Quant Research Engineer"]),
