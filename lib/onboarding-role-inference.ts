@@ -92,7 +92,7 @@ export function inferRoleType(
   years = experienceYears(profile),
   currentYear = new Date().getFullYear(),
 ): RoleType {
-  if (years >= 2) return "full-time";
+  if (years >= 5) return "full-time";
   const experiences = profile.experience ?? [];
   const currentCoOp = experiences.some((item) => {
     if (!/co-?op/i.test(item.title)) return false;
@@ -104,6 +104,7 @@ export function inferRoleType(
   if (profile.currently_enrolled || profile.grad_year > currentYear + 1) return "internship";
   const titles = experiences.map((item) => item.title).join(" ");
   if (/intern(ship)?/i.test(titles) && years < 2) return "internship";
+  if (years >= 2) return "full-time";
   return "full-time";
 }
 

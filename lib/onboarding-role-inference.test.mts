@@ -28,13 +28,13 @@ test("keeps the parser's strongest suggestion first and always returns five choi
   assert.ok(result.categories.includes("data-ml"));
 });
 
-test("does not invent unrelated careers when the resume has no supported family", () => {
+test("keeps five model-suggested careers for a role family outside the local catalog", () => {
   const result = inferResumeTargeting(profile({
-    target_roles: ["Registered Nurse"],
+    target_roles: ["Registered Nurse", "Staff Nurse", "Clinical Nurse", "Charge Nurse", "Nurse Educator"],
     experience: [{ company: "Hospital", title: "Staff Nurse", start: "2024", end: "Present", description: "Patient care" }],
   }), 2026);
 
-  assert.deepEqual(result.roles, ["Registered Nurse", "Staff Nurse"]);
+  assert.deepEqual(result.roles, ["Registered Nurse", "Staff Nurse", "Clinical Nurse", "Charge Nurse", "Nurse Educator"]);
   assert.deepEqual(result.categories, ["other"]);
 });
 
@@ -86,6 +86,10 @@ test("keeps an experienced professional full-time while they study part-time", (
   assert.equal(inferRoleType(profile({
     experience: [{ company: "Acme", title: "Engineering Co-op", start: "2016", end: "2016", description: "" }],
   }), 10, 2026), "full-time");
+});
+
+test("keeps a student with two years of campus experience in the internship track", () => {
+  assert.equal(inferRoleType(profile({ currently_enrolled: true, grad_year: 2028 }), 2, 2026), "internship");
 });
 
 test("guesses new-grad for a currently enrolled candidate graduating within a year", () => {
