@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 import { findJob } from "@/lib/try-jobs";
+import { sanitizeTryPacket } from "@/lib/try-work-authorization";
 
 /* The real try-it path (design doc 2026-07-08): paste resume text + pick a
    cached posting -> one Claude call -> truncated personal packet. Hardening:
@@ -47,11 +48,15 @@ const PACKET_SCHEMA = {
     tailored_bullets: {
       type: "array",
       items: { type: "string" },
+      minItems: 3,
+      maxItems: 3,
       description:
         "Exactly 3 resume bullets rewritten from the candidate's own experience in the posting's language. Verb-first, with a number where the source material has one. Never invent experience.",
     },
     ats_coverage: {
       type: "integer",
+      minimum: 0,
+      maximum: 100,
       description:
         "0-100: how many of the posting's key requirements the rewritten bullets now cover.",
     },
@@ -60,8 +65,9 @@ const PACKET_SCHEMA = {
       properties: {
         university: { type: "string" },
         work_authorization: {
-          type: "string",
-          description: "Best guess from the resume, or 'Not stated on resume'.",
+          anyOf: [{ type: "string" }, { type: "null" }],
+          description:
+            "Copy the candidate's full, verbatim work-authorization statement from the resume. Return null when the resume does not state it or the answer is ambiguous. Never infer it from location, citizenship, education, or employment history.",
         },
         short_answer: {
           type: "string",
@@ -154,7 +160,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ degraded: true, reason: "error" }, { status: 502 });
     }
     const text = message.content.find((b) => b.type === "text")?.text ?? "";
-    const packet = JSON.parse(text);
+    const packet = sanitizeTryPacket(resume, JSON.parse(text));
+    if (!packet) throw new Error("Invalid try packet returned by model");
 
     const res = NextResponse.json({ packet });
     res.cookies.set("rq_try", session, {
