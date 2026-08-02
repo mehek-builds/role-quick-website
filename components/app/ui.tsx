@@ -106,11 +106,17 @@ export function Meter({
  *  touch, invisible to the keyboard, and written in the engine's vocabulary. It is a real
  *  sentence in the accessible name now, and the visible caption under the ring says what the
  *  number counts in words a student already owns. */
-export function ScoreRing({ score }: { score: number }) {
+export function ScoreRing({
+  score,
+  metricLabel = "words in this job post also appear on your resume",
+}: {
+  score: number;
+  metricLabel?: string;
+}) {
   const pct = Math.max(0, Math.min(100, Math.round(score)));
   const r = 15.9155;
   return (
-    <div className="relative h-12 w-12 shrink-0" role="img" aria-label={`${pct} out of 100 words in this job post also appear on your resume`}>
+    <div className="relative h-12 w-12 shrink-0" role="img" aria-label={`${pct} out of 100 ${metricLabel}`}>
       <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
         <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />
         <circle
