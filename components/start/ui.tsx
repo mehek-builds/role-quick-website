@@ -23,6 +23,7 @@ import type { OnboardingStep } from "@/lib/api";
    pretending every click is equal. */
 export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
   { key: "resume", label: "Your resume", weight: 2 },
+  { key: "impact", label: "Your impact", weight: 2 },
   { key: "focus", label: "Your roles", weight: 1 },
   /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
      in the flow in time and the most consequential in effect, and the rail is a map of TIME. */

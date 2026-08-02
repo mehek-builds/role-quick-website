@@ -462,11 +462,39 @@ export type ParsedProfile = {
   // Total usable bank rows after reconciliation. Unlike bank_seeded, this stays positive when a
   // replacement upload matches entries already stored for the student.
   bank_total?: number;
+  recent_experience_review?: RecentExperienceReview;
+};
+
+export type ImpactComponent = "action" | "noun" | "metric_or_scope" | "outcome";
+
+export type RecentExperienceCandidate = {
+  entry_id: string;
+  type: string;
+  org: string;
+  title: string;
+  date_range: string;
+  bullet_variants: string[];
+};
+
+export type RecentExperienceReview = {
+  status: "ready" | "choose_entry" | "optional_enrichment" | "needs_input" | "continued";
+  selected_entry_id: string | null;
+  user_selected: boolean;
+  impact_candidate: {
+    draft: string;
+    score: number;
+    components: Record<ImpactComponent, { present: boolean; evidence: string | null }>;
+  } | null;
+  grounded_bullet_count: number;
+  missing_bullets: number;
+  completed: boolean;
+  continue_with_found: boolean;
+  candidates: RecentExperienceCandidate[];
 };
 
 // Legacy values stay in the response type during the rolling deploy. The new backend no longer
 // emits them, and /start treats an older response as ready rather than restoring the removed flow.
-export type OnboardingStep = "focus" | "sponsorship" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
+export type OnboardingStep = "focus" | "sponsorship" | "resume" | "impact" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
 
 export type OnboardingState = {
   /** Unattended submission is earned: the server refuses to enable it until the student has
@@ -485,6 +513,7 @@ export type OnboardingState = {
   sponsorship_answer?: SponsorshipAnswer | null;
   sponsorship_required?: boolean | null;
   has_resume: boolean;
+  has_impact_review?: boolean;
   has_base_resume: boolean;
   has_applied: boolean;
   has_targeting: boolean;
@@ -515,6 +544,21 @@ export type Targeting = {
 
 export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
+}
+
+export function getRecentExperienceReview() {
+  return api<RecentExperienceReview>("/profile/recent-experience");
+}
+
+export function putRecentExperienceReview(body: {
+  selected_entry_id: string;
+  answers: Partial<Record<ImpactComponent, string>>[];
+  continue_with_found: boolean;
+}) {
+  return api<RecentExperienceReview>("/profile/recent-experience", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
 }
 
 export type AutomationSettings = {
