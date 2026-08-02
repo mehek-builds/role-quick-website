@@ -2,11 +2,17 @@
 
 import { Button } from "@/components/app/Button";
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, ExperienceEntry, getToken } from "@/lib/api";
+import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
+import {
+  hasCompleteTargetRoleSet,
+  parseEditableLines,
+  parseEditableList,
+  targetRolesChanged,
+} from "@/lib/profile-editor";
 
 type ParsedProfile = Record<string, unknown>;
 
@@ -22,16 +28,21 @@ export default function ResumeWorkspace() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [profileRes, bankRes] = await Promise.all([
+      const [profileRes, bankRes, targetingRes] = await Promise.all([
         api<ParsedProfile>("/profile").catch((err) =>
           err instanceof ApiError && err.status === 404 ? ("missing" as const) : null,
         ),
         api<{ entries: ExperienceEntry[] }>("/profile/experience-bank").catch(
           () => ({ entries: [] as ExperienceEntry[] }),
         ),
+        getTargeting().catch(() => null),
       ]);
       if (cancelled) return;
-      setProfile(profileRes ?? "missing");
+      setProfile(
+        profileRes && profileRes !== "missing" && targetingRes?.titles?.length
+          ? { ...profileRes, target_roles: targetingRes.titles }
+          : profileRes ?? "missing",
+      );
       setEntries(bankRes.entries);
     })();
     return () => {
@@ -56,11 +67,17 @@ export default function ResumeWorkspace() {
       if (!res.ok) {
         setError(data?.error ?? "Upload failed. Is it a PDF under 10 MB?");
       } else {
-        setProfile(data as ParsedProfile);
-        // Re-pull the bank: a fresh parse may have seeded new entries.
-        const bank = await api<{ entries: ExperienceEntry[] }>(
-          "/profile/experience-bank",
-        ).catch(() => null);
+        // Re-pull the bank and targeting. Existing targeting is authoritative and intentionally
+        // survives a replacement PDF, so do not display the parser's fresh guesses over it.
+        const [bank, targeting] = await Promise.all([
+          api<{ entries: ExperienceEntry[] }>("/profile/experience-bank").catch(() => null),
+          getTargeting().catch(() => null),
+        ]);
+        setProfile(
+          targeting?.titles?.length
+            ? { ...(data as ParsedProfile), target_roles: targeting.titles }
+            : data as ParsedProfile,
+        );
         if (bank) setEntries(bank.entries);
       }
     } catch {
@@ -297,20 +314,20 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <div>
-      <label className="block text-xs font-medium text-muted">{label}</label>
+    <label className="block">
+      <span className="text-xs font-medium text-muted">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
-    </div>
+    </label>
   );
 }
 
-/* The parse shape has evolved; show the common fields when present and keep
-   the full parse inspectable rather than guessing at every key. */
+/* The parse shape has evolved. The common profile facts are reviewable here, while structured work
+   history stays in its purpose-built editor below. */
 function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, unknown>; onProfileChange: (profile: Record<string, unknown>) => void }) {
   const str = (k: string) =>
     typeof profile[k] === "string" ? (profile[k] as string) : null;
@@ -320,37 +337,22 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
       : [];
   const name = str("full_name") ?? str("name");
   const skills = list("skills");
+  const targetRoles = list("target_roles");
   const gradYear = profile["grad_year"];
   return (
     <div className="mt-6 border-t border-border pt-5">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        {name && <KV label="Name" value={name} />}
-        {str("email") && <KV label="Email" value={str("email")!} />}
-        {str("phone") && <KV label="Phone" value={str("phone")!} />}
-      </div>
-      {/* R-052: school, degree and graduation date used to render as read-only truncated text, so a
-          mis-parse could only be fixed by producing a new PDF, and the truncation meant the user
-          could not even read the stored value to notice it was wrong. R-047 was exactly that: the
-          parser dropped "Computer Science &" from a joint degree and there was no way to put it
-          back. These three are the education block, so they are edited together. */}
-      <EducationEditor
+      <ParsedProfileEditor
+        name={name ?? ""}
+        email={str("email") ?? ""}
+        phone={str("phone") ?? ""}
         school={str("school") ?? ""}
         degree={str("degree") ?? ""}
         gradDate={str("grad_date") ?? (typeof gradYear === "number" ? String(gradYear) : "")}
-        onSaved={(patched) => onProfileChange({ ...profile, ...patched })}
+        objective={str("objective") ?? ""}
+        skills={skills}
+        targetRoles={targetRoles}
+        onSaved={onProfileChange}
       />
-      {skills.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {skills.slice(0, 14).map((s) => (
-            <span
-              key={s}
-              className="rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[11px] text-muted"
-            >
-              {s}
-            </span>
-          ))}
-        </div>
-      )}
       <details className="mt-4">
         <summary className="cursor-pointer text-xs text-faint hover:text-muted">
           View full parsed profile
@@ -374,34 +376,99 @@ function KV({ label, value }: { label: string; value: string }) {
   );
 }
 
-function EducationEditor({ school, degree, gradDate, onSaved }: { school: string; degree: string; gradDate: string; onSaved: (patch: Record<string, unknown>) => void }) {
+type ParsedProfileDraft = {
+  full_name: string;
+  phone: string;
+  school: string;
+  degree: string;
+  grad_date: string;
+  objective: string;
+  skills: string;
+  target_roles: string;
+};
+
+function ParsedProfileEditor({
+  name,
+  email,
+  phone,
+  school,
+  degree,
+  gradDate,
+  objective,
+  skills,
+  targetRoles,
+  onSaved,
+}: {
+  name: string;
+  email: string;
+  phone: string;
+  school: string;
+  degree: string;
+  gradDate: string;
+  objective: string;
+  skills: string[];
+  targetRoles: string[];
+  onSaved: (profile: Record<string, unknown>) => void;
+}) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState({ school, degree, grad_date: gradDate });
+  const initialDraft = (): ParsedProfileDraft => ({
+    full_name: name,
+    phone,
+    school,
+    degree,
+    grad_date: gradDate,
+    objective,
+    skills: skills.join(", "),
+    target_roles: targetRoles.join("\n"),
+  });
+  const [draft, setDraft] = useState<ParsedProfileDraft>(initialDraft);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   function startEditing() {
-    setDraft({ school, degree, grad_date: gradDate });
+    setDraft(initialDraft());
     setError(null);
     setEditing(true);
   }
 
   async function save() {
-    if (!draft.school.trim()) {
-      setError("School cannot be empty. Autofill has no fallback for it.");
+    if (!draft.full_name.trim()) {
+      setError("Name cannot be empty. Autofill has no fallback for it.");
+      return;
+    }
+    if (school && !draft.school.trim()) {
+      setError("School cannot be empty. You can replace a parsed school, but not erase it.");
+      return;
+    }
+    const roles = parseEditableLines(draft.target_roles);
+    if (!hasCompleteTargetRoleSet(roles, targetRoles)) {
+      setError("Keep five target roles so Litos has a complete search set.");
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const updated = await api<Record<string, unknown>>("/profile/education", {
+      const rolesChanged = roles.length > 0 && targetRolesChanged(roles, targetRoles);
+      const updated = await api<Record<string, unknown>>("/profile/parsed", {
         method: "PATCH",
-        body: JSON.stringify({ school: draft.school, degree: draft.degree, grad_date: draft.grad_date }),
+        body: JSON.stringify({
+          full_name: draft.full_name,
+          phone: draft.phone,
+          ...(draft.school.trim() || school ? { school: draft.school } : {}),
+          degree: draft.degree,
+          grad_date: draft.grad_date,
+          objective: draft.objective,
+          skills: parseEditableList(draft.skills),
+          ...(rolesChanged ? { target_roles: roles } : {}),
+        }),
       });
-      onSaved(updated);
+      // Targeting is stored separately from the parse and is authoritative. When this save did not
+      // change roles, keep the titles already loaded from /profile/targeting instead of letting an
+      // older parser guess in parsed_json flash back into the card until the next page load.
+      onSaved({ ...updated, target_roles: rolesChanged ? roles : targetRoles });
       setEditing(false);
     } catch (reason) {
-      setError(userFacingError(reason, "Could not save your education."));
+      setError(userFacingError(reason, "Could not save your profile changes."));
     } finally {
       setSaving(false);
     }
@@ -409,38 +476,77 @@ function EducationEditor({ school, degree, gradDate, onSaved }: { school: string
 
   if (!editing) {
     return (
-      <div className="mt-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div>
+        <div className="flex justify-end">
+          <button type="button" onClick={startEditing} className="text-xs text-brand-ink underline underline-offset-2">
+            Edit parsed details
+          </button>
+        </div>
+        <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          {name && <KV label="Name" value={name} />}
+          {email && <KV label="Email" value={email} />}
+          {phone && <KV label="Phone" value={phone} />}
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {school && <KV label="School" value={school} />}
           <KV label="Degree" value={degree || "Not captured from your resume"} />
           {gradDate && <KV label="Graduation" value={gradDate} />}
         </div>
-        <button type="button" onClick={startEditing} className="mt-3 text-xs text-brand-ink underline underline-offset-2">
-          Correct education
-        </button>
+        {objective && <div className="mt-4"><KV label="Objective" value={objective} /></div>}
+        {skills.length > 0 && <ProfileChips label="Skills" values={skills} />}
+        {targetRoles.length > 0 && <ProfileChips label="Target roles" values={targetRoles} />}
       </div>
     );
   }
 
   return (
-    <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
-      <p className="text-xs text-muted">
-        Every tailored resume prints this exactly as written here. Keep a joint degree whole, for example
-        &quot;Bachelor of Science in Computer Science &amp; Business Administration, Finance Emphasis&quot;.
-      </p>
-      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="School" value={draft.school} onChange={(school) => setDraft({ ...draft, school })} placeholder="University of Southern California" />
-        <Field label="Degree" value={draft.degree} onChange={(degree) => setDraft({ ...draft, degree })} placeholder="Bachelor of Science in Computer Science" />
+    <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="rounded-inner border border-border bg-surface-alt p-4">
+      <div>
+        <p className="text-sm font-medium text-ink">Review parsed details</p>
+        <p className="mt-1 text-xs text-muted">Correct what the PDF reader got wrong. Your login email stays unchanged.</p>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Name" value={draft.full_name} onChange={(full_name) => setDraft({ ...draft, full_name })} placeholder="Your full name" />
+        <Field label="Phone" value={draft.phone} onChange={(phone) => setDraft({ ...draft, phone })} placeholder="Optional" />
+      </div>
+      {email && <p className="mt-2 text-xs text-faint">Login email: {email}</p>}
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Field label="School" value={draft.school} onChange={(nextSchool) => setDraft({ ...draft, school: nextSchool })} placeholder="University of Southern California" />
+        <Field label="Degree" value={draft.degree} onChange={(nextDegree) => setDraft({ ...draft, degree: nextDegree })} placeholder="Bachelor of Science in Computer Science" />
         <Field label="Graduation" value={draft.grad_date} onChange={(grad_date) => setDraft({ ...draft, grad_date })} placeholder="May 2028" />
       </div>
-      {error && <p role="alert" className="mt-2 text-xs text-warn">{userFacingError(error)}</p>}
-      <div className="mt-3 flex gap-2">
-        <Button type="button" onClick={save} disabled={saving} >
-          {saving ? "Saving..." : "Save education"}
-        </Button>
-        <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">
-          Cancel
-        </button>
+      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <TextAreaField label="Skills" value={draft.skills} onChange={(nextSkills) => setDraft({ ...draft, skills: nextSkills })} rows={4} hint="Separate skills with commas or new lines." />
+        <TextAreaField label="Target roles" value={draft.target_roles} onChange={(target_roles) => setDraft({ ...draft, target_roles })} rows={4} hint="Keep five roles, one per line. Any real job title is valid." />
+      </div>
+      <div className="mt-4">
+        <TextAreaField label="Objective or summary" value={draft.objective} onChange={(nextObjective) => setDraft({ ...draft, objective: nextObjective })} rows={3} hint="Optional. Keep this true to your experience." />
+      </div>
+      {error && <p role="alert" className="mt-3 text-xs text-warn">{userFacingError(error)}</p>}
+      <div className="mt-4 flex gap-2">
+        <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+        <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function TextAreaField({ label, value, onChange, rows, hint }: { label: string; value: string; onChange: (value: string) => void; rows: number; hint: string }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-muted">{label}</span>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="mt-1.5 w-full resize-y rounded-inner border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand" />
+      <span className="mt-1 block text-[11px] text-faint">{hint}</span>
+    </label>
+  );
+}
+
+function ProfileChips({ label, values }: { label: string; values: string[] }) {
+  return (
+    <div className="mt-4">
+      <p className="mb-1.5 text-xs text-faint">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {values.map((value) => <span key={value} className="rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[11px] text-muted">{value}</span>)}
       </div>
     </div>
   );
