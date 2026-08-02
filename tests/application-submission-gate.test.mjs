@@ -92,8 +92,9 @@ test("automation settings send field-specific updates so stale clients cannot re
   assert.match(settings, /saveAutomation\(\{ automatic_submission_enabled: event\.target\.checked \}\)/);
   assert.match(settings, /changeAutomaticVerification\(event\.target\.checked\)/);
   assert.match(settings, /verificationEnableDecision\(emailConnections\)/);
-  assert.match(settings, /connectProvider\("gmail", true\)/);
-  assert.match(settings, /connectProvider\("outlook", true\)/);
+  assert.match(settings, /\(connected \? disconnectProvider\(provider\) : connectProvider\(provider, true\)\)/);
+  assert.match(settings, /Inbox access/);
+  assert.doesNotMatch(settings, /Email connections<\/p>/);
   assert.match(settings, /shouldEnableVerificationAfterCallback/);
   assert.match(settings, /setAutomationSettings\(\{ automatic_verification_enabled: true \}\)/);
   assert.match(api, /setAutomationSettings\(settings: Partial<AutomationSettings>\)/);
