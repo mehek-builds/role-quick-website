@@ -5,6 +5,7 @@ import {
   canGenerateFrom,
   countPreparedJobs,
   jobSubmittedOnDay,
+  nextPreferredReadyPacket,
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
@@ -101,6 +102,35 @@ describe("daily match preparation", () => {
     const ranked = rankJobs(jobs, null, null);
     const packets = [{ job_context: { company: "Acme Labs", role: "Product Engineer" } }];
     assert.equal(countPreparedJobs(ranked, packets), 1);
+  });
+
+  test("the next application follows current preference order, not packet recency", () => {
+    const oldPreferred = {
+      id: "preferred-packet",
+      created_at: "2026-07-01T00:00:00.000Z",
+      job_context: { company: "Acme Labs", role: "Product Engineer", job_id: "1" },
+      spec: { _review: { status: "ready_to_submit", updated_at: "2026-07-01T00:00:00.000Z" } },
+    };
+    const newOutsideCriteria = {
+      id: "stale-packet",
+      created_at: "2026-08-01T00:00:00.000Z",
+      job_context: { company: "Other Co", role: "Operations Associate", job_id: "2" },
+      spec: { _review: { status: "ready_to_submit", updated_at: "2026-08-01T00:00:00.000Z" } },
+    };
+
+    assert.equal(nextPreferredReadyPacket([newOutsideCriteria, oldPreferred], [jobs[0]])?.id, "preferred-packet");
+    assert.equal(nextPreferredReadyPacket([newOutsideCriteria], [jobs[0]]), null);
+  });
+
+  test("a non-ready packet is never selected even when its job matches", () => {
+    const packet = {
+      id: "submitted-packet",
+      created_at: "2026-08-01T00:00:00.000Z",
+      job_context: { company: "Acme Labs", role: "Product Engineer", job_id: "1" },
+      spec: { _review: { status: "submitted", updated_at: "2026-08-01T00:00:00.000Z" } },
+    };
+
+    assert.equal(nextPreferredReadyPacket([packet], [jobs[0]]), null);
   });
 
   test("finishes a daily match only after that exact posting was submitted today", () => {

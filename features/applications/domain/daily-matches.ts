@@ -68,6 +68,38 @@ export function packetMatchesJob(
     && normalized(packet.job_context.role) === normalized(job.title);
 }
 
+const READY_TO_SEND_STATUSES = new Set([
+  "resume_ready",
+  "questions_ready",
+  "ready_to_submit",
+]);
+
+/**
+ * Select the next ready packet in the backend's current preference order.
+ *
+ * The application board is history and must not lose older records when targeting changes. The
+ * packet offered as "Next best match" is different: it can be sent automatically, so it must
+ * still belong to the current criteria-aware jobs response. Iterating jobs first preserves the
+ * backend's ranking authority and fails closed when no current match exists.
+ */
+export function nextPreferredReadyPacket(
+  packets: GeneratedResume[],
+  currentJobs: MonitoredJob[],
+): GeneratedResume | null {
+  for (const job of currentJobs) {
+    const matching = packets
+      .filter((packet) => READY_TO_SEND_STATUSES.has(packet.spec._review?.status ?? ""))
+      .filter((packet) => packetMatchesJob(packet, job))
+      .sort((a, b) => packetUpdatedAt(b).localeCompare(packetUpdatedAt(a)));
+    if (matching[0]) return matching[0];
+  }
+  return null;
+}
+
+function packetUpdatedAt(packet: GeneratedResume): string {
+  return packet.spec._review?.updated_at ?? packet.created_at ?? "";
+}
+
 export function countPreparedJobs(jobs: RankedJob[], packets: GeneratedResume[]): number {
   return jobs.filter((job) => packets.some((packet) => packetMatchesJob(packet, job))).length;
 }

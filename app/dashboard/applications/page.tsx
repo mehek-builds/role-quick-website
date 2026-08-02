@@ -11,13 +11,14 @@ import {
   type ApplicationReview,
   type CoverLetter,
   type GeneratedResume,
+  type JobsPage,
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { MIN_JD_CHARS, canGenerateFrom, packetMatchesJob } from "@/features/applications";
+import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
@@ -63,6 +64,8 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
 
 export default function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
+  const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
+  const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* The packet being looked at in the read-only viewer, held as an ID and resolved against `packets`
      at render. Separate from selectedId on purpose, so opening the viewer cannot put the page onto
@@ -277,6 +280,17 @@ export default function Applications() {
         if (requested) selectPacket(requested);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
+    api<JobsPage>("/jobs?offset=0")
+      .then((result) => {
+        if (cancelled) return;
+        setCurrentMatches(result.jobs);
+        setPreferenceError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCurrentMatches([]);
+        setPreferenceError("We could not check your current job preferences. Automatic sending is paused.");
+      });
     return () => {
       cancelled = true;
     };
@@ -371,17 +385,13 @@ export default function Applications() {
      what it is doing while it is on, and gives the student the seconds in which to stop it. */
   const autopilot = useAutopilot();
 
-  /* Statuses that mean "this one is finished and nothing is stopping it". Deliberately the same
-     list the "Ready" filter uses: two different definitions of ready on one page is how a student
-     ends up watching something send that the filter told them was not ready. */
-  const READY_TO_SEND = useMemo(() => ["resume_ready", "questions_ready", "ready_to_submit"], []);
-
   const nextPacket = useMemo(
-    () =>
-      reviewablePackets
-        .filter((packet) => READY_TO_SEND.includes(packet.spec._review?.status ?? ""))
-        .sort((a, b) => packetTimestamp(b).localeCompare(packetTimestamp(a)))[0] ?? null,
-    [READY_TO_SEND, reviewablePackets],
+    () => qaMode
+      ? reviewablePackets
+          .filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? ""))
+          .sort((a, b) => packetTimestamp(b).localeCompare(packetTimestamp(a)))[0] ?? null
+      : nextPreferredReadyPacket(reviewablePackets, currentMatches ?? []),
+    [currentMatches, qaMode, reviewablePackets],
   );
 
   /* Keyed by the packet it was measured against. A bare number would survive the card changing
@@ -825,6 +835,12 @@ export default function Applications() {
 
       {autopilot.error && <ErrorNote message={autopilot.error} />}
       {!selected && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
+      {!selected && (
+        <p className="text-sm leading-6 text-muted">
+          Your full application history stays here. Next best match and automatic sending follow your current Account preferences.
+        </p>
+      )}
+      {!selected && preferenceError && <ErrorNote message={preferenceError} />}
       {!selected && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard
           match={nextMatch}

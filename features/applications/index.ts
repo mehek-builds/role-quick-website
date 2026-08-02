@@ -13,6 +13,7 @@ export {
   canGenerateFrom,
   countPreparedJobs,
   jobSubmittedOnDay,
+  nextPreferredReadyPacket,
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
