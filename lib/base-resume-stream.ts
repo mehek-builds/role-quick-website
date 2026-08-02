@@ -41,7 +41,6 @@ export async function readBaseResumeFrames<T extends { event: string }>(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let terminal = false;
 
   while (true) {
     const { done, value } = await reader.read();
@@ -62,10 +61,45 @@ export async function readBaseResumeFrames<T extends { event: string }>(
       } catch {
         continue;
       }
-      if (parsed.event === "done" || parsed.event === "error") terminal = true;
+      const terminal = parsed.event === "done" || parsed.event === "error";
+      if (terminal && !hasValidTerminalPayload(parsed)) continue;
       onFrame(parsed);
+      if (terminal) {
+        // A terminal frame is the protocol boundary. Do not wait for a proxy or server to close the
+        // connection, because a held-open response would turn a completed build into a timeout.
+        void reader.cancel().catch(() => {});
+        return;
+      }
     }
   }
 
-  if (!terminal) throw new Error(INCOMPLETE_MESSAGE);
+  throw new Error(INCOMPLETE_MESSAGE);
+}
+
+function hasValidTerminalPayload(frame: { event: string }): boolean {
+  const payload = frame as Record<string, unknown>;
+  if (frame.event === "done") {
+    if (!isRecord(payload.spec)) return false;
+    const spec = payload.spec;
+    return (
+      typeof spec.school === "string" &&
+      typeof spec.degree === "string" &&
+      typeof spec.grad_date === "string" &&
+      typeof spec.coursework === "string" &&
+      Array.isArray(spec.experience) &&
+      Array.isArray(spec.skills) &&
+      Array.isArray(payload.warnings) &&
+      Array.isArray(payload.metrics) &&
+      isRecord(payload.ats) &&
+      typeof payload.built_at === "string"
+    );
+  }
+  if (frame.event === "error") {
+    return typeof payload.message === "string" && payload.message.length > 0;
+  }
+  return true;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
