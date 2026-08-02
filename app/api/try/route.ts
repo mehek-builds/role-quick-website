@@ -48,8 +48,6 @@ const PACKET_SCHEMA = {
     tailored_bullets: {
       type: "array",
       items: { type: "string" },
-      minItems: 3,
-      maxItems: 3,
       description:
         "Exactly 3 resume bullets rewritten from the candidate's own experience in the posting's language. Verb-first, with a number where the source material has one. Never invent experience.",
     },
