@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12] - 2026-08-02
+
+### Fixed
+
+- Live personal previews now avoid unsupported provider-side numeric range constraints while the
+  API continues enforcing a valid 0 to 100 ATS score before returning a result.
+
 ## [0.1.11] - 2026-08-02
 
 ### Fixed

@@ -53,8 +53,6 @@ const PACKET_SCHEMA = {
     },
     ats_coverage: {
       type: "integer",
-      minimum: 0,
-      maximum: 100,
       description:
         "0-100: how many of the posting's key requirements the rewritten bullets now cover.",
     },

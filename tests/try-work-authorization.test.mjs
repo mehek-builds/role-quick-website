@@ -62,9 +62,10 @@ test("the model may return null before the API clears missing authorization", ()
   assert.match(tryData, /work_authorization: string/);
 });
 
-test("the provider schema avoids unsupported array length constraints", () => {
-  assert.doesNotMatch(route, /\bminItems\b|\bmaxItems\b/);
+test("the provider schema avoids unsupported numeric and array constraints", () => {
+  assert.doesNotMatch(route, /\bminItems\b|\bmaxItems\b|\bminimum\b|\bmaximum\b/);
   assert.match(route, /Exactly 3 resume bullets/);
+  assert.match(route, /0-100: how many/);
   assert.match(route, /sanitizeTryPacket/);
 });
 
