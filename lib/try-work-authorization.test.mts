@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  extractExplicitWorkAuthorization,
   preserveExplicitWorkAuthorization,
   sanitizeTryPacket,
 } from "./try-work-authorization.ts";
@@ -113,6 +114,24 @@ test("accepts an explicit labeled work-authorization answer", () => {
   assert.equal(preserveExplicitWorkAuthorization(line, line), line);
 });
 
+test("extracts a strict standalone authorization line without model help", () => {
+  const line = "Work authorization: Yes, no sponsorship required.";
+  assert.equal(
+    extractExplicitWorkAuthorization(`Experience\n${line}\nEducation`),
+    line,
+  );
+});
+
+test("does not extract ambiguous status labels", () => {
+  for (const line of [
+    "Visa status: F-1",
+    "Citizenship status: Indian",
+    "Work authorization: Pending",
+  ]) {
+    assert.equal(extractExplicitWorkAuthorization(line), null, line);
+  }
+});
+
 test("the returned packet clears a model inference absent from the resume", () => {
   const packet = sanitizeTryPacket(
     "Experience includes TypeScript and React. Education includes Example University.",
@@ -132,6 +151,22 @@ test("the returned packet keeps a verbatim explicit authorization statement", ()
     packet?.filled_fields.work_authorization,
     "Authorized to work in the United States.",
   );
+});
+
+test("the returned packet recovers an explicit resume line when the model returns null", () => {
+  const statement = "Work authorization: Yes, no sponsorship required.";
+  const packet = sanitizeTryPacket(
+    `Experience includes TypeScript.\n${statement}\nEducation includes Example University.`,
+    {
+      ...VALID_PACKET,
+      filled_fields: {
+        ...VALID_PACKET.filled_fields,
+        work_authorization: null,
+      },
+    },
+  );
+
+  assert.equal(packet?.filled_fields.work_authorization, statement);
 });
 
 test("the returned packet rejects malformed model output", () => {
