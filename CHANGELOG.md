@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.10] - 2026-08-02
+
+### Changed
+
+- Job seekers can run the personal resume preview on mobile instead of being limited to the
+  John Doe sample.
+- When a resume does not explicitly state work authorization, Litos now asks the job seeker for
+  authorization and sponsorship answers before completing the preview.
+
+### Fixed
+
+- Personal preview failures no longer switch to John's application or make sample information
+  look like the job seeker's result.
+- Work authorization is accepted from a resume only when it is both verbatim and clearly about
+  authorization, citizenship, residency, a visa, or sponsorship.
+
 ## [0.1.9] - 2026-08-01
 
 ### Changed

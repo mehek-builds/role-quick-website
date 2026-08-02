@@ -20,11 +20,14 @@ import { MobileSendLink } from "@/components/MobileSendLink";
    The visitor clicks the extension's real verbs: Detect -> Generate ->
    Fill -> Review. Submit stays visibly disabled: waiting on you.
    Two paths converge on this one assembly screen: canned (John Doe
-   canon) and real (paste your resume, desktop only). Every failure of
-   the real path lands back on the canned data - no dead ends. */
+   canon) and real (paste or upload your resume). A failed real trial stays
+   on the visitor's resume path and never substitutes John's information. */
 
 type Step = "chooser" | "resume" | "autofill" | "outreach" | "done";
 const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "outreach", "done"];
+
+const WORK_AUTHORIZATION_ANSWERS = ["Yes", "No"] as const;
+const SPONSORSHIP_ANSWERS = ["No", "Yes", "Not sure"] as const;
 
 
 function after(step: Step, target: Step) {
@@ -47,6 +50,7 @@ export function TrySimulator({
   const [mode, setMode] = useState<"canned" | "real">("canned");
   const [jobIdx, setJobIdx] = useState(0);
   const [packet, setPacket] = useState<RealPacket | null>(null);
+  const [pendingPacket, setPendingPacket] = useState<RealPacket | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -79,6 +83,14 @@ export function TrySimulator({
     setStep("resume");
   }
 
+  function startRealPacket(nextPacket: RealPacket) {
+    setPacket(nextPacket);
+    setPendingPacket(null);
+    setGenerating(false);
+    setPasteOpen(false);
+    setStep("resume");
+  }
+
   async function chooseReal(resume: string, website: string) {
     setMode("real");
     track("path_chosen", { path: "real" });
@@ -93,7 +105,14 @@ export function TrySimulator({
       });
       const data = await res.json();
       if (res.ok && data.packet) {
-        setPacket(data.packet as RealPacket);
+        const nextPacket = data.packet as RealPacket;
+        if (!nextPacket.filled_fields.work_authorization?.trim()) {
+          setPendingPacket(nextPacket);
+          setGenerating(false);
+          return;
+        }
+        startRealPacket(nextPacket);
+        return;
       } else if (data.error === "not_a_resume" || data.error === "too_long") {
         setGenerating(false);
         setNotice(
@@ -103,22 +122,34 @@ export function TrySimulator({
         );
         return;
       } else {
-        /* Degraded state (API down, rate-limited, unconfigured): fall back
-           to the canned packet with one honest line. */
-        setMode("canned");
+        /* Keep failures on the visitor's own path. Showing John's packet here
+           makes a broken personal trial look successful with someone else's data. */
+        setGenerating(false);
         setNotice(
           data.reason === "rate_limited"
-            ? "You have used all your tries today. This is John's."
-            : "Live tries are down right now. This is John's.",
+            ? "You have used all your live tries today. Your resume was not replaced with sample information."
+            : "Your live preview could not be made. Your resume was not replaced with sample information. Try again shortly.",
         );
+        return;
       }
     } catch {
-      setMode("canned");
-      setNotice("Live preview is down. This is John's application.");
+      setGenerating(false);
+      setNotice(
+        "Your live preview could not be made. Your resume was not replaced with sample information. Try again shortly.",
+      );
+      return;
     }
-    setGenerating(false);
-    setPasteOpen(false);
-    setStep("resume");
+  }
+
+  function answerWorkAuthorization(answer: string) {
+    if (!pendingPacket) return;
+    startRealPacket({
+      ...pendingPacket,
+      filled_fields: {
+        ...pendingPacket.filled_fields,
+        work_authorization: answer,
+      },
+    });
   }
 
   /* The packet assembles itself once a path is chosen (Mehek, 2026-07-08: the
@@ -190,6 +221,12 @@ export function TrySimulator({
 
   return (
     <div className="mx-auto w-full max-w-5xl">
+      {pendingPacket && (
+        <WorkAuthorizationDialog
+          jobLocation={realJob?.location ?? "the role's location"}
+          onConfirm={answerWorkAuthorization}
+        />
+      )}
       {notice && (
         <p className="mb-4 text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
           {notice}
@@ -557,13 +594,127 @@ function Chooser({
         sample on John&apos;s.
       </p>
       <VerbButton onClick={onCanned}>Watch it on John&apos;s</VerbButton>
-      {/* Real path is desktop-only: phones can't install the extension anyway. */}
       <button
         onClick={() => setPasteOpen(true)}
-        className="hidden w-full rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink sm:block"
+        className="w-full rounded-full border border-border bg-surface px-5 py-2.5 text-sm font-medium text-ink transition-colors hover:border-ink"
       >
         Try it free with your resume
       </button>
+    </div>
+  );
+}
+
+function WorkAuthorizationDialog({
+  jobLocation,
+  onConfirm,
+}: {
+  jobLocation: string;
+  onConfirm: (answer: string) => void;
+}) {
+  const [authorized, setAuthorized] = useState<string | null>(null);
+  const [sponsorship, setSponsorship] = useState<string | null>(null);
+  const firstOptionRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    firstOptionRef.current?.focus();
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-ink/30 p-3 backdrop-blur-[2px] sm:items-center sm:p-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="work-authorization-title"
+        aria-describedby="work-authorization-description"
+        className="max-h-[calc(100dvh-1.5rem)] w-full max-w-[440px] overflow-y-auto rounded-[20px] border border-border bg-white p-5 shadow-overlay sm:max-h-[calc(100dvh-3rem)] sm:p-6"
+      >
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+          Needs your answer
+        </p>
+        <h2
+          id="work-authorization-title"
+          className="mt-2 text-xl font-medium tracking-[-0.02em] text-ink"
+        >
+          Work authorization.
+        </h2>
+        <p
+          id="work-authorization-description"
+          className="mt-2 text-[13px] leading-6 text-muted"
+        >
+          This role is listed in {jobLocation}. Your resume does not answer this,
+          so Litos will not guess.
+        </p>
+
+        <fieldset className="mt-5">
+          <legend className="text-[12px] font-medium text-ink">
+            Are you legally authorized to work there?
+          </legend>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {WORK_AUTHORIZATION_ANSWERS.map((option, index) => (
+              <label
+                key={option}
+                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-[12px] border px-4 py-3 text-[13px] transition-colors ${
+                  authorized === option
+                    ? "border-brand bg-brand-soft/60 text-ink"
+                    : "border-border bg-white text-muted hover:border-ink"
+                }`}
+              >
+                <input
+                  ref={index === 0 ? firstOptionRef : undefined}
+                  type="radio"
+                  name="work-authorization"
+                  value={option}
+                  checked={authorized === option}
+                  onChange={() => setAuthorized(option)}
+                  className="h-4 w-4 accent-[var(--color-brand)]"
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="mt-4">
+          <legend className="text-[12px] font-medium text-ink">
+            Will you need employer sponsorship now or later?
+          </legend>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {SPONSORSHIP_ANSWERS.map((option) => (
+              <label
+                key={option}
+                className={`flex min-h-11 cursor-pointer items-center gap-2 rounded-[12px] border px-3 py-3 text-[13px] transition-colors ${
+                  sponsorship === option
+                    ? "border-brand bg-brand-soft/60 text-ink"
+                    : "border-border bg-white text-muted hover:border-ink"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="sponsorship"
+                  value={option}
+                  checked={sponsorship === option}
+                  onChange={() => setSponsorship(option)}
+                  className="h-4 w-4 accent-[var(--color-brand)]"
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <button
+          type="button"
+          disabled={!authorized || !sponsorship}
+          onClick={() =>
+            authorized &&
+            sponsorship &&
+            onConfirm(`Authorized: ${authorized} · Sponsorship: ${sponsorship}`)
+          }
+          className="mt-5 min-h-11 w-full rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Continue my preview
+        </button>
+      </div>
     </div>
   );
 }
@@ -808,7 +959,9 @@ function FormArtifact({
       { label: "Why this role?", value: packet.filled_fields.short_answer },
     ];
   }, [packet]);
-  const shown = packet ? fields.length : filledCount;
+  const shown = packet
+    ? fields.filter((field) => field.value?.trim()).length
+    : filledCount;
   const total = packet ? 3 : CANNED_FIELDS_TOTAL;
 
   return (
@@ -820,7 +973,7 @@ function FormArtifact({
     >
       <div className="mt-2.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
         {fields.map((f, i) => {
-          const filled = i < shown;
+          const filled = packet ? Boolean(f.value?.trim()) : i < shown;
           return (
             <div
               key={f.label}
@@ -830,7 +983,7 @@ function FormArtifact({
             >
               <p className="text-[9.5px] font-medium text-muted">{f.label}</p>
               <p className="flex items-center justify-between gap-2 text-[12px] text-ink">
-                <span className="truncate">{filled ? f.value : " "}</span>
+                <span className="truncate">{filled ? f.value : "Needs your answer"}</span>
                 {filled && <span className="shrink-0 text-[10px] text-teal-ink">✓</span>}
               </p>
             </div>
