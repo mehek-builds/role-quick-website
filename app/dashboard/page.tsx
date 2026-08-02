@@ -691,7 +691,7 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
           text beside the location instead of borrowing the success colour. */}
       <div className="grid gap-5 p-5 sm:grid-cols-[48px_1fr_auto] sm:items-center sm:p-6">
         <div className="hidden sm:block">
-          <ScoreRing score={job.match} />
+          <ScoreRing score={job.match} metricLabel="preference fit for this job" />
           <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
         </div>
         <div className="min-w-0">
@@ -830,7 +830,7 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
               {/* Same score, same shape as Home and Applications. It was a blue chip here and a
                   ring everywhere else. */}
               <div className="text-center">
-                <ScoreRing score={job.match} />
+                <ScoreRing score={job.match} metricLabel="preference fit for this job" />
                 <p className="mt-1 w-12 text-[11px] text-faint">fit</p>
               </div>
             </div>
