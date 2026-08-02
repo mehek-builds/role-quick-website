@@ -276,19 +276,14 @@ export default function JobsPage() {
             ))}
           </ul>
 
-          {/* One line, and every part of it is a fact: how many are loaded, whether more exist, and
-              what put them in this order. It says "your resume", not "your profile", because the
-              resume is what the score was computed against and a student can go change it.
-              It also names the pool. A bare "sorted by fit" reads as a claim about the whole board,
-              and the sort only ever saw the newest RANKING_POOL postings — the backend has always
-              reported that number and nothing was showing it. */}
+          {/* Name the loaded pool and the account preferences that now drive its ordering. */}
           <p className="pt-1 text-center text-xs text-muted">
             {jobs.length} role{jobs.length === 1 ? "" : "s"} loaded
             {hasMore ? ", more to load" : ""}
             {ranked
               ? rankedPool !== null && poolExhausted
-                ? ` · best fit of the ${rankedPool} newest roles`
-                : " · sorted by fit to your resume"
+                ? ` · best preference matches of the ${rankedPool} newest roles`
+                : " · sorted by your preferences"
               : " · newest first"}
           </p>
 
