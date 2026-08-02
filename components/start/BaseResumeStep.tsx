@@ -521,11 +521,18 @@ export function BaseResumeStep({
           </div>
 
           {phase === "compare" && (
-            <div className="mt-5 flex flex-wrap items-center gap-3">
-              <PrimaryButton onClick={choose} disabled={!finished}>
-                {finished ? "Use this resume" : <PendingLabel onColor>Making...</PendingLabel>}
-              </PrimaryButton>
-              <LaterLink onClick={onLater} />
+            <div className="mt-5">
+              {error && <ErrorNote message={error} />}
+              <div className={`${error ? "mt-3 " : ""}flex flex-wrap items-center gap-3`}>
+                {error ? (
+                  <PrimaryButton onClick={run}>Try again</PrimaryButton>
+                ) : (
+                  <PrimaryButton onClick={choose} disabled={!finished}>
+                    {finished ? "Use this resume" : <PendingLabel onColor>Making...</PendingLabel>}
+                  </PrimaryButton>
+                )}
+                <LaterLink onClick={onLater} />
+              </div>
             </div>
           )}
         </div>
