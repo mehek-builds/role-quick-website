@@ -31,6 +31,7 @@ export function MatchScore({
   spec,
   jobContext,
   onResult,
+  disabled = false,
 }: {
   jdText: string;
   spec: ResumeSpec;
@@ -40,11 +41,14 @@ export function MatchScore({
    *  from ONE request. Passing only `missing` meant the JD pane had no way to know which terms
    *  were covered, and it fell back to highlighting every word of the resume. */
   onResult?: (result: JdMatchResponse | null) => void;
+  /** Local fixture renders do not have a backend session and must stay self-contained. */
+  disabled?: boolean;
 }) {
   const [result, setResult] = useState<JdMatchResponse | null>(null);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
+    if (disabled) return;
     let cancelled = false;
     const resumeText = resumeSpecText(spec);
     if (!jdText.trim() || !resumeText.trim()) return;
@@ -72,7 +76,7 @@ export function MatchScore({
     // onResult is intentionally not a dependency: callers pass an inline closure, and including it
     // would refire the request on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jdText, spec, jobContext?.company, jobContext?.role]);
+  }, [disabled, jdText, spec, jobContext?.company, jobContext?.role]);
 
   if (failed) {
     return <p className="text-[11px] leading-4 text-faint">We could not work out how well you fit this one</p>;

@@ -18,7 +18,7 @@ import type { ResumeSpec } from "@/lib/api";
  * requirements the resume covers. A second number beside it would teach students to average two
  * things that measure different questions.
  */
-export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
+export function ResumeHealth({ spec, disabled = false }: { spec: ResumeSpec; disabled?: boolean }) {
   // The key travels WITH the answer, so staleness is derived during render rather than set from
   // inside the effect (a synchronous setState there cascades a render on every edit).
   const [state, setState] = useState<{ health: Health | null; failed: boolean; key: string }>({
@@ -32,6 +32,7 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
   const key = JSON.stringify({ experience: spec.experience, skills: spec.skills });
 
   useEffect(() => {
+    if (disabled) return;
     let cancelled = false;
     const timer = setTimeout(() => {
       fetchResumeHealth(spec)
@@ -51,7 +52,7 @@ export function ResumeHealth({ spec }: { spec: ResumeSpec }) {
     // spec is intentionally absent: `key` is its content, and depending on both would refire on
     // every identity change, which is the thing the key exists to avoid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [disabled, key]);
 
   if (state.failed) {
     return <p className="text-[13px] text-faint">We could not check this resume just now.</p>;

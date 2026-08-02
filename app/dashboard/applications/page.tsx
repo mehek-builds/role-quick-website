@@ -32,6 +32,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/appli
 import type { JdMatchResponse } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
+import { replaceClosedComposerUrl } from "./composer-url";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationFilter = "all" | "action" | "ready" | "submitted";
@@ -101,7 +102,10 @@ export default function Applications() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [qaMode, setQaMode] = useState(false);
+  /* Null means the localhost-only fixture gate has not resolved yet. Treating that as false let
+     authenticated effects fire during the first render of a QA page, and a 401 redirected the
+     fixture to /login before it could verify anything. */
+  const [qaMode, setQaMode] = useState<boolean | null>(null);
   const [creating, setCreating] = useState(false);
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
@@ -119,6 +123,16 @@ export default function Applications() {
     return requested === "action" || requested === "ready" || requested === "submitted" ? requested : "all";
   });
   const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
+
+  const closeNewApplication = useCallback(() => {
+    setShowNewApplication(false);
+    setPendingJob(null);
+
+    replaceClosedComposerUrl(
+      window.location,
+      (data, unused, url) => window.history.replaceState(data, unused, url),
+    );
+  }, []);
 
   const captureCompletedSubmission = useCallback((result: SubmissionResponse, source: string) => {
     if (result.review.status !== "submitted" || capturedSubmissionIds.current.has(result.application_id)) return;
@@ -270,6 +284,9 @@ export default function Applications() {
       return;
     }
     let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setQaMode(false);
+    });
     api<{ resumes: GeneratedResume[] }>("/resume/history")
       .then((result) => {
         if (cancelled) return;
@@ -301,7 +318,7 @@ export default function Applications() {
     const jobId = params.get("job");
     if (params.get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
     if (!jobId) return;
-    if (qaMode) return;
+    if (qaMode !== false) return;
     let cancelled = false;
     api<{ job: MonitoredJob }>(`/jobs/${jobId}`)
       .then(({ job }) => {
@@ -383,7 +400,7 @@ export default function Applications() {
   /* ---- sending without being asked ----
      The setting itself lives on the server and is shared with Account; this page reads it, shows
      what it is doing while it is on, and gives the student the seconds in which to stop it. */
-  const autopilot = useAutopilot();
+  const autopilot = useAutopilot(qaMode === false);
 
   const nextPacket = useMemo(
     () => qaMode
@@ -398,7 +415,7 @@ export default function Applications() {
      underneath it and print one job's score on another job's row. */
   const [nextScore, setNextScore] = useState<{ id: string; score: number | null } | null>(null);
   useEffect(() => {
-    if (selectedId) return;
+    if (qaMode !== false || selectedId) return;
     const jd = nextPacket?.spec._review?.jd_text;
     if (!nextPacket || !jd) return;
     let cancelled = false;
@@ -409,7 +426,7 @@ export default function Applications() {
     return () => {
       cancelled = true;
     };
-  }, [nextPacket, selectedId]);
+  }, [nextPacket, qaMode, selectedId]);
 
   const nextMatch: NextMatch | null = nextPacket
     ? {
@@ -827,7 +844,10 @@ export default function Applications() {
             saving={autopilot.saving}
             onToggle={(next) => void autopilot.toggle(next)}
           />
-          <Button type="button" onClick={() => setShowNewApplication((current) => !current)}>
+          <Button
+            type="button"
+            onClick={showNewApplication ? closeNewApplication : () => setShowNewApplication(true)}
+          >
             {showNewApplication ? "Close" : "Add job"}
           </Button>
         </div>
@@ -998,7 +1018,13 @@ export default function Applications() {
                 {/* Was <ScoreRing score={extractScore(selected.spec)} /> under the caption "match".
                     That read spec._quality.atsCoverage, which counts every non-stopword in the
                     posting and therefore sat at 12-17% for a strong resume. */}
-                <MatchScore jdText={review.jd_text} spec={deferredSpec ?? spec} jobContext={selected.job_context} onResult={setMatchResult} />
+                <MatchScore
+                  jdText={review.jd_text}
+                  spec={deferredSpec ?? spec}
+                  jobContext={selected.job_context}
+                  onResult={setMatchResult}
+                  disabled={qaMode !== false}
+                />
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
                 <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} />
@@ -1049,7 +1075,7 @@ export default function Applications() {
                       Resume checks
                     </p>
                     <div className="mt-3">
-                      <ResumeHealth spec={deferredSpec ?? spec} />
+                      <ResumeHealth spec={deferredSpec ?? spec} disabled={qaMode !== false} />
                     </div>
                   </div>
                 </div>

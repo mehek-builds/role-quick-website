@@ -28,13 +28,14 @@ export type ConsentEligibility = {
   remaining: number;
 };
 
-export function useAutopilot() {
+export function useAutopilot(load: boolean = true) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [eligibility, setEligibility] = useState<ConsentEligibility | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!load) return;
     let cancelled = false;
     void getOnboardingState()
       .then((state) => {
@@ -48,7 +49,7 @@ export function useAutopilot() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [load]);
 
   const toggle = useCallback(
     async (next: boolean) => {
