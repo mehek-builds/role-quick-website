@@ -14,6 +14,21 @@ const EXPLICIT_WORK_AUTHORIZATION_PATTERNS = [
   /^(?:i have|holder of)\s+(?:the\s+)?right to work\b/i,
 ];
 
+function isExplicitWorkAuthorization(value: string): boolean {
+  return (
+    value.length >= MIN_WORK_AUTHORIZATION_LENGTH &&
+    EXPLICIT_WORK_AUTHORIZATION_PATTERNS.some((pattern) => pattern.test(value))
+  );
+}
+
+export function extractExplicitWorkAuthorization(resume: string): string | null {
+  const sourceLines = resume
+    .split(/\r?\n/)
+    .map(normalize)
+    .filter(Boolean);
+  return sourceLines.find(isExplicitWorkAuthorization) ?? null;
+}
+
 export function preserveExplicitWorkAuthorization(
   resume: string,
   candidate: unknown,
@@ -21,10 +36,7 @@ export function preserveExplicitWorkAuthorization(
   if (typeof candidate !== "string") return null;
 
   const answer = normalize(candidate);
-  if (answer.length < MIN_WORK_AUTHORIZATION_LENGTH) return null;
-  if (!EXPLICIT_WORK_AUTHORIZATION_PATTERNS.some((pattern) => pattern.test(answer))) {
-    return null;
-  }
+  if (!isExplicitWorkAuthorization(answer)) return null;
 
   const sourceLines = resume
     .split(/\r?\n/)
@@ -68,7 +80,9 @@ export function sanitizeTryPacket(
     filled_fields: {
       university: fields.university,
       work_authorization:
-        preserveExplicitWorkAuthorization(resume, fields.work_authorization) ?? "",
+        preserveExplicitWorkAuthorization(resume, fields.work_authorization) ??
+        extractExplicitWorkAuthorization(resume) ??
+        "",
       short_answer: fields.short_answer,
     },
     outreach_opening: candidate.outreach_opening,

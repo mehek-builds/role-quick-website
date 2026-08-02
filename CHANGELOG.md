@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.13] - 2026-08-02
+
+### Fixed
+
+- A clear standalone work-authorization line in a resume now bypasses the follow-up popup even
+  when the model omits that field. Ambiguous status labels still require the user's answer.
+
 ## [0.1.12] - 2026-08-02
 
 ### Fixed
