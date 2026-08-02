@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11] - 2026-08-02
+
+### Fixed
+
+- Live personal previews now use a provider-compatible response schema while the API continues
+  enforcing exactly three tailored bullets before returning a result.
+
 ## [0.1.10] - 2026-08-02
 
 ### Changed

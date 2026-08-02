@@ -62,6 +62,12 @@ test("the model may return null before the API clears missing authorization", ()
   assert.match(tryData, /work_authorization: string/);
 });
 
+test("the provider schema avoids unsupported array length constraints", () => {
+  assert.doesNotMatch(route, /\bminItems\b|\bmaxItems\b/);
+  assert.match(route, /Exactly 3 resume bullets/);
+  assert.match(route, /sanitizeTryPacket/);
+});
+
 test("a missing answer cannot receive a green completed check", () => {
   assert.match(
     simulator,
