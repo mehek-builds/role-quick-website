@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
+import { activeBoardStages, fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 
 /**
@@ -79,7 +79,7 @@ export function Board({
   const [busy, setBusy] = useState<ReadonlySet<string>>(new Set());
   const [moveError, setMoveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  const [activeStage, setActiveStage] = useState<Stage>("saved");
+  const [activeStage, setActiveStage] = useState<Stage>("applied");
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +125,8 @@ export function Board({
   const revisitable = (card: BoardCard) =>
     Boolean(onRevisit) && (revisitableIds === undefined ? openable(card) : revisitableIds.has(card.id));
 
+  const visibleStages = activeBoardStages(stages);
+
   if (failed) {
     return (
       <p className="text-sm text-muted">
@@ -145,14 +147,14 @@ export function Board({
         </p>
       )}
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1 md:hidden" aria-label="Application stage">
-        {stages.map((stage) => (
+        {visibleStages.map((stage) => (
           <button key={stage} type="button" onClick={() => setActiveStage(stage)} aria-pressed={activeStage === stage} className={`shrink-0 rounded-full border px-3 py-2 text-xs ${activeStage === stage ? "border-brand bg-brand-soft text-brand-ink" : "border-border text-muted"}`}>
             {STAGE_LABEL[stage]} · {cards.filter((card) => card.stage === stage).length}
           </button>
         ))}
       </div>
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
-      {stages.map((stage) => {
+      <div className="grid gap-3 md:grid-cols-3">
+      {visibleStages.map((stage) => {
         const column = cards.filter((c) => c.stage === stage);
         return (
           <section key={stage} aria-labelledby={`col-${stage}`} className={`${activeStage === stage ? "block" : "hidden"} min-w-0 md:block`}>
@@ -186,7 +188,7 @@ export function Board({
                   {/* The move control keeps its right edge clear so the packet mark can sit in the
                       actual corner rather than above it. */}
                   <div className={revisitable(card) ? "pr-8" : ""}>
-                    <MoveControl card={card} stages={stages} busy={busy.has(card.id)} onMove={move} />
+                    <MoveControl card={card} stages={visibleStages} busy={busy.has(card.id)} onMove={move} />
                   </div>
 
                   {/* THE PACKET MARK, bottom right. Always visible rather than on hover: a board is

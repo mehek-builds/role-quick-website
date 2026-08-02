@@ -34,3 +34,12 @@ test("internal resume language is not shown to users", () => {
 test("the board keeps required approval visible", () => {
   assert.match(read("components/app/Board.tsx"), /"ready_for_final_approval"[^\n]+return "Needs you"/);
 });
+
+test("the board shows only the active application pipeline columns", () => {
+  const board = read("components/app/Board.tsx");
+  assert.match(board, /const visibleStages = activeBoardStages\(stages\)/);
+  assert.match(board, /useState<Stage>\("applied"\)/);
+  assert.equal(board.match(/visibleStages\.map\(\(stage\)/g)?.length, 2);
+  assert.match(board, /<MoveControl card=\{card\} stages=\{visibleStages\}/);
+  assert.doesNotMatch(board, /xl:grid-cols-5/);
+});
