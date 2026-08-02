@@ -35,6 +35,7 @@ import {
   VERIFICATION_CONNECTION_INTENT_KEY,
   verificationEnableDecision,
 } from "./email-verification-flow";
+import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -46,6 +47,23 @@ const TRI = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
 ];
+
+const ACCOUNT_TABS = [
+  { id: "job-search", label: "Job search" },
+  { id: "application-details", label: "Application details" },
+  { id: "automation", label: "Automation" },
+  { id: "plan", label: "Plan & usage" },
+  { id: "sign-in", label: "Sign-in & data" },
+] as const;
+
+type AccountTab = (typeof ACCOUNT_TABS)[number]["id"];
+
+function tabFromHash(hash: string): AccountTab {
+  const requested = hash.replace(/^#/, "");
+  return ACCOUNT_TABS.some((tab) => tab.id === requested)
+    ? (requested as AccountTab)
+    : "job-search";
+}
 
 export default function Settings() {
   const router = useRouter();
@@ -82,6 +100,42 @@ export default function Settings() {
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
+  const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
+
+  useEffect(() => {
+    const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
+    syncTab();
+    window.addEventListener("hashchange", syncTab);
+    window.addEventListener("popstate", syncTab);
+    return () => {
+      window.removeEventListener("hashchange", syncTab);
+      window.removeEventListener("popstate", syncTab);
+    };
+  }, []);
+
+  function selectTab(tab: AccountTab) {
+    setActiveTab(tab);
+    window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
+  function moveTab(current: AccountTab, key: string) {
+    const currentIndex = ACCOUNT_TABS.findIndex((tab) => tab.id === current);
+    const nextIndex = key === "Home"
+      ? 0
+      : key === "End"
+        ? ACCOUNT_TABS.length - 1
+        : key === "ArrowRight"
+          ? (currentIndex + 1) % ACCOUNT_TABS.length
+          : key === "ArrowLeft"
+            ? (currentIndex - 1 + ACCOUNT_TABS.length) % ACCOUNT_TABS.length
+            : currentIndex;
+    const next = ACCOUNT_TABS[nextIndex];
+    if (!next || next.id === current) return;
+    selectTab(next.id);
+    document.getElementById(`tab-${next.id}`)?.focus();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -145,10 +199,12 @@ export default function Settings() {
               ? `${label} connected.${resolvedVerification ? " Email verification is on." : ""}`
               : `${label} connection was not completed. Email verification is still off.`,
           );
+          setActiveTab("automation");
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete("connection");
           cleanUrl.searchParams.delete("status");
           cleanUrl.searchParams.delete("connected_account_id");
+          cleanUrl.hash = "automation";
           window.history.replaceState({}, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
         }
       } catch (err) {
@@ -160,91 +216,6 @@ export default function Settings() {
       cancelled = true;
     };
   }, []);
-
-  /* Honour the #fragment once the content it points at actually exists.
-   *
-   * /dashboard/profile's "Edit details" links to
-   * /dashboard/settings#application-details. Giving that card an id was
-   * necessary and NOT sufficient: this page renders <ShimmerRows> until `me`
-   * resolves, so at the moment the browser handles the fragment the target is
-   * not in the DOM yet. The browser looks, finds nothing, and gives up. The
-   * card mounts a second later and nothing re-triggers the scroll.
-   *
-   * Verified against production on 2026-07-28 before this effect existed: both
-   * a hard load of /dashboard/settings#application-details and a client-side
-   * click from Profile ended at scrollY 0 with the card at top 1115. The id was
-   * live and the jump still did not happen.
-   *
-   * Keyed on `me` because that is the state that flips this page from shimmer
-   * to content: the early return above renders <ShimmerRows> while it is null
-   * and the whole page, including the card, once it is not. If those setState
-   * calls in the loader are ever split so the card lands after `me`, this fires
-   * too early and silently stops working. Keep them in one tick.
-   *
-   * KNOWN LIMITS, left in deliberately. A second review pass raised three more
-   * and none of them is reachable in this app, so none is worth machinery:
-   *   - `scrollY > 40` infers intent from position rather than observing a real
-   *     interaction, so a restored position under 40px would not stop the jump.
-   *     The cost when it misfires is a 40px correction nobody perceives.
-   *   - `hashchange` also fires on back/forward, so history traversal to a
-   *     fragment entry re-jumps. That is the same place the browser was going.
-   *   - pushState/replaceState do not emit `hashchange`, so a same-route
-   *     fragment link would not be caught. There is no such link: the only
-   *     inbound one is from /dashboard/profile, a different route, which
-   *     remounts this component and re-runs the effect through `me`.
-   * Grep before "fixing" any of these: if a same-route fragment link ever
-   * lands on this page, the third one becomes real.
-   *
-   * Three things the first version of this got wrong, found by an adversarial
-   * review pass on 2026-07-28:
-   *
-   * 1. It could yank someone who was already reading. A visitor who arrives
-   *    with a fragment and starts scrolling during the several seconds of data
-   *    load would be dragged back the moment `me` landed. The load-time jump
-   *    now stands down if they have scrolled at all. An explicit click is
-   *    different: that IS a request to move, so hashchange ignores the guard.
-   * 2. It never fired on hash-only navigation. If the page is already loaded,
-   *    `me` does not change, so a second fragment link did nothing here. The
-   *    browser usually handles that case natively, which is why it was not
-   *    visible, but "usually" is not a guarantee worth resting on.
-   * 3. It did not decode the fragment, so an id with an escaped character
-   *    would never match. Nothing on this page needs it today. Both the
-   *    decoded and raw forms are tried, so a malformed escape degrades to the
-   *    old behaviour instead of throwing. */
-  useEffect(() => {
-    if (!me) return;
-    let cancelled = false;
-    let raf = 0;
-
-    const jump = (respectExistingScroll: boolean) => {
-      const raw = window.location.hash.slice(1);
-      if (!raw) return;
-      let decoded = raw;
-      try {
-        decoded = decodeURIComponent(raw);
-      } catch {
-        /* malformed escape: fall back to the raw fragment */
-      }
-      if (respectExistingScroll && window.scrollY > 40) return;
-      cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        if (cancelled) return;
-        const el =
-          document.getElementById(decoded) ?? document.getElementById(raw);
-        if (el instanceof HTMLDetailsElement) el.open = true;
-        el?.scrollIntoView({ block: "start" });
-      });
-    };
-
-    jump(true);
-    const onHashChange = () => jump(false);
-    window.addEventListener("hashchange", onHashChange);
-    return () => {
-      cancelled = true;
-      cancelAnimationFrame(raf);
-      window.removeEventListener("hashchange", onHashChange);
-    };
-  }, [me]);
 
   function patch(p: Partial<ApplicationProfile>) {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
@@ -473,6 +444,41 @@ export default function Settings() {
     <div className="space-y-8">
       <div>
         <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Account</h1>
+        <p className="mt-1 text-sm text-muted">Everything Litos uses for your job search, in one place.</p>
+      </div>
+
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div
+          className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
+          role="tablist"
+          aria-label="Account categories"
+        >
+          {ACCOUNT_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={activeTab === tab.id}
+              aria-controls={tab.id === "job-search" ? "job-search" : `panel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              onClick={() => selectTab(tab.id)}
+              onKeyDown={(event) => {
+                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                  event.preventDefault();
+                  moveTab(tab.id, event.key);
+                }
+              }}
+              className={`min-h-10 rounded-full px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                activeTab === tab.id
+                  ? "bg-surface font-medium text-ink shadow-rest"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -482,8 +488,21 @@ export default function Settings() {
         </div>
       )}
 
+      {activeTab === "job-search" && (
+        <section id="job-search" role="tabpanel" aria-labelledby="tab-job-search" className="space-y-4">
+          <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+            <div>
+              <h2 className="text-base font-medium text-ink">Main resume</h2>
+              <p className="mt-1 text-sm leading-6 text-muted">Keep the experience Litos tailors for each job up to date.</p>
+            </div>
+            <ButtonLink href="/dashboard/resume">Edit resume</ButtonLink>
+          </Card>
+          <TargetingCard />
+        </section>
+      )}
+
       {/* Account */}
-      <Card className="p-6">
+      {activeTab === "sign-in" && <Card className="p-6" id="panel-sign-in" role="tabpanel" aria-labelledby="tab-sign-in">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-base font-medium text-ink">Account</h2>
           <button type="button" onClick={() => { clearSession(); router.replace("/"); }} className="min-h-11 px-2 text-sm text-muted hover:text-ink">Sign out</button>
@@ -570,11 +589,10 @@ export default function Settings() {
           </form>
           </details>
         )}
-      </Card>
+      </Card>}
 
-      <Card className="p-6">
-        <details>
-        <summary className="cursor-pointer text-base font-medium text-ink">Automation</summary>
+      {activeTab === "automation" && <Card className="p-6" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
+        <h2 className="text-base font-medium text-ink">Automation</h2>
         <div className="pt-1">
         <p className="text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
         <div className="mt-5 space-y-4">
@@ -660,8 +678,7 @@ export default function Settings() {
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
         </div>
-        </details>
-      </Card>
+      </Card>}
 
       {/* VISA SPONSORSHIP.
           Its own card rather than a row inside "Answers you give every time", because it is not an
@@ -673,10 +690,9 @@ export default function Settings() {
           sponsorship during setup cannot turn the filter off (the server refuses either way), and a
           control that looks live and silently fails is worse than one that explains why it is
           fixed. */}
-      {sponsorship && (
+      {activeTab === "job-search" && sponsorship && (
         <Card className="p-6" id="visa-sponsorship">
-          <details>
-          <summary className="cursor-pointer text-base font-medium text-ink">Visa sponsorship filter</summary>
+          <h2 className="text-base font-medium text-ink">Visa sponsorship filter</h2>
           <div className="pt-1">
           <p className="text-sm leading-6 text-muted">Only show jobs where sponsorship is confirmed.</p>
           {sponsorError && <div className="mt-4"><ErrorNote message={sponsorError} /></div>}
@@ -737,7 +753,6 @@ export default function Settings() {
             people before.
           </p>
           </div>
-          </details>
         </Card>
       )}
 
@@ -755,12 +770,12 @@ export default function Settings() {
           header. Every numeric check passed ("cardTop 0, inView true") while
           the thing the reader came for was invisible. Same scroll-margin the
           homepage sections use. */}
-      <details className="scroll-mt-24 rounded-card border border-border bg-surface" id="application-details">
-        <summary className="cursor-pointer p-6 text-base font-medium text-ink">
-          Application details
-          <span className="mt-1 block text-sm font-normal text-muted">Contact, links, and form answers</span>
-        </summary>
-        <div className="px-6 pb-6">
+      {activeTab === "application-details" && <Card className="p-6" id="panel-application-details" role="tabpanel" aria-labelledby="tab-application-details">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-medium text-ink">Application details</h2>
+            <p className="mt-1 text-sm text-muted">Contact, links, and form answers</p>
+          </div>
         <div className="flex justify-end">
           <div className="flex items-center gap-3">
             {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
@@ -770,6 +785,7 @@ export default function Settings() {
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
+        </div>
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -813,11 +829,10 @@ export default function Settings() {
         </div>
 
         <p className="mt-5 text-xs leading-5 text-faint">Personal questions stay unanswered unless you choose an answer.</p>
-        </div>
-      </details>
+      </Card>}
 
       {/* Plan + usage */}
-      <Card className="p-6">
+      {activeTab === "plan" && <Card className="p-6" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} />
@@ -847,10 +862,10 @@ export default function Settings() {
             You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel your subscription</a> : "Contact support to manage or cancel."}
           </div>
         ) : null}
-      </Card>
+      </Card>}
 
       {/* Data */}
-      <Card className="p-6">
+      {activeTab === "sign-in" && <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Your data</h2>
         <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
         <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
@@ -858,7 +873,7 @@ export default function Settings() {
           <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
           <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
         </div>
-      </Card>
+      </Card>}
     </div>
   );
 }

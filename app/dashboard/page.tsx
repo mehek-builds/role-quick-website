@@ -486,7 +486,7 @@ export default function Home() {
           <p className="mt-1 text-sm text-muted">
             {targetLabel}
             <span aria-hidden="true" className="mx-2 text-faint">·</span>
-            <Link href="/dashboard/profile" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
+            <Link href="/dashboard/settings#job-search" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
               Change what you want
             </Link>
           </p>

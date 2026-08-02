@@ -16,7 +16,8 @@ test("dashboard navigation and hero use the simplified product language", () => 
   const demo = read("components/flow/data.ts");
   assert.doesNotMatch(layout, /label: "Resume"/);
   assert.doesNotMatch(layout, /label: "Contact"/);
-  assert.match(layout, /label: "Job search"/);
+  assert.doesNotMatch(layout, /label: "Job search"/);
+  assert.match(layout, /label: "Account"/);
   assert.match(demo, /resume: "Fill the form", form: "Send it"/);
   assert.doesNotMatch(demo, /name: "Resume"/);
   assert.doesNotMatch(demo, /\{ name: "emailOpen"/);

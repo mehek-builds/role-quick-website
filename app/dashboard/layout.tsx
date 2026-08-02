@@ -11,7 +11,6 @@ import {
   GearIcon,
   HomeIcon,
   MailIcon,
-  PersonIcon,
   SearchIcon,
 } from "@/components/app/NavIcons";
 
@@ -24,7 +23,6 @@ const NAV = [
   { href: "/dashboard/jobs", label: "Jobs", Icon: SearchIcon },
   { href: "/dashboard/applications", label: "Applications", Icon: ClipboardIcon },
   { href: "/dashboard/outreach", label: "Emails", Icon: MailIcon },
-  { href: "/dashboard/profile", label: "Job search", Icon: PersonIcon },
 ];
 
 /* Pinned below the work destinations because Account is visited occasionally. */
@@ -32,9 +30,8 @@ const UTILITY = [
   { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
 ];
 
-/* Five destinations preserve usable touch targets on a 360px phone. Resume and account controls
-   remain reachable from Job search and the mobile header. */
-const MOBILE_NAV = NAV;
+/* The consolidated Account destination is the fifth mobile item. */
+const MOBILE_NAV = [...NAV, ...UTILITY];
 
 const ALL_DESTINATIONS = [...NAV, ...UTILITY];
 
@@ -151,12 +148,6 @@ export default function DashboardLayout({
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
               <span className="text-base font-medium tracking-tight text-ink">Litos</span>
-            </Link>
-            <Link
-              href={href("/dashboard/settings")}
-              className="ml-auto flex min-h-10 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink transition-colors hover:border-ink"
-            >
-              Account
             </Link>
           </div>
         </header>
