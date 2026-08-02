@@ -69,6 +69,23 @@ test("the provider schema avoids unsupported numeric and array constraints", () 
   assert.match(route, /sanitizeTryPacket/);
 });
 
+test("unverified job keywords pause before the model call", () => {
+  assert.match(route, /findKeywordClarifications\(posting\.jd, resume\)/);
+  assert.match(route, /needs_clarification: true, clarifications/);
+  assert.match(route, /parseClarificationAnswers/);
+  assert.match(route, /findDeclinedKeywordClaims/);
+  assert.match(route, /findDeclinedKeywordClaims\([\s\S]*packet\.tailored_bullets/);
+  assert.match(route, /A job-posting keyword is not evidence/);
+});
+
+test("the clarification queue requires evidence or an explicit decline", () => {
+  assert.match(simulator, /Check these requirements\./);
+  assert.match(simulator, /Litos will only use[\s\S]*what you confirm\./);
+  assert.match(simulator, /I have not done this\./);
+  assert.match(simulator, /MIN_CLARIFICATION_ANSWER_CHARS/);
+  assert.match(simulator, /Use my answers/);
+});
+
 test("a missing answer cannot receive a green completed check", () => {
   assert.match(
     simulator,
