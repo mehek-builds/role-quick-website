@@ -91,18 +91,18 @@ export async function fetchResumeHealth(spec: ResumeSpec): Promise<ResumeHealth>
 
 // ---- F4: the student's own funnel ----
 
-export type FunnelWeek = { week_start: string; submitted: number; tailored: number };
+export type FunnelDay = { day: string; submitted: number; tailored: number };
 
 export type FunnelSummary = {
   resumes_tailored: number;
   applications_submitted: number;
   fields_filled: number;
   submitted_this_week: number;
-  weeks: FunnelWeek[];
+  days: FunnelDay[];
   too_early: boolean;
 };
 
-/** Sends the browser's UTC offset so the weeks are the student's weeks, not the server's. */
+/** Sends the browser's UTC offset so the days are the student's days, not the server's. */
 export async function fetchFunnel(): Promise<FunnelSummary> {
   const offset = -new Date().getTimezoneOffset(); // getTimezoneOffset is minutes WEST of UTC
   return api<FunnelSummary>(`/metrics/funnel?tz_offset=${offset}`);

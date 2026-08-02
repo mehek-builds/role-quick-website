@@ -56,7 +56,7 @@ export function Funnel() {
   // reports no progress, on the day someone signs up.
   if (f.resumes_tailored === 0 && f.applications_submitted === 0) return null;
 
-  const peak = Math.max(1, ...f.weeks.map((w) => w.submitted));
+  const peak = Math.max(1, ...f.days.map((day) => day.submitted));
 
   return (
     <section className="rounded-[20px] border border-border bg-surface-alt px-5 py-4">
@@ -72,29 +72,33 @@ export function Funnel() {
 
       {!f.too_early && (
         <div className="mt-4 border-t border-border pt-3">
-          <div className="flex items-end gap-1.5" role="img" aria-label={weeklyLabel(f)}>
-            {f.weeks.map((w) => (
-              <div key={w.week_start} className="flex flex-1 flex-col items-center gap-1">
-                {/* No minimum height on an empty week. A 2px floor made a week with one
-                    application look identical to a week with none whenever the peak was high. */}
+          <div className="flex items-end gap-1" role="img" aria-label={dailyLabel(f)}>
+            {f.days.map((day, i) => (
+              <div key={day.day} className="flex flex-1 flex-col items-center gap-1">
+                {/* No minimum height on an empty day. A 2px floor made a day with one
+                    application look identical to a day with none whenever the peak was high. */}
                 <div
-                  className={w.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
-                  style={w.submitted === 0 ? undefined : { height: `${Math.max(4, (w.submitted / peak) * 40)}px` }}
-                  title={`${w.submitted} sent`}
+                  className={day.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
+                  style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 40)}px` }}
+                  title={`${day.day}: ${day.submitted} sent`}
                 />
-                <span className="font-mono text-[9px] text-faint">{w.week_start.slice(5)}</span>
+                {/* Every other day, ending on today. Fourteen MM-DD labels in this column ran
+                    together into a grey smear, and the last one has to be today's. */}
+                <span className="font-mono text-[9px] text-faint">
+                  {(f.days.length - 1 - i) % 2 === 0 ? day.day.slice(5) : " "}
+                </span>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-faint">Applications you sent each week.</p>
+          <p className="mt-2 text-[11px] text-faint">Applications you sent each day.</p>
         </div>
       )}
     </section>
   );
 }
 
-function weeklyLabel(f: FunnelSummary): string {
-  return f.weeks.map((w) => `week of ${w.week_start}: ${w.submitted}`).join(", ");
+function dailyLabel(f: FunnelSummary): string {
+  return f.days.map((day) => `${day.day}: ${day.submitted}`).join(", ");
 }
 
 function Stat({ value, label }: { value: number; label: string }) {
