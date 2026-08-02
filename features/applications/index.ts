@@ -6,6 +6,7 @@
  */
 export * from "./domain/application-review";
 export * from "./domain/apply-variant";
+export * from "./domain/board-stages";
 export * from "./domain/match-model";
 export {
   AUTO_SUBMIT_PREPARED_LIMIT,
