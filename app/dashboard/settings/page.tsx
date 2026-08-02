@@ -508,33 +508,6 @@ export default function Settings() {
             </div>
           </div>
         </div>
-        <p className="mt-5 text-xs font-medium text-muted">Email connections</p>
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          {(["gmail", "outlook"] as const).map((provider) => {
-            const connection = emailConnections.connections.find((item) => item.provider === provider);
-            const connected = connection?.connected === true;
-            const label = provider === "gmail" ? "Gmail" : "Outlook";
-            return (
-              <div key={provider} className="flex items-center justify-between rounded-inner border border-border bg-surface px-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-ink">{label}</p>
-                  <p className="mt-0.5 text-xs text-faint">
-                    {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  disabled={!emailConnections.configured || connectionBusy !== null}
-                  onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider))}
-                  variant={connected ? "secondary" : "primary"}
-                  size="sm"
-                >
-                  {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
-                </Button>
-              </div>
-            );
-          })}
-        </div>
         {me.email && (
           <details className="mt-6 border-t border-border pt-4">
             <summary className="cursor-pointer text-sm font-medium text-ink">Password</summary>
@@ -635,7 +608,7 @@ export default function Settings() {
             <div className="flex items-start justify-between gap-5">
               <label htmlFor="automatic-email-verification">
                 <span className="block text-sm font-medium text-ink">Read the code a company emails me</span>
-                <span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span>
+                <span className="mt-1 block text-xs leading-5 text-muted">Let Litos find a code tied to an active application using only an inbox you connect below.</span>
               </label>
               <input
                 id="automatic-email-verification"
@@ -648,24 +621,41 @@ export default function Settings() {
               />
             </div>
             {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
-              <div className="mt-4 border-t border-border pt-4">
-                <p className="text-xs leading-5 text-muted">Connect an inbox first. Your provider will show exactly what Litos can access before you approve it.</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={() => void connectProvider("gmail", true)} disabled={connectionBusy !== null}>
-                    Connect Gmail
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => void connectProvider("outlook", true)} disabled={connectionBusy !== null}>
-                    Connect Outlook
-                  </Button>
-                  <Button type="button" size="sm" variant="secondary" onClick={() => setVerificationConnectionPrompt(false)} disabled={connectionBusy !== null}>
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+              <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
             )}
             {automaticVerification && !hasActiveInbox(emailConnections) && (
               <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until an inbox is connected.</p>
             )}
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs font-medium text-muted">Inbox access</p>
+              <p className="mt-1 text-xs leading-5 text-faint">Your provider shows exactly what Litos can access before you approve it.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {(["gmail", "outlook"] as const).map((provider) => {
+                  const connection = emailConnections.connections.find((item) => item.provider === provider);
+                  const connected = connection?.connected === true;
+                  const label = provider === "gmail" ? "Gmail" : "Outlook";
+                  return (
+                    <div key={provider} className="flex items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-ink">{label}</p>
+                        <p className="mt-0.5 text-xs text-faint">
+                          {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        disabled={!emailConnections.configured || connectionBusy !== null}
+                        onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, true))}
+                        variant={connected ? "secondary" : "primary"}
+                        size="sm"
+                      >
+                        {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
