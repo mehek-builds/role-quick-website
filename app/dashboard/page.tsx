@@ -459,7 +459,7 @@ export default function Home() {
           <p className="mt-1 text-sm text-muted">
             {targetLabel}
             <span aria-hidden="true" className="mx-2 text-faint">·</span>
-            <Link href="/dashboard/profile" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
+            <Link href="/dashboard/settings#job-search" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
               Change what you want
             </Link>
           </p>
@@ -561,7 +561,7 @@ export default function Home() {
           title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
           body={dismissed.length ? "You have looked at all of them. New jobs turn up when we next check the job boards." : "Fill in your profile so Litos can pick out the best jobs from the job boards it watches."}
         >
-          <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/profile"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+          <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/settings#job-search"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
             {dismissed.length ? "Browse all jobs" : "Complete profile"}
           </Link>
         </EmptyState>

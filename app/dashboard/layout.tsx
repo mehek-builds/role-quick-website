@@ -14,8 +14,10 @@ const NAV = [
   { href: "/dashboard/jobs", label: "Jobs" },
   { href: "/dashboard/applications", label: "Applications" },
   { href: "/dashboard/outreach", label: "Emails" },
-  { href: "/dashboard/profile", label: "Profile" },
 ];
+
+const ACCOUNT = { href: "/dashboard/settings", label: "Account" };
+const MOBILE_NAV = [...NAV, ACCOUNT];
 
 export default function DashboardLayout({
   children,
@@ -115,12 +117,22 @@ export default function DashboardLayout({
           </nav>
           {/* One control, one name. This link said "Account", announced "Account settings", and
               landed on a page headed "Settings". It is Account in all three places now. */}
-          <Link href="/dashboard/settings" className="ml-auto flex min-h-10 items-center rounded-full border border-border px-3.5 text-xs font-medium text-ink transition-colors hover:border-ink">Account</Link>
+          <Link
+            href={ACCOUNT.href}
+            aria-current={pathname.startsWith(ACCOUNT.href) ? "page" : undefined}
+            className={`ml-auto flex min-h-10 items-center rounded-full border px-3.5 text-xs font-medium text-ink transition-colors ${
+              pathname.startsWith(ACCOUNT.href)
+                ? "border-ink bg-surface-alt"
+                : "border-border hover:border-ink"
+            }`}
+          >
+            Account
+          </Link>
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-7 pb-24 sm:px-6 sm:py-10">{children}</main>
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur sm:hidden">
-        {NAV.map((item) => {
+        {MOBILE_NAV.map((item) => {
           const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
           return (
             <Link

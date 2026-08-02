@@ -9,12 +9,13 @@ import { ThinkingOrb, type OrbState } from "thinking-orbs";
 export function Card({
   children,
   className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={`rounded-card border border-border bg-surface ${className}`}>
+    <div
+      {...props}
+      className={`rounded-card border border-border bg-surface ${className}`}
+    >
       {children}
     </div>
   );

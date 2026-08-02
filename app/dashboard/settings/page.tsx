@@ -25,6 +25,7 @@ import { API_URL } from "@/lib/config";
 import { passwordFormProblem } from "@/app/login/password-form";
 import { updatePasswordSession } from "@/app/login/password-session";
 import { litosClientHeaders } from "@/lib/product";
+import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -36,6 +37,23 @@ const TRI = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
 ];
+
+const ACCOUNT_TABS = [
+  { id: "job-search", label: "Job search" },
+  { id: "application-details", label: "Application details" },
+  { id: "automation", label: "Automation" },
+  { id: "plan", label: "Plan & usage" },
+  { id: "sign-in", label: "Sign-in & data" },
+] as const;
+
+type AccountTab = (typeof ACCOUNT_TABS)[number]["id"];
+
+function tabFromHash(hash: string): AccountTab {
+  const requested = hash.replace(/^#/, "");
+  return ACCOUNT_TABS.some((tab) => tab.id === requested)
+    ? (requested as AccountTab)
+    : "job-search";
+}
 
 export default function Settings() {
   const router = useRouter();
@@ -68,6 +86,42 @@ export default function Settings() {
   const [passwordNotice, setPasswordNotice] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
+  const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
+
+  useEffect(() => {
+    const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
+    syncTab();
+    window.addEventListener("hashchange", syncTab);
+    window.addEventListener("popstate", syncTab);
+    return () => {
+      window.removeEventListener("hashchange", syncTab);
+      window.removeEventListener("popstate", syncTab);
+    };
+  }, []);
+
+  function selectTab(tab: AccountTab) {
+    setActiveTab(tab);
+    window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
+  }
+
+  function moveTab(current: AccountTab, key: string) {
+    const currentIndex = ACCOUNT_TABS.findIndex((tab) => tab.id === current);
+    const nextIndex = key === "Home"
+      ? 0
+      : key === "End"
+        ? ACCOUNT_TABS.length - 1
+        : key === "ArrowRight"
+          ? (currentIndex + 1) % ACCOUNT_TABS.length
+          : key === "ArrowLeft"
+            ? (currentIndex - 1 + ACCOUNT_TABS.length) % ACCOUNT_TABS.length
+            : currentIndex;
+    const next = ACCOUNT_TABS[nextIndex];
+    if (!next || next.id === current) return;
+    selectTab(next.id);
+    document.getElementById(`tab-${next.id}`)?.focus();
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -99,10 +153,12 @@ export default function Settings() {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
           const connected = connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected);
           setConnectionNotice(callbackStatus === "success" && connected ? `${label} connected.` : `${label} connection was not completed.`);
+          setActiveTab("sign-in");
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete("connection");
           cleanUrl.searchParams.delete("status");
           cleanUrl.searchParams.delete("connected_account_id");
+          cleanUrl.hash = "sign-in";
           window.history.replaceState({}, "", `${cleanUrl.pathname}${cleanUrl.search}${cleanUrl.hash}`);
         }
       } catch (err) {
@@ -309,8 +365,42 @@ export default function Settings() {
       <div>
         <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Account</h1>
         <p className="mt-1 text-sm text-muted">
-          Account, application details, and plan.
+          Everything Litos uses for your job search, in one place.
         </p>
+      </div>
+
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div
+          className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
+          role="tablist"
+          aria-label="Account categories"
+        >
+          {ACCOUNT_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              id={`tab-${tab.id}`}
+              aria-selected={activeTab === tab.id}
+              aria-controls={`panel-${tab.id}`}
+              tabIndex={activeTab === tab.id ? 0 : -1}
+              onClick={() => selectTab(tab.id)}
+              onKeyDown={(event) => {
+                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                  event.preventDefault();
+                  moveTab(tab.id, event.key);
+                }
+              }}
+              className={`min-h-10 rounded-full px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                activeTab === tab.id
+                  ? "bg-surface font-medium text-ink shadow-rest"
+                  : "text-muted hover:text-ink"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -320,8 +410,28 @@ export default function Settings() {
         </div>
       )}
 
+      {activeTab === "job-search" && (
+        <section
+          id="panel-job-search"
+          role="tabpanel"
+          aria-labelledby="tab-job-search"
+          className="space-y-4"
+        >
+          <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
+            <div>
+              <h2 className="text-base font-medium text-ink">Main resume</h2>
+              <p className="mt-1 text-sm leading-6 text-muted">
+                Keep the experience Litos tailors for each job up to date.
+              </p>
+            </div>
+            <ButtonLink href="/dashboard/resume">Edit resume</ButtonLink>
+          </Card>
+          <TargetingCard />
+        </section>
+      )}
+
       {/* Account */}
-      <Card className="p-6">
+      {activeTab === "sign-in" && <Card className="p-6" id="panel-sign-in" role="tabpanel" aria-labelledby="tab-sign-in">
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-base font-medium text-ink">Account</h2>
           <button type="button" onClick={() => { clearSession(); router.replace("/"); }} className="min-h-11 px-2 text-sm text-muted hover:text-ink">Sign out</button>
@@ -432,9 +542,9 @@ export default function Settings() {
             </div>
           </form>
         )}
-      </Card>
+      </Card>}
 
-      <Card className="p-6">
+      {activeTab === "automation" && <Card className="p-6" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
         <h2 className="text-base font-medium text-ink">Two things Litos can do on its own</h2>
         <p className="mt-1 text-sm leading-6 text-muted">These are two separate choices, and you can turn either off at any time. We check again right before anything is sent.</p>
         <div className="mt-5 space-y-4">
@@ -470,10 +580,10 @@ export default function Settings() {
           </label>
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos still stops and waits for you when something is missing, when two answers do not match, when a question is about you personally, when a site checks you are human, or when it is not sure.</p>
-      </Card>
+      </Card>}
 
       {/* Application profile */}
-      <Card className="p-6">
+      {activeTab === "application-details" && <Card className="p-6" id="panel-application-details" role="tabpanel" aria-labelledby="tab-application-details">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-medium text-ink">Answers you give every time</h2>
@@ -533,14 +643,14 @@ export default function Settings() {
         </div>
 
         <p className="mt-5 text-xs leading-5 text-faint">
-          Questions about race and gender always default to "I would rather not say"
+          Questions about race and gender always default to &quot;I would rather not say&quot;
           and can only be changed by an explicit opt-in inside the extension.
           Work authorization is always asked, never inferred.
         </p>
-      </Card>
+      </Card>}
 
       {/* Plan + usage */}
-      <Card className="p-6">
+      {activeTab === "plan" && <Card className="p-6" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} />
@@ -571,10 +681,10 @@ export default function Settings() {
             You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel in Lemon Squeezy</a> : "Use the billing portal linked in your receipt email to manage or cancel."}
           </div>
         ) : null}
-      </Card>
+      </Card>}
 
       {/* Data */}
-      <Card className="p-6">
+      {activeTab === "sign-in" && <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Your data</h2>
         <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
         <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
@@ -582,7 +692,7 @@ export default function Settings() {
           <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
           <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
         </div>
-      </Card>
+      </Card>}
     </div>
   );
 }
