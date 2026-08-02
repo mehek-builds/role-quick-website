@@ -460,6 +460,8 @@ export type ParsedProfile = {
   bank_total?: number;
 };
 
+// Legacy values stay in the response type during the rolling deploy. The new backend no longer
+// emits them, and /start treats an older response as ready rather than restoring the removed flow.
 export type OnboardingStep = "focus" | "sponsorship" | "resume" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
 
 export type OnboardingState = {

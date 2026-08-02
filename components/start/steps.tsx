@@ -795,7 +795,7 @@ export function DoneStep({
   return (
     <StartShell
       step="done"
-      title="You're ready."
+      title="Your job matches are ready."
     >
       <div>
         <PrimaryButton
@@ -807,7 +807,7 @@ export function DoneStep({
           }}
           disabled={busy}
         >
-          {busy ? <PendingLabel state="shaping" onColor>Saving...</PendingLabel> : "Go to dashboard"}
+          {busy ? <PendingLabel state="shaping" onColor>Saving...</PendingLabel> : "See my jobs"}
         </PrimaryButton>
       </div>
     </StartShell>

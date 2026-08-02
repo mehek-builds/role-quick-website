@@ -9,7 +9,7 @@
  * The step rail reuses the homepage film's own act labels (00 JOB FOUND, 01 RESUME), so the
  * marketing page and onboarding share one wayfinding device instead of inventing a second.
  * It is wayfinding, not a progress meter: no percentage, no streak, no celebration. The
- * Guardrails ban all three and a number would only make a 12-minute step feel longer.
+ * Guardrails ban all three, and the labels already say what remains.
  */
 
 import { Button } from "@/components/app/Button";
@@ -18,27 +18,16 @@ import type { OnboardingStep } from "@/lib/api";
 /* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
    screens, and the resume step was the only place in the product that accented the word. It is
    "resume" everywhere we write it, in every surface, with no exceptions. */
-/* `weight` is roughly how much of the student's TIME the step costs, and it is
-   the whole reason this rail can draw a fill again. The 2026-07-04 removal was
-   right about the bar it removed: equal segments read 43% done while the
-   twelve-minute application was still ahead, which is a promise the flow
-   cannot keep. But the fault was equal weighting, not fills. Sizing each
-   segment by its real cost means the apply step occupies 12 of 22 of the rail,
-   so the student SEES the big block ahead instead of being told they are
-   nearly finished. Rough numbers on purpose: they only have to be right
-   relative to each other, and being roughly honest beats being precisely
-   wrong. Approved 2026-07-27 as override 1 of 10 (DESIGN.md). */
+/* `weight` is roughly how much of the student's time the step costs. Resume upload and one-page
+   review get more space than the short choice screens, so the rail reflects effort instead of
+   pretending every click is equal. */
 export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
   { key: "resume", label: "Your resume", weight: 2 },
-  { key: "focus", label: "Jobs for you", weight: 1 },
+  { key: "focus", label: "Your roles", weight: 1 },
   /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
      in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
   { key: "sponsorship", label: "Work visa", weight: 1 },
   { key: "base", label: "Your one page", weight: 2 },
-  { key: "install", label: "Add to Chrome", weight: 2 },
-  { key: "apply", label: "One application", weight: 12 },
-  { key: "gaps", label: "A few details", weight: 2 },
-  { key: "targeting", label: "When you start", weight: 1 },
   { key: "done", label: "Done", weight: 0 },
 ];
 
@@ -46,17 +35,8 @@ export function StepRail({ current }: { current: OnboardingStep }) {
   const i = STEPS.findIndex((s) => s.key === current);
   const activeStep = STEPS[Math.max(0, i)];
   const step = Math.max(0, i) + 1;
-  /* The fill is back, weighted by effort rather than by step count. The rule it
-     has to satisfy is the one that killed the last bar: never tell a student
-     they are nearly done while the twelve-minute application is still ahead.
-     Weighting does that structurally. Each segment is as wide as the step is
-     expensive, so at "Add to Chrome" the rail is visibly about a third filled
-     with one wide block left, which is the truth.
-
-     No percentage number. The 2026-07-04 note that a figure "would only make a
-     12-minute step feel longer" still holds, and the bar's shape already says
-     more than a digit would. The written "Step 5 of 8" stays as the precise
-     part. */
+  /* Each segment is as wide as the effort it represents. No percentage number: the written step
+     count is precise enough, while the rail provides a quick visual map of the remaining work. */
   return (
     <div aria-label={`Setup: step ${step} of ${STEPS.length}, ${activeStep.label}`}>
       <div className="flex items-center justify-between gap-4">
