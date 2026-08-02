@@ -3,14 +3,8 @@
 import { Button } from "@/components/app/Button";
 import { useEffect, useState } from "react";
 import { RoleType, Targeting, api, getTargeting, putTargeting } from "@/lib/api";
-import {
-  CATEGORIES,
-  MAX_CATEGORIES,
-  MAX_ROLE_TYPES,
-  ROLE_TYPES,
-  periodLabel,
-  periodsFor,
-} from "@/lib/periods";
+import { CATEGORIES, ROLE_TYPES, periodLabel, periodsFor } from "@/lib/periods";
+import { REMOTE_LOCATION, isRemoteLocation, locationSuggestions } from "@/lib/locations";
 import { Card, ErrorNote, PendingLabel } from "./ui";
 import { Chip } from "@/components/start/ui";
 
@@ -22,10 +16,10 @@ import { Chip } from "@/components/start/ui";
  * you were chasing closes, you decide you'll take a co-op after all - and the whole point of
  * targeting is that it aims every future application.
  *
- * Same caps as /start and the same reason: an uncapped multi-select lets someone tick everything,
- * and "interested in everything" is indistinguishable from "hasn't chosen". Both match nothing.
- * The server enforces them too (targetingBodySchema); this just makes the limit visible before
- * it's hit rather than after a 400.
+ * Nothing here is capped any more (2026-08-02). Categories and types were 3 and 2, on the argument
+ * that "interested in everything" reads the same as "hasn't chosen"; in practice it told a student
+ * who wants software AND data AND product that they were not allowed to say so, and they picked
+ * three and never came back. Ranking sorts a broad feed. A hard stop at three does not.
  */
 export default function TargetingCard() {
   const [t, setT] = useState<Targeting | null>(null);
@@ -81,8 +75,15 @@ export default function TargetingCard() {
   const titles = t.titles ?? [];
   const locations = t.locations ?? [];
   const periods = periodsFor(gradYear);
-  const catFull = categories.length >= MAX_CATEGORIES;
-  const typeFull = roleTypes.length >= MAX_ROLE_TYPES;
+  const remoteChosen = locations.some(isRemoteLocation);
+  const suggestions = locationSuggestions(locationOptions);
+
+  function addLocation(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    if (locations.some((existing) => existing.toLowerCase() === trimmed.toLowerCase())) return;
+    patch({ locations: [...locations, trimmed] });
+  }
 
   function patch(p: Partial<Targeting>) {
     setT((prev) => ({ ...(prev as Targeting), ...p }));
@@ -130,16 +131,24 @@ export default function TargetingCard() {
       </div>
 
       <div className="mt-6">
-        <div className="flex items-baseline justify-between">
-          <p className="text-[13px] text-ink">Locations</p>
-          <span className="font-mono text-[11px] text-faint">Up to 5</span>
-        </div>
-        <p className="mt-1 text-xs leading-5 text-muted">Jobs must match one of these places. Leave this empty to search anywhere.</p>
+        <p className="text-[13px] text-ink">Locations</p>
+        <p className="mt-1 text-xs leading-5 text-muted">
+          Jobs must match one of these places. Add as many as you want, anywhere in the world, or
+          leave this empty to search everywhere.
+        </p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {locations.map((location) => (
             <Chip key={location} label={location} on onClick={() => patch({ locations: locations.filter((value) => value !== location) })} />
           ))}
         </div>
+        {/* Remote is a place, not only the checkbox below. The checkbox hides every on-site job;
+            this chip says "London, Dubai, OR anywhere remote", which is what people actually want
+            and previously had no way to express. */}
+        {!remoteChosen && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <Chip label={`+ ${REMOTE_LOCATION}`} on={false} onClick={() => addLocation(REMOTE_LOCATION)} />
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <input
             value={newLocation}
@@ -148,24 +157,25 @@ export default function TargetingCard() {
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
               event.preventDefault();
-              const value = newLocation.trim();
-              if (value && locations.length < 5 && !locations.includes(value)) patch({ locations: [...locations, value] });
+              addLocation(newLocation);
               setNewLocation("");
             }}
-            placeholder="Add a city or region"
+            placeholder="Add a city, country or region"
             aria-label="Add a preferred location"
             className="min-h-11 w-64 rounded-full border border-border bg-surface px-4 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
           />
+          {/* The board's own cities first, then hubs on every continent. The facets alone are
+              US-heavy, which told a student in Bangalore or Dubai that their city was not an
+              option. Free text still works, and always did. */}
           <datalist id="litos-location-options">
-            {locationOptions.map((location) => <option key={location} value={location} />)}
+            {suggestions.map((location) => <option key={location} value={location} />)}
           </datalist>
           <Button
             variant="secondary"
             size="sm"
-            disabled={!newLocation.trim() || locations.length >= 5}
+            disabled={!newLocation.trim()}
             onClick={() => {
-              const value = newLocation.trim();
-              if (value && !locations.includes(value)) patch({ locations: [...locations, value] });
+              addLocation(newLocation);
               setNewLocation("");
             }}
           >
@@ -181,13 +191,15 @@ export default function TargetingCard() {
           />
           Show remote jobs only
         </label>
+        {t.remote_only && locations.length > 0 && (
+          <p className="mt-1.5 text-xs leading-5 text-muted">
+            While this is on, only remote jobs are shown and the places above are ignored.
+          </p>
+        )}
       </div>
 
       <div className="mt-6">
-        <div className="flex items-baseline justify-between">
-          <p className="text-[13px] text-ink">Kind of work</p>
-          <span className="font-mono text-[11px] text-faint">Up to {MAX_CATEGORIES}</span>
-        </div>
+        <p className="text-[13px] text-ink">Kind of work</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {CATEGORIES.map((c) => {
             const on = categories.includes(c.slug);
@@ -196,7 +208,6 @@ export default function TargetingCard() {
                 key={c.slug}
                 label={c.label}
                 on={on}
-                disabled={!on && catFull}
                 onClick={() =>
                   patch({
                     categories: on ? categories.filter((x) => x !== c.slug) : [...categories, c.slug],
@@ -209,10 +220,7 @@ export default function TargetingCard() {
       </div>
 
       <div className="mt-6">
-        <div className="flex items-baseline justify-between">
-          <p className="text-[13px] text-ink">Type</p>
-          <span className="font-mono text-[11px] text-faint">Up to {MAX_ROLE_TYPES}</span>
-        </div>
+        <p className="text-[13px] text-ink">Type</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {ROLE_TYPES.map((r) => {
             const slug = r.slug as RoleType;
@@ -222,7 +230,6 @@ export default function TargetingCard() {
                 key={r.slug}
                 label={r.label}
                 on={on}
-                disabled={!on && typeFull}
                 onClick={() =>
                   patch({ role_types: on ? roleTypes.filter((x) => x !== slug) : [...roleTypes, slug] })
                 }
