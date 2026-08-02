@@ -72,7 +72,7 @@ export async function loadDashboardInitialState(request: DashboardRequester): Pr
   const [me, jobs, targeting, profile, resumeHistory, applicationProfile, outreach, onboarding] = await Promise.all([
     request<Me>("/me"),
     request<{ jobs: MonitoredJob[] }>("/jobs?offset=0"),
-    request<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, primary_period: null, backup_period: null })),
+    request<Targeting>("/profile/targeting").catch(() => ({ categories: null, titles: null, role_types: null, locations: null, remote_only: false, primary_period: null, backup_period: null })),
     request<Partial<ParsedProfile>>("/profile").catch(() => ({ skills: [], target_roles: [] })),
     request<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
     request<ApplicationProfile>("/profile/application").catch(() => ({})),

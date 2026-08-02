@@ -25,6 +25,9 @@ const jobs = [
     posted_at: "2026-07-26T09:00:00.000Z",
     first_seen_at: "2026-07-26T09:00:00.000Z",
     ats_name: "greenhouse",
+    match_score: 91,
+    preference_score: 96,
+    preference_reasons: ["Product Engineer", "software engineering", "New York"],
   },
   {
     id: "2",
@@ -40,6 +43,9 @@ const jobs = [
     posted_at: "2026-07-26T10:00:00.000Z",
     first_seen_at: "2026-07-26T10:00:00.000Z",
     ats_name: "lever",
+    match_score: 86,
+    preference_score: 40,
+    preference_reasons: ["full time"],
   },
 ];
 
@@ -50,16 +56,12 @@ describe("daily match preparation", () => {
     assert.equal(AUTO_SUBMIT_PREPARED_LIMIT, 20);
   });
 
-  test("ranks target-title and resume-skill evidence ahead of recency", () => {
-    const ranked = rankJobs(
-      jobs,
-      { titles: ["Product Engineer"], categories: ["Software engineering"], role_types: null, primary_period: null, backup_period: null },
-      { skills: ["React", "TypeScript"], target_roles: ["Product Engineer"] },
-    );
+  test("preserves the backend order and preference evidence", () => {
+    const ranked = rankJobs(jobs);
 
     assert.equal(ranked[0].id, "1");
     assert.ok(ranked[0].match > ranked[1].match);
-    assert.deepEqual(ranked[0].reasons.slice(0, 2), ["Product", "React"]);
+    assert.deepEqual(ranked[0].reasons, ["Product Engineer", "software engineering", "New York"]);
   });
 
   test("recognizes an existing packet despite punctuation and case differences", () => {

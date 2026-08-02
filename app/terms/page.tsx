@@ -43,7 +43,7 @@ export const metadata = {
    remaining half of this and lives in the backend repo: the clickwrap on the
    sign-in screen forms the agreement, and storing the version is what proves
    which text a given account accepted. */
-export const TERMS_VERSION = "2026-07-30";
+const TERMS_VERSION = "2026-07-30";
 const TERMS_EFFECTIVE = "30 July 2026";
 
 function Section({

@@ -115,6 +115,8 @@ const QA_TARGETING: Targeting = {
   categories: ["Software engineering", "Product engineering"],
   titles: ["Software Engineer", "Product Engineer"],
   role_types: ["internship", "new-grad"],
+  locations: ["San Francisco", "New York"],
+  remote_only: false,
   primary_period: "Summer 2027",
   backup_period: null,
 };
@@ -244,7 +246,7 @@ export default function Home() {
     };
   }, []);
 
-  const rankedJobs = useMemo(() => rankJobs(jobs ?? [], targeting, profile), [jobs, profile, targeting]);
+  const rankedJobs = useMemo(() => rankJobs(jobs ?? []), [jobs]);
   /* The build-ahead queue, and ONLY that: nothing renders this list. Empty unless automatic
      submission is on, which is what stops resumes being built for students who never asked. */
   const dailyJobs = useMemo(

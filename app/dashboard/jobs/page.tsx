@@ -364,6 +364,11 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
             {type && <span className="text-muted">{type}</span>}
           </p>
         )}
+        {job.preference_reasons && job.preference_reasons.length > 0 && (
+          <p className="mt-1.5 text-xs text-faint">
+            Matches your {job.preference_reasons.join(", ")}
+          </p>
+        )}
         <p className="mt-1.5 font-mono text-[11px] text-faint">
           Found {formatRelativeDate(job.first_seen_at)}
           {job.department ? ` · ${job.department}` : ""}

@@ -241,6 +241,10 @@ export type MonitoredJob = {
    * resume yet. In all of those cases the honest row shows no number at all.
    */
   match_score?: number | null;
+  /** 0-100 fit against the account's saved role, type, and location preferences. */
+  preference_score?: number;
+  /** Human-readable preference signals used by the backend ranking. */
+  preference_reasons?: string[];
   /**
    * Why this posting is safe to show someone who needs a visa sponsored, or null when nothing
    * confirms it.
@@ -503,6 +507,8 @@ export type Targeting = {
   categories: string[] | null;
   titles: string[] | null;
   role_types: RoleType[] | null;
+  locations: string[] | null;
+  remote_only: boolean;
   primary_period: string | null;
   backup_period: string | null;
 };

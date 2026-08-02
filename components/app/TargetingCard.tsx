@@ -34,6 +34,8 @@ export default function TargetingCard() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [newLocation, setNewLocation] = useState("");
+  const [locationOptions, setLocationOptions] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +46,11 @@ export default function TargetingCard() {
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Could not load the jobs you want.");
       }
+      void api<{ locations?: string[] }>("/jobs/facets")
+        .then((result) => {
+          if (!cancelled) setLocationOptions(result.locations ?? []);
+        })
+        .catch(() => null);
       // grad_year lives on the parsed resume and only feeds the period options. Fetched separately
       // and allowed to fail: a student who skipped the upload has no profile, and periodsFor(0)
       // already falls back to a sensible two-year window. Losing it must not break the card.
@@ -72,6 +79,7 @@ export default function TargetingCard() {
   const categories = t.categories ?? [];
   const roleTypes = t.role_types ?? [];
   const titles = t.titles ?? [];
+  const locations = t.locations ?? [];
   const periods = periodsFor(gradYear);
   const catFull = categories.length >= MAX_CATEGORIES;
   const typeFull = roleTypes.length >= MAX_ROLE_TYPES;
@@ -89,6 +97,8 @@ export default function TargetingCard() {
         categories: t.categories,
         titles: t.titles,
         role_types: t.role_types,
+        locations: t.locations,
+        remote_only: t.remote_only,
         primary_period: t.primary_period,
         backup_period: t.backup_period,
       });
@@ -117,6 +127,60 @@ export default function TargetingCard() {
             {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
           </Button>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <div className="flex items-baseline justify-between">
+          <p className="text-[13px] text-ink">Locations</p>
+          <span className="font-mono text-[11px] text-faint">Up to 5</span>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-muted">Jobs must match one of these places. Leave this empty to search anywhere.</p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {locations.map((location) => (
+            <Chip key={location} label={location} on onClick={() => patch({ locations: locations.filter((value) => value !== location) })} />
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            value={newLocation}
+            list="litos-location-options"
+            onChange={(event) => setNewLocation(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              const value = newLocation.trim();
+              if (value && locations.length < 5 && !locations.includes(value)) patch({ locations: [...locations, value] });
+              setNewLocation("");
+            }}
+            placeholder="Add a city or region"
+            aria-label="Add a preferred location"
+            className="min-h-11 w-64 rounded-full border border-border bg-surface px-4 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+          />
+          <datalist id="litos-location-options">
+            {locationOptions.map((location) => <option key={location} value={location} />)}
+          </datalist>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!newLocation.trim() || locations.length >= 5}
+            onClick={() => {
+              const value = newLocation.trim();
+              if (value && !locations.includes(value)) patch({ locations: [...locations, value] });
+              setNewLocation("");
+            }}
+          >
+            Add
+          </Button>
+        </div>
+        <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={t.remote_only}
+            onChange={(event) => patch({ remote_only: event.target.checked })}
+            className="accent-brand"
+          />
+          Show remote jobs only
+        </label>
       </div>
 
       <div className="mt-6">

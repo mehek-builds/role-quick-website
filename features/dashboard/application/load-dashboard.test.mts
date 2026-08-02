@@ -17,7 +17,7 @@ const completeBootstrap: DashboardBootstrap = {
     },
   },
   jobs: { jobs: [{ id: "job-1" }] as DashboardBootstrap["jobs"]["jobs"] },
-  targeting: { categories: null, titles: null, role_types: null, primary_period: null, backup_period: null },
+  targeting: { categories: null, titles: null, role_types: null, locations: null, remote_only: false, primary_period: null, backup_period: null },
   profile: { full_name: "Me", skills: ["TypeScript"] },
   resume_history: { resumes: [] },
   application_profile: {},

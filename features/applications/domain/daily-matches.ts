@@ -29,27 +29,16 @@ export const AUTO_SUBMIT_PREPARED_LIMIT = 20;
 
 export function rankJobs(
   jobs: MonitoredJob[],
-  targeting: Targeting | null,
-  profile: Partial<ParsedProfile> | null,
+  _targeting?: Targeting | null,
+  _profile?: Partial<ParsedProfile> | null,
 ): RankedJob[] {
-  const titleTerms = tokens([...(targeting?.titles ?? []), ...(profile?.target_roles ?? [])].join(" "));
-  const skillTerms = tokens([...(profile?.skills ?? []), ...(targeting?.categories ?? [])].join(" "));
-
-  return jobs
-    .map((job) => {
-      const title = tokens(job.title);
-      const corpus = tokens(`${job.title} ${job.department ?? ""} ${job.description}`);
-      const titleMatches = [...titleTerms].filter((term) => title.has(term));
-      const skillMatches = [...skillTerms].filter((term) => corpus.has(term));
-      const match = Math.min(98, 72 + titleMatches.length * 6 + Math.min(14, skillMatches.length * 2));
-      const reasons = [...new Set([...titleMatches, ...skillMatches])].slice(0, 3).map(readableTerm);
-      return {
-        ...job,
-        match,
-        reasons: reasons.length ? reasons : [job.department || job.employment_type || "Role fit"],
-      };
-    })
-    .sort((a, b) => b.match - a.match || (b.posted_at ?? b.first_seen_at).localeCompare(a.posted_at ?? a.first_seen_at));
+  /* GET /jobs is the single ranking authority. Re-ranking its first page in the browser used a
+     different formula, ignored role type and location, and made Home disagree with Jobs. */
+  return jobs.map((job) => ({
+    ...job,
+    match: job.preference_score ?? job.match_score ?? 0,
+    reasons: job.preference_reasons ?? [],
+  }));
 }
 
 /**
@@ -173,19 +162,6 @@ export function portalName(portalUrl: string): string {
   return "the company's application page";
 }
 
-function tokens(value: string): Set<string> {
-  return new Set(value.toLowerCase().match(/[a-z][a-z0-9+#.]{1,}/g)?.filter((term) => !STOP_WORDS.has(term)) ?? []);
-}
-
-function readableTerm(term: string): string {
-  if (term === "api" || term === "apis") return "API experience";
-  if (term === "typescript") return "TypeScript";
-  if (term === "react") return "React";
-  return term.charAt(0).toUpperCase() + term.slice(1);
-}
-
 function normalized(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
-
-const STOP_WORDS = new Set(["and", "the", "with", "for", "from", "that", "this", "your", "engineer", "engineering", "intern", "internship", "new", "grad"]);
