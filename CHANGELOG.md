@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.14] - 2026-08-02
+
+### Added
+
+- Personal trials now pause before generation when a high-value job requirement is absent from
+  the resume. Job seekers must provide one concrete example or explicitly say they have not done it.
+
+### Fixed
+
+- Declined requirements are rejected if a generated resume bullet still tries to claim them.
+
 ## [0.1.13] - 2026-08-02
 
 ### Fixed

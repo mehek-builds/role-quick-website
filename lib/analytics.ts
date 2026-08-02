@@ -8,6 +8,8 @@ import posthog from "posthog-js/dist/module.slim";
 type TryEvent =
   | "try_start"
   | "path_chosen"
+  | "try_clarifications_queued"
+  | "try_clarifications_answered"
   | "packet_complete"
   | "install_click"
   /* The site's primary ask is now the account, not the store: every marketing

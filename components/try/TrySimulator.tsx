@@ -12,6 +12,12 @@ import {
   type RealPacket,
 } from "@/lib/try-data";
 import type { TryJobCard } from "@/lib/try-jobs";
+import {
+  MAX_CLARIFICATION_ANSWER_CHARS,
+  MIN_CLARIFICATION_ANSWER_CHARS,
+  type ClarificationAnswers,
+  type KeywordClarification,
+} from "@/lib/try-keyword-clarifications";
 import { ThinkingOrb } from "thinking-orbs";
 import { PendingLabel } from "@/components/app/ui";
 import { MobileSendLink } from "@/components/MobileSendLink";
@@ -29,6 +35,11 @@ const STEP_ORDER: Step[] = ["chooser", "resume", "autofill", "outreach", "done"]
 const WORK_AUTHORIZATION_ANSWERS = ["Yes", "No"] as const;
 const SPONSORSHIP_ANSWERS = ["No", "Yes", "Not sure"] as const;
 
+type PendingClarificationTrial = {
+  resume: string;
+  website: string;
+  clarifications: KeywordClarification[];
+};
 
 function after(step: Step, target: Step) {
   return STEP_ORDER.indexOf(step) > STEP_ORDER.indexOf(target);
@@ -51,6 +62,8 @@ export function TrySimulator({
   const [jobIdx, setJobIdx] = useState(0);
   const [packet, setPacket] = useState<RealPacket | null>(null);
   const [pendingPacket, setPendingPacket] = useState<RealPacket | null>(null);
+  const [pendingClarifications, setPendingClarifications] =
+    useState<PendingClarificationTrial | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pasteOpen, setPasteOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -86,25 +99,47 @@ export function TrySimulator({
   function startRealPacket(nextPacket: RealPacket) {
     setPacket(nextPacket);
     setPendingPacket(null);
+    setPendingClarifications(null);
     setGenerating(false);
     setPasteOpen(false);
     setStep("resume");
   }
 
-  async function chooseReal(resume: string, website: string) {
+  async function chooseReal(
+    resume: string,
+    website: string,
+    clarificationAnswers?: ClarificationAnswers,
+  ) {
     setMode("real");
     track("path_chosen", { path: "real" });
     if (t0.current == null) t0.current = Date.now();
     setGenerating(true);
+    setPendingClarifications(null);
     setNotice(null);
     try {
       const res = await fetch("/api/try", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ resume, postingId: jobs[jobIdx]?.id ?? "", website }),
+        body: JSON.stringify({
+          resume,
+          postingId: jobs[jobIdx]?.id ?? "",
+          website,
+          ...(clarificationAnswers ? { clarificationAnswers } : {}),
+        }),
       });
       const data = await res.json();
-      if (res.ok && data.packet) {
+      if (res.ok && data.needs_clarification && Array.isArray(data.clarifications)) {
+        setPendingClarifications({
+          resume,
+          website,
+          clarifications: data.clarifications as KeywordClarification[],
+        });
+        setGenerating(false);
+        track("try_clarifications_queued", {
+          count: data.clarifications.length,
+        });
+        return;
+      } else if (res.ok && data.packet) {
         const nextPacket = data.packet as RealPacket;
         if (!nextPacket.filled_fields.work_authorization?.trim()) {
           setPendingPacket(nextPacket);
@@ -150,6 +185,19 @@ export function TrySimulator({
         work_authorization: answer,
       },
     });
+  }
+
+  function answerClarifications(answers: ClarificationAnswers) {
+    if (!pendingClarifications) return;
+    track("try_clarifications_answered", {
+      count: pendingClarifications.clarifications.length,
+      declined: Object.values(answers).filter((answer) => answer === null).length,
+    });
+    void chooseReal(
+      pendingClarifications.resume,
+      pendingClarifications.website,
+      answers,
+    );
   }
 
   /* The packet assembles itself once a path is chosen (Mehek, 2026-07-08: the
@@ -225,6 +273,13 @@ export function TrySimulator({
         <WorkAuthorizationDialog
           jobLocation={realJob?.location ?? "the role's location"}
           onConfirm={answerWorkAuthorization}
+        />
+      )}
+      {pendingClarifications && (
+        <KeywordClarificationDialog
+          jobTitle={realJob?.title ?? "this role"}
+          clarifications={pendingClarifications.clarifications}
+          onConfirm={answerClarifications}
         />
       )}
       {notice && (
@@ -713,6 +768,140 @@ function WorkAuthorizationDialog({
           className="mt-5 min-h-11 w-full rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
         >
           Continue my preview
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function KeywordClarificationDialog({
+  jobTitle,
+  clarifications,
+  onConfirm,
+}: {
+  jobTitle: string;
+  clarifications: KeywordClarification[];
+  onConfirm: (answers: ClarificationAnswers) => void;
+}) {
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [declined, setDeclined] = useState<Record<string, boolean>>({});
+  const firstAnswerRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    firstAnswerRef.current?.focus();
+  }, []);
+
+  const complete = clarifications.every((clarification) => {
+    if (declined[clarification.id]) return true;
+    return (
+      (answers[clarification.id] ?? "").trim().length >=
+      MIN_CLARIFICATION_ANSWER_CHARS
+    );
+  });
+
+  function confirm() {
+    if (!complete) return;
+    onConfirm(
+      Object.fromEntries(
+        clarifications.map((clarification) => [
+          clarification.id,
+          declined[clarification.id]
+            ? null
+            : (answers[clarification.id] ?? "").trim(),
+        ]),
+      ),
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-y-auto bg-ink/30 p-3 backdrop-blur-[2px] sm:items-center sm:p-6">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="keyword-clarification-title"
+        aria-describedby="keyword-clarification-description"
+        className="max-h-[calc(100dvh-1.5rem)] w-full max-w-[520px] overflow-y-auto rounded-[20px] border border-border bg-white p-5 shadow-overlay sm:max-h-[calc(100dvh-3rem)] sm:p-6"
+      >
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+          Needs your input
+        </p>
+        <h2
+          id="keyword-clarification-title"
+          className="mt-2 text-xl font-medium tracking-[-0.02em] text-ink"
+        >
+          Check these requirements.
+        </h2>
+        <p
+          id="keyword-clarification-description"
+          className="mt-2 text-[13px] leading-6 text-muted"
+        >
+          These appear in {jobTitle}, but not in your resume. Litos will only use
+          what you confirm.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          {clarifications.map((clarification, index) => {
+            const isDeclined = Boolean(declined[clarification.id]);
+            return (
+              <fieldset
+                key={clarification.id}
+                className="rounded-[12px] border border-border bg-surface-alt/40 p-4"
+              >
+                <legend className="px-1 font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                  {clarification.keyword}
+                </legend>
+                <label
+                  htmlFor={`clarification-${clarification.id}`}
+                  className="block text-[12px] font-medium leading-5 text-ink"
+                >
+                  {clarification.question}
+                </label>
+                <textarea
+                  ref={index === 0 ? firstAnswerRef : undefined}
+                  id={`clarification-${clarification.id}`}
+                  value={answers[clarification.id] ?? ""}
+                  disabled={isDeclined}
+                  maxLength={MAX_CLARIFICATION_ANSWER_CHARS}
+                  rows={3}
+                  onChange={(event) =>
+                    setAnswers((current) => ({
+                      ...current,
+                      [clarification.id]: event.target.value,
+                    }))
+                  }
+                  placeholder="Name the project, task, or result."
+                  className="mt-2 w-full rounded-[12px] border border-border bg-white px-3 py-2.5 text-[13px] leading-5 text-ink outline-none placeholder:text-faint focus:border-brand disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-faint"
+                />
+                <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-3 text-[12px] text-muted">
+                  <input
+                    type="checkbox"
+                    checked={isDeclined}
+                    onChange={(event) =>
+                      setDeclined((current) => ({
+                        ...current,
+                        [clarification.id]: event.target.checked,
+                      }))
+                    }
+                    className="h-4 w-4 accent-[var(--color-brand)]"
+                  />
+                  <span>I have not done this.</span>
+                </label>
+              </fieldset>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 text-[11px] leading-5 text-faint">
+          A short “yes” is not enough. Give one concrete detail, or mark that you
+          have not done it.
+        </p>
+        <button
+          type="button"
+          disabled={!complete}
+          onClick={confirm}
+          className="mt-4 min-h-11 w-full rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          Use my answers
         </button>
       </div>
     </div>
