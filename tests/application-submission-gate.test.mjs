@@ -90,7 +90,12 @@ test("automation settings send field-specific updates so stale clients cannot re
   const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
   assert.match(settings, /saveAutomation\(\{ automatic_submission_enabled: event\.target\.checked \}\)/);
-  assert.match(settings, /saveAutomation\(\{ automatic_verification_enabled: event\.target\.checked \}\)/);
+  assert.match(settings, /changeAutomaticVerification\(event\.target\.checked\)/);
+  assert.match(settings, /verificationEnableDecision\(emailConnections\)/);
+  assert.match(settings, /connectProvider\("gmail", true\)/);
+  assert.match(settings, /connectProvider\("outlook", true\)/);
+  assert.match(settings, /shouldEnableVerificationAfterCallback/);
+  assert.match(settings, /setAutomationSettings\(\{ automatic_verification_enabled: true \}\)/);
   assert.match(api, /setAutomationSettings\(settings: Partial<AutomationSettings>\)/);
 });
 
