@@ -396,9 +396,6 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         }}
       />
 
-      <p className="mt-6 max-w-[46ch] text-sm leading-6 text-muted">
-        Used only for your applications. Never sold.
-      </p>
       <div className="mt-6 flex items-center gap-3">
         <PrimaryButton onClick={() => {
           if (inputRef.current) inputRef.current.value = "";
