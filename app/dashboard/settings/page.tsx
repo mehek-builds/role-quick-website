@@ -29,6 +29,12 @@ import { passwordFormProblem } from "@/app/login/password-form";
 import { updatePasswordSession } from "@/app/login/password-session";
 import { litosClientHeaders } from "@/lib/product";
 import { track } from "@/lib/analytics";
+import {
+  hasActiveInbox,
+  shouldEnableVerificationAfterCallback,
+  VERIFICATION_CONNECTION_INTENT_KEY,
+  verificationEnableDecision,
+} from "./email-verification-flow";
 
 /* Application profile: exactly the fields the backend encrypts and the
    extension autofills (PRD-v2 Section 4). EEO self-identification is not
@@ -66,6 +72,7 @@ export default function Settings() {
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
+  const [verificationConnectionPrompt, setVerificationConnectionPrompt] = useState(false);
   const [mountedAt] = useState(() => Date.now());
   const [dataBusy, setDataBusy] = useState<"export" | "delete" | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -98,18 +105,46 @@ export default function Settings() {
             connectionRes = await getEmailConnections();
           }
         }
+        let resolvedVerification = onboardingRes.automatic_verification_enabled;
+        let verificationEnableProblem: string | null = null;
+        const intendedProvider = callbackProvider
+          ? window.sessionStorage.getItem(VERIFICATION_CONNECTION_INTENT_KEY)
+          : null;
+        if (shouldEnableVerificationAfterCallback({
+          callbackProvider,
+          callbackStatus,
+          intendedProvider,
+          connections: connectionRes,
+        })) {
+          try {
+            const enabled = await setAutomationSettings({ automatic_verification_enabled: true });
+            resolvedVerification = enabled.automatic_verification_enabled;
+          } catch (reason) {
+            verificationEnableProblem = reason instanceof Error
+              ? reason.message
+              : "The inbox connected, but email verification could not be turned on.";
+          }
+        }
+        if (callbackProvider && callbackStatus && intendedProvider === callbackProvider) {
+          window.sessionStorage.removeItem(VERIFICATION_CONNECTION_INTENT_KEY);
+        }
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
-        setAutomaticVerification(onboardingRes.automatic_verification_enabled);
+        setAutomaticVerification(resolvedVerification);
         setEmailConnections(connectionRes);
         setSponsorship(sponsorRes);
+        if (verificationEnableProblem) setError(verificationEnableProblem);
         if (callbackProvider && callbackStatus) {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
           const connected = connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected);
-          setConnectionNotice(callbackStatus === "success" && connected ? `${label} connected.` : `${label} connection was not completed.`);
+          setConnectionNotice(
+            callbackStatus === "success" && connected
+              ? `${label} connected.${resolvedVerification ? " Email verification is on." : ""}`
+              : `${label} connection was not completed. Email verification is still off.`,
+          );
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete("connection");
           cleanUrl.searchParams.delete("status");
@@ -261,16 +296,42 @@ export default function Settings() {
     }
   }
 
-  async function connectProvider(provider: EmailProvider) {
+  async function connectProvider(provider: EmailProvider, enableVerificationAfterConnect = false) {
     setConnectionBusy(provider);
     setError(null);
+    if (enableVerificationAfterConnect) {
+      window.sessionStorage.setItem(VERIFICATION_CONNECTION_INTENT_KEY, provider);
+    }
     try {
       const result = await createEmailConnection(provider);
       window.location.assign(result.redirect_url);
     } catch (err) {
+      if (enableVerificationAfterConnect) {
+        window.sessionStorage.removeItem(VERIFICATION_CONNECTION_INTENT_KEY);
+      }
       setConnectionBusy(null);
       setError(err instanceof Error ? err.message : "Could not start the email connection.");
     }
+  }
+
+  function changeAutomaticVerification(enabled: boolean) {
+    if (!enabled) {
+      setVerificationConnectionPrompt(false);
+      void saveAutomation({ automatic_verification_enabled: false });
+      return;
+    }
+    if (!emailConnections) return;
+    const decision = verificationEnableDecision(emailConnections);
+    if (decision === "enable") {
+      void saveAutomation({ automatic_verification_enabled: true });
+      return;
+    }
+    if (decision === "unavailable") {
+      setError("Email connections are unavailable right now. Email verification is still off.");
+      return;
+    }
+    setError(null);
+    setVerificationConnectionPrompt(true);
   }
 
   async function disconnectProvider(provider: EmailProvider) {
@@ -280,8 +341,13 @@ export default function Settings() {
     setError(null);
     try {
       await disconnectEmailConnection(provider);
-      setEmailConnections(await getEmailConnections());
-      setConnectionNotice(`${label} disconnected.`);
+      const connections = await getEmailConnections();
+      setEmailConnections(connections);
+      if (!hasActiveInbox(connections)) {
+        setAutomaticVerification(false);
+        setVerificationConnectionPrompt(false);
+      }
+      setConnectionNotice(`${label} disconnected.${hasActiveInbox(connections) ? " Email verification is still on through your other inbox." : " Email verification is off."}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Could not disconnect ${label}.`);
     } finally {
@@ -565,10 +631,42 @@ export default function Settings() {
               className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
             />
           </label>
-          <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
-            <span><span className="block text-sm font-medium text-ink">Read the code a company emails me</span><span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span></span>
-            <input aria-label="Read the code a company emails me" type="checkbox" checked={automaticVerification} disabled={savingAutomation} onChange={(event) => void saveAutomation({ automatic_verification_enabled: event.target.checked })} className="mt-1 size-4 accent-[#6b84e8]" />
-          </label>
+          <div className="rounded-inner border border-border p-4">
+            <div className="flex items-start justify-between gap-5">
+              <label htmlFor="automatic-email-verification">
+                <span className="block text-sm font-medium text-ink">Read the code a company emails me</span>
+                <span className="mt-1 block text-xs leading-5 text-muted">Use connected Gmail or Outlook only to find a code tied to an active application.</span>
+              </label>
+              <input
+                id="automatic-email-verification"
+                aria-label="Read the code a company emails me"
+                type="checkbox"
+                checked={automaticVerification}
+                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
+                onChange={(event) => changeAutomaticVerification(event.target.checked)}
+                className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+              />
+            </div>
+            {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
+              <div className="mt-4 border-t border-border pt-4">
+                <p className="text-xs leading-5 text-muted">Connect an inbox first. Your provider will show exactly what Litos can access before you approve it.</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button type="button" size="sm" onClick={() => void connectProvider("gmail", true)} disabled={connectionBusy !== null}>
+                    Connect Gmail
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => void connectProvider("outlook", true)} disabled={connectionBusy !== null}>
+                    Connect Outlook
+                  </Button>
+                  <Button type="button" size="sm" variant="secondary" onClick={() => setVerificationConnectionPrompt(false)} disabled={connectionBusy !== null}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            )}
+            {automaticVerification && !hasActiveInbox(emailConnections) && (
+              <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until an inbox is connected.</p>
+            )}
+          </div>
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
         </div>
