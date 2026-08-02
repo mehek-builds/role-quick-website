@@ -2,26 +2,17 @@
 
 /* /start - onboarding.
  *
- * The thesis: the first application IS the onboarding. Nobody fills in a citizenship field
- * because a settings page asked; they fill it in because a job they want is asking. So we stop
- * asking and watch one real application instead, and everything after it takes seconds.
- *
- * PRD-v2 Section 4D splits every field into three buckets. Bucket 1 ("auto-extract, no ask") is
- * what the resume gives us at step 01. Bucket 3 ("always ask, never attempt extraction") is
- * citizenship, DOB, salary, availability - exactly the questions that are invasive cold and
- * ordinary on an application - so they are harvested at step 03 rather than asked here.
- *
- * Which leaves targeting: the only thing an application cannot teach us, because it is about the
- * next hundred postings rather than the one in front of them. The resume comes first so its work
- * history can seed five concrete roles, the likely employment type and the matching categories.
- * The student corrects that guess before the rest of setup continues.
+ * Setup collects only what changes the first dashboard experience: a resume, the roles inferred
+ * from it, the sponsorship filter, and the one-page resume Litos will tailor. The Chrome extension
+ * is a secondary path for jobs found elsewhere, so it is not an onboarding gate. Missing form
+ * answers are asked in context when a real application needs them instead of through a sample form.
  *
  * Steps are DERIVED server-side from data that already exists (see routes/onboarding.ts), not
  * stored as a cursor, so "Finish later" and a fresh start are the same code path and neither can
  * disagree with reality.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApplicationProfile,
@@ -37,35 +28,10 @@ import {
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
 import { track } from "@/lib/analytics";
-import { DoneStep, FocusStep, GapsStep, InstallStep, ResumeStep, TargetStep } from "@/components/start/steps";
+import { DoneStep, FocusStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { StepRail } from "@/components/start/ui";
-import { inferResumeTargeting } from "@/lib/onboarding-role-inference";
-
-// An autofill_event is proof of install because only a running extension can POST one, so we poll
-// for it while the student is off applying.
-//
-// NOTE, corrected 2026-07-26: an older comment here claimed the web app "cannot see the extension
-// (no externally_connectable)". That has not been true for some time - wxt.config.ts declares
-// externally_connectable for trylitos.com - so a direct handshake is available and would let this
-// screen advance the moment the extension is installed, rather than waiting for a whole
-// application to complete. The poll stays as the fallback for the case it also covers (the student
-// applied on a portal the extension does not support), but it should no longer be the only signal.
-//
-// Backs off 5s -> 30s. The event we are waiting for lands somewhere inside a ~12-minute
-// application, so 5s granularity is only useful for the first few seconds and is pure waste after
-// that. It is not free waste either: /onboarding/state is the heaviest read in the API (six
-// queries plus the auth check), and on Vercel the pool is max:1 per instance, so those six run
-// SERIALLY down one connection - six network round-trips to Neon per poll. At a flat 5s, a
-// thousand students sitting on this screen is ~200 req/s of polling alone; backing off cuts that
-// to ~33 req/s at the tail for a delay nobody can perceive against a 12-minute form.
-const POLL_START_MS = 5000;
-const POLL_MAX_MS = 30000;
-const QA_TARGETING = {
-  titles: ["Software Engineer", "Product Engineer", "Frontend Engineer", "Full Stack Engineer", "Data Engineer"],
-  role_types: ["internship" as const],
-};
 
 export default function Start() {
   const router = useRouter();
@@ -77,22 +43,8 @@ export default function Start() {
   const [appProfile, setAppProfile] = useState<ApplicationProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
-  // Client-side sub-step: the backend's "install" step covers both installing and applying,
-  // since it cannot tell them apart. The click is the only signal we get.
-  const [clickedInstall, setClickedInstall] = useState(false);
-  // Same shape: gaps are optional, so skipping them cannot be expressed as server state without
-  // inventing a "declined" flag per field. The backend keeps deriving 'gaps' while any are
-  // empty, so the choice to move on lives here, for this session.
-  const [skippedGaps, setSkippedGaps] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // Set alongside the QA state stub below so the base step can replay a canned build.
   const [qaDemo, setQaDemo] = useState(false);
-  const targetingFallback = useMemo(() => profile ? {
-    titles: profile.target_roles,
-    role_types: [inferResumeTargeting(profile).roleType],
-  } : null, [profile]);
-
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
     setState(s);
@@ -156,7 +108,6 @@ export default function Start() {
             },
           ],
         } as ParsedProfile);
-        setClickedInstall(qaStep === "apply");
         setQaDemo(true);
         return;
       }
@@ -178,51 +129,6 @@ export default function Start() {
       }
     })();
   }, [loadProfile, router, refresh]);
-
-  // Poll only while they are off applying. Anything else is a wasted request.
-  useEffect(() => {
-    const applying = state?.step === "install" && clickedInstall;
-    if (!applying) return;
-
-    let delay = POLL_START_MS;
-    let stopped = false;
-
-    const tick = async () => {
-      if (stopped) return;
-      // A backgrounded tab is a student who is off filling the form in another tab - which is
-      // exactly when we are waiting, but also when nobody is looking at this screen. Skip the
-      // request and re-check on the next tick rather than polling a hidden page.
-      if (typeof document !== "undefined" && document.hidden) {
-        timer.current = setTimeout(tick, delay);
-        return;
-      }
-      try {
-        const s = await refresh();
-        if (s.step !== "install") return; // moved on; the effect tears down
-      } catch {
-        /* transient; keep polling */
-      }
-      delay = Math.min(delay * 2, POLL_MAX_MS);
-      timer.current = setTimeout(tick, delay);
-    };
-
-    timer.current = setTimeout(tick, delay);
-    // Coming back to the tab is a strong signal they just finished, so check immediately and
-    // reset the backoff rather than making them wait out a 30s tail.
-    const onVisible = () => {
-      if (document.hidden || stopped) return;
-      delay = POLL_START_MS;
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(tick, 0);
-    };
-    document.addEventListener("visibilitychange", onVisible);
-
-    return () => {
-      stopped = true;
-      document.removeEventListener("visibilitychange", onVisible);
-      if (timer.current) clearTimeout(timer.current);
-    };
-  }, [state?.step, clickedInstall, refresh]);
 
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)
@@ -352,64 +258,13 @@ export default function Start() {
         />
       );
 
+    // An older backend may briefly return one of the removed steps during a rolling deploy. Treat
+    // it as ready rather than sending the student through the deleted extension and sample-form
+    // detour until the next state refresh reaches the new backend.
     case "install":
     case "apply":
-      return (
-        <InstallStep
-          phase={clickedInstall ? "apply" : "install"}
-          targetingFallback={qaDemo ? QA_TARGETING : targetingFallback}
-          allowSavedTargeting={!qaDemo}
-          onInstalled={() => {
-            // Install and apply are one backend step, so the click is the only boundary we can
-            // see. Without it, a student who installs and then abandons the application is
-            // indistinguishable from one who never installed - and those need different fixes.
-            stepDone("install");
-            track("onboarding_step_view", { step: "apply" });
-            setClickedInstall(true);
-          }}
-          onLater={later}
-        />
-      );
-
     case "gaps":
-      // Saving gaps usually empties them, which re-derives 'targeting' on its own. Skipping
-      // does not, so the flag carries them forward rather than looping on this screen.
-      if (skippedGaps) {
-        return (
-          <TargetStep
-            gradYear={profile?.grad_year ?? 0}
-            onLater={later}
-            onDone={() => void refresh()}
-          />
-        );
-      }
-      return (
-        <GapsStep
-          gaps={state.gaps}
-          onLater={later}
-          onDone={(skipped) => {
-            track(skipped ? "onboarding_step_skip" : "onboarding_step_done", {
-              step: "gaps",
-              fields: state.gaps.length,
-            });
-            setSkippedGaps(true);
-            void refresh();
-          }}
-        />
-      );
-
     case "targeting":
-      return (
-        <TargetStep
-          gradYear={profile?.grad_year ?? 0}
-          onLater={later}
-          onDone={() => {
-            stepDone("targeting");
-            void refresh();
-          }}
-        />
-      );
-
     case "done":
       return (
         <>
