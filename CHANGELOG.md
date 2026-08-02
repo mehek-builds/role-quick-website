@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.0] - 2026-08-02
+
+### Added
+
+- Onboarding now reviews the applicant's newest experience, asks only for missing impact details,
+  and offers generic examples without inventing numbers.
+- Applicants can choose the most valuable parsed experience when recency is unclear and can add
+  multiple accomplishments before continuing.
+
+### Changed
+
+- The onboarding progress rail, API client, and analytics now include the recent-experience review.
+- Applicants with enough evidence can continue immediately, while sparse evidence requires either
+  enrichment or the explicit "Continue with what you found" choice.
+
 ## [0.1.14] - 2026-08-02
 
 ### Added

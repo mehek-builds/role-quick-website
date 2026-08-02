@@ -32,6 +32,7 @@ import { DoneStep, FocusStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { StepRail } from "@/components/start/ui";
+import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 
 export default function Start() {
   const router = useRouter();
@@ -73,6 +74,7 @@ export default function Start() {
           completed_at: null,
           has_focus: true,
           has_resume: true,
+          has_impact_review: qaStep !== "impact",
           has_base_resume: false,
           has_applied: false,
           has_targeting: false,
@@ -237,6 +239,18 @@ export default function Start() {
               const s = await refresh();
               if (s.has_resume) await loadProfile();
             })();
+          }}
+        />
+      );
+
+    case "impact":
+      return (
+        <RecentExperienceStep
+          demo={qaDemo}
+          onLater={later}
+          onDone={() => {
+            stepDone("impact");
+            void refresh();
           }}
         />
       );
