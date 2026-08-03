@@ -419,7 +419,7 @@ export default function Applications() {
     const jd = nextPacket?.spec._review?.jd_text;
     if (!nextPacket || !jd) return;
     let cancelled = false;
-    void fetchJdMatch(jd, resumeSpecText(nextPacket.spec), { company: nextPacket.job_context.company, role: nextPacket.job_context.role })
+    void fetchJdMatch(jd, resumeSpecText(nextPacket.spec), { company: nextPacket.job_context.company, role: nextPacket.job_context.role, job_id: nextPacket.job_context.job_id })
       .then((result) => !cancelled && setNextScore({ id: nextPacket.id, score: result.scorable ? result.score : null }))
       // No number rather than a wrong one.
       .catch(() => null);
@@ -864,6 +864,11 @@ export default function Applications() {
       {!selected && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard
           match={nextMatch}
+          /* The only thing this card is still waiting on. Packets are loaded by the time it mounts
+             (the guard above requires it), so the preferences fetch is what decides whether a null
+             match means "not yet" or "none". It settles to [] even when it fails, so this cannot
+             stay true forever the way `match === null` could. */
+          searching={currentMatches === null}
           autopilot={Boolean(autopilot.enabled)}
           appliedToday={appliedToday}
           onSend={(id) => void sendWithoutAsking(id)}

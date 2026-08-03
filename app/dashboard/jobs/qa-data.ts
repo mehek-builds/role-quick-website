@@ -4,8 +4,9 @@ import type { JobsPage } from "@/lib/api";
  * Fixture rows for `/dashboard/jobs?qa=1`, matching the pattern the Applications page already uses.
  *
  * This exists so the list can be reviewed and screenshotted without a database behind it, and so a
- * reviewer sees the states that are otherwise hard to produce on demand: a posting that scored, a
- * posting the scorer declined to score, one the student has already applied to, a company whose
+ * reviewer sees the states that are otherwise hard to produce on demand: a posting that fits the
+ * saved preferences, one that fits none of them and so carries no badge and no reasons line, one
+ * the student has already applied to, a company whose
  * careers URL is its own domain, and one whose careers URL is the job board (which must fall back
  * to the initial rather than paint the board's icon on the row).
  *
@@ -43,7 +44,8 @@ export function qaJobsPage(): JobsPage {
         first_seen_at: hoursAgo(3),
         ats_name: "greenhouse",
         career_url: "https://ramp.com/careers",
-        match_score: 94,
+        preference_score: 94,
+        preference_reasons: ["Product Analyst", "product", "San Francisco, CA"],
         /* Pay states, which are otherwise hard to produce on demand and are the point of this
            fixture. This row is the ordinary one: an annual range the employer published. */
         salary_min: 145700,
@@ -66,7 +68,8 @@ export function qaJobsPage(): JobsPage {
         first_seen_at: hoursAgo(6),
         ats_name: "ashby",
         career_url: "https://linear.app/careers",
-        match_score: 91,
+        preference_score: 91,
+        preference_reasons: ["Frontend Engineer", "software engineering", "remote preference"],
         // A currency that is not dollars, to check the symbol is not hardcoded.
         salary_min: 110000,
         salary_max: 185000,
@@ -88,7 +91,8 @@ export function qaJobsPage(): JobsPage {
         first_seen_at: hoursAgo(20),
         ats_name: "lever",
         career_url: "https://notion.so/careers",
-        match_score: 89,
+        preference_score: 89,
+        preference_reasons: ["product", "New York, NY", "internship"],
         // An hourly rate on an internship: it must keep its exact figures rather than round to "$0K".
         salary_min: 45,
         salary_max: 55,
@@ -110,7 +114,8 @@ export function qaJobsPage(): JobsPage {
         first_seen_at: hoursAgo(52),
         ats_name: "greenhouse",
         career_url: "https://vercel.com/careers",
-        match_score: 76,
+        preference_score: 76,
+        preference_reasons: ["software engineering", "remote preference"],
         // One published figure rather than a band: it must print once, not "$180K - $180K".
         salary_min: 180000,
         salary_max: 180000,
@@ -137,7 +142,8 @@ export function qaJobsPage(): JobsPage {
         first_seen_at: hoursAgo(74),
         ats_name: "greenhouse",
         career_url: "https://boards.greenhouse.io/sierralabs",
-        match_score: 61,
+        preference_score: 61,
+        preference_reasons: ["data ml", "internship"],
       },
       {
         // Unscorable: the posting listed too few real requirements. The row shows NO badge, which
@@ -156,7 +162,11 @@ export function qaJobsPage(): JobsPage {
         first_seen_at: hoursAgo(96),
         ats_name: "ashby",
         career_url: "https://cursor.com/careers",
-        match_score: null,
+        /* No preferences matched, so no badge and no reasons line. The row must still read as a
+           complete row rather than a broken one: this is the state a student with an empty or very
+           narrow Account preference set sees on most of the board. */
+        preference_score: 0,
+        preference_reasons: [],
       },
     ],
   };

@@ -241,9 +241,20 @@ export type MonitoredJob = {
    * resume yet. In all of those cases the honest row shows no number at all.
    */
   match_score?: number | null;
-  /** 0-100 fit against the account's saved role, type, and location preferences. */
-  preference_score?: number;
-  /** Human-readable preference signals used by the backend ranking. */
+  /**
+   * 0-100 fit against the account's saved role, type, and location preferences.
+   *
+   * NULL WHEN THE ACCOUNT HAS SAVED NO PREFERENCES, and null is not zero here either. The backend
+   * scorer floors at 0 and returns 0 both for "you asked for nothing" and for "you asked, and this
+   * posting has none of it"; only GET /jobs holds the targeting row, so only GET /jobs can tell
+   * those apart, and it sends null for the first. Clients render no number for null.
+   *
+   * It is NOT match_score. This one never reads the resume.
+   */
+  preference_score?: number | null;
+  /** Human-readable preference signals behind `preference_score`, from the same metric. Empty when
+   *  there is no preference score, and empty when nothing matched. A score printed without one of
+   *  these beside it is the defect ISSUE-014 was filed for. */
   preference_reasons?: string[];
   /**
    * Why this posting is safe to show someone who needs a visa sponsored, or null when nothing

@@ -896,10 +896,15 @@ function JobMatchCard({
               <p className="mt-1 truncate text-small text-muted">{job.company_name}</p>
             </div>
           </div>
-          <div className="justify-self-end text-center">
-            <ScoreRing score={job.match} metricLabel="preference fit for this job" />
-            <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
-          </div>
+          {/* No ring at all for an account with no saved preferences. `match` is null there rather
+              than 0, because a ring drawn empty says "this job fits you 0 out of 100" when the
+              truth is that nothing has been asked of it yet. */}
+          {job.match !== null && (
+            <div className="justify-self-end text-center">
+              <ScoreRing score={job.match} metricLabel="preference fit for this job" />
+              <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
+            </div>
+          )}
         </div>
 
         <h2 className="mt-4 text-heading font-medium text-ink">{job.title}</h2>
@@ -1064,10 +1069,12 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
               <h3 id="job-description-heading" className="text-sm font-medium text-ink">Job description</h3>
               {/* Same score, same shape as Home and Applications. It was a blue chip here and a
                   ring everywhere else. */}
-              <div className="text-center">
-                <ScoreRing score={job.match} metricLabel="preference fit for this job" />
-                <p className="mt-1 w-12 text-[11px] text-faint">fit</p>
-              </div>
+              {job.match !== null && (
+                <div className="text-center">
+                  <ScoreRing score={job.match} metricLabel="preference fit for this job" />
+                  <p className="mt-1 w-12 text-[11px] text-faint">fit</p>
+                </div>
+              )}
             </div>
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>
           </section>

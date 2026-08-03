@@ -15,7 +15,16 @@ import type { JdMatchResponse } from "../domain/match-model";
  * See student-outreach-backend/src/engine/jdMatch.ts for the model behind the replacement.
  */
 
-export type JobContext = { company?: string; role?: string };
+/**
+ * What the backend already knows about the posting, and so must not score the student against.
+ *
+ * `job_id` earns its place here: the backend excludes the posting's own offices from the
+ * requirement set, and a packet stores no location, so without the id the review screen scores
+ * with the employer's cities in the denominator and on the missing list. Sending the id lets the
+ * backend read the live job row, which also covers every packet built before this existed.
+ * Absent for packets from the extension or a hand-typed link, which point at no monitored posting.
+ */
+export type JobContext = { company?: string; role?: string; job_id?: string | null };
 
 export async function fetchJdMatch(
   jdText: string,
