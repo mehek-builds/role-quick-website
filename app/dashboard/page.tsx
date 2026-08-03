@@ -15,6 +15,7 @@ import {
   type Targeting,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { MatchScore } from "@/components/app/MatchScore";
 import { Funnel } from "@/components/app/Funnel";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
@@ -24,7 +25,9 @@ import {
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
+  useJobMatchScores,
   visibleMatches,
+  type JobMatch,
   type ProfileIdentity,
   type RankedJob,
 } from "@/features/applications";
@@ -334,6 +337,8 @@ export default function Home() {
    * ways depending on which button got pressed. Finished is finished. The only state that is
    * genuinely different is having had no matches at all, and that is todayJobs.length === 0. */
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
+  /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
+  const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
     const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
@@ -760,6 +765,7 @@ export default function Home() {
             <JobMatchCard
               key={job.id}
               job={job}
+              match={matches[job.id]}
               prepared={packets.some((packet) => packetMatchesJob(packet, job))}
               preparing={preparingJobs.includes(job.id)}
               preparationFailed={prewarmFailures.includes(job.id)}
@@ -906,6 +912,7 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
  * claims work is happening. */
 function JobMatchCard({
   job,
+  match,
   prepared,
   preparing,
   preparationFailed,
@@ -917,6 +924,7 @@ function JobMatchCard({
   onRetry,
 }: {
   job: RankedJob;
+  match: JobMatch | null | undefined;
   prepared: boolean;
   preparing: boolean;
   preparationFailed: boolean;
@@ -948,13 +956,17 @@ function JobMatchCard({
               <p className="mt-1 truncate text-small text-muted">{job.company_name}</p>
             </div>
           </div>
-          {/* No ring at all for an account with no saved preferences. `match` is null there rather
-              than 0, because a ring drawn empty says "this job fits you 0 out of 100" when the
-              truth is that nothing has been asked of it yet. */}
-          {job.match !== null && (
+          {/* No ring while the score is still being fetched, and none at all for a posting the
+              backend declines to score. `undefined` is "not yet", `null` is "nothing honest to
+              say", and both print nothing: a ring drawn empty says "your resume covers 0 of what
+              this job asks for" when the truth is that we never got an answer. */}
+          {match && (
             <div className="justify-self-end text-center">
-              <ScoreRing score={job.match} metricLabel="preference fit for this job" />
-              <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
+              <ScoreRing
+                score={match.score}
+                metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted)`}
+              />
+              <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
             </div>
           )}
         </div>
@@ -965,8 +977,12 @@ function JobMatchCard({
           {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
         </p>
         <PayLine job={job} />
+        {/* "You asked for", not "Matches your". The ring above is resume-to-JD coverage and this
+            line is preference fit; sharing the word "match" between them is what let one card
+            assert two contradictory things in the ISSUE-014 audit. Both facts stay, with a word
+            each. */}
         {job.reasons.length > 0 && (
-          <p className="mt-2 truncate text-small text-faint">Matches your {job.reasons.join(", ")}</p>
+          <p className="mt-2 truncate text-small text-faint">You asked for {job.reasons.join(", ")}</p>
         )}
 
         {/* Paused says what stopped. A status word with no reason behind it leaves a student
@@ -1119,13 +1135,21 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
           <section aria-labelledby="job-description-heading" className="border-b border-border p-5 lg:overflow-y-auto lg:border-b-0 lg:border-r sm:p-8">
             <div className="flex items-center justify-between gap-4">
               <h3 id="job-description-heading" className="text-sm font-medium text-ink">Job description</h3>
-              {/* Same score, same shape as Home and Applications. It was a blue chip here and a
-                  ring everywhere else. */}
-              {job.match !== null && (
-                <div className="text-center">
-                  <ScoreRing score={job.match} metricLabel="preference fit for this job" />
-                  <p className="mt-1 w-12 text-[11px] text-faint">fit</p>
-                </div>
+              {/* The same component the Applications review pane uses, scored against the packet
+                  sitting in the right-hand column rather than against the base resume the list
+                  scores. A review screen showing a number about a document that is not on the page
+                  would be the ISSUE-014 defect in its subtlest form. */}
+              {/* The WHOLE stored job_context below, not company and role picked out of it.
+                  `job_id` is what lets the backend read the posting's offices off the live job row
+                  and keep them out of the denominator; a packet stores no location of its own, so
+                  dropping the id scores the student against the employer's cities. The Applications
+                  review pane passes it whole for the same reason. */}
+              {packet && (review?.jd_text || job.description) && (
+                <MatchScore
+                  jdText={review?.jd_text || job.description}
+                  spec={packet.spec}
+                  jobContext={packet.job_context}
+                />
               )}
             </div>
             <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>

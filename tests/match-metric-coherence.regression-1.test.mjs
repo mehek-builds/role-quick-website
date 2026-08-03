@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { rankJobs } from "../features/applications/domain/daily-matches.ts";
 
-// Regression: ISSUE-014, one card asserted two contradictory metrics about the same posting.
+// Regression: ISSUE-014, one card asserted two contradictory things about the same posting.
 // Found by a live production audit on 2026-08-03.
 //
 // Databricks' "Product Management Intern (Summer 2027)" rendered fit 40 on Home and "0% match" on
@@ -11,37 +11,78 @@ import { rankJobs } from "../features/applications/domain/daily-matches.ts";
 // Francisco, CA, internship". The badge was resume-to-JD coverage (`match_score`) and the sentence
 // under it was preference fit (`preference_score`): two metrics, two denominators, one card.
 //
-// The rule these tests hold: a score and the reasons printed beneath it come from the SAME metric,
-// and Home and Jobs answer the same question about the same posting.
+// THIS FILE HAS HELD TWO DIFFERENT ANSWERS, and the second one is what ships.
+//
+//   1. Show PREFERENCE FIT on both screens. Coherent, and it did fix the contradiction, but it
+//      meant the number beside a job described OUR RANKING rather than the student.
+//   2. Show RESUME-TO-JD COVERAGE on both screens. Mehek's call, 2026-08-03: the number a student
+//      reads next to a job is how much of what that job asks for is already on their resume.
+//
+// The rule that survives both answers, and the reason the original was a bug: a score and the words
+// printed beneath it must come from the same metric, and Home and Jobs must answer the same
+// question about the same posting.
 
-describe("a card never pairs one metric's score with another metric's reasons", () => {
-  const jobsPage = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
+/** Comments are stripped before scanning, so the record of WHY may name the thing it bans. */
+const code = (text) =>
+  text
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("//"))
+    .join("\n");
 
-  test("the Jobs badge reads preference fit, the same field Home reads", () => {
-    assert.match(jobsPage, /<FitBadge score={job\.preference_score} reasons={job\.preference_reasons} \/>/);
+describe("the score on a card is resume-to-JD coverage, on every surface", () => {
+  /* Stripped for POSITIVE assertions too, not just the negative ones. These two files now carry a
+     lot of explanatory prose, and a positive assertion that matches raw source can be satisfied by
+     a comment quoting the string it is supposed to be checking for. */
+  const jobsPage = code(readFileSync("app/dashboard/jobs/page.tsx", "utf8"));
+  const homePage = code(readFileSync("app/dashboard/page.tsx", "utf8"));
+
+  test("both screens read the same hook", () => {
+    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
+      assert.match(src, /useJobMatchScores\(/, `${name} must score via the shared hook`);
+    }
   });
 
-  test("no surface renders match_score as a bare percentage in a list", () => {
-    // Resume coverage keeps its home on the review screen, in MatchScore, where it arrives with a
-    // band label, an "N of M requirements" denominator, and a refusal state for postings that
-    // listed nothing to score. A bare percentage in a list has none of that, and on real postings
-    // it lands an order of magnitude below where a reader assumes a percentage sits.
-    assert.doesNotMatch(jobsPage, /score={job\.match_score}/);
+  test("no list surface renders preference_score as a number", () => {
+    // preference_score never opens the resume. It may order the feed and it may name reasons; it
+    // may not be the number a student reads as a match.
+    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
+      assert.doesNotMatch(src, /\bpreference_score\b/, `${name} must not render preference_score`);
+    }
   });
 
-  test("the badge says fit, not match, because that is the question it answers", () => {
-    assert.match(jobsPage, /\{pct\}% fit/);
-    assert.doesNotMatch(jobsPage, /\{pct\}% match/);
+  test("the badge says match, and its tooltip names the denominator", () => {
+    assert.match(jobsPage, /\{pct\}% match/);
+    assert.doesNotMatch(jobsPage, /\{pct\}% fit/);
+    // The objection that retired the first version of this badge was that a bare percentage in a
+    // list carries no band, no denominator and no refusal state. All three ride along now.
+    //
+    // The qualifier is ISSUE-023's, and it is not decoration: term_count is capped at
+    // EMPHASIS_LIMIT, so it is what Litos COUNTED, not everything the posting lists. The caption
+    // suite below holds the same rule for MatchScore; a list badge may not overclaim where the
+    // review screen is forbidden to.
+    assert.match(jobsPage, /requirements Litos counted in this posting/);
+    assert.doesNotMatch(jobsPage, /requirements this posting lists/);
   });
 
-  test("the badge tooltip says it does not read the resume", () => {
-    // The word "match" beside a job posting reads as "how much of this job is you". Anyone who
-    // assumes this number saw their resume will draw exactly the wrong conclusion from a low one.
-    assert.match(jobsPage, /It does not read your resume\./);
+  test("the preference sentence does not borrow the score's word", () => {
+    // "0% match" over "Matches your product, San Francisco, CA, internship" is the original defect.
+    // Both facts are worth showing; they just cannot both be called matching.
+    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
+      assert.match(src, /You asked for \{/, `${name} must caption preference reasons as an ask`);
+      assert.doesNotMatch(src, /Matches your \{/, `${name} must not caption them as a match`);
+    }
+  });
+
+  test("an unscored posting prints nothing, never a zero", () => {
+    // `undefined` (still fetching) and `null` (backend declined to score) must both render nothing.
+    // A zero is a claim that the resume matched no requirement, which is not what either means.
+    assert.match(jobsPage, /if \(!match\) return null;/);
+    assert.match(homePage, /\{match && \(/);
   });
 });
 
-describe("rankJobs carries preference fit and nothing else", () => {
+describe("rankJobs carries preference evidence and no score at all", () => {
   const job = {
     id: "1",
     company_name: "Databricks",
@@ -51,57 +92,40 @@ describe("rankJobs carries preference fit and nothing else", () => {
     match_score: 0,
   };
 
-  test("match is the preference score even when a resume coverage score exists", () => {
+  test("no score field reaches a card", () => {
+    // This type carried a score twice and lost it twice. It cannot supply resume coverage, which
+    // needs the resume and a network round trip, so it offers no score rather than a convenient
+    // wrong one. That is what stops a third `?? 0` being added in a hurry.
     const [ranked] = rankJobs([job]);
-    assert.equal(ranked.match, 40);
+    assert.equal("match" in ranked, false);
     assert.deepEqual(ranked.reasons, ["product", "San Francisco, CA", "internship"]);
   });
 
-  test("match never falls back to match_score, which is a different question", () => {
-    // The old expression was `preference_score ?? match_score ?? 0`. It silently swapped the ring
-    // on Home from "fits what you asked for" to "your resume is a poor match" with nothing on
-    // screen saying so.
-    const [ranked] = rankJobs([{ ...job, preference_score: undefined, match_score: 87 }]);
-    assert.equal(ranked.match, null, "an absent preference score is not a resume score");
+  test("backend order is preserved even when the scores disagree with it", () => {
+    // Asserted against an input where document order and score order CONFLICT. Against an already
+    // sorted list this passes for any implementation that does not deliberately re-sort, which is
+    // no assertion at all. GET /jobs is the single ranking authority: a higher preference_score
+    // further down the list must not be hoisted.
+    const lowerScoreFirst = { ...job, id: "1", preference_score: 12 };
+    const higherScoreSecond = { ...job, id: "2", preference_score: 96 };
+    assert.deepEqual(
+      rankJobs([lowerScoreFirst, higherScoreSecond]).map((r) => r.id),
+      ["1", "2"],
+      "rankJobs must not re-sort by preference_score",
+    );
   });
 
-  test("an account with no preferences saved gets null, never a confident zero", () => {
-    // The backend sends preference_score: null for this, because preferenceFit floors at 0 and
-    // only GET /jobs can see the targeting row.
-    const [ranked] = rankJobs([{ ...job, preference_score: null, preference_reasons: [] }]);
-    assert.equal(ranked.match, null);
-  });
-
-  test("a real zero with preferences saved is also suppressed, so Home cannot draw a 0 ring", () => {
-    // This is the case that reintroduced ISSUE-014 in a second shape: Jobs rendered no badge while
-    // Home rendered a "0" ring labelled "fit", for the same posting in the same session.
-    const [ranked] = rankJobs([{ ...job, preference_score: 0, preference_reasons: [] }]);
-    assert.equal(ranked.match, null, "a number with no reason behind it is a number with no caption");
-  });
-
-  test("Home and Jobs suppress on exactly the same conditions", () => {
-    // One rule, asserted against both implementations rather than described in two comments.
-    const jobsPage = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
-    const badge = jobsPage.slice(jobsPage.indexOf("function FitBadge"), jobsPage.indexOf("{pct}% fit"));
-    assert.match(badge, /if \(score === null \|\| score === undefined\) return null;/);
-    assert.match(badge, /if \(!reasons \|\| reasons\.length === 0\) return null;/);
-
+  test("absent preference reasons rank fine, with an empty list", () => {
     for (const shape of [
+      { preference_reasons: undefined },
       { preference_score: null, preference_reasons: [] },
       { preference_score: 0, preference_reasons: [] },
-      { preference_score: undefined, preference_reasons: undefined },
     ]) {
-      assert.equal(rankJobs([{ ...job, ...shape }])[0].match, null, JSON.stringify(shape));
+      assert.deepEqual(rankJobs([{ ...job, ...shape }])[0].reasons, [], JSON.stringify(shape));
     }
-    // ...and both render when there IS a reason.
-    assert.equal(rankJobs([job])[0].match, 40);
-  });
-
-  test("Home draws no ring at all when there is nothing to draw", () => {
-    const home = readFileSync("app/dashboard/page.tsx", "utf8");
-    assert.equal(home.match(/\{job\.match !== null && \(/g)?.length, 2);
   });
 });
+
 
 // B3: the review screen is the only surface still showing resume coverage, so it is the one that
 // most needs the posting's offices out of its denominator and its missing list. A packet stores no
