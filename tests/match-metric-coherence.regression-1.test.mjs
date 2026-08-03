@@ -81,6 +81,16 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     assert.doesNotMatch(jobsPage, /requirements this posting lists/);
   });
 
+  test("the Tracker row's badge carries the same band and denominator", () => {
+    // ISSUE-038 put this badge on a third surface and left it unheld, which is the SAME omission
+    // ISSUE-038 was about: "every surface" enumerated two. Verified 2026-08-04 by mutation, with
+    // the band dropped and with the denominator dropped; both left the suite green before this.
+    const nextMatchRow = code(readFileSync("components/app/Autopilot.tsx", "utf8"));
+    assert.match(nextMatchRow, /match\.match\.band \?\? "Match"/, "the row must name the band");
+    assert.match(nextMatchRow, /\$\{match\.match\.matched\} of the \$\{match\.match\.total\} requirements Litos counted/);
+    assert.doesNotMatch(nextMatchRow, /requirements this posting lists/);
+  });
+
   test("the preference sentence does not borrow the score's word", () => {
     // "0% match" over "Matches your product, San Francisco, CA, internship" is the original defect.
     // Both facts are worth showing; they just cannot both be called matching.

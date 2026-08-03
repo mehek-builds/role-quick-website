@@ -44,6 +44,22 @@ export type JdMatchResponse = {
  * jd_text is FROZEN at the moment the resume was tailored, while Home scores the live posting. Once
  * a posting is re-scraped those are different documents. The frozen snapshot stays as the fallback
  * for packets that point at no monitored posting, from the extension or a hand-typed link.
+ *
+ * WHAT THIS DOES NOT FIX, STATED PLAINLY BECAUSE IT IS A DELIBERATE TRADE AND NOT AN OVERSIGHT.
+ * The divergence is RELOCATED, not eliminated. Clicking this row opens the review screen, whose
+ * MatchScore ring scores the TAILORED PACKET against the packet's FROZEN jd_text, so a student who
+ * clicks through still watches the number change: measured 2026-08-04, the row read 33 and the ring
+ * it opened into read "50 out of 100, your resume covers 5 of the 10 requirements".
+ *
+ * That is a better position than the one before it, and it is chosen rather than settled for. Two
+ * surfaces agreed before (Home and Jobs, with the row and the review screen each off on their own);
+ * three agree now. The remaining disagreement is also the DEFENSIBLE one: the review screen has the
+ * resume it scored on screen beside the number, so the number can be interrogated there. This row
+ * has no document at all, which is the whole reason it had to move.
+ *
+ * Closing the last gap means deciding what the review screen's ring is FOR, which is a product
+ * question about whether a student wants "how you compare on the board" or "how this tailored
+ * resume reads against this posting", both on one screen. It is not a bug to be fixed quietly here.
  */
 export type NextMatchScoreRequest = {
   /** Null asks the server to read the live posting row. See fetchJdMatch. */
