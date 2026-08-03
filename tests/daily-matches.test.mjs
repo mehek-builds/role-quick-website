@@ -61,7 +61,9 @@ describe("daily match preparation", () => {
     const ranked = rankJobs(jobs);
 
     assert.equal(ranked[0].id, "1");
-    assert.ok(ranked[0].match > ranked[1].match);
+    /* No score assertion, deliberately: rankJobs hands back no score at all. The number on a card
+       is resume-to-JD coverage, fetched per posting by useJobMatchScores. See
+       tests/match-metric-coherence.regression-1.test.mjs. */
     assert.deepEqual(ranked[0].reasons, ["Product Engineer", "software engineering", "New York"]);
   });
 

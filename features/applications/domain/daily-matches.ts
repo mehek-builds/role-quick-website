@@ -6,16 +6,27 @@ import type {
   Targeting,
 } from "@/lib/api";
 
+/* NO `match` FIELD, and that is the ISSUE-014 fix in its final form.
+ *
+ * This type has now carried a score twice and lost it twice, for opposite reasons, and both are
+ * worth keeping in view before anyone adds a third:
+ *
+ *   1. `match: preference_score ?? match_score ?? 0` - two metrics and a fabricated zero in one
+ *      expression. A card could silently swap from "fits what you asked for" to "your resume is a
+ *      poor match" with nothing on screen saying so.
+ *   2. `match: number | null`, preference fit only. Coherent, and it shipped, but it meant the
+ *      number a student read beside a job was about OUR RANKING rather than about them.
+ *
+ * The number on a card is now resume-to-JD coverage on every surface, fetched per posting by
+ * features/applications/application/use-job-match-scores.ts. rankJobs cannot supply it, because it
+ * needs the resume and a network round trip, so the honest thing is for this type not to offer a
+ * score at all. preference_score still orders the feed - GET /jobs remains the single ranking
+ * authority and this function preserves its order - and still supplies `reasons`, which is words
+ * rather than a number and now says "You asked for ..." so it cannot be read as the score's
+ * caption. */
 export type RankedJob = MonitoredJob & {
-  /**
-   * 0-100 preference fit, or null when the account has saved no preferences to fit against.
-   *
-   * NULLABLE ON PURPOSE. It was `number` with a `?? 0` behind it, and a zero drawn for an account
-   * that never told us what it wanted is a claim the data does not support. Callers render nothing
-   * for null. It is never resume coverage: see rankJobs.
-   */
-  match: number | null;
-  /** The preference signals behind `match`, from the same metric. Never mixed with another. */
+  /** Preference signals: what the STUDENT asked for. Never a caption for the resume-coverage
+   *  score, which is a different question with a different denominator. */
   reasons: string[];
 };
 
@@ -43,36 +54,19 @@ export function rankJobs(
   /* GET /jobs is the single ranking authority. Re-ranking its first page in the browser used a
      different formula, ignored role type and location, and made Home disagree with Jobs.
 
-     `match` IS PREFERENCE FIT AND ONLY PREFERENCE FIT. It used to fall back to `match_score` and
-     then to 0, which is two separate lies in one expression. `match_score` is resume-to-JD
-     coverage: a different question, a different denominator, and a number that on real postings
-     lands an order of magnitude lower, so the fallback silently swapped the ring on Home from
-     "fits what you asked for" to "your resume is a poor match" with nothing on screen saying so.
-     The `?? 0` then painted a confident zero for an account that had simply saved no preferences.
+     THIS FUNCTION HANDS BACK NO SCORE. See the note on RankedJob: the number beside a job is
+     resume-to-JD coverage, which needs the resume and a round trip, so it is fetched by
+     use-job-match-scores.ts rather than derived here. preference_score stays out of the UI
+     entirely; it orders the feed, which is the job it is good at.
 
-     ONE SUPPRESSION RULE, AND JOBS HOLDS THE SAME ONE. A fit number is shown only when there is at
-     least one reason behind it. That is not a stylistic choice: this whole issue is numbers printed
-     without the explanation that makes them readable, and a score with an empty reasons list is
-     exactly that. It also happens to be the only rule that makes the two screens agree, because it
-     covers both ways a number can be unexplainable at once:
-
-       - no preferences saved. The backend now sends preference_score: null for this, because
-         preferenceFit floors at 0 and only the route can see the targeting row. Home used to draw
-         a "0" ring labelled "fit" at an account that had never been asked what it wanted.
-       - preferences saved, this posting matches none of them. A real 0, and a real answer, but not
-         one a ring can caption. Jobs already drew nothing here while Home drew a 0, which is the
-         same cross-screen contradiction in its smallest form.
-
-     `reasons` comes from the same metric as `match`, which is the property that was missing on Jobs
-     (see FitBadge in app/dashboard/jobs/page.tsx, which suppresses on the identical conditions). */
-  return jobs.map((job) => {
-    const reasons = job.preference_reasons ?? [];
-    return {
-      ...job,
-      match: reasons.length > 0 ? job.preference_score ?? null : null,
-      reasons,
-    };
-  });
+     `reasons` survives because it is WORDS, and true ones: it says what the student asked for. It
+     is rendered as "You asked for ..." rather than "Matches your ...", so it cannot be misread as
+     the caption for the coverage number sitting above it. That misreading, one metric's score over
+     another metric's reasons, is the defect the ISSUE-014 audit actually found. */
+  return jobs.map((job) => ({
+    ...job,
+    reasons: job.preference_reasons ?? [],
+  }));
 }
 
 /**

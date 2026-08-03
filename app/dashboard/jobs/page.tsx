@@ -4,7 +4,7 @@ import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
-import { fetchBoard } from "@/features/applications";
+import { fetchBoard, useJobMatchScores, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
@@ -39,6 +39,8 @@ function appendUnseen(current: MonitoredJob[], incoming: MonitoredJob[]): Monito
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
+  /* One definition of the number, shared with Home. See use-job-match-scores.ts. */
+  const matches = useJobMatchScores(jobs);
   const [ranked, setRanked] = useState(false);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
@@ -290,7 +292,7 @@ export default function JobsPage() {
           <ul className="grid gap-3">
             {jobs.map((job) => (
               <li key={job.id}>
-                <JobRow job={job} applied={isJobApplied(job, applied)} />
+                <JobRow job={job} applied={isJobApplied(job, applied)} match={matches[job.id]} />
               </li>
             ))}
           </ul>
@@ -334,7 +336,7 @@ export default function JobsPage() {
  * thing in the world to click, and giving the row two side-by-side buttons made the student choose
  * between them before they had read the role.
  */
-function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
+function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; match: JobMatch | null | undefined }) {
   const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]
     .filter(Boolean)
     .join(" · ");
@@ -360,7 +362,7 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
               {job.title}
             </a>
           </h2>
-          <FitBadge score={job.preference_score} reasons={job.preference_reasons} />
+          <MatchBadge match={match} />
           <SponsorBadge evidence={job.sponsorship_evidence} />
         </div>
         <p className="mt-1 truncate text-sm text-muted">
@@ -378,14 +380,17 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
             {type && <span className="text-muted">{type}</span>}
           </p>
         )}
-        {/* Directly under the badge it explains, and it explains THAT badge. This line and the
-            number above it used to come from two different metrics: the badge was resume-to-JD
-            coverage and this sentence was preference fit, so the same Databricks posting read
-            "0% match" beside "Matches your product, San Francisco, CA, internship". Whatever else
-            is true of a card, one metric's score may never carry another metric's reasons. */}
+        {/* "You asked for", NOT "Matches your". The badge above is resume-to-JD coverage and this
+            sentence is preference fit: two different questions that both used to answer to the word
+            "match", which is how the same Databricks posting came to read "0% match" beside
+            "Matches your product, San Francisco, CA, internship" and assert both at once. The rule
+            that survives from that fix is that one metric's score may never carry another metric's
+            reasons. It is kept by giving the metrics different words, not by deleting one of them:
+            what you asked for and what your resume covers are both worth saying, and a student
+            reading this row needs to be able to tell which is which. */}
         {job.preference_reasons && job.preference_reasons.length > 0 && (
           <p className="mt-1.5 text-xs text-faint">
-            Matches your {job.preference_reasons.join(", ")}
+            You asked for {job.preference_reasons.join(", ")}
           </p>
         )}
         <p className="mt-1.5 font-mono text-[11px] text-faint">
@@ -444,61 +449,40 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
 }
 
 /**
- * How well this posting fits the role, type and places you asked for.
+ * How much of what this posting asks for is already on your resume.
  *
- * WHY THIS IS PREFERENCE FIT AND NOT RESUME COVERAGE, which is what it used to be.
+ * ISSUE-014, second answer. The first made Home and Jobs agree on PREFERENCE FIT, which genuinely
+ * fixed the contradiction the audit found (fit 40 on Home, 0% match on Jobs, same Databricks
+ * posting, same session). Mehek's call, 2026-08-03, is that the number beside a job is the resume
+ * against the posting, on every surface: preference fit answers "did we pick this for you", which
+ * is a question about our ranking rather than about the student.
  *
- * The row used to render `match_score` here: 0-100 for how much of the posting's requirement list
- * appears on your main resume. Two things were wrong with that, and only one of them was cosmetic.
+ * WHAT THE FIRST ANSWER GOT RIGHT AND IS KEPT HERE:
  *
- *  1. IT CONTRADICTED THE LINE BENEATH IT. The sentence under this badge has always been the
- *     preference reasons. Databricks' "Product Management Intern" therefore read "0% match" over
- *     "Matches your product, San Francisco, CA, internship" -- one card asserting both that the
- *     posting fits nothing about you and that it fits three things about you.
- *  2. IT CONTRADICTED HOME. Home reads `preference_score` (see features/applications/domain,
- *     rankJobs, whose comment already names GET /jobs the single ranking authority precisely so
- *     the two screens cannot disagree). The same posting was fit 40 there and 0% here, in one
- *     session. Jobs was the screen that broke the contract, so Jobs is the screen that moves.
+ *  - ONE METRIC PER CARD'S VOCABULARY. The badge and the sentence under it were resume coverage and
+ *    preference fit both wearing the word "match". The sentence now reads "You asked for ...", so
+ *    the two facts stay on the card and stop competing for the same word.
+ *  - ABSENT, NEVER ZERO. A posting the backend declines to score, and a request that failed, both
+ *    arrive as null and render nothing. A zero is a claim that the resume matched no requirement.
+ *  - THE NUMBER NEVER CHANGES COLOUR. A 27 and a 74 look identical. A badge that shifted red to
+ *    green would be the product telling a student how to feel about a number it has already said is
+ *    not a prediction of anything. DESIGN.md's blue-soft exception stands, at Mehek's direction
+ *    (2026-07-28), so the number reads at a glance while scanning a column of rows.
  *
- * Preference fit is also the honest number for a LIST. It is what the backend actually sorts by
- * (rankByFit takes preference score first and coverage only as a tie-break), so it is the number
- * that explains the order the eye is scanning. Resume coverage is a per-application judgement and
- * it keeps its home on the review screen, in MatchScore, where it arrives with a band label, the
- * "N of M requirements" denominator that makes it readable, and a refusal state for postings that
- * listed nothing to score. A bare percentage in a list has none of that context.
- *
- * ABSENT, NOT ZERO, when there is nothing to say, and TWO different situations arrive that way.
- * The backend sends `preference_score: null` for an account that has saved no preferences, because
- * preferenceFit floors at 0 and only the route can see the targeting row. A 0 WITH targeting saved
- * is a different and perfectly real answer: this posting matches none of what you asked for. Both
- * get no badge, and the rule that covers both is the same one Home applies (see rankJobs): a fit
- * number is shown only when there is at least one reason behind it. A number this card cannot
- * caption is the exact defect this card was rewritten to remove.
- *
- * The `pct === 0` guard is therefore belt and braces rather than the load-bearing one. It holds
- * because every rule in preferenceFit that adds to the score also pushes a reason, so score 0 and
- * reasons empty always travel together; if that ever stops being true, the reasons check is the one
- * that still decides.
- *
- * A NOTE ON THE COLOUR, because it bends a rule. DESIGN.md reserves blue-soft for "your turn" and
- * for the documents pillar, and says stats appear as bare mono numerals with no badge. This badge
- * is neither a status nor a bare numeral, and it is blue at Mehek's direction (2026-07-28) so the
- * number reads at a glance while scanning a column of rows. What the law still holds onto: the
- * badge never changes colour with the score. A 41% and a 94% look identical, because a colour that
- * shifted from red to green would be the product telling a student how to feel about a number it
- * has already said is not a prediction of anything.
+ * WHAT IS ADDED, because the objection to a bare percentage in a list was correct: the band label
+ * and the "N of M requirements" denominator ride in the tooltip, so the number can be interrogated
+ * where it sits instead of only on the review screen.
  */
-function FitBadge({ score, reasons }: { score: number | null | undefined; reasons: string[] | undefined }) {
-  if (score === null || score === undefined) return null;
-  if (!reasons || reasons.length === 0) return null;
-  const pct = Math.max(0, Math.min(100, Math.round(score)));
-  if (pct === 0) return null;
+function MatchBadge({ match }: { match: JobMatch | null | undefined }) {
+  // undefined = still scoring, null = nothing honest to say. Neither prints.
+  if (!match) return null;
+  const pct = Math.max(0, Math.min(100, Math.round(match.score)));
   return (
     <span
       className="shrink-0 rounded-full bg-brand-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-brand-ink"
-      title={`${pct} out of 100 against the roles, job types and places saved in your Account preferences. It does not read your resume.`}
+      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements this posting lists.`}
     >
-      {pct}% fit
+      {pct}% match
     </span>
   );
 }

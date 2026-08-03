@@ -25,3 +25,9 @@ export {
 } from "./domain/daily-matches";
 export * from "./domain/requirement-terms";
 export * from "./infrastructure/applications-api";
+export {
+  SCORE_BATCH,
+  useJobMatchScores,
+  type JobMatch,
+  type JobMatchState,
+} from "./application/use-job-match-scores";
