@@ -479,7 +479,7 @@ export default function Home() {
   if (error && !jobs) return <ErrorNote message={error} />;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 lg:space-y-7">
       {/* The header carries the one thing a person comes here to do. "Change what you want" is a
           setting, so it sits as a text link under the subtitle rather than occupying the primary
           button slot. */}
@@ -529,7 +529,7 @@ export default function Home() {
       {/* One scan, not three stacked reports. Each tint keeps its existing product meaning:
           blue is application documents, coral is email outreach, and Momentum stays neutral
           because it combines both the student's actions and Litos's work. */}
-      <section aria-label="At a glance" className="grid gap-3 lg:grid-cols-3">
+      <section aria-label="At a glance" className="grid gap-3 lg:min-h-[clamp(12rem,calc(100vh-36rem),20rem)] lg:grid-cols-3">
         <Funnel />
         {applicationTotal > 0 && (
           <SnapshotCard
@@ -588,7 +588,10 @@ export default function Home() {
           </EmptyState>
         )
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 lg:min-h-[clamp(19rem,calc(100vh-29rem),20rem)] xl:grid-cols-3">
+          {/* The overview owns the extra desktop height. Job cards remain a compact working queue
+              so titles and actions stay close enough to scan together. Mobile keeps content-led
+              card heights. */}
           {visibleJobs.map((job) => (
             <JobMatchCard key={job.id} job={job} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
           ))}
@@ -650,16 +653,16 @@ function SnapshotCard({
   const linkClass = tone === "applications" ? "text-brand-ink" : "text-coral-ink";
 
   return (
-    <section aria-labelledby={id} className={`flex min-h-40 flex-col rounded-card border p-4 shadow-rest ${toneClass}`}>
+    <section aria-labelledby={id} className={`flex min-h-40 flex-col rounded-card border p-4 shadow-rest lg:min-h-44 lg:p-6 ${toneClass}`}>
       <div className="flex items-center justify-between gap-3">
         <h2 id={id} className="text-base font-medium text-ink">{title}</h2>
         <Link href={href} className={`text-small font-medium ${linkClass}`}>View all</Link>
       </div>
-      <dl className="mt-4 grid grid-cols-3 gap-2">
+      <dl className="mt-4 grid grid-cols-3 gap-2 lg:my-auto">
         {metrics.map((metric) => (
-          <Link key={metric.label} href={metric.href} className="rounded-inner bg-white/65 px-3 py-2.5 transition-colors hover:bg-white">
+          <Link key={metric.label} href={metric.href} className="rounded-inner bg-white/65 px-3 py-2.5 transition-colors hover:bg-white lg:px-4 lg:py-4">
             <dt className="text-small text-muted">{metric.label}</dt>
-            <dd className="mt-1 font-mono text-heading text-ink">{metric.value}</dd>
+            <dd className="mt-1 font-mono text-heading text-ink lg:text-section">{metric.value}</dd>
           </Link>
         ))}
       </dl>

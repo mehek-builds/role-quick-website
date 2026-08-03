@@ -37,7 +37,7 @@ export function Funnel() {
   // loss, and had no way to retry short of reloading.
   if (state.failed) {
     return (
-      <section className="flex min-h-40 flex-col justify-between rounded-card border border-border bg-surface-alt p-4 shadow-rest">
+      <section className="flex min-h-40 flex-col justify-between rounded-card border border-border bg-surface-alt p-4 shadow-rest lg:min-h-44 lg:p-6">
         <h2 className="text-base font-medium text-ink">Momentum</h2>
         <p className="text-small text-faint">
           Could not load your activity just now.{" "}
@@ -50,7 +50,7 @@ export function Funnel() {
   }
   if (!state.data) {
     // Sized to the loaded panel so the feed below does not jump when this resolves.
-    return <div className="min-h-40 animate-pulse rounded-card bg-surface-alt" aria-hidden="true" />;
+    return <div className="min-h-40 animate-pulse rounded-card bg-surface-alt lg:min-h-44" aria-hidden="true" />;
   }
 
   const f = state.data;
@@ -62,12 +62,12 @@ export function Funnel() {
   const peak = Math.max(1, ...f.days.map((day) => day.submitted));
 
   return (
-    <section className="flex min-h-40 flex-col rounded-card border border-border bg-surface-alt p-4 shadow-rest">
+    <section className="flex min-h-40 flex-col rounded-card border border-border bg-surface-alt p-4 shadow-rest lg:min-h-44 lg:p-6">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-medium text-ink">Momentum</h2>
         <span className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</span>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-3">
+      <div className="mt-4 grid grid-cols-3 gap-3 lg:mt-8">
         <Stat value={f.applications_submitted} label="applications sent, all time" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
@@ -108,7 +108,7 @@ function dailyLabel(f: FunnelSummary): string {
 function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div>
-      <p className="font-mono text-heading leading-none text-ink">{value}</p>
+      <p className="font-mono text-heading leading-none text-ink lg:text-section">{value}</p>
       <p className="mt-1 line-clamp-2 text-label text-muted">{label}</p>
     </div>
   );
