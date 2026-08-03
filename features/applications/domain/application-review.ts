@@ -166,6 +166,10 @@ export function startsNewSection(types: readonly (string | undefined)[], index: 
  * compile-time claim about JSON, not a runtime guarantee.
  */
 export function stripMetadata(spec: {
+  /* The targeting headline the renderer prints directly under the applicant's name. It was not
+     carried through here, so every surface built on stripMetadata dropped the second line of the
+     resume header. It is a heading, not a claim the applicant held the role. */
+  target_role?: string;
   school?: string;
   degree?: string;
   grad_date?: string;
@@ -176,6 +180,7 @@ export function stripMetadata(spec: {
   skill_source?: Record<string, string>;
 }) {
   return {
+    target_role: spec.target_role,
     school: spec.school ?? "",
     degree: spec.degree ?? "",
     grad_date: spec.grad_date ?? "",
