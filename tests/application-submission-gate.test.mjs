@@ -47,12 +47,12 @@ test("overview keeps three application states and reviews matches in a right-sid
   const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   // Still three states; the labels moved onto the four-word vocabulary.
-  assert.match(overview, /label="Ready"/);
-  assert.match(overview, /label="Needs you"/);
-  assert.match(overview, /label="Sent"/);
+  assert.match(overview, /label: "Ready"/);
+  assert.match(overview, /label: "Needs you"/);
+  assert.match(overview, /label: "Sent"/);
   // Each one is a filter link rather than a bare number.
-  assert.match(overview, /href="\/dashboard\/applications\?state=action"/);
-  assert.doesNotMatch(overview, /label="Prepared"/);
+  assert.match(overview, /href: "\/dashboard\/applications\?state=action"/);
+  assert.doesNotMatch(overview, /label: "Prepared"/);
   assert.doesNotMatch(overview, /Recent activity/);
   assert.doesNotMatch(overview, /Daily resume preparation/);
   assert.match(overview, /MONTHLY_PRO_APPLICATION_LIMIT = 1_000/);

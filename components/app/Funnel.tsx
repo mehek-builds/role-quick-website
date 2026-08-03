@@ -37,17 +37,20 @@ export function Funnel() {
   // loss, and had no way to retry short of reloading.
   if (state.failed) {
     return (
-      <p className="text-[13px] text-faint">
-        Could not load your activity just now.{" "}
-        <button type="button" onClick={() => setAttempt((n) => n + 1)} className="underline">
-          Try again
-        </button>
-      </p>
+      <section className="flex min-h-40 flex-col justify-between rounded-card border border-border bg-surface-alt p-4 shadow-rest">
+        <h2 className="text-base font-medium text-ink">Momentum</h2>
+        <p className="text-small text-faint">
+          Could not load your activity just now.{" "}
+          <button type="button" onClick={() => setAttempt((n) => n + 1)} className="font-medium text-ink underline underline-offset-4">
+            Try again
+          </button>
+        </p>
+      </section>
     );
   }
   if (!state.data) {
     // Sized to the loaded panel so the feed below does not jump when this resolves.
-    return <div className="h-[150px] animate-pulse rounded-[20px] bg-surface-alt" aria-hidden="true" />;
+    return <div className="min-h-40 animate-pulse rounded-card bg-surface-alt" aria-hidden="true" />;
   }
 
   const f = state.data;
@@ -59,38 +62,39 @@ export function Funnel() {
   const peak = Math.max(1, ...f.days.map((day) => day.submitted));
 
   return (
-    <section className="rounded-[20px] border border-border bg-surface-alt px-5 py-4">
-      <div className="flex flex-wrap items-baseline gap-x-8 gap-y-3">
+    <section className="flex min-h-40 flex-col rounded-card border border-border bg-surface-alt p-4 shadow-rest">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-medium text-ink">Momentum</h2>
+        <span className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</span>
+      </div>
+      <div className="mt-4 grid grid-cols-3 gap-3">
         <Stat value={f.applications_submitted} label="applications sent, all time" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.
             Calling it their own throughput would be the one thing this panel must not do. */}
         <Stat value={f.resumes_tailored} label="resumes prepared for you" />
-        {f.fields_filled > 0 && <Stat value={f.fields_filled} label="questions Litos filled in" />}
       </div>
 
       {!f.too_early && (
-        <div className="mt-4 border-t border-border pt-3">
+        <div className="mt-auto border-t border-border pt-3">
           <div className="flex items-end gap-1" role="img" aria-label={dailyLabel(f)}>
-            {f.days.map((day, i) => (
+            {f.days.map((day) => (
               <div key={day.day} className="flex flex-1 flex-col items-center gap-1">
                 {/* No minimum height on an empty day. A 2px floor made a day with one
                     application look identical to a day with none whenever the peak was high. */}
                 <div
                   className={day.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
-                  style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 40)}px` }}
+                  style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 24)}px` }}
                   title={`${day.day}: ${day.submitted} sent`}
                 />
                 {/* Every other day, ending on today. Fourteen MM-DD labels in this column ran
                     together into a grey smear, and the last one has to be today's. */}
-                <span className="font-mono text-[9px] text-faint">
-                  {(f.days.length - 1 - i) % 2 === 0 ? day.day.slice(5) : " "}
-                </span>
+                <span className="sr-only">{day.day}</span>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-faint">Applications you sent each day.</p>
+          {f.fields_filled > 0 && <p className="mt-2 text-label text-faint">{f.fields_filled} questions filled for you</p>}
         </div>
       )}
     </section>
@@ -104,8 +108,8 @@ function dailyLabel(f: FunnelSummary): string {
 function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div>
-      <p className="font-mono text-[22px] leading-none text-ink">{value}</p>
-      <p className="mt-1 text-[11px] text-muted">{label}</p>
+      <p className="font-mono text-heading leading-none text-ink">{value}</p>
+      <p className="mt-1 line-clamp-2 text-label text-muted">{label}</p>
     </div>
   );
 }

@@ -479,11 +479,11 @@ export default function Home() {
   if (error && !jobs) return <ErrorNote message={error} />;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       {/* The header carries the one thing a person comes here to do. "Change what you want" is a
           setting, so it sits as a text link under the subtitle rather than occupying the primary
           button slot. */}
-      <section className="flex flex-wrap items-start justify-between gap-4 border-b border-border pb-6">
+      <section className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Home</h1>
           <p className="mt-1 text-sm text-muted">
@@ -526,54 +526,43 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Above the per-application detail: the student's own throughput is the thing they open the
-          dashboard to check, and it is the number the teardown found behind every product with real
-          retention. It renders nothing at all until there is something to report. */}
-      <Funnel />
-
-      {/* On day one every one of these counters is 0, and six zeros is a worse first screen than
-          no counters at all. They appear once there is something to count. */}
-      {/* Each group gates on its OWN total. Sharing one `hasHistory` flag meant a student with two
-          emails and no applications was shown a row of application zeros to prove it. */}
-      {applicationTotal > 0 && (
-      <section aria-labelledby="applications-summary">
-        <div className="flex items-center justify-between gap-4">
-          <h2 id="applications-summary" className="text-base font-medium text-ink">Applications</h2>
-          <Link href="/dashboard/applications" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
-        </div>
-        {/* Every metric is a filter link. A number you cannot act on is decoration, and the
-            old "Action needed" panel below restated these same counts a second and third time. */}
-        <dl className="mt-4 grid grid-cols-3 border-y border-border">
-          {/* "Applied", not "Sent". The Emails group below also has a "Sent" and the two sat a
-              hundred pixels apart meaning two different things. */}
-          <SummaryMetric label="Ready" value={applicationSummary.ready} href="/dashboard/applications?state=ready" />
-          <SummaryMetric label="Needs you" value={applicationSummary.needsAction} href="/dashboard/applications?state=action" />
-          <SummaryMetric label="Sent" value={applicationSummary.submitted} href="/dashboard/applications?state=submitted" />
-        </dl>
+      {/* One scan, not three stacked reports. Each tint keeps its existing product meaning:
+          blue is application documents, coral is email outreach, and Momentum stays neutral
+          because it combines both the student's actions and Litos's work. */}
+      <section aria-label="At a glance" className="grid gap-3 lg:grid-cols-3">
+        <Funnel />
+        {applicationTotal > 0 && (
+          <SnapshotCard
+            id="applications-summary"
+            title="Applications"
+            href="/dashboard/applications"
+            tone="applications"
+            metrics={[
+              { label: "Ready", value: applicationSummary.ready, href: "/dashboard/applications?state=ready" },
+              { label: "Needs you", value: applicationSummary.needsAction, href: "/dashboard/applications?state=action" },
+              { label: "Sent", value: applicationSummary.submitted, href: "/dashboard/applications?state=submitted" },
+            ]}
+            action={applicationSummary.needsAction > 0 ? {
+              label: `${applicationSummary.needsAction} stopped for you`,
+              detail: "Finish the missing answers",
+              href: "/dashboard/applications?state=action",
+            } : undefined}
+          />
+        )}
+        {outreach.length > 0 && (
+          <SnapshotCard
+            id="outreach-summary"
+            title="Emails"
+            href="/dashboard/outreach"
+            tone="emails"
+            metrics={[
+              { label: "Drafted", value: outreachSummary.drafted, href: "/dashboard/outreach" },
+              { label: "Sent", value: outreachSummary.sent, href: "/dashboard/outreach" },
+              { label: "Replied", value: outreachSummary.replied, href: "/dashboard/outreach" },
+            ]}
+          />
+        )}
       </section>
-      )}
-
-      {applicationSummary.needsAction > 0 && (
-        <DashboardRow
-          label={`${applicationSummary.needsAction} application${applicationSummary.needsAction === 1 ? "" : "s"} stopped for you`}
-          detail="Finish the missing answers"
-          href="/dashboard/applications?state=action"
-        />
-      )}
-
-      {outreach.length > 0 && (
-      <section aria-labelledby="outreach-summary">
-        <div className="flex items-center justify-between gap-4">
-          <h2 id="outreach-summary" className="text-base font-medium text-ink">Emails</h2>
-          <Link href="/dashboard/outreach" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
-        </div>
-        <dl className="mt-4 grid grid-cols-3 border-y border-border">
-          <SummaryMetric label="Drafted" value={outreachSummary.drafted} href="/dashboard/outreach" />
-          <SummaryMetric label="Sent" value={outreachSummary.sent} href="/dashboard/outreach" />
-          <SummaryMetric label="Replied" value={outreachSummary.replied} href="/dashboard/outreach" />
-        </dl>
-      </section>
-      )}
 
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
@@ -599,7 +588,7 @@ export default function Home() {
           </EmptyState>
         )
       ) : (
-        <div className="space-y-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {visibleJobs.map((job) => (
             <JobMatchCard key={job.id} job={job} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
           ))}
@@ -638,28 +627,52 @@ export default function Home() {
   );
 }
 
-function SummaryMetric({ label, value, href }: { label: string; value: number; href: string }) {
-  return (
-    <div className="border-border first:pl-0 even:border-l sm:border-l sm:first:border-l-0">
-      {/* DESIGN.md hard law: color never encodes urgency. A count is a quantity, so it stays ink
-          and the label carries the meaning. */}
-      <Link href={href} className="block px-3 py-4 transition-colors hover:bg-surface-alt sm:px-5">
-        <dt className="text-xs text-muted">{label}</dt>
-        <dd className="mt-1 font-mono text-heading text-ink">{value}</dd>
-      </Link>
-    </div>
-  );
-}
+type SnapshotMetric = { label: string; value: number; href: string };
 
-function DashboardRow({ label, detail, href }: { label: string; detail: string; href: string }) {
+function SnapshotCard({
+  id,
+  title,
+  href,
+  tone,
+  metrics,
+  action,
+}: {
+  id: string;
+  title: string;
+  href: string;
+  tone: "applications" | "emails";
+  metrics: SnapshotMetric[];
+  action?: { label: string; detail: string; href: string };
+}) {
+  const toneClass = tone === "applications"
+    ? "border-brand/20 bg-brand-soft/70"
+    : "border-coral/20 bg-coral-soft/70";
+  const linkClass = tone === "applications" ? "text-brand-ink" : "text-coral-ink";
+
   return (
-    <Link href={href} className="group grid min-h-16 grid-cols-[1fr_auto] items-center gap-4 rounded-card border border-border px-5 py-3">
-      <span>
-        <span className="block text-sm font-medium text-ink">{label}</span>
-        <span className="block text-xs text-muted">{detail}</span>
-      </span>
-      <span aria-hidden="true" className="text-brand transition-transform group-hover:translate-x-0.5">→</span>
-    </Link>
+    <section aria-labelledby={id} className={`flex min-h-40 flex-col rounded-card border p-4 shadow-rest ${toneClass}`}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 id={id} className="text-base font-medium text-ink">{title}</h2>
+        <Link href={href} className={`text-small font-medium ${linkClass}`}>View all</Link>
+      </div>
+      <dl className="mt-4 grid grid-cols-3 gap-2">
+        {metrics.map((metric) => (
+          <Link key={metric.label} href={metric.href} className="rounded-inner bg-white/65 px-3 py-2.5 transition-colors hover:bg-white">
+            <dt className="text-small text-muted">{metric.label}</dt>
+            <dd className="mt-1 font-mono text-heading text-ink">{metric.value}</dd>
+          </Link>
+        ))}
+      </dl>
+      {action && (
+        <Link href={action.href} className="mt-3 flex items-center justify-between gap-3 rounded-inner bg-warn-soft px-3 py-2 text-warn">
+          <span className="min-w-0">
+            <span className="block truncate text-small font-medium">{action.label}</span>
+            <span className="block truncate text-label">{action.detail}</span>
+          </span>
+          <span aria-hidden="true">→</span>
+        </Link>
+      )}
+    </section>
   );
 }
 
@@ -685,56 +698,52 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
 
 function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
   return (
-    <Card className="overflow-hidden transition-colors hover:border-ink/30">
+    <Card className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised">
       {/* Lead with the employer, then put the score in the corner where it can be compared across
           cards without hiding who the role is for. The logo uses the same domain and fallback
           rules as the full Jobs list, so one company cannot show two different identities. */}
-      <div className="grid grid-cols-[48px_minmax(0,1fr)] items-center gap-4 p-5 sm:gap-5 sm:p-6">
-        <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
-        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_48px] gap-x-4 gap-y-3 sm:gap-x-5">
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Chip label={prepared ? "Ready" : preparationFailed ? "Paused" : "Getting ready"} kind={prepared ? "ready" : "generating"} />
-              <span className="text-xs text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
+      <div className="flex h-full flex-col p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Chip label={prepared ? "Ready" : preparationFailed ? "Paused" : "Getting ready"} kind={prepared ? "ready" : "generating"} />
+                <span className="text-small text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
+              </div>
+              <p className="mt-1 truncate text-small text-muted">{job.company_name}</p>
             </div>
-            <h2 className="mt-3 text-lg font-medium text-ink">{job.title}</h2>
-            <p className="mt-1 text-sm text-muted">
-              {job.company_name}
-              {job.location ? ` · ${job.location}` : ""}
-              {/* Only when the location line does not already say it, or a remote role reads
-                  "Remote, US · Remote". */}
-              {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
-            </p>
-            {/* Pay and job type, same formatter and same rule as /dashboard/jobs and the public
-                board (lib/pay.ts): shown only where the employer published it, and rendered as
-                nothing at all otherwise. This card is where the applicant decides whether the role
-                is worth a resume, so leaving the figure to the posting meant deciding without it. */}
-            <PayLine job={job} />
-            {/* The ranker's reasons used to be dumped raw at 12px with nothing saying what they
-                were. One word of framing turns a list of nouns into a sentence. */}
-            {job.reasons.length > 0 && (
-              <p className="mt-2 text-xs text-faint">Matches your {job.reasons.join(", ")}</p>
-            )}
           </div>
           <div className="justify-self-end text-center">
             <ScoreRing score={job.match} metricLabel="preference fit for this job" />
             <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
           </div>
-          {/* While Litos is still working there is nothing to click, so the primary slot holds a
-              plain line of text rather than a greyed-out button that reads as broken. And the
-              waiting state says "Getting ready" here too: the chip and the button use one name. */}
-          <div className="col-span-2 flex items-center justify-end gap-2">
-            <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
-              Skip
+        </div>
+
+        <h2 className="mt-4 text-heading font-medium text-ink">{job.title}</h2>
+        <p className="mt-1 truncate text-small text-muted">
+          {job.location ?? (job.remote ? "Remote" : "Location not listed")}
+          {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
+        </p>
+        <PayLine job={job} />
+        {job.reasons.length > 0 && (
+          <p className="mt-2 truncate text-small text-faint">Matches your {job.reasons.join(", ")}</p>
+        )}
+
+        {/* While Litos is still working there is nothing to click, so the primary slot holds a
+            plain line of text rather than a greyed-out button that reads as broken. And the
+            waiting state says "Getting ready" here too: the chip and the button use one name. */}
+        <div className="mt-auto flex items-center justify-end gap-2 pt-4">
+          <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
+            Skip
+          </button>
+          {prepared || preparationFailed ? (
+            <button type="button" onClick={prepared ? onReview : onRetry} aria-label={`${prepared ? "Review" : "Try again for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+              {prepared ? "Review" : "Try again"}
             </button>
-            {prepared || preparationFailed ? (
-              <button type="button" onClick={prepared ? onReview : onRetry} aria-label={`${prepared ? "Review" : "Try again for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-                {prepared ? "Review" : "Try again"}
-              </button>
-            ) : (
-              <span className="flex min-h-11 items-center px-3 text-sm text-muted">Getting ready</span>
-            )}
-          </div>
+          ) : (
+            <span className="flex min-h-11 items-center px-3 text-sm text-muted">Getting ready</span>
+          )}
         </div>
       </div>
     </Card>
