@@ -451,6 +451,11 @@ export type ParsedProfile = {
   full_name: string;
   experience: { company: string; title: string; start: string; end: string; description: string }[];
   skills: string[];
+  /* Spoken languages the resume printed. Separate from skills because the parser used to have
+   * nowhere else to put them, so they sorted ahead of the technical skills that drive resume
+   * tailoring. NOT the same list as application_profile.languages, which is the fluency the student
+   * declares in onboarding and the only list an employer form may be answered from. */
+  languages?: string[];
   projects: { name: string; description: string }[];
   school: string;
   grad_year: number;
