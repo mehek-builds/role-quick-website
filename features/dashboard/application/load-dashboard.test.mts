@@ -63,6 +63,16 @@ test("loads the versioned bootstrap contract with one request", async () => {
   assert.equal(state.jobs[0]?.id, "job-1");
 });
 
+test("does not reuse a pre-save bootstrap response when Home mounts again", async () => {
+  let bootstrapInit: RequestInit | undefined;
+  await loadDashboardInitialState(async <T>(path: string, init?: RequestInit) => {
+    if (path === "/dashboard/bootstrap") bootstrapInit = init;
+    return completeBootstrap as T;
+  });
+
+  assert.equal(bootstrapInit?.cache, "no-store");
+});
+
 test("falls back to legacy parallel resources only when the aggregate is unavailable", async () => {
   const paths: string[] = [];
   const responses: Record<string, unknown> = {
