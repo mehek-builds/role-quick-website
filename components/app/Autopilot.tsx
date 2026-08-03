@@ -181,12 +181,27 @@ export type NextMatch = {
  */
 export function NextMatchCard({
   match,
+  searching,
   autopilot,
   appliedToday,
   onSend,
   onOpen,
 }: {
   match: NextMatch | null;
+  /**
+   * True only while the preferences this card picks against are still in flight.
+   *
+   * WHY THIS IS A SEPARATE PROP AND NOT `match === null`. It used to be exactly that, and the null
+   * branch below rendered a pulsing dot and "Looking for your next match..." forever. Null has two
+   * causes and they are opposites: the answer has not arrived yet, or the answer arrived and it is
+   * "none of your ready applications match what you are looking for". Drawing both as a spinner
+   * told a student to keep waiting for something that had already finished and found nothing.
+   *
+   * It became the common case rather than the rare one when Next best match started intersecting
+   * ready packets with the current job board: before that, null meant "no ready packets at all",
+   * which almost never happened, so the loading-shaped empty state was never noticed.
+   */
+  searching: boolean;
   autopilot: boolean;
   appliedToday: number | null;
   onSend: (id: string) => void;
@@ -233,13 +248,35 @@ export function NextMatchCard({
     </div>
   );
 
-  if (!match) {
+  if (!match && searching) {
     return (
       <div>
         {header}
         <div className="flex items-center gap-3 rounded-card border border-border bg-surface px-5 py-4">
           <span aria-hidden="true" className="h-4 w-4 animate-pulse rounded-full bg-surface-alt" />
           <p className="text-sm text-muted">Looking for your next match...</p>
+        </div>
+      </div>
+    );
+  }
+
+  /* Nothing found, said as a fact and with the reason. No pulse: an animation is a promise that
+     something is still coming, and nothing is. The second line names the two things the student
+     can actually change, because "no match" on its own reads as a fault in the product when the
+     usual cause is that their ready applications are for postings the board has since rotated
+     past, or that their Account preferences narrowed after those applications were built.
+
+     Not an ErrorNote. Nothing failed. A day with no match is an ordinary day. */
+  if (!match) {
+    return (
+      <div>
+        {header}
+        <div className="rounded-card border border-border bg-surface px-5 py-4">
+          <p className="text-sm text-ink">No ready application matches your current preferences.</p>
+          <p className="mt-1 text-sm text-muted">
+            Your prepared applications are below. Widen your preferences in Account, or start a new
+            application from Jobs, and the next best match will appear here.
+          </p>
         </div>
       </div>
     );

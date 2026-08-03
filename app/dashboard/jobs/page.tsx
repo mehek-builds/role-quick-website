@@ -341,7 +341,7 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
               {job.title}
             </a>
           </h2>
-          <MatchBadge score={job.match_score} />
+          <FitBadge score={job.preference_score} reasons={job.preference_reasons} />
           <SponsorBadge evidence={job.sponsorship_evidence} />
         </div>
         <p className="mt-1 truncate text-sm text-muted">
@@ -359,6 +359,11 @@ function JobRow({ job, applied }: { job: MonitoredJob; applied: boolean }) {
             {type && <span className="text-muted">{type}</span>}
           </p>
         )}
+        {/* Directly under the badge it explains, and it explains THAT badge. This line and the
+            number above it used to come from two different metrics: the badge was resume-to-JD
+            coverage and this sentence was preference fit, so the same Databricks posting read
+            "0% match" beside "Matches your product, San Francisco, CA, internship". Whatever else
+            is true of a card, one metric's score may never carry another metric's reasons. */}
         {job.preference_reasons && job.preference_reasons.length > 0 && (
           <p className="mt-1.5 text-xs text-faint">
             Matches your {job.preference_reasons.join(", ")}
@@ -420,11 +425,41 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
 }
 
 /**
- * How much of what this posting asks for is already on your resume.
+ * How well this posting fits the role, type and places you asked for.
  *
- * Absent, not zero, when there is no score. `match_score` is null for a posting that did not list
- * enough real requirements to judge, and for everyone who has no main resume yet; rendering "0%
- * match" in either case would be a confident claim about someone's resume that nothing supports.
+ * WHY THIS IS PREFERENCE FIT AND NOT RESUME COVERAGE, which is what it used to be.
+ *
+ * The row used to render `match_score` here: 0-100 for how much of the posting's requirement list
+ * appears on your main resume. Two things were wrong with that, and only one of them was cosmetic.
+ *
+ *  1. IT CONTRADICTED THE LINE BENEATH IT. The sentence under this badge has always been the
+ *     preference reasons. Databricks' "Product Management Intern" therefore read "0% match" over
+ *     "Matches your product, San Francisco, CA, internship" -- one card asserting both that the
+ *     posting fits nothing about you and that it fits three things about you.
+ *  2. IT CONTRADICTED HOME. Home reads `preference_score` (see features/applications/domain,
+ *     rankJobs, whose comment already names GET /jobs the single ranking authority precisely so
+ *     the two screens cannot disagree). The same posting was fit 40 there and 0% here, in one
+ *     session. Jobs was the screen that broke the contract, so Jobs is the screen that moves.
+ *
+ * Preference fit is also the honest number for a LIST. It is what the backend actually sorts by
+ * (rankByFit takes preference score first and coverage only as a tie-break), so it is the number
+ * that explains the order the eye is scanning. Resume coverage is a per-application judgement and
+ * it keeps its home on the review screen, in MatchScore, where it arrives with a band label, the
+ * "N of M requirements" denominator that makes it readable, and a refusal state for postings that
+ * listed nothing to score. A bare percentage in a list has none of that context.
+ *
+ * ABSENT, NOT ZERO, when there is nothing to say, and TWO different situations arrive that way.
+ * The backend sends `preference_score: null` for an account that has saved no preferences, because
+ * preferenceFit floors at 0 and only the route can see the targeting row. A 0 WITH targeting saved
+ * is a different and perfectly real answer: this posting matches none of what you asked for. Both
+ * get no badge, and the rule that covers both is the same one Home applies (see rankJobs): a fit
+ * number is shown only when there is at least one reason behind it. A number this card cannot
+ * caption is the exact defect this card was rewritten to remove.
+ *
+ * The `pct === 0` guard is therefore belt and braces rather than the load-bearing one. It holds
+ * because every rule in preferenceFit that adds to the score also pushes a reason, so score 0 and
+ * reasons empty always travel together; if that ever stops being true, the reasons check is the one
+ * that still decides.
  *
  * A NOTE ON THE COLOUR, because it bends a rule. DESIGN.md reserves blue-soft for "your turn" and
  * for the documents pillar, and says stats appear as bare mono numerals with no badge. This badge
@@ -434,15 +469,17 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
  * shifted from red to green would be the product telling a student how to feel about a number it
  * has already said is not a prediction of anything.
  */
-function MatchBadge({ score }: { score: number | null | undefined }) {
+function FitBadge({ score, reasons }: { score: number | null | undefined; reasons: string[] | undefined }) {
   if (score === null || score === undefined) return null;
+  if (!reasons || reasons.length === 0) return null;
   const pct = Math.max(0, Math.min(100, Math.round(score)));
+  if (pct === 0) return null;
   return (
     <span
       className="shrink-0 rounded-full bg-brand-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-brand-ink"
-      title={`${pct} out of 100 of the requirements in this posting also appear on your resume`}
+      title={`${pct} out of 100 against the roles, job types and places saved in your Account preferences. It does not read your resume.`}
     >
-      {pct}% match
+      {pct}% fit
     </span>
   );
 }

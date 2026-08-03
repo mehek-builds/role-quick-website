@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer } from "@/features/applications";
+import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer, type JobContext } from "@/features/applications";
 import type { ResumeSpec } from "@/lib/api";
 import { useTermHover } from "./RequirementText";
 import type { ApplyOutcome } from "@/features/applications";
@@ -35,8 +35,10 @@ export function MatchScore({
 }: {
   jdText: string;
   spec: ResumeSpec;
-  /** The posting's own company and role, excluded from its requirements. */
-  jobContext?: { company?: string; role?: string };
+  /** The posting's own company, role and id, all excluded from its requirements. The id is what
+   *  lets the backend read the posting's offices off the live job row: a packet stores no location,
+   *  so without it this screen scores the student against the employer's cities. */
+  jobContext?: JobContext;
   /** Hands the whole result up so the parent can drive both panes' highlighting and the gap list
    *  from ONE request. Passing only `missing` meant the JD pane had no way to know which terms
    *  were covered, and it fell back to highlighting every word of the resume. */
@@ -76,7 +78,7 @@ export function MatchScore({
     // onResult is intentionally not a dependency: callers pass an inline closure, and including it
     // would refire the request on every parent render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [disabled, jdText, spec, jobContext?.company, jobContext?.role]);
+  }, [disabled, jdText, spec, jobContext?.company, jobContext?.role, jobContext?.job_id]);
 
   if (failed) {
     return <p className="text-[11px] leading-4 text-faint">We could not work out how well you fit this one</p>;
