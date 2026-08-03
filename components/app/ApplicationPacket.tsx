@@ -130,9 +130,14 @@ function ResumePaper({
           <div className="mt-2.5">
             <div className="flex items-baseline justify-between gap-3">
               <p className="min-w-0 flex-1 text-[11px] font-semibold">{entry.org}</p>
-              <p className="shrink-0 text-[9px] text-neutral-600">{entry.date_range}</p>
+              <p className="shrink-0 text-[9px] text-neutral-600">{entry.location}</p>
             </div>
-            {entry.title && <p className="mt-0.5 italic text-neutral-600">{entry.title}</p>}
+            {(entry.title || entry.date_range) && (
+              <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                <p className="min-w-0 flex-1 italic text-neutral-600">{entry.title}</p>
+                <p className="shrink-0 text-[9px] text-neutral-600">{entry.date_range}</p>
+              </div>
+            )}
             <ul className="mt-1 space-y-1">
               {entry.bullets.map((bullet, bulletIndex) => (
                 <li key={bulletIndex} className="grid grid-cols-[10px_1fr] gap-1">
@@ -173,12 +178,20 @@ function Education({ spec }: { spec: ResumeSpec }) {
       <p className="mt-4 border-b border-neutral-300 pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]">
         Education
       </p>
+      {/* Two split lines, matching drawEducation(): school with the place, then degree with the
+          date. The date used to sit beside the school and the degree line had no right column, so
+          the eye had nowhere consistent to read dates from. */}
       <div className="mt-2.5">
         <div className="flex items-baseline justify-between gap-3">
           <p className="min-w-0 flex-1 text-[11px] font-semibold">{spec.school}</p>
-          <p className="shrink-0 text-[9px] text-neutral-600">{spec.grad_date}</p>
+          <p className="shrink-0 text-[9px] text-neutral-600">{spec.school_location}</p>
         </div>
-        {spec.degree && <p className="mt-0.5 italic text-neutral-600">{spec.degree}</p>}
+        {(spec.degree || spec.grad_date) && (
+          <div className="mt-0.5 flex items-baseline justify-between gap-3">
+            <p className="min-w-0 flex-1 italic text-neutral-600">{spec.degree}</p>
+            <p className="shrink-0 text-[9px] text-neutral-600">{spec.grad_date}</p>
+          </div>
+        )}
         {/* Between the degree and the coursework, the order drawEducation() prints them in. Absent
             is the normal case and shows nothing: a resume that never stated a GPA is not missing
             one. */}

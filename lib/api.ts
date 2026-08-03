@@ -340,6 +340,9 @@ export function setSponsorFilter(enabled: boolean) {
 }
 
 export type ResumeEntry = {
+  /** Where the work happened, printed right of the organisation. Copied from the experience bank,
+   *  never written by the model, and only when the organisation matches exactly. */
+  location?: string;
   type?: "job" | "project" | "leadership";
   org: string;
   title: string;
@@ -357,6 +360,8 @@ export type ResumeSpec = {
   /** Already formatted for print, e.g. "3.8/4.0" or "3.8". Optional and usually absent: a resume
    *  that never stated a GPA is not missing one. Mirrors the backend's ResumeSpec. */
   gpa?: string;
+  /** The place printed beside the school. Transcribed from the resume, never inferred. */
+  school_location?: string;
   coursework: string;
   education_position?: "top" | "after_experience";
   experience: ResumeEntry[];
