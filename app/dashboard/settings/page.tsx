@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, ButtonLink } from "@/components/app/Button";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   api,
@@ -889,10 +889,18 @@ function Input({
   onChange: (v: string | null) => void;
   placeholder?: string;
 }) {
+  /* htmlFor/id, not aria-label: the visible text IS the accessible name, so tying
+     them together means a future copy edit cannot leave a screen reader reading
+     the old wording. Without the association the label is only a sibling of the
+     input, so nothing computes a name and every field on this panel announced as
+     a bare "edit text" (WCAG 4.1.2). useId gives a value that matches between the
+     server render and the client render, which a hand-rolled counter would not. */
+  const fieldId = useId();
   return (
     <div>
-      <label className="block text-xs font-medium text-muted">{label}</label>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <input
+        id={fieldId}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value || null)}
         placeholder={placeholder}
@@ -918,10 +926,14 @@ function LanguagesInput({
   placeholder?: string;
 }) {
   const [text, setText] = useState((value ?? []).join(", "));
+  /* Same label association as Input: this field looks identical to the reader,
+     so it has to announce identically too. */
+  const fieldId = useId();
   return (
     <div>
-      <label className="block text-xs font-medium text-muted">{label}</label>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <input
+        id={fieldId}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
@@ -948,10 +960,15 @@ function Select({
   onChange: (v: boolean | null) => void;
 }) {
   const current = value === true ? "yes" : value === false ? "no" : "";
+  /* The two selects are the work-authorization and sponsorship questions, the
+     highest-stakes answers on the page: unnamed, they announce only "Yes / No /
+     Prefer not to say" with no hint of which question is being answered. */
+  const fieldId = useId();
   return (
     <div>
-      <label className="block text-xs font-medium text-muted">{label}</label>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <select
+        id={fieldId}
         value={current}
         onChange={(e) =>
           onChange(e.target.value === "" ? null : e.target.value === "yes")
