@@ -18,6 +18,28 @@ test("Home gathers its three summaries into one divided card", async () => {
   assert.match(home, /className="grid gap-3 md:grid-cols-2 xl:grid-cols-3"/);
 });
 
+test("The header subtitle names only what the link beside it can change", async () => {
+  const home = await readFile(homeUrl, "utf8");
+
+  // targeting.titles and targeting.categories are its only inputs. Both are edited by
+  // TargetingCard, which is what "Change what you want" opens, so the label and its own control
+  // always agree. profile.target_roles is editable too, but on /dashboard/resume and not by that
+  // link, and it ranks nothing - so it stays out of the header.
+  assert.match(home, /const targetLabel = targetingHeadline\(targeting\?\.titles, targeting\?\.categories\) \?\? "Your target roles"/);
+  assert.doesNotMatch(home, /targetLabel[^\n]*target_roles/);
+  // The subtitle is the only place the label is printed, and it still carries that link.
+  assert.match(home, /\{targetLabel\}/);
+  assert.match(home, /href="\/dashboard\/settings#job-search"/);
+});
+
+test("Home keeps no parsed-profile state now that nothing on it reads one", async () => {
+  const home = await readFile(homeUrl, "utf8");
+
+  assert.doesNotMatch(home, /setProfile/);
+  // The fetch behind it is still load-bearing: identity.full_name comes from the same response.
+  assert.match(home, /setIdentity\(initial\.identity\)/);
+});
+
 test("Overview columns carry no card chrome and no nested tiles of their own", async () => {
   const [home, funnel] = await Promise.all([readFile(homeUrl, "utf8"), readFile(funnelUrl, "utf8")]);
 

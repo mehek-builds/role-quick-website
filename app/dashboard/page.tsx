@@ -29,6 +29,7 @@ import {
 } from "@/features/applications";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
+import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
@@ -195,7 +196,9 @@ export default function Home() {
   const [me, setMe] = useState<Me | null>(null);
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
   const [targeting, setTargeting] = useState<Targeting | null>(null);
-  const [profile, setProfile] = useState<Partial<ParsedProfile> | null>(null);
+  /* No parsed-profile state here any more: the header was its only reader, and it now names saved
+     targeting instead. The /profile fetch behind it is not dead - loadDashboardInitialState still
+     derives identity.full_name from the same response, and the prewarm below needs that. */
   const [identity, setIdentity] = useState<ProfileIdentity | null>(null);
   const [applicationProfile, setApplicationProfile] = useState<ApplicationProfile | null>(null);
   const [packets, setPackets] = useState<GeneratedResume[]>([]);
@@ -228,7 +231,6 @@ export default function Home() {
         setMe(QA_ME);
         setJobs(QA_JOBS);
         setTargeting(QA_TARGETING);
-        setProfile(QA_PROFILE);
         setIdentity({ full_name: "John Doe", email: "qa@trylitos.com" });
         setApplicationProfile({});
         setPackets(QA_PACKETS);
@@ -245,7 +247,6 @@ export default function Home() {
         setLoadedAt(Date.now());
         setJobs(initial.jobs);
         setTargeting(initial.targeting);
-        setProfile(initial.profile);
         setIdentity(initial.identity);
         setApplicationProfile(initial.applicationProfile);
         setPackets(initial.packets);
@@ -542,7 +543,11 @@ export default function Home() {
     }
   }
 
-  const targetLabel = targeting?.titles?.[0] ?? profile?.target_roles?.[0] ?? "Your target roles";
+  /* Saved targeting only, and only the parts the "Change what you want" link below can edit. This
+     used to fall through to profile.target_roles when no titles were saved, so the header claimed
+     one thing while the feed underneath ranked by the saved categories. See targetingHeadline for
+     why target_roles is not a rung even though it is user-editable on /dashboard/resume. */
+  const targetLabel = targetingHeadline(targeting?.titles, targeting?.categories) ?? "Your target roles";
   const trialActive = Boolean(
     me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
   );
