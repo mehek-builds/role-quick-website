@@ -1,7 +1,8 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
   ApiError,
@@ -65,7 +66,19 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   jobId: null,
 };
 
-export default function Applications() {
+/* useSearchParams needs a Suspense boundary above it, or the whole route opts out of the static
+   shell and Next fails the build rather than shipping a page that renders nothing until the query
+   is known. The fallback is the same shimmer the page shows while its own packets load, so the
+   boundary is invisible: this is a client dashboard whose first paint was already a loading state. */
+export default function ApplicationsPage() {
+  return (
+    <Suspense fallback={<ShimmerRows rows={4} />}>
+      <Applications />
+    </Suspense>
+  );
+}
+
+function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
@@ -117,17 +130,45 @@ export default function Applications() {
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
-  /* Seeded from ?state= so the Overview metrics are real filter links rather than decoration.
-     Read once at mount: after that the select on this page is the only thing that moves it.
+  /* ?state= IS the filter. Not a seed for it, the thing itself.
+     Home's Overview metrics link here with it, and it has to work on the path a student actually
+     takes, which is a click.
 
-     The seeding alone never made those links work. The value fed one list that only mounted once a
-     packet was open, so arriving from Home's "N stopped for you" banner set a filter nobody could
-     see, applied it to nothing on screen, and left the student on the same board they would have
-     got with no link at all. The ledger below now renders on the board view whenever this is not
-     "all", with its heading and its select carrying the current value. */
-  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>(
-    () => (typeof window === "undefined" ? "all" : applicationFilterFromSearch(window.location.search)),
-  );
+     This was `useState(() => applicationFilterFromSearch(window.location.search))`, under a comment
+     saying it was read once at mount. Both halves of that were the bug (ISSUE-042). Measured in a
+     driven browser against a stubbed backend: clicking Home's "5 stopped for you" banner runs this
+     component's initialiser while `window.location.pathname` is still `/dashboard` and its search
+     is still empty, because the App Router renders the incoming route inside a transition BEFORE it
+     commits the new URL. So the read resolved to "all". Being a first-mount-only read, nothing
+     re-ran it when the URL did land a moment later. A hard load worked, because there the URL is
+     already correct when the component first renders, which is exactly why pasting the link and
+     reloading both looked fine while all four Home controls were dead.
+
+     useSearchParams is the router's own view of the query, so it is correct during that transition
+     and it UPDATES, which a first-mount read cannot.
+
+     THE URL IS THE SINGLE SOURCE OF TRUTH, deliberately, rather than mirroring the param into local
+     state. Mirroring needs a "last seen param" to tell an arriving ?state= apart from a value the
+     student just chose, and getting that wrong in either direction is silent: too eager and the
+     select is stomped back on every render, too lazy and the deep link stops working again. There
+     is no second copy to disagree here. It also buys three things the mirrored version cannot: the
+     filtered view is shareable, it survives a reload, and Back returns to it. */
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const applicationFilter = applicationFilterFromSearch(searchParams.toString());
+  /* Writes the choice back to the URL, so the select and the deep link move the same thing.
+     Everything removes the parameter rather than writing state=all: a URL that says nothing is
+     what a plain visit looks like, and this is also what closes the ledger section.
+     scroll: false because this is a filter, not a navigation; the student is looking at the list
+     they just filtered and must not be thrown to the top of the page. */
+  const setApplicationFilter = useCallback((next: ApplicationFilter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete("state");
+    else params.set("state", next);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
   const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const closeNewApplication = useCallback(() => {

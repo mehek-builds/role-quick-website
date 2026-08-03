@@ -49,17 +49,71 @@ describe("the ?state= deep link resolves to a view", () => {
     }
   });
 
-  test("the page actually seeds its filter from the URL", () => {
-    /* The parser being correct proves nothing if the page never calls it. Dropping the initialiser
-       for a bare `useState("all")` survived every other assertion in this file: the parser still
-       passed its own unit tests, the ledger still rendered whenever a filter was set, and no filter
-       could ever be set, so all four Home controls went silently dead exactly as they did in
-       ISSUE-037. The wiring is the thing the deep link rides on, so it is pinned here. */
+  test("the page actually reads its filter from the URL", () => {
+    /* The parser being correct proves nothing if the page never calls it. Dropping the read for a
+       bare `useState("all")` survived every other assertion in this file: the parser still passed
+       its own unit tests, the ledger still rendered whenever a filter was set, and no filter could
+       ever be set, so all four Home controls went silently dead exactly as they did in ISSUE-037.
+
+       RE-POINTED for ISSUE-042. This used to pin the exact `useState(() => ...window.location...)`
+       initialiser, which is the mechanism that turned out to BE the second bug, so the assertion
+       was holding the defect in place. What has to be true is that the filter comes from the URL,
+       not that it comes from it once at mount. */
     assert.match(
       applications,
-      /useState<ApplicationFilter>\(\s*\(\) => \(typeof window === "undefined" \? "all" : applicationFilterFromSearch\(window\.location\.search\)\),?\s*\)/,
-      "the filter's initial value has to come from the URL, or ?state= sets nothing at all",
+      /applicationFilterFromSearch\(searchParams\.toString\(\)\)/,
+      "the filter has to be read from the router's live view of the query",
     );
+    assert.match(applications, /const searchParams = useSearchParams\(\)/, "and that view is useSearchParams");
+  });
+
+  test("the filter is not read once at mount", () => {
+    /* ISSUE-042, the defect this file did not catch. `useState(() => applicationFilterFromSearch(
+       window.location.search))` works on a hard load and fails on a click, which is the only path a
+       student ever takes: the App Router renders the incoming route inside a transition BEFORE it
+       commits the new URL, so the initialiser samples `/dashboard` with an empty search and
+       resolves to "all", and being first-mount-only nothing re-runs it when the URL lands. Verified
+       in a driven browser by logging window.location inside the initialiser on a real click.
+
+       Both halves are banned here. A lazy initialiser is a one-shot read, and window.location is
+       the value that is stale during the transition, so either one alone reintroduces ISSUE-042. */
+    assert.doesNotMatch(
+      applications,
+      /useState<ApplicationFilter>/,
+      "the filter cannot live in state seeded at mount: a click arrives before the URL does",
+    );
+    /* Comments off first. The code above this one explains the bug by quoting the defective line,
+       and a check that cannot tell a warning from the thing it warns about is worse than none. */
+    const code = stripComments(applications);
+    assert.doesNotMatch(
+      code,
+      /applicationFilterFromSearch\(window\.location/,
+      "window.location is the stale value during a client-side navigation; the router's is not",
+    );
+  });
+
+  test("choosing a view writes it back to the URL", () => {
+    /* The URL is the single source of truth, so the select cannot only set local state: that would
+       be a second copy for the reactive read to stomp on the next render. Writing back is also what
+       makes the filtered view shareable and reload-safe.
+
+       replace, not push: a filter is not a place. Pushing would make Back walk every option the
+       student tried instead of returning them to Home. */
+    const setter = applications.slice(applications.indexOf("const setApplicationFilter = useCallback"));
+    const body = setter.slice(0, setter.indexOf("}, ["));
+    assert.match(body, /router\.replace\(/, "the chosen view has to reach the URL");
+    assert.doesNotMatch(body, /router\.push\(/, "a filter change is not a history entry");
+    assert.match(body, /params\.delete\("state"\)/, "Everything clears the parameter rather than writing state=all");
+    assert.match(body, /params\.set\("state", next\)/, "and any other view writes itself");
+    assert.match(body, /scroll: false/, "filtering must not throw the reader to the top of the page");
+  });
+
+  test("the route can render a query-dependent view at all", () => {
+    /* useSearchParams opts the route out of the static shell unless a Suspense boundary sits above
+       it. Without one the build fails, so this is really a guard on someone "simplifying" the
+       wrapper away and discovering it in CI rather than here. */
+    assert.match(applications, /<Suspense fallback=/, "the query read needs a boundary above it");
+    assert.match(applications, /export default function ApplicationsPage\(\)/, "which is what the route's default export is for");
   });
 
   test("the list and the heading are driven by that same filter", () => {
