@@ -29,28 +29,77 @@ import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/
  * exist for a real submission.
  */
 
+/* THESE KEY NAMES ARE THE BACKEND'S, and they are the whole point of this function.
+   The list used to read ["location", "email", "phone", "linkedin", "website"], of which
+   three matched nothing: `_contact` is stored verbatim from the resume request body
+   (routes/resume.ts `_contact: body.contact`), whose schema is full_name, email, phone,
+   linkedin_url, github_url, portfolio_url. There is no `location` and the URL fields carry
+   the `_url` suffix, so a student with a LinkedIn on their rendered PDF saw no LinkedIn here
+   and had no way to tell the field was missing from the file or just from this pane.
+
+   It failed silently because a missing key is indistinguishable from an empty one after the
+   filter. If these ever drift again they will drift the same quiet way, so the order below is
+   the renderer's order (engine/resumeRender.ts contactLine) rather than a fresh opinion. */
+function contactName(spec: GeneratedResume["spec"]): string {
+  return (spec._contact?.full_name ?? "").trim();
+}
+
 function contactLine(spec: GeneratedResume["spec"]): string {
   const contact = spec._contact ?? {};
   /* An explicit key order, not Object.values: the record is loosely typed, so
      iteration order is whatever the backend happened to serialise, and a resume
      header that reorders itself between packets looks like a rendering bug. */
-  return ["location", "email", "phone", "linkedin", "website"]
+  return ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]
     .map((key) => contact[key])
     .filter((value): value is string => Boolean(value && value.trim()))
     .join(" · ");
 }
 
 /* The resume, read-only, from the same spec the editor renders. Black and white
-   only, which is the standing rule on every surface that shows a resume. */
-function ResumePaper({ spec, contact }: { spec: ResumeSpec; contact: string }) {
+   only, which is the standing rule on every surface that shows a resume.
+
+   THE HEADER IS THE APPLICANT, NOT THE SCHOOL. This pane used to open with `spec.school` in the
+   name slot, centred and heaviest on the page, with degree and dates beneath it: a student
+   checking the document they were about to send read their university where their own name
+   belongs. The cause is that `ResumeSpec` has no name field at all - the applicant lives on
+   `_contact.full_name`, a sibling that `stripMetadata` deliberately drops - so education simply
+   floated up into the empty first slot and took the EDUCATION heading down with it.
+
+   The renderer (engine/resumeRender.ts, drawHeader + drawEducation) is the artifact this claims
+   to depict, so the order here is its order: name, target role, rule, contact details, and then
+   education as a section like any other. A preview that composes differently from the file is
+   worse than no preview, because the student approves one document and the employer receives
+   another. */
+function ResumePaper({
+  spec,
+  name,
+  contact,
+}: {
+  spec: ResumeSpec;
+  name: string;
+  contact: string;
+}) {
   const types = spec.experience.map((entry) => entry.type);
+  const education = <Education spec={spec} />;
+  /* Mirrors resumeContentBlocks(): education leads unless the spec says it sits after the
+     experience sections, which is what a graduate's resume does. */
+  const educationAfterExperience = spec.education_position === "after_experience";
   return (
     <div className="rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black">
-      <p className="text-center text-[14px] font-semibold tracking-tight">{spec.school}</p>
-      <p className="mt-0.5 text-center text-[9px] text-neutral-600">
-        {spec.degree} · {spec.grad_date}
-      </p>
-      {contact && <p className="mt-1 text-center text-[9px] text-neutral-600">{contact}</p>}
+      {name && <p className="text-center text-[14px] font-semibold tracking-tight">{name}</p>}
+      {spec.target_role && (
+        <p className="mt-0.5 text-center text-[9px] font-semibold">{spec.target_role}</p>
+      )}
+      {/* Identity above the rule, ways to reach that person below it: two different kinds of
+          fact, so the eye gets a divider rather than a paragraph. Same rule the PDF draws. */}
+      {contact && (
+        <>
+          <div className="mt-1.5 h-px w-full bg-neutral-300" />
+          <p className="mt-1.5 text-center text-[9px] text-neutral-600">{contact}</p>
+        </>
+      )}
+
+      {!educationAfterExperience && education}
 
       {spec.experience.map((entry, index) => (
         <div key={`${entry.org}-${entry.title}-${index}`}>
@@ -78,17 +127,7 @@ function ResumePaper({ spec, contact }: { spec: ResumeSpec; contact: string }) {
         </div>
       ))}
 
-      {/* Coursework was being dropped. It is part of the stored spec and part of the rendered
-          resume, so leaving it out made this pane quietly disagree with the PDF it claims to
-          show, on the screen where that disagreement matters most. */}
-      {spec.coursework && (
-        <>
-          <p className="mt-4 border-b border-neutral-300 pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]">
-            Coursework
-          </p>
-          <p className="mt-2">{spec.coursework}</p>
-        </>
-      )}
+      {educationAfterExperience && education}
 
       {spec.skills.length > 0 && (
         <>
@@ -99,6 +138,29 @@ function ResumePaper({ spec, contact }: { spec: ResumeSpec; contact: string }) {
         </>
       )}
     </div>
+  );
+}
+
+/* Education as a real section, matching drawEducation(): school on the left with the grad date
+   pushed right on the same line, degree in italic beneath, and coursework carrying the renderer's
+   own "Relevant coursework:" lead-in. It was previously two centred lines under the top of the
+   page and a separate "Coursework" section further down, neither of which the PDF has. */
+function Education({ spec }: { spec: ResumeSpec }) {
+  if (!spec.school && !spec.degree && !spec.grad_date && !spec.coursework) return null;
+  return (
+    <>
+      <p className="mt-4 border-b border-neutral-300 pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]">
+        Education
+      </p>
+      <div className="mt-2.5">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="min-w-0 truncate text-[11px] font-semibold">{spec.school}</p>
+          <p className="shrink-0 text-[9px] text-neutral-600">{spec.grad_date}</p>
+        </div>
+        {spec.degree && <p className="mt-0.5 italic text-neutral-600">{spec.degree}</p>}
+        {spec.coursework && <p className="mt-0.5">Relevant coursework: {spec.coursework}</p>}
+      </div>
+    </>
   );
 }
 
@@ -342,7 +404,13 @@ export function ApplicationPacket({
                     page beside this has defended these same fields for as long as it has existed;
                     reading them raw here meant one packet predating a field threw during render and
                     unmounted the whole Applications tree, submission poller included. */}
-                <ResumePaper spec={stripMetadata(packet.spec)} contact={contactLine(packet.spec)} />
+                {/* name and contact come off the raw packet, not off stripMetadata's result:
+                    they live on `_contact`, which is exactly what that helper strips. */}
+                <ResumePaper
+                  spec={stripMetadata(packet.spec)}
+                  name={contactName(packet.spec)}
+                  contact={contactLine(packet.spec)}
+                />
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-faint">

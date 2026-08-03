@@ -10,6 +10,7 @@ import type { ApplicationReview, GeneratedResume } from "@/lib/api";
      UNSENT    needs_attention, with a REQUIRED question left blank */
 
 const SPEC: GeneratedResume["spec"] = {
+  target_role: "Software Engineer, Web",
   school: "University of Southern California",
   degree: "B.S. Computer Science",
   grad_date: "May 2027",
@@ -34,11 +35,19 @@ const SPEC: GeneratedResume["spec"] = {
       bullets: ["A Postgres persistence adapter for Yjs documents, used by 40 repositories."],
     },
   ],
+  /* THE BACKEND'S KEY NAMES, EXACTLY. This fixture previously carried `location` and `linkedin`
+     and no name at all, which are not fields the backend ever writes: `_contact` is stored
+     verbatim from the resume request body, whose schema is full_name, email, phone, linkedin_url,
+     github_url, portfolio_url. Because the fixture was written to match the reader rather than the
+     producer, the harness rendered a header that looked plausible while the real pane silently
+     dropped the applicant's name and every URL. A sandbox whose data has a different shape from
+     production cannot catch a shape bug, which is the one thing it exists to catch. */
   _contact: {
-    location: "Los Angeles, CA",
+    full_name: "John Doe",
     email: "john.doe@usc.edu",
     phone: "(213) 555-0148",
-    linkedin: "linkedin.com/in/johndoe",
+    linkedin_url: "linkedin.com/in/johndoe",
+    github_url: "github.com/johndoe",
   },
 };
 
