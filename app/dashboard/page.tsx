@@ -36,6 +36,8 @@ import { loadDashboardInitialState } from "@/features/dashboard";
 import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
+import { isWaitingOnHuman, waitingApplications } from "@/lib/captcha-queue";
+import { WaitingOnYou } from "@/components/app/WaitingOnYou";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 
@@ -340,9 +342,20 @@ export default function Home() {
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
   /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
   const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
+  /* Applications stopped on a human-verification check, oldest first. Kept out of the summary
+     numbers on purpose: this is a different kind of debt from the rest of "Needs you", and folding
+     it in would bury a thing that takes seconds to clear inside a count of things that do not. */
+  const waitingOnYou = useMemo(() => waitingApplications(packets), [packets]);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
-    const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
+    /* Excludes the rows the waiting-on-you block already owns. Counting them twice would be
+       tolerable; the copy is not. Tracker's action reads "N stopped for you / Finish the missing
+       answers", which is the wrong instruction for a CAPTCHA - nothing is missing, and on an
+       at_submit stall everything is already filled in. */
+    const needsAction = packets.filter((packet) => (
+      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+      && !isWaitingOnHuman(packet.spec._review)
+    )).length;
     const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
     return { ready, submitted, needsAction };
   }, [packets]);
@@ -693,6 +706,7 @@ export default function Home() {
           account and the other two are conditional, so the row has to divide evenly across however
           many columns actually render. empty:hidden keeps the card border from drawing around
           nothing when none of them do. */}
+      <WaitingOnYou items={waitingOnYou} />
       <section aria-label="At a glance">
         <div className="grid divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-rest empty:hidden lg:auto-cols-fr lg:grid-flow-col lg:divide-x lg:divide-y-0">
           <Funnel />

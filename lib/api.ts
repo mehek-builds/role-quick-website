@@ -404,6 +404,20 @@ export type ApplicationReview = {
   browser_context_id?: string;
   browser_session_id?: string;
   attention_reason?: string;
+  /* The typed half of attention_reason. Written by the backend when an application stops on a
+     human-verification check; nothing here is rendered as prose. `stalled_at` is the queue's sort
+     key and is deliberately not `updated_at`, which moves on unrelated writes. A stall is closed
+     with `resolved_at` rather than deleted, so a submitted application keeps its history while
+     dropping out of the queue. */
+  stall?: {
+    kind: "human_verification";
+    stalled_at: string;
+    surface: "server_run" | "extension";
+    provider: "recaptcha_v2" | "recaptcha_v3" | "hcaptcha" | "turnstile" | "arkose" | "unknown";
+    stage: "before_fill" | "at_submit";
+    source: "observed" | "assumed";
+    resolved_at?: string;
+  };
   handoff_expires_at?: string;
   final_approved_at?: string;
   submission_authorization?: {
