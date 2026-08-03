@@ -453,7 +453,10 @@ export function BaseResumeStep({
           .map((name) => name.trim())
           .filter(Boolean);
         if (declared.length > 0) {
-          await putApplicationProfile({ languages: declared });
+          /* `!demo` for the same reason persist() has it: a QA session has no account, so an
+             unguarded write here would 401 and show "Could not save your resume" on the one screen
+             the harness exists to make reviewable without logging in. */
+          if (!demo) await putApplicationProfile({ languages: declared });
           track("onboarding_languages_declared", {
             count: declared.length,
             prefilled: languageSuggestion.length > 0,
@@ -465,7 +468,7 @@ export function BaseResumeStep({
       setError(e instanceof Error ? e.message : "Could not save your resume.");
       setSaving(false);
     }
-  }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length]);
+  }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length, demo]);
 
   const contact: ContactHeader = {
     full_name: parsed?.full_name ?? "",

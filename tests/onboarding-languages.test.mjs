@@ -71,6 +71,18 @@ describe("the languages declaration in onboarding", () => {
     );
   });
 
+  /* persist() has carried a !demo guard since the QA harness existed. The declaration write is a
+     second network call on the same button and needs the same guard: without it, pressing "Looks
+     right" in a QA session 401s and reports "Could not save your resume" on the one screen the
+     harness exists to make reviewable without an account. */
+  test("the declaration write is guarded for QA sessions, like every other write here", () => {
+    assert.match(
+      STEP,
+      /if \(!demo\) await putApplicationProfile/,
+      "an unguarded write breaks ?qa=1&step=base, which has no account to write against"
+    );
+  });
+
   test("the block is gated on the build finishing, not shown mid-animation", () => {
     assert.match(
       STEP,
