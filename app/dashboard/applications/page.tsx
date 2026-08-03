@@ -20,6 +20,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
 import { ApplicationPacket } from "@/components/app/ApplicationPacket";
@@ -1075,6 +1076,18 @@ export default function Applications() {
                 <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 xl:max-h-[calc(100vh-15.5rem)]">
                   <div className="prose-copy whitespace-pre-line text-sm leading-6 text-ink">
                     <RequirementText text={review.jd_text} />
+                  </div>
+                  {/* Every requirement the posting states, met or not, with the student's own
+                      bullet as the reason. Collapsed behind a click because it costs a model call
+                      the first time: opening it is the student asking. Sits directly under the
+                      posting so a row can be read against the sentence it came from. */}
+                  <div className="mt-5 border-t border-border pt-4">
+                    <RequirementBreakdown
+                      jdText={review.jd_text}
+                      spec={deferredSpec ?? spec}
+                      jobContext={selected.job_context}
+                      disabled={qaMode !== false}
+                    />
                   </div>
                   {/* Preparation for later, under the posting it comes from. Collapsed by default:
                       expanding it is the student saying they are at that stage. */}
