@@ -1,4 +1,4 @@
-import type { ParsedProfile, RoleType } from "./api";
+import type { ParsedProfile, RoleType, Targeting } from "./api";
 
 export type ResumeTargetingGuess = {
   roles: string[];
@@ -175,5 +175,92 @@ export function inferResumeTargeting(profile: ParsedProfile, currentYear = new D
     roleType: inferRoleType(profile, yearsExperience, currentYear),
     categories: categories.length > 0 ? categories : ["other"],
     yearsExperience,
+  };
+}
+
+/* ------------------------------------------------------------------------------------------- */
+
+/* What the /start roles screen is allowed to do to targeting that already exists.
+ *
+ * This lives beside the inference rather than in its own module because it is the GUARD ON THAT
+ * INFERENCE: everything above is a guess about a student, and the rule below is the one that keeps
+ * a guess from outranking an answer they already gave.
+ *
+ * The screen used to seed itself purely from the resume inference and then PUT
+ * {categories, titles, role_types} as a full replacement. For a brand-new account that is
+ * harmless - there is nothing to replace. For an account that already stated its targeting it is
+ * one click of silent data loss on the record that aims every recommendation and every
+ * application: a student with quant-trading/software-engineering/product internships saved would
+ * be shown "Investment Banking Analyst" and "New grad" pre-selected (inferred from
+ * ParsedProfile.target_roles[0], the same untrustworthy value behind the dashboard header fix in
+ * b2137ce) and Continue would commit that guess over their real answer.
+ *
+ * That reachable at all is a consequence of the step being DERIVED rather than stored
+ * (routes/onboarding.ts): `hasFocusTargeting` requires a non-empty titles array, so any account
+ * whose targeting predates the titles field derives 'focus' again on every visit to /start,
+ * forever, no matter how much of the product it has already used.
+ *
+ * So the rule here is inference NEVER outranks a stated answer, in either direction:
+ *   - seeding reads saved targeting first and falls back to the resume guess only per field, and
+ *     only where the student has said nothing;
+ *   - committing merges categories instead of recomputing them, because this screen has no
+ *     category control at all. Categories are edited in Settings (components/app/TargetingCard),
+ *     so a screen that cannot show a category cannot be the thing that removes one.
+ *
+ * Both functions are pure and live here rather than in the component so the no-data-loss property
+ * can be pinned by a test without a browser.
+ */
+
+/** The three targeting fields this screen touches. The other four are none of its business. */
+export type SavedFocus = Pick<Targeting, "categories" | "titles" | "role_types"> | null;
+
+/** The resume inference, narrowed to what seeding actually reads. */
+export type FocusGuess = { roles: string[]; roleType: RoleType };
+
+export type FocusSelection = { titles: string[]; roleTypes: RoleType[] };
+
+function stated<T>(value: T[] | null | undefined): T[] | null {
+  return Array.isArray(value) && value.length > 0 ? value : null;
+}
+
+/**
+ * What the screen should arrive pre-selected with.
+ *
+ * Per field, not all-or-nothing: an account can have saved role_types and no titles (that is
+ * exactly the shape that derives 'focus' in the first place), and in that case the guess should
+ * still offer a title while the stated type stands.
+ *
+ * The guess contributes ONE title, not all five. Selecting every suggestion on the student's
+ * behalf would make Continue commit five inferred titles that they only ever declined to remove.
+ */
+export function focusSeed(saved: SavedFocus, guess: FocusGuess): FocusSelection {
+  const savedTitles = stated(saved?.titles);
+  const savedRoleTypes = stated(saved?.role_types);
+  return {
+    titles: savedTitles ?? (guess.roles[0] ? [guess.roles[0]] : []),
+    roleTypes: savedRoleTypes ?? [guess.roleType],
+  };
+}
+
+/**
+ * The body to PUT. Partial by omission (see routes/targeting.ts): locations, remote_only and the
+ * two periods are absent on purpose and keep their stored values.
+ *
+ * categories is a UNION of what was saved and what the chosen titles imply. Widening is the only
+ * safe direction for a screen with no category control: the student can never see that
+ * quant-trading is on, so they can never mean to turn it off, and a recompute would turn it off
+ * for them. Narrowing stays where the control is, in Settings.
+ *
+ * The derived half falls back to nothing rather than to "other" when there are saved categories:
+ * "other" is the fallback for a student who would otherwise have no category at all, and adding
+ * it to a real list would widen a stated preference into the untargeted bucket.
+ */
+export function focusPatch(saved: SavedFocus, selection: FocusSelection): Pick<Targeting, "categories" | "titles" | "role_types"> {
+  const savedCategories = saved?.categories ?? [];
+  const derived = categoriesForRoles(selection.titles, savedCategories.length > 0 ? [] : ["other"]);
+  return {
+    categories: Array.from(new Set([...savedCategories, ...derived])),
+    titles: selection.titles,
+    role_types: selection.roleTypes,
   };
 }
