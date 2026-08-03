@@ -115,6 +115,21 @@ function numberOrNull(value: unknown): number | null {
  *
  * 'Full-time' IS shown where a board genuinely stated it, because then it is the employer talking.
  */
+/**
+ * The employment types a visitor may FILTER by.
+ *
+ * Deliberately the same four words the backend's employment_type enum accepts, and deliberately not
+ * derived from board facets: the column also carries pass-through values from employers whose
+ * spelling the normalizer did not recognise, and offering one employer's wording as a board-wide
+ * category would promise a complete set that does not exist.
+ *
+ * A posting with NO stated type matches none of these, which is correct rather than a gap. Around
+ * 84% of the board states no type at all because Greenhouse has no such field, and the product's
+ * standing rule is that an unstated type shows nothing rather than being defaulted to Full-time.
+ * So "Full-time" here means "the employer said so", and the silence stays honest.
+ */
+export const EMPLOYMENT_TYPES = ["Full-time", "Part-time", "Internship", "Contract"] as const;
+
 export function jobTypeLabel(employmentType?: string | null): string | null {
   const value = employmentType?.trim();
   return value ? value : null;
