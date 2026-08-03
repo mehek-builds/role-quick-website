@@ -643,7 +643,7 @@ export default function Home() {
           {applicationTotal > 0 && (
             <OverviewColumn
               id="applications-summary"
-              title="Applications"
+              title="Tracker"
               href="/dashboard/applications"
               tone="applications"
               metrics={[

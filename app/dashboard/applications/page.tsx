@@ -848,7 +848,8 @@ export default function Applications() {
         </div>
       </div>
 
-      {autopilot.error && <ErrorNote message={autopilot.error} />}
+      {/* No autopilot.error row here any more. That error is only ever set by the toggle's own
+          save, and the toggle is on Jobs now, so a copy on this page could never fire. */}
       {!selected && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
       {!selected && (
         <p className="text-sm leading-6 text-muted">
