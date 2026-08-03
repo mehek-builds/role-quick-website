@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
-import { fetchFunnel } from "@/features/applications";
 import { isQaRender } from "@/lib/qa-mode";
 import {
   ClipboardIcon,
@@ -211,16 +210,18 @@ function RailLink({
 }
 
 /**
- * Who is signed in, what they are on, and how much of the job hunt is behind them.
+ * Who is signed in and what they are on. Two facts, no figures.
  *
- * Every number here is one this account actually did. `applications_submitted` is the same figure
- * the Home page's funnel reports, and until it arrives the row simply does not claim a count —
- * there is no placeholder zero, because "0 applications" is a statement about someone's month and
- * we should not make it before we know it is true.
+ * This used to print the account's all-time submitted count beside the tier, and the adjacency was
+ * the whole problem: "Free · 5 applications" is a fact about what someone has already done, but one
+ * separator away from a plan name it reads as what the plan grants — and free grants 20 resumes a
+ * month, so the rail was quietly quoting a quota four times smaller than the real one. Rewording it
+ * to a verb would have fixed the misreading; removing it also settles the redundancy, because Home's
+ * Momentum panel already reports that number labelled and in context. Say it once, where it means
+ * something. The rail's job is identity and plan.
  */
 function AccountFooter({ qaMode }: { qaMode: boolean }) {
   const [me, setMe] = useState<Me | null>(null);
-  const [submitted, setSubmitted] = useState<number | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
   useEffect(() => {
@@ -245,9 +246,6 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
       void api<Me>("/me")
         .then((result) => !cancelled && setMe(result))
         .catch(() => null);
-      void fetchFunnel()
-        .then((result) => !cancelled && setSubmitted(result.applications_submitted))
-        .catch(() => null);
     });
     return () => {
       cancelled = true;
@@ -256,14 +254,6 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
 
   const address = me?.email ?? email;
   const tier = me ? (me.is_guest ? "Trial" : me.tier === "pro" ? "Pro" : "Free") : null;
-  const meta = [
-    tier,
-    /* `== null`, not `===`. A rolling deploy where /funnel has not yet grown
-       `applications_submitted` hands back undefined, which is not `=== null`, so the guard fell
-       through and the rail printed the literal "undefined applications" under the address. The
-       loose check catches both shapes, which is what "until it arrives" above always meant. */
-    submitted == null ? null : `${submitted} application${submitted === 1 ? "" : "s"}`,
-  ].filter(Boolean);
 
   return (
     <Link
@@ -278,9 +268,7 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
       </span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium text-ink">{address ?? "Your account"}</span>
-        {meta.length > 0 && (
-          <span className="block truncate font-mono text-[11px] text-muted">{meta.join(" · ")}</span>
-        )}
+        {tier && <span className="block truncate font-mono text-[11px] text-muted">{tier}</span>}
       </span>
     </Link>
   );
