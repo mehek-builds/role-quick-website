@@ -119,13 +119,23 @@ function ResumePaper({
               {sectionHeading(entry.type)}
             </p>
           )}
+          {/* ORG ON THE SPLIT LINE, TITLE ITALIC BENEATH, matching drawEntrySection() +
+              drawSplitLine(). This printed `{entry.title} · {entry.org}` as one bold line, which
+              is not a line the PDF has anywhere: the renderer puts the organisation alone on the
+              split line with the date pushed right, then the role in italic underneath. Same two
+              facts, different hierarchy, and the hierarchy is the point. A resume is read by
+              scanning the left edge for where someone worked; folding the role into that line
+              makes the employer the second thing on it and gives the scan nothing to land on.
+
+              No `truncate` on the organisation. The renderer wraps it inside 72% of the usable
+              width, so truncating here shows LESS than the file does, and hiding content is the
+              one thing a preview of a document must never do. It wraps now, same as the PDF. */}
           <div className="mt-2.5">
             <div className="flex items-baseline justify-between gap-3">
-              <p className="min-w-0 truncate text-[11px] font-semibold">
-                {entry.title} · {entry.org}
-              </p>
+              <p className="min-w-0 flex-1 text-[11px] font-semibold">{entry.org}</p>
               <p className="shrink-0 text-[9px] text-neutral-600">{entry.date_range}</p>
             </div>
+            {entry.title && <p className="mt-0.5 italic text-neutral-600">{entry.title}</p>}
             <ul className="mt-1 space-y-1">
               {entry.bullets.map((bullet, bulletIndex) => (
                 <li key={bulletIndex} className="grid grid-cols-[10px_1fr] gap-1">
@@ -145,7 +155,10 @@ function ResumePaper({
           <p className="mt-4 border-b border-neutral-300 pb-1 font-mono text-[9px] font-semibold uppercase tracking-[0.1em]">
             Skills
           </p>
-          <p className="mt-2">{spec.skills.join(" · ")}</p>
+          {/* The renderer joins skills with `•`, not `·`. A different separator is a small thing
+              until the student compares the two documents side by side, which is the entire
+              purpose of this pane. */}
+          <p className="mt-2">{spec.skills.join(" • ")}</p>
         </>
       )}
     </div>
@@ -165,7 +178,7 @@ function Education({ spec }: { spec: ResumeSpec }) {
       </p>
       <div className="mt-2.5">
         <div className="flex items-baseline justify-between gap-3">
-          <p className="min-w-0 truncate text-[11px] font-semibold">{spec.school}</p>
+          <p className="min-w-0 flex-1 text-[11px] font-semibold">{spec.school}</p>
           <p className="shrink-0 text-[9px] text-neutral-600">{spec.grad_date}</p>
         </div>
         {spec.degree && <p className="mt-0.5 italic text-neutral-600">{spec.degree}</p>}
