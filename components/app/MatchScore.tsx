@@ -104,14 +104,31 @@ export function MatchScore({
     <div className="flex items-center gap-3">
       <div className="text-right">
         <p className="text-[11px] font-medium leading-4 text-ink">{result.band?.label}</p>
+        {/* "REQUIREMENTS WE COUNTED", not "the requirements" and not "top requirements".
+            ISSUE-023 capped the denominator (volley-backend, src/engine/jdMatch.ts,
+            EMPHASIS_LIMIT), because scoring against every term a 6k posting mentions measured the
+            employer's word count rather than the student's fit. A long posting therefore lists more
+            than term_count, so "the requirements" overclaimed and had to go.
+
+            "Top requirements" was the first replacement and it overclaims too, just more quietly.
+            It asserts these twelve are what the posting emphasises MOST, which the extractor cannot
+            support on every posting. On 107 of 398 scorable postings (27%) there is no stated
+            requirements section at all, so the twelve are ranked body prose. And even where a
+            section IS found, what fills it can be geography: Flexport's Sales Manager yields
+            `china, eu, japan, southeast asia` from a preferred block plus `ae, air, am, kansai,
+            kobe, kyoto, osaka, today` from prose. Calling those top requirements is a claim about
+            the employer; calling them what we counted is exactly true on every posting.
+
+            Also note term_count is an UNWEIGHTED count while `score` is weighted coverage, so the
+            two do not track each other exactly. See scoreBand in that file. */}
         <p className="text-[11px] leading-4 text-faint">
-          {result.matched.length} of {result.term_count} requirements
+          {result.matched.length} of {result.term_count} requirements we counted
         </p>
       </div>
       <div
         className="relative h-12 w-12 shrink-0"
         role="img"
-        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements this job posting lists.`}
+        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting.`}
       >
         <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
           <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />

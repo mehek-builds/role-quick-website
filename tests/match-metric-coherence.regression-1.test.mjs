@@ -126,3 +126,54 @@ describe("the review screen sends what the backend needs to exclude the posting'
     assert.match(apiFile, /export type JobContext = \{ company\?: string; role\?: string; job_id\?: string \| null \};/);
   });
 });
+
+// ISSUE-023: the caption under the number, which is the only place the denominator is stated.
+//
+// The backend caps the requirement set at EMPHASIS_LIMIT (engine/jdMatch.ts), because scoring
+// against every term a 6k posting mentions measured the employer's word count rather than the
+// student's fit. `term_count` is therefore the number of requirements Litos COUNTED, and on 353 of
+// the 400 newest active postings that is fewer than the posting lists.
+//
+// These bite because nothing else does: the caption is plain JSX in a component with no render
+// test, so reverting the wording to "N of M requirements" left the whole suite green while the
+// screen went back to claiming M is everything the posting asks for.
+describe("the match caption states which requirements it counted", () => {
+  // Comments are stripped before matching, so quoting a caption literal in a code comment can
+  // neither satisfy nor break these. The earlier version matched raw source, which meant the
+  // doesNotMatch below would have failed the moment anyone quoted the old wording to explain why it
+  // was replaced, and the positive assertions could have been satisfied by a comment alone.
+  const raw = readFileSync("components/app/MatchScore.tsx", "utf8");
+  const matchScore = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  test("the visible caption does not present term_count as the posting's whole list", () => {
+    // Asserted as a PROPERTY of the rendered string rather than as one blessed wording, so a future
+    // rewording passes as long as it does not go back to claiming the full list. The cap means
+    // term_count is what Litos counted, and on 27% of postings it is ranked body prose rather than
+    // anything the employer marked as a requirement.
+    const caption = matchScore.match(/\{result\.matched\.length\} of \{result\.term_count\}([^<]*)/);
+    assert.ok(caption, "the caption must still render matched.length of term_count");
+    const qualifier = caption[1].trim();
+    assert.notEqual(qualifier, "requirements", "a bare 'requirements' claims the posting's full list");
+    assert.ok(qualifier.length > "requirements".length, `unqualified caption: "${qualifier}"`);
+  });
+
+  test("the accessible label carries the same qualifier the caption does", () => {
+    // A screen reader user gets ONLY this string, so it is the one that must not overclaim.
+    const aria = matchScore.match(/aria-label=\{`([^`]*)`\}/);
+    assert.ok(aria, "the ring must keep an aria-label");
+    assert.doesNotMatch(aria[1], /requirements this job posting lists/);
+    assert.match(aria[1], /requirements Litos counted/);
+  });
+
+  test("the refusal state is still a sentence, not a zero", () => {
+    // Unchanged by ISSUE-023 and asserted here so a caption edit cannot quietly take it out: a
+    // posting that stated nothing scorable gets the explanation, never a confident 0. Asserted on
+    // BEHAVIOUR (an unscorable result returns before any number is rendered) rather than on the
+    // literal expression, which a no-op refactor would break.
+    const guard = matchScore.indexOf("result.reason");
+    const ring = matchScore.indexOf("strokeDasharray");
+    assert.ok(guard !== -1 && ring !== -1, "both the refusal branch and the ring must exist");
+    assert.ok(guard < ring, "the refusal branch must return before the ring is ever rendered");
+    assert.match(matchScore, /!result\.scorable/);
+  });
+});
