@@ -479,7 +479,11 @@ export default function Home() {
   if (error && !jobs) return <ErrorNote message={error} />;
 
   return (
-    <div className="space-y-5 lg:space-y-7">
+    /* One rhythm down the page. The desktop step-up this replaces existed to help the stretched
+       panels reach the fold; with the panels sized by their content there is nothing to pad out,
+       and two different section gaps depending on width was itself part of why the page read as
+       assembled rather than composed. */
+    <div className="space-y-6">
       {/* The header carries the one thing a person comes here to do. "Change what you want" is a
           setting, so it sits as a text link under the subtitle rather than occupying the primary
           button slot. */}
@@ -526,42 +530,52 @@ export default function Home() {
         </Card>
       )}
 
-      {/* One scan, not three stacked reports. Each tint keeps its existing product meaning:
-          blue is application documents, coral is email outreach, and Momentum stays neutral
-          because it combines both the student's actions and Litos's work. */}
-      <section aria-label="At a glance" className="grid gap-3 lg:min-h-[clamp(12rem,calc(100vh-36rem),20rem)] lg:grid-cols-3">
-        <Funnel />
-        {applicationTotal > 0 && (
-          <SnapshotCard
-            id="applications-summary"
-            title="Applications"
-            href="/dashboard/applications"
-            tone="applications"
-            metrics={[
-              { label: "Ready", value: applicationSummary.ready, href: "/dashboard/applications?state=ready" },
-              { label: "Needs you", value: applicationSummary.needsAction, href: "/dashboard/applications?state=action" },
-              { label: "Sent", value: applicationSummary.submitted, href: "/dashboard/applications?state=submitted" },
-            ]}
-            action={applicationSummary.needsAction > 0 ? {
-              label: `${applicationSummary.needsAction} stopped for you`,
-              detail: "Finish the missing answers",
-              href: "/dashboard/applications?state=action",
-            } : undefined}
-          />
-        )}
-        {outreach.length > 0 && (
-          <SnapshotCard
-            id="outreach-summary"
-            title="Emails"
-            href="/dashboard/outreach"
-            tone="emails"
-            metrics={[
-              { label: "Drafted", value: outreachSummary.drafted, href: "/dashboard/outreach" },
-              { label: "Sent", value: outreachSummary.sent, href: "/dashboard/outreach" },
-              { label: "Replied", value: outreachSummary.replied, href: "/dashboard/outreach" },
-            ]}
-          />
-        )}
+      {/* One instrument, read three ways.
+          This was three tinted cards, each holding its own white sub-tiles, so a single number sat
+          three containers deep and the row read as nine objects instead of one. The band is now a
+          single card divided by hairlines: the tints are gone, the sub-tiles are gone, and
+          hierarchy comes from type and spacing. Pillar colour survives where it still carries
+          meaning, on each column's own link, rather than as a wash behind the figures.
+
+          grid-flow-col with auto-cols-fr, not grid-cols-3: Momentum hides itself on a brand new
+          account and the other two are conditional, so the row has to divide evenly across however
+          many columns actually render. empty:hidden keeps the card border from drawing around
+          nothing when none of them do. */}
+      <section aria-label="At a glance">
+        <div className="grid divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-rest empty:hidden lg:auto-cols-fr lg:grid-flow-col lg:divide-x lg:divide-y-0">
+          <Funnel />
+          {applicationTotal > 0 && (
+            <OverviewColumn
+              id="applications-summary"
+              title="Applications"
+              href="/dashboard/applications"
+              tone="applications"
+              metrics={[
+                { label: "Ready", value: applicationSummary.ready, href: "/dashboard/applications?state=ready" },
+                { label: "Needs you", value: applicationSummary.needsAction, href: "/dashboard/applications?state=action" },
+                { label: "Sent", value: applicationSummary.submitted, href: "/dashboard/applications?state=submitted" },
+              ]}
+              action={applicationSummary.needsAction > 0 ? {
+                label: `${applicationSummary.needsAction} stopped for you`,
+                detail: "Finish the missing answers",
+                href: "/dashboard/applications?state=action",
+              } : undefined}
+            />
+          )}
+          {outreach.length > 0 && (
+            <OverviewColumn
+              id="outreach-summary"
+              title="Emails"
+              href="/dashboard/outreach"
+              tone="emails"
+              metrics={[
+                { label: "Drafted", value: outreachSummary.drafted, href: "/dashboard/outreach" },
+                { label: "Sent", value: outreachSummary.sent, href: "/dashboard/outreach" },
+                { label: "Replied", value: outreachSummary.replied, href: "/dashboard/outreach" },
+              ]}
+            />
+          )}
+        </div>
       </section>
 
       <section aria-labelledby="matches-heading" className="space-y-3">
@@ -588,10 +602,12 @@ export default function Home() {
           </EmptyState>
         )
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 lg:min-h-[clamp(19rem,calc(100vh-29rem),20rem)] xl:grid-cols-3">
-          {/* The overview owns the extra desktop height. Job cards remain a compact working queue
-              so titles and actions stay close enough to scan together. Mobile keeps content-led
-              card heights. */}
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {/* Content sets the height here, at every width. The viewport-derived minimum this
+              replaces stretched each card to whatever the window had left over, which opened a
+              hole between the pay line and the Skip/Review pair and pushed the two apart exactly
+              when they need to be read together. A single screen is worth having, but it has to
+              come from the content being compact, not from the containers being inflated. */}
           {visibleJobs.map((job) => (
             <JobMatchCard key={job.id} job={job} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
           ))}
@@ -630,9 +646,19 @@ export default function Home() {
   );
 }
 
-type SnapshotMetric = { label: string; value: number; href: string };
+type OverviewMetric = { label: string; value: number; href: string };
 
-function SnapshotCard({
+/* A column of the shared overview card.
+ *
+ * The tint and the white sub-tiles it used to carry are both gone. A tinted panel holding lighter
+ * panels put every figure three containers deep, and with a different wash behind each pillar
+ * nothing in the row could recede: colour was labelling the category rather than pointing at what
+ * needed attention. The pillar colour is kept on the one element where it still means something,
+ * the link out to that pillar's own page.
+ *
+ * Figures print in the same order and at the same scale as Momentum's, so the row scans as one
+ * line of numbers rather than as three separate readouts that happen to be adjacent. */
+function OverviewColumn({
   id,
   title,
   href,
@@ -644,30 +670,38 @@ function SnapshotCard({
   title: string;
   href: string;
   tone: "applications" | "emails";
-  metrics: SnapshotMetric[];
+  metrics: OverviewMetric[];
   action?: { label: string; detail: string; href: string };
 }) {
-  const toneClass = tone === "applications"
-    ? "border-brand/20 bg-brand-soft/70"
-    : "border-coral/20 bg-coral-soft/70";
   const linkClass = tone === "applications" ? "text-brand-ink" : "text-coral-ink";
 
   return (
-    <section aria-labelledby={id} className={`flex min-h-40 flex-col rounded-card border p-4 shadow-rest lg:min-h-44 lg:p-6 ${toneClass}`}>
+    <section aria-labelledby={id} className="flex flex-col p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 id={id} className="text-base font-medium text-ink">{title}</h2>
         <Link href={href} className={`text-small font-medium ${linkClass}`}>View all</Link>
       </div>
-      <dl className="mt-4 grid grid-cols-3 gap-2 lg:my-auto">
+      {/* Plain markup, matching Momentum's Stat. The dl this replaces held anchors as direct
+          children, which a description list may not have, and it printed the term above the
+          description so the figures sat on a different baseline to Momentum's. */}
+      <div className="mt-4 grid grid-cols-3 gap-3">
         {metrics.map((metric) => (
-          <Link key={metric.label} href={metric.href} className="rounded-inner bg-white/65 px-3 py-2.5 transition-colors hover:bg-white lg:px-4 lg:py-4">
-            <dt className="text-small text-muted">{metric.label}</dt>
-            <dd className="mt-1 font-mono text-heading text-ink lg:text-section">{metric.value}</dd>
+          /* A zero prints quieter. At full ink a bucket holding nothing was typeset exactly like a
+             bucket holding three, so the one figure worth acting on had to be hunted for among
+             its empty neighbours. The zero still shows, because the label is the useful part and
+             dropping it would break the row, but it stops competing.
+
+             text-muted, not text-faint: faint is #a3a19a, which is 2.6:1 on this surface and fails
+             WCAG AA for 20px regular text. Muted is 5.4:1 and still drops well back from ink. A
+             number a person cannot read is not de-emphasis, it is a number that is not there. */
+          <Link key={metric.label} href={metric.href} className="group">
+            <span className={`block font-mono text-heading leading-none ${metric.value === 0 ? "text-muted" : "text-ink"}`}>{metric.value}</span>
+            <span className="mt-1 line-clamp-2 block text-label text-muted underline decoration-transparent underline-offset-4 transition-colors group-hover:decoration-border">{metric.label}</span>
           </Link>
         ))}
-      </dl>
+      </div>
       {action && (
-        <Link href={action.href} className="mt-3 flex items-center justify-between gap-3 rounded-inner bg-warn-soft px-3 py-2 text-warn">
+        <Link href={action.href} className="mt-4 flex items-center justify-between gap-3 rounded-inner bg-warn-soft px-3 py-2 text-warn">
           <span className="min-w-0">
             <span className="block truncate text-small font-medium">{action.label}</span>
             <span className="block truncate text-label">{action.detail}</span>

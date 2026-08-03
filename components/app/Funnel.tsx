@@ -37,7 +37,7 @@ export function Funnel() {
   // loss, and had no way to retry short of reloading.
   if (state.failed) {
     return (
-      <section className="flex min-h-40 flex-col justify-between rounded-card border border-border bg-surface-alt p-4 shadow-rest lg:min-h-44 lg:p-6">
+      <section className="flex flex-col gap-3 p-5">
         <h2 className="text-base font-medium text-ink">Momentum</h2>
         <p className="text-small text-faint">
           Could not load your activity just now.{" "}
@@ -49,8 +49,8 @@ export function Funnel() {
     );
   }
   if (!state.data) {
-    // Sized to the loaded panel so the feed below does not jump when this resolves.
-    return <div className="min-h-40 animate-pulse rounded-card bg-surface-alt lg:min-h-44" aria-hidden="true" />;
+    // Sized to the loaded column so the row does not jump when this resolves.
+    return <div className="m-5 h-24 animate-pulse rounded-inner bg-surface-alt" aria-hidden="true" />;
   }
 
   const f = state.data;
@@ -62,12 +62,15 @@ export function Funnel() {
   const peak = Math.max(1, ...f.days.map((day) => day.submitted));
 
   return (
-    <section className="flex min-h-40 flex-col rounded-card border border-border bg-surface-alt p-4 shadow-rest lg:min-h-44 lg:p-6">
+    /* A column of the shared overview card, not a card of its own. The card chrome, the border and
+       the surface all belong to the parent now, so Momentum, Applications and Emails read as three
+       readings of one instrument rather than three separate reports. */
+    <section className="flex flex-col p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-medium text-ink">Momentum</h2>
         <span className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</span>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-3 lg:mt-8">
+      <div className="mt-4 grid grid-cols-3 gap-3">
         <Stat value={f.applications_submitted} label="applications sent, all time" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
@@ -77,19 +80,20 @@ export function Funnel() {
       </div>
 
       {!f.too_early && (
-        <div className="mt-auto border-t border-border pt-3">
-          <div className="flex items-end gap-1" role="img" aria-label={dailyLabel(f)}>
+        <div className="mt-4">
+          {/* A fixed plot box. The bars used to be drawn into whatever vertical space the stretched
+              card had left over, so a 14-day history with two active days rendered as two marks
+              floating in an empty field and read as a rendering fault rather than a chart. */}
+          <div className="flex h-8 items-end gap-1" role="img" aria-label={dailyLabel(f)}>
             {f.days.map((day) => (
-              <div key={day.day} className="flex flex-1 flex-col items-center gap-1">
+              <div key={day.day} className="flex h-full flex-1 flex-col justify-end">
                 {/* No minimum height on an empty day. A 2px floor made a day with one
                     application look identical to a day with none whenever the peak was high. */}
                 <div
                   className={day.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
-                  style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 24)}px` }}
+                  style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 32)}px` }}
                   title={`${day.day}: ${day.submitted} sent`}
                 />
-                {/* Every other day, ending on today. Fourteen MM-DD labels in this column ran
-                    together into a grey smear, and the last one has to be today's. */}
                 <span className="sr-only">{day.day}</span>
               </div>
             ))}
@@ -105,10 +109,18 @@ function dailyLabel(f: FunnelSummary): string {
   return f.days.map((day) => `${day.day}: ${day.submitted}`).join(", ");
 }
 
+/* One number scale for the whole overview. Momentum used to step up to text-section on desktop
+   while the neighbouring panels stayed at text-heading, which made the same kind of figure look
+   like two different kinds of fact depending on which third of the row it sat in.
+
+   One zero rule too. Momentum survives its own all-zero check, but a single figure inside it
+   still reaches zero on its own: a student who applied five times last month and none this week
+   reads 0 under "in the last 7 days". Printing that at full ink while the column across the
+   divider prints its zero quiet would put two rules for the same figure on one card. */
 function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div>
-      <p className="font-mono text-heading leading-none text-ink lg:text-section">{value}</p>
+      <p className={`font-mono text-heading leading-none ${value === 0 ? "text-muted" : "text-ink"}`}>{value}</p>
       <p className="mt-1 line-clamp-2 text-label text-muted">{label}</p>
     </div>
   );
