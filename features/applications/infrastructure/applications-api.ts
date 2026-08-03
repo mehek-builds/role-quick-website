@@ -26,14 +26,33 @@ import type { JdMatchResponse } from "../domain/match-model";
  */
 export type JobContext = { company?: string; role?: string; job_id?: string | null };
 
+/**
+ * `jdText` is NULL when the caller wants the server to read the posting itself.
+ *
+ * GET /jobs sends `left(description, 600)`, a preview sized for a list row, and a caller that
+ * scores the preview is scoring six hundred characters of company blurb: two or three requirement
+ * terms, under MIN_SCORABLE_TERMS, unscorable. That shipped on 2026-08-04 and the dashboard drew no
+ * number at all until a check on a real account caught it. A list must therefore pass null and let
+ * the route load the full description from the job row (it needs `job_context.job_id` to do so).
+ *
+ * Pass a STRING only when you hold text the server does not: the review screen, whose packet
+ * carries the JD captured when the resume was tailored to it. The live row may have been edited
+ * since, and that screen's number has to be about the document the resume was written against.
+ */
 export async function fetchJdMatch(
-  jdText: string,
+  jdText: string | null,
   resumeText: string,
   jobContext?: JobContext,
 ): Promise<JdMatchResponse> {
   return api<JdMatchResponse>("/jd-match", {
     method: "POST",
-    body: JSON.stringify({ jd_text: jdText, resume_text: resumeText, job_context: jobContext }),
+    body: JSON.stringify({
+      // Omitted entirely rather than sent as null: the route's schema treats absent as "read the
+      // posting yourself" and would reject an explicit null.
+      ...(jdText === null ? {} : { jd_text: jdText }),
+      resume_text: resumeText,
+      job_context: jobContext,
+    }),
   });
 }
 

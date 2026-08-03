@@ -104,7 +104,10 @@ export function useJobMatchScores(
              scored against the employer's cities, and the review screen (which does send it) would
              return a different number for the same posting. One definition of the number means one
              job context too. */
-          const result = await fetchJdMatch(job.description, resume, {
+          /* null jd_text: the list only holds `left(description, 600)`, a preview, and scoring
+             that made every posting unscorable. The route reads the full description off the job
+             row via job_id. See fetchJdMatch. */
+          const result = await fetchJdMatch(null, resume, {
             company: job.company_name,
             role: job.title,
             job_id: job.id,
