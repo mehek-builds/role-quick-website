@@ -250,3 +250,147 @@ test("internal #anchors resolve to a real id on the homepage", () => {
     assert.ok(ids.has(anchor), `href="/#${anchor}" has no matching id on the homepage`);
   }
 });
+
+/* ---------- 5. every shipped page is reachable by clicking ---------- */
+
+/* Sections 1 and 2b ask "does every link land somewhere?". This asks the
+ * mirror question, which is the one nobody was asking: "does every page have a
+ * link pointing AT it?". A route that ships, renders and 200s but appears in no
+ * navigation at any width is invisible to anyone who is not typing URLs, and
+ * unlike a 404 it produces no error anywhere to notice.
+ *
+ * Raised 2026-08-03 against /litos-vs-simplify and /for-career-centres, which
+ * turned out to be linked all along, from the homepage footer, and deliberately
+ * kept out of the header (reasoning recorded beside both <li>s in app/page.tsx,
+ * and in the header's own comment in components/Header.tsx). The finding was
+ * wrong but the gap it implied was real: nothing checked. Now something does,
+ * and the next route added without a link fails here instead of shipping dark.
+ *
+ * "Reachable" means a literal internal href in the SHIPPED source of app/ or
+ * components/, comments stripped. That qualifier is the whole difference
+ * between this test working and this test lying: the first version of it read
+ * raw source, so deleting the real footer <li> and leaving any commented-out
+ * href="/litos-vs-simplify" anywhere in the tree kept it green. This repo
+ * comments its deletions heavily and quotes what it deleted while doing so, so
+ * that is not a hypothetical, it is the house style. A route counts as reachable
+ * only if the link RENDERS.
+ *
+ * Footer counts: it is site navigation, and the audience arrives on the
+ * homepage. Header placement is a positioning question this test has no opinion
+ * about, deliberately, because it has no right answer.
+ *
+ * Worth being precise about what the footer buys, though, because it is less
+ * than it sounds: the footer lives inside app/page.tsx and renders on the
+ * HOMEPAGE ONLY (components/Header.tsx says the same, at more length, as the
+ * reason the phone hamburger came back). So both audience pages are reachable
+ * from exactly one page. From /try or /browse-jobs the only route to them is
+ * back through the wordmark to the homepage. That is defensible for pages
+ * written to be found by search and entered directly, and it is the state this
+ * test pins; it is not the same claim as "reachable site-wide".
+ */
+
+/* Shipped source: comments removed, so an assertion about what the site LINKS
+   cannot be satisfied by a comment mentioning the link. Same helper, same
+   argument, as shippedCopy() in tests/review-highlighting.test.mjs.
+
+   Used by section 5 only, deliberately. Sections 1 and 2b ask the opposite
+   question, "does this href resolve?", and there a commented-out href pointing
+   at a deleted route is still worth failing on, because it is about to be
+   uncommented by whoever is reading that comment. */
+function shippedSource(text) {
+  return text
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "") // JSX comments
+    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+    .replace(/^\s*\/\/.*$/gm, ""); // line comments
+}
+
+/* Routes that legitimately have no inbound link, each with the reason it is
+   exempt. Kept explicit and short, so adding a route to it is a decision
+   somebody has to write down rather than a pattern that waves it through. */
+const UNLINKED_BY_DESIGN = new Map([
+  /* The Chrome Web Store listing is the real install destination, and every
+     CTA points there via InstallLink/STORE_URL. /install is the fallback page
+     for people who reach it from the extension itself or from a QR code. */
+  ["/install", "install CTAs point at STORE_URL; this route is the off-site fallback"],
+  /* Onboarding, entered by redirect and not by link: app/login/page.tsx does
+     router.replace("/start") for a new account, and google-session.ts routes a
+     first-time Google sign-in there. Nothing should link to it, since arriving
+     without a session is the one way to see it broken. robots.ts disallows it
+     for the same reason. */
+  ["/start", "post-sign-in redirect target, never a link; see app/login/page.tsx"],
+  /* Internal QA harnesses. Linking them from a public surface is the bug. */
+  ["/qa/packet", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/packet/dashboard", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/portal-submission", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/portal-submission/[board]/[case]", "internal QA harness, must not be linked from a public surface"],
+]);
+
+test("every shipped route is either linked from somewhere or exempt on purpose", () => {
+  const linked = new Set();
+  for (const file of sources) {
+    for (const href of internalHrefs(shippedSource(readFileSync(file, "utf8")))) {
+      linked.add(href.length > 1 ? href.replace(/\/$/, "") : href);
+    }
+  }
+
+  const orphans = [...routes].filter(
+    (r) => r !== "/" && !linked.has(r) && !UNLINKED_BY_DESIGN.has(r),
+  );
+
+  assert.deepEqual(
+    orphans,
+    [],
+    `Routes that ship but nothing links to. Add a link, or add the route to\n` +
+      `UNLINKED_BY_DESIGN with the reason:\n  ${orphans.join("\n  ")}`,
+  );
+});
+
+test("the two audience pages are reachable without typing a URL", () => {
+  /* Named rather than left to the sweep above, because these two are the ones
+     that got filed, and because the sweep would go green again if the footer
+     lost them and the header gained them. What matters is that a human can
+     click to them, not which chrome carries the link.
+
+     Shipped source on both files, for the reason in the section header: the
+     comments beside these two <li>s in app/page.tsx both quote the route they
+     sit next to, so read raw, this assertion is satisfied by the comment
+     explaining the link even after the link itself is gone. Verified by
+     deleting the real <li> and leaving the comment: raw source passes, shipped
+     source fails. */
+  const home = shippedSource(readFileSync(join(APP, "page.tsx"), "utf8"));
+  const header = shippedSource(readFileSync(join(ROOT, "components/Header.tsx"), "utf8"));
+  for (const route of ["/litos-vs-simplify", "/for-career-centres"]) {
+    assert.ok(
+      home.includes(`href="${route}"`) || header.includes(`href="${route}"`),
+      `${route} ships but neither the homepage nor the header links to it`,
+    );
+  }
+});
+
+test("the exemption list does not quietly cover a public page", () => {
+  /* The escape hatch above is only safe while it stays small. The definition of
+     "public" is not re-litigated here: app/sitemap.ts already maintains it, by
+     hand and with reasons, and a page that is worth submitting to a search
+     engine is by definition one a visitor should be able to click to. So the
+     two lists must not intersect. That also means an author cannot silence this
+     sweep for a marketing page without first removing it from the sitemap,
+     which is a conspicuous thing to have to do. */
+  const sitemap = readFileSync(join(APP, "sitemap.ts"), "utf8");
+  const publicPaths = new Set(
+    [...sitemap.matchAll(/path:\s*"([^"]*)"/g)].map((m) => m[1] || "/"),
+  );
+  assert.ok(publicPaths.size > 3, "could not read the sitemap's route list");
+
+  for (const route of UNLINKED_BY_DESIGN.keys()) {
+    assert.ok(
+      !publicPaths.has(route),
+      `${route} is in the sitemap, so it is a page meant to be found; ` +
+        `link it instead of exempting it from the reachability sweep`,
+    );
+    assert.ok(routeExists(route), `exempt route ${route} no longer exists; drop it from the list`);
+    assert.ok(
+      (UNLINKED_BY_DESIGN.get(route) ?? "").length > 20,
+      `${route} is exempt with no reason written down`,
+    );
+  }
+});

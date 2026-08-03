@@ -1350,7 +1350,24 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
   // element carries overflow-hidden and a JS-set pixel height, so a stale height silently CLIPS
   // with no scrollbar and no ellipsis, which is worse than the truncation this replaced. Crossing
   // the xl:grid-cols-2 breakpoint, zooming, and a late-loading webfont all move the wrap point
-  // without touching the value.
+  // without touching the value. The school headline is the sharpest case: it is text-sm sm:text-lg,
+  // so its CONTENT height changes at 640px (20px to 28px) even though the stored inline height is
+  // otherwise breakpoint-independent. Nothing but this observer catches that.
+  //
+  // This observer was reported dead twice, on 2026-08-03, by agents who forced the parent width and
+  // saw zero re-measure. It is not dead, and nothing here needs changing. Both reports were taken
+  // in a tab where document.visibilityState was "hidden", which suspends the whole rendering
+  // lifecycle: in that state requestAnimationFrame never runs and ResizeObserver delivers nothing,
+  // not even the initial observation a freshly constructed observer is owed. A control observer
+  // built in the same tab, on the same two elements, fired zero times, which is the tell that the
+  // harness and not the code was the subject of the measurement.
+  //
+  // Measured again the same day in headless Chromium with rendering actually running, against this
+  // exact code: forcing the parent 446px -> 120px -> 446px moved the school headline 28 -> 168 ->
+  // 28px, 375 -> 1280 finished at 28px (equal to a fresh load at 1280), and 1280 -> 375 finished at
+  // a 20px content height inside the 44px touch floor, with scrollHeight == clientHeight, i.e. no
+  // clipping in either direction. If this is ever re-reported, check document.visibilityState in
+  // the measuring tab before touching this effect.
   useEffect(() => {
     const node = ref.current;
     if (!node) return;

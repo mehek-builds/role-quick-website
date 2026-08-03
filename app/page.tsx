@@ -804,6 +804,34 @@ export default function Home() {
                 <li><a href="/#product" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Product</a></li>
                 {/* Pricing removed 2026-07-30 with the #pricing section. */}
                 <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
+                {/* Footer, not the header, and this is the whole reachability
+                    story for /litos-vs-simplify: it ships, it renders, and this
+                    is the one link to it. Reviewed 2026-08-03 after it was
+                    filed as "in no nav at any width" alongside
+                    /for-career-centres; that reading counted the header only.
+
+                    The header carries four links and one ask. Comparison pages
+                    are read by someone already weighing Litos against Simplify,
+                    which is late in the funnel and a small slice of arrivals;
+                    promoting it would put a competitor's name above the fold on
+                    the first screen a stranger sees, and spend a fifth header
+                    slot to do it. The two costs point the same way.
+
+                    Kept under Product rather than Company because a visitor
+                    hunting for it is comparing the PRODUCT, and it sits next to
+                    FAQ, which is where the same "answer my objection" impulse
+                    lands. Promote it if a channel ever earns it, the same
+                    condition attached to /for-career-centres below.
+
+                    Be honest about what this link is worth, though: this footer
+                    lives in app/page.tsx and renders on the HOMEPAGE ONLY, so
+                    this is one link on one page, not site-wide chrome. From
+                    /try or /browse-jobs the only way here is back through the
+                    wordmark. Both of these pages are written to be entered
+                    directly from search, so that is a deliberate trade and not
+                    an oversight, but if either ever becomes a page the funnel
+                    needs mid-visit, the footer is not enough on its own.
+                    Pinned by tests/route-integrity.test.mjs section 5. */}
                 <li><a href="/litos-vs-simplify" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Litos vs Simplify</a></li>
                 {/* Was the store link. The footer is site-wide chrome, so under
                     the one-place rule it carries the account instead; the store

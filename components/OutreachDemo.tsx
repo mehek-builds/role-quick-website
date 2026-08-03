@@ -180,6 +180,27 @@ export function OutreachDemo() {
                 one. A wrong guess bounces, and bounces hurt you. Her LinkedIn
                 profile is one click away instead.
               </p>
+              {/* A <span>, deliberately, and it must stay one. Filed as a dead control on
+                  2026-08-03 and it is not: this whole lower card is a PICTURE of the draft the
+                  product leaves in your Gmail, not the product. It is drawn inside window chrome
+                  (the three dots above), captioned "New message · Gmail" on the other branch, and
+                  badged "Draft · not sent". Nothing inside it is interactive in either branch, by
+                  design: the email branch has no Send button for exactly the same reason.
+
+                  The only live controls in this component are the four contact buttons in the
+                  upper card, which is a separate panel with its own chrome. Picking Rina is what
+                  reveals this state; it does not make this panel a control surface.
+
+                  A span is the honest encoding of a pictured button. It is not focusable, not in
+                  the tab order, and not announced as a button, so a keyboard or screen-reader
+                  visitor is never offered something that does nothing. Promoting it to <a href>
+                  would be worse, not better: Rina Okafor, Team Lead Infra at "Northline", is
+                  invented, so the href would have to point at a fabricated profile or at LinkedIn
+                  search, and a marketing page that sends visitors off-site mid-pitch on a made-up
+                  name is a real cost paid for a fake affordance.
+
+                  Same call, same reasoning as the inert "Submit application / Waiting on you" pill
+                  in components/try/TrySimulator.tsx, which sits in the extension-popup mockup. */}
               <span className="mt-4 inline-block rounded-full border border-border px-4 py-2 text-[12.5px] font-medium text-ink">
                 Open LinkedIn profile ↗
               </span>
