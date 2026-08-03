@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   applicationFilterFromSearch,
   applicationFilterHeading,
+  ledgerRendersOnLanding,
   statusMatchesApplicationFilter,
 } from "../features/applications/domain/application-filter.ts";
 
@@ -96,14 +97,44 @@ describe("the chosen view is visible on the page it lands on", () => {
 
   test("the list renders without a packet being open", () => {
     /* THE DEFECT. The gate read `selected && reviewablePackets.length > 1`, and a ?state= arrival
-       has no selection, so the one thing that consumed the filter never mounted. The gate has to
-       consult the filter itself for the deep link to land anywhere. */
-    const gate = ledger.source.slice(Math.max(0, ledger.start - 300), ledger.start);
+       has no selection, so the one thing that consumed the filter never mounted.
+
+       This asserts the exact expression, not that the word "applicationFilter" appears somewhere
+       near it. The first version of this test matched the vocabulary and nothing else, and an
+       adversarial pass walked straight through it: inverting the filter check to `=== "all"`, and
+       raising the count threshold to `> 99`, both left the suite green while restoring the defect
+       in full. The polarity and the threshold now live in ledgerRendersOnLanding, whose truth table
+       is asserted below; what is left here is the wiring, so both halves have to be right.
+
+       The `selected ?` branch is pinned with it: the ledger is also the switcher, and a mutant that
+       dropped that branch would take the only in-context way to move between applications with it. */
+    const gate = ledger.source.slice(Math.max(0, ledger.start - 400), ledger.start);
     assert.match(
       gate,
-      /applicationFilter/,
-      "the ledger's own render gate must consult the filter, or a ?state= arrival renders nothing that uses it",
+      /selected \? reviewablePackets\.length > 1 : ledgerRendersOnLanding\(applicationFilter, reviewablePackets\.length\)/,
+      "the ledger's gate must be the tested predicate, over the real filter and the real count",
     );
+  });
+
+  test("the gate opens on exactly the arrivals that need it", () => {
+    /* The truth table the wiring above delegates to. Every one of these was a surviving mutant.
+
+       Inverted polarity is the nastier of the two, because it is not a return to the old bug: it
+       makes ?state=action render NO list while a plain visit renders a spurious one, so the deep
+       link is dead AND the default view grows a duplicate of the board under a heading that says
+       "Your applications". */
+    for (const filter of ["action", "ready", "submitted"]) {
+      assert.equal(ledgerRendersOnLanding(filter, 1), true, `${filter} with one application must render the list`);
+      assert.equal(ledgerRendersOnLanding(filter, 9), true, `${filter} with a real history must render the list`);
+      assert.equal(ledgerRendersOnLanding(filter, 0), false, `${filter} on an empty history leaves the empty state to speak`);
+    }
+    // The unfiltered board view: the list would only restate the board below it.
+    assert.equal(ledgerRendersOnLanding("all", 9), false);
+    assert.equal(ledgerRendersOnLanding("all", 1), false);
+    assert.equal(ledgerRendersOnLanding("all", 0), false);
+    /* A threshold above one is the purest reproduction of ISSUE-037: every deep link inert for
+       every real account, with nothing on screen to say why. */
+    assert.equal(ledgerRendersOnLanding("action", 1), true, "one matching application is a list worth rendering");
   });
 
   test("nothing inside the list assumes a packet is selected", () => {
@@ -123,6 +154,19 @@ describe("the chosen view is visible on the page it lands on", () => {
     const heading = ledger.body.slice(ledger.body.indexOf('id="application-ledger-heading"'));
     const className = heading.match(/className=\{([^}]+)\}/)?.[1] ?? "";
     assert.match(className, /selected/, "the heading is only sr-only beside an open packet, not on the landing view");
+
+    /* BOTH branches, or the ternary is decoration. `selected ? "sr-only" : "sr-only"` satisfied a
+       test that only looked for the word `selected` and put the heading straight back into the
+       screen reader-only layer it was moved out of, which is the whole of the visible half of this
+       fix. The true branch stays sr-only on purpose: beside an open packet this heading would
+       compete with the packet's own. */
+    const branches = className.match(/selected \? "([^"]*)" : "([^"]*)"/);
+    assert.ok(branches, `expected the heading className to be a two-branch ternary on selected, got: ${className}`);
+    const [, whenSelected, whenLanding] = branches;
+    assert.equal(whenSelected, "sr-only", "beside an open packet the heading stays the switcher's label");
+    assert.doesNotMatch(whenLanding, /\bsr-only\b/, "on the landing view the heading has to be readable, not announced only");
+    assert.doesNotMatch(whenLanding, /\bhidden\b/, "nor display:none at any width");
+    assert.match(whenLanding, /text-/, "and carries real type, so it reads as the heading of the list below it");
   });
 
   test("the filter can still be set back to everything from that view", () => {
@@ -148,5 +192,39 @@ describe("the wording of each view", () => {
     }
     assert.notEqual(applicationFilterHeading("action"), applicationFilterHeading("ready"));
     assert.notEqual(applicationFilterHeading("action"), applicationFilterHeading("all"));
+  });
+
+  test("no two views can be given the same heading", () => {
+    /* Pairwise, not the two comparisons this used to make. `ready` returning the `submitted`
+       wording survived those, and it is the worst failure available here: a heading reading
+       "Applications you have sent" printed above a list of applications that have NOT been sent,
+       on the screen a student uses to decide what still needs doing. */
+    const headings = ["all", "action", "ready", "submitted"].map(applicationFilterHeading);
+    assert.equal(new Set(headings).size, headings.length, `two views share a heading: ${headings.join(" | ")}`);
+  });
+
+  test("each heading says what is actually in its list", () => {
+    /* Distinctness alone does not make a heading true. These pin the one word in each that carries
+       the meaning, and leave the rest of the wording free to be improved. */
+    assert.match(
+      applicationFilterHeading("ready"),
+      /\bready\b|\bsend\b/i,
+      "the ready view holds applications that are built and NOT yet sent",
+    );
+    assert.match(
+      applicationFilterHeading("submitted"),
+      /\bsent\b/i,
+      "the submitted view holds applications that have already gone out",
+    );
+    assert.doesNotMatch(
+      applicationFilterHeading("ready"),
+      /\bsent\b/i,
+      "calling unsent applications sent is a false statement above a real list",
+    );
+    assert.match(
+      applicationFilterHeading("action"),
+      /\byou\b/i,
+      "the action view is the one waiting on the student, and has to say so",
+    );
   });
 });

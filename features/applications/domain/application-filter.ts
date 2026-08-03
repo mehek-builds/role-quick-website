@@ -47,6 +47,26 @@ export function statusMatchesApplicationFilter(status: string | undefined, filte
 }
 
 /**
+ * Does the Tracker owe the student a filtered list, with no packet open?
+ *
+ * This is the gate ISSUE-037 was: the ledger used to render only beside an open packet, so every
+ * ?state= arrival applied its filter to nothing and showed no control to change it. It is a named
+ * predicate rather than an inline condition because the two ways to get it wrong are silent on the
+ * page and invisible to a source-level test. Inverting it hides the list on exactly the arrivals
+ * that need it and shows a duplicate of the board on the ones that do not; raising the count
+ * threshold makes every deep link inert again for every real account. Both survived an earlier
+ * version of the test that only checked this condition MENTIONED the filter. The truth table sits
+ * beside this in tests/application-state-deeplink.regression-1.test.mjs.
+ *
+ * Not on "all": on the unfiltered board view the list would only restate the board below it, and
+ * setting the select back to Everything is how the student clears the filter.
+ * Not on an empty history: the empty state speaks for that page instead.
+ */
+export function ledgerRendersOnLanding(filter: ApplicationFilter, reviewableCount: number): boolean {
+  return filter !== "all" && reviewableCount > 0;
+}
+
+/**
  * What the list is called while a filter is on.
  *
  * Printed above the rows, so the current value is readable as words and not only as the selected

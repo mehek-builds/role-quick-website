@@ -18,7 +18,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { applicationFilterFromSearch, applicationFilterHeading, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { fetchRequirements } from "@/features/applications";
@@ -920,7 +920,7 @@ export default function Applications() {
           It stays hidden on an unfiltered board view, where it would only restate the board below
           it. Setting the select back to Everything is what closes it, which is also how the
           filter is cleared. */}
-      {packets !== null && (selected ? reviewablePackets.length > 1 : applicationFilter !== "all" && reviewablePackets.length > 0) && (
+      {packets !== null && (selected ? reviewablePackets.length > 1 : ledgerRendersOnLanding(applicationFilter, reviewablePackets.length)) && (
         /* Keep the switcher above every screen branch. Historical marker for the invariant:
            packet.job_context.role} · {packet.job_context.company} */
         /* Every control in here used to sit behind `hidden lg:block`. Filter and sort being
