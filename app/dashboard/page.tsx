@@ -33,8 +33,11 @@ import {
 } from "@/features/applications";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
+import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
+import { isWaitingOnHuman, waitingApplications } from "@/lib/captcha-queue";
+import { WaitingOnYou } from "@/components/app/WaitingOnYou";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
 
@@ -320,7 +323,7 @@ export default function Home() {
   // The backend response is today's complete match set, and its size can vary. Home shows only
   // the next three unfinished matches, but completion must account for every match in this set.
   const todayJobs = rankedJobs;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDayKey();
   const submittedToday = useMemo(
     () => new Set(todayJobs.filter((job) => jobSubmittedOnDay(job, packets, todayKey)).map((job) => job.id)),
     [packets, todayJobs, todayKey],
@@ -339,9 +342,20 @@ export default function Home() {
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
   /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
   const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
+  /* Applications stopped on a human-verification check, oldest first. Kept out of the summary
+     numbers on purpose: this is a different kind of debt from the rest of "Needs you", and folding
+     it in would bury a thing that takes seconds to clear inside a count of things that do not. */
+  const waitingOnYou = useMemo(() => waitingApplications(packets), [packets]);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
-    const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
+    /* Excludes the rows the waiting-on-you block already owns. Counting them twice would be
+       tolerable; the copy is not. Tracker's action reads "N stopped for you / Finish the missing
+       answers", which is the wrong instruction for a CAPTCHA - nothing is missing, and on an
+       at_submit stall everything is already filled in. */
+    const needsAction = packets.filter((packet) => (
+      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+      && !isWaitingOnHuman(packet.spec._review)
+    )).length;
     const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
     return { ready, submitted, needsAction };
   }, [packets]);
@@ -692,6 +706,7 @@ export default function Home() {
           account and the other two are conditional, so the row has to divide evenly across however
           many columns actually render. empty:hidden keeps the card border from drawing around
           nothing when none of them do. */}
+      <WaitingOnYou items={waitingOnYou} />
       <section aria-label="At a glance">
         <div className="grid divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-rest empty:hidden lg:auto-cols-fr lg:grid-flow-col lg:divide-x lg:divide-y-0">
           <Funnel />
@@ -1023,8 +1038,16 @@ function JobMatchCard({
   );
 }
 
+/* Keyed on the LOCAL day, so "Skipped for today" lasts until the student's own midnight.
+ *
+ * No legacy read of the old UTC-dated key. Where the two disagree (the hours between local and UTC
+ * midnight) a student can see one day's skip list reset once, and that is the whole cost: the list
+ * is same-day only, it holds nothing but "not this one", and re-skipping is one click on a card
+ * that is already on screen. A fallback read would have to merge two keys, decide which one wins
+ * when both exist, and then be deleted later anyway. That is more moving parts, permanently, to
+ * avoid one cheap click, once. Take the reset. */
 function dailyDismissalKey(): string {
-  return `litos-dismissed-${new Date().toISOString().slice(0, 10)}`;
+  return `litos-dismissed-${localDayKey()}`;
 }
 
 function readDismissed(key: string): string[] {
@@ -1037,7 +1060,7 @@ function readDismissed(key: string): string[] {
 }
 
 function prewarmLockKey(jobId: string): string {
-  return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
+  return `litos-prewarm-${localDayKey()}-${jobId}`;
 }
 
 /* The one lock protocol, shared by both paths that can build a packet.
