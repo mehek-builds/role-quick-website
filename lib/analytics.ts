@@ -68,7 +68,22 @@ type CoreEvent =
   | "checkout_started"
   | "account_data_exported"
   | "account_deleted"
-  | "job_search_zero_results";
+  | "job_search_zero_results"
+  /* A React error boundary caught a render-time throw and put its recovery
+     screen up instead of the page.
+
+     This is NOT the automatic exception capture that instrumentation-client.ts
+     turns off and the privacy policy says is off. That feature ships the error
+     message, the stack and the surrounding page state. This is one named
+     product event carrying two fields: which surface blanked, and Next's
+     `digest`, a server-generated hash of the error with no message in it. No
+     message, no stack, nothing the student typed.
+
+     It exists because the boundary is the only place that knows a page failed
+     to render, and a boundary nobody can count is a boundary that hides the bug
+     it caught: the screen says "try again", the student does, and the incident
+     leaves no trace anywhere. */
+  | "render_error";
 
 function device(): "desktop" | "mobile" {
   if (typeof window === "undefined") return "desktop";
