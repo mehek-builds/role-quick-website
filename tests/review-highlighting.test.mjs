@@ -147,9 +147,15 @@ function shippedCopy(source) {
 test("R-051b: resume fields wrap instead of clipping", () => {
   // A single-line <input> truncated the education headline to "Marshall School of B". EditableLine
   // must stay a growing textarea so long values wrap and stay readable.
-  const editableLine = editableLineSource();
+  //
+  // Read through shippedCopy, not raw source. The word "scrollHeight" appears three times inside
+  // this function and only one of them is the measurement: the other two are prose explaining what
+  // scrollHeight reports when the box is taller than its text. A raw grep therefore stayed green
+  // with the measurement deleted, which is the same comments-versus-code hole shippedCopy was
+  // written for a few tests down. An assertion that a comment can satisfy is not an assertion.
+  const editableLine = shippedCopy(editableLineSource());
   assert.match(editableLine, /<textarea/);
-  assert.match(editableLine, /scrollHeight/);
+  assert.match(editableLine, /node\.scrollHeight/);
 });
 
 test("R-049: a tab returning to the foreground refreshes immediately", () => {
@@ -256,10 +262,29 @@ test('resume fields cannot contain a newline', () => {
 test('the auto-grow height is re-measured on reflow, not only on value change', () => {
   // overflow-hidden plus a JS-set pixel height means a stale height CLIPS with no scrollbar and no
   // ellipsis, which is worse than the truncation this replaced.
-  const editableLine = editableLineSource();
-  assert.match(editableLine, /ResizeObserver/);
+  //
+  // shippedCopy for the same reason as R-051b above: "ResizeObserver" and "useLayoutEffect" are
+  // both named in the prose that explains why they are there, so a raw grep passed on the strength
+  // of the comment alone and would have stayed green through the deletion of either hook.
+  const editableLine = shippedCopy(editableLineSource());
+  assert.match(editableLine, /new ResizeObserver\(/);
   assert.match(editableLine, /document\.fonts/);
-  assert.match(editableLine, /useLayoutEffect/);
+  assert.match(editableLine, /useLayoutEffect\(/);
+
+  // observe(node) is the one that does the work, and it is what these measurements are of.
+  // Measured 2026-08-03 in a browser with rendering actually running: forcing the parent from
+  // 446px to 120px re-measured the school headline from 28px to 168px and back to 28px, and a
+  // 375-to-1280 viewport change landed on 28px, equal to a fresh load at 1280.
+  //
+  // The parent observation is DEFENSIVE REDUNDANCY, and is pinned as such rather than because it
+  // is load-bearing. It is not: the field is w-full, so any width change reaching it through the
+  // parent also changes the field's own box, and observe(node) sees it. Removing the parent
+  // observation was measured to change nothing. It is kept, and pinned, because that argument
+  // rests entirely on w-full, and the day someone gives this field an intrinsic or fixed width
+  // the parent becomes the only place the change is visible. Cheap insurance against a class of
+  // silent clipping, not a mechanism.
+  assert.match(editableLine, /observer\.observe\(node\)/);
+  assert.match(editableLine, /observer\.observe\(node\.parentElement\)/);
 });
 
 test('IME composition is not rewritten mid-keystroke', () => {

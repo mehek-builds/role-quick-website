@@ -128,8 +128,17 @@ test("the measurement suspends the touch floor, so it records the text and not t
   /* scrollHeight reports the padding box when the box is taller than its text, so measuring with
      min-h-11 in force returns 44px rather than the height of the words. Suspending it for the
      measurement is what keeps the inline height breakpoint-independent, which in turn is what lets
-     a viewport cross lg with no re-measure at all. That matters because the ResizeObserver below
-     does not currently fire; this fix must not depend on it. */
+     a viewport cross lg with no re-measure at all. That matters because it makes the crossing free
+     rather than dependent on an asynchronous re-measure landing in time.
+
+     This comment used to assert, as fact, that "the ResizeObserver below does not currently fire".
+     That was wrong, and it is corrected here rather than deleted because the wrong version was
+     itself cited as evidence in a later audit. The observer fires. The measurement that said
+     otherwise was taken in a tab with document.visibilityState === "hidden", where the browser
+     suspends the rendering lifecycle and delivers no ResizeObserver records at all. Re-measured
+     2026-08-03 in headless Chromium with rendering running: forcing the parent 446px -> 120px ->
+     446px moved the school headline 28 -> 168 -> 28px. Nothing here depends on the observer either
+     way, but the claim should not keep being repeated. */
   /* Comments stripped before the ordering check below: this one explains the measurement, so the
      word scrollHeight appears in the prose ahead of the statement that reads it. */
   const resize = editableLine
