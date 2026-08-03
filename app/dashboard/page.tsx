@@ -17,6 +17,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { Funnel } from "@/components/app/Funnel";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
+import { CompanyLogo } from "@/components/app/CompanyLogo";
 import {
   AUTO_SUBMIT_PREPARED_LIMIT,
   jobSubmittedOnDay,
@@ -685,54 +686,55 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
 function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
   return (
     <Card className="overflow-hidden transition-colors hover:border-ink/30">
-      {/* Two signals, not five. The score is the ring (deck 07 says the score is a ring, and the
-          Applications page already renders it that way, so Home now matches). One status chip
-          carries the only thing that changes. "Remote" is a fact about the job, so it reads as
-          text beside the location instead of borrowing the success colour. */}
-      <div className="grid gap-5 p-5 sm:grid-cols-[48px_1fr_auto] sm:items-center sm:p-6">
-        <div className="hidden sm:block">
-          <ScoreRing score={job.match} metricLabel="preference fit for this job" />
-          <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
-        </div>
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Chip label={prepared ? "Ready" : preparationFailed ? "Paused" : "Getting ready"} kind={prepared ? "ready" : "generating"} />
-            <span className="text-xs text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
+      {/* Lead with the employer, then put the score in the corner where it can be compared across
+          cards without hiding who the role is for. The logo uses the same domain and fallback
+          rules as the full Jobs list, so one company cannot show two different identities. */}
+      <div className="grid grid-cols-[48px_minmax(0,1fr)] items-center gap-4 p-5 sm:gap-5 sm:p-6">
+        <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
+        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_48px] gap-x-4 gap-y-3 sm:gap-x-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <Chip label={prepared ? "Ready" : preparationFailed ? "Paused" : "Getting ready"} kind={prepared ? "ready" : "generating"} />
+              <span className="text-xs text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
+            </div>
+            <h2 className="mt-3 text-lg font-medium text-ink">{job.title}</h2>
+            <p className="mt-1 text-sm text-muted">
+              {job.company_name}
+              {job.location ? ` · ${job.location}` : ""}
+              {/* Only when the location line does not already say it, or a remote role reads
+                  "Remote, US · Remote". */}
+              {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
+            </p>
+            {/* Pay and job type, same formatter and same rule as /dashboard/jobs and the public
+                board (lib/pay.ts): shown only where the employer published it, and rendered as
+                nothing at all otherwise. This card is where the applicant decides whether the role
+                is worth a resume, so leaving the figure to the posting meant deciding without it. */}
+            <PayLine job={job} />
+            {/* The ranker's reasons used to be dumped raw at 12px with nothing saying what they
+                were. One word of framing turns a list of nouns into a sentence. */}
+            {job.reasons.length > 0 && (
+              <p className="mt-2 text-xs text-faint">Matches your {job.reasons.join(", ")}</p>
+            )}
           </div>
-          <h2 className="mt-3 text-lg font-medium text-ink">{job.title}</h2>
-          <p className="mt-1 text-sm text-muted">
-            {job.company_name}
-            {job.location ? ` · ${job.location}` : ""}
-            {/* Only when the location line does not already say it, or a remote role reads
-                "Remote, US · Remote". */}
-            {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
-          </p>
-          {/* Pay and job type, same formatter and same rule as /dashboard/jobs and the public
-              board (lib/pay.ts): shown only where the employer published it, and rendered as
-              nothing at all otherwise. This card is where the applicant decides whether the role
-              is worth a resume, so leaving the figure to the posting meant deciding without it. */}
-          <PayLine job={job} />
-          {/* The ranker's reasons used to be dumped raw at 12px with nothing saying what they
-              were. One word of framing turns a list of nouns into a sentence. */}
-          {job.reasons.length > 0 && (
-            <p className="mt-2 text-xs text-faint">Matches your {job.reasons.join(", ")}</p>
-          )}
-        </div>
-        {/* While Litos is still working there is nothing to click, so the primary slot holds a
-            plain line of text rather than a greyed-out button that reads as broken. And the
-            waiting state says "Getting ready" here too: the chip and the button used to call the
-            same moment two different things. */}
-        <div className="flex items-center gap-2 sm:justify-end">
-          <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
-            Skip
-          </button>
-          {prepared || preparationFailed ? (
-            <button type="button" onClick={prepared ? onReview : onRetry} aria-label={`${prepared ? "Review" : "Try again for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-              {prepared ? "Review" : "Try again"}
+          <div className="justify-self-end text-center">
+            <ScoreRing score={job.match} metricLabel="preference fit for this job" />
+            <p className="mt-1 w-12 text-center text-[11px] text-faint">fit</p>
+          </div>
+          {/* While Litos is still working there is nothing to click, so the primary slot holds a
+              plain line of text rather than a greyed-out button that reads as broken. And the
+              waiting state says "Getting ready" here too: the chip and the button use one name. */}
+          <div className="col-span-2 flex items-center justify-end gap-2">
+            <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
+              Skip
             </button>
-          ) : (
-            <span className="flex min-h-11 items-center px-3 text-sm text-muted">Getting ready</span>
-          )}
+            {prepared || preparationFailed ? (
+              <button type="button" onClick={prepared ? onReview : onRetry} aria-label={`${prepared ? "Review" : "Try again for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+                {prepared ? "Review" : "Try again"}
+              </button>
+            ) : (
+              <span className="flex min-h-11 items-center px-3 text-sm text-muted">Getting ready</span>
+            )}
+          </div>
         </div>
       </div>
     </Card>
