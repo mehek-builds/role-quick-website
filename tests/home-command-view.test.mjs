@@ -41,10 +41,15 @@ test("Pillar colour survives only where it points somewhere", async () => {
   assert.match(home, /tone === "applications" \? "text-brand-ink" : "text-coral-ink"/);
 });
 
-test("The overview prints one number scale and prints a zero faint", async () => {
+test("The overview prints one number scale and one zero rule, readably", async () => {
   const [home, funnel] = await Promise.all([readFile(homeUrl, "utf8"), readFile(funnelUrl, "utf8")]);
 
-  assert.match(home, /metric\.value === 0 \? "text-faint" : "text-ink"/);
+  // Both sides of the divider quiet a zero, and both quiet it the same way.
+  assert.match(home, /metric\.value === 0 \? "text-muted" : "text-ink"/);
+  assert.match(funnel, /value === 0 \? "text-muted" : "text-ink"/);
+  // text-faint is #a3a19a: 2.6:1 on this surface, under WCAG AA for 20px regular text.
+  assert.doesNotMatch(home, /=== 0 \? "text-faint"/);
+  assert.doesNotMatch(funnel, /=== 0 \? "text-faint"/);
   // No desktop step-up on either side of the divider: same figure, same size, whichever column.
   assert.doesNotMatch(home, /text-heading[^"]*lg:text-section/);
   assert.doesNotMatch(funnel, /text-heading[^"]*lg:text-section/);

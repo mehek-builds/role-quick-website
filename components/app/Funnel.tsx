@@ -111,11 +111,16 @@ function dailyLabel(f: FunnelSummary): string {
 
 /* One number scale for the whole overview. Momentum used to step up to text-section on desktop
    while the neighbouring panels stayed at text-heading, which made the same kind of figure look
-   like two different kinds of fact depending on which third of the row it sat in. */
+   like two different kinds of fact depending on which third of the row it sat in.
+
+   One zero rule too. Momentum survives its own all-zero check, but a single figure inside it
+   still reaches zero on its own: a student who applied five times last month and none this week
+   reads 0 under "in the last 7 days". Printing that at full ink while the column across the
+   divider prints its zero quiet would put two rules for the same figure on one card. */
 function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div>
-      <p className="font-mono text-heading leading-none text-ink">{value}</p>
+      <p className={`font-mono text-heading leading-none ${value === 0 ? "text-muted" : "text-ink"}`}>{value}</p>
       <p className="mt-1 line-clamp-2 text-label text-muted">{label}</p>
     </div>
   );

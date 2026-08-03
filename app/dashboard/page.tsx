@@ -646,7 +646,7 @@ export default function Home() {
   );
 }
 
-type SnapshotMetric = { label: string; value: number; href: string };
+type OverviewMetric = { label: string; value: number; href: string };
 
 /* A column of the shared overview card.
  *
@@ -670,7 +670,7 @@ function OverviewColumn({
   title: string;
   href: string;
   tone: "applications" | "emails";
-  metrics: SnapshotMetric[];
+  metrics: OverviewMetric[];
   action?: { label: string; detail: string; href: string };
 }) {
   const linkClass = tone === "applications" ? "text-brand-ink" : "text-coral-ink";
@@ -686,12 +686,16 @@ function OverviewColumn({
           description so the figures sat on a different baseline to Momentum's. */}
       <div className="mt-4 grid grid-cols-3 gap-3">
         {metrics.map((metric) => (
-          /* A zero prints faint. At full ink a bucket holding nothing was typeset exactly like a
+          /* A zero prints quieter. At full ink a bucket holding nothing was typeset exactly like a
              bucket holding three, so the one figure worth acting on had to be hunted for among
              its empty neighbours. The zero still shows, because the label is the useful part and
-             dropping it would break the row, but it stops competing. */
+             dropping it would break the row, but it stops competing.
+
+             text-muted, not text-faint: faint is #a3a19a, which is 2.6:1 on this surface and fails
+             WCAG AA for 20px regular text. Muted is 5.4:1 and still drops well back from ink. A
+             number a person cannot read is not de-emphasis, it is a number that is not there. */
           <Link key={metric.label} href={metric.href} className="group">
-            <span className={`block font-mono text-heading leading-none ${metric.value === 0 ? "text-faint" : "text-ink"}`}>{metric.value}</span>
+            <span className={`block font-mono text-heading leading-none ${metric.value === 0 ? "text-muted" : "text-ink"}`}>{metric.value}</span>
             <span className="mt-1 line-clamp-2 block text-label text-muted underline decoration-transparent underline-offset-4 transition-colors group-hover:decoration-border">{metric.label}</span>
           </Link>
         ))}
