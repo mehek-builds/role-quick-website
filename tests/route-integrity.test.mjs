@@ -235,7 +235,12 @@ test("internal #anchors resolve to a real id on the homepage", () => {
   const sources = [join(APP, "page.tsx"), join(ROOT, "components/Header.tsx")];
   const anchors = new Set();
   for (const file of sources) {
-    for (const m of readFileSync(file, "utf8").matchAll(/href="\/#([a-z-]+)"/g)) {
+    /* Both spellings of the same link: the JSX attribute `href="/#faq"` and the
+       object-literal `href: "/#faq"`. The header now declares its four
+       destinations once as data and renders that list twice (pill nav and phone
+       sheet), so an attribute-only pattern would have quietly stopped checking
+       the header's anchors while still passing on the homepage's. */
+    for (const m of readFileSync(file, "utf8").matchAll(/href[=:]\s*"\/#([a-z-]+)"/g)) {
       anchors.add(m[1]);
     }
   }

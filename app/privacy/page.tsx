@@ -84,7 +84,10 @@ export default function Privacy() {
             We use PostHog to understand which Litos website pages and Chrome
             extension actions are useful, such as opening the extension,
             completing sign-in, generating or filling an application, recording
-            a submission outcome, drafting outreach, or starting checkout. When a
+            a submission outcome, drafting outreach, or starting checkout. When
+            a page fails to load and shows you a recovery screen, we send the
+            name of that screen and a reference code for the failure, without
+            the error text. When a
             job-title search returns no matches, we
             also send the normalized job title and selected location, remote,
             and visa-sponsorship filters so we know which job sources to add.
