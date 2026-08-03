@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { relative } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, test } from "node:test";
 import { localDayKey, localDayKeyOf } from "../lib/local-day.ts";
 import { jobSubmittedOnDay } from "../features/applications/domain/daily-matches.ts";
@@ -80,5 +83,83 @@ describe("submitted-today and today are the same timezone", () => {
     const yesterdayEvening = "2026-08-04T02:00:00.000Z"; // 7 PM local on the 3rd
 
     assert.equal(jobSubmittedOnDay(job, packetSubmittedAt(yesterdayEvening), todayKey), false);
+  });
+});
+
+/* The three call sites that ARE the filed defect.
+ *
+ * Everything above tests the helper and the domain function, and all of it stayed green when the
+ * dashboard's own three keys were reverted to the UTC slice, which means it was guarding the fix
+ * and not the bug. These are source-text assertions against app/dashboard/page.tsx because that
+ * file is a client component the node runner cannot load. tests/home-match-window.test.mjs already
+ * reads and regex-matches the same file for the same reason. */
+describe("the dashboard's day keys are the local day", () => {
+  const homeUrl = new URL("../app/dashboard/page.tsx", import.meta.url);
+
+  test("all three keys derive from localDayKey", async () => {
+    const home = readFileSync(homeUrl, "utf8");
+
+    // "Skipped for today" has to survive until the student's own midnight.
+    assert.match(home, /litos-dismissed-\$\{localDayKey\(\)\}/);
+    // The build-ahead lock rotates with the day it belongs to.
+    assert.match(home, /litos-prewarm-\$\{localDayKey\(\)\}-\$\{jobId\}/);
+    // Feeds submittedToday, and through it dayQueueFinished.
+    assert.match(home, /const todayKey = localDayKey\(\);/);
+    assert.match(home, /import \{ localDayKey \} from "@\/lib\/local-day";/);
+  });
+
+  test("no UTC day survives in the file", () => {
+    const home = readFileSync(homeUrl, "utf8");
+
+    assert.doesNotMatch(home, /toISOString\(\)\.slice\(0, ?10\)/);
+  });
+});
+
+/* The allowlist. A UTC calendar day is occasionally the right answer, so this does not ban it; it
+ * makes the next person who wants one say why, here, instead of quietly reintroducing ISSUE-035.
+ *
+ * Keyed by path, valued by the reason that path is exempt. Both entries were examined for this
+ * issue and deliberately left alone. */
+const UTC_DAY_ALLOWED = new Map([
+  [
+    "app/api/try/route.ts",
+    "Server-side rate-limit bucket. The server has no user timezone to work from, and the window "
+      + "is shared across every caller, so one fixed reference is the only coherent choice.",
+  ],
+  [
+    "app/dashboard/settings/page.tsx",
+    "The export FILENAME. Cosmetic, never read back, and no part of the 'today' the student is "
+      + "promised on the dashboard.",
+  ],
+]);
+
+describe("a UTC calendar day is allowlisted, never incidental", () => {
+  const root = fileURLToPath(new URL("../", import.meta.url));
+  const scanned = ["app", "components", "features", "lib"];
+
+  function sourceFiles(directory) {
+    return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) return sourceFiles(path);
+      if (!/\.[cm]?[jt]sx?$/.test(entry.name)) return [];
+      return /\.test\.[cm]?[jt]sx?$/.test(entry.name) ? [] : [path];
+    });
+  }
+
+  test("every UTC day key outside the allowlist is gone", () => {
+    const offenders = scanned
+      .flatMap((directory) => sourceFiles(`${root}${directory}`))
+      .filter((path) => /toISOString\(\)\.slice\(0, ?10\)/.test(readFileSync(path, "utf8")))
+      .map((path) => relative(root, path))
+      .filter((path) => !UTC_DAY_ALLOWED.has(path));
+
+    assert.deepEqual(offenders, [], `use localDayKey, or add the file to UTC_DAY_ALLOWED with a reason: ${offenders.join(", ")}`);
+  });
+
+  test("the allowlist does not outlive what it excuses", () => {
+    // A stale exemption is a licence nobody meant to grant. If the line goes, so does the entry.
+    for (const [path, reason] of UTC_DAY_ALLOWED) {
+      assert.match(readFileSync(`${root}${path}`, "utf8"), /toISOString\(\)\.slice\(0, ?10\)/, `${path} no longer needs its exemption: ${reason}`);
+    }
   });
 });
