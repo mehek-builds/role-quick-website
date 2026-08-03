@@ -31,8 +31,11 @@ const code = (text) =>
     .join("\n");
 
 describe("the score on a card is resume-to-JD coverage, on every surface", () => {
-  const jobsPage = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
-  const homePage = readFileSync("app/dashboard/page.tsx", "utf8");
+  /* Stripped for POSITIVE assertions too, not just the negative ones. These two files now carry a
+     lot of explanatory prose, and a positive assertion that matches raw source can be satisfied by
+     a comment quoting the string it is supposed to be checking for. */
+  const jobsPage = code(readFileSync("app/dashboard/jobs/page.tsx", "utf8"));
+  const homePage = code(readFileSync("app/dashboard/page.tsx", "utf8"));
 
   test("both screens read the same hook", () => {
     for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
@@ -44,16 +47,22 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     // preference_score never opens the resume. It may order the feed and it may name reasons; it
     // may not be the number a student reads as a match.
     for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
-      assert.doesNotMatch(code(src), /\bpreference_score\b/, `${name} must not render preference_score`);
+      assert.doesNotMatch(src, /\bpreference_score\b/, `${name} must not render preference_score`);
     }
   });
 
   test("the badge says match, and its tooltip names the denominator", () => {
     assert.match(jobsPage, /\{pct\}% match/);
-    assert.doesNotMatch(code(jobsPage), /\{pct\}% fit/);
+    assert.doesNotMatch(jobsPage, /\{pct\}% fit/);
     // The objection that retired the first version of this badge was that a bare percentage in a
     // list carries no band, no denominator and no refusal state. All three ride along now.
-    assert.match(jobsPage, /requirements this posting lists/);
+    //
+    // The qualifier is ISSUE-023's, and it is not decoration: term_count is capped at
+    // EMPHASIS_LIMIT, so it is what Litos COUNTED, not everything the posting lists. The caption
+    // suite below holds the same rule for MatchScore; a list badge may not overclaim where the
+    // review screen is forbidden to.
+    assert.match(jobsPage, /requirements Litos counted in this posting/);
+    assert.doesNotMatch(jobsPage, /requirements this posting lists/);
   });
 
   test("the preference sentence does not borrow the score's word", () => {
@@ -61,7 +70,7 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     // Both facts are worth showing; they just cannot both be called matching.
     for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
       assert.match(src, /You asked for \{/, `${name} must caption preference reasons as an ask`);
-      assert.doesNotMatch(code(src), /Matches your \{/, `${name} must not caption them as a match`);
+      assert.doesNotMatch(src, /Matches your \{/, `${name} must not caption them as a match`);
     }
   });
 
@@ -92,11 +101,18 @@ describe("rankJobs carries preference evidence and no score at all", () => {
     assert.deepEqual(ranked.reasons, ["product", "San Francisco, CA", "internship"]);
   });
 
-  test("backend order is preserved", () => {
-    // GET /jobs is still the single ranking authority and preference_score is still what it sorts
-    // by. That is the job preference fit is good at; it just never becomes a number on screen.
-    const second = { ...job, id: "2", preference_score: 96 };
-    assert.deepEqual(rankJobs([job, second]).map((r) => r.id), ["1", "2"]);
+  test("backend order is preserved even when the scores disagree with it", () => {
+    // Asserted against an input where document order and score order CONFLICT. Against an already
+    // sorted list this passes for any implementation that does not deliberately re-sort, which is
+    // no assertion at all. GET /jobs is the single ranking authority: a higher preference_score
+    // further down the list must not be hoisted.
+    const lowerScoreFirst = { ...job, id: "1", preference_score: 12 };
+    const higherScoreSecond = { ...job, id: "2", preference_score: 96 };
+    assert.deepEqual(
+      rankJobs([lowerScoreFirst, higherScoreSecond]).map((r) => r.id),
+      ["1", "2"],
+      "rankJobs must not re-sort by preference_score",
+    );
   });
 
   test("absent preference reasons rank fine, with an empty list", () => {
@@ -107,5 +123,81 @@ describe("rankJobs carries preference evidence and no score at all", () => {
     ]) {
       assert.deepEqual(rankJobs([{ ...job, ...shape }])[0].reasons, [], JSON.stringify(shape));
     }
+  });
+});
+
+
+// B3: the review screen is the only surface still showing resume coverage, so it is the one that
+// most needs the posting's offices out of its denominator and its missing list. A packet stores no
+// location, so the id is what lets the backend read it off the live job row.
+describe("the review screen sends what the backend needs to exclude the posting's offices", () => {
+  test("the next-match score request carries the job id", () => {
+    const applications = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+    assert.match(applications, /job_id: nextPacket\.job_context\.job_id/);
+  });
+
+  test("MatchScore passes the whole stored job_context through, id included", () => {
+    const applications = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+    assert.match(applications, /jobContext=\{selected\.job_context\}/);
+    const matchScore = readFileSync("components/app/MatchScore.tsx", "utf8");
+    assert.match(matchScore, /jobContext\?: JobContext;/);
+    // The id has to be a dependency, or a packet swap reuses the previous posting's exclusions.
+    assert.match(matchScore, /jobContext\?\.job_id\]\);/);
+  });
+
+  test("JobContext carries the id for every caller of it", () => {
+    const apiFile = readFileSync("features/applications/infrastructure/applications-api.ts", "utf8");
+    assert.match(apiFile, /export type JobContext = \{ company\?: string; role\?: string; job_id\?: string \| null \};/);
+  });
+});
+
+// ISSUE-023: the caption under the number, which is the only place the denominator is stated.
+//
+// The backend caps the requirement set at EMPHASIS_LIMIT (engine/jdMatch.ts), because scoring
+// against every term a 6k posting mentions measured the employer's word count rather than the
+// student's fit. `term_count` is therefore the number of requirements Litos COUNTED, and on 353 of
+// the 400 newest active postings that is fewer than the posting lists.
+//
+// These bite because nothing else does: the caption is plain JSX in a component with no render
+// test, so reverting the wording to "N of M requirements" left the whole suite green while the
+// screen went back to claiming M is everything the posting asks for.
+describe("the match caption states which requirements it counted", () => {
+  // Comments are stripped before matching, so quoting a caption literal in a code comment can
+  // neither satisfy nor break these. The earlier version matched raw source, which meant the
+  // doesNotMatch below would have failed the moment anyone quoted the old wording to explain why it
+  // was replaced, and the positive assertions could have been satisfied by a comment alone.
+  const raw = readFileSync("components/app/MatchScore.tsx", "utf8");
+  const matchScore = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+
+  test("the visible caption does not present term_count as the posting's whole list", () => {
+    // Asserted as a PROPERTY of the rendered string rather than as one blessed wording, so a future
+    // rewording passes as long as it does not go back to claiming the full list. The cap means
+    // term_count is what Litos counted, and on 27% of postings it is ranked body prose rather than
+    // anything the employer marked as a requirement.
+    const caption = matchScore.match(/\{result\.matched\.length\} of \{result\.term_count\}([^<]*)/);
+    assert.ok(caption, "the caption must still render matched.length of term_count");
+    const qualifier = caption[1].trim();
+    assert.notEqual(qualifier, "requirements", "a bare 'requirements' claims the posting's full list");
+    assert.ok(qualifier.length > "requirements".length, `unqualified caption: "${qualifier}"`);
+  });
+
+  test("the accessible label carries the same qualifier the caption does", () => {
+    // A screen reader user gets ONLY this string, so it is the one that must not overclaim.
+    const aria = matchScore.match(/aria-label=\{`([^`]*)`\}/);
+    assert.ok(aria, "the ring must keep an aria-label");
+    assert.doesNotMatch(aria[1], /requirements this job posting lists/);
+    assert.match(aria[1], /requirements Litos counted/);
+  });
+
+  test("the refusal state is still a sentence, not a zero", () => {
+    // Unchanged by ISSUE-023 and asserted here so a caption edit cannot quietly take it out: a
+    // posting that stated nothing scorable gets the explanation, never a confident 0. Asserted on
+    // BEHAVIOUR (an unscorable result returns before any number is rendered) rather than on the
+    // literal expression, which a no-op refactor would break.
+    const guard = matchScore.indexOf("result.reason");
+    const ring = matchScore.indexOf("strokeDasharray");
+    assert.ok(guard !== -1 && ring !== -1, "both the refusal branch and the ring must exist");
+    assert.ok(guard < ring, "the refusal branch must return before the ring is ever rendered");
+    assert.match(matchScore, /!result\.scorable/);
   });
 });

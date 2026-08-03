@@ -338,7 +338,7 @@ export default function Home() {
    * genuinely different is having had no matches at all, and that is todayJobs.length === 0. */
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
   /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
-  const matches = useJobMatchScores(jobs === null ? null : visibleJobs);
+  const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
     const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
@@ -964,7 +964,7 @@ function JobMatchCard({
             <div className="justify-self-end text-center">
               <ScoreRing
                 score={match.score}
-                metricLabel={`of what this job asks for is on your resume (${match.matched} of ${match.total} requirements)`}
+                metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted)`}
               />
               <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
             </div>
@@ -1139,11 +1139,16 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
                   sitting in the right-hand column rather than against the base resume the list
                   scores. A review screen showing a number about a document that is not on the page
                   would be the ISSUE-014 defect in its subtlest form. */}
+              {/* The WHOLE stored job_context below, not company and role picked out of it.
+                  `job_id` is what lets the backend read the posting's offices off the live job row
+                  and keep them out of the denominator; a packet stores no location of its own, so
+                  dropping the id scores the student against the employer's cities. The Applications
+                  review pane passes it whole for the same reason. */}
               {packet && (review?.jd_text || job.description) && (
                 <MatchScore
                   jdText={review?.jd_text || job.description}
                   spec={packet.spec}
-                  jobContext={{ company: packet.job_context.company, role: packet.job_context.role }}
+                  jobContext={packet.job_context}
                 />
               )}
             </div>

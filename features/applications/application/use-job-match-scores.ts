@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MonitoredJob } from "@/lib/api";
 import { getBaseResume } from "@/lib/base-resume";
 import { fetchJdMatch } from "../infrastructure/applications-api";
@@ -52,8 +52,18 @@ export type JobMatchState = Record<string, JobMatch | null>;
 /** How many of the visible jobs get scored on load. Each score is one POST. */
 export const SCORE_BATCH = 8;
 
-export function useJobMatchScores(jobs: MonitoredJob[] | null, batchSize: number = SCORE_BATCH) {
+export function useJobMatchScores(
+  jobs: MonitoredJob[] | null,
+  /** `false` for QA fixture renders, which have no session and must stay self-contained. */
+  enabled: boolean = true,
+  batchSize: number = SCORE_BATCH,
+) {
   const [scores, setScores] = useState<JobMatchState>({});
+  /* Ids with a request open. `scores` cannot serve as this: it is only written when a request
+     SETTLES, so two overlapping loops both read "not scored yet" and both POST. The job list gets a
+     new identity on every committed keystroke on Jobs and on every dismissal on Home, so
+     overlapping loops are the normal case rather than the edge one. */
+  const inFlight = useRef<Set<string>>(new Set());
   /* STATE, not a ref. As a ref this lost a race it lost most of the time: the scoring effect keys
      off the job list, and the resume request usually finished second, so the effect read null and
      no job on the page ever showed a number. */
@@ -67,6 +77,7 @@ export function useJobMatchScores(jobs: MonitoredJob[] | null, batchSize: number
      scores the packet in front of you instead, because a number about a document you cannot see
      would be worse than no number. Same metric, stated denominator, different subject. */
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void getBaseResume()
       .then((stored) => {
@@ -76,46 +87,66 @@ export function useJobMatchScores(jobs: MonitoredJob[] | null, batchSize: number
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [enabled]);
 
-  const scoreJobs = useCallback(async (batch: MonitoredJob[], resume: string) => {
-    const wanted = batch.filter((job) => scores[job.id] === undefined && job.description);
+  const scoreJobs = useCallback(async (batch: MonitoredJob[], resume: string, alive: () => boolean) => {
+    const wanted = batch.filter(
+      (job) => scores[job.id] === undefined && !inFlight.current.has(job.id) && job.description,
+    );
     if (wanted.length === 0) return;
-    for (const job of wanted) {
-      try {
-        const result = await fetchJdMatch(job.description, resume, {
-          company: job.company_name,
-          role: job.title,
-        });
-        setScores((current) => ({
-          ...current,
-          [job.id]:
-            result.scorable && result.score !== null
-              ? {
-                  score: result.score,
-                  band: result.band?.label ?? null,
-                  matched: result.matched.length,
-                  total: result.term_count,
-                }
-              : null,
-        }));
-      } catch {
-        setScores((current) => ({ ...current, [job.id]: null }));
+    for (const job of wanted) inFlight.current.add(job.id);
+    try {
+      for (const job of wanted) {
+        if (!alive()) return;
+        try {
+          /* job_id, not just company and role. The backend reads the posting's own offices off the
+             live job row and excludes them from the requirement set; without the id a student is
+             scored against the employer's cities, and the review screen (which does send it) would
+             return a different number for the same posting. One definition of the number means one
+             job context too. */
+          const result = await fetchJdMatch(job.description, resume, {
+            company: job.company_name,
+            role: job.title,
+            job_id: job.id,
+          });
+          if (!alive()) return;
+          setScores((current) => ({
+            ...current,
+            [job.id]:
+              result.scorable && result.score !== null
+                ? {
+                    score: result.score,
+                    band: result.band?.label ?? null,
+                    matched: result.matched.length,
+                    total: result.term_count,
+                  }
+                : null,
+          }));
+        } catch {
+          if (!alive()) return;
+          setScores((current) => ({ ...current, [job.id]: null }));
+        }
       }
+    } finally {
+      for (const job of wanted) inFlight.current.delete(job.id);
     }
   }, [scores]);
 
   useEffect(() => {
-    if (!jobs || !resumeText) return;
+    if (!enabled || !jobs || !resumeText) return;
+    let alive = true;
     /* react-hooks/set-state-in-effect fires on the call, not on a real synchronous setState: every
        setScores in scoreJobs sits behind `await fetchJdMatch`, so nothing is set during the effect
        body and there is no cascading render to avoid. */
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    void scoreJobs(jobs.slice(0, batchSize), resumeText);
+    void scoreJobs(jobs.slice(0, batchSize), resumeText, () => alive);
+    return () => {
+      alive = false;
+    };
     // scoreJobs closes over `scores`, which it also sets; depending on it here would re-enter on
     // every score. The batch is decided by the job list and the resume alone.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobs, resumeText, batchSize]);
+  }, [jobs, resumeText, batchSize, enabled]);
 
   return scores;
 }

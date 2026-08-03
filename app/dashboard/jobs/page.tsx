@@ -4,7 +4,7 @@ import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
-import { fetchBoard, useJobMatchScores, type JobMatch } from "@/features/applications";
+import { fetchBoard, useJobMatchScores, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
@@ -39,8 +39,6 @@ function appendUnseen(current: MonitoredJob[], incoming: MonitoredJob[]): Monito
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
-  /* One definition of the number, shared with Home. See use-job-match-scores.ts. */
-  const matches = useJobMatchScores(jobs);
   const [ranked, setRanked] = useState(false);
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
@@ -65,6 +63,14 @@ export default function JobsPage() {
      page owns the switch because Jobs is the list the sending draws from. Held off until qaMode
      resolves, on the same rule as every other request here. */
   const autopilot = useAutopilot(qaMode === false);
+  /* One definition of the number, shared with Home. See use-job-match-scores.ts. Held off until
+     qaMode resolves, the same gate autopilot uses: a fixture render has no session and must stay
+     self-contained rather than firing real scoring requests that can only fail. */
+  /* The batch grows with the list. Scoring a fixed first 8 meant that after one "Load more" every
+     row past the eighth resolved to undefined forever, which renders identically to a posting the
+     backend declined to score, so the list the badge exists to make comparable was mostly
+     unbadged. Growth is bounded by the page size the student actually asked for. */
+  const matches = useJobMatchScores(jobs, qaMode === false, Math.max(SCORE_BATCH, jobs?.length ?? 0));
   /* The filters a response must have been fetched under to be allowed into the list. A plain
      counter was not enough: the filter effect and loadMore both read the same counter, so neither
      could tell the other's response apart from its own, and a load-more that finished after a
@@ -480,7 +486,7 @@ function MatchBadge({ match }: { match: JobMatch | null | undefined }) {
   return (
     <span
       className="shrink-0 rounded-full bg-brand-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-brand-ink"
-      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements this posting lists.`}
+      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting.`}
     >
       {pct}% match
     </span>
