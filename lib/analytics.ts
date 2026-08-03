@@ -57,6 +57,10 @@ type OnboardingEvent =
   // different questions: whether students have the numbers, and whether the ask is worth its place.
   | "base_resume_metrics_added"
   | "base_resume_metrics_skipped"
+  // The fluency declaration, asked on the base step. `prefilled` separates the two cases that
+  // matter: a student confirming what their resume already printed, and one typing it from
+  // nothing. If the second dominates, the parser is missing languages it should be reading.
+  | "onboarding_languages_declared"
   | "onboarding_complete";
 
 type CoreEvent =

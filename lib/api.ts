@@ -535,6 +535,10 @@ export type OnboardingState = {
   has_targeting: boolean;
   learned: string[];
   gaps: string[];
+  /** Starting values for gap questions, taken from the student's own resume. A suggestion is never
+   *  a stored answer: it is offered only for fields still listed in `gaps`, and only the student
+   *  saving it makes it a declaration. */
+  gap_suggestions?: { languages?: string[] };
   /** Page count of the uploaded file, measured at parse time. 0 when never measured. */
   source_pages: number;
   /** The original upload, for the side-by-side. NULL is normal: storing it is best-effort. */

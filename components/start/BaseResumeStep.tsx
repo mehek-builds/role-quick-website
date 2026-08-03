@@ -12,6 +12,7 @@ import {
   type BuildStage,
   type MetricGap,
 } from "@/lib/base-resume";
+import { putApplicationProfile } from "@/lib/api";
 import { track } from "@/lib/analytics";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { SourceResume } from "./SourceResume";
@@ -80,6 +81,11 @@ export function BaseResumeStep({
   sourceUrl,
   onDone,
   onLater,
+  /* Whether the fluency declaration is still unanswered, and what the uploaded resume printed.
+     Both come off /onboarding/state so the rule for when to ask lives on the server beside
+     gapsFrom, rather than being re-derived from two stores in the browser. */
+  languageGap = false,
+  languageSuggestion = [],
   /* localhost QA (?qa=1&step=base): replay a canned build instead of calling the API, so this
      screen keeps the promise the rest of the flow makes - every step openable and reviewable
      without a live account. Without it this one step would bounce a QA session to /login on the
@@ -93,8 +99,23 @@ export function BaseResumeStep({
   sourceUrl: string | null;
   onDone: () => void;
   onLater: () => void;
+  languageGap?: boolean;
+  languageSuggestion?: string[];
   demo?: boolean;
 }) {
+  /* ASKED HERE, PREFILLED, ONCE. The fluency declaration was never collected in onboarding: the
+     gaps screen that owned the question is not reachable in the current flow, so the only way to
+     answer it was to find the field in Settings. Meanwhile a form asking "Do you speak German?"
+     had nothing on file and Litos correctly refused to answer.
+
+     This screen rather than a restored screen, because the student is already reading what their
+     resume says, and the answer is usually printed on the page in front of them. One prefilled
+     line beside the document beats a detour.
+
+     Prefilled is not answered. `languageSuggestion` is what the resume PRINTED, which schema.ts is
+     explicit is not a fluency claim; pressing "Looks right" is what makes it a declaration. Left
+     blank, nothing is written and it stays a gap, so a skip is never mistaken for "no languages". */
+  const [languages, setLanguages] = useState(languageSuggestion.join(", "));
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
   /* Two phases, one screen. `compare` puts the upload beside the rebuild so the difference is an
      observation rather than a claim; `detail` is what they get after choosing. Local state, not a
@@ -422,12 +443,32 @@ export function BaseResumeStep({
       // Save before advancing. Anything they edited has to be on the server before the next step
       // reads it, and "Looks right" is the student asserting this exact document is the one.
       await persist();
+      /* The declaration, written only when the question was open and they left something in it.
+         A blank stays a gap on purpose: an empty list would record "no languages", which is a
+         different and wrong answer to the next form that asks. Written AFTER persist so a failure
+         here cannot cost them the resume edits they just made. */
+      if (languageGap) {
+        const declared = languages
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean);
+        if (declared.length > 0) {
+          /* `!demo` for the same reason persist() has it: a QA session has no account, so an
+             unguarded write here would 401 and show "Could not save your resume" on the one screen
+             the harness exists to make reviewable without logging in. */
+          if (!demo) await putApplicationProfile({ languages: declared });
+          track("onboarding_languages_declared", {
+            count: declared.length,
+            prefilled: languageSuggestion.length > 0,
+          });
+        }
+      }
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your resume.");
       setSaving(false);
     }
-  }, [editing, persist, onDone]);
+  }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length, demo]);
 
   const contact: ContactHeader = {
     full_name: parsed?.full_name ?? "",
@@ -721,6 +762,28 @@ export function BaseResumeStep({
                 ))}
               </ul>
             </details>
+          )}
+
+          {/* Sits above the button because pressing it is what declares the answer. Below it, the
+              student would be agreeing to something they had not read. */}
+          {finished && languageGap && (
+            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+              <label htmlFor="base-languages" className="text-[13px] text-ink">
+                Which languages are you fluent in?
+              </label>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                {languageSuggestion.length > 0
+                  ? "Taken from your resume. Correct it if it overstates anything: employers ask, and Litos answers with exactly this."
+                  : "Employers ask this on forms. Litos leaves the question blank until you answer it here."}
+              </p>
+              <input
+                id="base-languages"
+                value={languages}
+                onChange={(event) => setLanguages(event.target.value)}
+                placeholder="English, Hindi, Spanish"
+                className="mt-2.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+              />
+            </div>
           )}
 
           <div className="mt-7 flex flex-wrap items-center gap-3">
