@@ -250,7 +250,11 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
   const tier = me ? (me.is_guest ? "Trial" : me.tier === "pro" ? "Pro" : "Free") : null;
   const meta = [
     tier,
-    submitted === null ? null : `${submitted} application${submitted === 1 ? "" : "s"}`,
+    /* `== null`, not `===`. A rolling deploy where /funnel has not yet grown
+       `applications_submitted` hands back undefined, which is not `=== null`, so the guard fell
+       through and the rail printed the literal "undefined applications" under the address. The
+       loose check catches both shapes, which is what "until it arrives" above always meant. */
+    submitted == null ? null : `${submitted} application${submitted === 1 ? "" : "s"}`,
   ].filter(Boolean);
 
   return (

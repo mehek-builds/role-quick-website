@@ -903,7 +903,12 @@ export default function Applications() {
       {selected && reviewablePackets.length > 1 && (
         /* Keep the switcher above every screen branch. Historical marker for the invariant:
            packet.job_context.role} · {packet.job_context.company} */
-        <section aria-labelledby="application-ledger-heading" className="hidden border-y border-border lg:block">
+        /* Every control in here used to sit behind `hidden lg:block`. Filter and sort being
+           desktop-only was a deliberate trade; the switcher going with them was not, and it is the
+           only in-context way to move between applications, so a phone user's sole escape from an
+           open packet was the "All applications" link. Litos's traffic is TikTok and Instagram, so
+           most real sessions were the ones missing it. */
+        <section aria-labelledby="application-ledger-heading" className="border-y border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-baseline gap-2">
               <h2 id="application-ledger-heading" className="sr-only">Your applications</h2>
@@ -924,9 +929,36 @@ export default function Applications() {
               </select>
             </div>
           </div>
+          {/* Below lg the ledger becomes a horizontally scrolling strip of chips rather than a
+              table. Four columns of role, company, date and status do not survive 375px, and a
+              vertical list of 50 rows between the page header and the review surface would bury
+              the thing the student actually opened. The strip is the shape this codebase already
+              uses for the same problem: the Board's stage picker and the Account tab strip. The
+              negative margin lets it bleed to both edges of the phone screen, so the last chip is
+              visibly cut rather than looking like the end of the list. */}
+          <div className="-mx-4 overflow-x-auto border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
+            {visiblePackets.length === 0 ? (
+              <p className="py-2 text-sm text-muted">No applications in this view.</p>
+            ) : (
+              <div className="flex min-w-max gap-2">
+                {visiblePackets.map((packet) => (
+                  <button
+                    key={packet.id}
+                    type="button"
+                    onClick={() => selectPacket(packet)}
+                    aria-pressed={packet.id === selected.id}
+                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected.id ? "border-brand bg-brand-soft" : "border-border"}`}
+                  >
+                    <span className={`truncate text-[13px] font-medium ${packet.id === selected.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
+                    <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           {/* Whole rows: max-h-72 cut the fifth row in half, which reads as a broken layout
               rather than as "there is more below". */}
-          <div className="max-h-[280px] overflow-y-auto border-t border-border">
+          <div className="hidden max-h-[280px] overflow-y-auto border-t border-border lg:block">
             {visiblePackets.length === 0 ? (
               <p className="py-5 text-sm text-muted">No applications in this view.</p>
             ) : (
@@ -1230,7 +1262,11 @@ function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: Res
           falls back to its ~20-column default, which squeezed a long joint degree into a narrow
           stacked column. The degree takes the remaining space and the date gets just what it
           needs. */}
-      <div className="mt-1 flex items-baseline justify-center gap-1.5 text-xs text-muted">
+      {/* items-center below lg, because the drawn dot is the one thing in this row that is not a
+          field: the two fields sit in a 44px touch box with their text centred in it, and a
+          baseline-aligned span next to them lands at the bottom of that box instead of beside the
+          words. From lg the boxes collapse to the text and the original baseline row returns. */}
+      <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-muted lg:items-baseline">
         <span className="min-w-0 flex-1">
           <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-right" />
         </span>
@@ -1294,7 +1330,16 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
     const node = ref.current;
     if (!node) return;
     node.style.height = "auto";
+    /* The touch floor below lg is suspended for the duration of the measurement. scrollHeight on a
+       textarea reports the padding box when the box is taller than its text, so with min-h-11 in
+       force `height: auto` still resolves to 44px and the number written back is 44px rather than
+       the height of the words. That bakes a breakpoint-specific figure into an inline height, and
+       an inline height outranks min-height, so the field then stays 44px on the desktop layout with
+       no way back down short of a re-measure. Measuring with the floor off keeps this value the
+       content height at every width, which is what makes crossing lg need no re-measure at all. */
+    node.style.minHeight = "0";
     node.style.height = `${node.scrollHeight}px`;
+    node.style.minHeight = "";
   }, []);
 
   // useLayoutEffect, not useEffect: measuring after paint made every field flash at one-row height
@@ -1346,7 +1391,27 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
         if (composing.current) onChange(event.target.value);
         else commit(event.target.value);
       }}
-      className={`w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 ${className}`}
+      // Touch sizing below lg only. These fields render at 12-13px with a 16-20px line box, so on a
+      // phone the tap target for "Product Engineer" was 16px tall: under the 44px comfort figure,
+      // and under the 24px WCAG 2.5.8 AA floor as well, on the primary editing affordance of the
+      // product's core screen. Above lg the floor lifts entirely, because the editor is deliberately
+      // compact there so it reads as a document rather than as a form.
+      //
+      // min-height ONLY, deliberately: nothing here may change what `resize` measures. That function
+      // writes an inline pixel height, and an inline height outranks min-height, so a floor built
+      // out of padding would be baked into the measured value and would then have to be measured
+      // away again on the way back up. The first attempt did exactly that and left all nine fields
+      // stuck at 44px on the desktop layout after dragging a window past lg. Because min-height is
+      // the only thing that varies by breakpoint, the inline height stays the content height at
+      // every width, and crossing lg needs no re-measure at all: the floor simply stops applying and
+      // the box drops straight back to it.
+      //
+      // content-center is what puts the words in the middle of that taller box instead of along its
+      // top edge. It is alignment, not sizing, so unlike padding it is invisible to scrollHeight and
+      // cannot get baked into the measurement. A browser without align-content on block containers
+      // just leaves the text at the top, which is untidy but fully usable, so this degrades rather
+      // than breaks.
+      className={`w-full resize-none overflow-hidden border-0 bg-transparent p-0 outline-none focus:ring-1 focus:ring-brand/30 min-h-11 content-center lg:min-h-0 lg:content-normal ${className}`}
     />
   );
 }

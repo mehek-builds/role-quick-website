@@ -7,7 +7,13 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 test("Applications opens the board by default and keeps selected detail first on mobile", () => {
   const source = read("app/dashboard/applications/page.tsx");
   assert.doesNotMatch(source, /requested\s*\?\?\s*reviewable\[0\]/);
-  assert.match(source, /className="hidden border-y border-border lg:block"/);
+  /* This used to pin the whole ledger section as `hidden ... lg:block`. That kept the tall table
+     off a phone, which was the intent here, but it also took the filter, the sort and the packet
+     switcher with it, and the switcher is the only in-context way to move between applications.
+     What actually has to stay true is narrower: the multi-row TABLE does not push the selected
+     detail down the screen on a phone. The switcher itself now rides above it as a one-row
+     scrolling strip, asserted in tests/applications-mobile-controls.test.mjs. */
+  assert.match(source, /className="hidden max-h-\[280px\] overflow-y-auto border-t border-border lg:block"/);
   assert.match(source, /← All applications/);
 });
 
