@@ -321,6 +321,7 @@ const UNLINKED_BY_DESIGN = new Map([
   /* Internal QA harnesses. Linking them from a public surface is the bug. */
   ["/qa/packet", "internal QA harness, must not be linked from a public surface"],
   ["/qa/packet/dashboard", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/waiting-on-you", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission/[board]/[case]", "internal QA harness, must not be linked from a public surface"],
 ]);
