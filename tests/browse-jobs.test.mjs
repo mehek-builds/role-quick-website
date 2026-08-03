@@ -275,17 +275,37 @@ describe("the three search fields", () => {
   });
 
   test("each field offers suggestions without demanding one", () => {
-    /* Was an assertion that a <datalist> existed. The datalist is gone — the
+    /* Was an assertion that a <datalist> existed. The datalist is gone: the
        page draws its own list now, because a browser-drawn popup cannot be made
        to sit under its field or wear the page's type. What must not change is
        the property the datalist was there for: suggestions are offered, never
        required. A <select> would silently forbid searching for anything we had
-       not already indexed. */
+       not already indexed.
+
+       SCOPED TO THE THREE SEARCH FIELDS, not to the page. It used to ban <select>
+       anywhere in the file, which read as the same rule and is not: the Job type
+       filter added later IS a select, deliberately, because employment type is a
+       closed vocabulary of four words the backend will accept and a text box
+       there invites "intern", "Interns" and "INTERNSHIP", three spellings that
+       all return nothing while looking like an honest empty result. The invariant
+       is about title, company and location, which are open sets. A test that
+       cannot tell an open set from a closed one blocks the right change and
+       reads like a real failure while doing it. */
     const combo = readFileSync(new URL("../components/browse/ComboField.tsx", import.meta.url), "utf8");
     assert.match(combo, /role="listbox"/, "fields must offer a list");
     assert.match(combo, /type="text"/, "and the field itself must stay free text");
-    assert.doesNotMatch(page, /<select\b/, "a select would reject free text");
-    assert.doesNotMatch(combo, /<select\b/, "a select would reject free text");
+    assert.doesNotMatch(combo, /<select\b/, "a search field must never become a select");
+
+    /* Each of the three is rendered by ComboField, which is what makes it free
+       text. Asserted per field rather than by counting selects, so replacing one
+       of them with a select fails here whatever else the page grows. */
+    for (const name of ["title", "company", "location"]) {
+      assert.match(
+        page,
+        new RegExp(`<ComboField\\s+name="${name}"`),
+        `"${name}" is an open set and must stay a free-text combo`,
+      );
+    }
   });
 
   test("filters survive pagination", () => {
