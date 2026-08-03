@@ -10,8 +10,9 @@ import { CompanyLogo } from "@/components/app/CompanyLogo";
  * THE SWITCH IS STILL THE ONE IN ACCOUNT. Both read and write the same server field
  * (`automatic_submission_enabled`) through the same endpoint, and the server keeps the same lock:
  * it refuses to turn it on until the student has personally approved `required` real submissions.
- * This copy exists here as well because Applications is where the consequence is visible, and a
- * consent switch two screens from its effect is a switch nobody connects to what they are seeing.
+ * This copy lives on Jobs, the list the sending draws from. The Tracker page reads the same field
+ * without offering the switch: that is where the consequence, the countdown and the cancel window,
+ * is visible.
  *
  * THE COUNTDOWN IS THE CANCEL WINDOW, NOT A PROGRESS BAR. Nothing is happening during those
  * seconds. They exist so that "without asking" still has a moment in it where the student can say

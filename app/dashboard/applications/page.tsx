@@ -23,7 +23,7 @@ import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
 import { ApplicationPacket } from "@/components/app/ApplicationPacket";
-import { AutopilotLockNote, AutopilotToggle, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
+import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
@@ -815,7 +815,7 @@ export default function Applications() {
     <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Applications</h1>
+          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Tracker</h1>
           {/* Every selected screen needs a way back to the mobile list. Desktop keeps the compact
               switcher beside the detail, so this control would only repeat it there. */}
           {selected && spec && review && (
@@ -834,16 +834,11 @@ export default function Applications() {
         </div>
         {/* The selected packet's status already prints on its own row and inside the review
             surface; a third copy in the page header was noise. */}
+        {/* The "Send without asking" switch used to sit here. It now lives on the Jobs header,
+            beside the list the sending draws from. This page still READS the same server field,
+            because the lock note and the cancel window below are that setting's consequence, and
+            the consequence stays where the applications are. */}
         <div className="flex flex-wrap items-center gap-4">
-          {/* Always on the page header, including while one application is open. A packet
-              auto-selects on load, so gating this on the board view would have hidden the switch
-              on the screen almost every visit actually lands on. */}
-          <AutopilotToggle
-            enabled={autopilot.enabled}
-            eligibility={autopilot.eligibility}
-            saving={autopilot.saving}
-            onToggle={(next) => void autopilot.toggle(next)}
-          />
           <Button
             type="button"
             onClick={showNewApplication ? closeNewApplication : () => setShowNewApplication(true)}
@@ -853,7 +848,8 @@ export default function Applications() {
         </div>
       </div>
 
-      {autopilot.error && <ErrorNote message={autopilot.error} />}
+      {/* No autopilot.error row here any more. That error is only ever set by the toggle's own
+          save, and the toggle is on Jobs now, so a copy on this page could never fire. */}
       {!selected && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
       {!selected && (
         <p className="text-sm leading-6 text-muted">

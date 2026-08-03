@@ -9,6 +9,7 @@ import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
 import { formatPay, jobTypeLabel } from "@/features/jobs";
 import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
 
@@ -58,6 +59,10 @@ export default function JobsPage() {
   const [applied, setApplied] = useState<AppliedIndex | null>(null);
   /* Null while we work out whether this is a QA render, so neither branch fires a request first. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
+  /* Send-without-asking. The setting is server-side and shared with Account and the tracker; this
+     page owns the switch because Jobs is the list the sending draws from. Held off until qaMode
+     resolves, on the same rule as every other request here. */
+  const autopilot = useAutopilot(qaMode === false);
   /* The filters a response must have been fetched under to be allowed into the list. A plain
      counter was not enough: the filter effect and loadMore both read the same counter, so neither
      could tell the other's response apart from its own, and a load-more that finished after a
@@ -216,13 +221,27 @@ export default function JobsPage() {
             {ranked ? "Top matches for you." : "Latest jobs."}
           </h1>
         </div>
-        {newToday > 0 && (
-          <span className="flex min-h-8 items-center gap-2 rounded-full bg-brand-soft px-3.5 font-mono text-[11px] font-medium text-brand-ink">
-            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand" />
-            {newToday} new today
-          </span>
-        )}
+        <div className="flex flex-wrap items-center gap-4">
+          {newToday > 0 && (
+            <span className="flex min-h-8 items-center gap-2 rounded-full bg-brand-soft px-3.5 font-mono text-[11px] font-medium text-brand-ink">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-brand" />
+              {newToday} new today
+            </span>
+          )}
+          {/* The switch that decides whether anything in this list gets sent without the student
+              being asked first. Same server field and same lock as Account; it sits here because
+              Jobs is the list the sending draws from. */}
+          <AutopilotToggle
+            enabled={autopilot.enabled}
+            eligibility={autopilot.eligibility}
+            saving={autopilot.saving}
+            onToggle={(next) => void autopilot.toggle(next)}
+          />
+        </div>
       </div>
+
+      {autopilot.error && <ErrorNote message={autopilot.error} />}
+      <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />
 
       {!ranked && (
         <p className="text-sm text-muted">
