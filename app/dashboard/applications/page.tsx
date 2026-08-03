@@ -20,6 +20,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import { fetchRequirements } from "@/features/applications";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
@@ -420,8 +421,19 @@ export default function Applications() {
     const jd = nextPacket?.spec._review?.jd_text;
     if (!nextPacket || !jd) return;
     let cancelled = false;
-    void fetchJdMatch(jd, resumeSpecText(nextPacket.spec), { company: nextPacket.job_context.company, role: nextPacket.job_context.role, job_id: nextPacket.job_context.job_id })
-      .then((result) => !cancelled && setNextScore({ id: nextPacket.id, score: result.scorable ? result.score : null }))
+    /* The SAME measurement the student sees when they open this packet.
+     *
+     * This card used to read the term score while opening the packet showed the requirement
+     * breakdown, so one posting carried two numbers on two screens: 27% here, five of six met
+     * there. That is ISSUE-014's shape, and it does not stop being that because both numbers are
+     * defensible on their own.
+     *
+     * Affordable here for the same reason the breakdown is affordable on the review screen: this
+     * is ONE posting, not a list, and the packet was warmed when it was built, so this is a cache
+     * read. It falls back to no number rather than to the other metric, because a number that
+     * silently changes meaning is the thing being fixed. */
+    void fetchRequirements(jd, nextPacket.spec, { company: nextPacket.job_context.company, role: nextPacket.job_context.role, job_id: nextPacket.job_context.job_id })
+      .then((result) => !cancelled && setNextScore({ id: nextPacket.id, score: result.score }))
       // No number rather than a wrong one.
       .catch(() => null);
     return () => {
