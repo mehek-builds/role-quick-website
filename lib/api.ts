@@ -354,6 +354,9 @@ export type ResumeSpec = {
   school: string;
   degree: string;
   grad_date: string;
+  /** Already formatted for print, e.g. "3.8/4.0" or "3.8". Optional and usually absent: a resume
+   *  that never stated a GPA is not missing one. Mirrors the backend's ResumeSpec. */
+  gpa?: string;
   coursework: string;
   education_position?: "top" | "after_experience";
   experience: ResumeEntry[];

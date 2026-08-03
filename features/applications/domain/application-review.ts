@@ -173,6 +173,7 @@ export function stripMetadata(spec: {
   school?: string;
   degree?: string;
   grad_date?: string;
+  gpa?: string;
   coursework?: string;
   education_position?: "top" | "after_experience";
   experience?: { type?: "job" | "project" | "leadership"; org: string; title: string; date_range: string; bullets: string[] }[];
@@ -184,6 +185,7 @@ export function stripMetadata(spec: {
     school: spec.school ?? "",
     degree: spec.degree ?? "",
     grad_date: spec.grad_date ?? "",
+    gpa: spec.gpa,
     coursework: spec.coursework ?? "",
     education_position: spec.education_position,
     experience: (spec.experience ?? []).map((entry) => ({ ...entry, bullets: entry.bullets ?? [] })),

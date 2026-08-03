@@ -179,6 +179,10 @@ function Education({ spec }: { spec: ResumeSpec }) {
           <p className="shrink-0 text-[9px] text-neutral-600">{spec.grad_date}</p>
         </div>
         {spec.degree && <p className="mt-0.5 italic text-neutral-600">{spec.degree}</p>}
+        {/* Between the degree and the coursework, the order drawEducation() prints them in. Absent
+            is the normal case and shows nothing: a resume that never stated a GPA is not missing
+            one. */}
+        {spec.gpa && <p className="mt-0.5">GPA: {spec.gpa}</p>}
         {spec.coursework && <p className="mt-0.5">Relevant coursework: {spec.coursework}</p>}
       </div>
     </>

@@ -14,6 +14,7 @@ const SPEC: GeneratedResume["spec"] = {
   school: "University of Southern California",
   degree: "B.S. Computer Science",
   grad_date: "May 2027",
+  gpa: "3.89/4.0",
   coursework: "Distributed Systems, Databases, Compilers",
   skills: ["TypeScript", "React", "Node", "Postgres", "CRDTs"],
   experience: [
