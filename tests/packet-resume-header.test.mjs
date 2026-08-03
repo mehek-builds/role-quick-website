@@ -69,19 +69,19 @@ describe("the packet resume preview", () => {
     );
   });
 
-  /* Legacy packets predate `_contact` and carry no name. Without this, `{name && <p>}` followed by
-     a sibling `{spec.target_role && <p>}` leaves the ROLE as the first line on exactly those
-     packets, which is the reported bug reproduced on old data. The role must be nested inside the
-     name branch so it cannot outlive it. */
-  test("never lets the target role lead when there is no name", () => {
-    const header = PACKET.slice(PACKET.indexOf("function ResumePaper"));
-    const roleAt = header.indexOf("{spec.target_role");
-    const nameAt = header.indexOf("{name &&");
-    const contactAt = header.indexOf("{contact &&");
-    assert.ok(nameAt !== -1 && roleAt !== -1, "both the name and the target role must render");
-    assert.ok(
-      roleAt > nameAt && roleAt < contactAt,
-      "the target role must sit inside the name branch, not as a sibling that survives a missing name"
+  /* The renderer no longer prints the target role, so neither does this. `spec.target_role` is
+     still on the packet and still drives targeting, which is precisely why this needs pinning: the
+     field is right there, and the obvious reading of a field named target_role on a resume spec is
+     that the resume shows it. It does not. */
+  test("does not print the target role, because the document does not", () => {
+    const paper = PACKET.slice(
+      PACKET.indexOf("function ResumePaper"),
+      PACKET.indexOf("function SectionHeading")
+    );
+    assert.doesNotMatch(
+      paper,
+      /\{spec\.target_role\}/,
+      "the header is the name, a rule, and the contact line; a role line here is not on the PDF"
     );
   });
 
