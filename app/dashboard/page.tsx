@@ -33,6 +33,7 @@ import {
 } from "@/features/applications";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
+import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
 
@@ -320,7 +321,7 @@ export default function Home() {
   // The backend response is today's complete match set, and its size can vary. Home shows only
   // the next three unfinished matches, but completion must account for every match in this set.
   const todayJobs = rankedJobs;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDayKey();
   const submittedToday = useMemo(
     () => new Set(todayJobs.filter((job) => jobSubmittedOnDay(job, packets, todayKey)).map((job) => job.id)),
     [packets, todayJobs, todayKey],
@@ -1023,8 +1024,16 @@ function JobMatchCard({
   );
 }
 
+/* Keyed on the LOCAL day, so "Skipped for today" lasts until the student's own midnight.
+ *
+ * No legacy read of the old UTC-dated key. Where the two disagree (the hours between local and UTC
+ * midnight) a student can see one day's skip list reset once, and that is the whole cost: the list
+ * is same-day only, it holds nothing but "not this one", and re-skipping is one click on a card
+ * that is already on screen. A fallback read would have to merge two keys, decide which one wins
+ * when both exist, and then be deleted later anyway. That is more moving parts, permanently, to
+ * avoid one cheap click, once. Take the reset. */
 function dailyDismissalKey(): string {
-  return `litos-dismissed-${new Date().toISOString().slice(0, 10)}`;
+  return `litos-dismissed-${localDayKey()}`;
 }
 
 function readDismissed(key: string): string[] {
@@ -1037,7 +1046,7 @@ function readDismissed(key: string): string[] {
 }
 
 function prewarmLockKey(jobId: string): string {
-  return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
+  return `litos-prewarm-${localDayKey()}-${jobId}`;
 }
 
 /* The one lock protocol, shared by both paths that can build a packet.

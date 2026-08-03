@@ -5,6 +5,9 @@ import type {
   ParsedProfile,
   Targeting,
 } from "@/lib/api";
+/* Relative, not "@/lib/local-day": this module is loaded directly by the node test runner, which
+   resolves no tsconfig path aliases. Every other "@/lib" import here is type-only and erased. */
+import { localDayKeyOf } from "../../../lib/local-day.ts";
 
 /* NO `match` FIELD, and that is the ISSUE-014 fix in its final form.
  *
@@ -132,7 +135,15 @@ export function countPreparedJobs(jobs: RankedJob[], packets: GeneratedResume[])
   return jobs.filter((job) => packets.some((packet) => packetMatchesJob(packet, job))).length;
 }
 
-/** Whether this exact posting was submitted during the requested UTC day. */
+/**
+ * Whether this exact posting was submitted during the requested local day.
+ *
+ * dayKey comes from localDayKey, so submitted_at has to be converted to a local day too. This used
+ * to be `review.submitted_at?.slice(0, 10)`, which reads the UTC day off the stored instant. Once
+ * the caller's key is local, comparing it against a UTC day is wrong for the hours either side of
+ * local midnight, every day, in every timezone that is not UTC. The two sides of this comparison
+ * must be produced by the same function or they will drift apart again.
+ */
 export function jobSubmittedOnDay(
   job: Pick<MonitoredJob, "id" | "company_name" | "title">,
   packets: GeneratedResume[],
@@ -142,7 +153,7 @@ export function jobSubmittedOnDay(
     const review = packet.spec._review;
     return packetMatchesJob(packet, job)
       && review?.status === "submitted"
-      && review.submitted_at?.slice(0, 10) === dayKey;
+      && localDayKeyOf(review.submitted_at) === dayKey;
   });
 }
 
