@@ -49,6 +49,34 @@ describe("the ?state= deep link resolves to a view", () => {
     }
   });
 
+  test("the page actually seeds its filter from the URL", () => {
+    /* The parser being correct proves nothing if the page never calls it. Dropping the initialiser
+       for a bare `useState("all")` survived every other assertion in this file: the parser still
+       passed its own unit tests, the ledger still rendered whenever a filter was set, and no filter
+       could ever be set, so all four Home controls went silently dead exactly as they did in
+       ISSUE-037. The wiring is the thing the deep link rides on, so it is pinned here. */
+    assert.match(
+      applications,
+      /useState<ApplicationFilter>\(\s*\(\) => \(typeof window === "undefined" \? "all" : applicationFilterFromSearch\(window\.location\.search\)\),?\s*\)/,
+      "the filter's initial value has to come from the URL, or ?state= sets nothing at all",
+    );
+  });
+
+  test("the list and the heading are driven by that same filter", () => {
+    /* Both call sites, because either one pinned to a constant is the defect wearing a different
+       hat: a list that ignores the filter, or a heading that misdescribes a list that honours it. */
+    assert.match(
+      applications,
+      /statusMatchesApplicationFilter\(packet\.spec\._review\?\.status, applicationFilter\)/,
+      "the rows have to be filtered by the chosen view, not by a constant",
+    );
+    assert.match(
+      applications,
+      /applicationFilterHeading\(applicationFilter\)/,
+      "the heading has to name the chosen view, not a constant",
+    );
+  });
+
   test("an absent, empty or unknown state shows everything rather than nothing", () => {
     assert.equal(applicationFilterFromSearch(""), "all");
     assert.equal(applicationFilterFromSearch("?application=abc"), "all");
