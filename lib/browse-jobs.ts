@@ -62,6 +62,9 @@ export type Filters = {
      read from and written back into a query string by a plain GET form, and "true"/undefined is
      what a checkbox in such a form produces. */
   sponsor_only?: string;
+  /* One of the five words the API's employment_type enum accepts, or absent for no filter.
+     A string for the same reason sponsor_only is: it round-trips through a plain GET form. */
+  employment_type?: string;
 };
 
 export type JobsPage = {
@@ -149,7 +152,7 @@ export async function fetchJobs(
     limit: String(PER_PAGE),
     offset: String((Math.max(1, page) - 1) * PER_PAGE),
   });
-  for (const key of ["title", "company", "location", "q", "sponsor_only"] as const) {
+  for (const key of ["title", "company", "location", "q", "sponsor_only", "employment_type"] as const) {
     const value = filters[key]?.trim();
     if (value) params.set(key, value);
   }

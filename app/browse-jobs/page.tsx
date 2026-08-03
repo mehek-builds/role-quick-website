@@ -16,7 +16,7 @@ import {
 } from "@/lib/browse-jobs";
 import { logoSrc } from "@/lib/company-logos";
 import { isOther, JOB_TITLES, withOther } from "@/lib/job-titles";
-import { formatPay, jobTypeLabel } from "@/features/jobs";
+import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
 
 export const metadata: Metadata = {
   title: "Browse jobs",
@@ -168,6 +168,7 @@ function describeFilters(filters: Filters): string {
     ["Job title", filters.title],
     ["Company", filters.company],
     ["City", filters.location],
+    ["Job type", filters.employment_type],
     ["", filters.q],
   ];
   const parts = named
@@ -199,6 +200,7 @@ export default async function BrowseJobs({
     q?: string;
     page?: string;
     sponsor_only?: string;
+    employment_type?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -215,14 +217,24 @@ export default async function BrowseJobs({
   /* Only ever the literal "true". Echoing whatever arrived would put an attacker-chosen string in
      the checkbox's value and in every pagination link on the page. */
   const sponsorOnly = params.sponsor_only === "true";
+  /* Allow-listed against the API's own enum rather than echoed. Same reasoning as sponsor_only:
+     an unrecognised value would otherwise be reflected into the select and into every pagination
+     link, and the backend would 400 the whole board rather than ignore one filter. */
+  const employmentType: string =
+    (EMPLOYMENT_TYPES as readonly string[]).includes(params.employment_type ?? "")
+      ? (params.employment_type as string)
+      : "";
   const filters: Filters = {
     title: clean(params.title),
     company: clean(params.company),
     location: clean(params.location),
     q: clean(params.q),
     sponsor_only: sponsorOnly ? "true" : "",
+    employment_type: employmentType,
   };
-  const searching = Boolean(filters.title || filters.company || filters.location || filters.q);
+  const searching = Boolean(
+    filters.title || filters.company || filters.location || filters.q || employmentType,
+  );
   const requested = Math.max(1, Number(params.page) || 1);
   const [{ jobs, total, postingsTotal, ok }, facets] = await Promise.all([
     fetchJobs(filters, requested),
@@ -287,7 +299,7 @@ export default async function BrowseJobs({
         <form
           action="/browse-jobs"
           method="get"
-          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[900px] lg:grid-cols-[1fr_1fr_1fr_auto]"
+          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[1100px] lg:grid-cols-[1fr_1fr_1fr_minmax(0,0.8fr)_auto]"
         >
           <ComboField
             name="title"
@@ -310,13 +322,48 @@ export default async function BrowseJobs({
             value={filters.location ?? ""}
             options={withOther(facets.locations)}
           />
+          {/* A SELECT, not a ComboField, and that is the point of the control. The other three
+              fields are free text with suggestions because a visitor may legitimately search a
+              title or city we have never seen. Employment type is a CLOSED vocabulary of five
+              words the backend will accept, so offering a text box would invite "intern",
+              "Interns" and "INTERNSHIP" - three spellings that all return nothing while looking
+              like a search that simply found no jobs.
+
+              Internship is why this control exists. It was renderable on every tile and queryable
+              on none, so the one category a student most needs to isolate could only be reached by
+              typing "intern" into the Job title box, which also matched "Internal Audit" and
+              missed every co-op. */}
+          <div className="relative flex min-w-0 flex-col gap-1.5">
+            <label
+              htmlFor="employment_type"
+              className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint"
+            >
+              Job type
+            </label>
+            <select
+              id="employment_type"
+              name="employment_type"
+              defaultValue={employmentType}
+              className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none"
+            >
+              {/* Empty value, so an unset filter submits nothing and simply leaves the URL. Worded
+                  "Any" rather than "Other": the three comboboxes use "Other" to mean "no filter,
+                  type your own", and there is nothing here to type. */}
+              <option value="">Any</option>
+              {EMPLOYMENT_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
           {/* A fourth control, and the only one that is not a search term: it changes which jobs
               are eligible rather than which match. It sits on its own row under the three fields
               so it is not read as a fourth thing to type in.
               A checkbox in a GET form submits nothing when unticked, which is exactly the wanted
               behaviour: the parameter simply disappears from the URL. */}
-          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-4">
+          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-5">
             <input
               type="checkbox"
               name="sponsor_only"

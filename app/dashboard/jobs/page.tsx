@@ -10,23 +10,38 @@ import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } fro
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
-import { formatPay, jobTypeLabel } from "@/features/jobs";
+import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
 import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
 
 /* The filters, as one string. It is the pagination key as well as the query: a page of results
    only belongs to the list on screen if it was fetched under the same filters, and comparing this
    is how a late "load more" response is stopped from appending rows that answer a question the
    student has already changed. */
-function jobParams(query: string, location: string, remoteOnly: boolean, offset: number) {
+function jobParams(
+  query: string,
+  location: string,
+  remoteOnly: boolean,
+  employmentType: string,
+  offset: number,
+) {
   const params = new URLSearchParams({ offset: String(offset) });
   if (query.trim()) params.set("title", query.trim());
   if (location.trim()) params.set("location", location.trim());
   if (remoteOnly) params.set("remote", "true");
+  if (employmentType) params.set("employment_type", employmentType);
   return params;
 }
 
-function filterKey(query: string, location: string, remoteOnly: boolean): string {
-  return `${query.trim()}|${location.trim()}|${remoteOnly}`;
+/* Every filter belongs in this key, not just the ones that were here first. It is what stops a
+   late response being appended to a list that now answers a different question, so a filter left
+   out of it is a filter whose stale results can still land on screen. */
+function filterKey(
+  query: string,
+  location: string,
+  remoteOnly: boolean,
+  employmentType: string,
+): string {
+  return `${query.trim()}|${location.trim()}|${remoteOnly}|${employmentType}`;
 }
 
 /* Appending a page can repeat a row. The server ranks a live pool on every request, so a posting
@@ -43,6 +58,7 @@ export default function JobsPage() {
   const [query, setQuery] = useState("");
   const [location, setLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(false);
+  const [employmentType, setEmploymentType] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -75,7 +91,7 @@ export default function JobsPage() {
      counter was not enough: the filter effect and loadMore both read the same counter, so neither
      could tell the other's response apart from its own, and a load-more that finished after a
      keystroke appended page 3 of the OLD filter onto page 1 of the NEW one. */
-  const activeFilter = useRef(filterKey("", "", false));
+  const activeFilter = useRef(filterKey("", "", false, ""));
   /* Demand is recorded only after the student commits the title with Enter or blur. The board may
      still filter live, but intermediate keystrokes and half-written titles are not sourcing data. */
   const zeroResultIntent = useRef<string | null>(null);
@@ -107,10 +123,10 @@ export default function JobsPage() {
   useEffect(() => {
     if (qaMode !== false) return;
     let cancelled = false;
-    const key = filterKey(query, location, remoteOnly);
+    const key = filterKey(query, location, remoteOnly, employmentType);
     activeFilter.current = key;
     const timer = window.setTimeout(() => {
-      api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, 0).toString()}`)
+      api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, employmentType, 0).toString()}`)
         .then((result) => {
           if (cancelled || activeFilter.current !== key) return;
           setJobs(result.jobs);
@@ -150,7 +166,7 @@ export default function JobsPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [location, qaMode, query, remoteOnly]);
+  }, [employmentType, location, qaMode, query, remoteOnly]);
 
   /* Which of these the student has already applied to. Fetched once, not per filter change: it is
      a fact about their account, not about the query. A failure here leaves it null, and a row that
@@ -175,7 +191,7 @@ export default function JobsPage() {
     const key = activeFilter.current;
     setLoadingMore(true);
     try {
-      const result = await api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, jobs.length).toString()}`);
+      const result = await api<JobsPage>(`/jobs?${jobParams(query, location, remoteOnly, employmentType, jobs.length).toString()}`);
       // Only merge if the student is still looking at the list this answers.
       if (activeFilter.current !== key) return;
       setJobs((current) => (current ? appendUnseen(current, result.jobs) : result.jobs));
@@ -197,13 +213,13 @@ export default function JobsPage() {
          the DATA, above, and it is there. */
       setLoadingMore(false);
     }
-  }, [hasMore, jobs, loadingMore, location, query, remoteOnly]);
+  }, [employmentType, hasMore, jobs, loadingMore, location, query, remoteOnly]);
 
   const newToday = useMemo(() => (jobs ? countNewToday(jobs) : 0), [jobs]);
-  const filtering = query.trim() !== "" || location.trim() !== "" || remoteOnly;
+  const filtering = query.trim() !== "" || location.trim() !== "" || remoteOnly || employmentType !== "";
   const commitTargetRole = () => {
     if (!query.trim()) return;
-    const key = filterKey(query, location, remoteOnly);
+    const key = filterKey(query, location, remoteOnly, employmentType);
     zeroResultIntent.current = key;
     const completed = latestResult.current;
     if (!completed || completed.key !== key) return;
@@ -257,9 +273,27 @@ export default function JobsPage() {
         </p>
       )}
 
-      <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto]">
+      <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto_auto]">
         <input aria-label="Search job titles" value={query} onChange={(event) => setQuery(event.target.value)} onBlur={commitTargetRole} onKeyDown={(event) => { if (event.key === "Enter") commitTargetRole(); }} placeholder="Search job title" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
         <input aria-label="Filter by location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
+        {/* Same closed vocabulary as /browse-jobs, and the same reason it is a select: the title
+            box above already accepts free text, and "intern" typed into it matches "Internal
+            Audit" while missing every co-op. This control is the only way to ask the question
+            exactly. Both surfaces read GET /jobs, so they cannot disagree about what an
+            Internship is. */}
+        <select
+          aria-label="Filter by job type"
+          value={employmentType}
+          onChange={(event) => setEmploymentType(event.target.value)}
+          className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30"
+        >
+          <option value="">Any job type</option>
+          {EMPLOYMENT_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
         <label className="flex items-center gap-2 rounded-control border border-border px-4 py-2.5 text-sm text-ink transition-colors hover:border-brand focus-within:ring-2 focus-within:ring-brand/30">
           <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
           Remote only
