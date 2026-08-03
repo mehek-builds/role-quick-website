@@ -70,7 +70,11 @@ test("overview keeps three application states and reviews matches in a right-sid
   assert.match(overview, /reviewTriggerRef\.current\?\.focus\(\)/);
   assert.match(overview, /closeButtonRef\.current\?\.focus\(\)/);
   assert.match(overview, /onKeyDown=\{containFocus\}/);
-  assert.match(overview, /prepared \? "Review" : "Try again"/);
+  /* Was /prepared \? "Review" : "Try again"/. The card carries four states now, not two: a job
+     with no packet is "Not started" with a Prepare button, and only a request actually in flight
+     shows "Getting ready". Full coverage lives in tests/prepare-on-demand.test.mjs. */
+  assert.match(overview, /status === "ready" \? \([\s\S]*?onClick=\{onReview\}[\s\S]*?Review/);
+  assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
   assert.match(overview, /activeReviewJobIdRef\.current === submittedJobId/);
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.

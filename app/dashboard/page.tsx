@@ -14,7 +14,7 @@ import {
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, Meter, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { Funnel } from "@/components/app/Funnel";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
@@ -127,29 +127,40 @@ const QA_PROFILE: Partial<ParsedProfile> = {
   target_roles: ["Software Engineer", "Product Engineer"],
 };
 
-const QA_PACKETS: GeneratedResume[] = QA_JOBS.map((job) => ({
-  id: `resume-${job.id}`,
-  job_context: { company: job.company_name, role: job.title, jd_hash: job.id },
-  created_at: new Date().toISOString(),
-  spec: {
-    school: "University of Southern California",
-    degree: "B.S. Computer Science",
-    grad_date: "May 2027",
-    coursework: "Data Structures, Software Engineering",
-    experience: [],
-    skills: QA_PROFILE.skills ?? [],
-    _review: {
-      jd_text: job.description,
-      portal_url: job.apply_url,
-      ats_name: job.ats_name,
-      status: "ready_to_submit",
-      edited_terms: [],
-      questions: [],
-      skipped_reasons: [],
-      updated_at: new Date().toISOString(),
+/* Only the first QA job carries a packet, and that asymmetry is the point.
+ *
+ * Every QA job used to have one, so the harness could only ever draw a row of "Ready" cards. The
+ * state that broke, a matched job with no packet and no way to start one, was the one state this
+ * fixture could not render, which is a large part of why it shipped and sat there for five days.
+ * Jobs two and three now stand in for the rest of the matrix: "Not started" with a live Prepare
+ * button, which is what most students actually see. */
+function qaPacketFor(job: MonitoredJob): GeneratedResume {
+  return {
+    id: `resume-${job.id}`,
+    job_context: { company: job.company_name, role: job.title, jd_hash: job.id },
+    created_at: new Date().toISOString(),
+    spec: {
+      school: "University of Southern California",
+      degree: "B.S. Computer Science",
+      grad_date: "May 2027",
+      coursework: "Data Structures, Software Engineering",
+      experience: [],
+      skills: QA_PROFILE.skills ?? [],
+      _review: {
+        jd_text: job.description,
+        portal_url: job.apply_url,
+        ats_name: job.ats_name,
+        status: "ready_to_submit",
+        edited_terms: [],
+        questions: [],
+        skipped_reasons: [],
+        updated_at: new Date().toISOString(),
+      },
     },
-  },
-}));
+  };
+}
+
+const QA_PACKETS: GeneratedResume[] = QA_JOBS.slice(0, 1).map(qaPacketFor);
 
 const QA_OUTREACH: OutreachEvent[] = [
   {
@@ -200,7 +211,9 @@ export default function Home() {
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [prewarmFailures, setPrewarmFailures] = useState<string[]>([]);
-  const [prewarmRetry, setPrewarmRetry] = useState(0);
+  /* Jobs whose packet is being built right now, by either path. This is what lets the card say
+     "Getting ready" and mean it, instead of saying it about work nobody ever started. */
+  const [preparingJobs, setPreparingJobs] = useState<string[]>([]);
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
   const reviewTriggerRef = useRef<HTMLElement | null>(null);
@@ -362,12 +375,9 @@ export default function Home() {
       while (!cancelled && !halted) {
         const job = missing[cursor++];
         if (!job) return;
-        const lockKey = prewarmLockKey(job.id);
-        const existingLock = Number(window.localStorage.getItem(lockKey));
-        if (existingLock && Date.now() - existingLock < 10 * 60 * 1000) {
-          continue;
-        }
-        window.localStorage.setItem(lockKey, String(Date.now()));
+        if (prewarmLockHeld(job.id)) continue;
+        claimPrewarmLock(job.id);
+        setPreparingJobs((current) => [...new Set([...current, job.id])]);
         try {
           const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${job.id}`);
           const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
@@ -379,12 +389,17 @@ export default function Home() {
             setPrewarmFailures((current) => current.filter((jobId) => jobId !== job.id));
           }
         } catch (reason) {
-          window.localStorage.removeItem(lockKey);
+          releasePrewarmLock(job.id);
           if (!cancelled) setPrewarmFailures((current) => [...new Set([...current, job.id])]);
           const message = reason instanceof Error ? reason.message : "Resume preparation paused.";
           if (/limit|quota|slow down|temporarily unavailable/i.test(message)) {
             halted = true;
           }
+        } finally {
+          /* Not guarded on `cancelled`. An unmount must still clear the in-flight mark, or a job
+             stays "Getting ready" for the rest of the session with no request behind it, which is
+             the exact lie this whole change exists to remove. */
+          setPreparingJobs((current) => current.filter((jobId) => jobId !== job.id));
         }
       }
     };
@@ -393,7 +408,9 @@ export default function Home() {
     return () => {
       cancelled = true;
     };
-  }, [applicationProfile, autoSubmitEnabled, dailyJobs, identity, me, packets, prewarmRetry, qaMode]);
+    /* preparingJobs is written here but never read here, so it stays out of the deps: putting a
+       value in the list that the effect only ever sets makes the effect retrigger itself. */
+  }, [applicationProfile, autoSubmitEnabled, dailyJobs, identity, me, packets, qaMode]);
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];
@@ -427,11 +444,65 @@ export default function Home() {
     setReviewJob(null);
   }
 
-  function retryPreparation(jobId: string) {
-    window.localStorage.removeItem(prewarmLockKey(jobId));
+  /* Build one packet, because this student asked for this job.
+   *
+   * The prewarm loop above only runs for students who turned automatic submission on. Everyone
+   * else was promised a packet "when they ask for one", but Home never gave them a way to ask:
+   * the card's action slot rendered inert text, so a matched job sat at "Getting ready" forever
+   * with nothing able to move it. This is the asking.
+   *
+   * It takes the same two steps as a prewarm worker (fetch the complete job, then generate), and
+   * it writes the same day-scoped lock first, so the prewarm loop skips any job already being
+   * built here and a student on automatic submission cannot spend the quota twice for one job. */
+  async function preparePacket(jobId: string) {
+    if (!identity?.full_name?.trim() || !applicationProfile) return;
+    if (preparingJobs.includes(jobId)) return;
+
+    /* A QA render has no session, and api() answers a 401 by clearing what session there is and
+       sending the browser to /login. Without this the harness's own Prepare button would bounce
+       it off the screen it exists to show, which is the trap the layout already documents. The
+       fixture transition is real enough to demo: Not started, then Getting ready, then Ready. */
+    if (qaMode) {
+      const job = QA_JOBS.find((candidate) => candidate.id === jobId);
+      if (!job) return;
+      setPreparingJobs((current) => [...new Set([...current, jobId])]);
+      window.setTimeout(() => {
+        setPackets((current) => [qaPacketFor(job), ...current]);
+        setPreparingJobs((current) => current.filter((id) => id !== jobId));
+      }, 1200);
+      return;
+    }
+
+    setPreparingJobs((current) => [...new Set([...current, jobId])]);
     setPrewarmFailures((current) => current.filter((id) => id !== jobId));
-    prewarmStarted.current = false;
-    setPrewarmRetry((current) => current + 1);
+    claimPrewarmLock(jobId);
+
+    try {
+      const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${jobId}`);
+      const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
+        method: "POST",
+        body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, getStoredEmail())),
+      });
+      if (generated.application) {
+        setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
+      }
+    } catch {
+      /* The lock comes off so the next attempt is allowed to run at all. Quota and rate limits are
+         the backend's call, not a rule duplicated here where it would drift: a refusal arrives as
+         a failure, the card says Paused, and "Try again" is a real button. */
+      releasePrewarmLock(jobId);
+      setPrewarmFailures((current) => [...new Set([...current, jobId])]);
+    } finally {
+      setPreparingJobs((current) => current.filter((id) => id !== jobId));
+    }
+  }
+
+  /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
+     a counter so the effect would re-run, which does nothing at all for the students who never had
+     that effect running in the first place. */
+  function retryPreparation(jobId: string) {
+    releasePrewarmLock(jobId);
+    void preparePacket(jobId);
   }
 
   async function submitFromDrawer() {
@@ -609,7 +680,21 @@ export default function Home() {
               when they need to be read together. A single screen is worth having, but it has to
               come from the content being compact, not from the containers being inflated. */}
           {visibleJobs.map((job) => (
-            <JobMatchCard key={job.id} job={job} prepared={packets.some((packet) => packetMatchesJob(packet, job))} preparationFailed={prewarmFailures.includes(job.id)} onDismiss={() => dismiss(job.id)} onReview={() => openReview(job)} onRetry={() => retryPreparation(job.id)} />
+            <JobMatchCard
+              key={job.id}
+              job={job}
+              prepared={packets.some((packet) => packetMatchesJob(packet, job))}
+              preparing={preparingJobs.includes(job.id)}
+              preparationFailed={prewarmFailures.includes(job.id)}
+              /* Generating needs a name and an application profile. Without them the request is a
+                 guaranteed failure, so the card sends the student to the one page that fixes it
+                 rather than offering a button that cannot work. */
+              canPrepare={Boolean(identity?.full_name?.trim() && applicationProfile)}
+              onDismiss={() => dismiss(job.id)}
+              onReview={() => openReview(job)}
+              onPrepare={() => void preparePacket(job.id)}
+              onRetry={() => retryPreparation(job.id)}
+            />
           ))}
         </div>
       )}
@@ -733,7 +818,36 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
   );
 }
 
-function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, onRetry }: { job: RankedJob; prepared: boolean; preparationFailed: boolean; onDismiss: () => void; onReview: () => void; onRetry: () => void }) {
+/* A matched job, in one of four states.
+ *
+ * There used to be three, and one of them was a trap. A card with no packet rendered the words
+ * "Getting ready" in an inert span, on the assumption that something was always building it.
+ * That stopped being true when prewarming narrowed to automatic-submission students: for everyone
+ * else nothing was building it, nothing ever would, and the card had no control that could start
+ * anything. "Not started" and "Getting ready" are now two different states, and only one of them
+ * claims work is happening. */
+function JobMatchCard({
+  job,
+  prepared,
+  preparing,
+  preparationFailed,
+  canPrepare,
+  onDismiss,
+  onReview,
+  onPrepare,
+  onRetry,
+}: {
+  job: RankedJob;
+  prepared: boolean;
+  preparing: boolean;
+  preparationFailed: boolean;
+  canPrepare: boolean;
+  onDismiss: () => void;
+  onReview: () => void;
+  onPrepare: () => void;
+  onRetry: () => void;
+}) {
+  const status = prepared ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
     <Card className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised">
       {/* Lead with the employer, then put the score in the corner where it can be compared across
@@ -745,7 +859,10 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
             <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <Chip label={prepared ? "Ready" : preparationFailed ? "Paused" : "Getting ready"} kind={prepared ? "ready" : "generating"} />
+                <Chip
+                  label={status === "ready" ? "Ready" : status === "preparing" ? "Getting ready" : status === "failed" ? "Paused" : "Not started"}
+                  kind={status === "ready" ? "ready" : "generating"}
+                />
                 <span className="text-small text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
               </div>
               <p className="mt-1 truncate text-small text-muted">{job.company_name}</p>
@@ -767,19 +884,31 @@ function JobMatchCard({ job, prepared, preparationFailed, onDismiss, onReview, o
           <p className="mt-2 truncate text-small text-faint">Matches your {job.reasons.join(", ")}</p>
         )}
 
-        {/* While Litos is still working there is nothing to click, so the primary slot holds a
-            plain line of text rather than a greyed-out button that reads as broken. And the
-            waiting state says "Getting ready" here too: the chip and the button use one name. */}
+        {/* Only one state here has nothing to click, and it is the one where a request really is
+            in flight. The chip and this slot use one name for each state, so a card never says
+            two things at once. */}
         <div className="mt-auto flex items-center justify-end gap-2 pt-4">
           <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Skip
           </button>
-          {prepared || preparationFailed ? (
-            <button type="button" onClick={prepared ? onReview : onRetry} aria-label={`${prepared ? "Review" : "Try again for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-              {prepared ? "Review" : "Try again"}
+          {status === "preparing" ? (
+            <span className="flex min-h-11 items-center px-3 text-sm text-muted">
+              <PendingLabel>Getting ready</PendingLabel>
+            </span>
+          ) : status === "ready" ? (
+            <button type="button" onClick={onReview} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+              Review
             </button>
+          ) : !canPrepare ? (
+            /* No name or no application profile yet. The packet cannot be built until that exists,
+               so the card points at the fix instead of offering a button that would only fail. */
+            <Link href="/dashboard/profile" className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+              Complete profile
+            </Link>
           ) : (
-            <span className="flex min-h-11 items-center px-3 text-sm text-muted">Getting ready</span>
+            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try again for" : "Prepare an application for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+              {status === "failed" ? "Try again" : "Prepare"}
+            </button>
           )}
         </div>
       </div>
@@ -802,6 +931,30 @@ function readDismissed(key: string): string[] {
 
 function prewarmLockKey(jobId: string): string {
   return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
+}
+
+/* The one lock protocol, shared by both paths that can build a packet.
+ *
+ * A student on automatic submission has the prewarm loop running while the Prepare button is also
+ * live, so the two have to agree on what "already being built" means or one job costs two model
+ * calls and two entries against the monthly quota. Keeping claim, check and release as three
+ * functions next to the key they share is what stops that agreement drifting.
+ *
+ * Module scope, not the component body: these read the clock, and the render-purity rule cannot
+ * tell an event handler from something it might call while rendering. */
+const PREWARM_LOCK_MS = 10 * 60 * 1000;
+
+function claimPrewarmLock(jobId: string): void {
+  window.localStorage.setItem(prewarmLockKey(jobId), String(Date.now()));
+}
+
+function prewarmLockHeld(jobId: string): boolean {
+  const claimedAt = Number(window.localStorage.getItem(prewarmLockKey(jobId)));
+  return Boolean(claimedAt) && Date.now() - claimedAt < PREWARM_LOCK_MS;
+}
+
+function releasePrewarmLock(jobId: string): void {
+  window.localStorage.removeItem(prewarmLockKey(jobId));
 }
 
 function applicationLimit(me: Me): number {
