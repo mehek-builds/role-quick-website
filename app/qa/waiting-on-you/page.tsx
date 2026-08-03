@@ -1,0 +1,116 @@
+import type { Metadata } from "next";
+import { WaitingOnYou } from "@/components/app/WaitingOnYou";
+import { waitingApplications } from "@/lib/captcha-queue";
+
+/* The "waiting on you" queue, rendered against a fixture.
+ *
+ * Same reason as the dashboard packet harness next door: the real block is behind the login wall
+ * and only appears once an application has actually stalled on a CAPTCHA, which is not a state you
+ * can produce on demand without a cooperating employer. This feeds the component the same shape the
+ * dashboard builds, through the same waitingApplications() the dashboard calls, so the fixture
+ * cannot drift from the real payload without failing the typecheck.
+ *
+ * It is a harness, not a demo: /qa/ is robots-disallowed and nothing links here. */
+export const metadata: Metadata = {
+  title: "Waiting-on-you queue harness",
+  robots: { index: false, follow: false },
+};
+
+/* Ages are relative to render so the harness exercises every branch of describeWait at once:
+   minutes, hours and days. */
+const now = Date.now();
+const ago = (ms: number) => new Date(now - ms).toISOString();
+
+const FIXTURE = [
+  {
+    id: "oldest-days",
+    job_context: { company: "Northwind Systems", role: "Data Analyst" },
+    spec: {
+      _review: {
+        status: "needs_attention",
+        portal_url: "https://boards.greenhouse.io/northwind/jobs/4012345",
+        stall: {
+          kind: "human_verification" as const,
+          stalled_at: ago(3 * 24 * 60 * 60 * 1000),
+          surface: "server_run" as const,
+          provider: "recaptcha_v2" as const,
+          stage: "at_submit" as const,
+          source: "observed" as const,
+        },
+      },
+    },
+  },
+  {
+    id: "hours-before-fill",
+    job_context: { company: "Halcyon Labs", role: "Product Intern" },
+    spec: {
+      _review: {
+        status: "needs_attention",
+        portal_url: "https://jobs.lever.co/halcyon/abc-123/apply",
+        stall: {
+          kind: "human_verification" as const,
+          stalled_at: ago(5 * 60 * 60 * 1000),
+          surface: "extension" as const,
+          provider: "hcaptcha" as const,
+          stage: "before_fill" as const,
+          source: "observed" as const,
+        },
+      },
+    },
+  },
+  /* No portal_url, and no company. Both occur on real rows: packets built before the field existed,
+     and anything created from a pasted description. The card has to stay readable. */
+  {
+    id: "no-url-no-company",
+    job_context: { company: "  ", role: "" },
+    spec: {
+      _review: {
+        status: "needs_attention",
+        stall: {
+          kind: "human_verification" as const,
+          stalled_at: ago(20 * 60 * 1000),
+          surface: "server_run" as const,
+          provider: "unknown" as const,
+          stage: "at_submit" as const,
+          source: "assumed" as const,
+        },
+      },
+    },
+  },
+  /* Must NOT appear: resolved stall, and needs_attention for an unrelated reason. */
+  {
+    id: "resolved",
+    job_context: { company: "Already Done", role: "Sent" },
+    spec: {
+      _review: {
+        status: "needs_attention",
+        stall: {
+          kind: "human_verification" as const,
+          stalled_at: ago(9 * 60 * 60 * 1000),
+          surface: "server_run" as const,
+          provider: "turnstile" as const,
+          stage: "at_submit" as const,
+          source: "observed" as const,
+          resolved_at: ago(60 * 1000),
+        },
+      },
+    },
+  },
+  {
+    id: "other-blocker",
+    job_context: { company: "Missing Field Co", role: "Analyst" },
+    spec: { _review: { status: "needs_attention" } },
+  },
+];
+
+export default function WaitingOnYouHarnessPage() {
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-12">
+      <p className="mb-6 text-sm text-muted">
+        Harness. Three rows should render, oldest first. The resolved stall and the
+        unrelated-blocker row must not appear.
+      </p>
+      <WaitingOnYou items={waitingApplications(FIXTURE)} />
+    </main>
+  );
+}
