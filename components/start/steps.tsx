@@ -23,11 +23,20 @@ import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell } from ".
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
-import { categoriesForRoles, inferResumeTargeting } from "@/lib/onboarding-role-inference";
+import { focusPatch, focusSeed, inferResumeTargeting, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
 
+/* This screen is reachable long after setup: the step is derived, and `hasFocusTargeting` wants a
+ * non-empty titles array, so an account whose targeting predates that field lands here on every
+ * visit to /start with a complete profile and a history of sent applications behind it.
+ *
+ * So saved targeting has to be READ before anything is drawn. Seeding from the resume inference
+ * and committing it was one click of silent data loss on the record that aims every
+ * recommendation (see lib/onboarding-role-inference.ts for the rule and why categories merge). Loading it
+ * first is also why a failed read shows a retry instead of falling through to the guess: a PUT
+ * built without knowing what is stored is the same overwrite by another route. */
 export function FocusStep({
   onDone,
   onLater,
@@ -38,8 +47,84 @@ export function FocusStep({
   profile: ParsedProfile;
 }) {
   const guess = useMemo(() => inferResumeTargeting(profile), [profile]);
-  const [selectedTitles, setSelectedTitles] = useState<string[]>(() => guess.roles[0] ? [guess.roles[0]] : []);
-  const [roleTypes, setRoleTypes] = useState<RoleType[]>(() => [guess.roleType]);
+  /* undefined while the read is in flight. null means there is genuinely nothing stored, which is
+     the normal state for a new account: /profile/targeting answers 200-with-nulls, never 404. */
+  const [saved, setSaved] = useState<SavedFocus | undefined>(undefined);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    /* No token is the localhost QA bypass (?qa=1&step=focus), not a failure: nothing is stored for
+       a signed-out reviewer, so the guess is the whole truth and there is nothing to lose. It
+       resolves through the same promise rather than an early setSaved so the effect body never
+       sets state synchronously. */
+    (getToken() ? getTargeting() : Promise.resolve<SavedFocus>(null))
+      .then((targeting) => {
+        if (!cancelled) setSaved(targeting);
+      })
+      .catch((reason) => {
+        if (!cancelled) setLoadError(reason instanceof Error ? reason.message : "Could not load the jobs you want.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  if (loadError) {
+    return (
+      <StartShell step="focus" title="Here's where we'd start.">
+        <ErrorNote message={loadError} />
+        <button
+          type="button"
+          onClick={() => {
+            setLoadError(null);
+            setAttempt((n) => n + 1);
+          }}
+          className="mt-4 text-sm text-brand underline underline-offset-4"
+        >
+          Try loading again
+        </button>
+      </StartShell>
+    );
+  }
+
+  if (saved === undefined) {
+    return (
+      <StartShell step="focus" title="Here's where we'd start.">
+        <div className="rq-shimmer h-32 rounded-inner" />
+      </StartShell>
+    );
+  }
+
+  /* Keyed on the read so the form's lazy initial state is built from a settled `saved` rather than
+     patched into place by an effect afterwards. There is no window where the student can click
+     Continue against a pre-fill that has not seen their stored answer yet. */
+  return (
+    <FocusForm
+      key={attempt}
+      guess={guess}
+      saved={saved}
+      onDone={onDone}
+      onLater={onLater}
+    />
+  );
+}
+
+function FocusForm({
+  guess,
+  saved,
+  onDone,
+  onLater,
+}: {
+  guess: ReturnType<typeof inferResumeTargeting>;
+  saved: SavedFocus;
+  onDone: () => void;
+  onLater: () => void;
+}) {
+  const seed = useMemo(() => focusSeed(saved, guess), [saved, guess]);
+  const [selectedTitles, setSelectedTitles] = useState<string[]>(() => seed.titles);
+  const [roleTypes, setRoleTypes] = useState<RoleType[]>(() => seed.roleTypes);
   const [newTitle, setNewTitle] = useState("");
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
@@ -80,11 +165,9 @@ export function FocusStep({
     setBusy(true);
     setError(null);
     try {
-      await putTargeting({
-        categories: categoriesForRoles(selectedTitles),
-        titles: selectedTitles,
-        role_types: roleTypes,
-      });
+      /* Partial by omission, and additive on categories. This screen shows titles and one type; it
+         must not be able to remove a category the student cannot see. See lib/onboarding-role-inference.ts. */
+      await putTargeting(focusPatch(saved, { titles: selectedTitles, roleTypes }));
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
