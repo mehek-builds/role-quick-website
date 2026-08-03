@@ -85,6 +85,50 @@ describe("the packet resume preview", () => {
     );
   });
 
+  /* Entry typography, against drawEntrySection() + drawSplitLine(). The pane printed
+     `{entry.title} · {entry.org}` as one bold line, which is not a line the renderer draws
+     anywhere: org alone on the split line, role italic beneath. */
+  test("puts the organisation alone on the split line, role italic beneath", () => {
+    assert.doesNotMatch(
+      PACKET,
+      /\{entry\.title\}\s*·\s*\{entry\.org\}/,
+      "org and role must not share one line; the renderer separates them and the hierarchy is the point"
+    );
+    assert.match(PACKET, /\{entry\.org\}<\/p>/, "the organisation gets the split line to itself");
+    assert.match(
+      PACKET,
+      /\{entry\.title &&[\s\S]{0,120}italic/,
+      "the role renders in italic beneath the organisation, the way drawEntrySection does it"
+    );
+  });
+
+  /* The renderer wraps org and school inside their split-line column. `truncate` would show LESS
+     than the file, and hiding content is the one thing a preview of a document must not do. */
+  test("never truncates content the rendered file shows in full", () => {
+    /* Bounded to ResumePaper + Education, which sit between these two declarations. An unbounded
+       slice runs to end of file and catches the packet dialog's own header, where truncating a
+       long job title into a fixed chrome row is correct. The rule is about the paper, not the
+       furniture around it. */
+    const paper = PACKET.slice(
+      PACKET.indexOf("function ResumePaper"),
+      PACKET.indexOf("function SectionHeading")
+    );
+    assert.ok(paper.includes("function Education"), "the slice must cover ResumePaper and Education");
+    assert.doesNotMatch(
+      paper,
+      /truncate/,
+      "no truncate on the resume paper: the PDF wraps these, so truncating hides content from the check"
+    );
+  });
+
+  test("joins skills with the separator the renderer uses", () => {
+    assert.match(
+      PACKET,
+      /skills\.join\(" • "\)/,
+      "the renderer joins skills with a bullet, not a middot"
+    );
+  });
+
   test("gives education its own section rather than floating it under the header", () => {
     assert.match(
       PACKET,
