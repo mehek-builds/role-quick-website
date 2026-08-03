@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { litosClientHeaders } from "@/lib/product";
@@ -243,35 +243,25 @@ export default function ResumeWorkspace() {
                     onChange={(v) => patchEntry(i, { date_range: v })}
                     placeholder="Jun 2025 - Aug 2025"
                   />
-                  <div>
-                    <label className="block text-xs font-medium text-muted">Type</label>
-                    <select
-                      value={entry.type}
-                      onChange={(e) =>
-                        patchEntry(i, { type: e.target.value as "job" | "project" })
-                      }
-                      className="mt-1.5 w-full rounded-full border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
-                    >
-                      <option value="job">Job</option>
-                      <option value="project">Project</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="mt-4">
-                  <label className="block text-xs font-medium text-muted">
-                    Resume bullets, one per line
-                  </label>
-                  <textarea
-                    value={entry.bullet_variants.join("\n")}
-                    onChange={(e) =>
-                      patchEntry(i, { bullet_variants: e.target.value.split("\n") })
-                    }
-                    rows={Math.max(3, entry.bullet_variants.length)}
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3.5 py-2.5 text-sm leading-6 text-ink outline-none focus:border-brand"
-                    placeholder="Shipped X that did Y, measured by Z"
+                  <SelectField
+                    label="Type"
+                    value={entry.type}
+                    onChange={(v) => patchEntry(i, { type: v as "job" | "project" })}
+                    options={[
+                      { value: "job", label: "Job" },
+                      { value: "project", label: "Project" },
+                    ]}
                   />
                 </div>
+
+                <LinesField
+                  className="mt-4"
+                  label="Resume bullets, one per line"
+                  value={entry.bullet_variants.join("\n")}
+                  onChange={(v) => patchEntry(i, { bullet_variants: v.split("\n") })}
+                  rows={Math.max(3, entry.bullet_variants.length)}
+                  placeholder="Shipped X that did Y, measured by Z"
+                />
 
                 <div className="mt-3 flex items-end justify-between gap-4">
                   <div className="flex-1">
@@ -323,6 +313,83 @@ function Field({
         className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     </label>
+  );
+}
+
+/* ISSUE-034. The Type select and the bullets textarea used to be written inline in the entry
+   card, each with a <label> that was only a sibling: no htmlFor, no wrapping element, so nothing
+   computed an accessible name and a reader announced six unnamed selects reading "Job / Project"
+   and six unnamed multi-line boxes (WCAG 4.1.2 and 3.3.2). The four fields beside them went
+   through Field, whose <label> wraps its input, so they were named correctly the whole time. That
+   is exactly why it survived: the page looked and read consistently to a sighted user.
+
+   Both controls now live in a helper that owns the label and the control together, so a field
+   added to the entry card later cannot be born unnamed the way these two were. Association is by
+   htmlFor/id off useId, matching the fix ISSUE-012 made in Settings: useId because the value has
+   to agree between the server render and the client render, and htmlFor rather than aria-label
+   because the visible text IS the name, so a copy edit cannot leave a reader on the old wording. */
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  const fieldId = useId();
+  return (
+    <div>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
+      <select
+        id={fieldId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>{option.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/* Distinct from TextAreaField below: that one is the parsed-profile editor's box, which always
+   carries a hint line and resizes. This is the work-history bullets box, which does not. Keeping
+   them separate is deliberate, since merging them would change how one of the two looks. */
+function LinesField({
+  className,
+  label,
+  value,
+  onChange,
+  rows,
+  placeholder,
+}: {
+  className?: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows: number;
+  placeholder?: string;
+}) {
+  const fieldId = useId();
+  return (
+    <div className={className}>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">
+        {label}
+      </label>
+      <textarea
+        id={fieldId}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={rows}
+        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3.5 py-2.5 text-sm leading-6 text-ink outline-none focus:border-brand"
+        placeholder={placeholder}
+      />
+    </div>
   );
 }
 
