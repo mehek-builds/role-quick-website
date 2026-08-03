@@ -70,7 +70,24 @@ describe("the hook does not amplify requests or outlive its component", () => {
   });
 });
 
-describe("the list and the review screen score against the same job context", () => {
+describe("the list scores the posting, not the preview of it", () => {
+  test("the list sends no jd_text, so the route reads the full description", () => {
+    /* The defect this closes, found on a real account 2026-08-04: GET /jobs sends
+       `left(description, 600)`, and scoring that preview yields two or three requirement terms, so
+       every posting fell under MIN_SCORABLE_TERMS and the dashboard drew no number at all. The
+       suite was green throughout, because nothing tied the text the client sends to the text the
+       job row holds. */
+    assert.match(code, /fetchJdMatch\(null, resume, \{/);
+    assert.doesNotMatch(code, /fetchJdMatch\(job\.description/);
+  });
+
+  test("the review screen still sends its own text", () => {
+    // Its packet holds the JD captured when the resume was tailored to it. The live row may have
+    // been edited since, and that screen's number must be about the document on the page.
+    const matchScore = readFileSync("components/app/MatchScore.tsx", "utf8");
+    assert.match(matchScore, /fetchJdMatch\(jdText,/);
+  });
+
   test("the list request carries job_id", () => {
     // Without it the backend cannot read the posting's offices off the live job row, so the
     // employer's own cities land in the denominator and on the missing list. The review screen
