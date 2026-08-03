@@ -80,6 +80,9 @@ export default function Start() {
           has_targeting: false,
           learned: [],
           gaps: ["gpa", "gpa_scale", "major", "languages"],
+          // Populated so the base step's languages line is reviewable in QA in its prefilled
+          // state, which is the state almost every real student will see.
+          gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },
           // Multi-page on purpose: the comparison's whole argument is 3 pages against 1, so a
           // 1 here would make the step's signature moment unreviewable in QA.
           source_pages: 3,
@@ -263,6 +266,8 @@ export default function Start() {
           email={getStoredEmail()}
           sourcePages={state.source_pages}
           sourceUrl={state.source_resume_url}
+          languageGap={state.gaps.includes("languages")}
+          languageSuggestion={state.gap_suggestions?.languages ?? []}
           demo={qaDemo}
           onLater={later}
           onDone={() => {
