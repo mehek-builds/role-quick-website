@@ -99,6 +99,10 @@ export default function ResumeWorkspace() {
           org: e.org.trim(),
           title: e.title?.trim() || undefined,
           date_range: e.date_range?.trim() || undefined,
+          /* Sent back unchanged because this PUT replaces the whole bank. Omitting it does not
+             leave the stored value alone, it deletes it - which is how every parsed city was lost
+             the first time. Not editable here; it comes off the resume. */
+          location: e.location?.trim() || undefined,
           bullet_variants: e.bullet_variants.map((b) => b.trim()).filter(Boolean),
           tags: (e.tags ?? []).map((t) => t.trim()).filter(Boolean),
         }))
