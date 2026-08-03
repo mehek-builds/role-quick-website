@@ -60,7 +60,7 @@ test("on-demand and prewarm share one lock so a job is never built twice", async
   assert.match(home, /if \(preparingJobs\.includes\(jobId\)\) return;/);
 
   // A failure releases the lock on both paths, otherwise a retry is blocked for ten minutes.
-  assert.match(home, /\} catch \{[\s\S]*?releasePrewarmLock\(jobId\);/);
+  assert.match(home, /\} catch \(reason\) \{[\s\S]*?releasePrewarmLock\(jobId\);/);
   assert.match(home, /\} catch \(reason\) \{[\s\S]*?releasePrewarmLock\(job\.id\);/);
   assert.match(home, /function retryPreparation\(jobId: string\) \{\s*releasePrewarmLock\(jobId\);/);
 });
@@ -74,6 +74,25 @@ test("the in-flight mark is always cleared, including on unmount", async () => {
   assert.equal(finallies.length, 2, "both preparePacket and the prewarm worker must clear in finally");
   // preparingJobs is written by the effect but never read by it, so it must stay out of the deps.
   assert.doesNotMatch(home, /me, packets, preparingJobs, qaMode\]/);
+});
+
+test("Paused says what stopped, and never says it in jargon", async () => {
+  const home = await readFile(homeUrl, "utf8");
+
+  // Both build paths record a reason, not just the fact of failure.
+  assert.match(home, /const \[preparationErrors, setPreparationErrors\] = useState<Record<string, string>>\(\{\}\)/);
+  assert.match(home, /\} catch \(reason\) \{[\s\S]*?setPreparationErrors\(\(current\) => \(\{ \.\.\.current, \[jobId\]: userFacingError\(reason\) \}\)\)/);
+  assert.match(home, /setPreparationErrors\(\(current\) => \(\{ \.\.\.current, \[job\.id\]: userFacingError\(reason\) \}\)\)/);
+
+  // userFacingError swaps stack traces and 5xx text for a plain sentence, so a backend fault
+  // never reaches a student's card as jargon.
+  assert.match(home, /userFacingError\(reason\)/);
+
+  // The card renders it, and only under the state it explains.
+  assert.match(home, /status === "failed" && preparationError && \([\s\S]*?text-warn">\{preparationError\}/);
+
+  // A new attempt drops the previous reason rather than explaining a failure that already ended.
+  assert.match(home, /setPreparationErrors\(\(current\) => \{\s*if \(!\(jobId in current\)\) return current;[\s\S]*?delete next\[jobId\];/);
 });
 
 test("a card cannot offer Prepare before the profile can support it", async () => {

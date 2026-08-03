@@ -217,6 +217,9 @@ export default function Home() {
   /* Jobs whose packet is being built right now, by either path. This is what lets the card say
      "Getting ready" and mean it, instead of saying it about work nobody ever started. */
   const [preparingJobs, setPreparingJobs] = useState<string[]>([]);
+  /* Why a build stopped, per job. Kept so "Paused" can say something rather than leaving a
+     student to guess whether to wait, fix something, or give up. */
+  const [preparationErrors, setPreparationErrors] = useState<Record<string, string>>({});
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
   const reviewTriggerRef = useRef<HTMLElement | null>(null);
@@ -391,8 +394,11 @@ export default function Home() {
           }
         } catch (reason) {
           releasePrewarmLock(job.id);
-          if (!cancelled) setPrewarmFailures((current) => [...new Set([...current, job.id])]);
           const message = reason instanceof Error ? reason.message : "Resume preparation paused.";
+          if (!cancelled) {
+            setPrewarmFailures((current) => [...new Set([...current, job.id])]);
+            setPreparationErrors((current) => ({ ...current, [job.id]: userFacingError(reason) }));
+          }
           if (/limit|quota|slow down|temporarily unavailable/i.test(message)) {
             halted = true;
           }
@@ -476,6 +482,14 @@ export default function Home() {
 
     setPreparingJobs((current) => [...new Set([...current, jobId])]);
     setPrewarmFailures((current) => current.filter((id) => id !== jobId));
+    /* Last attempt's reason goes with the last attempt. Leaving it up under a fresh "Getting
+       ready" would explain a failure that is no longer the one happening. */
+    setPreparationErrors((current) => {
+      if (!(jobId in current)) return current;
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
     claimPrewarmLock(jobId);
 
     try {
@@ -487,12 +501,18 @@ export default function Home() {
       if (generated.application) {
         setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
       }
-    } catch {
+    } catch (reason) {
       /* The lock comes off so the next attempt is allowed to run at all. Quota and rate limits are
          the backend's call, not a rule duplicated here where it would drift: a refusal arrives as
-         a failure, the card says Paused, and "Try again" is a real button. */
+         a failure, the card says Paused, and "Try again" is a real button.
+
+         The reason is kept. "Paused" on its own is the same dead end in a politer font: it tells a
+         student something stopped without telling them whether to wait, fix something, or stop
+         trying. userFacingError drops anything that reads like a stack trace or a 5xx and
+         substitutes a plain sentence, so a backend fault never reaches the card as jargon. */
       releasePrewarmLock(jobId);
       setPrewarmFailures((current) => [...new Set([...current, jobId])]);
+      setPreparationErrors((current) => ({ ...current, [jobId]: userFacingError(reason) }));
     } finally {
       setPreparingJobs((current) => current.filter((id) => id !== jobId));
     }
@@ -695,6 +715,7 @@ export default function Home() {
                  guaranteed failure, so the card sends the student to the one page that fixes it
                  rather than offering a button that cannot work. */
               canPrepare={Boolean(identity?.full_name?.trim() && applicationProfile)}
+              preparationError={preparationErrors[job.id]}
               onDismiss={() => dismiss(job.id)}
               onReview={() => openReview(job)}
               onPrepare={() => void preparePacket(job.id)}
@@ -836,6 +857,7 @@ function JobMatchCard({
   prepared,
   preparing,
   preparationFailed,
+  preparationError,
   canPrepare,
   onDismiss,
   onReview,
@@ -846,6 +868,7 @@ function JobMatchCard({
   prepared: boolean;
   preparing: boolean;
   preparationFailed: boolean;
+  preparationError?: string;
   canPrepare: boolean;
   onDismiss: () => void;
   onReview: () => void;
@@ -887,6 +910,12 @@ function JobMatchCard({
         <PayLine job={job} />
         {job.reasons.length > 0 && (
           <p className="mt-2 truncate text-small text-faint">Matches your {job.reasons.join(", ")}</p>
+        )}
+
+        {/* Paused says what stopped. A status word with no reason behind it leaves a student
+            deciding between waiting, fixing something and giving up, with nothing to decide on. */}
+        {status === "failed" && preparationError && (
+          <p className="mt-3 line-clamp-2 text-label text-warn">{preparationError}</p>
         )}
 
         {/* Only one state here has nothing to click, and it is the one where a request really is
