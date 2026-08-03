@@ -18,6 +18,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { fetchRequirements } from "@/features/applications";
@@ -37,7 +38,6 @@ import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
-type ApplicationFilter = "all" | "action" | "ready" | "submitted";
 type ApplicationSort = "recent" | "company";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean };
 
@@ -117,13 +117,17 @@ export default function Applications() {
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
-  // Seeded from ?state= so the Overview metrics are real filter links rather than decoration.
-  // Read once at mount: after that the select on this page is the only thing that moves it.
-  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>(() => {
-    if (typeof window === "undefined") return "all";
-    const requested = new URLSearchParams(window.location.search).get("state");
-    return requested === "action" || requested === "ready" || requested === "submitted" ? requested : "all";
-  });
+  /* Seeded from ?state= so the Overview metrics are real filter links rather than decoration.
+     Read once at mount: after that the select on this page is the only thing that moves it.
+
+     The seeding alone never made those links work. The value fed one list that only mounted once a
+     packet was open, so arriving from Home's "N stopped for you" banner set a filter nobody could
+     see, applied it to nothing on screen, and left the student on the same board they would have
+     got with no link at all. The ledger below now renders on the board view whenever this is not
+     "all", with its heading and its select carrying the current value. */
+  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>(
+    () => (typeof window === "undefined" ? "all" : applicationFilterFromSearch(window.location.search)),
+  );
   const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const closeNewApplication = useCallback(() => {
@@ -386,13 +390,8 @@ export default function Applications() {
   const review = selected?.spec._review;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const visiblePackets = useMemo(() => {
-    const filtered = reviewablePackets.filter((packet) => {
-      const status = packet.spec._review?.status;
-      if (applicationFilter === "action") return ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "");
-      if (applicationFilter === "ready") return ["resume_ready", "questions_ready", "ready_to_submit"].includes(status ?? "");
-      if (applicationFilter === "submitted") return status === "submitted";
-      return true;
-    });
+    const filtered = reviewablePackets.filter((packet) =>
+      statusMatchesApplicationFilter(packet.spec._review?.status, applicationFilter));
     return [...filtered].sort((a, b) => applicationSort === "company"
       ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
@@ -909,7 +908,19 @@ export default function Applications() {
         </p>
       )}
 
-      {selected && reviewablePackets.length > 1 && (
+      {/* Two reasons this section exists, and it has to render for both.
+
+          With a packet open it is the switcher: the only in-context way to move to another
+          application. With nothing open and a filter on, it is the answer to the deep link Home
+          just followed. Gating the whole thing on `selected` made every ?state= arrival inert,
+          because the filter it had just set had no rows to apply to and no visible control to
+          change: Home's banner promised the applications that had stopped for the student and
+          delivered the same board as the plain URL.
+
+          It stays hidden on an unfiltered board view, where it would only restate the board below
+          it. Setting the select back to Everything is what closes it, which is also how the
+          filter is cleared. */}
+      {packets !== null && (selected ? reviewablePackets.length > 1 : ledgerRendersOnLanding(applicationFilter, reviewablePackets.length)) && (
         /* Keep the switcher above every screen branch. Historical marker for the invariant:
            packet.job_context.role} · {packet.job_context.company} */
         /* Every control in here used to sit behind `hidden lg:block`. Filter and sort being
@@ -920,7 +931,12 @@ export default function Applications() {
         <section aria-labelledby="application-ledger-heading" className="border-y border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-baseline gap-2">
-              <h2 id="application-ledger-heading" className="sr-only">Your applications</h2>
+              {/* Visible whenever this is the landing view for a filter, so the student reads what
+                  they are looking at in words. Beside an open packet it goes back to being the
+                  switcher's label: the heading there would compete with the packet's own. */}
+              <h2 id="application-ledger-heading" className={selected ? "sr-only" : "text-sm font-medium text-ink"}>
+                {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
+              </h2>
               <span className="font-mono text-[11px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
             </div>
             <div className="flex gap-2">
@@ -955,10 +971,10 @@ export default function Applications() {
                     key={packet.id}
                     type="button"
                     onClick={() => selectPacket(packet)}
-                    aria-pressed={packet.id === selected.id}
-                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected.id ? "border-brand bg-brand-soft" : "border-border"}`}
+                    aria-pressed={packet.id === selected?.id}
+                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected?.id ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
-                    <span className={`truncate text-[13px] font-medium ${packet.id === selected.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
+                    <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
                   </button>
                 ))}
@@ -982,7 +998,7 @@ export default function Applications() {
                 </div>
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
                       <time className="hidden text-xs text-faint sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>

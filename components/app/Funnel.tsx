@@ -101,7 +101,11 @@ export function Funnel() {
         <span className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</span>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-3">
-        <Stat value={f.applications_submitted} label="all time counter" />
+        {/* "all time counter" shipped here: the name of the variable rather than the name of the
+            thing, under a card headed LAST 14 DAYS, so the card argued with itself. The backend
+            builds this field as submittedAt.length, every application ever sent with no window on
+            it at all, so the label has to say the span out loud or the header speaks for it. */}
+        <Stat value={f.applications_submitted} label="sent since you started" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.
