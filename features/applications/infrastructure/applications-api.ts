@@ -191,3 +191,53 @@ export async function fetchInterviewPrep(
     body: JSON.stringify({ jd_text: jdText, spec, job_context: jobContext }),
   });
 }
+
+/**
+ * The requirement-by-requirement breakdown, for the REVIEW SCREEN ONLY.
+ *
+ * Costs one model call the first time a posting is read against a resume and nothing on every read
+ * after, because the backend caches on (clause, bullets). Never called from a list: putting it on a
+ * surface that fans out to 24 rows is the cost mistake the split exists to avoid.
+ *
+ * Answers what the score alone cannot. Measured over 600 live postings, the term scorer sees only
+ * the 34.6% of requirement clauses that name a technology; the rest - a degree in the right field,
+ * years of experience, communicating with partners - were invisible, and they are
+ * disproportionately the ones a student MEETS.
+ */
+export type RequirementVerdict = "met" | "unmet" | "unscoreable";
+
+export type RequirementClauseView = {
+  text: string;
+  verdict: RequirementVerdict;
+  basis: "terms" | "degree" | "graduation" | "experience-years" | "competency" | "none";
+  /** The student's own bullet when met, or what is missing when not. */
+  evidence: string | null;
+  missing_terms: string[];
+};
+
+export type RequirementsResponse = {
+  score: number | null;
+  scored: number;
+  met: number;
+  clauses: RequirementClauseView[];
+  /** How many clauses needed a model call this time. Zero on a repeat view. */
+  judged: number;
+  from_cache: number;
+  /** Verdicts the backend threw out for not quoting a real bullet. Non-empty means a bad run. */
+  rejected: string[];
+};
+
+export async function fetchRequirements(
+  jdText: string | null,
+  spec: ResumeSpec | undefined,
+  jobContext?: JobContext,
+): Promise<RequirementsResponse> {
+  return api<RequirementsResponse>("/jd-match/requirements", {
+    method: "POST",
+    body: JSON.stringify({
+      ...(jdText === null ? {} : { jd_text: jdText }),
+      ...(spec ? { spec } : {}),
+      job_context: jobContext,
+    }),
+  });
+}
