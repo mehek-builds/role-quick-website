@@ -21,7 +21,7 @@ export type DashboardInitialState = {
   autoSubmitEnabled: boolean;
 };
 
-export type DashboardRequester = <T>(path: string) => Promise<T>;
+export type DashboardRequester = <T>(path: string, init?: RequestInit) => Promise<T>;
 
 function isBootstrapV1(value: unknown): value is DashboardBootstrap {
   if (!value || typeof value !== "object") return false;
@@ -63,7 +63,9 @@ export function dashboardStateFromBootstrap(bootstrap: DashboardBootstrap): Dash
 /** Keep the web deploy reversible while the aggregate endpoint rolls out independently. */
 export async function loadDashboardInitialState(request: DashboardRequester): Promise<DashboardInitialState> {
   try {
-    const bootstrap = await request<unknown>("/dashboard/bootstrap");
+    // Account saves targeting through a different URL. The aggregate endpoint is privately cached,
+    // so a normal fetch here can legally replay the pre-save subtitle after navigating Home.
+    const bootstrap = await request<unknown>("/dashboard/bootstrap", { cache: "no-store" });
     if (isBootstrapV1(bootstrap)) return dashboardStateFromBootstrap(bootstrap);
   } catch (error) {
     if (!supportsLegacyFallback(error)) throw error;

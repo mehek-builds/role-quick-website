@@ -10,6 +10,7 @@ import test from "node:test";
    is not importable. `tests/typography-policy.test.mjs` guards its own laws the same way. */
 
 const componentUrl = new URL("../components/app/CompanyLogo.tsx", import.meta.url);
+const homeUrl = new URL("../app/dashboard/page.tsx", import.meta.url);
 
 /* Comments are stripped before anything is asserted. These checks describe what the component
    DOES, and the comments here explain the bugs it must not repeat by quoting them verbatim — so a
@@ -64,4 +65,18 @@ test("the favicon request never carries the dashboard URL with it", async () => 
   // The referrer would tell a third party which page a signed-in student is on.
   const source = await code();
   assert.match(source, /referrerPolicy="no-referrer"/);
+});
+
+test("the Home recommendation card leads with the company logo", async () => {
+  const home = await readFile(homeUrl, "utf8");
+  const card = home.slice(home.indexOf("function JobMatchCard"), home.indexOf("function dailyDismissalKey"));
+
+  assert.match(
+    card,
+    /<CompanyLogo company=\{job\.company_name\} careerUrl=\{job\.career_url\} companyDomain=\{job\.company_domain\} \/>/,
+  );
+  assert.ok(
+    card.indexOf("<CompanyLogo") < card.indexOf("<ScoreRing"),
+    "the company mark should occupy the leading slot before the top-right fit score",
+  );
 });
