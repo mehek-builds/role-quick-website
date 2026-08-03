@@ -62,7 +62,7 @@ export type Filters = {
      read from and written back into a query string by a plain GET form, and "true"/undefined is
      what a checkbox in such a form produces. */
   sponsor_only?: string;
-  /* One of the four words the API's employment_type enum accepts, or absent for no filter.
+  /* One of the five words the API's employment_type enum accepts, or absent for no filter.
      A string for the same reason sponsor_only is: it round-trips through a plain GET form. */
   employment_type?: string;
 };

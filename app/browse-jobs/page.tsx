@@ -324,7 +324,7 @@ export default async function BrowseJobs({
           />
           {/* A SELECT, not a ComboField, and that is the point of the control. The other three
               fields are free text with suggestions because a visitor may legitimately search a
-              title or city we have never seen. Employment type is a CLOSED vocabulary of four
+              title or city we have never seen. Employment type is a CLOSED vocabulary of five
               words the backend will accept, so offering a text box would invite "intern",
               "Interns" and "INTERNSHIP" - three spellings that all return nothing while looking
               like a search that simply found no jobs.

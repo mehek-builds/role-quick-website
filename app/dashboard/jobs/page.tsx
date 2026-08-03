@@ -158,7 +158,7 @@ export default function JobsPage() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [location, qaMode, query, remoteOnly]);
+  }, [employmentType, location, qaMode, query, remoteOnly]);
 
   /* Which of these the student has already applied to. Fetched once, not per filter change: it is
      a fact about their account, not about the query. A failure here leaves it null, and a row that
