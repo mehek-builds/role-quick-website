@@ -243,20 +243,22 @@ export default function Privacy() {
           </p>
         </Section>
 
-        {/* mehekbuilds@gmail.com is the ONE address users are given, Mehek's
-            call 2026-07-28. This page used to give mehekman@usc.edu, which made
-            four different support contacts across the product: this page, the
-            Chrome Web Store listing (mehekbuilds@), /v1/meta (which was still
-            serving the dead hello@rolequick.com until the same day), and the
-            /contact form's server-side CONTACT_INBOX. The address that fulfils
-            the deletion promise is the one that matters most to get right, and
-            it should not be a personal university address. Do not reintroduce
-            another one here. */}
+        {/* support@trylitos.com is the ONE address users are given. Mehek's
+            call 2026-07-28 made it mehekbuilds@gmail.com to collapse four
+            different support contacts into one; 2026-08-03 moved that one onto
+            the domain, once Google Workspace was set up on trylitos.com. It is
+            an alias of admin@trylitos.com, so mail to it lands in the same
+            inbox. The other surfaces now read the same address from env rather
+            than hardcoding it: /v1/meta via PRODUCT_SUPPORT_EMAIL and the
+            /contact form via CONTACT_INBOX. The address that fulfils the
+            deletion promise is the one that matters most to get right, and it
+            should be on the product's own domain, not a personal mailbox. Do
+            not reintroduce another one here. */}
         <Section title="Export and deletion">
           <p>
             Email{" "}
-            <a href="mailto:mehekbuilds@gmail.com" className="text-ink underline">
-              mehekbuilds@gmail.com
+            <a href="mailto:support@trylitos.com" className="text-ink underline">
+              support@trylitos.com
             </a>{" "}
             from your account address to export or delete your account-linked
             Litos data.
@@ -285,8 +287,8 @@ export default function Privacy() {
         <Section title="Questions">
           <p>
             Same address:{" "}
-            <a href="mailto:mehekbuilds@gmail.com" className="text-ink underline">
-              mehekbuilds@gmail.com
+            <a href="mailto:support@trylitos.com" className="text-ink underline">
+              support@trylitos.com
             </a>
             . You will get an answer from a person.
           </p>
