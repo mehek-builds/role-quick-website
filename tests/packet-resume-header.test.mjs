@@ -69,19 +69,19 @@ describe("the packet resume preview", () => {
     );
   });
 
-  /* Legacy packets predate `_contact` and carry no name. Without this, `{name && <p>}` followed by
-     a sibling `{spec.target_role && <p>}` leaves the ROLE as the first line on exactly those
-     packets, which is the reported bug reproduced on old data. The role must be nested inside the
-     name branch so it cannot outlive it. */
-  test("never lets the target role lead when there is no name", () => {
-    const header = PACKET.slice(PACKET.indexOf("function ResumePaper"));
-    const roleAt = header.indexOf("{spec.target_role");
-    const nameAt = header.indexOf("{name &&");
-    const contactAt = header.indexOf("{contact &&");
-    assert.ok(nameAt !== -1 && roleAt !== -1, "both the name and the target role must render");
-    assert.ok(
-      roleAt > nameAt && roleAt < contactAt,
-      "the target role must sit inside the name branch, not as a sibling that survives a missing name"
+  /* The renderer no longer prints the target role, so neither does this. `spec.target_role` is
+     still on the packet and still drives targeting, which is precisely why this needs pinning: the
+     field is right there, and the obvious reading of a field named target_role on a resume spec is
+     that the resume shows it. It does not. */
+  test("does not print the target role, because the document does not", () => {
+    const paper = PACKET.slice(
+      PACKET.indexOf("function ResumePaper"),
+      PACKET.indexOf("function SectionHeading")
+    );
+    assert.doesNotMatch(
+      paper,
+      /\{spec\.target_role\}/,
+      "the header is the name, a rule, and the contact line; a role line here is not on the PDF"
     );
   });
 
@@ -121,11 +121,19 @@ describe("the packet resume preview", () => {
     );
   });
 
-  test("joins skills with the separator the renderer uses", () => {
+  /* Both separators, pinned together. They drifted from the PDF independently and only the skills
+     one was caught the first time, so a test that covers one and not the other has already been
+     proven insufficient. engine/resumeRender.ts is the reference for both. */
+  test("uses the separators the renderer uses", () => {
     assert.match(
       PACKET,
       /skills\.join\(" • "\)/,
       "the renderer joins skills with a bullet, not a middot"
+    );
+    assert.match(
+      PACKET,
+      /\.join\(" \| "\)/,
+      "the renderer joins contact details with a pipe, not a middot"
     );
   });
 

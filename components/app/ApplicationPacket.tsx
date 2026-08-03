@@ -52,7 +52,10 @@ function contactLine(spec: GeneratedResume["spec"]): string {
   return ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]
     .map((key) => contact[key])
     .filter((value): value is string => Boolean(value && value.trim()))
-    .join(" · ");
+    /* A PIPE, because that is what the renderer joins with. Missed when the skills separator was
+       corrected: two separators drifted from the PDF and only one got fixed, which is the exact
+       failure mode this pane keeps having. The renderer's contactLine is the reference. */
+    .join(" | ");
 }
 
 /* The resume, read-only, from the same spec the editor renders. Black and white
@@ -86,21 +89,15 @@ function ResumePaper({
   const educationAfterExperience = spec.education_position === "after_experience";
   return (
     <div className="rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black">
-      {/* THE ROLE NEVER LEADS. Packets generated before `_contact` was stored have no name (the
-          backend has a standing 409 for exactly those: "This older resume cannot be edited in the
-          dashboard"), and a bare `{name && ...}` would leave the target role as the visually first
-          line on those. That is the original complaint reproduced on legacy data: a resume headed
-          by a job title reads as a document about the job rather than about the applicant. With no
-          name to sit under, the role has nothing to qualify, so education leads instead and does it
-          under a real EDUCATION heading. */}
-      {name && (
-        <>
-          <p className="text-center text-[14px] font-semibold tracking-tight">{name}</p>
-          {spec.target_role && (
-            <p className="mt-0.5 text-center text-[9px] font-semibold">{spec.target_role}</p>
-          )}
-        </>
-      )}
+      {/* THE TARGET ROLE IS NOT PART OF THE HEADER. The renderer stopped printing it (backend
+          "the header is the applicant, not the posting's job title"), so printing it here would put
+          a line in the preview that is not on the file the employer receives, which is the exact
+          class of drift this pane keeps being fixed for. `spec.target_role` is still on the packet
+          and still drives targeting; it is just not something the document says.
+
+          The header is now the name, a rule, and the contact line. On packets predating `_contact`
+          there is no name, so education leads under a real EDUCATION heading. */}
+      {name && <p className="text-center text-[14px] font-semibold tracking-tight">{name}</p>}
       {/* Identity above the rule, ways to reach that person below it: two different kinds of
           fact, so the eye gets a divider rather than a paragraph. Same rule the PDF draws. */}
       {contact && (
