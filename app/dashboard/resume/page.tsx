@@ -337,6 +337,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
       : [];
   const name = str("full_name") ?? str("name");
   const skills = list("skills");
+  const languages = list("languages");
   const targetRoles = list("target_roles");
   const gradYear = profile["grad_year"];
   return (
@@ -350,6 +351,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         gradDate={str("grad_date") ?? (typeof gradYear === "number" ? String(gradYear) : "")}
         objective={str("objective") ?? ""}
         skills={skills}
+        languages={languages}
         targetRoles={targetRoles}
         onSaved={onProfileChange}
       />
@@ -384,6 +386,7 @@ type ParsedProfileDraft = {
   grad_date: string;
   objective: string;
   skills: string;
+  languages: string;
   target_roles: string;
 };
 
@@ -396,6 +399,7 @@ function ParsedProfileEditor({
   gradDate,
   objective,
   skills,
+  languages,
   targetRoles,
   onSaved,
 }: {
@@ -407,6 +411,7 @@ function ParsedProfileEditor({
   gradDate: string;
   objective: string;
   skills: string[];
+  languages: string[];
   targetRoles: string[];
   onSaved: (profile: Record<string, unknown>) => void;
 }) {
@@ -419,6 +424,7 @@ function ParsedProfileEditor({
     grad_date: gradDate,
     objective,
     skills: skills.join(", "),
+    languages: languages.join(", "),
     target_roles: targetRoles.join("\n"),
   });
   const [draft, setDraft] = useState<ParsedProfileDraft>(initialDraft);
@@ -459,6 +465,7 @@ function ParsedProfileEditor({
           grad_date: draft.grad_date,
           objective: draft.objective,
           skills: parseEditableList(draft.skills),
+          languages: parseEditableList(draft.languages),
           ...(rolesChanged ? { target_roles: roles } : {}),
         }),
       });
@@ -494,6 +501,10 @@ function ParsedProfileEditor({
         </div>
         {objective && <div className="mt-4"><KV label="Objective" value={objective} /></div>}
         {skills.length > 0 && <ProfileChips label="Skills" values={skills} />}
+        {/* Shown as its own group rather than merged into Skills. The two lists are read for
+            different reasons, and the parser used to run them together, which is how six spoken
+            languages ended up leading the skills section of every generated resume. */}
+        {languages.length > 0 && <ProfileChips label="Languages" values={languages} />}
         {targetRoles.length > 0 && <ProfileChips label="Target roles" values={targetRoles} />}
       </div>
     );
@@ -518,6 +529,15 @@ function ParsedProfileEditor({
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <TextAreaField label="Skills" value={draft.skills} onChange={(nextSkills) => setDraft({ ...draft, skills: nextSkills })} rows={4} hint="Separate skills with commas or new lines." />
         <TextAreaField label="Target roles" value={draft.target_roles} onChange={(target_roles) => setDraft({ ...draft, target_roles })} rows={4} hint="Keep five roles, one per line. Any real job title is valid." />
+      </div>
+      <div className="mt-4">
+        <TextAreaField
+          label="Languages"
+          value={draft.languages}
+          onChange={(nextLanguages) => setDraft({ ...draft, languages: nextLanguages })}
+          rows={2}
+          hint="Spoken languages your resume lists. Keep these out of Skills. To tell employers which ones you are fluent in, use Settings."
+        />
       </div>
       <div className="mt-4">
         <TextAreaField label="Objective or summary" value={draft.objective} onChange={(nextObjective) => setDraft({ ...draft, objective: nextObjective })} rows={3} hint="Optional. Keep this true to your experience." />
