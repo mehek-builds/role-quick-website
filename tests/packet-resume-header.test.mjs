@@ -145,6 +145,25 @@ describe("the packet resume preview", () => {
     );
   });
 
+  /* The GPA, in the renderer's order: degree, GPA, coursework. Absent shows nothing, because a
+     resume that never stated a GPA is not missing one and the product does not keep asking for a
+     number the student chose not to give. */
+  test("shows the GPA where drawEducation prints it", () => {
+    const education = PACKET.slice(
+      PACKET.indexOf("function Education"),
+      PACKET.indexOf("function SectionHeading")
+    );
+    const degreeAt = education.indexOf("{spec.degree &&");
+    const gpaAt = education.indexOf("{spec.gpa &&");
+    const courseworkAt = education.indexOf("{spec.coursework &&");
+    assert.ok(gpaAt !== -1, "the preview must show a GPA the rendered file prints");
+    assert.ok(
+      degreeAt < gpaAt && gpaAt < courseworkAt,
+      "degree, then GPA, then coursework: the order drawEducation() emits"
+    );
+    assert.match(education, /GPA: \{spec\.gpa\}/, "printed with the same label the renderer uses");
+  });
+
   test("reads only contact keys the backend actually writes", () => {
     for (const key of KEYS_THE_BACKEND_NEVER_WRITES) {
       assert.doesNotMatch(

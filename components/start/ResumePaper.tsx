@@ -502,6 +502,16 @@ function Education({ spec, index, first }: { spec: ResumeSpec; index: number; fi
           </div>
         </Line>
       )}
+      {/* READ-ONLY, unlike every other line on this page, and deliberately so. applyResumePolicy
+          rewrites `gpa` from the parsed profile on every generation, so an edit made here would
+          survive the base resume and then silently revert on the first tailored one. An editable
+          control that quietly loses the edit is worse than no control. The GPA is corrected where
+          it is stored, not where it is printed. */}
+      {spec.gpa && (
+        <Line index={index}>
+          <div className="mt-[0.2em] leading-[1.4]">GPA: {spec.gpa}</div>
+        </Line>
+      )}
       {(spec.coursework || editing) && (
         <Line index={index}>
           <div className="mt-[0.2em] leading-[1.4]">
