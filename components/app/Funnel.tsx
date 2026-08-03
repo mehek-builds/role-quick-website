@@ -96,11 +96,21 @@ export function Funnel() {
        the surface all belong to the parent now, so Momentum, Applications and Emails read as three
        readings of one instrument rather than three separate reports. */
     <section className="flex flex-col p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-medium text-ink">Momentum</h2>
-        <span className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</span>
-      </div>
+      {/* "Last 14 days" used to sit up here as a card-level eyebrow, and it was false for everything
+          under it: buildFunnel windows only `days`, while applications_submitted, resumes_tailored
+          and fields_filled are counted over the student's whole history. The card read "LAST 14 DAYS"
+          over an all-time 13. The window moved down to caption the bars, the one thing it describes.
+          Rescoping the figures to 14 days instead would have meant changing what /metrics/funnel
+          returns to make a label true, and would have taken away the running total a student opens
+          this panel to watch. The figures keep their own wording, see the note below. */}
+      <h2 className="text-base font-medium text-ink">Momentum</h2>
       <div className="mt-4 grid grid-cols-3 gap-3">
+        {/* The wording of these two labels is Mehek's call in 44edb10 and is not a drive-by fix.
+            "all time counter" was chosen over "applications sent, all time" to hold the label to one
+            line and keep the three figures on a common baseline. The cost is recorded in that commit
+            and is known and accepted: "applications" now appears nowhere in Momentum, because the
+            rail that carried the noun was removed for reading as a quota beside the tier, so neither
+            of the first two figures names what it counts. Reopen it with her, not from here. */}
         <Stat value={f.applications_submitted} label="all time counter" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
@@ -111,23 +121,32 @@ export function Funnel() {
 
       {!f.too_early && (
         <div className="mt-4">
-          {/* A fixed plot box. The bars used to be drawn into whatever vertical space the stretched
-              card had left over, so a 14-day history with two active days rendered as two marks
-              floating in an empty field and read as a rendering fault rather than a chart. */}
-          <div className="flex h-8 items-end gap-1" role="img" aria-label={dailyLabel(f)}>
-            {f.days.map((day) => (
-              <div key={day.day} className="flex h-full flex-1 flex-col justify-end">
-                {/* No minimum height on an empty day. A 2px floor made a day with one
-                    application look identical to a day with none whenever the peak was high. */}
-                <div
-                  className={day.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
-                  style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 32)}px` }}
-                  title={`${day.day}: ${day.submitted} sent`}
-                />
-                <span className="sr-only">{day.day}</span>
-              </div>
-            ))}
-          </div>
+          {/* The caption and the bars are one figure, and the field count is deliberately OUTSIDE it.
+              fields_filled is an all-time sum like the two figures above, so leaving it under the
+              caption inside a shared parent would have put "LAST 14 DAYS" over an all-time number
+              again, two lines down instead of four, and a caption binds harder than a card eyebrow.
+              Its own wording is left exactly as it shipped: moving the caption is the whole fix, and
+              the copy on this card is Mehek's call, not this change's. */}
+          <figure>
+            <figcaption className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</figcaption>
+            {/* A fixed plot box. The bars used to be drawn into whatever vertical space the stretched
+                card had left over, so a 14-day history with two active days rendered as two marks
+                floating in an empty field and read as a rendering fault rather than a chart. */}
+            <div className="mt-2 flex h-8 items-end gap-1" role="img" aria-label={dailyLabel(f)}>
+              {f.days.map((day) => (
+                <div key={day.day} className="flex h-full flex-1 flex-col justify-end">
+                  {/* No minimum height on an empty day. A 2px floor made a day with one
+                      application look identical to a day with none whenever the peak was high. */}
+                  <div
+                    className={day.submitted === 0 ? "w-full border-t border-border" : "w-full rounded-t-sm bg-brand/70"}
+                    style={day.submitted === 0 ? undefined : { height: `${Math.max(4, (day.submitted / peak) * 32)}px` }}
+                    title={`${day.day}: ${day.submitted} sent`}
+                  />
+                  <span className="sr-only">{day.day}</span>
+                </div>
+              ))}
+            </div>
+          </figure>
           {f.fields_filled > 0 && <p className="mt-2 text-label text-faint">{f.fields_filled} questions filled for you</p>}
         </div>
       )}
