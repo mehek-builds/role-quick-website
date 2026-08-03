@@ -437,6 +437,9 @@ export type ExperienceEntry = {
   org: string;
   title?: string | null;
   date_range?: string | null;
+  /** Where the work happened. Must be round-tripped on save: PUT /profile/experience-bank replaces
+   *  the whole bank, so a field the client omits is erased rather than left alone. */
+  location?: string | null;
   bullet_variants: string[];
   tags?: string[] | null;
 };
