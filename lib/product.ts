@@ -13,8 +13,10 @@ export const PRODUCT_FALLBACK = {
     privacy: "https://trylitos.com/privacy",
     // rolequick.com stopped resolving after the rename. This fallback is
     // only used when the backend meta call fails, but it was still a dead
-    // address shipped as the support contact.
-    supportEmail: "mehekbuilds@gmail.com",
+    // address shipped as the support contact. Now matches the live value the
+    // backend serves from PRODUCT_SUPPORT_EMAIL, so the fallback and the real
+    // thing cannot drift into two different support addresses again.
+    supportEmail: "support@trylitos.com",
   },
 } as const;
 
