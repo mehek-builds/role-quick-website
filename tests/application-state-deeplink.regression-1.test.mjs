@@ -33,8 +33,19 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 /** Comments carry the words this file asserts on, so they come off before any structural check. */
 const stripComments = (source) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
-const applications = read("app/dashboard/applications/page.tsx");
+const applicationsRaw = read("app/dashboard/applications/page.tsx");
 const home = read("app/dashboard/page.tsx");
+
+/* EVERY structural assertion in this file reads this, never the raw source.
+   Stripping was applied to exactly one assertion before, which left the guard defeatable from both
+   directions and the claim in that one comment only half true. A mutant that hard-coded
+   `const applicationFilter: ApplicationFilter = "all"` while leaving the real expression quoted in
+   a comment kept the suite fully green with every Home control dead again, because the positive
+   assertions were matching prose. The mirror image was live too: a comment that merely QUOTED the
+   banned `useState<ApplicationFilter>` pattern, as the explanatory comments here and in the page
+   both do, turned the suite red for a comment-only edit. Code is checked; prose is not; in both
+   directions. */
+const applications = stripComments(applicationsRaw);
 
 describe("the ?state= deep link resolves to a view", () => {
   test("every value Home links with is a view the Tracker honours", () => {
@@ -49,17 +60,75 @@ describe("the ?state= deep link resolves to a view", () => {
     }
   });
 
-  test("the page actually seeds its filter from the URL", () => {
-    /* The parser being correct proves nothing if the page never calls it. Dropping the initialiser
-       for a bare `useState("all")` survived every other assertion in this file: the parser still
-       passed its own unit tests, the ledger still rendered whenever a filter was set, and no filter
-       could ever be set, so all four Home controls went silently dead exactly as they did in
-       ISSUE-037. The wiring is the thing the deep link rides on, so it is pinned here. */
+  test("the page actually reads its filter from the URL", () => {
+    /* The parser being correct proves nothing if the page never calls it. Dropping the read for a
+       bare `useState("all")` survived every other assertion in this file: the parser still passed
+       its own unit tests, the ledger still rendered whenever a filter was set, and no filter could
+       ever be set, so all four Home controls went silently dead exactly as they did in ISSUE-037.
+
+       RE-POINTED for ISSUE-042. This used to pin the exact `useState(() => ...window.location...)`
+       initialiser, which is the mechanism that turned out to BE the second bug, so the assertion
+       was holding the defect in place. What has to be true is that the filter comes from the URL,
+       not that it comes from it once at mount. */
     assert.match(
       applications,
-      /useState<ApplicationFilter>\(\s*\(\) => \(typeof window === "undefined" \? "all" : applicationFilterFromSearch\(window\.location\.search\)\),?\s*\)/,
-      "the filter's initial value has to come from the URL, or ?state= sets nothing at all",
+      /applicationFilterFromSearch\(searchParams\.toString\(\)\)/,
+      "the filter has to be read from the router's live view of the query",
     );
+    assert.match(applications, /const searchParams = useSearchParams\(\)/, "and that view is useSearchParams");
+  });
+
+  test("the filter is not read once at mount", () => {
+    /* ISSUE-042, the defect this file did not catch. `useState(() => applicationFilterFromSearch(
+       window.location.search))` works on a hard load and fails on a click, which is the only path a
+       student ever takes: the App Router renders the incoming route inside a transition BEFORE it
+       commits the new URL, so the initialiser samples `/dashboard` with an empty search and
+       resolves to "all", and being first-mount-only nothing re-runs it when the URL lands. Verified
+       in a driven browser by logging window.location inside the initialiser on a real click.
+
+       Both halves are banned here. A lazy initialiser is a one-shot read, and window.location is
+       the value that is stale during the transition, so either one alone reintroduces ISSUE-042. */
+    assert.doesNotMatch(
+      applications,
+      /useState<ApplicationFilter>/,
+      "the filter cannot live in state seeded at mount: a click arrives before the URL does",
+    );
+    assert.doesNotMatch(
+      applications,
+      /applicationFilterFromSearch\(window\.location/,
+      "window.location is the stale value during a client-side navigation; the router's is not",
+    );
+  });
+
+  test("choosing a view writes it back to the URL", () => {
+    /* The URL is the single source of truth, so the select cannot only set local state: that would
+       be a second copy for the reactive read to stomp on the next render. Writing back is also what
+       makes the filtered view shareable and reload-safe.
+
+       replace, not push: a filter is not a place. Pushing would make Back walk every option the
+       student tried instead of returning them to Home. */
+    const setter = applications.slice(applications.indexOf("const setApplicationFilter = useCallback"));
+    const body = setter.slice(0, setter.indexOf("}, ["));
+    assert.match(body, /router\.replace\(/, "the chosen view has to reach the URL");
+    assert.doesNotMatch(body, /router\.push\(/, "a filter change is not a history entry");
+    assert.match(body, /params\.delete\("state"\)/, "Everything clears the parameter rather than writing state=all");
+    assert.match(body, /params\.set\("state", next\)/, "and any other view writes itself");
+    assert.match(body, /scroll: false/, "filtering must not throw the reader to the top of the page");
+  });
+
+  test("the route can render a query-dependent view at all", () => {
+    /* The boundary is DEFENSIVE, not required. An earlier version of this comment said the build
+       fails without it and the route loses its static shell; that was checked and is false on the
+       Next version this repo pins. Removing the wrapper with a wiped .next still builds, and
+       /dashboard/applications is still marked static.
+
+       It is kept and pinned because useSearchParams is the documented reason a route opts into
+       client-side rendering, that behaviour has changed across Next majors, and the cost here is a
+       fallback the page already showed while its packets loaded. Keeping it means an upgrade
+       cannot quietly turn the query read into a blank first paint. The claim is corrected rather
+       than deleted: false comments on this audit have twice been cited as evidence by later work. */
+    assert.match(applications, /<Suspense fallback=/, "the query read needs a boundary above it");
+    assert.match(applications, /export default function ApplicationsPage\(\)/, "which is what the route's default export is for");
   });
 
   test("the list and the heading are driven by that same filter", () => {
@@ -115,7 +184,7 @@ describe("the ?state= deep link resolves to a view", () => {
 
 describe("the chosen view is visible on the page it lands on", () => {
   const ledger = (() => {
-    const source = stripComments(applications);
+    const source = applications;
     const start = source.indexOf('<section aria-labelledby="application-ledger-heading"');
     assert.notEqual(start, -1, "expected the ledger section to still be labelled by its heading id");
     const end = source.indexOf("</section>", start);
