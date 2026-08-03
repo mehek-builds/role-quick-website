@@ -33,8 +33,19 @@ const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf
 /** Comments carry the words this file asserts on, so they come off before any structural check. */
 const stripComments = (source) => source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
-const applications = read("app/dashboard/applications/page.tsx");
+const applicationsRaw = read("app/dashboard/applications/page.tsx");
 const home = read("app/dashboard/page.tsx");
+
+/* EVERY structural assertion in this file reads this, never the raw source.
+   Stripping was applied to exactly one assertion before, which left the guard defeatable from both
+   directions and the claim in that one comment only half true. A mutant that hard-coded
+   `const applicationFilter: ApplicationFilter = "all"` while leaving the real expression quoted in
+   a comment kept the suite fully green with every Home control dead again, because the positive
+   assertions were matching prose. The mirror image was live too: a comment that merely QUOTED the
+   banned `useState<ApplicationFilter>` pattern, as the explanatory comments here and in the page
+   both do, turned the suite red for a comment-only edit. Code is checked; prose is not; in both
+   directions. */
+const applications = stripComments(applicationsRaw);
 
 describe("the ?state= deep link resolves to a view", () => {
   test("every value Home links with is a view the Tracker honours", () => {
@@ -82,11 +93,8 @@ describe("the ?state= deep link resolves to a view", () => {
       /useState<ApplicationFilter>/,
       "the filter cannot live in state seeded at mount: a click arrives before the URL does",
     );
-    /* Comments off first. The code above this one explains the bug by quoting the defective line,
-       and a check that cannot tell a warning from the thing it warns about is worse than none. */
-    const code = stripComments(applications);
     assert.doesNotMatch(
-      code,
+      applications,
       /applicationFilterFromSearch\(window\.location/,
       "window.location is the stale value during a client-side navigation; the router's is not",
     );
@@ -109,9 +117,16 @@ describe("the ?state= deep link resolves to a view", () => {
   });
 
   test("the route can render a query-dependent view at all", () => {
-    /* useSearchParams opts the route out of the static shell unless a Suspense boundary sits above
-       it. Without one the build fails, so this is really a guard on someone "simplifying" the
-       wrapper away and discovering it in CI rather than here. */
+    /* The boundary is DEFENSIVE, not required. An earlier version of this comment said the build
+       fails without it and the route loses its static shell; that was checked and is false on the
+       Next version this repo pins. Removing the wrapper with a wiped .next still builds, and
+       /dashboard/applications is still marked static.
+
+       It is kept and pinned because useSearchParams is the documented reason a route opts into
+       client-side rendering, that behaviour has changed across Next majors, and the cost here is a
+       fallback the page already showed while its packets loaded. Keeping it means an upgrade
+       cannot quietly turn the query read into a blank first paint. The claim is corrected rather
+       than deleted: false comments on this audit have twice been cited as evidence by later work. */
     assert.match(applications, /<Suspense fallback=/, "the query read needs a boundary above it");
     assert.match(applications, /export default function ApplicationsPage\(\)/, "which is what the route's default export is for");
   });
@@ -169,7 +184,7 @@ describe("the ?state= deep link resolves to a view", () => {
 
 describe("the chosen view is visible on the page it lands on", () => {
   const ledger = (() => {
-    const source = stripComments(applications);
+    const source = applications;
     const start = source.indexOf('<section aria-labelledby="application-ledger-heading"');
     assert.notEqual(start, -1, "expected the ledger section to still be labelled by its heading id");
     const end = source.indexOf("</section>", start);

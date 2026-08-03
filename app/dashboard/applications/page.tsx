@@ -66,10 +66,15 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   jobId: null,
 };
 
-/* useSearchParams needs a Suspense boundary above it, or the whole route opts out of the static
-   shell and Next fails the build rather than shipping a page that renders nothing until the query
-   is known. The fallback is the same shimmer the page shows while its own packets load, so the
-   boundary is invisible: this is a client dashboard whose first paint was already a loading state. */
+/* A Suspense boundary over the useSearchParams read. DEFENSIVE, not required: this was first
+   written down as "Next fails the build without it", and that was checked afterwards and is not
+   true on the version this repo pins. Removing the wrapper with a wiped .next still builds, and
+   this route is still prerendered.
+
+   It stays because useSearchParams is the documented reason a route opts into client-side
+   rendering, that behaviour has moved across Next majors, and the price is a fallback the page
+   already showed while its own packets loaded. So the boundary is invisible here and it means a
+   future upgrade cannot quietly turn the query read into a blank first paint. */
 export default function ApplicationsPage() {
   return (
     <Suspense fallback={<ShimmerRows rows={4} />}>
