@@ -101,7 +101,7 @@ export function Funnel() {
         <span className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</span>
       </div>
       <div className="mt-4 grid grid-cols-3 gap-3">
-        <Stat value={f.applications_submitted} label="applications sent, all time" />
+        <Stat value={f.applications_submitted} label="all time counter" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.
