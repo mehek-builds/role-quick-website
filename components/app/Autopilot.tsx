@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getOnboardingState, setAutomationSettings } from "@/lib/api";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+import type { JobMatch } from "@/features/applications";
 
 /**
  * Sending without being asked, on the page where it happens.
@@ -170,7 +171,13 @@ export type NextMatch = {
   id: string;
   company: string;
   role: string;
-  score?: number | null;
+  /**
+   * The same shape Jobs and Home carry, and for the same reason (ISSUE-038): this row shows a bare
+   * percentage next to a company and a role with no document on screen, so it must answer the
+   * question every other job card answers and it must be interrogable where it sits. `null` means
+   * there is nothing honest to print, never a zero.
+   */
+  match?: JobMatch | null;
 };
 
 /**
@@ -296,8 +303,13 @@ export function NextMatchCard({
           <span className="min-w-0">
             <span className="flex flex-wrap items-baseline gap-2">
               <span className="truncate text-sm font-medium text-ink">{match.role}</span>
-              {typeof match.score === "number" && (
-                <span className="font-mono text-[11px] text-muted">{Math.round(match.score)}% match</span>
+              {match.match && (
+                <span
+                  className="font-mono text-[11px] text-muted"
+                  title={`${match.match.band ?? "Match"}: your resume covers ${match.match.matched} of the ${match.match.total} requirements Litos counted in this posting.`}
+                >
+                  {Math.max(0, Math.min(100, Math.round(match.match.score)))}% match
+                </span>
               )}
             </span>
             <span className="block truncate text-xs text-muted">{match.company}</span>

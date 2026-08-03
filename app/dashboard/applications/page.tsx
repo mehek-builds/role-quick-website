@@ -20,9 +20,11 @@ import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRel
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
-import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { fetchRequirements } from "@/features/applications";
+import { nextMatchScoreRequest } from "@/features/applications";
+import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
@@ -33,7 +35,7 @@ import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
-import type { JdMatchResponse } from "@/features/applications";
+import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
@@ -130,6 +132,13 @@ function Applications() {
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
+  /* ISSUE-040: the composer's own refusal, kept OUT of the page-level `error` on purpose.
+     "Fill in all four boxes first." used to render in the banner above the composer, which on a
+     723px viewport measured y = -281 while the button that raised it sat at y = 434: announced to a
+     screen reader, invisible to everyone else, because the job description textarea alone is ~320px
+     tall. It now renders beside the button and names the boxes it is about, so it is perceivable
+     from where the action was taken without any scrolling or animation. One alert, not two. */
+  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[] } | null>(null);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [coverLetterBody, setCoverLetterBody] = useState("");
@@ -179,6 +188,8 @@ function Applications() {
   const closeNewApplication = useCallback(() => {
     setShowNewApplication(false);
     setPendingJob(null);
+    // A refusal about a form that is no longer open would greet the next student to open it.
+    setComposerRefusal(null);
 
     replaceClosedComposerUrl(
       window.location,
@@ -458,40 +469,57 @@ function Applications() {
     [currentMatches, qaMode, reviewablePackets],
   );
 
+  /* The BASE resume, once, from the same source use-job-match-scores.ts reads. The next-best-match
+     row prints a bare percentage beside a company and a role with no document on screen, so it has
+     to be the number every other job card carries; scoring the tailored packet here is what made
+     one psiquantum posting read 33 on Home and 42% on this row in the same session (ISSUE-038). */
+  const [baseResumeText, setBaseResumeText] = useState<string | null>(null);
+  useEffect(() => {
+    if (qaMode !== false) return;
+    let cancelled = false;
+    void getBaseResume()
+      .then((stored) => !cancelled && stored?.spec && setBaseResumeText(resumeSpecText(stored.spec)))
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [qaMode]);
+
   /* Keyed by the packet it was measured against. A bare number would survive the card changing
      underneath it and print one job's score on another job's row. */
-  const [nextScore, setNextScore] = useState<{ id: string; score: number | null } | null>(null);
+  const [nextScore, setNextScore] = useState<{ id: string; match: JobMatch | null } | null>(null);
   useEffect(() => {
     if (qaMode !== false || selectedId) return;
-    const jd = nextPacket?.spec._review?.jd_text;
-    if (!nextPacket || !jd) return;
+    const request = nextMatchScoreRequest(nextPacket, baseResumeText);
+    if (!nextPacket || !request) return;
     let cancelled = false;
-    /* The SAME measurement the student sees when they open this packet.
-     *
-     * This card used to read the term score while opening the packet showed the requirement
-     * breakdown, so one posting carried two numbers on two screens: 27% here, five of six met
-     * there. That is ISSUE-014's shape, and it does not stop being that because both numbers are
-     * defensible on their own.
-     *
-     * Affordable here for the same reason the breakdown is affordable on the review screen: this
-     * is ONE posting, not a list, and the packet was warmed when it was built, so this is a cache
-     * read. It falls back to no number rather than to the other metric, because a number that
-     * silently changes meaning is the thing being fixed. */
-    void fetchRequirements(jd, nextPacket.spec, { company: nextPacket.job_context.company, role: nextPacket.job_context.role, job_id: nextPacket.job_context.job_id })
-      .then((result) => !cancelled && setNextScore({ id: nextPacket.id, score: result.score }))
+    /* The SAME question Home and Jobs answer about this posting: how much of what it asks for is on
+       the student's base resume. See nextMatchScoreRequest for why the packet is not the subject
+       here and why the frozen jd_text yields to the live posting row. */
+    void fetchJdMatch(request.jdText, request.resumeText, request.jobContext)
+      .then((result) => {
+        if (cancelled) return;
+        setNextScore({
+          id: nextPacket.id,
+          // Never a zero we did not measure: unscorable resolves to no number at all.
+          match: result.scorable && result.score !== null
+            ? { score: result.score, band: result.band?.label ?? null, matched: result.matched.length, total: result.term_count }
+            : null,
+        });
+      })
       // No number rather than a wrong one.
       .catch(() => null);
     return () => {
       cancelled = true;
     };
-  }, [nextPacket, qaMode, selectedId]);
+  }, [baseResumeText, nextPacket, qaMode, selectedId]);
 
   const nextMatch: NextMatch | null = nextPacket
     ? {
         id: nextPacket.id,
         company: nextPacket.job_context.company ?? "Company",
         role: nextPacket.job_context.role ?? "Role",
-        score: nextScore?.id === nextPacket.id ? nextScore.score : null,
+        match: nextScore?.id === nextPacket.id ? nextScore.match : null,
       }
     : null;
 
@@ -548,6 +576,8 @@ function Applications() {
      remove, just arrived at from the other direction. Changing the link or the description is not
      a change of identity, so those leave it alone. */
   function applyDraftEdit(next: NewApplicationDraft) {
+    // The refusal described the form as it was. Typing is the student answering it.
+    setComposerRefusal(null);
     setNewApplication((current) => {
       const identityChanged = next.company !== current.company || next.role !== current.role;
       return identityChanged ? { ...next, jobId: null } : next;
@@ -594,16 +624,18 @@ function Applications() {
     const role = draft.role.trim();
     const portalUrl = draft.portalUrl.trim();
     const jobDescription = draft.jobDescription.trim();
-    if (!company || !role || !portalUrl || jobDescription.length < MIN_JD_CHARS) {
-      setError("Fill in all four boxes first.");
+    /* Both refusals go to composerRefusal, never to setError: they are answers to a button inside
+       the composer and have to appear next to it. See the state declaration for the measurement. */
+    const missing = missingApplicationFields({ company, role, portalUrl, jobDescription });
+    if (missing.length > 0) {
+      setComposerRefusal({ message: "Fill in all four boxes first.", fields: missing });
       return;
     }
-    try {
-      if (new URL(portalUrl).protocol !== "https:") throw new Error("Job URL must use HTTPS");
-    } catch {
-      setError("Enter a complete job URL beginning with https://.");
+    if (!isHttpsJobUrl(portalUrl)) {
+      setComposerRefusal({ message: "Enter a complete job URL beginning with https://.", fields: ["portalUrl"] });
       return;
     }
+    setComposerRefusal(null);
 
     setCreating(true);
     setError(null);
@@ -946,6 +978,7 @@ function Applications() {
           creating={creating}
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
+          refusal={composerRefusal}
         />
       )}
       {legacyCount > 0 && !reviewOpen && (
@@ -1280,6 +1313,7 @@ function NewApplicationPanel({
   creating,
   onFetchJobDescription,
   extractingJd,
+  refusal,
 }: {
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
@@ -1287,8 +1321,11 @@ function NewApplicationPanel({
   creating: boolean;
   onFetchJobDescription: () => void;
   extractingJd: boolean;
+  /** Why the last press of "Make my resume" did nothing, and which boxes it was about. */
+  refusal: { message: string; fields: ApplicationDraftField[] } | null;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
+  const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
   return (
     <Card className="p-6">
       <div className="max-w-2xl">
@@ -1297,12 +1334,12 @@ function NewApplicationPanel({
         <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" />
-        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineer" />
+        <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" invalid={invalid("company")} />
+        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineer" invalid={invalid("role")} />
       </div>
       <div className="mt-4 flex items-end gap-3">
         <div className="flex-1">
-          <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" />
+          <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" invalid={invalid("portalUrl")} />
         </div>
         <Button
           type="button"
@@ -1312,8 +1349,14 @@ function NewApplicationPanel({
         </Button>
       </div>
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
-      <div className="mt-5 flex justify-end">
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-border"}`} />
+      {/* Beside the button that raised it, not in the page banner far above it. The button and this
+          line are in the same flex row, so a student who can reach the button can read the refusal
+          without scrolling: no scrollIntoView, no requestAnimationFrame, nothing that stops running
+          in a background tab. role="alert" is here and nowhere else for this message, so a screen
+          reader still hears it exactly once. */}
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+        {refusal && <p role="alert" className="mr-auto text-sm text-danger">{refusal.message}</p>}
         <Button type="button" onClick={onGenerate} disabled={creating} >
           {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
         </Button>
@@ -1322,12 +1365,15 @@ function NewApplicationPanel({
   );
 }
 
-function ApplicationField({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string }) {
+function ApplicationField({ label, value, onChange, placeholder, type = "text", invalid = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string; invalid?: boolean }) {
   const id = `new-application-${label.toLowerCase().replaceAll(" ", "-")}`;
   return (
     <div>
       <label className="block text-xs font-medium text-muted" htmlFor={id}>{label}</label>
-      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1.5 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand" />
+      {/* aria-invalid rather than a second message per field: the one alert beside the button says
+          what is wrong, and this says which boxes it meant, in both channels at once. Omitted (not
+          set to "false") when valid, so nothing is announced about a field that is fine. */}
+      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-invalid={invalid || undefined} className={`mt-1.5 w-full rounded-full border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand ${invalid ? "border-danger" : "border-border"}`} />
     </div>
   );
 }

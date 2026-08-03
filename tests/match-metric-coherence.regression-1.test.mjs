@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { rankJobs } from "../features/applications/domain/daily-matches.ts";
+import { nextMatchScoreRequest } from "../features/applications/domain/match-model.ts";
 
 // Regression: ISSUE-014, one card asserted two contradictory things about the same posting.
 // Found by a live production audit on 2026-08-03.
@@ -36,6 +37,13 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
      a comment quoting the string it is supposed to be checking for. */
   const jobsPage = code(readFileSync("app/dashboard/jobs/page.tsx", "utf8"));
   const homePage = code(readFileSync("app/dashboard/page.tsx", "utf8"));
+  /* ISSUE-038 added this third file. "Every surface" was in this describe's title and only Jobs and
+     Home were ever in the list, which is how the Tracker's next-best-match row went on printing a
+     different number for the same posting (33 on Home, 42% here) through the whole of the one-number
+     work on 2026-08-04. A title is not an assertion. Behaviour for this row is asserted in
+     tests/next-match-score-source.regression-1.test.mjs; what belongs HERE is that it is in the
+     list at all. */
+  const trackerPage = code(readFileSync("app/dashboard/applications/page.tsx", "utf8"));
 
   test("both screens read the same hook", () => {
     for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
@@ -43,10 +51,18 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     }
   });
 
+  test("the Tracker's next-best-match row reads the same metric the hook does", () => {
+    // Not the hook itself: this is ONE packet, not a list of postings, so it makes the same request
+    // by hand. What has to be shared is the SUBJECT and the endpoint, which is what these check.
+    assert.match(trackerPage, /getBaseResume\(\)/, "the Tracker row must score the base resume");
+    assert.match(trackerPage, /fetchJdMatch\(request\.jdText, request\.resumeText, request\.jobContext\)/);
+    assert.doesNotMatch(trackerPage, /resumeSpecText\(nextPacket\.spec\)/, "the tailored packet is not the subject of this row");
+  });
+
   test("no list surface renders preference_score as a number", () => {
     // preference_score never opens the resume. It may order the feed and it may name reasons; it
     // may not be the number a student reads as a match.
-    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
+    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage], ["Tracker", trackerPage]]) {
       assert.doesNotMatch(src, /\bpreference_score\b/, `${name} must not render preference_score`);
     }
   });
@@ -63,6 +79,16 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     // review screen is forbidden to.
     assert.match(jobsPage, /requirements Litos counted in this posting/);
     assert.doesNotMatch(jobsPage, /requirements this posting lists/);
+  });
+
+  test("the Tracker row's badge carries the same band and denominator", () => {
+    // ISSUE-038 put this badge on a third surface and left it unheld, which is the SAME omission
+    // ISSUE-038 was about: "every surface" enumerated two. Verified 2026-08-04 by mutation, with
+    // the band dropped and with the denominator dropped; both left the suite green before this.
+    const nextMatchRow = code(readFileSync("components/app/Autopilot.tsx", "utf8"));
+    assert.match(nextMatchRow, /match\.match\.band \?\? "Match"/, "the row must name the band");
+    assert.match(nextMatchRow, /\$\{match\.match\.matched\} of the \$\{match\.match\.total\} requirements Litos counted/);
+    assert.doesNotMatch(nextMatchRow, /requirements this posting lists/);
   });
 
   test("the preference sentence does not borrow the score's word", () => {
@@ -132,8 +158,18 @@ describe("rankJobs carries preference evidence and no score at all", () => {
 // location, so the id is what lets the backend read it off the live job row.
 describe("the review screen sends what the backend needs to exclude the posting's offices", () => {
   test("the next-match score request carries the job id", () => {
-    const applications = readFileSync("app/dashboard/applications/page.tsx", "utf8");
-    assert.match(applications, /job_id: nextPacket\.job_context\.job_id/);
+    // The invariant is unchanged. Its subject moved: ISSUE-038 lifted the request out of the effect
+    // and into nextMatchScoreRequest, so this is asserted on the value that function produces
+    // rather than on the literal that used to sit in the page. A regex over page source could not
+    // follow it, and deleting the test rather than moving it is how this invariant got broken once
+    // already.
+    const request = nextMatchScoreRequest(
+      { id: "p1", job_context: { company: "PsiQuantum", role: "Intern", job_id: "job-1" }, spec: { _review: { jd_text: "text" } } },
+      "base resume",
+    );
+    assert.equal(request.jobContext.job_id, "job-1");
+    const applications = code(readFileSync("app/dashboard/applications/page.tsx", "utf8"));
+    assert.match(applications, /nextMatchScoreRequest\(nextPacket, baseResumeText\)/, "the page must build the request through it");
   });
 
   test("MatchScore passes the whole stored job_context through, id included", () => {
