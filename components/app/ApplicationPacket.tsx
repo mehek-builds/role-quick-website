@@ -86,9 +86,20 @@ function ResumePaper({
   const educationAfterExperience = spec.education_position === "after_experience";
   return (
     <div className="rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black">
-      {name && <p className="text-center text-[14px] font-semibold tracking-tight">{name}</p>}
-      {spec.target_role && (
-        <p className="mt-0.5 text-center text-[9px] font-semibold">{spec.target_role}</p>
+      {/* THE ROLE NEVER LEADS. Packets generated before `_contact` was stored have no name (the
+          backend has a standing 409 for exactly those: "This older resume cannot be edited in the
+          dashboard"), and a bare `{name && ...}` would leave the target role as the visually first
+          line on those. That is the original complaint reproduced on legacy data: a resume headed
+          by a job title reads as a document about the job rather than about the applicant. With no
+          name to sit under, the role has nothing to qualify, so education leads instead and does it
+          under a real EDUCATION heading. */}
+      {name && (
+        <>
+          <p className="text-center text-[14px] font-semibold tracking-tight">{name}</p>
+          {spec.target_role && (
+            <p className="mt-0.5 text-center text-[9px] font-semibold">{spec.target_role}</p>
+          )}
+        </>
       )}
       {/* Identity above the rule, ways to reach that person below it: two different kinds of
           fact, so the eye gets a divider rather than a paragraph. Same rule the PDF draws. */}

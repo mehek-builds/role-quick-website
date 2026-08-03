@@ -69,6 +69,22 @@ describe("the packet resume preview", () => {
     );
   });
 
+  /* Legacy packets predate `_contact` and carry no name. Without this, `{name && <p>}` followed by
+     a sibling `{spec.target_role && <p>}` leaves the ROLE as the first line on exactly those
+     packets, which is the reported bug reproduced on old data. The role must be nested inside the
+     name branch so it cannot outlive it. */
+  test("never lets the target role lead when there is no name", () => {
+    const header = PACKET.slice(PACKET.indexOf("function ResumePaper"));
+    const roleAt = header.indexOf("{spec.target_role");
+    const nameAt = header.indexOf("{name &&");
+    const contactAt = header.indexOf("{contact &&");
+    assert.ok(nameAt !== -1 && roleAt !== -1, "both the name and the target role must render");
+    assert.ok(
+      roleAt > nameAt && roleAt < contactAt,
+      "the target role must sit inside the name branch, not as a sibling that survives a missing name"
+    );
+  });
+
   test("gives education its own section rather than floating it under the header", () => {
     assert.match(
       PACKET,
