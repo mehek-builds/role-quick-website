@@ -45,6 +45,9 @@ export const RETIRED = [
   ["job-board scan", "we check for new ones"],
   ["monitored jobs", "the jobs we watch for you"],
   ["throughput", "applications you sent"],
+  // Shipped to production on the Momentum card as the label of a real number, under a header
+  // reading LAST 14 DAYS, so the card contradicted itself and named a variable at the same time.
+  ["all time counter", "sent since you started"],
   // Ad-tech vocabulary. The card heading was renamed in the terminology pass and
   // four other strings were missed, which is exactly why this belongs in the list
   // rather than being fixed one-off. The API path /profile/targeting and the
