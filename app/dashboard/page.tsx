@@ -24,6 +24,7 @@ import {
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
+  visibleMatches,
   type ProfileIdentity,
   type RankedJob,
 } from "@/features/applications";
@@ -98,6 +99,48 @@ const QA_JOBS: MonitoredJob[] = [
     posted_at: new Date().toISOString(),
     first_seen_at: new Date().toISOString(),
     ats_name: "ashby",
+  },
+  /* Four and five exist so the harness can show the window REFILLING.
+     With exactly three fixtures, Home rendered three cards and finishing one just left two: the
+     backfill that the whole window is built around had nothing to pull from and could not be seen,
+     let alone caught if it broke. A set larger than the window is also the realistic case. */
+  {
+    id: "qa-job-4",
+    company_name: "Ramp",
+    title: "Backend Engineer, New Grad",
+    location: "New York, NY",
+    department: "Engineering",
+    employment_type: "Full-time",
+    description: "Build payments and card infrastructure with TypeScript, Python, Postgres, and distributed systems at high transaction volume.",
+    apply_url: "https://jobs.ashbyhq.com/ramp/qa",
+    posting_url: "https://jobs.ashbyhq.com/ramp/qa",
+    remote: false,
+    posted_at: new Date().toISOString(),
+    first_seen_at: new Date().toISOString(),
+    ats_name: "ashby",
+    salary_min: 150000,
+    salary_max: 190000,
+    salary_currency: "USD",
+    salary_interval: "year",
+  },
+  {
+    id: "qa-job-5",
+    company_name: "Notion",
+    title: "Product Engineer Intern",
+    location: "San Francisco, CA",
+    department: "Product Engineering",
+    employment_type: "Internship",
+    description: "Ship collaborative editing and workspace features with React, TypeScript, and APIs alongside product and design.",
+    apply_url: "https://boards.greenhouse.io/notion/qa",
+    posting_url: "https://boards.greenhouse.io/notion/qa",
+    remote: false,
+    posted_at: new Date().toISOString(),
+    first_seen_at: new Date().toISOString(),
+    ats_name: "greenhouse",
+    salary_min: 50,
+    salary_max: 60,
+    salary_currency: "USD",
+    salary_interval: "hour",
   },
 ];
 
@@ -280,10 +323,17 @@ export default function Home() {
     [packets, todayJobs, todayKey],
   );
   const visibleJobs = useMemo(
-    () => todayJobs.filter((job) => !dismissed.includes(job.id) && !submittedToday.has(job.id)).slice(0, 3),
+    () => visibleMatches(todayJobs, { dismissed, submitted: submittedToday }),
     [dismissed, submittedToday, todayJobs],
   );
-  const allTodaySubmitted = todayJobs.length > 0 && submittedToday.size === todayJobs.length;
+  /* The day's matches are done, however they got done.
+   *
+   * This was `submittedToday.size === todayJobs.length`, so "No matches left for the day" only
+   * appeared to a student who SUBMITTED every match. Skip them instead and the queue emptied into
+   * a different, weaker screen ("Today's queue is clear"), which is the same fact reported two
+   * ways depending on which button got pressed. Finished is finished. The only state that is
+   * genuinely different is having had no matches at all, and that is todayJobs.length === 0. */
+  const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
     const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
@@ -685,15 +735,17 @@ export default function Home() {
       {jobs === null ? (
         <ShimmerRows rows={4} />
       ) : visibleJobs.length === 0 ? (
-        allTodaySubmitted ? (
+        dayQueueFinished ? (
           <DailyMatchesComplete />
         ) : (
+          /* Reached only when the day never had a match to begin with. Sending someone to "Browse
+             all jobs" here would be sending them to another empty list. */
           <EmptyState
-            title={dismissed.length ? "Today's queue is clear" : "No matches yet"}
-            body={dismissed.length ? "You have looked at all of them. New jobs turn up when we next check the job boards." : "Fill in your profile so Litos can pick out the best jobs from the job boards it watches."}
+            title="No matches yet"
+            body="Fill in your profile so Litos can pick out the best jobs from the job boards it watches."
           >
-            <Link href={dismissed.length ? "/dashboard/jobs" : "/dashboard/profile"} className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
-              {dismissed.length ? "Browse all jobs" : "Complete profile"}
+            <Link href="/dashboard/profile" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+              Complete profile
             </Link>
           </EmptyState>
         )
