@@ -335,6 +335,7 @@ function SplitLine({
   onLeft,
   onRight,
   after,
+  italic = false,
 }: {
   left: string;
   right: string;
@@ -342,6 +343,9 @@ function SplitLine({
   onLeft?: (v: string) => void;
   onRight?: (v: string) => void;
   after?: React.ReactNode;
+  /* The second line of an entry: same columns, italic on the left. One component with a flag
+     rather than two that must not drift, exactly as drawSplitLine takes a leftFont. */
+  italic?: boolean;
 }) {
   return (
     <Line index={index}>
@@ -349,7 +353,7 @@ function SplitLine({
         className="flex items-baseline justify-between gap-4"
         style={{ marginTop: `calc(var(--rq-gap) * ${GAP_UNITS.splitLine})` }}
       >
-        <span className="flex min-w-0 items-baseline font-bold leading-[1.35]">
+        <span className={`flex min-w-0 items-baseline leading-[1.35] ${italic ? "italic" : "font-bold"}`}>
           {onLeft ? <Editable value={left} onCommit={onLeft} /> : left}
           {after}
         </span>
@@ -383,28 +387,30 @@ function Entry({
 
   return (
     <>
+      {/* Org and place, then role and dates: the two-split-line shape drawEntrySection() emits.
+          The location is not editable here for the same reason the GPA is not - applyResumePolicy
+          re-copies it from the experience bank on every generation, so an edit would survive this
+          screen and silently revert on the first tailored resume. */}
       <SplitLine
         left={entry.org}
-        right={entry.date_range ?? ""}
+        right={entry.location ?? ""}
         index={index}
         onLeft={editing ? (v) => set({ org: v }) : undefined}
-        onRight={editing ? (v) => set({ date_range: v }) : undefined}
         after={
           editing && onRemove ? (
             <RemoveButton onClick={onRemove} label={`Remove ${entry.org}`} />
           ) : undefined
         }
       />
-      {(entry.title || editing) && (
-        <Line index={index}>
-          <div className="italic leading-[1.35]">
-            {editing ? (
-              <Editable value={entry.title ?? ""} onCommit={(v) => set({ title: v })} />
-            ) : (
-              entry.title
-            )}
-          </div>
-        </Line>
+      {(entry.title || entry.date_range || editing) && (
+        <SplitLine
+          left={entry.title ?? ""}
+          right={entry.date_range ?? ""}
+          index={index}
+          italic
+          onLeft={editing ? (v) => set({ title: v }) : undefined}
+          onRight={editing ? (v) => set({ date_range: v }) : undefined}
+        />
       )}
       {entry.bullets.map((bullet, i) => (
         // Keyed by position, not by text: keying on content would remount the span the moment a
@@ -486,21 +492,19 @@ function Education({ spec, index, first }: { spec: ResumeSpec; index: number; fi
       <SectionHeader index={index} first={first}>EDUCATION</SectionHeader>
       <SplitLine
         left={spec.school}
-        right={spec.grad_date}
+        right={spec.school_location ?? ""}
         index={index}
         onLeft={editing ? (v) => set({ school: v }) : undefined}
-        onRight={editing ? (v) => set({ grad_date: v }) : undefined}
       />
-      {(spec.degree || editing) && (
-        <Line index={index}>
-          <div className="italic leading-[1.35]">
-            {editing ? (
-              <Editable value={spec.degree ?? ""} onCommit={(v) => set({ degree: v })} />
-            ) : (
-              spec.degree
-            )}
-          </div>
-        </Line>
+      {(spec.degree || spec.grad_date || editing) && (
+        <SplitLine
+          left={spec.degree ?? ""}
+          right={spec.grad_date ?? ""}
+          index={index}
+          italic
+          onLeft={editing ? (v) => set({ degree: v }) : undefined}
+          onRight={editing ? (v) => set({ grad_date: v }) : undefined}
+        />
       )}
       {/* READ-ONLY, unlike every other line on this page, and deliberately so. applyResumePolicy
           rewrites `gpa` from the parsed profile on every generation, so an edit made here would

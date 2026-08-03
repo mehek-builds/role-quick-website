@@ -15,6 +15,7 @@ const SPEC: GeneratedResume["spec"] = {
   degree: "B.S. Computer Science",
   grad_date: "May 2027",
   gpa: "3.89/4.0",
+  school_location: "Los Angeles, CA",
   coursework: "Distributed Systems, Databases, Compilers",
   skills: ["TypeScript", "React", "Node", "Postgres", "CRDTs"],
   experience: [
@@ -22,6 +23,7 @@ const SPEC: GeneratedResume["spec"] = {
       type: "job",
       org: "Clubfolio",
       title: "Founding Engineer",
+      location: "Los Angeles, CA",
       date_range: "2025 to now",
       bullets: [
         "Rebuilt the club-portal editor on CRDTs; sync conflicts fell to zero across 1,200 users.",

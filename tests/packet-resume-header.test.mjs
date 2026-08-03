@@ -97,9 +97,39 @@ describe("the packet resume preview", () => {
     assert.match(PACKET, /\{entry\.org\}<\/p>/, "the organisation gets the split line to itself");
     assert.match(
       PACKET,
-      /\{entry\.title &&[\s\S]{0,120}italic/,
-      "the role renders in italic beneath the organisation, the way drawEntrySection does it"
+      /italic[^>]*>\{entry\.title\}/,
+      "the role renders in italic, the way drawEntrySection does it"
     );
+  });
+
+  /* TWO SPLIT LINES, matching drawSplitLine twice: the place is the right column of line one and
+     the date is the right column of line two. Pinned as pairs because the failure mode is a date
+     drifting back up beside the organisation, which is where it used to be and is the shape the
+     applicant's own template does not have. */
+  test("pairs place with organisation and date with role", () => {
+    const paper = PACKET.slice(
+      PACKET.indexOf("function ResumePaper"),
+      PACKET.indexOf("function SectionHeading")
+    );
+    /* Anchored on the closing tag, not the bare expression. The entry key is
+       `key={`${entry.org}-${entry.title}-${index}`}`, and "{entry.title}" is a substring of
+       "${entry.title}" inside it, so a bare search finds the key and reports the role rendering
+       before the place. */
+    const orgAt = paper.indexOf("{entry.org}</p>");
+    const entryPlaceAt = paper.indexOf("{entry.location}</p>");
+    const titleAt = paper.indexOf("{entry.title}</p>");
+    const rangeAt = paper.indexOf("{entry.date_range}</p>");
+    assert.ok([orgAt, entryPlaceAt, titleAt, rangeAt].every((i) => i !== -1), "all four columns render");
+    assert.ok(orgAt < entryPlaceAt, "the place is the right column of the organisation line");
+    assert.ok(entryPlaceAt < titleAt, "the role line comes after the organisation line");
+    assert.ok(titleAt < rangeAt, "the date is the right column of the role line");
+
+    const schoolAt = paper.indexOf("{spec.school}</p>");
+    const schoolPlaceAt = paper.indexOf("{spec.school_location}</p>");
+    const degreeAt = paper.indexOf("{spec.degree}</p>");
+    const gradAt = paper.indexOf("{spec.grad_date}</p>");
+    assert.ok(schoolAt < schoolPlaceAt && schoolPlaceAt < degreeAt && degreeAt < gradAt,
+      "education follows the same shape: school with place, degree with date");
   });
 
   /* The renderer wraps org and school inside their split-line column. `truncate` would show LESS
