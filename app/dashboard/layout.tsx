@@ -16,12 +16,13 @@ import {
 
 /* One noun per destination, and the two that a student kept confusing are now told apart by the
    word itself rather than by a subtitle they have to find: "Jobs" is everything we found, and
-   "Applications" is the subset you are actually working on. "Outreach" was the brand's word for
-   sending an email to a human, so it says Emails. */
+   "Tracker" is the subset you are actually working on. "Outreach" was the brand's word for
+   sending an email to a human, so it says Emails. The route stays /applications: the label is
+   what a student reads, and changing the URL would break every link already sent out. */
 const NAV = [
   { href: "/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/dashboard/jobs", label: "Jobs", Icon: SearchIcon },
-  { href: "/dashboard/applications", label: "Applications", Icon: ClipboardIcon },
+  { href: "/dashboard/applications", label: "Tracker", Icon: ClipboardIcon },
   { href: "/dashboard/outreach", label: "Emails", Icon: MailIcon },
 ];
 
