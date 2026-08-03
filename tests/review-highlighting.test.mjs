@@ -127,6 +127,16 @@ const requirementText = await readFile(new URL("../components/app/RequirementTex
 /** Source with comments removed, for assertions about what the screen SAYS rather than what the
  *  file contains. A `doesNotMatch` against raw source cannot tell rendered copy from a comment
  *  explaining why that copy was deleted, and this repo comments its deletions heavily. */
+/** The EditableLine function body, whole. This used to be `.slice(0, 2600)` from the function
+ *  keyword, a byte count that quietly stopped covering the function the moment anyone added a
+ *  comment to it: four assertions here went green-to-red on a change that touched none of what they
+ *  assert. Slicing to the next declaration cannot drift that way. */
+function editableLineSource() {
+  const start = dashboard.indexOf("function EditableLine(");
+  const end = dashboard.indexOf("function EditableHighlight(", start);
+  return dashboard.slice(start, end === -1 ? undefined : end);
+}
+
 function shippedCopy(source) {
   return source
     .replace(/\{\/\*[\s\S]*?\*\/\}/g, "") // JSX comments
@@ -137,9 +147,9 @@ function shippedCopy(source) {
 test("R-051b: resume fields wrap instead of clipping", () => {
   // A single-line <input> truncated the education headline to "Marshall School of B". EditableLine
   // must stay a growing textarea so long values wrap and stay readable.
-  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
-  assert.match(editableLine.slice(0, 2600), /<textarea/);
-  assert.match(editableLine.slice(0, 2600), /scrollHeight/);
+  const editableLine = editableLineSource();
+  assert.match(editableLine, /<textarea/);
+  assert.match(editableLine, /scrollHeight/);
 });
 
 test("R-049: a tab returning to the foreground refreshes immediately", () => {
@@ -238,24 +248,24 @@ test('resume fields cannot contain a newline', () => {
   // These were structurally single-line under <input>. The value flows into the resume spec, the
   // rendered PDF and the portal autofill payload, where a newline in an org or date field is a
   // broken line at best and a mis-parsed ATS field at worst.
-  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
-  assert.match(editableLine.slice(0, 2600), /event\.key === "Enter"/);
-  assert.match(editableLine.slice(0, 2600), /replace\(\/\\s\*\[\\r\\n\]\+\\s\*\/g, " "\)/);
+  const editableLine = editableLineSource();
+  assert.match(editableLine, /event\.key === "Enter"/);
+  assert.match(editableLine, /replace\(\/\\s\*\[\\r\\n\]\+\\s\*\/g, " "\)/);
 });
 
 test('the auto-grow height is re-measured on reflow, not only on value change', () => {
   // overflow-hidden plus a JS-set pixel height means a stale height CLIPS with no scrollbar and no
   // ellipsis, which is worse than the truncation this replaced.
-  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
-  assert.match(editableLine.slice(0, 2600), /ResizeObserver/);
-  assert.match(editableLine.slice(0, 2600), /document\.fonts/);
-  assert.match(editableLine.slice(0, 2600), /useLayoutEffect/);
+  const editableLine = editableLineSource();
+  assert.match(editableLine, /ResizeObserver/);
+  assert.match(editableLine, /document\.fonts/);
+  assert.match(editableLine, /useLayoutEffect/);
 });
 
 test('IME composition is not rewritten mid-keystroke', () => {
-  const editableLine = dashboard.slice(dashboard.indexOf("function EditableLine("));
-  assert.match(editableLine.slice(0, 2600), /onCompositionStart/);
-  assert.match(editableLine.slice(0, 2600), /onCompositionEnd/);
+  const editableLine = editableLineSource();
+  assert.match(editableLine, /onCompositionStart/);
+  assert.match(editableLine, /onCompositionEnd/);
 });
 
 test('degree and graduation date are separate fields, not a separator-joined string', () => {
