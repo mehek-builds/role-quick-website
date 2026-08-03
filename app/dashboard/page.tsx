@@ -35,7 +35,7 @@ import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
-import { waitingApplications } from "@/lib/captcha-queue";
+import { isWaitingOnHuman, waitingApplications } from "@/lib/captcha-queue";
 import { WaitingOnYou } from "@/components/app/WaitingOnYou";
 
 type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
@@ -347,7 +347,14 @@ export default function Home() {
   const waitingOnYou = useMemo(() => waitingApplications(packets), [packets]);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
-    const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
+    /* Excludes the rows the waiting-on-you block already owns. Counting them twice would be
+       tolerable; the copy is not. Tracker's action reads "N stopped for you / Finish the missing
+       answers", which is the wrong instruction for a CAPTCHA - nothing is missing, and on an
+       at_submit stall everything is already filled in. */
+    const needsAction = packets.filter((packet) => (
+      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+      && !isWaitingOnHuman(packet.spec._review)
+    )).length;
     const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
     return { ready, submitted, needsAction };
   }, [packets]);

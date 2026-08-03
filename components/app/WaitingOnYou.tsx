@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Card } from "@/components/app/ui";
 import { describeRemainingWork, describeWait, type WaitingApplication } from "@/lib/captcha-queue";
 
 /**
@@ -23,19 +24,26 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
      replaces the whole subtree. Starting from null renders the label only once there is a real
      clock to render it from. */
   const [now, setNow] = useState<number | null>(null);
+  const waiting = items.length;
   useEffect(() => {
+    // Guarded on the count, not just returned early below: without this every dashboard session -
+    // and the overwhelming majority have nothing stalled - re-rendered this component once a minute
+    // forever to produce nothing.
+    if (waiting === 0) return;
     setNow(Date.now());
     // A wait that reads "3 hours" for the rest of the session is worse than no duration at all.
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
-  }, []);
+  }, [waiting]);
 
   if (items.length === 0) return null;
 
   return (
-    <section aria-labelledby="waiting-on-you-heading" className="rounded-card border border-border bg-surface shadow-rest">
+    <Card aria-labelledby="waiting-on-you-heading" role="region" className="shadow-rest">
       <div className="border-b border-border px-5 py-4">
-        <h2 id="waiting-on-you-heading" className="text-base font-semibold text-ink">
+        {/* aria-live because the count changes in place as applications resolve, and a heading that
+            silently goes from 3 to 2 is a change a screen reader user never learns about. */}
+        <h2 id="waiting-on-you-heading" aria-live="polite" className="text-base font-semibold text-ink">
           {items.length === 1
             ? "1 application is waiting on you"
             : `${items.length} applications are waiting on you`}
@@ -64,8 +72,12 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
                 href={item.portalUrl}
                 target="_blank"
                 /* noopener is the load-bearing half: these are third-party employer pages and an
-                   opened tab can otherwise reach back through window.opener. */
+                   opened tab can otherwise reach back through window.opener. The url itself is
+                   https-checked in safePortalUrl; rel does nothing against a javascript: href. */
                 rel="noopener noreferrer"
+                /* Every one of these links reads "Finish this one", so without a label a screen
+                   reader's link list is N identical entries with no way to tell them apart. */
+                aria-label={`Finish ${item.role} at ${item.company}, opens in a new tab`}
               >
                 Finish this one
               </a>
@@ -78,6 +90,6 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
           </li>
         ))}
       </ul>
-    </section>
+    </Card>
   );
 }

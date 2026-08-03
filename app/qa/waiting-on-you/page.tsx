@@ -16,12 +16,14 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/* Ages are relative to render so the harness exercises every branch of describeWait at once:
-   minutes, hours and days. */
-const now = Date.now();
-const ago = (ms: number) => new Date(now - ms).toISOString();
+/* force-dynamic because the ages below are relative to render. At module scope in a prerendered
+   page they freeze at build time and the harness that exists to exercise minutes, hours and days
+   drifts to all-days the next morning. */
+export const dynamic = "force-dynamic";
 
-const FIXTURE = [
+const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+
+const fixture = () => [
   {
     id: "oldest-days",
     job_context: { company: "Northwind Systems", role: "Data Analyst" },
@@ -110,7 +112,7 @@ export default function WaitingOnYouHarnessPage() {
         Harness. Three rows should render, oldest first. The resolved stall and the
         unrelated-blocker row must not appear.
       </p>
-      <WaitingOnYou items={waitingApplications(FIXTURE)} />
+      <WaitingOnYou items={waitingApplications(fixture())} />
     </main>
   );
 }

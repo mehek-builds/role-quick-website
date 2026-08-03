@@ -54,6 +54,25 @@ export function isWaitingOnHuman(review: ReviewLike | null | undefined): boolean
   return review?.status === "needs_attention" && !!review.stall && !review.stall.resolved_at;
 }
 
+/**
+ * Only an https URL is allowed to become a link.
+ *
+ * portal_url arrives from backend data that ultimately traces back to an employer's posting or a
+ * pasted link, and the backend's own guard is zod .url(), which happily accepts
+ * `javascript:alert(1)`. This block puts a button in front of the applicant and tells them to click
+ * it, which makes it precisely the wrong place to trust a URL. Anything that is not https is
+ * dropped, and the row falls through to its "open it from your applications list" branch rather
+ * than disappearing - the application still needs finishing either way.
+ */
+export function safePortalUrl(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  try {
+    return new URL(raw).protocol === "https:" ? raw : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function waitingApplications(packets: readonly PacketLike[]): WaitingApplication[] {
   return packets
     .filter((packet) => isWaitingOnHuman(packet.spec?._review))
@@ -61,7 +80,7 @@ export function waitingApplications(packets: readonly PacketLike[]): WaitingAppl
       id: packet.id,
       company: packet.job_context?.company?.trim() || "This company",
       role: packet.job_context?.role?.trim() || "this role",
-      portalUrl: packet.spec?._review?.portal_url,
+      portalUrl: safePortalUrl(packet.spec?._review?.portal_url),
       stalledAt: packet.spec!._review!.stall!.stalled_at,
       stage: packet.spec!._review!.stall!.stage,
     }))
