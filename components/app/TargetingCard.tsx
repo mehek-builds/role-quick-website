@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RoleType, Targeting, api, getTargeting, putTargeting } from "@/lib/api";
 import { CATEGORIES, ROLE_TYPES, periodLabel, periodsFor } from "@/lib/periods";
 import { REMOTE_LOCATION, isRemoteLocation, locationSuggestions } from "@/lib/locations";
@@ -27,9 +27,19 @@ export default function TargetingCard() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  // Kept apart from `error`, which blanks the card. That was tolerable when a save only happened
+  // because the student pressed a button; now that saves fire on their own, a flaky network would
+  // wipe out the chips they were in the middle of clicking.
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
   const [newLocation, setNewLocation] = useState("");
   const [locationOptions, setLocationOptions] = useState<string[]>([]);
+  // Autosave bookkeeping. `revision` counts edits the student has made in this session, so the
+  // save effect fires on every change but never on the initial load; `latest` hands the effect
+  // the current targeting without making the effect depend on it and re-arm the timer twice.
+  const [revision, setRevision] = useState(0);
+  const latest = useRef<Targeting | null>(null);
+  latest.current = t;
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +70,16 @@ export default function TargetingCard() {
     };
   }, []);
 
+  /* Every edit saves itself. There used to be a "Save changes" button, and the failure it caused
+   * was silent: a student toggled a chip, saw it turn blue, and left. The chip had already changed
+   * colour, so nothing on screen said the change was still sitting unsaved in the browser. The
+   * short debounce is so that clicking through four chips is one PUT, not four. */
+  useEffect(() => {
+    if (revision === 0) return;
+    const id = setTimeout(() => void save(), 500);
+    return () => clearTimeout(id);
+  }, [revision]);
+
   if (error) return <ErrorNote message={error} />;
   if (!t) {
     return (
@@ -87,25 +107,27 @@ export default function TargetingCard() {
 
   function patch(p: Partial<Targeting>) {
     setT((prev) => ({ ...(prev as Targeting), ...p }));
+    setRevision((r) => r + 1);
   }
 
   async function save() {
-    if (!t) return;
+    const current = latest.current;
+    if (!current) return;
     setSaving(true);
-    setError(null);
+    setSaveError(null);
     try {
       await putTargeting({
-        categories: t.categories,
-        titles: t.titles,
-        role_types: t.role_types,
-        locations: t.locations,
-        remote_only: t.remote_only,
-        primary_period: t.primary_period,
-        backup_period: t.backup_period,
+        categories: current.categories,
+        titles: current.titles,
+        role_types: current.role_types,
+        locations: current.locations,
+        remote_only: current.remote_only,
+        primary_period: current.primary_period,
+        backup_period: current.backup_period,
       });
       setSavedAt(Date.now());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save that.");
+      setSaveError(e instanceof Error ? e.message : "Could not save that.");
     } finally {
       setSaving(false);
     }
@@ -120,13 +142,21 @@ export default function TargetingCard() {
             This aims every application Litos fills. Change it whenever the hunt changes.
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
-          <Button
-            onClick={() => void save()}
-            disabled={saving} >
-            {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
-          </Button>
+        {/* Status, not a control. It only appears once the student has actually changed something,
+            so a card they are only reading stays quiet. */}
+        <div className="flex min-h-6 items-center gap-3 text-xs">
+          {saving ? (
+            <PendingLabel>Saving...</PendingLabel>
+          ) : saveError ? (
+            <>
+              <span className="text-warn">{saveError}</span>
+              <Button variant="secondary" size="sm" onClick={() => void save()}>
+                Try again
+              </Button>
+            </>
+          ) : (
+            savedAt && <span className="text-positive">Saved</span>
+          )}
         </div>
       </div>
 
