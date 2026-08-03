@@ -153,17 +153,18 @@ test("the measurement suspends the touch floor, so it records the text and not t
   );
 });
 
-test("the account footer prints no count rather than an undefined one", () => {
-  /* `=== null` is not a guard against a field the backend has not shipped yet. This repo handles
-     rolling-deploy shape drift elsewhere; the rail was the gap. */
-  assert.match(
-    dashboardLayout,
-    /submitted == null \? null :/,
-    "expected the loose null check, which catches both null and a missing applications_submitted",
-  );
+test("the account footer states the plan and no count beside it", () => {
+  /* Supersedes an undefined-guard on the same line, 2026-08-03. The count it was guarding is gone.
+     It printed "Free · 5 applications" one separator away from the tier, where a bare noun reads as
+     the allowance the plan grants rather than as what the account has already done — and free
+     grants 20 resumes a month, so the rail was quoting a quota four times under the real one.
+     Momentum on Home reports the same figure labelled, so nothing was lost by removing it.
+
+     Asserted on the funnel call rather than on any copy: the wording of the misreading is not the
+     thing to pin, the rail having a throughput number next to a plan name is. */
   assert.doesNotMatch(
     dashboardLayout,
-    /submitted === null/,
-    "the strict check is what printed 'undefined applications'",
+    /fetchFunnel|applications_submitted/,
+    "the rail must not read throughput; a count beside the tier reads as the tier's allowance",
   );
 });
