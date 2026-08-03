@@ -231,3 +231,33 @@ export function portalName(portalUrl: string): string {
 function normalized(value: string | undefined): string {
   return (value ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
+
+/* How many matches Home shows at once. */
+export const HOME_MATCH_WINDOW = 3;
+
+/**
+ * The matches Home is currently showing.
+ *
+ * A WINDOW over the day's ranked set, not a page of it. Filter to whatever is still unfinished,
+ * then cut to the window size, so finishing one match drops it out and the next-best slides up in
+ * the same render. The order matters: cutting before filtering would freeze the window and leave a
+ * gap where the finished match used to be, instead of refilling it.
+ *
+ * A match is finished either way a student can finish one. Submitting it and skipping it are
+ * different intentions but the same fact here: it is no longer waiting on them.
+ *
+ * The window refills right up until the day's set runs out, so the only thing that can leave Home
+ * showing fewer than `size` is the set itself being smaller. That is a supply question for the
+ * job monitor, and nothing here can invent a third match out of a set of two.
+ */
+export function visibleMatches<T extends { id: string }>(
+  todayJobs: readonly T[],
+  options: { dismissed?: readonly string[]; submitted?: ReadonlySet<string>; size?: number } = {},
+): T[] {
+  const dismissed = options.dismissed ?? [];
+  const submitted = options.submitted ?? new Set<string>();
+  const size = options.size ?? HOME_MATCH_WINDOW;
+  return todayJobs
+    .filter((job) => !dismissed.includes(job.id) && !submitted.has(job.id))
+    .slice(0, size);
+}

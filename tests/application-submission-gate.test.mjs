@@ -79,7 +79,10 @@ test("overview keeps three application states and reviews matches in a right-sid
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.
   assert.match(overview, /const todayJobs = rankedJobs;/);
-  assert.match(overview, /todayJobs\.filter\([\s\S]{0,180}\.slice\(0, 3\)/);
+  /* The window moved into features/applications as visibleMatches, where it is tested by finishing
+     matches and checking what refills rather than by matching on this file's text. Home must window
+     the day's full set (todayJobs), never a pre-cut slice of it. */
+  assert.match(overview, /visibleMatches\(todayJobs, \{ dismissed, submitted: submittedToday \}\)/);
   assert.doesNotMatch(overview, /rankedJobs\.slice\(0, 3\)/);
   assert.match(styles, /dashboard-drawer-in/);
 });

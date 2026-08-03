@@ -225,8 +225,15 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
   useEffect(() => {
     /* QA renders have no session. Calling /me here anyway would 401, and api() answers a 401 by
        clearing the session and sending the browser to /login — so the footer alone was enough to
-       bounce every QA render of every dashboard page off the screen it was there to show. */
-    if (qaMode) return;
+       bounce every QA render of every dashboard page off the screen it was there to show.
+
+       Asked of window, not of the `qaMode` prop, and that is the whole point. The prop is state the
+       PARENT sets in its own effect, and React runs a child's effects before its parent's, so at the
+       one moment this guard has to hold it is still false: the fetch went out, 401ed, and redirected
+       while the layout was still deciding it was in QA mode. The guard read as correct and did
+       nothing, which is why the bounce it documents kept happening. isQaRender() reads
+       window.location, which is already right on the first pass. */
+    if (qaMode || isQaRender()) return;
     let cancelled = false;
     /* Deferred, not read in the effect body: getStoredEmail touches localStorage, which does not
        exist while this renders on the server, and setting state synchronously here would also

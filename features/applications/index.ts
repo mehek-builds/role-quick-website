@@ -10,6 +10,7 @@ export * from "./domain/board-stages";
 export * from "./domain/match-model";
 export {
   AUTO_SUBMIT_PREPARED_LIMIT,
+  HOME_MATCH_WINDOW,
   MIN_JD_CHARS,
   canGenerateFrom,
   countPreparedJobs,
@@ -18,6 +19,7 @@ export {
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
+  visibleMatches,
   type ProfileIdentity,
   type RankedJob,
 } from "./domain/daily-matches";

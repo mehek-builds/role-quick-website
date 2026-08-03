@@ -2,6 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { fetchFunnel, type FunnelSummary } from "@/features/applications";
+import { isQaRender } from "@/lib/qa-mode";
+
+/* A QA render has no session, and fetchFunnel goes through api(), which answers a 401 by clearing
+   the session and sending the browser to /login. This component was the last unguarded caller on
+   the dashboard: it bounced every QA render of Home off the screen the harness exists to show, and
+   it did it fast enough to look like the harness was simply broken. The layout documents this exact
+   trap for the account footer; nobody checked Momentum for it.
+
+   Fourteen days ending today, so the sparkline draws a real shape rather than a flat line. */
+const QA_FUNNEL: FunnelSummary = {
+  resumes_tailored: 22,
+  applications_submitted: 5,
+  fields_filled: 84,
+  submitted_this_week: 5,
+  too_early: false,
+  days: Array.from({ length: 14 }, (_, i) => {
+    const submitted = [0, 0, 0, 1, 0, 0, 2, 0, 1, 0, 0, 3, 1, 2][i];
+    return { day: `d-${13 - i}`, submitted, tailored: submitted * 2 };
+  }),
+};
 
 /**
  * The student's own throughput.
@@ -24,6 +44,16 @@ export function Funnel() {
 
   useEffect(() => {
     let cancelled = false;
+    if (isQaRender()) {
+      /* Deferred rather than set in the effect body, matching the shell above: a synchronous
+         setState here cascades a render before the first paint. */
+      queueMicrotask(() => {
+        if (!cancelled) setState({ data: QA_FUNNEL, failed: false });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     fetchFunnel()
       .then((data) => !cancelled && setState({ data, failed: false }))
       .catch(() => !cancelled && setState({ data: null, failed: true }));
