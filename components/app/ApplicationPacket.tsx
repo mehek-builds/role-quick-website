@@ -52,7 +52,10 @@ function contactLine(spec: GeneratedResume["spec"]): string {
   return ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]
     .map((key) => contact[key])
     .filter((value): value is string => Boolean(value && value.trim()))
-    .join(" · ");
+    /* A PIPE, because that is what the renderer joins with. Missed when the skills separator was
+       corrected: two separators drifted from the PDF and only one got fixed, which is the exact
+       failure mode this pane keeps having. The renderer's contactLine is the reference. */
+    .join(" | ");
 }
 
 /* The resume, read-only, from the same spec the editor renders. Black and white

@@ -121,11 +121,19 @@ describe("the packet resume preview", () => {
     );
   });
 
-  test("joins skills with the separator the renderer uses", () => {
+  /* Both separators, pinned together. They drifted from the PDF independently and only the skills
+     one was caught the first time, so a test that covers one and not the other has already been
+     proven insufficient. engine/resumeRender.ts is the reference for both. */
+  test("uses the separators the renderer uses", () => {
     assert.match(
       PACKET,
       /skills\.join\(" • "\)/,
       "the renderer joins skills with a bullet, not a middot"
+    );
+    assert.match(
+      PACKET,
+      /\.join\(" \| "\)/,
+      "the renderer joins contact details with a pipe, not a middot"
     );
   });
 
