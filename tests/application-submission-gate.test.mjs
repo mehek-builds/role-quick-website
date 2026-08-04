@@ -59,7 +59,14 @@ test("overview keeps three application states and reviews matches in a right-sid
   assert.match(overview, /return me\.usage\.resumes\.limit/);
   assert.match(overview, /role="dialog"/);
   assert.match(overview, /Job description/);
-  assert.match(overview, /Tailored resume/);
+  /* The drawer's two panes: the posting on the left, the resume on the right. This used to pin the
+     string "Tailored resume", which was the fallback heading of a ResumePreview local to this file.
+     That component was a second renderer of the document and showed the posting's role and company
+     where the applicant's name belongs, so it is gone and the drawer imports the shared ResumePaper
+     that the Applications pane already used. Pinning the component rather than a heading is also
+     the stronger assertion: "Tailored resume" only ever rendered when job_context.role was empty,
+     so the string could vanish from the screen without this line noticing. */
+  assert.match(overview, /<ResumePaper/);
   // The drawer's send control. Label reworded 2026-07-27 ("Submit application" -> "Send it");
   // what matters is that the drawer can send and that sending is gated, asserted just below.
   assert.match(overview, /"Send it"/);
