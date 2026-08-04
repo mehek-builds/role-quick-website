@@ -221,14 +221,56 @@ describe("the match caption states which requirements it counted", () => {
     assert.ok(qualifier.length > "requirements".length, `unqualified caption: "${qualifier}"`);
   });
 
+  // Walks to the end of one JSX opening tag from its "<", stepping over `{...}` expressions and
+  // template literals so an attribute value containing ">" cannot end the tag early.
+  const tagEnd = (source, start) => {
+    let depth = 0;
+    let inTemplate = false;
+    for (let i = start; i < source.length; i++) {
+      const c = source[i];
+      if (inTemplate) {
+        if (c === "`") inTemplate = false;
+      } else if (c === "`") inTemplate = true;
+      else if (c === "{") depth++;
+      else if (c === "}") depth--;
+      else if (c === ">" && depth === 0) return i + 1;
+    }
+    return source.length;
+  };
+
+  // The score ring's aria-label, selected by ANCHORING to the element that renders it rather than
+  // by position in the file. The earlier version read `matchScore.match(/aria-label=\{`(...)`\}/)`,
+  // and `String.match` without /g returns the FIRST hit only: it was the ring's label purely
+  // because the ring happened to own the file's first template-literal aria-label. Add one above it
+  // and the ban AND the positive assertion below would both have silently retargeted to the new
+  // string, leaving the ring's real label unasserted while the suite stayed green. It also never
+  // saw plain-string labels like the evidence dot's at all. strokeDasharray is the ring's
+  // structural marker (the refusal test below anchors to the same one), and the ring's wrapper is
+  // the last role="img" opened before it.
+  const ringAriaLabel = (source) => {
+    const ringAt = source.indexOf("strokeDasharray");
+    assert.notEqual(ringAt, -1, "the ring must still be rendered");
+    let tagStart = -1;
+    for (const m of source.matchAll(/\srole="img"/g)) {
+      if (m.index > ringAt) break;
+      const open = source.lastIndexOf("<", m.index);
+      if (open !== -1) tagStart = open;
+    }
+    assert.notEqual(tagStart, -1, 'the ring must keep its role="img" wrapper');
+    const tag = source.slice(tagStart, tagEnd(source, tagStart));
+    // Both quoting forms, so moving the label off a template literal cannot drop it out of scope.
+    const label = tag.match(/aria-label=(?:\{`([^`]*)`\}|"([^"]*)")/);
+    assert.ok(label, "the ring must keep an aria-label");
+    return label[1] ?? label[2];
+  };
+
   test("the accessible label carries the same qualifier the caption does", () => {
     // A screen reader user gets ONLY this string, so it is the one that must not overclaim.
-    const aria = matchScore.match(/aria-label=\{`([^`]*)`\}/);
-    assert.ok(aria, "the ring must keep an aria-label");
+    const aria = ringAriaLabel(matchScore);
     // Singular included: the same file shipped "Every requirement this posting lists" in visible
     // copy while every plural-only ban in this suite read straight past it.
-    assert.doesNotMatch(aria[1], /\brequirements? this (job )?posting lists/i);
-    assert.match(aria[1], /requirements Litos counted/);
+    assert.doesNotMatch(aria, /\brequirements? this (job )?posting lists/i);
+    assert.match(aria, /requirements Litos counted/);
   });
 
   test("the refusal state is still a sentence, not a zero", () => {
