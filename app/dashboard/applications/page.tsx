@@ -54,7 +54,17 @@ type SubmissionResponse = { application_id: string; review: ApplicationReview; c
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type CoverLetterResponse = { cover_letter: CoverLetter; download_url: string };
-type ProfileIdentity = { full_name?: string; email?: string };
+type ProfileIdentity = {
+  full_name?: string;
+  email?: string;
+  school?: string;
+  degree?: string;
+  grad_date?: string;
+  grad_year?: number;
+  currently_enrolled?: boolean;
+  coursework?: string[];
+  school_location?: string;
+};
 type NewApplicationDraft = {
   company: string;
   role: string;
@@ -802,6 +812,15 @@ function Applications() {
           company,
           role,
           jd_text: jobDescription,
+          profile_education: {
+            school: identity.school,
+            degree: identity.degree,
+            grad_date: identity.grad_date,
+            grad_year: identity.grad_year,
+            currently_enrolled: identity.currently_enrolled,
+            coursework: identity.coursework,
+            school_location: identity.school_location,
+          },
           /* Omitted rather than sent as null when this did not come from a posting: the backend
              field is optional, and only a present id gets written into the stored job_context. */
           ...(draft.jobId ? { job_id: draft.jobId } : {}),
