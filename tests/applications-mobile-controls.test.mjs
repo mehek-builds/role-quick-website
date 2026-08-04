@@ -28,8 +28,12 @@ const applications = await readFile(
   new URL("../app/dashboard/applications/page.tsx", import.meta.url),
   "utf8",
 );
+/* The rail lives in dashboard-shell.tsx, not layout.tsx. The chrome was split out of the layout so
+   the layout could go back to being a server component and declare a tab title. Reading layout.tsx
+   here would still PASS, because the assertion below is a doesNotMatch and the layout no longer
+   contains the code it guards: a silent pass that stops catching the regression it was written for. */
 const dashboardLayout = await readFile(
-  new URL("../app/dashboard/layout.tsx", import.meta.url),
+  new URL("../app/dashboard/dashboard-shell.tsx", import.meta.url),
   "utf8",
 );
 

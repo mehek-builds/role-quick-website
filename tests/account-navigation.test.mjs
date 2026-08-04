@@ -13,7 +13,10 @@ function shippedCopy(source) {
 
 test("job search and account settings share one tabbed account destination", async () => {
   const [layout, settings, oldProfileRoute] = await Promise.all([
-    readFile(new URL("../app/dashboard/layout.tsx", import.meta.url), "utf8"),
+    /* NAV, UTILITY and MOBILE_NAV live in dashboard-shell.tsx: the chrome was split out of the
+       layout so the layout could go back to being a server component and declare a tab title. The
+       doesNotMatch below would pass against the layout while checking nothing. */
+    readFile(new URL("../app/dashboard/dashboard-shell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/profile/page.tsx", import.meta.url), "utf8"),
   ]);

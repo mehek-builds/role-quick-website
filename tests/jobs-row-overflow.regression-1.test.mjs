@@ -144,11 +144,14 @@ describe("the /dashboard/jobs tab title is declared, and declared once", () => {
   };
 
   test("the route segment has its own layout", () => {
-    // app/dashboard/layout.tsx is a client component, so it cannot export metadata and titles its
-    // segments from an effect instead. That effect loses a race on a hard load: Next streams the
-    // resolved metadata as a deferred RSC chunk that lands after the first hydration commit, so
-    // the root layout's marketing title is written over the top of the effect's. Only a segment
-    // that declares its own metadata wins, so the file existing is itself the fix.
+    // app/dashboard/layout.tsx used to be a client component, so it could not export metadata and
+    // titled its segments from an effect instead. That effect lost a race on a hard load: Next
+    // streams the resolved metadata as a deferred RSC chunk that lands after the first hydration
+    // commit, so the root layout's marketing title was written over the top of the effect's. Only a
+    // segment that declares its own metadata wins, so the file existing is itself the fix. The
+    // dashboard layout is a server component again now and declares /dashboard's own title, but
+    // that does not make this file optional: a parent title is what a segment INHERITS when it
+    // declares none, so without this layout the Jobs tab would read "Home".
     assert.ok(existsSync(JOBS_LAYOUT), `${JOBS_LAYOUT} is what makes the title survive a hard load`);
   });
 
