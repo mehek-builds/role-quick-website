@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchJdMatch, fetchGapEvidence, resumeSpecText, type JdMatchResponse, type GapAnswer, type JobContext } from "@/features/applications";
+import { fetchJdMatch, fetchGapEvidence, resumeSpecText, MATCH_WEIGHTING_NOTE, type JdMatchResponse, type GapAnswer, type JobContext } from "@/features/applications";
 import type { ResumeSpec } from "@/lib/api";
 import { useTermHover } from "./RequirementText";
 import type { ApplyOutcome } from "@/features/applications";
@@ -120,15 +120,23 @@ export function MatchScore({
             the employer; calling them what we counted is exactly true on every posting.
 
             Also note term_count is an UNWEIGHTED count while `score` is weighted coverage, so the
-            two do not track each other exactly. See scoreBand in that file. */}
-        <p className="text-[11px] leading-4 text-faint">
+            two do not track each other exactly. See scoreBand in that file.
+
+            THAT LAST PARAGRAPH USED TO BE TRUE ONLY IN THIS COMMENT. This is the one surface where
+            a sighted student reads the count and the number at the same time without hovering
+            anything: "Strong match / 2 of 4 requirements we counted" beside a ring reading 54.
+            ISSUE-041. The words are unchanged, because they are correct and because this line is an
+            11px column that cannot take a sentence; what is added is MATCH_WEIGHTING_NOTE on hover
+            and in the ring's accessible name, which is the same affordance Jobs, Home and the
+            Tracker row already use for it. */}
+        <p className="text-[11px] leading-4 text-faint" title={MATCH_WEIGHTING_NOTE}>
           {result.matched.length} of {result.term_count} requirements we counted
         </p>
       </div>
       <div
         className="relative h-12 w-12 shrink-0"
         role="img"
-        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting.`}
+        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting. ${MATCH_WEIGHTING_NOTE}`}
       >
         <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
           <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />

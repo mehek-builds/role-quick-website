@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getOnboardingState, setAutomationSettings } from "@/lib/api";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
-import type { JobMatch } from "@/features/applications";
+import { MATCH_WEIGHTING_NOTE, type JobMatch } from "@/features/applications";
 
 /**
  * Sending without being asked, on the page where it happens.
@@ -303,10 +303,13 @@ export function NextMatchCard({
           <span className="min-w-0">
             <span className="flex flex-wrap items-baseline gap-2">
               <span className="truncate text-sm font-medium text-ink">{match.role}</span>
+              {/* The weighting clause is APPENDED, never folded in: the sentence before it is
+                  pinned literally by tests/match-metric-coherence.regression-1.test.mjs. This is
+                  the row the 54-beside-2-of-4 audit was measured on. */}
               {match.match && (
                 <span
                   className="font-mono text-[11px] text-muted"
-                  title={`${match.match.band ?? "Match"}: your resume covers ${match.match.matched} of the ${match.match.total} requirements Litos counted in this posting.`}
+                  title={`${match.match.band ?? "Match"}: your resume covers ${match.match.matched} of the ${match.match.total} requirements Litos counted in this posting. ${MATCH_WEIGHTING_NOTE}`}
                 >
                   {Math.max(0, Math.min(100, Math.round(match.match.score)))}% match
                 </span>

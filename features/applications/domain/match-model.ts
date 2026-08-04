@@ -19,6 +19,43 @@ export type JdMatchResponse = {
 };
 
 /**
+ * Why the badge is not `matched` divided by `total`, said once so four surfaces cannot drift.
+ *
+ * ISSUE-041. Measured live on 2026-08-04: Databricks' "Product Management Intern (Summer 2027)"
+ * rendered a `54% match` badge whose own tooltip read "your resume covers 2 of the 4 requirements
+ * Litos counted in this posting". Two of four is fifty. A student who divides gets a different
+ * number from the one they are looking at, and the sentence is positioned as the explanation OF
+ * that number.
+ *
+ * THE TWO ARE DIFFERENT ARITHMETIC, and both are true. volley-backend's engine/jdMatch.ts scores
+ * WEIGHTED coverage: every extracted requirement carries its section's weight (1 under a
+ * requirements heading, 0.7 under responsibilities, 0.6 under a preferred block, 0.4 in unlabelled
+ * prose) and the score is covered weight over total weight. The caption is an UNWEIGHTED count of
+ * the same terms. That posting extracts four terms of total weight 3.7, so two weight-1 terms give
+ * 2 / 3.7 = 54 beside a caption of 2 of 4. The scorer's own docblock has said this in the negative
+ * since ISSUE-023 ("the caption cannot be used to predict the band, and neither number is wrong");
+ * what it never did was say it to the student.
+ *
+ * HOW FAR APART THEY CAN GET, because a four-point gap would not have been worth copy. Weights run
+ * 1 down to 0.4 and the term set runs 4 to 12 (MIN_SCORABLE_TERMS to EMPHASIS_LIMIT), so the worst
+ * case is every covered term at 1 and every missed one at 0.4, or the reverse: "5 of 12" is a
+ * caption reading 42% beside a badge of 64, and "7 of 12" is a caption reading 58% beside a badge
+ * of 36. Roughly 22 points in either direction, and the spread straddles band lines - the scorer
+ * records "5 of 12" scoring 46 or 32 on its own SWE fixture, which is Strong or Solid on identical
+ * copy.
+ *
+ * WHY A CLAUSE RATHER THAN A NEW NUMBER. Restating the weighted share in words would print the
+ * badge twice, and the count is the fact the student can act on: it is the size of the gap list
+ * below it. So both facts stay and the relationship between them stops being left to inference.
+ *
+ * IT MAY NOT SAY "requirements this posting lists". That wording is ISSUE-023's overclaim, banned
+ * and pinned, because the extractor's set is capped at EMPHASIS_LIMIT and is not the employer's
+ * stated set. This clause talks about how the counted set is weighted, never about its completeness.
+ */
+export const MATCH_WEIGHTING_NOTE =
+  "Requirements the posting listed as required weigh more than ones it only mentions in passing, so the score is weighted coverage rather than that fraction.";
+
+/**
  * What the Tracker's next-best-match row has to ask for, so its number is the SAME number Home and
  * Jobs print beside the same posting.
  *
