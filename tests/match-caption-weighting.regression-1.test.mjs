@@ -114,7 +114,8 @@ describe("the weighting note is one string, and it says the right thing", () => 
     // ban on the claim, it is a ban on one spelling of it.
     const note = await weightingNote();
     assert.doesNotMatch(note ?? "", /requirements? this (job )?posting lists/i);
-    assert.doesNotMatch(note ?? "", /\ball (of the )?requirements\b/i);
+    // `(of )?(the )?` because `(of the )?` missed "all the requirements", the likeliest phrasing.
+    assert.doesNotMatch(note ?? "", /\ball (of )?(the )?requirements\b/i);
   });
 
   test("it does not restate the score as a second number", async () => {
@@ -185,6 +186,16 @@ describe("the ISSUE-023 wording the note sits next to is untouched", () => {
       // Case-insensitive AND number-insensitive. Case, because the sentence-initial form is the one
       // an author would naturally write. Number, because the singular is what actually shipped.
       assert.doesNotMatch(src, /\brequirements? this (job )?posting lists/i, `${name} overclaims`);
+      // THE SECOND BAN, the one that does not depend on a fixed verb. The line above pins one
+      // determiner-and-verb pair, so "all the requirements this posting has" walks past it while
+      // making the identical completeness claim. This ban held only for MATCH_WEIGHTING_NOTE
+      // (see the note test above) and was never propagated to the surfaces that render the count,
+      // which is the more likely place for the claim to appear. Verified clean against all four
+      // surfaces when added.
+      // `(of )?(the )?`, NOT `(of the )?`: the note's copy of this ban read the latter and so
+      // missed "all the requirements", which is the phrasing an author is most likely to reach
+      // for. Mutation-confirmed both ways before widening.
+      assert.doesNotMatch(src, /\ball (of )?(the )?requirements\b/i, `${name} claims the full list`);
     }
   });
 });

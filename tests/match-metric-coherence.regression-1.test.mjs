@@ -78,7 +78,10 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     // suite below holds the same rule for MatchScore; a list badge may not overclaim where the
     // review screen is forbidden to.
     assert.match(jobsPage, /requirements Litos counted in this posting/);
-    assert.doesNotMatch(jobsPage, /requirements this posting lists/);
+    // Either number, either case. The plural-only spelling of this ban is how the singular form
+    // shipped live in the review screen's zero-gaps line: a ban that holds in one grammatical
+    // number bans a spelling, not the claim.
+    assert.doesNotMatch(jobsPage, /\brequirements? this (job )?posting lists/i);
   });
 
   test("the Tracker row's badge carries the same band and denominator", () => {
@@ -88,7 +91,8 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     const nextMatchRow = code(readFileSync("components/app/Autopilot.tsx", "utf8"));
     assert.match(nextMatchRow, /match\.match\.band \?\? "Match"/, "the row must name the band");
     assert.match(nextMatchRow, /\$\{match\.match\.matched\} of the \$\{match\.match\.total\} requirements Litos counted/);
-    assert.doesNotMatch(nextMatchRow, /requirements this posting lists/);
+    // Singular included for the same reason as the Jobs badge above.
+    assert.doesNotMatch(nextMatchRow, /\brequirements? this (job )?posting lists/i);
   });
 
   test("the preference sentence does not borrow the score's word", () => {
@@ -221,7 +225,9 @@ describe("the match caption states which requirements it counted", () => {
     // A screen reader user gets ONLY this string, so it is the one that must not overclaim.
     const aria = matchScore.match(/aria-label=\{`([^`]*)`\}/);
     assert.ok(aria, "the ring must keep an aria-label");
-    assert.doesNotMatch(aria[1], /requirements this job posting lists/);
+    // Singular included: the same file shipped "Every requirement this posting lists" in visible
+    // copy while every plural-only ban in this suite read straight past it.
+    assert.doesNotMatch(aria[1], /\brequirements? this (job )?posting lists/i);
     assert.match(aria[1], /requirements Litos counted/);
   });
 
