@@ -447,7 +447,13 @@ export type ApplicationReview = {
 
 export type ExperienceEntry = {
   id?: string;
-  type: "job" | "project";
+  /* "leadership" was stored and accepted by the API (experienceBank.ts enum) but missing from this
+     union, so the account page rendered a Type select with no matching option for a third of a
+     typical bank. A controlled <select> with no matching option shows the first one, so opening
+     that dropdown on a club presidency and picking anything reclassified it as a job - silently,
+     because the value looked wrong from the moment the card painted. Clubs, societies and
+     volunteering are not work experience and should not be offered to employers as if they were. */
+  type: "job" | "project" | "leadership";
   org: string;
   title?: string | null;
   date_range?: string | null;

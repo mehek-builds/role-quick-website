@@ -141,8 +141,53 @@ function Applications() {
      723px viewport measured y = -281 while the button that raised it sat at y = 434: announced to a
      screen reader, invisible to everyone else, because the job description textarea alone is ~320px
      tall. It now renders beside the button and names the boxes it is about, so it is perceivable
-     from where the action was taken without any scrolling or animation. One alert, not two. */
-  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[] } | null>(null);
+     from where the action was taken without any scrolling or animation. One alert, not two.
+
+     ISSUE-043 widened this from validation to EVERY message either composer button raises. The
+     rule, drawn once so later call sites do not have to re-argue it:
+
+       A message caused by pressing a button INSIDE the composer belongs beside that button.
+       A message about the state of the PAGE belongs in the page banner.
+
+     So the composer owns both of its buttons end to end: "Make my resume" (its two validation
+     guards and the failure of /profile, /profile/application and /resume/generate) and "Read job"
+     (its two URL guards and the failure of /jobs/extract). The banner keeps what the student did
+     not ask for and cannot answer from the composer: the applications list failing to load, the
+     preferences fetch failing, the autopilot sending on its own, and every control on the review
+     screen, which is a different surface with its own geometry.
+
+     Measured on production before the fix, with /resume/generate returning 500 on a filled form:
+     the banner sat at y = -126 on a 1280x723 viewport and y = -195 on a 375x812 one while the
+     button was on screen in both, and the failure ALSO moved scrollY (345 -> 413, 560 -> 628),
+     pushing the banner further out of reach than the ISSUE-040 case it replaced.
+
+     `fields` stays empty for anything the server did. A 500 is not the student mistyping, so
+     marking the four boxes aria-invalid would be a lie about their input; an empty array renders
+     the sentence and marks nothing, which `invalid()` in NewApplicationPanel gives for free.
+
+     `at` is which of the composer's two buttons is being answered, and it exists because "inside
+     the composer" was not close enough. The first cut of ISSUE-043 sent Read job's messages to the
+     generate row, and the harness measured them at y = 979 on a 375x812 viewport with the Read job
+     button at y = 554: off screen in the other direction, the same defect upside down. The two
+     buttons are ~440px apart, so the composer needs two slots and not one. Exactly one is ever
+     live, because `at` holds one value. */
+  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null>(null);
+  /* One announcement, never two. The page banner and this alert are both live regions, so leaving a
+     stale `error` up while raising a refusal makes a screen reader read the old problem and the new
+     one. Everything that speaks for the composer goes through here and clears the other channel.
+
+     KNOWN ASYMMETRY, accepted rather than overlooked: setError(null) is unconditional, so the
+     composer always wins over the page. If the list failed to load and the banner reads "We could
+     not load your applications. Reload the page.", the next composer press erases a fact that is
+     still true. That is the opposite of the principle argued two comments up, applied in one
+     direction only. It is accepted because every page-level error on this screen is reload advice
+     the student can act on later, and the alternative is two live regions firing on a single press,
+     which is the louder failure. If a page-level error ever appears here that is NOT reload advice,
+     revisit this line rather than adding a second alert. */
+  const refuseInComposer = useCallback((at: ComposerSlot, message: string, fields: ApplicationDraftField[]) => {
+    setError(null);
+    setComposerRefusal({ message, fields, at });
+  }, []);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [coverLetterBody, setCoverLetterBody] = useState("");
@@ -575,6 +620,10 @@ function Applications() {
         captureCompletedSubmission(result, "autopilot");
         setPackets((current) => current?.map((item) => (item.id === id ? { ...item, spec: { ...item.spec, _review: result.review } } : item)) ?? current);
       } catch (reason) {
+        /* Stays in the page banner, deliberately, and is NOT a composer refusal. Nobody pressed a
+           composer button: this is the countdown on NextMatchCard reaching zero, or that card's own
+           Send. Routing it into the composer would put an answer about the autopilot next to a
+           button that did not ask, in a panel that is usually closed when this fires. */
         setError(reason instanceof Error ? reason.message : "Could not send that application on its own. It is still here for you.");
       }
     },
@@ -611,19 +660,23 @@ function Applications() {
     });
   }
 
+  /* "Read job" is the composer's other button, and every one of these three answers is about the
+     Job URL box six pixels away. They went to the page banner until ISSUE-043; the first two are
+     the same class of validation ISSUE-040 moved for "Make my resume" and were simply missed. */
   async function fetchJobDescription() {
     const portalUrl = newApplication.portalUrl.trim();
     if (!portalUrl) {
-      setError("Add the job link first, then get the description.");
+      refuseInComposer("url", "Add the job link first, then get the description.", ["portalUrl"]);
       return;
     }
     try {
       if (new URL(portalUrl).protocol !== "https:") throw new Error("Job URL must use HTTPS");
     } catch {
-      setError("Enter a complete job URL beginning with https://.");
+      refuseInComposer("url", "Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
     setExtractingJd(true);
+    setComposerRefusal(null);
     setError(null);
     setNotice(null);
     try {
@@ -636,7 +689,9 @@ function Applications() {
     } catch (err) {
       // A 502 here is expected for some client-rendered boards (see backend jobExtract.ts) - the
       // manual textarea right below stays the fallback, this just saves the copy/paste when it works.
-      setError(err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.");
+      /* No fields marked: a board that will not give up its text is not the student's URL being
+         wrong, and border-danger on the box they typed correctly reads as an accusation. */
+      refuseInComposer("url", err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.", []);
     } finally {
       setExtractingJd(false);
     }
@@ -655,11 +710,11 @@ function Applications() {
        the composer and have to appear next to it. See the state declaration for the measurement. */
     const missing = missingApplicationFields({ company, role, portalUrl, jobDescription });
     if (missing.length > 0) {
-      setComposerRefusal({ message: "Fill in all four boxes first.", fields: missing });
+      refuseInComposer("generate", "Fill in all four boxes first.", missing);
       return;
     }
     if (!isHttpsJobUrl(portalUrl)) {
-      setComposerRefusal({ message: "Enter a complete job URL beginning with https://.", fields: ["portalUrl"] });
+      refuseInComposer("generate", "Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
     setComposerRefusal(null);
@@ -731,7 +786,11 @@ function Applications() {
       track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
       setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.");
+      /* ISSUE-043. This is the press of "Make my resume" failing, so it is answered beside "Make my
+         resume". Empty fields on purpose: a 500 from /resume/generate, or a missing name on the
+         main resume, says nothing about the four boxes, and marking them would send the student
+         back to retype input that was already fine. */
+      refuseInComposer("generate", reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.", []);
     } finally {
       setCreating(false);
     }
@@ -992,6 +1051,18 @@ function Applications() {
         />
       )}
 
+      {/* KNOWN, NOT IN SCOPE, and recorded here because it is the mechanism behind a number in the
+          ISSUE-043 measurements. This banner renders IMMEDIATELY ABOVE the composer, so a
+          page-level error arriving while the composer is open pushes the whole composer down by
+          this element's height. That is why the baseline scroll position moved 586 -> 674 and
+          420 -> 488 when the generate request failed: the banner appeared here and shoved
+          everything below it, carrying the banner itself further from the button.
+
+          ISSUE-043 means the refusal now travels WITH the button, so the message can no longer be
+          pushed away from the control that raised it. The button itself can still jump under the
+          student's cursor when a genuine page-level error lands mid-press. Not a regression, and
+          not something a placement fix can reach: it needs this banner reserved or moved, which is
+          a layout change to the whole screen. */}
       {error && <ErrorNote message={error} />}
       {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
           the student fixes the education line rather than sitting there until she saves. */}
@@ -1353,8 +1424,9 @@ function NewApplicationPanel({
   creating: boolean;
   onFetchJobDescription: () => void;
   extractingJd: boolean;
-  /** Why the last press of "Make my resume" did nothing, and which boxes it was about. */
-  refusal: { message: string; fields: ApplicationDraftField[] } | null;
+  /** Why the last press of a composer button did nothing, which boxes it was about, and which of
+      the two buttons is being answered. */
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
   const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
@@ -1380,6 +1452,10 @@ function NewApplicationPanel({
           {extractingJd ? <PendingLabel state="composing">Reading...</PendingLabel> : "Read job"}
         </Button>
       </div>
+      {/* Read job's own slot. Measured: the two composer buttons are ~440px apart, so the generate
+          row is not "beside" this one. With the message down there it sat at y = 979 on a 375x812
+          viewport while this button was at y = 554. */}
+      <ComposerRefusalNote refusal={refusal} at="url" />
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
       <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-border"}`} />
       {/* Beside the button that raised it, not in the page banner far above it. The button and this
@@ -1388,13 +1464,34 @@ function NewApplicationPanel({
           in a background tab. role="alert" is here and nowhere else for this message, so a screen
           reader still hears it exactly once. */}
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-        {refusal && <p role="alert" className="mr-auto text-sm text-danger">{refusal.message}</p>}
+        <ComposerRefusalNote refusal={refusal} at="generate" />
         <Button type="button" onClick={onGenerate} disabled={creating} >
           {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
         </Button>
       </div>
     </Card>
   );
+}
+
+/** Which composer button a refusal is answering. The composer has exactly two, far enough apart
+    that a message beside one is off screen from the other. */
+type ComposerSlot = "url" | "generate";
+
+/* The refusal is written ONCE and mounted in whichever slot matches, rather than duplicated into
+   both places behind two conditions. Two copies would be two live regions the day someone changes
+   one condition and not the other, and a screen reader would read the same refusal twice. `at`
+   holds a single value, so at most one of these ever renders anything. */
+function ComposerRefusalNote({
+  refusal,
+  at,
+}: {
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
+  at: ComposerSlot;
+}) {
+  if (!refusal || refusal.at !== at) return null;
+  /* Gated on the refusal existing, never on it naming a field: a server failure names none, and
+     that is exactly the case ISSUE-043 was about. */
+  return <p className={at === "generate" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>;
 }
 
 function ApplicationField({ label, value, onChange, placeholder, type = "text", invalid = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string; invalid?: boolean }) {
