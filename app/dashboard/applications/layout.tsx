@@ -5,7 +5,7 @@ import type { Metadata } from "next";
  *
  * Same finding, same cure as app/dashboard/jobs/layout.tsx, which carries the full explanation:
  * app/dashboard/layout.tsx is a client component and so cannot export metadata, and the effect it
- * uses instead loses a race on a hard load against the deferred RSC chunk carrying the resolved
+ * used instead lost a race on a hard load against the deferred RSC chunk carrying the resolved
  * metadata. Declaring the title on the segment makes the streamed answer correct at the source,
  * so it is right in the served HTML rather than written and then overwritten.
  *

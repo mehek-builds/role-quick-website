@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
 import { isQaRender } from "@/lib/qa-mode";
+import { PRODUCT_NAME } from "@/lib/product";
 import {
   ClipboardIcon,
   GearIcon,
@@ -59,10 +60,14 @@ export default function DashboardLayout({
      is not a harmless second opinion: on a client-side nav this effect runs after the declared
      title has landed, so it overwrites it. That is exactly what it did to /dashboard/resume, which
      is not a nav destination and so fell to the bare product name, wiping out "Resume" every time
-     a student reached the page from inside the app. A route's title now has exactly one owner. */
+     a student reached the page from inside the app. A route's title now has exactly one owner.
+
+     The label is still read out of NAV rather than typed here, so renaming the destination renames
+     the tab with it and the sidebar and the tab cannot drift apart. */
   useEffect(() => {
     if (pathname !== "/dashboard") return;
-    document.title = "Home: Litos";
+    const home = NAV.find((n) => n.href === "/dashboard");
+    if (home) document.title = `${home.label}: ${PRODUCT_NAME}`;
   }, [pathname]);
 
   useEffect(() => {

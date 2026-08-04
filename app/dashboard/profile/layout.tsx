@@ -4,13 +4,13 @@ import type { Metadata } from "next";
  * The tab title for /dashboard/profile, declared rather than assigned.
  *
  * Same finding, same cure as app/dashboard/jobs/layout.tsx, which carries the full explanation:
- * the client layout above cannot export metadata, and the effect it uses instead is overwritten
+ * the client layout above cannot export metadata, and the effect it used instead was overwritten
  * on a hard load by the root layout's marketing title.
  *
  * This one is worth saying out loud, because the page is a redirect and the instinct is that a
  * redirect has no title. It has one. The route prerenders to a real 200 HTML shell and the hop to
  * /dashboard/settings#job-search happens once that shell is running, so the tab is titled for as
- * long as the hop takes, and today it is titled with the marketing line. "Account" is the word the
+ * long as the hop takes, and it used to be titled with the marketing line. "Account" is the word the
  * nav uses for where this route is sending the reader, so titling it that way means the tab does
  * not change under them when they arrive. No brand suffix: the root layout templates it.
  *

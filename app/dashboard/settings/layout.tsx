@@ -4,7 +4,7 @@ import type { Metadata } from "next";
  * The tab title for /dashboard/settings, declared rather than assigned.
  *
  * Same finding, same cure as app/dashboard/jobs/layout.tsx, which carries the full explanation:
- * the client layout above cannot export metadata, and the effect it uses instead is overwritten
+ * the client layout above cannot export metadata, and the effect it used instead was overwritten
  * on a hard load by the root layout's marketing title.
  *
  * "Account", the word in the UTILITY table that renders this destination in the nav. No brand
