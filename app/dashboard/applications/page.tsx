@@ -16,7 +16,7 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
@@ -1399,12 +1399,22 @@ function Applications() {
               came back with "This portal is not supported yet". Nine of one account's ten failures
               were that. The tailored resume is still worth having, so this says what Litos cannot
               do and hands the applicant the page instead of hiding the job. */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
-            <p className="text-sm text-ink">
-              {review.portal_supported === false
-                ? "Litos cannot fill in this company’s page. Your resume is ready, so apply on their site."
-                : "Litos fills the form with your saved answers and this resume."}
-            </p>
+          {/* The two sentences are NOT the same kind of sentence, which is why only one of them is
+              allowed to disappear on a phone.
+              The supported line describes what the button next to it already says: on a 375px
+              screen it wraps to two rows and the bar, which is now sticky, was eating ~150px of an
+              812px viewport to restate "Fill the form" in a longer form. It comes back at sm.
+              The unsupported line is the opposite: it is the only thing that explains why the
+              button says "Open the company page" instead, and dropping it would leave a student
+              with a control that looks like a mistake. It is shown at every width. */}
+          {/* justify-end below sm is not a style preference. `hidden` is display:none, so the caption
+              is not a flex item there at all, and justify-between with ONE item resolves to
+              flex-start: the primary action slid to the left edge on a phone while the same bar on
+              the questions screen sat right. Same bar, three alignments, depending on branch. */}
+          <TerminalActionBar className="justify-end sm:justify-between">
+            {review.portal_supported === false
+              ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
+              : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               {review.portal_supported === false
@@ -1413,7 +1423,7 @@ function Applications() {
                   {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
                 </Button>}
             </div>
-          </div>
+          </TerminalActionBar>
         </>
       )}
 
@@ -1751,7 +1761,12 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button></div>
+      {/* Same trap as the review screen, one screen later: N six-row textareas and then the button
+          that ends the screen, so at 744px the action is off the bottom of a document whose every
+          other element eats the keyboard. Same treatment. */}
+      <TerminalActionBar className="justify-end">
+        <Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button>
+      </TerminalActionBar>
     </div>
   );
 }

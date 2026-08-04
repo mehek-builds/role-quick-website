@@ -26,6 +26,20 @@ const SENT_STATUSES = ["submitted", "submitted", "submitted", "submitted"];
 export const COUNTS = { action: NEEDS_YOU_STATUSES.length, ready: READY_STATUSES.length, submitted: SENT_STATUSES.length };
 export const REVIEWABLE_TOTAL = COUNTS.action + COUNTS.ready + COUNTS.submitted;
 
+/**
+ * A job description of a length a real posting actually has.
+ *
+ * The narrow-viewport spec needs the review screen to be TALLER THAN THE VIEWPORT, or it proves
+ * nothing: a one-line description fits on a phone with room to spare, the primary action is
+ * trivially on screen, and the case stays green against the very layout defect it exists to catch.
+ * ~4,500 characters is the middle of the range for the postings Litos actually opens.
+ */
+const REALISTIC_JD_PARAGRAPH =
+  "Fixture Company is hiring an engineer to build TypeScript workflow systems and accessible React interfaces. " +
+  "You will partner with product teams, automate operational handoffs, write tested code, and improve application performance. " +
+  "Experience with Node.js, PostgreSQL, and customer-facing product engineering is preferred. ";
+export const REALISTIC_JD = REALISTIC_JD_PARAGRAPH.repeat(14).trim();
+
 function packet(key, status) {
   return {
     id: `fixture-packet-${key}`,
@@ -41,12 +55,18 @@ function packet(key, status) {
       experience: [],
       skills: [],
       _review: {
-        jd_text: `Fixture job description ${key}.`,
+        jd_text: `Fixture job description ${key}. ${REALISTIC_JD}`,
         portal_url: "https://jobs.example.com/fixture",
         ats_name: "Greenhouse",
         status,
         edited_terms: [],
-        questions: [],
+        /* One unanswered required question on the needs-you packets, so the portal screen offers
+           "Check the answers" and the questions screen has something to render. Without it that
+           whole branch of the flow is unreachable from the fixture, which is how the questions
+           screen went untested while sharing a component with the reported bug. */
+        questions: status === "needs_attention"
+          ? [{ id: `q-${key}`, question: "Why do you want to work here?", answer: "", kind: "essay", required: true }]
+          : [],
         skipped_reasons: [],
         updated_at: "2026-07-21T12:00:00.000Z",
         ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
@@ -139,5 +159,24 @@ export const STUB = {
      on render, so an object with either key missing takes the whole route into its error boundary. */
   "/applications/board": { stages: [], cards: [] },
   "/track/events": [],
+  /* Resume checks, inside the review screen's right pane. The shape is the one
+     features/applications/infrastructure/response-shape.ts insists on: `findings` an array and
+     both counts real numbers, since the panel prints the counts in a sentence. Zero findings is a
+     real answer and renders the "nothing to fix" line, which is all this spec needs from it. */
+  "/resume/health": { findings: [], bullet_count: 1, quantified_count: 0 },
+  /* Opening a packet scores it. `{}` here is not harmless: MatchScore reads `matched` and `missing`
+     as arrays on the way to the badge, and an object without them takes the whole review screen
+     into its error boundary, which is a blank page with no Fill the form button on it. Reported as
+     "not scorable" on purpose, the one shape that renders without asserting a fabricated score. */
+  "/jd-match": {
+    score: null,
+    scorable: false,
+    reason: "fixture",
+    band: null,
+    term_count: 0,
+    min_scorable_terms: 4,
+    matched: [],
+    missing: [],
+  },
   "/onboarding/state": { automatic_submission_enabled: false },
 };

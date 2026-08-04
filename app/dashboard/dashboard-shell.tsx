@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
 import { isQaRender } from "@/lib/qa-mode";
+import { currentKeyboardInset } from "@/lib/keyboard-inset";
 import {
   ClipboardIcon,
   GearIcon,
@@ -55,6 +56,44 @@ export function DashboardShell({
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
+
+  /**
+   * Publish the software keyboard's height as a CSS variable.
+   *
+   * A bottom-sticky element is positioned against the LAYOUT viewport, and iOS Safari does not
+   * shrink the layout viewport for the keyboard. So without this the terminal action bar sits
+   * behind the keyboard for exactly as long as a text field is focused, which on the two screens
+   * that use it (an editable resume, and a page of textareas) is most of the time they are open.
+   *
+   * Listens to `scroll` as well as `resize`: iOS scrolls the visual viewport to keep the focused
+   * field above the keyboard, and that changes how much is covered without changing any height.
+   *
+   * Nothing here runs where `visualViewport` is absent, and the value stays 0 on every browser
+   * that resizes the layout viewport instead, so this is inert outside the case it fixes.
+   */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const root = document.documentElement;
+    let last = -1;
+    const apply = () => {
+      const inset = currentKeyboardInset();
+      // Only touch the DOM when the value actually changed: these events fire per frame during a
+      // scroll, and a style write per frame on a phone is a jank source for no benefit.
+      if (inset === last) return;
+      last = inset;
+      root.style.setProperty("--keyboard-inset", `${inset}px`);
+    };
+    apply();
+    viewport.addEventListener("resize", apply);
+    viewport.addEventListener("scroll", apply);
+    return () => {
+      viewport.removeEventListener("resize", apply);
+      viewport.removeEventListener("scroll", apply);
+      // Back to the stylesheet's own 0px rather than a stale inline value from a torn-down shell.
+      root.style.removeProperty("--keyboard-inset");
+    };
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -150,7 +189,14 @@ export function DashboardShell({
             </Link>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-7 pb-24 sm:px-6 sm:py-10 lg:pb-10">{children}</main>
+        {/* Top and bottom padding are set SEPARATELY on purpose. This was `py-7 pb-24 sm:py-10`,
+            where the `sm:py-10` shorthand quietly overwrote the `pb-24` that exists to keep the end
+            of a page off the tab bar below. The bar is `lg:hidden`, so from 640px to 1023px it was
+            still on screen with nothing reserved for it, and the last 21px of every dashboard page
+            sat underneath it. On /dashboard/applications those 21px are where the primary action
+            lives. Nothing here may use a `py-*` shorthand again: the bottom is the bar's to claim,
+            through --dashboard-action-offset, whose bar term goes to 0 exactly when the bar does. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-7 pb-[var(--dashboard-action-offset)] sm:px-6 sm:pt-10">{children}</main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
