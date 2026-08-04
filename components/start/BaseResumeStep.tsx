@@ -19,6 +19,7 @@ import { SourceResume } from "./SourceResume";
 import { LaterLink, PrimaryButton, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { humanizeBuildNote } from "@/lib/buildNotes";
+import { courseworkLine } from "@/lib/profile-editor";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * The base resume screen. Paper on the left, the build on the right.
@@ -1016,12 +1017,17 @@ function replayDemo(onFrame: (frame: BuildFrame) => void) {
 /** School, degree, grad date and coursework come from the parse, not the model. */
 function educationFrom(parsed: ParsedProfile | null): Partial<ResumeSpec> {
   if (!parsed) return {};
-  const p = parsed as ParsedProfile & { degree?: string; grad_date?: string; coursework?: string[] };
+  const p = parsed as ParsedProfile & { degree?: string; grad_date?: string; coursework?: unknown };
   return {
     school: p.school ?? "",
     degree: p.degree ?? "",
     grad_date: p.grad_date ?? (p.grad_year ? String(p.grad_year) : ""),
-    coursework: (p.coursework ?? []).join(", "),
+    /* Through the shared reader (ISSUE-044). The declared `string[]` was a claim about jsonb, not a
+     * guarantee from it, and the bare `.join` underneath it would have thrown a TypeError on a
+     * stored string rather than degrading - on /start, the screen where a new user approves their
+     * base resume. The type is widened to `unknown` deliberately: the annotation was the thing
+     * making the unsafe call look safe. */
+    coursework: courseworkLine(p.coursework),
   };
 }
 

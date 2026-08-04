@@ -8,6 +8,7 @@ import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
 import {
+  courseworkLine,
   hasCompleteTargetRoleSet,
   parseEditableLines,
   parseEditableList,
@@ -511,25 +512,6 @@ function LinesField({
       />
     </div>
   );
-}
-
-/* Relevant coursework is STORED AS A LIST and edited here as one comma separated line, so it is
-   joined for display rather than read as a string.
-
-   Reading it with the str() helper below returned null for every healthy profile, because the
-   parser writes an array: this screen showed a BLANK coursework box to students whose resume listed
-   a full set of courses, and the read-only summary hid the field entirely. A student who then
-   helpfully retyped their courses into that blank box wrote a plain string back over the array, and
-   because the resume generator gates on Array.isArray, every resume generated afterwards printed an
-   EMPTY coursework line while this page went on displaying the text she had typed (ISSUE-044).
-
-   Tolerant of a stored string on purpose, permanently. The two repos deploy separately on merge, so
-   this page can never assume the API alongside it is the new one, and the rows corrupted before the
-   backfill must still display rather than silently reading as empty a second time. */
-function courseworkLine(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!Array.isArray(value)) return "";
-  return value.filter((entry): entry is string => typeof entry === "string").join(", ");
 }
 
 /* The parse shape has evolved. The common profile facts are reviewable here, while structured work

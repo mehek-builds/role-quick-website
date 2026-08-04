@@ -20,6 +20,25 @@ export function splitBankByCategory<T extends { type: string }>(
   };
 }
 
+/* `parsed_json.coursework` as the ONE LINE every surface displays it as.
+ *
+ * Shared rather than written per screen, which is the whole lesson of ISSUE-044. The field is stored
+ * as a LIST and edited as one comma separated line, and when each reader spelled that conversion for
+ * itself they disagreed: the resume screen read it with a `typeof === "string"` helper, got null for
+ * every healthy profile, and showed a BLANK box under the words "This prints on your generated
+ * resume" - which is what invited a student to retype her courses and overwrite the array with a
+ * string. One exported function means the next screen to show this field cannot get it wrong.
+ *
+ * Tolerant of a stored string on purpose, permanently. The site and the API are separate repos that
+ * deploy independently on merge, so no page here can assume the API beside it is the newer one. The
+ * cost of tolerating is one branch; the cost of not tolerating was a silently empty resume line, and
+ * on the join path below it would be a TypeError, since a string has no .join. */
+export function courseworkLine(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value.filter((entry): entry is string => typeof entry === "string").join(", ");
+}
+
 export function parseEditableList(value: string): string[] {
   return deduplicate(value.split(/[\n,]/));
 }
