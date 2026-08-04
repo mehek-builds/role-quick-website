@@ -21,10 +21,20 @@ test("every path that receives a review routes the screen from it", async () => 
     dashboard,
     /\/submit-request`[\s\S]{0,900}moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
   );
-  // The poll.
+  // The poll, which now has EXACTLY ONE exception and it is spelled out here rather than being
+  // absorbed by a wider span. While the student's own approve is in flight the poll is reporting
+  // the status from BEFORE that approve, so routing on it walks them backwards onto a live
+  // "Send it" and invites a duplicate application. The guard must sit immediately before the
+  // route, and it must be the ref (readable synchronously) rather than a state value.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,1600}moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,2600}if \(approveInFlight\.current\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+  );
+  // And the approve response itself routes, which is the whole point of the sibling fix: the QA
+  // branch always did and the real one did not.
+  assert.match(
+    dashboard,
+    /\/submission\/approve`[\s\S]{0,2000}moveToScreen\(screenForStatus\(result\.review\.status, "portal"\)\)/,
   );
   // Selecting a packet, which falls back to the review screen rather than the progress screen.
   assert.match(dashboard, /moveToScreen\(screenForStatus\(status, "review"\)\)/);
