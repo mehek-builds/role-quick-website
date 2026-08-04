@@ -411,3 +411,87 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
     }
   });
 }
+
+
+/**
+ * The keyboard case, driven through the same variable the shell writes.
+ *
+ * A real software keyboard cannot be opened in headless Chromium, and `visualViewport` cannot be
+ * resized from script, so this asserts the half that is actually this repo's: given a keyboard
+ * inset, does the sticky bar clear it? The other half, turning viewport geometry into that number,
+ * is a pure function unit-tested in lib/keyboard-inset.test.mts with real device measurements.
+ * Splitting it that way is the only honest option here; a single test claiming to prove "works on
+ * iPhone" would be claiming something no machine in this pipeline can observe.
+ */
+test("a terminal action bar clears a software keyboard", async () => {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 } });
+  await context.route("**/*", async (route) => {
+    const url = route.request().url();
+    if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
+      await route.continue();
+      return;
+    }
+    if (url.startsWith(BACKEND_ORIGIN)) {
+      const body = STUB[new URL(url).pathname];
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
+      return;
+    }
+    blockedExternal.push(url);
+    await route.abort();
+  });
+  await context.addInitScript((token) => {
+    window.localStorage.setItem("rq_token", token);
+    window.localStorage.setItem("rq_email", "fixture@example.invalid");
+    window.localStorage.setItem("litos_session_mode_v1", "verified");
+    window.localStorage.setItem("litos_has_history_v1", "true");
+  }, SESSION_TOKEN);
+
+  const page = await context.newPage();
+  try {
+    await openAPacket(page);
+    const closed = await page.evaluate(PROBE, { label: "keyboard closed", action: "Fill the form" });
+    assert.ok(closed.fullyInViewport, JSON.stringify(closed));
+
+    /* 336px is an iPhone 14 Pro portrait keyboard. */
+    await page.evaluate(() => { document.documentElement.style.setProperty("--keyboard-inset", "336px"); });
+    await page.waitForTimeout(300);
+    const open = await page.evaluate(PROBE, { label: "keyboard open", action: "Fill the form" });
+
+    const keyboardTop = open.viewportH - 336;
+    assert.ok(
+      open.bottom <= keyboardTop,
+      `the action bar is behind the keyboard: its bottom is ${open.bottom} and the keyboard starts at ${keyboardTop}. ${JSON.stringify(open)}`,
+    );
+    assert.ok(open.top >= 0, `the bar was pushed off the top of the screen: ${JSON.stringify(open)}`);
+    /* The BAR's own edge, not the button's: the button sits 16px inside the bar's padding, and
+       measuring it made the first version of this assertion look like a 17px discrepancy that was
+       simply the padding. The tab bar is behind the keyboard too, so its height must NOT be added
+       on top of the keyboard's (max(), not a sum); anything beyond the 40px gutter is dead space. */
+    const barBottom = await page.evaluate(() => {
+      const btn = [...document.querySelectorAll("button")].find((b) => /Fill the form/i.test(b.textContent ?? ""));
+      const bar = btn.closest("[class*='sticky']");
+      return Math.round(bar.getBoundingClientRect().bottom);
+    });
+    const slack = keyboardTop - barBottom;
+    assert.ok(
+      slack >= 0 && slack <= 48,
+      `the bar's own bottom edge sits ${slack}px above the keyboard; expected the 40px gutter. A much larger number means the tab bar's height is being added to the keyboard's instead of max()'d with it.`,
+    );
+
+    /* And `main`'s reservation must NOT have moved, or the document would shift under a student
+       mid-keystroke. */
+    const padUnchanged = await page.evaluate(() => {
+      const main = document.querySelector("main");
+      return getComputedStyle(main).paddingBottom;
+    });
+    await page.evaluate(() => { document.documentElement.style.removeProperty("--keyboard-inset"); });
+    await page.waitForTimeout(200);
+    const restored = await page.evaluate(() => getComputedStyle(document.querySelector("main")).paddingBottom);
+    assert.equal(padUnchanged, restored, "main's bottom padding changed with the keyboard; it must be keyboard-independent");
+  } catch (reason) {
+    await captureFailure("keyboard", page, reason);
+    throw reason;
+  } finally {
+    await context.close().catch(() => {});
+  }
+});

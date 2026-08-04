@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 /**
@@ -36,7 +37,17 @@ test("a terminal action bar parks exactly where it comes to rest", async () => {
   const shell = await readFile(new URL("../app/dashboard/dashboard-shell.tsx", import.meta.url), "utf8");
   const ui = await readFile(new URL("../components/app/ui.tsx", import.meta.url), "utf8");
   assert.match(shell, /pb-\[var\(--dashboard-action-offset\)\]/);
-  assert.match(ui, /sticky bottom-\[var\(--dashboard-action-offset,[^\]]*\)\]/);
+  assert.match(ui, /sticky bottom-\[var\(--dashboard-action-sticky-offset,[^\]]*\)\]/);
+  // The two are different variables ON PURPOSE, and they must agree whenever no keyboard is up.
+  // The sticky one adds the keyboard; `main`'s padding must NOT, or the document would jump by a
+  // keyboard's height the moment a textarea takes focus. Their only difference is that term.
+  const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+  assert.match(css, /--dashboard-action-offset: calc\(var\(--dashboard-bottom-bar\) \+ 2\.5rem\);/);
+  assert.match(
+    css,
+    /--dashboard-action-sticky-offset: calc\(max\(var\(--dashboard-bottom-bar\), var\(--keyboard-inset\)\) \+ 2\.5rem\);/,
+  );
+  assert.match(css, /--keyboard-inset: 0px;/, "the variable must have a stylesheet default, so a browser with no visualViewport resolves it");
   // A py-* shorthand on main would silently cancel the bottom padding again, which is the whole
   // reason the original defect existed.
   // The CONTENT main, not the loading skeleton's. The skeleton renders no tab bar and needs no

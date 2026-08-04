@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
 import { isQaRender } from "@/lib/qa-mode";
+import { currentKeyboardInset } from "@/lib/keyboard-inset";
 import {
   ClipboardIcon,
   GearIcon,
@@ -55,6 +56,44 @@ export function DashboardShell({
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
+
+  /**
+   * Publish the software keyboard's height as a CSS variable.
+   *
+   * A bottom-sticky element is positioned against the LAYOUT viewport, and iOS Safari does not
+   * shrink the layout viewport for the keyboard. So without this the terminal action bar sits
+   * behind the keyboard for exactly as long as a text field is focused, which on the two screens
+   * that use it (an editable resume, and a page of textareas) is most of the time they are open.
+   *
+   * Listens to `scroll` as well as `resize`: iOS scrolls the visual viewport to keep the focused
+   * field above the keyboard, and that changes how much is covered without changing any height.
+   *
+   * Nothing here runs where `visualViewport` is absent, and the value stays 0 on every browser
+   * that resizes the layout viewport instead, so this is inert outside the case it fixes.
+   */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const root = document.documentElement;
+    let last = -1;
+    const apply = () => {
+      const inset = currentKeyboardInset();
+      // Only touch the DOM when the value actually changed: these events fire per frame during a
+      // scroll, and a style write per frame on a phone is a jank source for no benefit.
+      if (inset === last) return;
+      last = inset;
+      root.style.setProperty("--keyboard-inset", `${inset}px`);
+    };
+    apply();
+    viewport.addEventListener("resize", apply);
+    viewport.addEventListener("scroll", apply);
+    return () => {
+      viewport.removeEventListener("resize", apply);
+      viewport.removeEventListener("scroll", apply);
+      // Back to the stylesheet's own 0px rather than a stale inline value from a torn-down shell.
+      root.style.removeProperty("--keyboard-inset");
+    };
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => {

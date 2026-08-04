@@ -322,10 +322,23 @@ html {
      is the same defect as the 21px, just small enough to argue about. Measured: 61px at a 16px root
      with no safe-area inset. */
   --dashboard-bottom-bar: calc(3.25rem + 1px + max(0.5rem, env(safe-area-inset-bottom, 0px)));
-  /* Where a terminal action bar comes to REST, and therefore also where it parks while sticky.
+  /* Pixels of the layout viewport's bottom edge hidden behind the software keyboard. Written by
+     DashboardShell from visualViewport; 0 everywhere that resizes the layout viewport instead
+     (Android Chrome, every desktop browser) and 0 whenever no keyboard is up. See
+     lib/keyboard-inset.ts for why the layout viewport is the wrong thing to trust on iOS. */
+  --keyboard-inset: 0px;
+  /* Where a terminal action bar comes to REST, and what `main` reserves for it.
      One value for both, because they were 60px and 100px in the first cut and the bar visibly
      hopped 40px up on the last scroll increment, right where a thumb was already reaching. */
   --dashboard-action-offset: calc(var(--dashboard-bottom-bar) + 2.5rem);
+  /* Where it PARKS while stuck, which is the same thing until a keyboard opens.
+     max(), not a sum: the tab bar and the keyboard both cover the bottom of the layout viewport,
+     and when the keyboard is up it is covering the tab bar too, so adding them would float the
+     action bar a tab bar's height above the keyboard for no reason. Whichever is taller wins.
+     This is deliberately NOT what `main` reserves. Padding that grew by ~336px the moment a
+     textarea took focus would shove the document under the student mid-keystroke; the sticky
+     offset can move freely because moving is all it does. */
+  --dashboard-action-sticky-offset: calc(max(var(--dashboard-bottom-bar), var(--keyboard-inset)) + 2.5rem);
 }
 
 /* The bar is `lg:hidden`, so above lg it owns nothing and nothing should be reserved for it.

@@ -254,7 +254,8 @@ export function EmptyState({
  * to solve. Sticky costs nothing above lg (`lg:static`) and needs no reserved space, because at
  * the end of the scroll the element IS in its flow position.
  *
- * `bottom` is --dashboard-action-offset, the SAME value `main` reserves as bottom padding. That is
+ * `bottom` is --dashboard-action-sticky-offset, which equals --dashboard-action-offset (the value
+ * `main` reserves as bottom padding) until a software keyboard opens. That is
  * the point of there being one variable: park it anywhere else and the bar visibly hops as it goes
  * from stuck to settled on the last scroll increment, which is exactly where a thumb is already
  * reaching for it. The offset carries the tab bar's height, so above lg (where the bar is hidden
@@ -280,7 +281,7 @@ export function TerminalActionBar({
 }) {
   return (
     <div
-      className={`sticky bottom-[var(--dashboard-action-offset,2.5rem)] z-20 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4 shadow-raised lg:static lg:shadow-none ${className}`}
+      className={`sticky bottom-[var(--dashboard-action-sticky-offset,2.5rem)] z-20 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4 shadow-raised lg:static lg:shadow-none ${className}`}
     >
       {children}
     </div>
