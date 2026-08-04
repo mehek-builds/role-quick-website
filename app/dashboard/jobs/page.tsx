@@ -4,7 +4,7 @@ import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
-import { fetchBoard, useJobMatchScores, SCORE_BATCH, type JobMatch } from "@/features/applications";
+import { fetchBoard, useJobMatchScores, MATCH_WEIGHTING_NOTE, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { activeJobFilters, buildAppliedIndex, countNewToday, emptyJobsBody, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
@@ -549,10 +549,13 @@ function MatchBadge({ match }: { match: JobMatch | null | undefined }) {
   // undefined = still scoring, null = nothing honest to say. Neither prints.
   if (!match) return null;
   const pct = Math.max(0, Math.min(100, Math.round(match.score)));
+  // The weighting clause is APPENDED, not folded in: the sentence before it is pinned literally by
+  // tests/match-metric-coherence.regression-1.test.mjs and stays exactly as it was. See
+  // MATCH_WEIGHTING_NOTE for why a count beside a weighted score needed saying out loud.
   return (
     <span
       className="shrink-0 rounded-full bg-brand-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-brand-ink"
-      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting.`}
+      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting. ${MATCH_WEIGHTING_NOTE}`}
     >
       {pct}% match
     </span>

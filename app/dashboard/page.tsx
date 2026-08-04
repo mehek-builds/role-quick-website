@@ -22,6 +22,7 @@ import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import {
   AUTO_SUBMIT_PREPARED_LIMIT,
+  MATCH_WEIGHTING_NOTE,
   jobSubmittedOnDay,
   packetMatchesJob,
   rankJobs,
@@ -989,9 +990,13 @@ function JobMatchCard({
               this job asks for" when the truth is that we never got an answer. */}
           {match && (
             <div className="justify-self-end text-center">
+              {/* The weighting clause is APPENDED, never folded in: the text before it is pinned
+                  literally by tests/preference-score-copy.regression-1.test.mjs.
+                  MATCH_WEIGHTING_NOTE carries why a count sits beside a score it does not divide
+                  out to. */}
               <ScoreRing
                 score={match.score}
-                metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted)`}
+                metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted). ${MATCH_WEIGHTING_NOTE}`}
               />
               <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
             </div>

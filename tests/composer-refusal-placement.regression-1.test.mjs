@@ -103,11 +103,15 @@ describe("the refusal renders where the button is, and is announced exactly once
     // createApplication's guard: the same URL sentence is still a legitimate setError elsewhere on
     // this page, raised by the "Read job" button, and banning the string everywhere would be a
     // vocabulary rule rather than a placement one.
+    //
+    // ISSUE-043 moved these two through the refuseInComposer helper rather than calling
+    // setComposerRefusal inline, because the helper also clears the page banner. The assertion
+    // still holds the same thing: these exact sentences reach the composer and not setError.
     assert.ok(createApplication.length > 0, "createApplication must still be findable");
     assert.doesNotMatch(createApplication, /setError\(/, "the generate guard must not use the page banner");
     for (const message of ["Fill in all four boxes first.", "Enter a complete job URL beginning with https://."]) {
       assert.ok(
-        createApplication.includes(`setComposerRefusal({ message: "${message}"`),
+        createApplication.includes(`refuseInComposer("generate", "${message}"`),
         `${message} must set the composer refusal`,
       );
     }
@@ -117,10 +121,19 @@ describe("the refusal renders where the button is, and is announced exactly once
     // Asserted on ADJACENCY rather than on the alert existing anywhere: the defect was an alert
     // that existed and was 281px above the viewport. The refusal paragraph and the button must sit
     // in the same flex row, which is what makes it visible whenever the button is reachable.
+    //
+    // ISSUE-043 gave the composer a second slot beside "Read job", so the alert element moved into
+    // ComposerRefusalNote and each row mounts it with its own `at`. The adjacency this test exists
+    // for is unchanged and still asserted: the note and the button share the flex row, and the note
+    // is the thing that carries role="alert" and refusal.message.
     const row = code.match(/<div className="mt-5 flex flex-wrap items-center justify-end gap-3">([\s\S]*?)<\/div>/);
     assert.ok(row, "the generate button must keep its own row");
-    assert.match(row[1], /refusal && <p role="alert"[^>]*>\{refusal\.message\}<\/p>/);
+    assert.match(row[1], /<ComposerRefusalNote refusal=\{refusal\} at="generate" \/>/);
     assert.match(row[1], /Make my resume/);
+    assert.match(
+      code,
+      /function ComposerRefusalNote\([\s\S]*?if \(!refusal \|\| refusal\.at !== at\) return null;[\s\S]*?role="alert">\{refusal\.message\}<\/p>/,
+    );
   });
 
   test("exactly one element announces it", () => {
