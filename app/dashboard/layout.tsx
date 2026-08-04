@@ -214,7 +214,7 @@ function RailLink({
  *
  * This used to print the account's all-time submitted count beside the tier, and the adjacency was
  * the whole problem: "Free · 5 applications" is a fact about what someone has already done, but one
- * separator away from a plan name it reads as what the plan grants — and free grants 20 resumes a
+ * separator away from a plan name it reads as what the plan grants, and free grants 20 resumes a
  * month, so the rail was quietly quoting a quota four times smaller than the real one. Rewording it
  * to a verb would have fixed the misreading; removing it also settles the redundancy, because Home's
  * Momentum panel already reports that number labelled and in context. Say it once, where it means
@@ -226,7 +226,7 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
 
   useEffect(() => {
     /* QA renders have no session. Calling /me here anyway would 401, and api() answers a 401 by
-       clearing the session and sending the browser to /login — so the footer alone was enough to
+       clearing the session and sending the browser to /login, so the footer alone was enough to
        bounce every QA render of every dashboard page off the screen it was there to show.
 
        Asked of window, not of the `qaMode` prop, and that is the whole point. The prop is state the

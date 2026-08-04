@@ -13,7 +13,7 @@
  * the board points at greenhouse/lever/ashby, never at the employer's own site.
  *
  * THE GUESS IS NEVER TRUSTED. A candidate domain is accepted only if the site
- * it resolves to identifies itself as that company — the company's name has to
+ * it resolves to identifies itself as that company: the company's name has to
  * appear in <title>, og:site_name, or the apple-touch-icon's own path. "Block"
  * would otherwise happily attach block.com, which belongs to someone else.
  */
@@ -48,7 +48,7 @@ function slugs(company) {
    false positive came from them: Block resolved to block.co (an NFT company,
    not Jack Dorsey's Block, which is block.xyz), Ashby to ashby.ai instead of
    ashbyhq.com, Elastic to elastic.io instead of elastic.co. The name check
-   cannot catch those — the impostor's title genuinely contains the word — so
+   cannot catch those (the impostor's title genuinely contains the word) so
    the alternates are simply not tried. A company whose real domain is not .com
    keeps its monogram, which is the correct outcome when we are not sure. */
 function candidates(company) {

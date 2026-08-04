@@ -28,7 +28,7 @@ export default function Privacy() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      {/* Header is a fixed floating pill now — clear it before content */}
+      {/* Header is a fixed floating pill now, clear it before content */}
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-20 pt-32">
         <h1 className="text-section font-[450] tracking-tight text-ink">
           What we do with your data.

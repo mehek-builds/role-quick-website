@@ -3,7 +3,7 @@
  * Self-hosted on purpose. The easy way to do this is a third-party logo API
  * (Clearbit, Google's favicon service), but that puts a request to somebody
  * else's server in every visitor's browser, on a page that lists 24 employers
- * at a time — which hands a third party a log of who is looking at which jobs.
+ * at a time, which hands a third party a log of who is looking at which jobs.
  * For a product whose whole pitch is that it does not do things behind your
  * back, that is the wrong trade. scripts/fetch-company-logos.mjs pulls each
  * mark once from the company's OWN domain and commits it to public/company/.
@@ -16,8 +16,8 @@
  */
 
 /* Chime and Gusto are DELIBERATELY absent. Both answer every asset request
-   with a 403 bot-block — homepage, /favicon.ico, /apple-touch-icon.png, with
-   and without www — so there is no mark to fetch from their own domain, and
+   with a 403 bot-block: homepage, /favicon.ico, /apple-touch-icon.png, with
+   and without www, so there is no mark to fetch from their own domain, and
    the alternative is exactly the third-party logo API this file exists to
    avoid. They render as a monogram. Re-check occasionally; if either opens up,
    add it here and re-run the fetch script. */
@@ -92,7 +92,7 @@ export const COMPANY_DOMAINS: Record<string, string> = {
      parked. Those 13 were rejected and stay on the monogram, along with ~60 the
      script could not resolve at all, and 10 whose site refused the fetch. A
      wrong logo on a real job is worse than no logo, so this list only contains
-     marks somebody looked at, and every entry has a file on disk — asserted by
+     marks somebody looked at, and every entry has a file on disk, asserted by
      tests/browse-jobs.test.mjs. */
   Abridge: "abridge.com",
   Adyen: "adyen.com",
@@ -232,7 +232,7 @@ export function logoPath(company: string): string | null {
 }
 
 /* Fallback when a company has no mark: its first letter. Deliberately not a
-   coloured circle — DESIGN.md bans icons-in-coloured-circles, and a board where
+   coloured circle: DESIGN.md bans icons-in-coloured-circles, and a board where
    the missing logos are the loudest thing on the page reads as broken. */
 export function monogram(company: string): string {
   const first = company.trim()[0];
@@ -241,7 +241,7 @@ export function monogram(company: string): string {
 
 /* Where the tile points for a company's mark.
  *
- * A curated company gets its committed file directly — no round trip, and those
+ * A curated company gets its committed file directly: no round trip, and those
  * marks were approved by a human. Everything else goes to /api/company-logo,
  * which resolves it live and answers with a monogram if it cannot. That is what
  * keeps the board correct as the job monitor adds employers: a company that

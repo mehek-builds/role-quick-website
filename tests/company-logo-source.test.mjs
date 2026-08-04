@@ -25,7 +25,7 @@ describe("domainCandidates", () => {
     /* The first version tried .ai/.io/.co too, and EVERY false positive came
        from them: block.co is an NFT company, ashby.ai is not Ashby, elastic.io
        is not Elastic. The impostor's own title contains the word, so no name
-       check can separate them — the alternates simply are not tried. */
+       check can separate them: the alternates simply are not tried. */
     for (const company of ["Stripe", "Scale AI", "Qube Research & Technologies"]) {
       for (const d of domainCandidates(company)) {
         assert.ok(d.endsWith(".com"), `${company} proposed ${d}`);
@@ -139,7 +139,7 @@ describe("pngInsideIco", () => {
 
   test("returns null for a bitmap .ico rather than serving nonsense", () => {
     /* Half of real favicons are raw DIB. Decoding those needs an image encoder,
-       which is a devDependency and cannot run in a request — so they are given
+       which is a devDependency and cannot run in a request, so they are given
        up on and the company keeps its monogram. */
     const dib = new Uint8Array([40, 0, 0, 0, 9, 9, 9, 9]);
     assert.equal(pngInsideIco(buildIco(dib)), null);
@@ -222,7 +222,7 @@ describe("parseBoardUrl", () => {
     });
   });
 
-  test("refuses anything that is not one of those hosts — this is the SSRF gate", () => {
+  test("refuses anything that is not one of those hosts: this is the SSRF gate", () => {
     /* The board URL arrives as a query parameter and OUR SERVER fetches it.
        Without an exact-hostname allowlist, anyone could point this at an
        internal address and have the response handed back to them. Every case
@@ -326,7 +326,7 @@ describe("the board URL actually reaches the logo service", () => {
    *
    * If a refactor drops boardUrl from the tile, or the API stops returning
    * career_url, nothing breaks and nothing looks wrong: the route just falls
-   * back to guessing a domain from the company name — the exact path that put
+   * back to guessing a domain from the company name: the exact path that put
    * an NFT company's logo on Block. The board would keep rendering logos, some
    * of them wrong, and no test would have failed. Hence these. */
   const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");

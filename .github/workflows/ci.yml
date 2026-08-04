@@ -1,9 +1,9 @@
 # Run the checks this repo already has, on every change, without anyone
 # remembering to.
 #
-# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ — the
+# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ (the
 # vocabulary gate, route integrity, the typography scale, the logo service's
-# SSRF allowlist — only held when somebody happened to run `npm test` locally.
+# SSRF allowlist) only held when somebody happened to run `npm test` locally.
 # They did not always: `main` sat red for a day on a stale assertion in
 # application-submission-gate, and a red suite is worse than no suite, because
 # once failure is normal nobody reads the output.

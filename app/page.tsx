@@ -100,7 +100,7 @@ const FAQ_ITEMS: {
 
 /* The one icon set on the site: the brand deck's three pillar pictograms
    (section 06), line-only, 1.6px stroke, currentColor. Reused in the hero
-   bridge and at the top of every pillar section — one primitive, repeated. */
+   bridge and at the top of every pillar section: one primitive, repeated. */
 const PILLAR_ICONS: Record<string, React.ReactNode> = {
   resume: (
     <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden>
@@ -312,10 +312,10 @@ export default function Home() {
             It was a statistic about the job market, not about Litos: it spent
             a full viewport telling the reader the odds are bad without saying
             anything the product does about them. Background changes still mark
-            section boundaries from here down (deep-dive pacing rule) — no
+            section boundaries from here down (deep-dive pacing rule), no
             hairline dividers between bands. */}
 
-        {/* Documents — pinned act: the real rebuild held over the live film.
+        {/* Documents, pinned act: the real rebuild held over the live film.
             The separate #formats band ("A robot reads it first", with its own
             mess-in / clean-out demo) was REMOVED 2026-07-28 in the deletion
             pass. It made the same argument as this section, directly above
@@ -381,7 +381,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Autofill — pinned act: the real fill held over the live film */}
+        {/* Autofill, pinned act: the real fill held over the live film */}
         <section id="autofill" className="relative scroll-mt-24">
           <Wash tint="teal" soft />
           <div className="relative sm:h-[185svh]">
@@ -465,7 +465,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Outreach — pinned act: the real draft held over the live film */}
+        {/* Outreach, pinned act: the real draft held over the live film */}
         <section id="outreach" className="relative scroll-mt-24">
           <Wash tint="coral" soft />
           <div className="relative sm:h-[185svh]">
@@ -729,7 +729,7 @@ export default function Home() {
             drift from middleware/quota.ts LIMITS and TRIAL_DAYS) and was LEFT
             IN PLACE, values intact, so restoring is an import and a paste. */}
 
-        {/* Close: the finale — by here the live film has collated the book */}
+        {/* Close: the finale: by here the live film has collated the book */}
         <section id="close" className="relative">
           <Wash soft />
           <div className="relative mx-auto max-w-3xl px-6 py-40 text-center">

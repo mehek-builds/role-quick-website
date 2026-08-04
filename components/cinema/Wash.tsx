@@ -1,6 +1,6 @@
 /* A feathered clarity wash behind a section's content: keeps text at full
    contrast in the middle and dissolves to nothing at the edges, so the
-   flying papers stay visible around every section. No panels, no seams —
+   flying papers stay visible around every section. No panels, no seams:
    the page is the film. Pillar sections pass their soft tint. */
 
 const TINTS = {

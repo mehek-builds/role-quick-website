@@ -14,13 +14,13 @@
  *    showed a monogram until somebody noticed. If this case fails, the system
  *    has silently gone back to being a snapshot. Asserted with a control name
  *    rather than a live board company, because the uncurated companies on the
- *    board are precisely the residue an earlier pass already failed on — their
+ *    board are precisely the residue an earlier pass already failed on: their
  *    hit rate is reported, not asserted.
  * 3. A company on the denylist stays a monogram. peloton.com sells oil-and-gas
  *    software; a green tick here would mean we are shipping the wrong company's
  *    logo onto a real job.
  * 4. A company that does not exist degrades to a monogram image with a 200,
- *    not a 404 — the tile has no client JavaScript to catch a broken image.
+ *    not a 404: the tile has no client JavaScript to catch a broken image.
  * 5. Every mark served is really an image, not an HTML error page. Bot-blocked
  *    hosts answer asset requests with 200 and a login wall.
  * 6. The answers are cacheable. Without this the board would re-probe hundreds
@@ -34,7 +34,7 @@ const BOARD =
 
 let failures = 0;
 const check = (ok, label, detail = "") => {
-  console.log(`  ${ok ? "ok  " : "FAIL"}  ${label}${detail ? ` — ${detail}` : ""}`);
+  console.log(`  ${ok ? "ok  " : "FAIL"}  ${label}${detail ? `: ${detail}` : ""}`);
   if (!ok) failures += 1;
 };
 
@@ -80,7 +80,7 @@ console.log("\n2. a company the map has never heard of resolves live");
 /* A control, deliberately NOT a board company and NOT in COMPANY_DOMAINS. It
    stands in for the next employer the job monitor adds: if this resolves, the
    route can dress a company nobody prepared for. Using a live board company for
-   this would be a worse test, not a better one — see the note below. */
+   this would be a worse test, not a better one, see the note below. */
 for (const control of ["Shopify", "Atlassian"]) {
   const r = await logo(control);
   check(
@@ -140,7 +140,7 @@ check(
 /* --- 6. cacheable, or the board re-probes the internet on every view --- */
 console.log("\n6. answers are cacheable");
 /* Measured on the REDIRECT itself, not on the file it points at. Following it
-   reports the static asset's own header, which is a different question — what
+   reports the static asset's own header, which is a different question: what
    matters is that the browser does not come back to this route. */
 const stripeRedirect = await logo("Stripe", "manual");
 check(
@@ -198,7 +198,7 @@ console.log("\n9. the API still hands the board URL to the page");
 /* The cross-repo join, and the one thing a website test cannot hold on its own.
    If the backend stops selecting career_url on /jobs/grouped, the tile passes
    nothing, the route silently falls back to guessing a domain from the name,
-   and the board keeps rendering logos — some of them the wrong company's. No
+   and the board keeps rendering logos, some of them the wrong company's. No
    unit test anywhere would fail. This is the check that would. */
 const grouped = await (
   await fetch(`${BOARD}/jobs/grouped?limit=5`, { signal: AbortSignal.timeout(30_000) })

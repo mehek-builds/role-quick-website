@@ -160,7 +160,7 @@ test("the measurement suspends the touch floor, so it records the text and not t
 test("the account footer states the plan and no count beside it", () => {
   /* Supersedes an undefined-guard on the same line, 2026-08-03. The count it was guarding is gone.
      It printed "Free · 5 applications" one separator away from the tier, where a bare noun reads as
-     the allowance the plan grants rather than as what the account has already done — and free
+     the allowance the plan grants rather than as what the account has already done, and free
      grants 20 resumes a month, so the rail was quoting a quota four times under the real one.
      Momentum on Home reports the same figure labelled, so nothing was lost by removing it.
 

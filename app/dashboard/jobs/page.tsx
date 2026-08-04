@@ -170,7 +170,7 @@ export default function JobsPage() {
 
   /* Which of these the student has already applied to. Fetched once, not per filter change: it is
      a fact about their account, not about the query. A failure here leaves it null, and a row that
-     does not know simply offers to apply — the worst case is a second visit to a posting, which is
+     does not know simply offers to apply: the worst case is a second visit to a posting, which is
      recoverable, where a wrongly-shown "Applied" is a missed application, which is not. */
   useEffect(() => {
     if (qaMode !== false) return;
@@ -404,9 +404,9 @@ export default function JobsPage() {
  *
  * The row leads with the company's icon and the role, carries the match number beside the title
  * where the eye is already reading, and ends in exactly one control: apply, or the fact that you
- * already did. "View posting" moved onto the role itself — the title of a job is the most obvious
- * thing in the world to click, and giving the row two side-by-side buttons made the student choose
- * between them before they had read the role.
+ * already did. "View posting" moved onto the role itself, since the title of a job is the most
+ * obvious thing in the world to click, and giving the row two side-by-side buttons made the student
+ * choose between them before they had read the role.
  */
 function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; match: JobMatch | null | undefined }) {
   const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]

@@ -1,7 +1,7 @@
 /* The dashboard sidebar's icons, and nothing else.
  *
  * Drawn here rather than pulled from an icon package for two reasons. A package would ship several
- * hundred glyphs to render eight, and — the one that actually matters — every icon set has its own
+ * hundred glyphs to render eight, and (the one that actually matters) every icon set has its own
  * stroke weight, corner radius and optical size, none of which are this brand's. These are one
  * family: 18px box, 1.5 stroke, round caps and joins, currentColor throughout.
  *

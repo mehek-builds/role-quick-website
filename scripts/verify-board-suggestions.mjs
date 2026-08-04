@@ -5,7 +5,7 @@
  * A suggestion that lands on an empty page is worse than no suggestion: the
  * reader concludes the board is broken, rather than that we offered a word we
  * do not carry. The curated title list was built by measuring against the live
- * board, and the board changes under us — companies are added weekly — so this
+ * board, and the board changes under us (companies are added weekly) so this
  * re-measures it. Exits non-zero, so it can gate a deploy.
  */
 
@@ -67,7 +67,7 @@ for (const [field, key] of [["company", "companies"], ["location", "locations"]]
 
 console.log("\n3. Other is a signpost, not a search term");
 const other = await count("title", OTHER);
-console.log(`  note  title="${OTHER}" would return ${other} — which is why the page treats it as no filter`);
+console.log(`  note  title="${OTHER}" would return ${other}, which is why the page treats it as no filter`);
 
 console.log(`\n${failures === 0 ? "PASS" : `FAIL (${failures})`}`);
 process.exit(failures === 0 ? 0 : 1);

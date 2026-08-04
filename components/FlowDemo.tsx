@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * FlowDemo — a miniature picture of the product working, for the hero.
+ * FlowDemo: a miniature picture of the product working, for the hero.
  *
  * It plays one loop: five matched jobs, then the packet being made against a
  * real posting (the resume rewritten and the employer's form filled), each

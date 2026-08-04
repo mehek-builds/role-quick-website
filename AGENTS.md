@@ -1,8 +1,18 @@
 <!-- BEGIN:nextjs-agent-rules -->
 # This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+This version has breaking changes: APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
 <!-- END:nextjs-agent-rules -->
+
+## No em dashes, anywhere
+Hard rule, no exceptions: this repo contains zero em dashes. Not in site copy,
+not in Markdown, not in code comments. Use a comma, a colon, a semicolon,
+parentheses, or two sentences. `tests/no-em-dashes.test.mjs` enforces it on
+every PR, so a stray one fails CI rather than reaching review.
+
+The only allowance is where the character itself is load-bearing rather than
+prose, such as stripping it out of an incoming feed. Write it as a
+`\u2014` escape there, never as a literal.
 
 ## Design System
 Always read DESIGN.md before making any visual or UI decisions.
@@ -44,7 +54,7 @@ is how `block.co` (an NFT company) nearly landed on Block's jobs, `imply.com`
 - Name-guessing is the last resort only, and keeps its own rules: `.com` only,
   the site must name the company, and a denylist of names whose obvious `.com`
   belongs to someone else.
-- A miss returns the company's initial as an SVG with a 200 — never a 404, because
+- A miss returns the company's initial as an SVG with a 200, never a 404, because
   the board carries no client JavaScript to swap in a fallback.
 
 If you change any of this, run `npm run verify:logos https://trylitos.com`. It

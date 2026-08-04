@@ -337,7 +337,7 @@ export function NextMatchCard({
             /* The window has closed and the request is out. No number and no Cancel: counting on
                past zero printed "Sending 0s" forever whenever the submit did not come back, which
                is a stuck pill insisting a send is one second away. And there is nothing left to
-               cancel here — the ask has already left. */
+               cancel here: the ask has already left. */
             <span className="rounded-full bg-brand-soft px-3.5 py-1.5 font-mono text-[11px] font-medium text-brand-ink">
               Sending
             </span>
