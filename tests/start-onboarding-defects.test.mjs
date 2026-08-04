@@ -299,11 +299,11 @@ test("the first pick of all, with nothing selected yet, starts blank", () => {
   assert.deepEqual(answersForPick(null, "entry-a", blankAnswers()), blankAnswers());
 });
 
-test("an all-blank answer set is sent as [], because the escape hatch depends on it", () => {
-  /* "Continue with what you found." previously sent [] unconditionally and must keep reaching the
-     server when nothing has been typed. A lone {} composes, server-side, to the entry's existing
-     first bullet, which is then put through a strong-verb gate it never had to pass before: an
-     entry opening "Responsible for ..." would 400 the one control a stuck student has. */
+test("an all-blank answer set is sent as []", () => {
+  /* "Continue with what you found." sent [] unconditionally before this step grew answer
+     fieldsets, and an untouched form must still produce that exact request. Three empty objects
+     would compose, server-side, to text already in the bank and be dropped there as duplicates, so
+     this is about not asking for work that cannot have an effect. */
   assert.deepEqual(answersToSend(blankAnswers(), 3), []);
   assert.deepEqual(answersToSend([{ action: "   " }, {}, {}], 3), []);
 });

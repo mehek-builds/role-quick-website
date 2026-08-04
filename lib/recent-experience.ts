@@ -48,19 +48,25 @@ export function answersForPick(
  * special: it is composed against the entry's existing first bullet. Compacting the array would
  * slide an accomplishment the student wrote about their second bullet onto their first.
  *
- * A TRAILING RUN OF BLANKS MUST GO, and specifically an all-blank set must become []. The server
- * runs its strong-verb gate over every composed bullet BEFORE deduping, and a lone `{}` at index 0
- * composes to the entry's existing first bullet verbatim. That bullet came from the resume parse
- * and is under no obligation to open with a whitelisted verb ("Responsible for ..."), so sending
- * `[{}]` can 400 the request on the student's own untouched text. "Continue with what you found."
- * is the control a stuck student uses to escape this screen and it previously sent [] regardless,
- * so it has to keep working when nothing has been typed.
+ * A TRAILING RUN OF BLANKS GOES, so that "Continue with what you found." with nothing typed sends
+ * `[]` exactly as it did before this step grew answer fieldsets. This is now tidiness rather than
+ * a defence: a blank set composes server-side either to text already in the bank, which the server
+ * recognises as an echo and drops, or to an empty string when the entry has no bullets yet, which
+ * the server discards before it looks at anything. Kept because sending three empty objects asks
+ * the server to do work with no possible effect, and because this app deploys separately from the
+ * backend.
  *
- * Read in student-outreach-backend at 3f38555 on 2026-08-04, READ ONLY: src/routes/profile.ts
- * composes at :985, gates with startsWithStrongVerb at :988 and dedupes at :992;
- * src/engine/recentExperience.ts composeImpactBullet returns `current.trim()` when every field is
- * empty; and the PUT body schema at :129 accepts `{}` as an element because all four fields are
- * optional.
+ * Do NOT let this grow into dropping leading or interior blanks. Whether a blank at index 0 is
+ * safe is the server's business, not this function's; here the only invariant is that an answer
+ * keeps the index it was typed at.
+ *
+ * Re-derived against student-outreach-backend d9285df plus the pending change to it: the PUT
+ * handler in src/routes/profile.ts delegates to `applyImpactAnswers` in
+ * src/engine/recentExperience.ts, which composes positionally with index 0 against the entry's
+ * existing first bullet, recognises echoes of the bank, and only then judges what is left. Named
+ * by function rather than by line, because line numbers in that handler have already gone stale
+ * once in this comment's history. The PUT body schema accepts `{}` as an element because all four
+ * answer fields are optional.
  */
 export function answersToSend(answers: ImpactAnswers[], answerCount: number): ImpactAnswers[] {
   const visible = answers.slice(0, answerCount);
