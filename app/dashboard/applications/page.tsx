@@ -18,7 +18,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
@@ -305,7 +305,7 @@ function Applications() {
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
     setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
     const status = packet.spec._review?.status;
-    moveToScreen(status === "submitted" ? "submitted" : ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status ?? "") ? "submitting" : ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "") ? "portal" : "review");
+    moveToScreen(screenForStatus(status, "review"));
     setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
     setError(null);
     setNotice(null);
@@ -337,9 +337,7 @@ function Applications() {
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
     // run that had since succeeded.
     setError(null);
-    if (result.review.status === "submitted") moveToScreen("submitted");
-    else if (["needs_attention", "ready_for_final_approval", "failed"].includes(result.review.status)) moveToScreen("portal");
-    else moveToScreen("submitting");
+    moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
 
   useEffect(() => {
@@ -924,6 +922,11 @@ function Applications() {
         captureCompletedSubmission(result, "review");
         setSubmission(result);
         setPackets((current) => current?.map((packet) => packet.id === selected.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+        // This response is the END of the run, not an acknowledgement of its start, and it is
+        // routinely terminal ("failed", "needs_attention", "ready_for_final_approval"). It used to
+        // be installed into state and then ignored for routing, which left the progress screen
+        // spinning over a run that was already over.
+        moveToScreen(screenForStatus(result.review.status, "submitting"));
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
         const now = new Date().toISOString();
@@ -1390,13 +1393,25 @@ function Applications() {
               it says what the colour MEANS rather than what it IS. Two names
               for one colour is worse than no name. Guarded by R-046 in
               tests/review-highlighting.test.mjs. */}
+          {/* The send control is gated on portal_supported, not just on saving state.
+              Packets on company-owned careers pages used to sit here behind a live "Fill the form"
+              button that could only ever fail: the run started, drove a browser for minutes, and
+              came back with "This portal is not supported yet". Nine of one account's ten failures
+              were that. The tailored resume is still worth having, so this says what Litos cannot
+              do and hands the applicant the page instead of hiding the job. */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
-            <p className="text-sm text-ink">Litos fills the form with your saved answers and this resume.</p>
+            <p className="text-sm text-ink">
+              {review.portal_supported === false
+                ? "Litos cannot fill in this company’s page. Your resume is ready, so apply on their site."
+                : "Litos fills the form with your saved answers and this resume."}
+            </p>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
-              <Button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
-                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
-              </Button>
+              {review.portal_supported === false
+                ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>
+                : <Button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                  {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
+                </Button>}
             </div>
           </div>
         </>

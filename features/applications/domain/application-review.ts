@@ -134,6 +134,32 @@ export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): 
   return "Ready";
 }
 
+export type ReviewScreen = "review" | "submitting" | "portal" | "submitted";
+
+/**
+ * Which screen a backend status means. One function, because three call sites disagreed.
+ *
+ * The status-to-screen decision was written out longhand in three places: on packet select, on
+ * every poll, and (almost) at the end of a submit request. The third one was the bug. After
+ * POST /submit-request resolved, the page installed the returned review with setSubmission and then
+ * simply stopped - no screen change on the success path, even though that response is TERMINAL and
+ * routinely carries status "failed". The screen stayed on "submitting", so a run that was already
+ * dead kept rendering "Getting the company's page ready." and a climbing elapsed counter with no
+ * error, no reason and no retry. Confirmed in prod on 2026-08-04.
+ *
+ * Note the qa branch beside it DID call moveToScreen. The real path was the one missing it, which
+ * is exactly how a gap like this survives being looked at.
+ *
+ * `fallback` is the only genuine difference between the callers: selecting a packet with no live
+ * status lands on "review", while a poll or a submit response mid-run stays on "submitting".
+ */
+export function screenForStatus(status: ReviewStatus | string | undefined, fallback: ReviewScreen): ReviewScreen {
+  if (status === "submitted") return "submitted";
+  if (status === "needs_attention" || status === "ready_for_final_approval" || status === "failed") return "portal";
+  if (status && ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "submitting";
+  return fallback;
+}
+
 /**
  * True for a packet that is mid-run or waiting on the user, the states worth badging on the packet
  * switcher. Without a badge, a user who switches away from a running packet has no way to find it
