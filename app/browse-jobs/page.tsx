@@ -160,7 +160,7 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
   );
 }
 
-/* "Job title “software engineer” and City “New York”", the fields are named back
+/* "Job title “software engineer” and City “New York”": the fields are named back
  * so the reader can see which one narrowed the result, which matters most when
  * a search returns nothing and they need to know which box to change. */
 function describeFilters(filters: Filters): string {
@@ -268,9 +268,9 @@ export default async function BrowseJobs({
             <>
               {/* Just the number (Mehek, 2026-07-29). The sentence used to
                   explain where the postings come from, that a multi-city role is
-                  one card, and what Litos then does with it, three things the
-                  page already shows: the tiles carry "N openings", and the band
-                  at the bottom makes the offer. */}
+                  one card, and what Litos then does with it. All three are already
+                  on the page: the tiles carry "N openings", and the band at the
+                  bottom makes the offer. */}
               <span className="font-mono text-ink">{countLabel(total)}</span>{" "}
               {total === 1 ? "role" : "roles"}
               {postingsTotal === null ? "." : (

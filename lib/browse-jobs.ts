@@ -74,7 +74,7 @@ export type JobsPage = {
   /** Raw postings behind those groups. Null only while an older backend is still deploying. */
   postingsTotal: number | null;
   /* null when the API could not be reached at all, which the page has to show
-     as a fault rather than as "no jobs match", those look identical to a
+     as a fault rather than as "no jobs match": those look identical to a
      reader and only one of them is our problem to fix. */
   ok: boolean;
 };
@@ -104,7 +104,7 @@ export const PER_PAGE = 24;
  * comment got it wrong: /browse-jobs reads searchParams and sets no route-level
  * `revalidate`, so it is dynamically rendered per request and there is NO
  * edge-cached HTML. The only thing between a visitor and the backend is Next's
- * Data Cache, which is per-deployment and not shared across regions, it is
+ * Data Cache, which is per-deployment and not shared across regions; it is
  * cold after every deploy.
  *
  * And SWR means "fresh on the NEXT load", not "fresh in 60 seconds": on a

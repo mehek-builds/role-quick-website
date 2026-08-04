@@ -70,7 +70,7 @@ describe("em-dash gate", () => {
     /* Cheap guard against the scan silently going empty, which would turn every future run green
      * without checking anything. */
     const files = trackedFiles();
-    assert.ok(files.length > 100, `only ${files.length} tracked files found, the scan is not working`);
+    assert.ok(files.length > 100, `only ${files.length} tracked files found; the scan is not working`);
     assert.ok(files.includes("DESIGN.md"), "expected DESIGN.md in the scan");
   });
 });

@@ -222,7 +222,7 @@ describe("parseBoardUrl", () => {
     });
   });
 
-  test("refuses anything that is not one of those hosts, this is the SSRF gate", () => {
+  test("refuses anything that is not one of those hosts: this is the SSRF gate", () => {
     /* The board URL arrives as a query parameter and OUR SERVER fetches it.
        Without an exact-hostname allowlist, anyone could point this at an
        internal address and have the response handed back to them. Every case
