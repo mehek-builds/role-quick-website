@@ -118,6 +118,9 @@ function Applications() {
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
   const selectedIdRef = useRef<string | null>(null);
+  /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
+     poll callback does not have to re-subscribe on every submission update. */
+  const submissionRef = useRef<SubmissionResponse | null>(null);
   /* The posting we have already auto-generated for, so arriving from "Apply now" can never spend
      two resumes on one job. A ref, not state: it must be readable and writable within the same
      tick the effect runs in, before any re-render. */
@@ -126,6 +129,33 @@ function Applications() {
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   const [screen, setScreen] = useState<Screen>("review");
+  /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
+     The progress screen says one of two things, and the difference is the whole point of it:
+     preparing the form is "nothing is sent yet", and approving is "sending it now". It read that
+     off `submission.review.status`, but during an approve the status is still
+     `ready_for_final_approval` for the entire duration of the request, because the only thing that
+     updates it is the response we are waiting for. So the screen spent the whole send promising
+     that nothing was being sent, which is the one moment the reassurance must not be wrong. */
+  const [submittingPhase, setSubmittingPhase] = useState<"preparing" | "sending">("preparing");
+  /* True from the moment "Send it" is pressed until the approve request settles.
+     This is the guard on a REAL application going to a REAL employer twice, and it exists because
+     the 2.5s submission poll is running the whole time. During an approve the server's status is
+     still `ready_for_final_approval` (that is the premise of this whole change), and
+     screenForStatus maps that to "portal", so the first poll tick used to take the student off the
+     sending screen and back to SubmissionScreen with a live "Send it" button, roughly 2.5 seconds
+     into every send that lasts longer than that. Nothing guarded a second press.
+     A ref rather than state on purpose: it has to be readable synchronously by the poll and by a
+     second click that lands in the same tick, before any re-render. */
+  /* The application currently being approved, not a bare boolean. Page-level flags meant that
+     sending A greyed out "Send it" on B with no explanation, and the guard that drops a second
+     press would have dropped a legitimate press on a different application. */
+  const approveInFlight = useRef<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  /* When the student pressed "Send it", so the progress clock measures the SEND rather than the
+     review. It was anchored to `review.updated_at`, which is stamped when preparation finished, so
+     a student who spent six minutes reading the packet before approving saw "6m 00s elapsed" and
+     the "start the application again" milestone the instant their send actually began. */
+  const [approveStartedAt, setApproveStartedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -247,6 +277,13 @@ function Applications() {
     );
   }, []);
 
+  /* Mirror `submission` into the ref the poll reads. An effect keeps it correct for every path;
+     approveFinalSubmission ALSO assigns it synchronously, because the window this guard closes is
+     between the approve resolving and this effect running, and a poll can land inside it. */
+  useEffect(() => {
+    submissionRef.current = submission;
+  }, [submission]);
+
   const captureCompletedSubmission = useCallback((result: SubmissionResponse, source: string) => {
     if (result.review.status !== "submitted" || capturedSubmissionIds.current.has(result.application_id)) return;
     capturedSubmissionIds.current.add(result.application_id);
@@ -305,6 +342,10 @@ function Applications() {
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
     setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
     const status = packet.spec._review?.status;
+    /* A different packet, so any "sending" flag belongs to the one we are leaving. Without this,
+       switching to a packet whose stored status is `filling` captioned it "You told Litos to send
+       this" for an application the student never authorised. */
+    setSubmittingPhase("preparing");
     moveToScreen(screenForStatus(status, "review"));
     setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
     setError(null);
@@ -324,6 +365,16 @@ function Applications() {
     // the packet the user is looking at. The ref, not the closure, is the current truth.
     if (selectedIdRef.current !== requestedId) return;
 
+    /* Never go backwards off a finished send. A poll issued BEFORE the approve returned can land
+       after it, carrying the pre-send `ready_for_final_approval`; installing it would replace the
+       receipt with a live "Send it" for an application that has already gone. The id guard above
+       cannot see this, because it is the right packet, just an older answer. */
+    if (
+      submissionRef.current?.application_id === result.application_id
+      && submissionRef.current?.review.status === "submitted"
+      && result.review.status !== "submitted"
+    ) return;
+
     captureCompletedSubmission(result, "poll");
     setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
     setQuestions((current) => mergeDiscoveredQuestions(current, result.review.questions));
@@ -337,6 +388,16 @@ function Applications() {
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
     // run that had since succeeded.
     setError(null);
+    /* While the student's own send is in flight the poll is usually reporting the status from
+       BEFORE the approve, and acting on that walks them backwards onto a live "Send it".
+       TERMINAL states are the exception, and the exception is load-bearing: `api()` has no
+       AbortController and no timeout, so a stalled approve request never rejects and the flag stays
+       set for as long as the socket hangs. Suppressing everything would then reproduce the
+       never-resolving spinner this branch is named for, reached through a hung connection instead
+       of a missing route, with the poll already holding the answer. Only the backwards moves are
+       dropped. */
+    const terminal = result.review.status === "submitted" || result.review.status === "failed";
+    if (approveInFlight.current !== null && !terminal) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
 
@@ -910,6 +971,7 @@ function Applications() {
       setError("Some answers are missing. Add them first.");
       return;
     }
+    setSubmittingPhase("preparing");
     moveToScreen("submitting");
     setError(null);
     track("application_submission_requested", { source: qaMode ? "qa" : "review" });
@@ -969,7 +1031,14 @@ function Applications() {
 
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
+    // Second press of "Send it" for THIS application while the first is still going.
+    if (approveInFlight.current === selected.id) return;
+    const requestedId = selected.id;
+    approveInFlight.current = requestedId;
+    setApprovingId(requestedId);
+    setApproveStartedAt(new Date().toISOString());
     setError(null);
+    setSubmittingPhase("sending");
     moveToScreen("submitting");
     try {
       if (qaMode) {
@@ -981,11 +1050,39 @@ function Applications() {
       } else {
         const result = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
         captureCompletedSubmission(result, "final_approval");
+        /* The packet the student is LOOKING at, which after a multi-minute send need not be the one
+           they approved: the packet switcher renders above every screen including this one, so
+           tapping another row mid-send is a single tap. refreshSubmission has guarded exactly this
+           since the wrong-employer finding; this path did not, and installing A's result while B is
+           selected renders A's confirmation text and reference id under B's role and company. The
+           send still completed and the poll will pick it up when they return to it. */
+        if (selectedIdRef.current !== requestedId) return;
+        submissionRef.current = result;
         setSubmission(result);
+        /* This response is the END of the send, not an acknowledgement that it started, exactly as
+           in prepareApplication above, and it was installed into state and then never routed off.
+           The QA branch four lines up has always called moveToScreen; the real one never did.
+           BE PRECISE ABOUT WHAT THAT COSTS, because the obvious overstatement is wrong: the
+           submission poll below also routes off the status, so a FOREGROUNDED tab recovers within
+           its 2.5s tick and the student sees the receipt. The poll is the only thing that was
+           saving this, and it is deliberately suppressed while `document.visibilityState` is not
+           "visible". So the screen that never resolves is the backgrounded one, which is the
+           ordinary case here: a portal run takes minutes and the whole point of the copy is that
+           you can go and do something else. Routing off the response we already hold costs nothing
+           and does not depend on the tab being watched.
+           The fallback is "portal", the screen this was entered from, so an unrecognised status
+           returns to a screen with controls on it rather than parking on the spinner again. */
+        moveToScreen(screenForStatus(result.review.status, "portal"));
       }
     } catch (reason) {
+      /* Back to the screen this came from, and back to "preparing": leaving the phase on "sending"
+         would caption the NEXT run of the progress screen as a send that is not happening. */
+      setSubmittingPhase("preparing");
       moveToScreen("portal");
       setError(reason instanceof Error ? reason.message : "Could not approve the final portal submission.");
+    } finally {
+      approveInFlight.current = null;
+      setApprovingId(null);
     }
   }
 
@@ -1244,9 +1341,13 @@ function Applications() {
           reviewDiscovered={submission?.review.status === "needs_attention"}
         />
       ) : screen === "submitting" ? (
-        <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
+        <PortalProgress
+          status={submission?.review.status}
+          startedAt={submittingPhase === "sending" ? approveStartedAt ?? submission?.review.updated_at : submission?.review.updated_at}
+          sending={submittingPhase === "sending"}
+        />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
+        <SubmissionScreen submission={submission} approving={approvingId === selected.id} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -1771,7 +1872,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ submission, approving, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { submission: SubmissionResponse; approving: boolean; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
@@ -1832,7 +1933,7 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending || approving} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
         <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
@@ -1894,7 +1995,9 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status, startedAt }: { status?: ApplicationReview["status"]; startedAt?: string }) {
+function PortalProgress({ status, startedAt, sending = false }: { status?: ApplicationReview["status"]; startedAt?: string;
+  /** True when this screen was entered by pressing "Send it". See submittingPhase. */
+  sending?: boolean }) {
   // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
   // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
   // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
@@ -1934,7 +2037,15 @@ function PortalProgress({ status, startedAt }: { status?: ApplicationReview["sta
   // The old copy asserted "Nothing is submitted during this preparation step" on every status,
   // including the genuinely-submitting one. That reassurance was false at exactly the moment it
   // mattered most, so each stage now states only what is true of that stage.
-  const submitting = status === "submitting" || status === "submission_claimed";
+  //
+  // `sending` is first and is not redundant with the status test. During an approve the status on
+  // hand is still `ready_for_final_approval` for the whole request, because the response that
+  // changes it is the thing being awaited, so the status alone put the "nothing is sent yet" line
+  // on screen for the entire duration of the send. What the caller pressed is known immediately;
+  // the status only catches up afterwards. Unlike the routing problem above, this one does NOT
+  // depend on the tab being hidden: the poll cannot fix it either, because the status genuinely is
+  // still ready_for_final_approval until the send returns.
+  const submitting = sending || status === "submitting" || status === "submission_claimed";
   const title = submitting ? "Sending it to the company now." : "Getting the company's page ready.";
   const body = submitting
     ? "You told Litos to send this. It is finishing the form now, and will not say it is sent until the company confirms it."

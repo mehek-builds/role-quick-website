@@ -241,9 +241,29 @@ test("R-046: the highlight tones are visually distinct", () => {
   assert.match(requirementText, /aria-label=\{`\$\{children\}, \$\{TONE_LABEL\[tone\]\}`\}/);
 });
 
+/**
+ * PortalProgress's own source, from its declaration to the next top-level function.
+ *
+ * The point of a bounded span is that a match cannot wander into some other component; a character
+ * count achieves that only by accident, and two of these assertions broke on a comment being added
+ * rather than on the thing they guard changing.
+ */
+function portalProgressSource() {
+  const start = dashboard.indexOf("function PortalProgress(");
+  assert.ok(start >= 0, "PortalProgress has been renamed or removed");
+  const end = dashboard.indexOf("\nfunction ", start + 1);
+  assert.ok(end > start, "could not find the end of PortalProgress");
+  return dashboard.slice(start, end);
+}
+
 test("the submitting screen names the dashboard authorization", () => {
-  const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
-  assert.match(progress.slice(0, 3200), /You told Litos to send this/);
+  // Bounded to PortalProgress itself rather than to a character count. The span was 3200, which was
+  // simply "long enough today", and a comment added inside the function on 2026-08-04 pushed this
+  // sentence to offset 3233 and turned a passing invariant red without anything about the invariant
+  // changing. Ending at the next function declaration says what was meant: this sentence lives in
+  // THIS component.
+  const progress = portalProgressSource();
+  assert.match(progress, /You told Litos to send this/);
 });
 
 // ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----
@@ -317,17 +337,25 @@ test('a blocked or failed run is not painted in the ready treatment', () => {
 test('the elapsed clock is anchored to the server, not to component mount', () => {
   // A reload during a live run remounted the component; a mount-anchored clock restarted at 0s and
   // reported "3s elapsed" for a four-minute-old run, defeating the point of showing it.
-  assert.match(dashboard, /startedAt=\{submission\?\.review\.updated_at\}/);
+  //
+  // Two anchors now, and which one is correct depends on what the screen is doing. While PREPARING,
+  // `review.updated_at` is the server's own stamp for that run. While SENDING it is not: it was
+  // stamped when preparation finished, so a student who read the packet for six minutes before
+  // pressing "Send it" opened the sending screen already reading "6m 00s elapsed", past the
+  // five-minute threshold that tells them to start the application again. The send is anchored to
+  // when the send began, and falls back to the server stamp if that is somehow absent.
+  assert.match(dashboard, /startedAt=\{submittingPhase === "sending" \? approveStartedAt \?\? submission\?\.review\.updated_at : submission\?\.review\.updated_at\}/);
+  assert.match(dashboard, /setApproveStartedAt\(new Date\(\)\.toISOString\(\)\)/);
   assert.match(dashboard, /Date\.parse\(startedAt\)/);
 });
 
 test('the ticking second count is not announced to screen readers', () => {
   // As an aria-live region it announced every single second for the minutes a run takes.
-  const progress = dashboard.slice(dashboard.indexOf("function PortalProgress("));
+  const progress = portalProgressSource();
   // The number itself is aria-hidden; the live region sits on the milestone copy, which changes
   // twice in a run rather than every second.
-  assert.match(progress.slice(0, 4000), /className="text-center text-xs text-muted" aria-hidden/);
-  assert.match(progress.slice(0, 4000), /\{milestone && \(/);
+  assert.match(progress, /className="text-center text-xs text-muted" aria-hidden/);
+  assert.match(progress, /\{milestone && \(/);
 });
 
 test('a run that has gone on too long says so instead of claiming it is fine', () => {
@@ -336,6 +364,11 @@ test('a run that has gone on too long says so instead of claiming it is fine', (
 });
 
 test('a successful poll clears a stale error banner', () => {
-  const refresh = dashboard.slice(dashboard.indexOf("const refreshSubmission"));
-  assert.match(refresh.slice(0, 1800), /setError\(null\);/);
+  // Bounded to refreshSubmission itself. The span was 1800 characters, which is "long enough
+  // today": adding the in-flight guard and its comment pushed setError past it and turned a
+  // passing invariant red without the invariant changing.
+  const start = dashboard.indexOf("const refreshSubmission");
+  const end = dashboard.indexOf("\n  useEffect(", start);
+  assert.ok(end > start, "could not find the end of refreshSubmission");
+  assert.match(dashboard.slice(start, end), /setError\(null\);/);
 });
