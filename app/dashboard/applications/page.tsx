@@ -34,7 +34,8 @@ import { SectionBoundary } from "@/components/app/SectionBoundary";
    verbatim from the resume request body, so "location" and "linkedin" resolve to nothing and fail
    silently after a .filter(Boolean). Sharing them is the reason this screen cannot drift from the
    packet pane the way it just did. */
-import { ApplicationPacket, ResumePaper, contactLine, contactName } from "@/components/app/ApplicationPacket";
+import { ApplicationPacket, contactLine, contactName } from "@/components/app/ApplicationPacket";
+import { ResumePaper } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
