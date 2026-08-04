@@ -76,7 +76,7 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
-import { BACKEND_ORIGIN, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -134,9 +134,9 @@ test.after(async () => {
  * not the rect corners: the button is `rounded-control` (999px), so its rect corners fall outside
  * the painted pill and would report a miss on a perfectly healthy button.
  */
-const PROBE = (label) => {
-  const btn = [...document.querySelectorAll("button")].find((b) => /Fill the form/i.test(b.textContent ?? ""));
-  if (!btn) return { found: false, label };
+const PROBE = ({ label, action }) => {
+  const btn = [...document.querySelectorAll("button")].find((b) => (b.textContent ?? "").trim().startsWith(action));
+  if (!btn) return { found: false, label, action };
   const r = btn.getBoundingClientRect();
   const nav = document.querySelector("nav.fixed");
   const navShown = nav ? getComputedStyle(nav).display !== "none" : false;
@@ -159,6 +159,7 @@ const PROBE = (label) => {
   return {
     found: true,
     label,
+    action,
     visibility: document.visibilityState,
     scrollY: Math.round(window.scrollY),
     maxScroll: document.documentElement.scrollHeight - document.documentElement.clientHeight,
@@ -263,7 +264,7 @@ for (const vp of VIEWPORTS) {
     try {
       await openAPacket(page);
 
-      const atRest = await page.evaluate(PROBE, "no scrolling at all");
+      const atRest = await page.evaluate(PROBE, { label: "no scrolling at all", action: "Fill the form" });
       assert.equal(atRest.found, true, "the review screen did not render a Fill the form button");
       assert.equal(atRest.visibility, "visible", "a background tab suspends rAF and smooth scrolling; nothing measured here would mean anything");
 
@@ -294,7 +295,7 @@ for (const vp of VIEWPORTS) {
       /* And at the end of the document, where the bar comes to rest, on every width. */
       await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
       await page.waitForTimeout(600);
-      const atEnd = await page.evaluate(PROBE, "scrolled to the end");
+      const atEnd = await page.evaluate(PROBE, { label: "scrolled to the end", action: "Fill the form" });
       assert.ok(
         atEnd.fullyInViewport,
         `at ${label}, scrolled to the very end, the action was still not fully in the viewport: ${JSON.stringify(atEnd)}`,
@@ -307,6 +308,103 @@ for (const vp of VIEWPORTS) {
       assert.deepEqual([...unstubbedBackendPaths], [], "the stub answered {} to a path the review screen depends on");
     } catch (reason) {
       await captureFailure(label, page, reason);
+      throw reason;
+    } finally {
+      await context.close().catch(() => {});
+    }
+  });
+}
+
+
+/**
+ * The OTHER screen this change touches.
+ *
+ * The review screen was the reported one, so it was the only one asserted, and a green suite read
+ * as "the change is covered" when half of it was not. QuestionsScreen is the same trap one step
+ * later: N six-row textareas and then the button that ends the screen. It also has a shape the
+ * review screen does not, and it is the shape most likely to break a bottom-sticky element: when
+ * few questions are unanswered the wrapper is SHORTER than the viewport, so the bar has no travel
+ * and must simply sit in flow without floating over anything or clipping.
+ */
+for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
+  const label = `${vp.width}x${vp.height}`;
+  test(`the questions screen's terminal action is reachable at ${label}`, async () => {
+    const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+    await context.route("**/*", async (route) => {
+      const url = route.request().url();
+      if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
+        await route.continue();
+        return;
+      }
+      if (url.startsWith(BACKEND_ORIGIN)) {
+        const backendPath = new URL(url).pathname;
+        /* The submission poll's path carries the packet id, so it cannot be a key in the static
+           STUB map. Answer it from the same fixture the ledger was built from, so the portal
+           screen sees the packet the user actually opened. */
+        const poll = backendPath.match(/^\/applications\/([^/]+)\/submission$/);
+        if (poll) {
+          const packet = RESUMES.find((r) => r.id === poll[1]);
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ application_id: poll[1], review: packet?.spec?._review ?? {}, cover_letter: null }),
+          });
+          return;
+        }
+        const body = STUB[backendPath];
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
+        return;
+      }
+      blockedExternal.push(url);
+      await route.abort();
+    });
+    await context.addInitScript((token) => {
+      window.localStorage.setItem("rq_token", token);
+      window.localStorage.setItem("rq_email", "fixture@example.invalid");
+      window.localStorage.setItem("litos_session_mode_v1", "verified");
+      window.localStorage.setItem("litos_has_history_v1", "true");
+    }, SESSION_TOKEN);
+
+    const page = await context.newPage();
+    try {
+      /* A needs_attention packet lands on the portal screen, and "Check the answers" is the
+         supported route into QuestionsScreen without pressing anything that sends. */
+      await page.goto(`${ORIGIN}/dashboard/applications?state=action`, { waitUntil: "domcontentloaded" });
+      const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
+      await rows.first().waitFor({ state: "visible", timeout: 20_000 });
+      await rows.first().click();
+      const check = page.getByRole("button", { name: "Check the answers" });
+      await check.waitFor({ state: "visible", timeout: 20_000 });
+      await check.click();
+
+      const save = page.getByRole("button", { name: /^Save answers/ });
+      await save.waitFor({ state: "visible", timeout: 20_000 });
+      await page.waitForTimeout(600);
+
+      const atRest = await page.evaluate(PROBE, { label: "questions, no scrolling", action: "Save answers" });
+      assert.equal(atRest.found, true, "the questions screen did not render its terminal action");
+      assert.equal(atRest.visibility, "visible");
+      assert.ok(atRest.fullyInViewport, `the questions action was not on screen at ${label}: ${JSON.stringify(atRest)}`);
+      assert.deepEqual(atRest.misses, [], `something is painted over the questions action at ${label}: ${JSON.stringify(atRest.misses)}`);
+      assert.equal(atRest.occludedByNav, false, `the questions action overlaps the tab bar at ${label}: ${JSON.stringify(atRest)}`);
+
+      await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
+      await page.waitForTimeout(600);
+      const atEnd = await page.evaluate(PROBE, { label: "questions, scrolled to the end", action: "Save answers" });
+      assert.ok(atEnd.fullyInViewport, `at the end of the questions screen the action was off screen at ${label}: ${JSON.stringify(atEnd)}`);
+      assert.deepEqual(atEnd.misses, [], JSON.stringify(atEnd.misses));
+      assert.equal(atEnd.occludedByNav, false, JSON.stringify(atEnd));
+
+      /* The stuck and settled positions must COINCIDE. They were 40px apart in the first cut, so
+         the button jumped upward on the last scroll increment. */
+      assert.ok(
+        Math.abs(atEnd.top - atRest.top) <= 2,
+        `the action moved ${Math.abs(atEnd.top - atRest.top)}px between its stuck and settled positions at ${label}. It must park where it rests.`,
+      );
+
+      assert.deepEqual(blockedExternal, [], "a request tried to leave this machine");
+    } catch (reason) {
+      await captureFailure(`questions-${label}`, page, reason);
       throw reason;
     } finally {
       await context.close().catch(() => {});

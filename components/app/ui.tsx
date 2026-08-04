@@ -254,8 +254,16 @@ export function EmptyState({
  * to solve. Sticky costs nothing above lg (`lg:static`) and needs no reserved space, because at
  * the end of the scroll the element IS in its flow position.
  *
- * `bottom` is --dashboard-bottom-bar, so the sticky bar rides directly on top of the mobile tab
- * bar rather than under it, and lands flush at the viewport bottom above lg where that bar is gone.
+ * `bottom` is --dashboard-action-offset, the SAME value `main` reserves as bottom padding. That is
+ * the point of there being one variable: park it anywhere else and the bar visibly hops as it goes
+ * from stuck to settled on the last scroll increment, which is exactly where a thumb is already
+ * reaching for it. The offset carries the tab bar's height, so above lg (where the bar is hidden
+ * and its term is 0) this lands at the ordinary page gutter.
+ *
+ * The `,2.5rem` fallback is not decoration. The variable is declared on :root by app/globals.css,
+ * but a caller who renders this outside that stylesheet gets an unresolvable var(), which makes
+ * `bottom` invalid at computed-value time, which silently turns sticky into a no-op with nothing
+ * failing loudly. The fallback degrades to a plain page-gutter offset instead.
  *
  * WHY THIS WORKS AT ALL, since it is the part that is easy to break: a bottom-sticky element can
  * only travel inside its containing block, and this bar is always the LAST child of its section.
@@ -272,7 +280,7 @@ export function TerminalActionBar({
 }) {
   return (
     <div
-      className={`sticky bottom-[var(--dashboard-bottom-bar)] z-20 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4 shadow-raised lg:static lg:shadow-none ${className}`}
+      className={`sticky bottom-[var(--dashboard-action-offset,2.5rem)] z-20 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4 shadow-raised lg:static lg:shadow-none ${className}`}
     >
       {children}
     </div>

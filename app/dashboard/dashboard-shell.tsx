@@ -156,8 +156,8 @@ export function DashboardShell({
             still on screen with nothing reserved for it, and the last 21px of every dashboard page
             sat underneath it. On /dashboard/applications those 21px are where the primary action
             lives. Nothing here may use a `py-*` shorthand again: the bottom is the bar's to claim,
-            through --dashboard-bottom-bar, which goes to 0 exactly when the bar goes away. */}
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-7 pb-[calc(var(--dashboard-bottom-bar)+2.5rem)] sm:px-6 sm:pt-10">{children}</main>
+            through --dashboard-action-offset, whose bar term goes to 0 exactly when the bar does. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-7 pb-[var(--dashboard-action-offset)] sm:px-6 sm:pt-10">{children}</main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">

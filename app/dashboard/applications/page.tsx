@@ -1407,7 +1407,11 @@ function Applications() {
               The unsupported line is the opposite: it is the only thing that explains why the
               button says "Open the company page" instead, and dropping it would leave a student
               with a control that looks like a mistake. It is shown at every width. */}
-          <TerminalActionBar>
+          {/* justify-end below sm is not a style preference. `hidden` is display:none, so the caption
+              is not a flex item there at all, and justify-between with ONE item resolves to
+              flex-start: the primary action slid to the left edge on a phone while the same bar on
+              the questions screen sat right. Same bar, three alignments, depending on branch. */}
+          <TerminalActionBar className="justify-end sm:justify-between">
             {review.portal_supported === false
               ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
               : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}

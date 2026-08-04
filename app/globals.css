@@ -315,15 +315,39 @@ html {
    21px sat under the tab bar across that whole band, measured on 2026-08-04. A variable cannot be
    cancelled by a shorthand that was reaching for something else.
    The arithmetic is the bar's own box: pt-2 (8px) + a 44px touch target + its safe-area padding. */
-.dashboard-shell {
-  --dashboard-bottom-bar: calc(3.25rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+:root {
+  /* The arithmetic is the bar's own box, and every term is load-bearing:
+     border-t (1px) + pt-2 (8px) + a 44px touch target + its safe-area padding. The 1px was missing
+     in the first cut of this and made the variable one pixel short of the bar it describes, which
+     is the same defect as the 21px, just small enough to argue about. Measured: 61px at a 16px root
+     with no safe-area inset. */
+  --dashboard-bottom-bar: calc(3.25rem + 1px + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+  /* Where a terminal action bar comes to REST, and therefore also where it parks while sticky.
+     One value for both, because they were 60px and 100px in the first cut and the bar visibly
+     hopped 40px up on the last scroll increment, right where a thumb was already reaching. */
+  --dashboard-action-offset: calc(var(--dashboard-bottom-bar) + 2.5rem);
 }
 
-/* The bar is lg:hidden, so above lg it owns nothing and nothing should be reserved for it. */
-@media (min-width: 1024px) {
-  .dashboard-shell {
+/* The bar is `lg:hidden`, so above lg it owns nothing and nothing should be reserved for it.
+   64rem, NOT 1024px. Tailwind 4 emits its `lg` variant as `min-width: 64rem`, and the first cut of
+   this wrote the hand-authored half in px. They are only equal at a 16px root font size. A reader
+   who has set a larger default font (a real accessibility setting) gets an lg that starts at, say,
+   1280px, so from 1024px up the tab bar is still on screen while this has already gone to zero:
+   the clearance disappears AND the sticky bar parks at bottom 0 underneath it. That is precisely
+   the bug this variable exists to fix, restored for the people most likely to be hurt by it, and
+   no viewport-width test can catch it because Playwright runs at a 16px root. Verified in the
+   compiled stylesheet: `min-width:64rem` and `min-width:1024px` were both present in one file. */
+@media (min-width: 64rem) {
+  :root {
     --dashboard-bottom-bar: 0px;
   }
+}
+
+/* The sticky action bar is opaque and sits over the end of the page, so a browser scrolling a
+   focused field "just into view" can park it directly underneath the bar. Every screen that uses
+   TerminalActionBar is also a screen full of textareas, so this is the common case, not the edge. */
+html {
+  scroll-padding-bottom: calc(var(--dashboard-action-offset) + 3rem);
 }
 
 @media (max-width: 639px) {

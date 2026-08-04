@@ -60,7 +60,13 @@ function packet(key, status) {
         ats_name: "Greenhouse",
         status,
         edited_terms: [],
-        questions: [],
+        /* One unanswered required question on the needs-you packets, so the portal screen offers
+           "Check the answers" and the questions screen has something to render. Without it that
+           whole branch of the flow is unreachable from the fixture, which is how the questions
+           screen went untested while sharing a component with the reported bug. */
+        questions: status === "needs_attention"
+          ? [{ id: `q-${key}`, question: "Why do you want to work here?", answer: "", kind: "essay", required: true }]
+          : [],
         skipped_reasons: [],
         updated_at: "2026-07-21T12:00:00.000Z",
         ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
