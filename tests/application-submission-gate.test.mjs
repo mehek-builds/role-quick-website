@@ -40,7 +40,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // ready_for_final_approval and retrying only from failed; both labels have already been reworded
   // once ("Submit application" -> "Send it", "Retry preparation" -> "Try again") and broke this
   // test rather than the product. Bounded spans, so a match cannot span half the file.
-  assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{onApprove\}/);
+  assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
   assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
@@ -121,6 +121,14 @@ test("the review screen gates and performs the submission", async () => {
   // Both endpoints: the first request, and the approval of a run already waiting on the student.
   assert.match(review, /\/submit-request/);
   assert.match(review, /\/submission\/approve/);
+  assert.match(review, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
+  assert.match(review, /const finalApprovalBlocked = coverLetterPending \|\| requiredAnswerMissing \|\| !previewReady \|\| approving/);
+  assert.match(review, /onClick=\{approveVerifiedPreview\}/);
+  assert.match(review, /disabled=\{finalApprovalBlocked\}/);
+  assert.match(review, /Resume attached to this application/);
+  assert.match(review, /Answers included with final submission/);
+  assert.match(review, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
+  assert.match(review, /onError=\{\(\) => setPreviewState\(\{ url: previewUrl, loaded: false, failed: true \}\)\}/);
   // The poll that moves a run through its statuses, which the drawer duplicated on a 2.5s timer.
   assert.match(review, /window\.setTimeout\(poll,/);
 });

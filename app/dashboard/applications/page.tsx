@@ -35,6 +35,7 @@ import { SectionBoundary } from "@/components/app/SectionBoundary";
    silently after a .filter(Boolean). Sharing them is the reason this screen cannot drift from the
    packet pane the way it just did. */
 import { ApplicationPacket, contactLine, contactName } from "@/components/app/ApplicationPacket";
+import { ResumePaper } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
@@ -1352,7 +1353,7 @@ function Applications() {
           sending={submittingPhase === "sending"}
         />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen submission={submission} approving={approvingId === selected.id} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
+        <SubmissionScreen packet={selected} submission={submission} approving={approvingId === selected.id} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -1927,11 +1928,22 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ submission, approving, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { submission: SubmissionResponse; approving: boolean; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ packet, submission, approving, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
+  const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
+  const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
+  const previewUrl = review.preview_screenshot_url ?? "";
+  const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
+  const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
+  const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
+  const finalApprovalBlocked = coverLetterPending || requiredAnswerMissing || !previewReady || approving;
+  function approveVerifiedPreview() {
+    if (finalApprovalBlocked) return;
+    onApprove();
+  }
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
@@ -1966,6 +1978,34 @@ function SubmissionScreen({ submission, approving, onHandoffComplete, onApprove,
           </div>
         )}
         {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
+        {review.status === "ready_for_final_approval" && (
+          <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
+            <p className="text-xs font-medium text-muted">Resume attached to this application</p>
+            <div className="mt-3 max-h-[28rem] overflow-y-auto rounded-inner border border-border bg-white p-2">
+              <ResumePaper spec={stripMetadata(packet.spec)} name={contactName(packet.spec)} contact={contactLine(packet.spec)} />
+            </div>
+            {packet.download_url && packet.download_url !== "#" && (
+              <a href={packet.download_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-medium text-brand-ink underline-offset-2 hover:underline">
+                Open exact PDF
+              </a>
+            )}
+          </div>
+        )}
+        {review.status === "ready_for_final_approval" && review.questions.length > 0 && (
+          <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
+            <p className="text-xs font-medium text-muted">Answers included with final submission</p>
+            <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
+              {review.questions.map((question) => (
+                <div key={question.id} className="px-3 py-3">
+                  <p className="text-xs font-medium leading-5 text-ink">{question.question}</p>
+                  <p className={`mt-1 whitespace-pre-line text-xs leading-5 ${(question.answer ?? "").trim() ? "text-muted" : question.required ? "text-warn" : "text-faint"}`}>
+                    {(question.answer ?? "").trim() || (question.required ? "Left blank, and this one is required" : "Left blank")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {review.verification?.status === "completed" && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Code found</p>
@@ -1988,13 +2028,33 @@ function SubmissionScreen({ submission, approving, onHandoffComplete, onApprove,
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending || approving} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
+        {review.status === "ready_for_final_approval" && !previewReady && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            Litos has to show the filled form preview before this can be sent.
+          </p>
+        )}
+        {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            A required answer is still blank. Check the answers before sending.
+          </p>
+        )}
         <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">What the form looked like after we filled it in</p></div>
-        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="The company's application page after Litos filled it in" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="The company's application page after Litos filled it in"
+            className="h-auto w-full"
+            onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
+            onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
+          />
+        ) : (
+          <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>
+        )}
       </Card>
     </div>
   );
