@@ -452,19 +452,10 @@ function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; 
             {type && <span className="text-muted">{type}</span>}
           </p>
         )}
-        {/* "You asked for", NOT "Matches your". The badge above is resume-to-JD coverage and this
-            sentence is preference fit: two different questions that both used to answer to the word
-            "match", which is how the same Databricks posting came to read "0% match" beside
-            "Matches your product, San Francisco, CA, internship" and assert both at once. The rule
-            that survives from that fix is that one metric's score may never carry another metric's
-            reasons. It is kept by giving the metrics different words, not by deleting one of them:
-            what you asked for and what your resume covers are both worth saying, and a student
-            reading this row needs to be able to tell which is which. */}
-        {job.preference_reasons && job.preference_reasons.length > 0 && (
-          <p className="mt-1.5 text-xs text-faint">
-            You asked for {job.preference_reasons.join(", ")}
-          </p>
-        )}
+        {/* The preference-fit line ("You asked for ...") used to sit here. It repeated the same
+            saved search on every row, so it was removed. The rule it existed to keep still holds:
+            one metric's score may never carry another metric's reasons, which is why the badge
+            above says resume-to-JD coverage and nothing else on this row speaks for it. */}
         <p className="mt-1.5 font-mono text-[11px] text-faint">
           Found {formatRelativeDate(job.first_seen_at)}
           {job.department ? ` · ${job.department}` : ""}
@@ -532,8 +523,11 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
  * WHAT THE FIRST ANSWER GOT RIGHT AND IS KEPT HERE:
  *
  *  - ONE METRIC PER CARD'S VOCABULARY. The badge and the sentence under it were resume coverage and
- *    preference fit both wearing the word "match". The sentence now reads "You asked for ...", so
- *    the two facts stay on the card and stop competing for the same word.
+ *    preference fit both wearing the word "match". The sentence was reworded to "You asked for ..."
+ *    so the two facts stopped competing for the same word, and has since been removed outright
+ *    (it repeated the saved search on every row). The badge is now the only thing on a card that
+ *    speaks to fit, and it speaks only for resume coverage. If a preference line ever comes back,
+ *    it comes back with its own vocabulary, never the badge's.
  *  - ABSENT, NEVER ZERO. A posting the backend declines to score, and a request that failed, both
  *    arrive as null and render nothing. A zero is a claim that the resume matched no requirement.
  *  - THE NUMBER NEVER CHANGES COLOUR. A 27 and a 74 look identical. A badge that shifted red to
