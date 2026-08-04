@@ -7,6 +7,23 @@ export const QA_PACKET: GeneratedResume = {
   created_at: "2026-07-21T12:00:00.000Z",
   download_url: "#",
   spec: {
+    /* THE BACKEND'S KEY NAMES, EXACTLY, and the fixture must carry this at all.
+       It did not, and that is why driving this sandbox could never have caught the header bug:
+       with no `_contact`, contactName() returns "" and the review screen legitimately draws no
+       name, so the broken version and the fixed version render identically here. A fixture shaped
+       like the bug cannot reveal the bug, which is the same lesson the packet harness learned in
+       tests/packet-resume-header.test.mjs.
+
+       `_contact` is stored verbatim from the resume request body, whose schema is full_name /
+       email / phone / linkedin_url / github_url / portfolio_url. There is no "location" and the
+       URL fields carry the `_url` suffix. */
+    _contact: {
+      full_name: "John Doe",
+      email: "john.doe@usc.edu",
+      phone: "(213) 555-0148",
+      linkedin_url: "linkedin.com/in/johndoe",
+      github_url: "github.com/johndoe",
+    },
     school: "University of Southern California",
     degree: "B.S. Computer Science",
     grad_date: "May 2027",
