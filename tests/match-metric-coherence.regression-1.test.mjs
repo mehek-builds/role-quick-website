@@ -221,16 +221,27 @@ describe("the match caption states which requirements it counted", () => {
     assert.ok(qualifier.length > "requirements".length, `unqualified caption: "${qualifier}"`);
   });
 
-  // Walks to the end of one JSX opening tag from its "<", stepping over `{...}` expressions and
-  // template literals so an attribute value containing ">" cannot end the tag early.
+  // Walks to the end of one JSX opening tag from its "<", stepping over quoted values, `{...}`
+  // expressions and template literals, so no attribute value can end the tag early or hold it open.
+  // Quoted values are skipped for BOTH reasons: a ">" inside one would close the tag early (the
+  // scan would stop mid-tag and the label would read as missing), and an unbalanced "{" inside one
+  // would leave depth above zero so the real ">" never closes it. The second is the dangerous
+  // direction. It runs off the end of the opening tag and into the element's children, and a
+  // descendant's aria-label would then be read as the ring's own and silently satisfy the
+  // assertion below. That is the same class of bug this whole helper exists to remove, so the scan
+  // treats a quoted value as opaque rather than trusting its contents to be balanced.
   const tagEnd = (source, start) => {
     let depth = 0;
     let inTemplate = false;
+    let quote = "";
     for (let i = start; i < source.length; i++) {
       const c = source[i];
-      if (inTemplate) {
+      if (quote) {
+        if (c === quote) quote = "";
+      } else if (inTemplate) {
         if (c === "`") inTemplate = false;
-      } else if (c === "`") inTemplate = true;
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === "`") inTemplate = true;
       else if (c === "{") depth++;
       else if (c === "}") depth--;
       else if (c === ">" && depth === 0) return i + 1;
