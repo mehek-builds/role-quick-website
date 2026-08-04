@@ -11,6 +11,7 @@ import {
   hasCompleteTargetRoleSet,
   parseEditableLines,
   parseEditableList,
+  splitBankByCategory,
   targetRolesChanged,
 } from "@/lib/profile-editor";
 
@@ -99,17 +100,37 @@ export default function ResumeWorkspace() {
           org: e.org.trim(),
           title: e.title?.trim() || undefined,
           date_range: e.date_range?.trim() || undefined,
-          /* Sent back unchanged because this PUT replaces the whole bank. Omitting it does not
-             leave the stored value alone, it deletes it - which is how every parsed city was lost
-             the first time. Not editable here; it comes off the resume. */
+          /* This PUT replaces the whole bank, so omitting a field does not leave the stored value
+             alone, it deletes it - which is how every parsed city was lost the first time. Now
+             editable above, so an empty string here is the student clearing it on purpose. */
           location: e.location?.trim() || undefined,
           bullet_variants: e.bullet_variants.map((b) => b.trim()).filter(Boolean),
           tags: (e.tags ?? []).map((t) => t.trim()).filter(Boolean),
-        }))
-        .filter((e) => e.org && e.bullet_variants.length > 0);
+        }));
+      /* The API requires an org and at least one bullet per entry, so incomplete rows cannot be
+         sent. They used to be dropped here silently and the page still said "Saved", so a half
+         filled entry disappeared and reported success. That was survivable while the only way in
+         was one "Add entry" button; two Add buttons and two empty states inviting "add one by
+         hand" make it the common case. Say what is wrong instead, and save nothing until it is
+         fixed: a partial save would renumber the bank under the student mid-edit.
+         A row with nothing typed in it at all is the student changing their mind after clicking
+         Add, so it is dropped without complaint. */
+      const started = cleaned.filter((e) => !(e.org && e.bullet_variants.length > 0))
+        .filter((e) => e.org || e.bullet_variants.length > 0 || e.title || e.date_range);
+      if (started.length > 0) {
+        const named = started.find((e) => e.org)?.org;
+        setError(
+          started.length === 1
+            ? `${named ? `"${named}"` : "One entry"} needs both an organization and at least one bullet before it can be saved.`
+            : `${started.length} entries need both an organization and at least one bullet before they can be saved.`,
+        );
+        setSaving(false);
+        return;
+      }
+      const complete = cleaned.filter((e) => e.org && e.bullet_variants.length > 0);
       const res = await api<{ entries: ExperienceEntry[] }>(
         "/profile/experience-bank",
-        { method: "PUT", body: JSON.stringify({ entries: cleaned }) },
+        { method: "PUT", body: JSON.stringify({ entries: complete }) },
       );
       setEntries(res.entries);
       setSavedAt(Date.now());
@@ -125,6 +146,23 @@ export default function ResumeWorkspace() {
       prev ? prev.map((e, j) => (j === i ? { ...e, ...patch } : e)) : prev,
     );
   }
+
+  function removeEntry(i: number) {
+    setEntries((prev) => prev?.filter((_, j) => j !== i) ?? prev);
+  }
+
+  function addEntry(type: ExperienceEntry["type"]) {
+    setEntries((prev) => [
+      ...(prev ?? []),
+      { type, org: "", title: "", date_range: "", location: "", bullet_variants: [""], tags: [] },
+    ]);
+  }
+
+  /* One array in, two groups out, every entry still carrying the index it holds in the stored bank.
+     Lives in lib/profile-editor so the index-preservation rule is covered by tests rather than
+     asserted by a comment - saveBank PUTs the whole bank in one request, and a group-local index
+     would write the wrong row as soon as the two categories interleave. */
+  const { work: workEntries, leadership: leadershipEntries } = splitBankByCategory(entries ?? []);
 
   return (
     <div className="space-y-8">
@@ -201,15 +239,6 @@ export default function ResumeWorkspace() {
               <span className="text-xs text-positive">Saved</span>
             )}
             <Button
-              onClick={() =>
-                setEntries((prev) => [
-                  ...(prev ?? []),
-                  { type: "job", org: "", title: "", date_range: "", bullet_variants: [""], tags: [] },
-                ])
-              } variant="secondary">
-              Add entry
-            </Button>
-            <Button
               onClick={saveBank}
               disabled={saving || entries === null} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
@@ -219,80 +248,167 @@ export default function ResumeWorkspace() {
 
         {entries === null ? (
           <ShimmerRows rows={3} />
-        ) : entries.length === 0 ? (
-          <Card className="p-8 text-center text-sm text-muted">
-            No entries yet. Upload a resume above and we will fill this in, or add
-            entries by hand.
-          </Card>
         ) : (
-          <div className="space-y-4">
-            {entries.map((entry, i) => (
-              <Card key={entry.id ?? `new-${i}`} className="p-5">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_140px_auto]">
-                  <Field
-                    label="Organization"
-                    value={entry.org}
-                    onChange={(v) => patchEntry(i, { org: v })}
-                    placeholder="Acme Corp"
-                  />
-                  <Field
-                    label="Title"
-                    value={entry.title ?? ""}
-                    onChange={(v) => patchEntry(i, { title: v })}
-                    placeholder="Software Engineer"
-                  />
-                  <Field
-                    label="Dates"
-                    value={entry.date_range ?? ""}
-                    onChange={(v) => patchEntry(i, { date_range: v })}
-                    placeholder="Jun 2025 - Aug 2025"
-                  />
-                  <SelectField
-                    label="Type"
-                    value={entry.type}
-                    onChange={(v) => patchEntry(i, { type: v as "job" | "project" })}
-                    options={[
-                      { value: "job", label: "Job" },
-                      { value: "project", label: "Project" },
-                    ]}
-                  />
-                </div>
-
-                <LinesField
-                  className="mt-4"
-                  label="Resume bullets, one per line"
-                  value={entry.bullet_variants.join("\n")}
-                  onChange={(v) => patchEntry(i, { bullet_variants: v.split("\n") })}
-                  rows={Math.max(3, entry.bullet_variants.length)}
-                  placeholder="Shipped X that did Y, measured by Z"
-                />
-
-                <div className="mt-3 flex items-end justify-between gap-4">
-                  <div className="flex-1">
-                    <Field
-                      label="Skills, separated by commas"
-                      value={(entry.tags ?? []).join(", ")}
-                      onChange={(v) =>
-                        patchEntry(i, { tags: v.split(",").map((t) => t.trim()) })
-                      }
-                      placeholder="python, data, leadership"
-                    />
-                  </div>
-                  <button
-                    onClick={() =>
-                      setEntries((prev) => prev?.filter((_, j) => j !== i) ?? prev)
-                    }
-                    className="pb-1 text-xs text-muted hover:text-danger"
-                  >
-                    Remove entry
-                  </button>
-                </div>
-              </Card>
-            ))}
+          /* Two groups, one bank. The split is by the `type` the parser already assigns, so a
+             resume that printed its clubs under a "Leadership" heading arrives sorted. One Save
+             covers both because they are one array underneath. */
+          <div className="space-y-8">
+            <EntryGroup
+              heading="Work experience"
+              blurb="Jobs, internships and projects. This is the work history employers read."
+              indexed={workEntries}
+              emptyLabel="Nothing here yet. Upload a resume above and we will fill this in, or add an entry by hand."
+              addLabel="Add work experience"
+              onAdd={() => addEntry("job")}
+              patchEntry={patchEntry}
+              removeEntry={removeEntry}
+            />
+            <EntryGroup
+              heading="Leadership and activities"
+              blurb="Clubs, societies, volunteering and student government. Kept separate so a club role is never offered to an employer as a job."
+              indexed={leadershipEntries}
+              emptyLabel="Nothing here yet. Move an entry here with its Type, or add one by hand."
+              addLabel="Add leadership role"
+              onAdd={() => addEntry("leadership")}
+              patchEntry={patchEntry}
+              removeEntry={removeEntry}
+            />
           </div>
         )}
       </section>
     </div>
+  );
+}
+
+/* One category of the bank. Rendered from (entry, index) pairs so every edit still addresses the
+   single underlying array - see indexedEntries above for why the groups are not their own state. */
+function EntryGroup({
+  heading,
+  blurb,
+  indexed,
+  emptyLabel,
+  addLabel,
+  onAdd,
+  patchEntry,
+  removeEntry,
+}: {
+  heading: string;
+  blurb: string;
+  indexed: { entry: ExperienceEntry; index: number }[];
+  emptyLabel: string;
+  addLabel: string;
+  onAdd: () => void;
+  patchEntry: (i: number, patch: Partial<ExperienceEntry>) => void;
+  removeEntry: (i: number) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-medium text-ink">{heading}</h3>
+          <p className="mt-0.5 text-xs text-muted">{blurb}</p>
+        </div>
+        <Button onClick={onAdd} variant="secondary">{addLabel}</Button>
+      </div>
+      {indexed.length === 0 ? (
+        <Card className="p-6 text-center text-sm text-muted">{emptyLabel}</Card>
+      ) : (
+        <div className="space-y-4">
+          {indexed.map(({ entry, index }) => (
+            <EntryCard
+              key={entry.id ?? `new-${index}`}
+              entry={entry}
+              index={index}
+              patchEntry={patchEntry}
+              removeEntry={removeEntry}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EntryCard({
+  entry,
+  index,
+  patchEntry,
+  removeEntry,
+}: {
+  entry: ExperienceEntry;
+  index: number;
+  patchEntry: (i: number, patch: Partial<ExperienceEntry>) => void;
+  removeEntry: (i: number) => void;
+}) {
+  return (
+    <Card className="p-5">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field
+          label="Organization"
+          value={entry.org}
+          onChange={(v) => patchEntry(index, { org: v })}
+          placeholder="Acme Corp"
+        />
+        <Field
+          label="Title"
+          value={entry.title ?? ""}
+          onChange={(v) => patchEntry(index, { title: v })}
+          placeholder="Software Engineer"
+        />
+      </div>
+      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_160px]">
+        <Field
+          label="Dates"
+          value={entry.date_range ?? ""}
+          onChange={(v) => patchEntry(index, { date_range: v })}
+          placeholder="Jun 2025 - Aug 2025"
+        />
+        {/* Was round-tripped but never shown, so a city the reader got wrong (or never found) could
+            only be fixed by producing a new PDF - and it prints on the generated resume. */}
+        <Field
+          label="Location"
+          value={entry.location ?? ""}
+          onChange={(v) => patchEntry(index, { location: v })}
+          placeholder="Los Angeles, CA"
+        />
+        <SelectField
+          label="Type"
+          value={entry.type}
+          onChange={(v) => patchEntry(index, { type: v as ExperienceEntry["type"] })}
+          options={[
+            { value: "job", label: "Job" },
+            { value: "project", label: "Project" },
+            { value: "leadership", label: "Leadership" },
+          ]}
+        />
+      </div>
+
+      <LinesField
+        className="mt-4"
+        label="Resume bullets, one per line"
+        value={entry.bullet_variants.join("\n")}
+        onChange={(v) => patchEntry(index, { bullet_variants: v.split("\n") })}
+        rows={Math.max(3, entry.bullet_variants.length)}
+        placeholder="Shipped X that did Y, measured by Z"
+      />
+
+      <div className="mt-3 flex items-end justify-between gap-4">
+        <div className="flex-1">
+          <Field
+            label="Skills, separated by commas"
+            value={(entry.tags ?? []).join(", ")}
+            onChange={(v) => patchEntry(index, { tags: v.split(",").map((t) => t.trim()) })}
+            placeholder="python, data, leadership"
+          />
+        </div>
+        <button
+          onClick={() => removeEntry(index)}
+          className="pb-1 text-xs text-muted hover:text-danger"
+        >
+          Remove entry
+        </button>
+      </div>
+    </Card>
   );
 }
 
@@ -420,6 +536,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         school={str("school") ?? ""}
         degree={str("degree") ?? ""}
         gradDate={str("grad_date") ?? (typeof gradYear === "number" ? String(gradYear) : "")}
+        coursework={str("coursework") ?? ""}
         objective={str("objective") ?? ""}
         skills={skills}
         languages={languages}
@@ -455,6 +572,7 @@ type ParsedProfileDraft = {
   school: string;
   degree: string;
   grad_date: string;
+  coursework: string;
   objective: string;
   skills: string;
   languages: string;
@@ -468,6 +586,7 @@ function ParsedProfileEditor({
   school,
   degree,
   gradDate,
+  coursework,
   objective,
   skills,
   languages,
@@ -480,6 +599,7 @@ function ParsedProfileEditor({
   school: string;
   degree: string;
   gradDate: string;
+  coursework: string;
   objective: string;
   skills: string[];
   languages: string[];
@@ -493,6 +613,7 @@ function ParsedProfileEditor({
     school,
     degree,
     grad_date: gradDate,
+    coursework,
     objective,
     skills: skills.join(", "),
     languages: languages.join(", "),
@@ -534,6 +655,12 @@ function ParsedProfileEditor({
           ...(draft.school.trim() || school ? { school: draft.school } : {}),
           degree: draft.degree,
           grad_date: draft.grad_date,
+          /* Sent ONLY when it changed, which makes this screen work against a backend that does not
+             know the field yet. parsedProfilePatchSchema is .strict(), so an unknown key is a 400 on
+             the whole save, not a partial one: shipping this page ahead of the matching backend
+             would break every profile save rather than just the coursework part of one. Same shape
+             as target_roles below, for the same reason. */
+          ...(draft.coursework !== coursework ? { coursework: draft.coursework } : {}),
           objective: draft.objective,
           skills: parseEditableList(draft.skills),
           languages: parseEditableList(draft.languages),
@@ -570,6 +697,7 @@ function ParsedProfileEditor({
           <KV label="Degree" value={degree || "Not captured from your resume"} />
           {gradDate && <KV label="Graduation" value={gradDate} />}
         </div>
+        {coursework && <div className="mt-4"><KV label="Relevant coursework" value={coursework} /></div>}
         {objective && <div className="mt-4"><KV label="Objective" value={objective} /></div>}
         {skills.length > 0 && <ProfileChips label="Skills" values={skills} />}
         {/* Shown as its own group rather than merged into Skills. The two lists are read for
@@ -608,6 +736,15 @@ function ParsedProfileEditor({
           onChange={(nextLanguages) => setDraft({ ...draft, languages: nextLanguages })}
           rows={2}
           hint="Spoken languages your resume lists. Keep these out of Skills. To tell employers which ones you are fluent in, use Settings."
+        />
+      </div>
+      <div className="mt-4">
+        <TextAreaField
+          label="Relevant coursework"
+          value={draft.coursework}
+          onChange={(nextCoursework) => setDraft({ ...draft, coursework: nextCoursework })}
+          rows={2}
+          hint="Course names, separated by commas. This prints on your generated resume."
         />
       </div>
       <div className="mt-4">

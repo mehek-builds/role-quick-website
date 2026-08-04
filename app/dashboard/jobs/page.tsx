@@ -4,7 +4,7 @@ import { Button } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
-import { fetchBoard, useJobMatchScores, SCORE_BATCH, type JobMatch } from "@/features/applications";
+import { fetchBoard, useJobMatchScores, MATCH_WEIGHTING_NOTE, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { activeJobFilters, buildAppliedIndex, countNewToday, emptyJobsBody, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
@@ -310,7 +310,13 @@ export default function JobsPage() {
           ))}
         </select>
         <label className="flex items-center gap-2 rounded-control border border-border px-4 py-2.5 text-sm text-ink transition-colors hover:border-brand focus-within:ring-2 focus-within:ring-brand/30">
-          <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
+          {/* Named on the input itself, the same way the three controls beside it are. The wrapping
+              label reads as an association to a person looking at the markup, but it is the only
+              thing carrying the name, and a screen reader announced this control as "on": the
+              checkbox's value attribute, which is what the accessible name falls back to when
+              nothing else supplies one. A student who cannot see the words next to it was being
+              offered a switch with no subject. */}
+          <input aria-label="Remote only" type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
           Remote only
         </label>
       </Card>
@@ -346,7 +352,16 @@ export default function JobsPage() {
         </EmptyState>
       ) : (
         <>
-          <ul className="grid gap-3">
+          {/* grid-cols-1 is load-bearing, not decoration. A bare `grid` leaves the single column
+              an `auto` track, and an auto track is floored by the min-content width of its widest
+              item: the rows carry `truncate` lines, `truncate` is `white-space: nowrap`, and a
+              nowrap line's min-content IS its max-content. So one long "Company · City, State"
+              pushed the track past the list, every row with it (they share the column), and the
+              Apply button off the right edge of the page. Tailwind's grid-cols-1 is
+              `repeat(1, minmax(0, 1fr))`, and that 0 minimum is exactly the fix: the track can no
+              longer be argued wider than the list, so the truncation inside the row does its job
+              instead of the page scrolling sideways. */}
+          <ul className="grid grid-cols-1 gap-3">
             {jobs.map((job) => (
               <li key={job.id}>
                 <JobRow job={job} applied={isJobApplied(job, applied)} match={matches[job.id]} />
@@ -534,10 +549,13 @@ function MatchBadge({ match }: { match: JobMatch | null | undefined }) {
   // undefined = still scoring, null = nothing honest to say. Neither prints.
   if (!match) return null;
   const pct = Math.max(0, Math.min(100, Math.round(match.score)));
+  // The weighting clause is APPENDED, not folded in: the sentence before it is pinned literally by
+  // tests/match-metric-coherence.regression-1.test.mjs and stays exactly as it was. See
+  // MATCH_WEIGHTING_NOTE for why a count beside a weighted score needed saying out loud.
   return (
     <span
       className="shrink-0 rounded-full bg-brand-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-brand-ink"
-      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting.`}
+      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting. ${MATCH_WEIGHTING_NOTE}`}
     >
       {pct}% match
     </span>

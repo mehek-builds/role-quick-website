@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+# Screenshots, DOM dumps and Playwright traces written by tests/e2e on failure only.
+/test-results/
 
 # next.js
 /.next/

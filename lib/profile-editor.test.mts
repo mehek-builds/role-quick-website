@@ -4,8 +4,45 @@ import {
   hasCompleteTargetRoleSet,
   parseEditableLines,
   parseEditableList,
+  splitBankByCategory,
   targetRolesChanged,
 } from "./profile-editor.ts";
+
+test("the bank splits into work and leadership, and jobs and projects both count as work", () => {
+  const { work, leadership } = splitBankByCategory([
+    { type: "job", org: "Cinematica Labs" },
+    { type: "leadership", org: "Spark SC" },
+    { type: "project", org: "Tonee" },
+    { type: "leadership", org: "Venture Capital Academy" },
+  ]);
+  assert.deepEqual(work.map(({ entry }) => entry.org), ["Cinematica Labs", "Tonee"]);
+  assert.deepEqual(leadership.map(({ entry }) => entry.org), ["Spark SC", "Venture Capital Academy"]);
+});
+
+/* The whole point of carrying the index: the two groups interleave in the stored array, so a
+   group-local index would edit a different row than the one on screen. */
+test("each entry keeps the index it has in the single stored bank", () => {
+  const { work, leadership } = splitBankByCategory([
+    { type: "leadership", org: "Spark SC" },
+    { type: "job", org: "Cinematica Labs" },
+    { type: "leadership", org: "USG" },
+    { type: "job", org: "Tri Coast Capital" },
+  ]);
+  assert.deepEqual(work.map(({ index }) => index), [1, 3]);
+  assert.deepEqual(leadership.map(({ index }) => index), [0, 2]);
+});
+
+test("an unknown future type lands under work rather than leadership", () => {
+  const { work, leadership } = splitBankByCategory([{ type: "volunteering", org: "Somewhere" }]);
+  assert.equal(work.length, 1);
+  assert.equal(leadership.length, 0);
+});
+
+test("an empty bank yields two empty groups rather than throwing", () => {
+  const { work, leadership } = splitBankByCategory([]);
+  assert.deepEqual(work, []);
+  assert.deepEqual(leadership, []);
+});
 
 test("profile lists accept commas and lines, trim, and deduplicate", () => {
   assert.deepEqual(

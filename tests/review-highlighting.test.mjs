@@ -166,8 +166,15 @@ test("R-049: a tab returning to the foreground refreshes immediately", () => {
 });
 
 test("R-049: a run in progress shows elapsed time", () => {
-  assert.match(dashboard, /elapsed/);
-  assert.match(dashboard, /PORTAL_SLOW_AFTER_S/);
+  // Read through shippedCopy, the same reason as R-051b above and measured the same way: renaming
+  // every CODE occurrence of "elapsed" in the page left this file at 30 pass, 0 fail, because the
+  // word also appears in the prose around the timer. The assertion was satisfied by the comment
+  // explaining the feature rather than by the feature. PORTAL_SLOW_AFTER_S was clean on the same
+  // measurement and is routed through shippedCopy anyway, because the rule is that an assertion
+  // reads shipped code, not that it reads shipped code once someone has proved it had to.
+  const shipped = shippedCopy(dashboard);
+  assert.match(shipped, /elapsed/);
+  assert.match(shipped, /PORTAL_SLOW_AFTER_S/);
 });
 
 test("R-051d: the packet switcher is not nested inside the review screen", () => {
