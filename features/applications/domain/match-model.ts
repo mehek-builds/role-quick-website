@@ -47,9 +47,12 @@ export type JdMatchResponse = {
  *
  * A NARROWER MIX IS STILL WORTH COPY. Where a posting only mixes 1 with 0.7, which is the common
  * shape (a requirements block plus a responsibilities block), the badge-versus-caption gap maxes at
- * 9.3 points. Do not confuse that quantity with the backend docblock's "5 of 12 is 46 or 35", which
+ * 9.3 points. Do not confuse that quantity with the backend docblock's "5 of 12 is 46 or 32", which
  * is the spread between two possible BADGES for one caption, not the gap between a badge and its
- * caption. Both matter and they are different measurements.
+ * caption. Both matter and they are different measurements. (That 32 is quoted as the source
+ * writes it and is itself wrong: on its own fixture of eight terms at weight 1 and four at 0.7,
+ * total 10.8, the lowest "5 of 12" is 3.8 / 10.8 = 35. Pre-existing over there, not corrected here,
+ * because that file belongs to another session this round.)
  *
  * WHY A CLAUSE RATHER THAN A NEW NUMBER. Restating the weighted share in words would print the
  * badge twice, and the count is the fact the student can act on: it is the size of the gap list

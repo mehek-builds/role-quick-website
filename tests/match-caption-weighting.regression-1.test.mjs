@@ -75,12 +75,24 @@ describe("the weighting note is one string, and it says the right thing", () => 
     // long as it still says some requirements matter more and still denies the division. A student
     // who can divide is the whole reason this exists.
     //
-    // NOT asserted on the word "weigh". The first draft used it and was reworded to "count for
-    // more" against tests/vocabulary.js's bar, so pinning the engineering verb would have pushed
-    // the next author back up the reading level to keep this green.
+    // PINNED ON THE COMPARISON, NOT ON A COMPARATIVE. A bare /more than/ matched any comparison
+    // anywhere in the sentence, so "This posting has more than four requirements, so the score is
+    // not that fraction" satisfied it while explaining nothing. The alternation holds the
+    // comparison to requirement IMPORTANCE, which is the load-bearing idea, and still leaves three
+    // ways to phrase it.
+    //
+    // It is deliberately not the single word "weigh". Correcting the earlier note in this file:
+    // the phrase that failed tests/vocabulary.js's bar was "weighted coverage", not "weigh".
+    // "Requirements ... weigh more than ones it only mentions in passing" is plain English, so
+    // pinning "weigh" would have frozen a synonym rather than protected a reading level. The
+    // alternation avoids both traps.
     const note = await weightingNote();
     assert.ok(typeof note === "string", "the shared clause must exist and be a string");
-    assert.match(note, /more than/i, "it must say some requirements matter more than others");
+    assert.match(
+      note,
+      /count(s)? for more|weigh(s)? more|matter(s)? more/i,
+      "it must say some requirements count for more than others, not merely compare something",
+    );
     assert.match(note, /requirements?/i, "it must be about the requirement terms");
     assert.match(note, /not that fraction/i, "it must deny that the score is the printed fraction");
     assert.ok(note.trim().length > 40, `too short to explain anything: "${note}"`);
@@ -96,8 +108,12 @@ describe("the weighting note is one string, and it says the right thing", () => 
     // the NATURAL sentence-initial form of the banned ISSUE-023 wording, and it passed a
     // case-sensitive version of this line while the guard on the line below it, which always
     // carried /i, bit correctly. One test, two conventions, one hole.
+    // SINGULAR TOO. The plural-only version of this regex is exactly why the overclaim survived on
+    // the review screen's zero-gaps line ("Every requirement this posting lists...") through three
+    // test files and an ISSUE-023 pass. A ban that only holds in one grammatical number is not a
+    // ban on the claim, it is a ban on one spelling of it.
     const note = await weightingNote();
-    assert.doesNotMatch(note ?? "", /requirements this (posting|job posting) lists/i);
+    assert.doesNotMatch(note ?? "", /requirements? this (job )?posting lists/i);
     assert.doesNotMatch(note ?? "", /\ball (of the )?requirements\b/i);
   });
 
@@ -160,13 +176,15 @@ describe("the ISSUE-023 wording the note sits next to is untouched", () => {
   // that live in match-metric-coherence and preference-score-copy ON PURPOSE: this change appends
   // to exactly those literals, so the file doing the appending is the one that should fail if a
   // future edit folds the clause in and rewrites them.
-  test("no surface says the posting's full list", () => {
+  // THE TITLE OF THIS TEST WAS BROADER THAN WHAT IT HELD, and that gap was not academic: one of the
+  // four surfaces it scans DID say the posting's full list, in the singular, in visible copy, and
+  // this test passed anyway. The copy is fixed and the regex is widened, so the title is now true.
+  test("no surface says the posting's full list, in either number", () => {
     for (const { name, path } of SURFACES) {
       const src = code(readFileSync(path, "utf8"));
-      // Case-insensitive for the same reason the clause's own guard is: the sentence-initial form
-      // is the one an author would naturally write, and a case-sensitive ban misses it.
-      assert.doesNotMatch(src, /\brequirements this posting lists/i, `${name} overclaims`);
-      assert.doesNotMatch(src, /\brequirements this job posting lists/i, `${name} overclaims`);
+      // Case-insensitive AND number-insensitive. Case, because the sentence-initial form is the one
+      // an author would naturally write. Number, because the singular is what actually shipped.
+      assert.doesNotMatch(src, /\brequirements? this (job )?posting lists/i, `${name} overclaims`);
     }
   });
 });

@@ -230,9 +230,24 @@ export function MatchGaps({
   }, [key]);
 
   if (missing.length === 0) {
+    /* "REQUIREMENT LITOS COUNTED", not "requirement this posting lists". ISSUE-023's banned
+       overclaim was shipping here in the SINGULAR, which is why every ban regex in three test
+       files walked straight past it: they all matched the plural. Live on origin/main before this
+       branch, and found while auditing the caption two hundred lines up that says the right thing.
+
+       It is wrong for the reason ISSUE-023 was filed. `missing.length === 0` means every term THE
+       EXTRACTOR COUNTED is covered, and that set is capped at EMPHASIS_LIMIT (12) in
+       volley-backend's engine/jdMatch.ts. A posting can state requirements the extractor never
+       counted, so "every requirement this posting lists" claims more than the product can know.
+
+       AND THIS IS THE WORST PLACE IN THE PRODUCT TO OVERCLAIM, which is why it is worth copy rather
+       than a comment. Every other overclaim shades a number the student keeps working against.
+       This one is the state where they stop: no chips below it, nothing left to fix, so the
+       sentence is the whole basis for concluding the resume is done for this posting. It has to be
+       the narrower, true claim. */
     return (
       <p className="text-sm text-muted">
-        Every requirement this posting lists already appears on your resume.
+        Every requirement Litos counted in this posting already appears on your resume.
       </p>
     );
   }
