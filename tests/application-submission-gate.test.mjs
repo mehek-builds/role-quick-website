@@ -54,7 +54,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
-test("overview keeps three application states and sends an application on one press", async () => {
+test("overview keeps three application states and sends matches to the review screen", async () => {
   const overview = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
 
   // Still three states; the labels moved onto the four-word vocabulary.
@@ -77,24 +77,11 @@ test("overview keeps three application states and sends an application on one pr
      title, and it showed a MatchScore ring with none of the requirement highlighting that explains
      the number.
 
-     Review was a link, and then it was not there at all. 2026-08-04, Mehek's call: a card's second
-     press is SUBMIT, and pressing it sends the application. One press, no screen in between, no
-     countdown. The drawer is still gone and is not what came back: what came back is the send,
-     and it came back as calls into the applications feature (sendApplication, readSubmission,
-     submissionBlocker) rather than as a local copy, which is what keeps one definition of how an
-     application goes out. Home still reviews nothing, asserted in the next test. */
-  assert.match(overview, /packet=\{packets\.find\(\(packet\) => packetMatchesJob\(packet, job\)\) \?\? null\}/);
-  assert.match(overview, /status === "ready" \? \([\s\S]*?onClick=\{onSubmit\}[\s\S]*?Submit/);
-  assert.match(overview, /await sendApplication\(packet\.id, review\)/);
-  assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
-  /* The gate the review screen enforced. Without it Submit is a button that can only fail for a
-     packet with a required blank, and the student is left pressing it. */
-  assert.match(overview, /const blocker = submissionBlocker\(review\)/);
-  assert.match(overview, /packet && blocker \? \([\s\S]*?Finish your answers/);
+     Review is a link now. That is the whole contract on this page. */
+  assert.match(overview, /reviewHref=\{reviewHrefFor\(job\)\}/);
+  assert.match(overview, /<Link href=\{reviewHref\}[\s\S]*?Review\s*<\/Link>/);
   assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
-  // A live run has to be visible as one, on the card that started it.
-  assert.match(overview, /const sending = submitting \|\| Boolean\(review && ACTIVE_SUBMISSION_STATUSES\.has\(review\.status\)\)/);
-  assert.match(overview, /<PendingLabel>Sending<\/PendingLabel>/);
+  assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
 
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.
