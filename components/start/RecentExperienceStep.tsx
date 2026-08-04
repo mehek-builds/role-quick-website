@@ -147,8 +147,8 @@ export function RecentExperienceStep({
         /* The answers go up either way. `continue_with_found` says "stop asking me for more", not
            "throw away what I already typed" - and it used to send an empty array, so a student who
            filled two fields and then pressed the link lost both without being told. The flag is the
-           only thing that should differ between the two buttons. See answersToSend for why an
-           all-blank set still has to arrive as []. */
+           only thing that should differ between the two buttons. See answersToSend for what it
+           trims and, more importantly, for what it must never trim. */
         const saved = await putRecentExperienceReview({
           selected_entry_id: selectedId,
           answers: answersToSend(answers, answerCount),
