@@ -29,7 +29,12 @@ import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
-import { ApplicationPacket } from "@/components/app/ApplicationPacket";
+/* contactName and contactLine, not a local read of `_contact`. They are the fourth and fifth
+   readers of that record, and the two that already know its exact key names: the backend stores it
+   verbatim from the resume request body, so "location" and "linkedin" resolve to nothing and fail
+   silently after a .filter(Boolean). Sharing them is the reason this screen cannot drift from the
+   packet pane the way it just did. */
+import { ApplicationPacket, contactLine, contactName } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
@@ -1434,7 +1439,21 @@ function Applications() {
                   Your resume for this job
                 </p>
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-15.5rem)]">
-                  <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
+                  {/* `selected.spec` for the name and contact, NOT the `spec` beside them, and the
+                      difference is the entire bug this fixes. `spec` is the editable copy, and it
+                      is built by `setSpec(stripMetadata(packet.spec))`: stripMetadata drops
+                      `_contact` deliberately, so the name is not merely absent from that object,
+                      it is removed on the way in. Reading the applicant off it is impossible, which
+                      is why the header silently became whatever sorted first.
+                      `selected` is the raw packet and still has it. */}
+                  <ResumeEditor
+                    spec={spec}
+                    name={contactName(selected.spec)}
+                    contact={contactLine(selected.spec)}
+                    editedTerms={editedTerms}
+                    onChange={setSpec}
+                    onPatchEntry={patchEntry}
+                  />
                   {/* Under the resume, inside the same scroll area: the checks describe the page
                       directly above them, so they belong to it rather than to the screen. */}
                   <div className="mx-auto mt-5 max-w-[640px] border-t border-border pt-4">
@@ -1647,30 +1666,66 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text", 
   );
 }
 
-function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
+/* THE HEADER IS THE APPLICANT, NOT THE SCHOOL, and `name` is a prop for a reason.
+ *
+ * This opened with `spec.school` in the name slot, centred and heaviest on the page, with the
+ * degree beneath it: the student read their university where their own name belongs, on the screen
+ * they check before sending. It is the third surface to ship that exact bug, and the cause is the
+ * same every time. `ResumeSpec` has no name field. The applicant lives on `_contact.full_name`, and
+ * `stripMetadata` drops `_contact` on purpose, so the editable spec this component receives cannot
+ * carry a name even in principle. A component typed `spec: ResumeSpec` is therefore STRUCTURALLY
+ * unable to render a header, and whatever field happens to sort first floats into the empty slot.
+ *
+ * So the name and the contact line arrive as their own props, off the raw packet, the same way
+ * ResumePaper takes them. That is the whole fix: a renderer that needs the applicant has to be
+ * given the applicant. tests/packet-resume-header.test.mjs now holds every resume surface to it.
+ *
+ * `name` is NOT editable here and that is deliberate. `onChange` carries a ResumeSpec, which has
+ * nowhere to put a name; a field that looked editable and silently discarded the edit would be
+ * worse than a printed line. The name is changed where it is stored, on the profile. */
+function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; name: string; contact: string; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
     <div className="mx-auto max-w-[640px] rounded-card border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
-      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
-      {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
-          lossy in both directions: a degree legitimately containing " · " split wrong, and any
-          third separator silently discarded the tail. R-047 was a mangled degree that could not be
-          corrected, so a control that can mangle it again works against the fix. The dot is drawn
-          between them rather than stored in either. */}
+      {/* Name, rule, contact line: the order drawHeader() draws them in, and the order the packet
+          pane shows. On a packet generated before `_contact` existed there is no name, and then
+          education simply leads under its own heading rather than a blank line appearing. */}
+      {name && <p className="text-center text-sm font-semibold sm:text-lg">{name}</p>}
+      {contact && (
+        <>
+          <div className="mt-1.5 h-px w-full bg-neutral-300" />
+          <p className="mt-1.5 text-center text-[11px] text-muted">{contact}</p>
+        </>
+      )}
+
+      {/* EDUCATION as a real section, because it is one. Without the heading the school sat at the
+          top of the page looking like a header, which is exactly how it came to occupy the name
+          slot: nothing marked it as belonging to a section. drawEducation() emits this heading. */}
+      <p className="mb-2 mt-6 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Education</p>
+      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="font-semibold" />
+      {/* STILL two fields, never one string round-tripped through a " · " separator. The separator
+          form was lossy in both directions: a degree legitimately containing " · " split wrong, and
+          any third separator silently discarded the tail. R-047 was a mangled degree that could not
+          be corrected, so a control that can mangle it again works against the fix.
+
+          The drawn dot between them is gone with the centring. It existed to join two fields into
+          one centred sub-heading under the school when the school was acting as the page header;
+          now that education is a section, drawEducation()'s own shape applies: degree on the left,
+          date pushed right. That is also the shape every experience entry below already uses, so
+          the eye reads dates from one column down the whole page instead of two.
+
+          Dropping the dot took the items-center/lg:items-baseline note with it. That was about the
+          dot alone: it was the one thing in the row that was not a field, so it needed aligning
+          against two 44px touch boxes. With no drawn glyph left, the fields align as fields. */}
       {/* Width comes from these wrappers, never from the textarea itself: an auto-width textarea
           falls back to its ~20-column default, which squeezed a long joint degree into a narrow
           stacked column. The degree takes the remaining space and the date gets just what it
           needs. */}
-      {/* items-center below lg, because the drawn dot is the one thing in this row that is not a
-          field: the two fields sit in a 44px touch box with their text centred in it, and a
-          baseline-aligned span next to them lands at the bottom of that box instead of beside the
-          words. From lg the boxes collapse to the text and the original baseline row returns. */}
-      <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-muted lg:items-baseline">
+      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-muted">
         <span className="min-w-0 flex-1">
-          <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-right" />
+          <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="italic" />
         </span>
-        <span aria-hidden>·</span>
         <span className="w-[5.5rem] shrink-0">
-          <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-left" />
+          <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-right" />
         </span>
       </div>
 
