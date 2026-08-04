@@ -337,7 +337,15 @@ test('a blocked or failed run is not painted in the ready treatment', () => {
 test('the elapsed clock is anchored to the server, not to component mount', () => {
   // A reload during a live run remounted the component; a mount-anchored clock restarted at 0s and
   // reported "3s elapsed" for a four-minute-old run, defeating the point of showing it.
-  assert.match(dashboard, /startedAt=\{submission\?\.review\.updated_at\}/);
+  //
+  // Two anchors now, and which one is correct depends on what the screen is doing. While PREPARING,
+  // `review.updated_at` is the server's own stamp for that run. While SENDING it is not: it was
+  // stamped when preparation finished, so a student who read the packet for six minutes before
+  // pressing "Send it" opened the sending screen already reading "6m 00s elapsed", past the
+  // five-minute threshold that tells them to start the application again. The send is anchored to
+  // when the send began, and falls back to the server stamp if that is somehow absent.
+  assert.match(dashboard, /startedAt=\{submittingPhase === "sending" \? approveStartedAt \?\? submission\?\.review\.updated_at : submission\?\.review\.updated_at\}/);
+  assert.match(dashboard, /setApproveStartedAt\(new Date\(\)\.toISOString\(\)\)/);
   assert.match(dashboard, /Date\.parse\(startedAt\)/);
 });
 
@@ -356,6 +364,11 @@ test('a run that has gone on too long says so instead of claiming it is fine', (
 });
 
 test('a successful poll clears a stale error banner', () => {
-  const refresh = dashboard.slice(dashboard.indexOf("const refreshSubmission"));
-  assert.match(refresh.slice(0, 1800), /setError\(null\);/);
+  // Bounded to refreshSubmission itself. The span was 1800 characters, which is "long enough
+  // today": adding the in-flight guard and its comment pushed setError past it and turned a
+  // passing invariant red without the invariant changing.
+  const start = dashboard.indexOf("const refreshSubmission");
+  const end = dashboard.indexOf("\n  useEffect(", start);
+  assert.ok(end > start, "could not find the end of refreshSubmission");
+  assert.match(dashboard.slice(start, end), /setError\(null\);/);
 });

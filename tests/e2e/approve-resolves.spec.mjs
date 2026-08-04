@@ -134,6 +134,7 @@ const SENT = {
  */
 async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const approveCalls = [];
   await context.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
@@ -144,6 +145,7 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING }
       const p = new URL(url).pathname;
       const json = async (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
       if (p.endsWith("/submission/approve")) {
+        approveCalls.push(Date.now ? 1 : 1);
         if (holdApproveMs) await delay(holdApproveMs);
         await json(SENT);
         return;
@@ -183,7 +185,7 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING }
   const sendIt = page.getByRole("button", { name: "Send it" });
   await sendIt.waitFor({ state: "visible", timeout: 25_000 });
 
-  return { context, page, sendIt };
+  return { context, page, sendIt, approveCalls };
 }
 
 function browserTest(name, body) {
@@ -237,6 +239,70 @@ browserTest("a visible tab is still rescued by the submission poll", async () =>
   await sendIt.click();
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await page.evaluate(() => document.visibilityState), "visible");
+  await context.close();
+  return page;
+});
+
+
+/**
+ * The one that matters: a real application must not be sent twice.
+ *
+ * The 2.5s submission poll runs while the sending screen is up, and during an approve the server
+ * still reports `ready_for_final_approval`, which screenForStatus maps to "portal". So the poll
+ * used to take the student OFF the sending screen and back to SubmissionScreen with a live
+ * "Send it" roughly 2.5 seconds into every send slower than that, and nothing guarded a second
+ * press. This case holds the approve open for 8 seconds, which is three poll ticks, and asserts
+ * both that the screen does not walk backwards and that a second click cannot fire a second POST.
+ *
+ * Pre-fix, measured 2026-08-04: the sending screen was replaced by "Check it over before it goes."
+ * with an enabled Send it, and clicking it produced a SECOND /submission/approve.
+ */
+browserTest("a slow send cannot be sent twice", async () => {
+  const { context, page, sendIt, approveCalls } = await openApproval(false, { holdApproveMs: 8000, pollAnswer: AWAITING });
+  await sendIt.click();
+
+  /* Past three poll ticks, the student must still be on the sending screen. */
+  await page.waitForTimeout(7000);
+  const sendItVisibleMidFlight = await page.getByRole("button", { name: "Send it" }).isVisible().catch(() => false);
+  const sendItEnabledMidFlight = sendItVisibleMidFlight
+    ? await page.getByRole("button", { name: "Send it" }).isEnabled().catch(() => false)
+    : false;
+  assert.equal(
+    sendItEnabledMidFlight,
+    false,
+    "the poll walked the user back to a live Send it while their send was still in flight, which is a duplicate application to a real employer",
+  );
+
+  await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(approveCalls.length, 1, `the approve endpoint was called ${approveCalls.length} times; it must be exactly once`);
+  await context.close();
+  return page;
+});
+
+/**
+ * The progress clock measures the send, not the review that preceded it.
+ *
+ * It was anchored to `review.updated_at`, stamped when preparation finished. A student who reads
+ * the packet for six minutes before approving therefore opened the sending screen already showing
+ * six minutes elapsed, and past five minutes the screen tells them to start the application again,
+ * which for a send that is genuinely in flight is the worst possible instruction.
+ */
+browserTest("the sending clock starts when Send it is pressed", async () => {
+  const STALE = {
+    ...AWAITING,
+    review: { ...AWAITING.review, updated_at: "2020-01-01T00:00:00.000Z" },
+  };
+  const { context, page, sendIt } = await openApproval(false, { holdApproveMs: 6000, pollAnswer: STALE });
+  await sendIt.click();
+  await page.getByText("Sending it to the company now.").waitFor({ state: "visible", timeout: 10_000 });
+  await page.waitForTimeout(1500);
+  const elapsedText = await page.locator("main").innerText();
+  const shown = elapsedText.match(/(\d+)m (\d+)s elapsed|(\d+)s elapsed/);
+  assert.ok(shown, `no elapsed clock rendered: ${elapsedText.slice(0, 300)}`);
+  assert.ok(
+    !/\dm \d\ds elapsed/.test(shown[0]),
+    `the clock is anchored to the pre-send timestamp and read "${shown[0]}" seconds into the send`,
+  );
   await context.close();
   return page;
 });
