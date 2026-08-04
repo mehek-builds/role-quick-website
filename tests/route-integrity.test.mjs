@@ -259,12 +259,20 @@ test("internal #anchors resolve to a real id on the homepage", () => {
  * navigation at any width is invisible to anyone who is not typing URLs, and
  * unlike a 404 it produces no error anywhere to notice.
  *
- * Raised 2026-08-03 against /litos-vs-simplify and /for-career-centres, which
- * turned out to be linked all along, from the homepage footer, and deliberately
- * kept out of the header (reasoning recorded beside both <li>s in app/page.tsx,
- * and in the header's own comment in components/Header.tsx). The finding was
- * wrong but the gap it implied was real: nothing checked. Now something does,
- * and the next route added without a link fails here instead of shipping dark.
+ * Raised 2026-08-03 against /litos-vs-simplify and /for-career-centres. The
+ * first pass closed it as a false premise, because the homepage footer does
+ * link both. That closure was wrong, and this comment used to carry the wrong
+ * version of it: counting a link is not the same as counting the pages the link
+ * renders on. Each route had exactly one inbound link, in a footer that lived
+ * inline in app/page.tsx and therefore rendered on the homepage and nowhere
+ * else, while <Header /> rendered on ten routes and carried neither. From /try
+ * or /browse-jobs there was no click path at all.
+ *
+ * Fixed 2026-08-04 by lifting that same footer into components/SiteFooter.tsx
+ * and rendering it on the marketing routes that had no footer. No link was
+ * added, removed or promoted into the header; the footer simply renders where
+ * the header does. Section 5b below pins the result page by page, which is the
+ * assertion whose absence let the wrong closure stand.
  *
  * "Reachable" means a literal internal href in the SHIPPED source of app/ or
  * components/, comments stripped. That qualifier is the whole difference
@@ -275,18 +283,13 @@ test("internal #anchors resolve to a real id on the homepage", () => {
  * that is not a hypothetical, it is the house style. A route counts as reachable
  * only if the link RENDERS.
  *
- * Footer counts: it is site navigation, and the audience arrives on the
- * homepage. Header placement is a positioning question this test has no opinion
- * about, deliberately, because it has no right answer.
+ * Footer counts: it is site navigation. Header placement is a positioning
+ * question this test has no opinion about, deliberately, because it has no
+ * right answer.
  *
- * Worth being precise about what the footer buys, though, because it is less
- * than it sounds: the footer lives inside app/page.tsx and renders on the
- * HOMEPAGE ONLY (components/Header.tsx says the same, at more length, as the
- * reason the phone hamburger came back). So both audience pages are reachable
- * from exactly one page. From /try or /browse-jobs the only route to them is
- * back through the wordmark to the homepage. That is defensible for pages
- * written to be found by search and entered directly, and it is the state this
- * test pins; it is not the same claim as "reachable site-wide".
+ * This sweep stays tree-wide on purpose: for a brand new route, one link
+ * anywhere is the bar, and demanding site-wide chrome for every page would be
+ * the wrong default. Section 5b is where the stricter claim lives.
  */
 
 /* Shipped source: comments removed, so an assertion about what the site LINKS
@@ -321,6 +324,7 @@ const UNLINKED_BY_DESIGN = new Map([
   /* Internal QA harnesses. Linking them from a public surface is the bug. */
   ["/qa/packet", "internal QA harness, must not be linked from a public surface"],
   ["/qa/packet/dashboard", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/waiting-on-you", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission/[board]/[case]", "internal QA harness, must not be linked from a public surface"],
 ]);
@@ -345,26 +349,159 @@ test("every shipped route is either linked from somewhere or exempt on purpose",
   );
 });
 
-test("the two audience pages are reachable without typing a URL", () => {
-  /* Named rather than left to the sweep above, because these two are the ones
-     that got filed, and because the sweep would go green again if the footer
-     lost them and the header gained them. What matters is that a human can
-     click to them, not which chrome carries the link.
+/* ---------- 5b. reachable FROM SOMEWHERE ELSE, not just from the homepage ---------- */
 
-     Shipped source on both files, for the reason in the section header: the
-     comments beside these two <li>s in app/page.tsx both quote the route they
-     sit next to, so read raw, this assertion is satisfied by the comment
-     explaining the link even after the link itself is gone. Verified by
-     deleting the real <li> and leaving the comment: raw source passes, shipped
-     source fails. */
-  const home = shippedSource(readFileSync(join(APP, "page.tsx"), "utf8"));
-  const header = shippedSource(readFileSync(join(ROOT, "components/Header.tsx"), "utf8"));
-  for (const route of ["/litos-vs-simplify", "/for-career-centres"]) {
-    assert.ok(
-      home.includes(`href="${route}"`) || header.includes(`href="${route}"`),
-      `${route} ships but neither the homepage nor the header links to it`,
-    );
+/* The assertion that had to exist and did not.
+ *
+ * Its predecessor read app/page.tsx and components/Header.tsx and passed if
+ * either mentioned the route. That is satisfied by one link on one page, which
+ * is exactly the state ISSUE-026 was reopened over, so it went green through
+ * the entire defect and could not have gone red. The gap is not "is there a
+ * link" but "can a visitor who is not on the homepage get there by clicking".
+ *
+ * So this resolves the render tree instead of grepping a file. For a given
+ * page.tsx it collects the hrefs that page renders itself, then follows its
+ * "@/..." imports and collects theirs, transitively. A link inside
+ * SiteFooter counts for a page only if that page actually renders SiteFooter.
+ * Move the footer back inline into app/page.tsx and every route below fails.
+ *
+ * Comments are stripped at every hop, for the reason in the section header: the
+ * <li>s carrying these two routes sit beside long comments that quote the very
+ * href they explain, so a raw-source version of this test is green on a tree
+ * where the links have been deleted and only the explanation is left. Verified
+ * by mutant, not assumed; see the mutant table in the change notes.
+ *
+ * Deliberately does not check the header. Which chrome carries the link is a
+ * positioning call with reasons written down on both sides. This only asks
+ * whether a human elsewhere on the site has a path.
+ *
+ * WHAT THIS TEST CANNOT DO, stated plainly because the first draft of this
+ * comment overclaimed it. It reads source text; it does not evaluate the
+ * program, so it cannot decide whether a tag that appears in the file actually
+ * renders. Three mutants were measured passing with the footer NOT on the page:
+ *
+ *   {false && <SiteFooter />}          dead branch, tag present
+ *   const _unused = <SiteFooter />;    module scope, never returned
+ *   {step ? null : <SiteFooter />}     the realistic one, a conditional render
+ *
+ * All three are green here. That is a property of static analysis, not a bug to
+ * be patched: deciding reachability needs the program run, and the honest
+ * alternative is a build-and-crawl test, which is a different test with a
+ * different cost. What this DOES buy is that the link and the render site have
+ * to exist in the same file that claims them, which is what the predecessor
+ * assertion failed to require, and which is the shape the actual defect took.
+ * The browser check in the change notes is what covers the rest.
+ *
+ * One known false FAILURE in the other direction: IMPORT_RX matches
+ * `import ... from "@/..."` only, so a barrel that re-exports the footer with
+ * `export { SiteFooter } from "@/components/SiteFooter"` breaks the chain and
+ * fails this test even though the page renders correctly. Measured, not
+ * theorised. Left unhandled because there is no barrel in this repo today and a
+ * red test on a working tree is a loud, five-minute fix; if one is introduced,
+ * extend IMPORT_RX to match the export form rather than deleting the test. */
+
+/* Captures the imported bindings as well as the module, because an import on
+   its own proves nothing. The first version of this walker followed every
+   "@/..." import, and a mutant caught it out immediately: deleting
+   <SiteFooter /> from app/try/page.tsx while leaving the now-unused import line
+   kept the test green, which is the same shape of lie as satisfying it with a
+   comment. An import is only followed when one of the names it binds is
+   actually used as a JSX tag in the shipped source.
+
+   That is "named as a tag", which is strictly weaker than "renders". See the
+   three measured survivors in the section header: this closes the stale-import
+   hole and nothing more. */
+const IMPORT_RX = /import\s+(?:type\s+)?([\s\S]*?)\s+from\s+"(@\/[^"]+)"/g;
+
+function boundNames(clause) {
+  return [...clause.matchAll(/[A-Za-z_$][\w$]*/g)]
+    .map((m) => m[0])
+    .filter((n) => n !== "as" && n !== "type" && n !== "default");
+}
+
+function rendersTag(text, name) {
+  return new RegExp(`<${name}[\\s/>]`).test(text);
+}
+
+function resolveAlias(spec) {
+  const base = join(ROOT, spec.replace(/^@\//, ""));
+  for (const ext of [".tsx", ".ts", "/index.tsx", "/index.ts"]) {
+    try {
+      if (statSync(base + ext).isFile()) return base + ext;
+    } catch {
+      /* not this extension */
+    }
   }
+  return null;
+}
+
+/* Every literal internal href a route renders, following local component
+   imports. Cycles are impossible in an import graph Next.js can build, but the
+   seen-set makes that assumption cheap rather than load-bearing. */
+function hrefsRenderedBy(file, seen = new Set()) {
+  if (seen.has(file)) return new Set();
+  seen.add(file);
+  const shipped = shippedSource(readFileSync(file, "utf8"));
+  const out = new Set(internalHrefs(shipped));
+  for (const m of shipped.matchAll(IMPORT_RX)) {
+    if (!boundNames(m[1]).some((n) => rendersTag(shipped, n))) continue;
+    const resolved = resolveAlias(m[2]);
+    if (!resolved) continue;
+    for (const href of hrefsRenderedBy(resolved, seen)) out.add(href);
+  }
+  return out;
+}
+
+/* The marketing pages a visitor can be standing on that are NOT the homepage.
+   Each must offer a click path to both audience pages, or the pages are only
+   findable by people who already arrived at the front door. */
+const IN_APP_MARKETING_ROUTES = [
+  "browse-jobs",
+  "try",
+  "terms",
+  "privacy",
+  "contact",
+  "litos-vs-simplify",
+  "for-career-centres",
+];
+
+const AUDIENCE_ROUTES = ["/litos-vs-simplify", "/for-career-centres"];
+
+test("both audience pages are reachable by clicking from inside the site, not only from the homepage", () => {
+  const missing = [];
+  for (const route of IN_APP_MARKETING_ROUTES) {
+    const file = join(APP, route, "page.tsx");
+    const rendered = hrefsRenderedBy(file);
+    for (const target of AUDIENCE_ROUTES) {
+      /* A page linking to itself is not a path anywhere, so it is not asked
+         for. Every other pairing is. */
+      if (`/${route}` === target) continue;
+      if (!rendered.has(target)) missing.push(`/${route} -> ${target}`);
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    `Pages with no click path to an audience page. The site footer is what\n` +
+      `carries these; check the page renders <SiteFooter />:\n  ${missing.join("\n  ")}`,
+  );
+});
+
+test("the homepage is not the only page that renders the site footer", () => {
+  /* The single fact the previous closure got wrong, pinned directly so it
+     cannot be re-argued from a link count. If the footer is ever inlined into
+     one page again, this fails before the pairing sweep above does, and says
+     why. */
+  const renderers = sources.filter(
+    (f) =>
+      /(^|\/)page\.tsx$/.test(f) &&
+      /<SiteFooter\b/.test(shippedSource(readFileSync(f, "utf8"))),
+  );
+  assert.ok(
+    renderers.length > 1,
+    `the site footer renders on ${renderers.length} page(s). It is site ` +
+      `navigation; a footer on one page is not navigation.`,
+  );
 });
 
 test("the exemption list does not quietly cover a public page", () => {

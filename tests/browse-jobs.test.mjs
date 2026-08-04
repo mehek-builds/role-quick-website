@@ -213,7 +213,7 @@ describe("pageCount", () => {
 describe("the board's layout", () => {
   test("a tile can shrink below its own nowrap content", () => {
     /* The location line is `truncate`, which is white-space: nowrap, and a grid
-       item defaults to min-width: auto — so the track grew to fit the longest
+       item defaults to min-width: auto, so the track grew to fit the longest
        unwrapped location instead of clipping it. On a 375px phone the document
        came out 809px wide and the whole page scrolled sideways, while desktop
        looked perfect and review showed nothing. min-w-0 is what lets truncate
@@ -275,17 +275,37 @@ describe("the three search fields", () => {
   });
 
   test("each field offers suggestions without demanding one", () => {
-    /* Was an assertion that a <datalist> existed. The datalist is gone — the
+    /* Was an assertion that a <datalist> existed. The datalist is gone: the
        page draws its own list now, because a browser-drawn popup cannot be made
        to sit under its field or wear the page's type. What must not change is
        the property the datalist was there for: suggestions are offered, never
        required. A <select> would silently forbid searching for anything we had
-       not already indexed. */
+       not already indexed.
+
+       SCOPED TO THE THREE SEARCH FIELDS, not to the page. It used to ban <select>
+       anywhere in the file, which read as the same rule and is not: the Job type
+       filter added later IS a select, deliberately, because employment type is a
+       closed vocabulary of four words the backend will accept and a text box
+       there invites "intern", "Interns" and "INTERNSHIP", three spellings that
+       all return nothing while looking like an honest empty result. The invariant
+       is about title, company and location, which are open sets. A test that
+       cannot tell an open set from a closed one blocks the right change and
+       reads like a real failure while doing it. */
     const combo = readFileSync(new URL("../components/browse/ComboField.tsx", import.meta.url), "utf8");
     assert.match(combo, /role="listbox"/, "fields must offer a list");
     assert.match(combo, /type="text"/, "and the field itself must stay free text");
-    assert.doesNotMatch(page, /<select\b/, "a select would reject free text");
-    assert.doesNotMatch(combo, /<select\b/, "a select would reject free text");
+    assert.doesNotMatch(combo, /<select\b/, "a search field must never become a select");
+
+    /* Each of the three is rendered by ComboField, which is what makes it free
+       text. Asserted per field rather than by counting selects, so replacing one
+       of them with a select fails here whatever else the page grows. */
+    for (const name of ["title", "company", "location"]) {
+      assert.match(
+        page,
+        new RegExp(`<ComboField\\s+name="${name}"`),
+        `"${name}" is an open set and must stay a free-text combo`,
+      );
+    }
   });
 
   test("filters survive pagination", () => {
@@ -317,14 +337,14 @@ describe("the three dropdowns", () => {
   test("the title field offers fifty role families, not raw postings", async () => {
     /* Mehek, 2026-07-29: fifty common titles, nothing more. The suggestions
        used to be the board's most common RAW titles, so the field opened on
-       "Senior Product Manager - Network Path" — a real posting, and not a thing
+       "Senior Product Manager - Network Path", a real posting, and not a thing
        anyone types into a box labelled Job title. */
     const { JOB_TITLES } = await import("../lib/job-titles.ts");
     assert.equal(JOB_TITLES.length, 50, `expected 50 titles, got ${JOB_TITLES.length}`);
     assert.equal(new Set(JOB_TITLES).size, 50, "the list must not repeat a title");
     for (const t of JOB_TITLES) {
       assert.ok(t.length < 40, `"${t}" reads like a posting, not a role family`);
-      assert.ok(!/[-–—(]/.test(t), `"${t}" carries posting punctuation`);
+      assert.ok(!/[-–\u2014(]/.test(t), `"${t}" carries posting punctuation`);
     }
   });
 
@@ -429,7 +449,7 @@ describe("the dropdowns read A to Z", () => {
 
   test("every field is sorted, and Other is always last", async () => {
     /* Other is not one of the options, it is the sentence telling you the box is
-       yours to type in — so it must not sort in among the O's. */
+       yours to type in, so it must not sort in among the O's. */
     const { withOther, OTHER } = await import("../lib/job-titles.ts");
     const out = withOther(["Zebra", "Other-Worldly Inc", "apple", "Mango"]);
     assert.equal(out.at(-1), OTHER);
@@ -470,13 +490,13 @@ describe("the board's cache windows", () => {
     assert.equal(
       windows.length,
       fetches,
-      `${fetches} fetch call(s) but ${windows.length} cache window(s) — one is unwindowed`,
+      `${fetches} fetch call(s) but ${windows.length} cache window(s), one is unwindowed`,
     );
     for (const w of windows) {
       assert.match(
         w,
         /^(LISTINGS_REVALIDATE|SUGGESTIONS_REVALIDATE)$/,
-        `"${w}" is not a bare named constant — an expression here re-splits the windows`,
+        `"${w}" is not a bare named constant: an expression here re-splits the windows`,
       );
     }
   });

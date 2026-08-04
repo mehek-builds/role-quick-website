@@ -1,7 +1,8 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
   ApiError,
@@ -15,14 +16,24 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
+import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
+import { nextMatchScoreRequest } from "@/features/applications";
+import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
+import { SectionBoundary } from "@/components/app/SectionBoundary";
+/* contactName and contactLine, not a local read of `_contact`. They are the fourth and fifth
+   readers of that record, and the two that already know its exact key names: the backend stores it
+   verbatim from the resume request body, so "location" and "linkedin" resolve to nothing and fail
+   silently after a .filter(Boolean). Sharing them is the reason this screen cannot drift from the
+   packet pane the way it just did. */
 import { ApplicationPacket, ResumePaper, contactLine, contactName } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
@@ -30,13 +41,13 @@ import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
-import type { JdMatchResponse } from "@/features/applications";
+import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
+import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
-type ApplicationFilter = "all" | "action" | "ready" | "submitted";
 type ApplicationSort = "recent" | "company";
 type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean };
 
@@ -64,9 +75,29 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   jobId: null,
 };
 
-export default function Applications() {
+/* A Suspense boundary over the useSearchParams read. DEFENSIVE, not required: this was first
+   written down as "Next fails the build without it", and that was checked afterwards and is not
+   true on the version this repo pins. Removing the wrapper with a wiped .next still builds, and
+   this route is still prerendered.
+
+   It stays because useSearchParams is the documented reason a route opts into client-side
+   rendering, that behaviour has moved across Next majors, and the price is a fallback the page
+   already showed while its own packets loaded. So the boundary is invisible here and it means a
+   future upgrade cannot quietly turn the query read into a blank first paint. */
+export default function ApplicationsPage() {
+  return (
+    <Suspense fallback={<ShimmerRows rows={4} />}>
+      <Applications />
+    </Suspense>
+  );
+}
+
+function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
+  /* The student's education block as GET /profile serves it today. Null means "not loaded or the
+     request failed", which educationDrift treats as "nothing to compare against". */
+  const [educationProfile, setEducationProfile] = useState<EducationProfile | null>(null);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* The packet being looked at in the read-only viewer, held as an ID and resolved against `packets`
@@ -92,6 +123,9 @@ export default function Applications() {
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
   const selectedIdRef = useRef<string | null>(null);
+  /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
+     poll callback does not have to re-subscribe on every submission update. */
+  const submissionRef = useRef<SubmissionResponse | null>(null);
   /* The posting we have already auto-generated for, so arriving from "Apply now" can never spend
      two resumes on one job. A ref, not state: it must be readable and writable within the same
      tick the effect runs in, before any re-render. */
@@ -100,6 +134,33 @@ export default function Applications() {
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   const [screen, setScreen] = useState<Screen>("review");
+  /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
+     The progress screen says one of two things, and the difference is the whole point of it:
+     preparing the form is "nothing is sent yet", and approving is "sending it now". It read that
+     off `submission.review.status`, but during an approve the status is still
+     `ready_for_final_approval` for the entire duration of the request, because the only thing that
+     updates it is the response we are waiting for. So the screen spent the whole send promising
+     that nothing was being sent, which is the one moment the reassurance must not be wrong. */
+  const [submittingPhase, setSubmittingPhase] = useState<"preparing" | "sending">("preparing");
+  /* True from the moment "Send it" is pressed until the approve request settles.
+     This is the guard on a REAL application going to a REAL employer twice, and it exists because
+     the 2.5s submission poll is running the whole time. During an approve the server's status is
+     still `ready_for_final_approval` (that is the premise of this whole change), and
+     screenForStatus maps that to "portal", so the first poll tick used to take the student off the
+     sending screen and back to SubmissionScreen with a live "Send it" button, roughly 2.5 seconds
+     into every send that lasts longer than that. Nothing guarded a second press.
+     A ref rather than state on purpose: it has to be readable synchronously by the poll and by a
+     second click that lands in the same tick, before any re-render. */
+  /* The application currently being approved, not a bare boolean. Page-level flags meant that
+     sending A greyed out "Send it" on B with no explanation, and the guard that drops a second
+     press would have dropped a legitimate press on a different application. */
+  const approveInFlight = useRef<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  /* When the student pressed "Send it", so the progress clock measures the SEND rather than the
+     review. It was anchored to `review.updated_at`, which is stamped when preparation finished, so
+     a student who spent six minutes reading the packet before approving saw "6m 00s elapsed" and
+     the "start the application again" milestone the instant their send actually began. */
+  const [approveStartedAt, setApproveStartedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -111,29 +172,122 @@ export default function Applications() {
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
+  /* ISSUE-040: the composer's own refusal, kept OUT of the page-level `error` on purpose.
+     "Fill in all four boxes first." used to render in the banner above the composer, which on a
+     723px viewport measured y = -281 while the button that raised it sat at y = 434: announced to a
+     screen reader, invisible to everyone else, because the job description textarea alone is ~320px
+     tall. It now renders beside the button and names the boxes it is about, so it is perceivable
+     from where the action was taken without any scrolling or animation. One alert, not two.
+
+     ISSUE-043 widened this from validation to EVERY message either composer button raises. The
+     rule, drawn once so later call sites do not have to re-argue it:
+
+       A message caused by pressing a button INSIDE the composer belongs beside that button.
+       A message about the state of the PAGE belongs in the page banner.
+
+     So the composer owns both of its buttons end to end: "Make my resume" (its two validation
+     guards and the failure of /profile, /profile/application and /resume/generate) and "Read job"
+     (its two URL guards and the failure of /jobs/extract). The banner keeps what the student did
+     not ask for and cannot answer from the composer: the applications list failing to load, the
+     preferences fetch failing, the autopilot sending on its own, and every control on the review
+     screen, which is a different surface with its own geometry.
+
+     Measured on production before the fix, with /resume/generate returning 500 on a filled form:
+     the banner sat at y = -126 on a 1280x723 viewport and y = -195 on a 375x812 one while the
+     button was on screen in both, and the failure ALSO moved scrollY (345 -> 413, 560 -> 628),
+     pushing the banner further out of reach than the ISSUE-040 case it replaced.
+
+     `fields` stays empty for anything the server did. A 500 is not the student mistyping, so
+     marking the four boxes aria-invalid would be a lie about their input; an empty array renders
+     the sentence and marks nothing, which `invalid()` in NewApplicationPanel gives for free.
+
+     `at` is which of the composer's two buttons is being answered, and it exists because "inside
+     the composer" was not close enough. The first cut of ISSUE-043 sent Read job's messages to the
+     generate row, and the harness measured them at y = 979 on a 375x812 viewport with the Read job
+     button at y = 554: off screen in the other direction, the same defect upside down. The two
+     buttons are ~440px apart, so the composer needs two slots and not one. Exactly one is ever
+     live, because `at` holds one value. */
+  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null>(null);
+  /* One announcement, never two. The page banner and this alert are both live regions, so leaving a
+     stale `error` up while raising a refusal makes a screen reader read the old problem and the new
+     one. Everything that speaks for the composer goes through here and clears the other channel.
+
+     KNOWN ASYMMETRY, accepted rather than overlooked: setError(null) is unconditional, so the
+     composer always wins over the page. If the list failed to load and the banner reads "We could
+     not load your applications. Reload the page.", the next composer press erases a fact that is
+     still true. That is the opposite of the principle argued two comments up, applied in one
+     direction only. It is accepted because every page-level error on this screen is reload advice
+     the student can act on later, and the alternative is two live regions firing on a single press,
+     which is the louder failure. If a page-level error ever appears here that is NOT reload advice,
+     revisit this line rather than adding a second alert. */
+  const refuseInComposer = useCallback((at: ComposerSlot, message: string, fields: ApplicationDraftField[]) => {
+    setError(null);
+    setComposerRefusal({ message, fields, at });
+  }, []);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
-  // Seeded from ?state= so the Overview metrics are real filter links rather than decoration.
-  // Read once at mount: after that the select on this page is the only thing that moves it.
-  const [applicationFilter, setApplicationFilter] = useState<ApplicationFilter>(() => {
-    if (typeof window === "undefined") return "all";
-    const requested = new URLSearchParams(window.location.search).get("state");
-    return requested === "action" || requested === "ready" || requested === "submitted" ? requested : "all";
-  });
+  /* ?state= IS the filter. Not a seed for it, the thing itself.
+     Home's Overview metrics link here with it, and it has to work on the path a student actually
+     takes, which is a click.
+
+     This was `useState(() => applicationFilterFromSearch(window.location.search))`, under a comment
+     saying it was read once at mount. Both halves of that were the bug (ISSUE-042). Measured in a
+     driven browser against a stubbed backend: clicking Home's "5 stopped for you" banner runs this
+     component's initialiser while `window.location.pathname` is still `/dashboard` and its search
+     is still empty, because the App Router renders the incoming route inside a transition BEFORE it
+     commits the new URL. So the read resolved to "all". Being a first-mount-only read, nothing
+     re-ran it when the URL did land a moment later. A hard load worked, because there the URL is
+     already correct when the component first renders, which is exactly why pasting the link and
+     reloading both looked fine while all four Home controls were dead.
+
+     useSearchParams is the router's own view of the query, so it is correct during that transition
+     and it UPDATES, which a first-mount read cannot.
+
+     THE URL IS THE SINGLE SOURCE OF TRUTH, deliberately, rather than mirroring the param into local
+     state. Mirroring needs a "last seen param" to tell an arriving ?state= apart from a value the
+     student just chose, and getting that wrong in either direction is silent: too eager and the
+     select is stomped back on every render, too lazy and the deep link stops working again. There
+     is no second copy to disagree here. It also buys three things the mirrored version cannot: the
+     filtered view is shareable, it survives a reload, and Back returns to it. */
+  const searchParams = useSearchParams();
+  const pathname = usePathname();
+  const router = useRouter();
+  const applicationFilter = applicationFilterFromSearch(searchParams.toString());
+  /* Writes the choice back to the URL, so the select and the deep link move the same thing.
+     Everything removes the parameter rather than writing state=all: a URL that says nothing is
+     what a plain visit looks like, and this is also what closes the ledger section.
+     scroll: false because this is a filter, not a navigation; the student is looking at the list
+     they just filtered and must not be thrown to the top of the page. */
+  const setApplicationFilter = useCallback((next: ApplicationFilter) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "all") params.delete("state");
+    else params.set("state", next);
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
   const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
 
   const closeNewApplication = useCallback(() => {
     setShowNewApplication(false);
     setPendingJob(null);
+    // A refusal about a form that is no longer open would greet the next student to open it.
+    setComposerRefusal(null);
 
     replaceClosedComposerUrl(
       window.location,
       (data, unused, url) => window.history.replaceState(data, unused, url),
     );
   }, []);
+
+  /* Mirror `submission` into the ref the poll reads. An effect keeps it correct for every path;
+     approveFinalSubmission ALSO assigns it synchronously, because the window this guard closes is
+     between the approve resolving and this effect running, and a poll can land inside it. */
+  useEffect(() => {
+    submissionRef.current = submission;
+  }, [submission]);
 
   const captureCompletedSubmission = useCallback((result: SubmissionResponse, source: string) => {
     if (result.review.status !== "submitted" || capturedSubmissionIds.current.has(result.application_id)) return;
@@ -193,6 +347,10 @@ export default function Applications() {
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
     setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
     const status = packet.spec._review?.status;
+    /* A different packet, so any "sending" flag belongs to the one we are leaving. Without this,
+       switching to a packet whose stored status is `filling` captioned it "You told Litos to send
+       this" for an application the student never authorised. */
+    setSubmittingPhase("preparing");
     moveToScreen(screenForStatus(status, "review"));
     setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
     setError(null);
@@ -212,6 +370,16 @@ export default function Applications() {
     // the packet the user is looking at. The ref, not the closure, is the current truth.
     if (selectedIdRef.current !== requestedId) return;
 
+    /* Never go backwards off a finished send. A poll issued BEFORE the approve returned can land
+       after it, carrying the pre-send `ready_for_final_approval`; installing it would replace the
+       receipt with a live "Send it" for an application that has already gone. The id guard above
+       cannot see this, because it is the right packet, just an older answer. */
+    if (
+      submissionRef.current?.application_id === result.application_id
+      && submissionRef.current?.review.status === "submitted"
+      && result.review.status !== "submitted"
+    ) return;
+
     captureCompletedSubmission(result, "poll");
     setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
     setQuestions((current) => mergeDiscoveredQuestions(current, result.review.questions));
@@ -225,6 +393,16 @@ export default function Applications() {
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
     // run that had since succeeded.
     setError(null);
+    /* While the student's own send is in flight the poll is usually reporting the status from
+       BEFORE the approve, and acting on that walks them backwards onto a live "Send it".
+       TERMINAL states are the exception, and the exception is load-bearing: `api()` has no
+       AbortController and no timeout, so a stalled approve request never rejects and the flag stays
+       set for as long as the socket hangs. Suppressing everything would then reproduce the
+       never-resolving spinner this branch is named for, reached through a hung connection instead
+       of a missing route, with the poll already holding the answer. Only the backwards moves are
+       dropped. */
+    const terminal = result.review.status === "submitted" || result.review.status === "failed";
+    if (approveInFlight.current !== null && !terminal) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
 
@@ -296,6 +474,12 @@ export default function Applications() {
         if (requested) selectPacket(requested);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
+    /* The education block as it stands NOW, to check the frozen packet against. Failure leaves it
+       null, and educationDrift reports nothing for a null profile: a warning is worth having, but
+       not at the price of blocking a send because one extra request did not come back. */
+    api<EducationProfile>("/profile")
+      .then((result) => !cancelled && setEducationProfile(result))
+      .catch(() => undefined);
     api<JobsPage>("/jobs?offset=0")
       .then((result) => {
         if (cancelled) return;
@@ -383,13 +567,8 @@ export default function Applications() {
   const review = selected?.spec._review;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const visiblePackets = useMemo(() => {
-    const filtered = reviewablePackets.filter((packet) => {
-      const status = packet.spec._review?.status;
-      if (applicationFilter === "action") return ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "");
-      if (applicationFilter === "ready") return ["resume_ready", "questions_ready", "ready_to_submit"].includes(status ?? "");
-      if (applicationFilter === "submitted") return status === "submitted";
-      return true;
-    });
+    const filtered = reviewablePackets.filter((packet) =>
+      statusMatchesApplicationFilter(packet.spec._review?.status, applicationFilter));
     return [...filtered].sort((a, b) => applicationSort === "company"
       ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
@@ -410,29 +589,57 @@ export default function Applications() {
     [currentMatches, qaMode, reviewablePackets],
   );
 
+  /* The BASE resume, once, from the same source use-job-match-scores.ts reads. The next-best-match
+     row prints a bare percentage beside a company and a role with no document on screen, so it has
+     to be the number every other job card carries; scoring the tailored packet here is what made
+     one psiquantum posting read 33 on Home and 42% on this row in the same session (ISSUE-038). */
+  const [baseResumeText, setBaseResumeText] = useState<string | null>(null);
+  useEffect(() => {
+    if (qaMode !== false) return;
+    let cancelled = false;
+    void getBaseResume()
+      .then((stored) => !cancelled && stored?.spec && setBaseResumeText(resumeSpecText(stored.spec)))
+      .catch(() => null);
+    return () => {
+      cancelled = true;
+    };
+  }, [qaMode]);
+
   /* Keyed by the packet it was measured against. A bare number would survive the card changing
      underneath it and print one job's score on another job's row. */
-  const [nextScore, setNextScore] = useState<{ id: string; score: number | null } | null>(null);
+  const [nextScore, setNextScore] = useState<{ id: string; match: JobMatch | null } | null>(null);
   useEffect(() => {
     if (qaMode !== false || selectedId) return;
-    const jd = nextPacket?.spec._review?.jd_text;
-    if (!nextPacket || !jd) return;
+    const request = nextMatchScoreRequest(nextPacket, baseResumeText);
+    if (!nextPacket || !request) return;
     let cancelled = false;
-    void fetchJdMatch(jd, resumeSpecText(nextPacket.spec), { company: nextPacket.job_context.company, role: nextPacket.job_context.role, job_id: nextPacket.job_context.job_id })
-      .then((result) => !cancelled && setNextScore({ id: nextPacket.id, score: result.scorable ? result.score : null }))
+    /* The SAME question Home and Jobs answer about this posting: how much of what it asks for is on
+       the student's base resume. See nextMatchScoreRequest for why the packet is not the subject
+       here and why the frozen jd_text yields to the live posting row. */
+    void fetchJdMatch(request.jdText, request.resumeText, request.jobContext)
+      .then((result) => {
+        if (cancelled) return;
+        setNextScore({
+          id: nextPacket.id,
+          // Never a zero we did not measure: unscorable resolves to no number at all.
+          match: result.scorable && result.score !== null
+            ? { score: result.score, band: result.band?.label ?? null, matched: result.matched.length, total: result.term_count }
+            : null,
+        });
+      })
       // No number rather than a wrong one.
       .catch(() => null);
     return () => {
       cancelled = true;
     };
-  }, [nextPacket, qaMode, selectedId]);
+  }, [baseResumeText, nextPacket, qaMode, selectedId]);
 
   const nextMatch: NextMatch | null = nextPacket
     ? {
         id: nextPacket.id,
         company: nextPacket.job_context.company ?? "Company",
         role: nextPacket.job_context.role ?? "Role",
-        score: nextScore?.id === nextPacket.id ? nextScore.score : null,
+        match: nextScore?.id === nextPacket.id ? nextScore.match : null,
       }
     : null;
 
@@ -456,6 +663,19 @@ export default function Applications() {
     async (id: string) => {
       const packet = (packets ?? []).find((item) => item.id === id);
       if (!packet || qaMode) return;
+      /* THE ONE PLACE A PACKET GOES OUT WITH NOTHING RE-CHECKED. Sending from the review screen
+         runs saveResume first, and PATCH /applications/:id/resume re-validates the spec's
+         education against the current profile server-side, so a drifted packet is refused there
+         already (with an opaque message, which the banner below fixes). This path posts
+         submit-request on its own, and the backend then uploads the PDF blob rendered at build
+         time. So an unattended send is the only way a resume stating a graduation year the
+         student has since corrected reaches an employer with no human and no check in between.
+         Refusing keeps the packet; it just has to be opened. */
+      const drift = educationDriftMessage(educationDrift(packet.spec, educationProfile));
+      if (drift) {
+        setError(`We did not send this one on its own. ${drift}`);
+        return;
+      }
       try {
         track("application_submission_requested", { source: "autopilot" });
         const result = await api<SubmissionResponse>(`/applications/${id}/submit-request`, {
@@ -465,16 +685,24 @@ export default function Applications() {
         captureCompletedSubmission(result, "autopilot");
         setPackets((current) => current?.map((item) => (item.id === id ? { ...item, spec: { ...item.spec, _review: result.review } } : item)) ?? current);
       } catch (reason) {
+        /* Stays in the page banner, deliberately, and is NOT a composer refusal. Nobody pressed a
+           composer button: this is the countdown on NextMatchCard reaching zero, or that card's own
+           Send. Routing it into the composer would put an answer about the autopilot next to a
+           button that did not ask, in a panel that is usually closed when this fires. */
         setError(reason instanceof Error ? reason.message : "Could not send that application on its own. It is still here for you.");
       }
     },
-    [captureCompletedSubmission, packets, qaMode],
+    [captureCompletedSubmission, educationProfile, packets, qaMode],
   );
   // The review surface is meant to be read without scrolling, so while it is open the page chrome
   // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
   // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
   // the resume are supposed to share.
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
+  const educationDriftBanner = useMemo(
+    () => (spec ? educationDriftMessage(educationDrift(spec, educationProfile)) : null),
+    [educationProfile, spec],
+  );
   const deferredSpec = useDeferredValue(spec);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
   const requirementIndex = useMemo(
@@ -489,25 +717,31 @@ export default function Applications() {
      remove, just arrived at from the other direction. Changing the link or the description is not
      a change of identity, so those leave it alone. */
   function applyDraftEdit(next: NewApplicationDraft) {
+    // The refusal described the form as it was. Typing is the student answering it.
+    setComposerRefusal(null);
     setNewApplication((current) => {
       const identityChanged = next.company !== current.company || next.role !== current.role;
       return identityChanged ? { ...next, jobId: null } : next;
     });
   }
 
+  /* "Read job" is the composer's other button, and every one of these three answers is about the
+     Job URL box six pixels away. They went to the page banner until ISSUE-043; the first two are
+     the same class of validation ISSUE-040 moved for "Make my resume" and were simply missed. */
   async function fetchJobDescription() {
     const portalUrl = newApplication.portalUrl.trim();
     if (!portalUrl) {
-      setError("Add the job link first, then get the description.");
+      refuseInComposer("url", "Add the job link first, then get the description.", ["portalUrl"]);
       return;
     }
     try {
       if (new URL(portalUrl).protocol !== "https:") throw new Error("Job URL must use HTTPS");
     } catch {
-      setError("Enter a complete job URL beginning with https://.");
+      refuseInComposer("url", "Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
     setExtractingJd(true);
+    setComposerRefusal(null);
     setError(null);
     setNotice(null);
     try {
@@ -520,7 +754,9 @@ export default function Applications() {
     } catch (err) {
       // A 502 here is expected for some client-rendered boards (see backend jobExtract.ts) - the
       // manual textarea right below stays the fallback, this just saves the copy/paste when it works.
-      setError(err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.");
+      /* No fields marked: a board that will not give up its text is not the student's URL being
+         wrong, and border-danger on the box they typed correctly reads as an accusation. */
+      refuseInComposer("url", err instanceof ApiError ? err.message : "We could not read that page. Paste the job description below instead.", []);
     } finally {
       setExtractingJd(false);
     }
@@ -535,16 +771,18 @@ export default function Applications() {
     const role = draft.role.trim();
     const portalUrl = draft.portalUrl.trim();
     const jobDescription = draft.jobDescription.trim();
-    if (!company || !role || !portalUrl || jobDescription.length < MIN_JD_CHARS) {
-      setError("Fill in all four boxes first.");
+    /* Both refusals go to composerRefusal, never to setError: they are answers to a button inside
+       the composer and have to appear next to it. See the state declaration for the measurement. */
+    const missing = missingApplicationFields({ company, role, portalUrl, jobDescription });
+    if (missing.length > 0) {
+      refuseInComposer("generate", "Fill in all four boxes first.", missing);
       return;
     }
-    try {
-      if (new URL(portalUrl).protocol !== "https:") throw new Error("Job URL must use HTTPS");
-    } catch {
-      setError("Enter a complete job URL beginning with https://.");
+    if (!isHttpsJobUrl(portalUrl)) {
+      refuseInComposer("generate", "Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
+    setComposerRefusal(null);
 
     setCreating(true);
     setError(null);
@@ -613,7 +851,11 @@ export default function Applications() {
       track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
       setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.");
+      /* ISSUE-043. This is the press of "Make my resume" failing, so it is answered beside "Make my
+         resume". Empty fields on purpose: a 500 from /resume/generate, or a missing name on the
+         main resume, says nothing about the four boxes, and marking them would send the student
+         back to retype input that was already fine. */
+      refuseInComposer("generate", reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.", []);
     } finally {
       setCreating(false);
     }
@@ -734,6 +976,7 @@ export default function Applications() {
       setError("Some answers are missing. Add them first.");
       return;
     }
+    setSubmittingPhase("preparing");
     moveToScreen("submitting");
     setError(null);
     track("application_submission_requested", { source: qaMode ? "qa" : "review" });
@@ -793,7 +1036,14 @@ export default function Applications() {
 
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
+    // Second press of "Send it" for THIS application while the first is still going.
+    if (approveInFlight.current === selected.id) return;
+    const requestedId = selected.id;
+    approveInFlight.current = requestedId;
+    setApprovingId(requestedId);
+    setApproveStartedAt(new Date().toISOString());
     setError(null);
+    setSubmittingPhase("sending");
     moveToScreen("submitting");
     try {
       if (qaMode) {
@@ -805,11 +1055,39 @@ export default function Applications() {
       } else {
         const result = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
         captureCompletedSubmission(result, "final_approval");
+        /* The packet the student is LOOKING at, which after a multi-minute send need not be the one
+           they approved: the packet switcher renders above every screen including this one, so
+           tapping another row mid-send is a single tap. refreshSubmission has guarded exactly this
+           since the wrong-employer finding; this path did not, and installing A's result while B is
+           selected renders A's confirmation text and reference id under B's role and company. The
+           send still completed and the poll will pick it up when they return to it. */
+        if (selectedIdRef.current !== requestedId) return;
+        submissionRef.current = result;
         setSubmission(result);
+        /* This response is the END of the send, not an acknowledgement that it started, exactly as
+           in prepareApplication above, and it was installed into state and then never routed off.
+           The QA branch four lines up has always called moveToScreen; the real one never did.
+           BE PRECISE ABOUT WHAT THAT COSTS, because the obvious overstatement is wrong: the
+           submission poll below also routes off the status, so a FOREGROUNDED tab recovers within
+           its 2.5s tick and the student sees the receipt. The poll is the only thing that was
+           saving this, and it is deliberately suppressed while `document.visibilityState` is not
+           "visible". So the screen that never resolves is the backgrounded one, which is the
+           ordinary case here: a portal run takes minutes and the whole point of the copy is that
+           you can go and do something else. Routing off the response we already hold costs nothing
+           and does not depend on the tab being watched.
+           The fallback is "portal", the screen this was entered from, so an unrecognised status
+           returns to a screen with controls on it rather than parking on the spinner again. */
+        moveToScreen(screenForStatus(result.review.status, "portal"));
       }
     } catch (reason) {
+      /* Back to the screen this came from, and back to "preparing": leaving the phase on "sending"
+         would caption the NEXT run of the progress screen as a send that is not happening. */
+      setSubmittingPhase("preparing");
       moveToScreen("portal");
       setError(reason instanceof Error ? reason.message : "Could not approve the final portal submission.");
+    } finally {
+      approveInFlight.current = null;
+      setApprovingId(null);
     }
   }
 
@@ -879,7 +1157,24 @@ export default function Applications() {
         />
       )}
 
+      {/* KNOWN, NOT IN SCOPE, and recorded here because it is the mechanism behind a number in the
+          ISSUE-043 measurements. This banner renders IMMEDIATELY ABOVE the composer, so a
+          page-level error arriving while the composer is open pushes the whole composer down by
+          this element's height. That is why the baseline scroll position moved 586 -> 674 and
+          420 -> 488 when the generate request failed: the banner appeared here and shoved
+          everything below it, carrying the banner itself further from the button.
+
+          ISSUE-043 means the refusal now travels WITH the button, so the message can no longer be
+          pushed away from the control that raised it. The button itself can still jump under the
+          student's cursor when a genuine page-level error lands mid-press. Not a regression, and
+          not something a placement fix can reach: it needs this banner reserved or moved, which is
+          a layout change to the whole screen. */}
       {error && <ErrorNote message={error} />}
+      {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
+          the student fixes the education line rather than sitting there until she saves. */}
+      {reviewOpen && educationDriftBanner && (
+        <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">{educationDriftBanner}</p>
+      )}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
       {showNewApplication && (
         <NewApplicationPanel
@@ -892,6 +1187,7 @@ export default function Applications() {
           creating={creating}
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
+          refusal={composerRefusal}
         />
       )}
       {legacyCount > 0 && !reviewOpen && (
@@ -900,7 +1196,19 @@ export default function Applications() {
         </p>
       )}
 
-      {selected && reviewablePackets.length > 1 && (
+      {/* Two reasons this section exists, and it has to render for both.
+
+          With a packet open it is the switcher: the only in-context way to move to another
+          application. With nothing open and a filter on, it is the answer to the deep link Home
+          just followed. Gating the whole thing on `selected` made every ?state= arrival inert,
+          because the filter it had just set had no rows to apply to and no visible control to
+          change: Home's banner promised the applications that had stopped for the student and
+          delivered the same board as the plain URL.
+
+          It stays hidden on an unfiltered board view, where it would only restate the board below
+          it. Setting the select back to Everything is what closes it, which is also how the
+          filter is cleared. */}
+      {packets !== null && (selected ? reviewablePackets.length > 1 : ledgerRendersOnLanding(applicationFilter, reviewablePackets.length)) && (
         /* Keep the switcher above every screen branch. Historical marker for the invariant:
            packet.job_context.role} · {packet.job_context.company} */
         /* Every control in here used to sit behind `hidden lg:block`. Filter and sort being
@@ -911,7 +1219,12 @@ export default function Applications() {
         <section aria-labelledby="application-ledger-heading" className="border-y border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
             <div className="flex items-baseline gap-2">
-              <h2 id="application-ledger-heading" className="sr-only">Your applications</h2>
+              {/* Visible whenever this is the landing view for a filter, so the student reads what
+                  they are looking at in words. Beside an open packet it goes back to being the
+                  switcher's label: the heading there would compete with the packet's own. */}
+              <h2 id="application-ledger-heading" className={selected ? "sr-only" : "text-sm font-medium text-ink"}>
+                {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
+              </h2>
               <span className="font-mono text-[11px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
             </div>
             <div className="flex gap-2">
@@ -946,10 +1259,10 @@ export default function Applications() {
                     key={packet.id}
                     type="button"
                     onClick={() => selectPacket(packet)}
-                    aria-pressed={packet.id === selected.id}
-                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected.id ? "border-brand bg-brand-soft" : "border-border"}`}
+                    aria-pressed={packet.id === selected?.id}
+                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected?.id ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
-                    <span className={`truncate text-[13px] font-medium ${packet.id === selected.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
+                    <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
                   </button>
                 ))}
@@ -973,7 +1286,7 @@ export default function Applications() {
                 </div>
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
                       <time className="hidden text-xs text-faint sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
@@ -1000,6 +1313,11 @@ export default function Applications() {
            that replaced their spreadsheet, and what retains is that the data accumulates and stays
            theirs. The flat list this replaces showed only role and company, with no way to record
            what had actually happened with any of them. */
+        /* The board is the whole of this branch, so containing it here does not save a sibling on
+           this screen. It saves the SHELL: the sidebar, the mobile tab bar and the page title stay
+           mounted, so a student whose board fails still has Home, Jobs and Emails one tap away
+           rather than the route boundary's full-page recovery screen. */
+        <SectionBoundary band="tracker-board" title="Your applications">
         <Board
           openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
@@ -1018,6 +1336,7 @@ export default function Applications() {
              that cannot act should be absent, not dead. */
           revisitableIds={new Set((packets ?? []).filter((item) => item.spec._review).map((item) => item.id))}
         />
+        </SectionBoundary>
       ) : screen === "questions" ? (
         <QuestionsScreen
           questions={questions}
@@ -1027,9 +1346,13 @@ export default function Applications() {
           reviewDiscovered={submission?.review.status === "needs_attention"}
         />
       ) : screen === "submitting" ? (
-        <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
+        <PortalProgress
+          status={submission?.review.status}
+          startedAt={submittingPhase === "sending" ? approveStartedAt ?? submission?.review.updated_at : submission?.review.updated_at}
+          sending={submittingPhase === "sending"}
+        />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen packet={selected} submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
+        <SubmissionScreen packet={selected} submission={submission} approving={approvingId === selected.id} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -1116,7 +1439,21 @@ export default function Applications() {
                   Your resume for this job
                 </p>
                 <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 xl:max-h-[calc(100vh-15.5rem)]">
-                  <ResumeEditor spec={spec} editedTerms={editedTerms} onChange={setSpec} onPatchEntry={patchEntry} />
+                  {/* `selected.spec` for the name and contact, NOT the `spec` beside them, and the
+                      difference is the entire bug this fixes. `spec` is the editable copy, and it
+                      is built by `setSpec(stripMetadata(packet.spec))`: stripMetadata drops
+                      `_contact` deliberately, so the name is not merely absent from that object,
+                      it is removed on the way in. Reading the applicant off it is impossible, which
+                      is why the header silently became whatever sorted first.
+                      `selected` is the raw packet and still has it. */}
+                  <ResumeEditor
+                    spec={spec}
+                    name={contactName(selected.spec)}
+                    contact={contactLine(selected.spec)}
+                    editedTerms={editedTerms}
+                    onChange={setSpec}
+                    onPatchEntry={patchEntry}
+                  />
                   {/* Under the resume, inside the same scroll area: the checks describe the page
                       directly above them, so they belong to it rather than to the screen. */}
                   <div className="mx-auto mt-5 max-w-[640px] border-t border-border pt-4">
@@ -1124,7 +1461,14 @@ export default function Applications() {
                       Resume checks
                     </p>
                     <div className="mt-3">
-                      <ResumeHealth spec={deferredSpec ?? spec} disabled={qaMode !== false} />
+                      {/* The first of the three occurrences was here: an undefined `findings` from
+                          /resume/health crashed this whole review screen, taking the JD, the resume,
+                          the match score and the gap list with it, for a panel that is four lines of
+                          advice in the corner. It is the clearest case in the audit for scoping a
+                          boundary to a panel. */}
+                      <SectionBoundary band="resume-health" title="Resume checks">
+                        <ResumeHealth spec={deferredSpec ?? spec} disabled={qaMode !== false} />
+                      </SectionBoundary>
                     </div>
                   </div>
                 </div>
@@ -1175,12 +1519,22 @@ export default function Applications() {
               came back with "This portal is not supported yet". Nine of one account's ten failures
               were that. The tailored resume is still worth having, so this says what Litos cannot
               do and hands the applicant the page instead of hiding the job. */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
-            <p className="text-sm text-ink">
-              {review.portal_supported === false
-                ? "Litos cannot fill in this company’s page. Your resume is ready, so apply on their site."
-                : "Litos fills the form with your saved answers and this resume."}
-            </p>
+          {/* The two sentences are NOT the same kind of sentence, which is why only one of them is
+              allowed to disappear on a phone.
+              The supported line describes what the button next to it already says: on a 375px
+              screen it wraps to two rows and the bar, which is now sticky, was eating ~150px of an
+              812px viewport to restate "Fill the form" in a longer form. It comes back at sm.
+              The unsupported line is the opposite: it is the only thing that explains why the
+              button says "Open the company page" instead, and dropping it would leave a student
+              with a control that looks like a mistake. It is shown at every width. */}
+          {/* justify-end below sm is not a style preference. `hidden` is display:none, so the caption
+              is not a flex item there at all, and justify-between with ONE item resolves to
+              flex-start: the primary action slid to the left edge on a phone while the same bar on
+              the questions screen sat right. Same bar, three alignments, depending on branch. */}
+          <TerminalActionBar className="justify-end sm:justify-between">
+            {review.portal_supported === false
+              ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
+              : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               {review.portal_supported === false
@@ -1189,7 +1543,7 @@ export default function Applications() {
                   {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
                 </Button>}
             </div>
-          </div>
+          </TerminalActionBar>
         </>
       )}
 
@@ -1221,6 +1575,7 @@ function NewApplicationPanel({
   creating,
   onFetchJobDescription,
   extractingJd,
+  refusal,
 }: {
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
@@ -1228,8 +1583,12 @@ function NewApplicationPanel({
   creating: boolean;
   onFetchJobDescription: () => void;
   extractingJd: boolean;
+  /** Why the last press of a composer button did nothing, which boxes it was about, and which of
+      the two buttons is being answered. */
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
+  const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
   return (
     <Card className="p-6">
       <div className="max-w-2xl">
@@ -1238,12 +1597,12 @@ function NewApplicationPanel({
         <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
-        <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" />
-        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineer" />
+        <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" invalid={invalid("company")} />
+        <ApplicationField label="Role" value={value.role} onChange={(role) => patch({ role })} placeholder="Software Engineer" invalid={invalid("role")} />
       </div>
       <div className="mt-4 flex items-end gap-3">
         <div className="flex-1">
-          <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" />
+          <ApplicationField label="Job URL" value={value.portalUrl} onChange={(portalUrl) => patch({ portalUrl })} placeholder="https://company.com/jobs/..." type="url" invalid={invalid("portalUrl")} />
         </div>
         <Button
           type="button"
@@ -1252,9 +1611,19 @@ function NewApplicationPanel({
           {extractingJd ? <PendingLabel state="composing">Reading...</PendingLabel> : "Read job"}
         </Button>
       </div>
+      {/* Read job's own slot. Measured: the two composer buttons are ~440px apart, so the generate
+          row is not "beside" this one. With the message down there it sat at y = 979 on a 375x812
+          viewport while this button was at y = 554. */}
+      <ComposerRefusalNote refusal={refusal} at="url" />
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" className="mt-1.5 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
-      <div className="mt-5 flex justify-end">
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-border"}`} />
+      {/* Beside the button that raised it, not in the page banner far above it. The button and this
+          line are in the same flex row, so a student who can reach the button can read the refusal
+          without scrolling: no scrollIntoView, no requestAnimationFrame, nothing that stops running
+          in a background tab. role="alert" is here and nowhere else for this message, so a screen
+          reader still hears it exactly once. */}
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+        <ComposerRefusalNote refusal={refusal} at="generate" />
         <Button type="button" onClick={onGenerate} disabled={creating} >
           {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
         </Button>
@@ -1263,40 +1632,100 @@ function NewApplicationPanel({
   );
 }
 
-function ApplicationField({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string }) {
+/** Which composer button a refusal is answering. The composer has exactly two, far enough apart
+    that a message beside one is off screen from the other. */
+type ComposerSlot = "url" | "generate";
+
+/* The refusal is written ONCE and mounted in whichever slot matches, rather than duplicated into
+   both places behind two conditions. Two copies would be two live regions the day someone changes
+   one condition and not the other, and a screen reader would read the same refusal twice. `at`
+   holds a single value, so at most one of these ever renders anything. */
+function ComposerRefusalNote({
+  refusal,
+  at,
+}: {
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
+  at: ComposerSlot;
+}) {
+  if (!refusal || refusal.at !== at) return null;
+  /* Gated on the refusal existing, never on it naming a field: a server failure names none, and
+     that is exactly the case ISSUE-043 was about. */
+  return <p className={at === "generate" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>;
+}
+
+function ApplicationField({ label, value, onChange, placeholder, type = "text", invalid = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string; invalid?: boolean }) {
   const id = `new-application-${label.toLowerCase().replaceAll(" ", "-")}`;
   return (
     <div>
       <label className="block text-xs font-medium text-muted" htmlFor={id}>{label}</label>
-      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="mt-1.5 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand" />
+      {/* aria-invalid rather than a second message per field: the one alert beside the button says
+          what is wrong, and this says which boxes it meant, in both channels at once. Omitted (not
+          set to "false") when valid, so nothing is announced about a field that is fine. */}
+      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-invalid={invalid || undefined} className={`mt-1.5 w-full rounded-full border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand ${invalid ? "border-danger" : "border-border"}`} />
     </div>
   );
 }
 
-function ResumeEditor({ spec, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
+/* THE HEADER IS THE APPLICANT, NOT THE SCHOOL, and `name` is a prop for a reason.
+ *
+ * This opened with `spec.school` in the name slot, centred and heaviest on the page, with the
+ * degree beneath it: the student read their university where their own name belongs, on the screen
+ * they check before sending. It is the third surface to ship that exact bug, and the cause is the
+ * same every time. `ResumeSpec` has no name field. The applicant lives on `_contact.full_name`, and
+ * `stripMetadata` drops `_contact` on purpose, so the editable spec this component receives cannot
+ * carry a name even in principle. A component typed `spec: ResumeSpec` is therefore STRUCTURALLY
+ * unable to render a header, and whatever field happens to sort first floats into the empty slot.
+ *
+ * So the name and the contact line arrive as their own props, off the raw packet, the same way
+ * ResumePaper takes them. That is the whole fix: a renderer that needs the applicant has to be
+ * given the applicant. tests/packet-resume-header.test.mjs now holds every resume surface to it.
+ *
+ * `name` is NOT editable here and that is deliberate. `onChange` carries a ResumeSpec, which has
+ * nowhere to put a name; a field that looked editable and silently discarded the edit would be
+ * worse than a printed line. The name is changed where it is stored, on the profile. */
+function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; name: string; contact: string; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
     <div className="mx-auto max-w-[640px] rounded-card border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
-      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="text-center text-sm font-semibold sm:text-lg" />
-      {/* Two fields, not one string round-tripped through a " · " separator. The separator form was
-          lossy in both directions: a degree legitimately containing " · " split wrong, and any
-          third separator silently discarded the tail. R-047 was a mangled degree that could not be
-          corrected, so a control that can mangle it again works against the fix. The dot is drawn
-          between them rather than stored in either. */}
+      {/* Name, rule, contact line: the order drawHeader() draws them in, and the order the packet
+          pane shows. On a packet generated before `_contact` existed there is no name, and then
+          education simply leads under its own heading rather than a blank line appearing. */}
+      {name && <p className="text-center text-sm font-semibold sm:text-lg">{name}</p>}
+      {contact && (
+        <>
+          <div className="mt-1.5 h-px w-full bg-neutral-300" />
+          <p className="mt-1.5 text-center text-[11px] text-muted">{contact}</p>
+        </>
+      )}
+
+      {/* EDUCATION as a real section, because it is one. Without the heading the school sat at the
+          top of the page looking like a header, which is exactly how it came to occupy the name
+          slot: nothing marked it as belonging to a section. drawEducation() emits this heading. */}
+      <p className="mb-2 mt-6 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Education</p>
+      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="font-semibold" />
+      {/* STILL two fields, never one string round-tripped through a " · " separator. The separator
+          form was lossy in both directions: a degree legitimately containing " · " split wrong, and
+          any third separator silently discarded the tail. R-047 was a mangled degree that could not
+          be corrected, so a control that can mangle it again works against the fix.
+
+          The drawn dot between them is gone with the centring. It existed to join two fields into
+          one centred sub-heading under the school when the school was acting as the page header;
+          now that education is a section, drawEducation()'s own shape applies: degree on the left,
+          date pushed right. That is also the shape every experience entry below already uses, so
+          the eye reads dates from one column down the whole page instead of two.
+
+          Dropping the dot took the items-center/lg:items-baseline note with it. That was about the
+          dot alone: it was the one thing in the row that was not a field, so it needed aligning
+          against two 44px touch boxes. With no drawn glyph left, the fields align as fields. */}
       {/* Width comes from these wrappers, never from the textarea itself: an auto-width textarea
           falls back to its ~20-column default, which squeezed a long joint degree into a narrow
           stacked column. The degree takes the remaining space and the date gets just what it
           needs. */}
-      {/* items-center below lg, because the drawn dot is the one thing in this row that is not a
-          field: the two fields sit in a 44px touch box with their text centred in it, and a
-          baseline-aligned span next to them lands at the bottom of that box instead of beside the
-          words. From lg the boxes collapse to the text and the original baseline row returns. */}
-      <div className="mt-1 flex items-center justify-center gap-1.5 text-xs text-muted lg:items-baseline">
+      <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-muted">
         <span className="min-w-0 flex-1">
-          <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="text-right" />
+          <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="italic" />
         </span>
-        <span aria-hidden>·</span>
         <span className="w-[5.5rem] shrink-0">
-          <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-left" />
+          <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-right" />
         </span>
       </div>
 
@@ -1488,12 +1917,17 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button></div>
+      {/* Same trap as the review screen, one screen later: N six-row textareas and then the button
+          that ends the screen, so at 744px the action is off the bottom of a document whose every
+          other element eats the keyboard. Same treatment. */}
+      <TerminalActionBar className="justify-end">
+        <Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button>
+      </TerminalActionBar>
     </div>
   );
 }
 
-function SubmissionScreen({ packet, submission, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ packet, submission, approving, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
@@ -1504,7 +1938,7 @@ function SubmissionScreen({ packet, submission, onHandoffComplete, onApprove, on
   const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
   const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
   const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
-  const finalApprovalBlocked = coverLetterPending || requiredAnswerMissing || !previewReady;
+  const finalApprovalBlocked = coverLetterPending || requiredAnswerMissing || !previewReady || approving;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -1609,19 +2043,17 @@ function SubmissionScreen({ packet, submission, onHandoffComplete, onApprove, on
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">What the form looked like after we filled it in</p></div>
-        {review.preview_screenshot_url ? (
-          previewFailed ? (
-            <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
-          ) : (
-            <img
-              src={review.preview_screenshot_url}
-              alt="The company's application page after Litos filled it in"
-              className="h-auto w-full"
-              onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
-              onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
-            />
-          )
-        ) : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="The company's application page after Litos filled it in"
+            className="h-auto w-full"
+            onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
+            onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
+          />
+        ) : (
+          <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>
+        )}
       </Card>
     </div>
   );
@@ -1677,7 +2109,9 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status, startedAt }: { status?: ApplicationReview["status"]; startedAt?: string }) {
+function PortalProgress({ status, startedAt, sending = false }: { status?: ApplicationReview["status"]; startedAt?: string;
+  /** True when this screen was entered by pressing "Send it". See submittingPhase. */
+  sending?: boolean }) {
   // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
   // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
   // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
@@ -1717,7 +2151,15 @@ function PortalProgress({ status, startedAt }: { status?: ApplicationReview["sta
   // The old copy asserted "Nothing is submitted during this preparation step" on every status,
   // including the genuinely-submitting one. That reassurance was false at exactly the moment it
   // mattered most, so each stage now states only what is true of that stage.
-  const submitting = status === "submitting" || status === "submission_claimed";
+  //
+  // `sending` is first and is not redundant with the status test. During an approve the status on
+  // hand is still `ready_for_final_approval` for the whole request, because the response that
+  // changes it is the thing being awaited, so the status alone put the "nothing is sent yet" line
+  // on screen for the entire duration of the send. What the caller pressed is known immediately;
+  // the status only catches up afterwards. Unlike the routing problem above, this one does NOT
+  // depend on the tab being hidden: the poll cannot fix it either, because the status genuinely is
+  // still ready_for_final_approval until the send returns.
+  const submitting = sending || status === "submitting" || status === "submission_claimed";
   const title = submitting ? "Sending it to the company now." : "Getting the company's page ready.";
   const body = submitting
     ? "You told Litos to send this. It is finishing the form now, and will not say it is sent until the company confirms it."

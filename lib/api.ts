@@ -350,6 +350,27 @@ export type ResumeEntry = {
   bullets: string[];
 };
 
+/**
+ * THIS TYPE CONTAINS NO NAME, AND THAT HAS CAUSED THE SAME BUG THREE TIMES.
+ *
+ * The applicant is not here. They live on `GeneratedResume["spec"]._contact.full_name`, and
+ * `stripMetadata` strips `_contact` on the way into any editable copy. So a component typed
+ * `{ spec: ResumeSpec }` - the natural signature for something that renders a resume - is
+ * STRUCTURALLY unable to draw a header, and `school` below, being the first printable field,
+ * floats into the empty name slot.
+ *
+ * Three surfaces shipped exactly that way: ApplicationPacket's ResumePaper, the deleted dashboard
+ * ResumePreview, and the review screen's ResumeEditor. Every one looked correct in review, type
+ * checked, and rendered a plausible resume. The PDF was right throughout, which is what made it
+ * so hard to see: the file was correct and the preview of the file was wrong.
+ *
+ * IF YOU ARE WRITING A NEW RESUME SURFACE: take the name and the contact line as their own props,
+ * the way ResumePaper and ResumeEditor do, and fill them with `contactName(packet.spec)` and
+ * `contactLine(packet.spec)` from components/app/ApplicationPacket. Do not read `_contact` by
+ * hand; its key names have already been got wrong once and they fail silently.
+ * tests/packet-resume-header.test.mjs finds every resume surface and will fail yours until it
+ * names the applicant.
+ */
 export type ResumeSpec = {
   /** Targeting headline, not a claim the candidate held the role. Mirrors the backend's ResumeSpec;
    *  needed here so the JD match score reads the same text the rendered resume shows. */
@@ -404,6 +425,20 @@ export type ApplicationReview = {
   browser_context_id?: string;
   browser_session_id?: string;
   attention_reason?: string;
+  /* The typed half of attention_reason. Written by the backend when an application stops on a
+     human-verification check; nothing here is rendered as prose. `stalled_at` is the queue's sort
+     key and is deliberately not `updated_at`, which moves on unrelated writes. A stall is closed
+     with `resolved_at` rather than deleted, so a submitted application keeps its history while
+     dropping out of the queue. */
+  stall?: {
+    kind: "human_verification";
+    stalled_at: string;
+    surface: "server_run" | "extension";
+    provider: "recaptcha_v2" | "recaptcha_v3" | "hcaptcha" | "turnstile" | "arkose" | "unknown";
+    stage: "before_fill" | "at_submit";
+    source: "observed" | "assumed";
+    resolved_at?: string;
+  };
   handoff_expires_at?: string;
   final_approved_at?: string;
   submission_authorization?: {

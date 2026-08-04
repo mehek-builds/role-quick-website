@@ -87,7 +87,20 @@ type CoreEvent =
      to render, and a boundary nobody can count is a boundary that hides the bug
      it caught: the screen says "try again", the student does, and the incident
      leaves no trace anywhere. */
-  | "render_error";
+  | "render_error"
+  /* A backend response parsed as JSON and was not the shape its endpoint
+     promises, so features/applications/infrastructure/response-shape.ts
+     rejected it rather than letting the presentation layer map over a missing
+     collection.
+
+     This is the ONLY signal that the manually deployed backend and the
+     automatically deployed frontend have drifted. Without it a drift is
+     invisible from this side: the student sees a panel saying it could not
+     load, retries, sees the same, and gives up, while every request in the log
+     is a 200. Two fields, both from the client's own source: the endpoint path
+     and the comma-joined NAMES of the offending fields. No values, no message,
+     no stack, nothing the student typed, matching render_error above. */
+  | "api_payload_incomplete";
 
 function device(): "desktop" | "mobile" {
   if (typeof window === "undefined") return "desktop";

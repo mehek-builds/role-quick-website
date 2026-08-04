@@ -14,14 +14,13 @@ import { FlowDemoFit } from "@/components/FlowDemo";
 import { InstallLink } from "@/components/InstallLink";
 import { SignInLink } from "@/components/SignInLink";
 import { ScrollProgress } from "@/components/ScrollProgress";
+import { SiteFooter } from "@/components/SiteFooter";
 import { StructuredData } from "@/components/StructuredData";
 import { Voices } from "@/components/Voices";
 
-/* Stamped once at build time, not per render. */
-const BUILD_DATE = new Date(process.env.BUILD_TIME ?? Date.now()).toLocaleString("en-US", {
-  month: "long",
-  year: "numeric",
-});
+/* BUILD_DATE moved to components/SiteFooter.tsx on 2026-08-04 with the footer
+   that was the only thing reading it. Still stamped once at build time, not
+   per render. */
 /* The lib/pricing.ts imports (FREE_LIMITS, PRO_LIMITS, PRO_MONTHLY_PRICE,
    PRO_YEARLY_MONTHLY_PRICE, TRIAL_DAYS) were dropped 2026-07-30 with the
    #pricing section. lib/pricing.ts itself is untouched. */
@@ -100,7 +99,7 @@ const FAQ_ITEMS: {
 
 /* The one icon set on the site: the brand deck's three pillar pictograms
    (section 06), line-only, 1.6px stroke, currentColor. Reused in the hero
-   bridge and at the top of every pillar section — one primitive, repeated. */
+   bridge and at the top of every pillar section: one primitive, repeated. */
 const PILLAR_ICONS: Record<string, React.ReactNode> = {
   resume: (
     <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 shrink-0" aria-hidden>
@@ -239,10 +238,13 @@ export default function Home() {
     <div className="flex flex-col flex-1">
       <StructuredData faq={FAQ_ITEMS} />
       <ScrollProgress />
-      {/* The footer claims the site is keyboard-navigable end to end, and
-          the focus rings back that up, but a page with fixed chrome and a
-          long film needs the standard escape: one skip link, visible only
-          when focused. */}
+      {/* The fixed header and the long scroll film below sit between the top
+          of the page and the first real content, so the page needs the
+          standard escape: one skip link, visible only when focused.
+          Anchored to layout, never to user-facing copy: the footer used to
+          carry a "keyboard-navigable end to end" line, it was reworded and
+          then cut, and this comment outlived it by a week still citing it.
+          Whatever the copy says, this reason has to stand on its own. */}
       {/* Was #product, whose whole value here was "skip the film, land on
           real content". #product is now the film wrapper itself, so that link
           would have skipped to the thing it exists to skip. #documents is the
@@ -312,10 +314,10 @@ export default function Home() {
             It was a statistic about the job market, not about Litos: it spent
             a full viewport telling the reader the odds are bad without saying
             anything the product does about them. Background changes still mark
-            section boundaries from here down (deep-dive pacing rule) — no
+            section boundaries from here down (deep-dive pacing rule), no
             hairline dividers between bands. */}
 
-        {/* Documents — pinned act: the real rebuild held over the live film.
+        {/* Documents, pinned act: the real rebuild held over the live film.
             The separate #formats band ("A robot reads it first", with its own
             mess-in / clean-out demo) was REMOVED 2026-07-28 in the deletion
             pass. It made the same argument as this section, directly above
@@ -381,7 +383,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Autofill — pinned act: the real fill held over the live film */}
+        {/* Autofill, pinned act: the real fill held over the live film */}
         <section id="autofill" className="relative scroll-mt-24">
           <Wash tint="teal" soft />
           <div className="relative sm:h-[185svh]">
@@ -465,7 +467,7 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Outreach — pinned act: the real draft held over the live film */}
+        {/* Outreach, pinned act: the real draft held over the live film */}
         <section id="outreach" className="relative scroll-mt-24">
           <Wash tint="coral" soft />
           <div className="relative sm:h-[185svh]">
@@ -705,9 +707,11 @@ export default function Home() {
 
         {/* REMOVED 2026-07-30, on Mehek's call: the whole #pricing section
             ("What it costs.", the Free and Pro cards, and the cancellation
-            line). The "Pricing" links in Header.tsx and in this page's own
-            footer went with it, because tests/route-integrity.test.mjs fails
-            an anchor that points at no id.
+            line). The "Pricing" links in Header.tsx and in the footer went with
+            it, because tests/route-integrity.test.mjs fails an anchor that
+            points at no id. The footer was inline in this file when that was
+            written; it moved to components/SiteFooter.tsx on 2026-08-04, so
+            "this page's own footer" no longer points anywhere. Look there.
 
             There is no separate /pricing route and there never was. This
             section, reached by those two nav links, was the whole of pricing on
@@ -729,7 +733,7 @@ export default function Home() {
             drift from middleware/quota.ts LIMITS and TRIAL_DAYS) and was LEFT
             IN PLACE, values intact, so restoring is an import and a paste. */}
 
-        {/* Close: the finale — by here the live film has collated the book */}
+        {/* Close: the finale: by here the live film has collated the book */}
         <section id="close" className="relative">
           <Wash soft />
           <div className="relative mx-auto max-w-3xl px-6 py-40 text-center">
@@ -783,121 +787,7 @@ export default function Home() {
         </section>
       </main>
 
-      <footer className="relative">
-        <Wash />
-        <div className="relative mx-auto max-w-6xl px-6 py-14">
-          <div className="grid grid-cols-2 gap-10 sm:grid-cols-4">
-            <div className="col-span-2 sm:col-span-1">
-              <div className="flex items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/brand/litos-mark.svg" alt="" className="h-5 w-5" />
-                <span className="text-base font-medium tracking-tight text-ink">
-                  Litos
-                </span>
-              </div>
-            </div>
-            <div>
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Product
-              </p>
-              <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                <li><a href="/#product" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Product</a></li>
-                {/* Pricing removed 2026-07-30 with the #pricing section. */}
-                <li><a href="/#faq" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">FAQ</a></li>
-                {/* Footer, not the header, and this is the whole reachability
-                    story for /litos-vs-simplify: it ships, it renders, and this
-                    is the one link to it. Reviewed 2026-08-03 after it was
-                    filed as "in no nav at any width" alongside
-                    /for-career-centres; that reading counted the header only.
-
-                    The header carries four links and one ask. Comparison pages
-                    are read by someone already weighing Litos against Simplify,
-                    which is late in the funnel and a small slice of arrivals;
-                    promoting it would put a competitor's name above the fold on
-                    the first screen a stranger sees, and spend a fifth header
-                    slot to do it. The two costs point the same way.
-
-                    Kept under Product rather than Company because a visitor
-                    hunting for it is comparing the PRODUCT, and it sits next to
-                    FAQ, which is where the same "answer my objection" impulse
-                    lands. Promote it if a channel ever earns it, the same
-                    condition attached to /for-career-centres below.
-
-                    Be honest about what this link is worth, though: this footer
-                    lives in app/page.tsx and renders on the HOMEPAGE ONLY, so
-                    this is one link on one page, not site-wide chrome. From
-                    /try or /browse-jobs the only way here is back through the
-                    wordmark. Both of these pages are written to be entered
-                    directly from search, so that is a deliberate trade and not
-                    an oversight, but if either ever becomes a page the funnel
-                    needs mid-visit, the footer is not enough on its own.
-                    Pinned by tests/route-integrity.test.mjs section 5. */}
-                <li><a href="/litos-vs-simplify" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Litos vs Simplify</a></li>
-                {/* Was the store link. The footer is site-wide chrome, so under
-                    the one-place rule it carries the account instead; the store
-                    is one scroll up, in #packet. */}
-                <li><a href="/login" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Get started</a></li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Company
-              </p>
-              <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                {/* Footer, not the header. Five of ten competitors keep a B2B
-                    entry in the main nav, but the header here carries one ask
-                    and the say-once rule is what keeps it doing that. This is a
-                    destination for someone who came looking, not a second pitch
-                    aimed at students. Promote it if the channel earns it. */}
-                {/* The site had no contact route at all. The only address was
-                    inside /privacy, for data requests, which is not where
-                    someone whose autofill just failed will look. */}
-                <li>
-                  <a
-                    href="/contact"
-                    className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0"
-                  >
-                    Contact
-                  </a>
-                </li>
-                <li>
-                  <a href="/for-career-centres" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
-                    For career centres
-                  </a>
-                </li>
-                <li>
-                  <a href="https://x.com/MehekBuilds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
-                    X
-                  </a>
-                </li>
-                <li>
-                  <a href="https://github.com/mehek-builds" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">
-                    GitHub
-                  </a>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-                Legal
-              </p>
-              <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
-                <li><a href="/privacy" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Privacy</a></li>
-                <li><a href="/terms" className="inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0">Terms</a></li>
-              </ul>
-            </div>
-          </div>
-          <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
-            <span>&copy; {new Date().getFullYear()} Litos</span>
-            {/* Was new Date() at render, so it always read "updated this month"
-                whether or not anything had changed. Manufactured freshness is
-                exactly what the Guardrails ban. This is the real build date. */}
-            <span className="font-mono text-[11px] uppercase tracking-[0.08em]">
-              Built {BUILD_DATE}
-            </span>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter wash />
     </div>
   );
 }

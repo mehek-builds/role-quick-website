@@ -17,7 +17,7 @@ import {
 /* The board's logo service.
  *
  * WHY THIS IS A ROUTE AND NOT A BUILD STEP. The job monitor adds companies on
- * its own schedule — 51 became 253 in a day — and a committed folder of PNGs is
+ * its own schedule (51 became 253 in a day) and a committed folder of PNGs is
  * a snapshot that goes stale the moment somebody adds a source. Every new
  * employer showed a monogram until a human noticed and re-ran a script. This
  * route means a company that appeared on the board an hour ago has its mark on
@@ -32,11 +32,11 @@ import {
  * companies on the board today; a company that left the board is simply never
  * requested again and its cache entry expires. That is also why the cache is
  * keyed by company name rather than accumulated in a directory somebody has to
- * prune — there is no state to go stale, only answers that stop being asked for.
+ * prune: there is no state to go stale, only answers that stop being asked for.
  *
  * WHERE THE IDENTITY COMES FROM. Preferably not the company's name. We poll
  * each employer's board by a token we chose, so the page at that token is that
- * company's by construction — asking IT who they are beats guessing a domain
+ * company's by construction: asking IT who they are beats guessing a domain
  * from their name, which is how block.co (an NFT company) nearly ended up on
  * Block's jobs. Name-guessing survives only as a last resort, for boards that
  * are bot-blocked or say nothing about themselves.

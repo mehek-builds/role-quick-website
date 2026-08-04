@@ -101,7 +101,7 @@ export function CinematicHero() {
     }
     if (!img) return;
     /* first successful paint dissolves the canvas in (CSS transition on the
-       element) — the load-order pops white → poster → sting read as cuts */
+       element): the load-order pops white → poster → sting read as cuts */
     if (canvas.style.opacity !== "1") canvas.style.opacity = "1";
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
@@ -207,7 +207,7 @@ export function CinematicHero() {
     resize();
     window.addEventListener("resize", resize);
     /* opened in a background tab: layout can be zero-sized at mount and
-       Chrome fires no resize on activation — re-fit when we become visible */
+       Chrome fires no resize on activation, re-fit when we become visible */
     const onVisible = () => {
       if (document.visibilityState === "visible") resize();
     };
@@ -346,7 +346,7 @@ export function CinematicHero() {
       };
 
       /* the film plays across the WHOLE page: frame index = page progress.
-         No snap — the scroll is never yanked; Lenis alone paces it.
+         No snap: the scroll is never yanked; Lenis alone paces it.
          Pacing: the papers keep flying for most of the page (frames 0-74
          are the swirl) and only collate into the single book at the very
          end (frames 75-120 compressed into the last 14% of scroll). */
@@ -403,7 +403,7 @@ export function CinematicHero() {
         },
       });
 
-      /* glass card choreography — each card owns a slice of the film */
+      /* glass card choreography: each card owns a slice of the film */
       const slide = (
         sel: string,
         enter: number,
@@ -493,9 +493,9 @@ export function CinematicHero() {
   return (
     <>
       {/* THE STAGE: the film and its atmosphere, fixed behind the entire
-          page. Every section floats over this — the animation never ends. */}
+          page. Every section floats over this: the animation never ends. */}
       <div ref={stageRef} className="pointer-events-none fixed inset-0 z-0" aria-hidden>
-        {/* 1 · the film — scrubbed by whole-page progress. Starts invisible;
+        {/* 1 · the film, scrubbed by whole-page progress. Starts invisible;
             drawFrame dissolves it in on the first painted frame. */}
         <canvas
           ref={filmRef}
@@ -557,7 +557,7 @@ export function CinematicHero() {
         </div>
         {/* 4 · chapter tint (multiply, whisper) */}
         <div className="rq-cine-tint absolute inset-0 mix-blend-multiply" />
-        {/* 5 · vignette — gentle, the brand stays light */}
+        {/* 5 · vignette: gentle, the brand stays light */}
         <div
           className="absolute inset-0"
           style={{
@@ -582,7 +582,7 @@ export function CinematicHero() {
             "00 · Job found" down the right edge (audit finding 46). One machine
             voice per moment; the rail is the one that persists, so it wins. */}
 
-        {/* glass card 0 — the hero. Server-rendered, visible at first paint. */}
+        {/* glass card 0: the hero. Server-rendered, visible at first paint. */}
         {/* Vertically centred: two columns side by side are far shorter than
             the same content stacked, so there is slack to centre INTO. */}
         <div className="rq-cine-card-hero absolute inset-x-0 top-[16svh] px-6 sm:inset-0 sm:flex sm:flex-col sm:items-center sm:justify-center sm:px-8 sm:pt-6 lg:px-10">

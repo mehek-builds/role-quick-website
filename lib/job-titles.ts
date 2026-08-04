@@ -2,7 +2,7 @@
  *
  * These are ROLE FAMILIES, not postings. The suggestions used to be the board's
  * most common raw titles, which meant a field labelled "Job title" opened on
- * "Senior Product Manager - Network Path" — a real posting, and not a thing
+ * "Senior Product Manager - Network Path", a real posting, and not a thing
  * anybody types. Mehek, 2026-07-29: fifty common titles, nothing more, and free
  * text still works.
  *
@@ -18,13 +18,13 @@
  * "Financial Advisor" and "Actuary". The board is fed by Greenhouse, Lever and
  * Ashby boards that skew heavily to tech, and no investment bank is among the
  * sources. The fix is a source in the backend's jobSources.ts, not a dropdown
- * entry that leads nowhere — so finance is represented here by the titles that
+ * entry that leads nowhere, so finance is represented here by the titles that
  * do return work: Trader, Financial Analyst, Quantitative Researcher,
  * Quantitative Trader, Accountant, Business Analyst.
  *
  * Stored in the order they were measured, most of the board first, so the
  * counts beside them stay readable as a record of what was checked. The board
- * DISPLAYS them alphabetically (Mehek, 2026-07-29) — see `alphabetical`.
+ * DISPLAYS them alphabetically (Mehek, 2026-07-29), see `alphabetical`.
  */
 export const JOB_TITLES: string[] = [
   "Software Engineer", // 991
@@ -84,7 +84,7 @@ export const JOB_TITLES: string[] = [
  * The fields already take free text, so this is a signpost rather than a
  * mechanism: it tells a reader whose role is not listed that the box is theirs
  * to type in, which a bare list of fifty does not. Choosing it must therefore
- * mean "no filter" — searching for the literal word "Other" would return the
+ * mean "no filter": searching for the literal word "Other" would return the
  * handful of postings with "other" in the title, which is the opposite of what
  * anyone picking it wants. See `clean` in app/browse-jobs/page.tsx. */
 export const OTHER = "Other";

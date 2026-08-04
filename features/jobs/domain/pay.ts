@@ -6,7 +6,7 @@
  * apart is how the same job ends up reading "$145K" on one page and "$145,700" on the other.
  *
  * NOTHING HERE INVENTS A NUMBER. Two thirds of the board publishes no pay at all, and every
- * function returns null for that rather than "Competitive" or "Not listed" — the same rule the
+ * function returns null for that rather than "Competitive" or "Not listed", the same rule the
  * board already follows when it says UPDATED instead of POSTED on a Greenhouse row. A reader
  * scanning tiles learns that a figure means the employer published one.
  */
@@ -81,7 +81,7 @@ export function formatPay(job: PayFacts): string | null {
   const currency = job.salary_currency?.trim().toUpperCase();
   const period = job.salary_interval ? PERIODS[job.salary_interval] : undefined;
   /* All four or nothing. The columns are written together and cleared together, so a row missing
-     one of them is a row this page has no honest way to render — most likely a period the poller
+     one of them is a row this page has no honest way to render, most likely a period the poller
      declined to guess, which is exactly the case that must not reach a reader as a bare number. */
   if (min === null || max === null || !currency || !period) return null;
 
@@ -99,7 +99,7 @@ export function formatPay(job: PayFacts): string | null {
 
 function numberOrNull(value: unknown): number | null {
   if (value === null || value === undefined) return null;
-  /* The column is double precision, so the API sends a JSON number — but a driver or a cache that
+  /* The column is double precision, so the API sends a JSON number, but a driver or a cache that
      hands back the string "150000" must not silently render as nothing. */
   const parsed = typeof value === "number" ? value : Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -111,7 +111,7 @@ function numberOrNull(value: unknown): number | null {
  * NULL IS THE COMMON ANSWER AND THE CORRECT ONE. Greenhouse is 84% of the board and has no
  * employment-type field at all, so those postings show no chip unless their own title stated a
  * type. Filling that silence with "Full-time" would put a fact no employer stated on ~18,000
- * tiles — see employmentTypeFromTitle in the backend's lib/compensation.ts.
+ * tiles, see employmentTypeFromTitle in the backend's lib/compensation.ts.
  *
  * 'Full-time' IS shown where a board genuinely stated it, because then it is the employer talking.
  */

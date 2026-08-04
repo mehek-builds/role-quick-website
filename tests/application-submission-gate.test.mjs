@@ -2,6 +2,18 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+/* Comments stripped before any "is it gone?" assertion, the same way R-046 does it in
+   tests/review-highlighting.test.mjs and the header guard does it in
+   tests/packet-resume-header.test.mjs.
+
+   The note left where the review drawer used to be necessarily names what it deleted:
+   submit-request, submission/approve, the poll. A bare grep counts that explanation as the code
+   still being there, and this failed exactly that way the moment the note was written. Deleting
+   the explanation to satisfy a grep would be the wrong repair. */
+function shippedCode(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
+
 test("saved answers honor standing consent while retaining a manual fallback", async () => {
   const dashboard = await readFile(
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),
@@ -30,15 +42,6 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // test rather than the product. Bounded spans, so a match cannot span half the file.
   assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
   assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
-  assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
-  assert.match(dashboard, /disabled=\{finalApprovalBlocked\}/);
-  assert.match(dashboard, /const requiredAnswerMissing = review\.questions\.some/);
-  assert.match(dashboard, /Litos has to show the filled form preview before this can be sent/);
-  assert.match(dashboard, /A required answer is still blank\. Check the answers before sending/);
-  assert.match(dashboard, /Resume attached to this application/);
-  assert.match(dashboard, /Answers included with final submission/);
-  assert.match(dashboard, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
-  assert.match(dashboard, /onError=\{\(\) => setPreviewState\(\{ url: previewUrl, loaded: false, failed: true \}\)\}/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I finished it myself/);
@@ -51,15 +54,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
-test("overview keeps three application states and sends straight from the match card", async () => {
+test("overview keeps three application states and sends matches to the review screen", async () => {
   const overview = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
-  /* Comments stripped for the doesNotMatch lines below, on purpose: the note explaining why the
-     drawer was removed has to be allowed to name what it removed. Same reason
-     tests/match-score-consistency strips before scanning. */
-  const shipped = overview
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
-    .replace(/\/\/.*$/gm, "");
 
   // Still three states; the labels moved onto the four-word vocabulary.
   assert.match(overview, /label: "Ready"/);
@@ -72,33 +68,21 @@ test("overview keeps three application states and sends straight from the match 
   assert.doesNotMatch(overview, /Daily resume preparation/);
   assert.match(overview, /MONTHLY_PRO_APPLICATION_LIMIT = 1_000/);
   assert.match(overview, /return me\.usage\.resumes\.limit/);
-  /* The pre-send review drawer is GONE from Home (2026-08-04, Mehek's call). Two presses used to
-     send an application: Review opened a right-side drawer, and "Send it" inside it did the send.
-     The card's own Submit is the send now. These lines are the guard against it creeping back:
-     a dialog on this page would mean a second confirmation step exists again. */
-  assert.doesNotMatch(shipped, /role="dialog"/);
-  assert.doesNotMatch(shipped, /"Send it"/);
-  assert.doesNotMatch(shipped, /function ReviewDrawer/);
-  // Word-bounded: `ApplicationReview` is a live type name and ends in the same seven letters.
-  assert.doesNotMatch(shipped, /\bonReview\b/);
-  // Both endpoints still belong to the card: approve after a captured form, submit-request
-  // otherwise. Losing the branch would send every packet down one path.
-  assert.match(overview, /\/submission\/approve/);
-  assert.match(overview, /\/submit-request/);
-  assert.match(overview, /\/submission`/);
-  assert.match(overview, /window\.setTimeout\(tick, 2_500\)/);
-  /* Ready means one press away from sent. The label is the promise: pressing it does not open
-     anything, it sends. */
-  assert.match(overview, /status === "ready" \? \([\s\S]*?onClick=\{onSubmit\}[\s\S]*?Submit/);
+
+  /* THE REVIEW DRAWER IS GONE, and most of what this test used to assert went with it: role=dialog,
+     the two panes, "Send it", canSubmit, /submit-request, the 2.5s poll, the focus trap and the
+     focus restore. None of those are deleted behaviours. They are the review screen's behaviours,
+     asserted below against the file that owns them, and the drawer was a second implementation of
+     them that had already drifted twice: it rendered the applicant's resume under the posting's job
+     title, and it showed a MatchScore ring with none of the requirement highlighting that explains
+     the number.
+
+     Review is a link now. That is the whole contract on this page. */
+  assert.match(overview, /reviewHref=\{reviewHrefFor\(job\)\}/);
+  assert.match(overview, /<Link href=\{reviewHref\}[\s\S]*?Review\s*<\/Link>/);
+  assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
   assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
-  /* The gate the drawer used to hold is what stops Submit being a button that only fails. A
-     required question with no answer, or a run handed back to the student, still has to go to the
-     screen that can clear it. */
-  assert.match(overview, /const blocked = missingAnswers\.length > 0 \|\| \["needs_attention", "failed"\]/);
-  assert.match(overview, /blocked && packet \? \([\s\S]*?Finish your answers/);
-  // Sending is not a state a card may skip past: it has to be visible while the run is live.
-  assert.match(overview, /const sending = submitting \|\| Boolean\(review && ACTIVE_SUBMISSION_STATUSES\.has\(review\.status\)\)/);
-  assert.match(overview, /<PendingLabel>Sending<\/PendingLabel>/);
+
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.
   assert.match(overview, /const todayJobs = rankedJobs;/);
@@ -107,6 +91,46 @@ test("overview keeps three application states and sends straight from the match 
      the day's full set (todayJobs), never a pre-cut slice of it. */
   assert.match(overview, /visibleMatches\(todayJobs, \{ dismissed, submitted: submittedToday \}\)/);
   assert.doesNotMatch(overview, /rankedJobs\.slice\(0, 3\)/);
+});
+
+/* The other half of the deletion, and the point of it: Home must not review a packet.
+   Each of these is a thing the drawer did. Any one of them reappearing here is the beginning of a
+   second review screen, which is how the first one drifted. */
+test("Home does not review a packet", async () => {
+  const overview = shippedCode(
+    await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8"),
+  );
+
+  assert.doesNotMatch(overview, /role="dialog"/, "reviewing happens on /dashboard/applications");
+  assert.doesNotMatch(overview, /submit-request/, "Home starts no submission");
+  assert.doesNotMatch(overview, /submission\/approve/, "Home approves no submission");
+  assert.doesNotMatch(overview, /"Send it"/, "the send control belongs to the review screen");
+  assert.doesNotMatch(overview, /<ResumePaper/, "Home renders no resume");
+  assert.doesNotMatch(overview, /<MatchScore/, "Home scores no packet against a posting");
+  assert.doesNotMatch(overview, /containFocus/, "no modal here, so no focus trap to maintain");
+});
+
+/* Everything above was asserted against the drawer until it was deleted. It is asserted here now,
+   against the screen that actually performs a submission, so the coverage moved rather than
+   thinned. */
+test("the review screen gates and performs the submission", async () => {
+  const review = await readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8");
+
+  // A required question with no answer stops the send, on the screen that can also collect it.
+  assert.match(review, /questions\.filter\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
+  // Both endpoints: the first request, and the approval of a run already waiting on the student.
+  assert.match(review, /\/submit-request/);
+  assert.match(review, /\/submission\/approve/);
+  assert.match(review, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
+  assert.match(review, /const finalApprovalBlocked = coverLetterPending \|\| requiredAnswerMissing \|\| !previewReady \|\| approving/);
+  assert.match(review, /onClick=\{approveVerifiedPreview\}/);
+  assert.match(review, /disabled=\{finalApprovalBlocked\}/);
+  assert.match(review, /Resume attached to this application/);
+  assert.match(review, /Answers included with final submission/);
+  assert.match(review, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
+  assert.match(review, /onError=\{\(\) => setPreviewState\(\{ url: previewUrl, loaded: false, failed: true \}\)\}/);
+  // The poll that moves a run through its statuses, which the drawer duplicated on a 2.5s timer.
+  assert.match(review, /window\.setTimeout\(poll,/);
 });
 
 /* Removed 2026-07-27: this guarded that every paid surface quoted the same

@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata = {
   title: "Terms",
@@ -257,6 +258,7 @@ export default function Terms() {
           </p>
         </Section>
       </main>
+      <SiteFooter />
     </div>
   );
 }

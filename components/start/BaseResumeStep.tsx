@@ -19,6 +19,7 @@ import { SourceResume } from "./SourceResume";
 import { LaterLink, PrimaryButton, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { humanizeBuildNote } from "@/lib/buildNotes";
+import { courseworkLine } from "@/lib/profile-editor";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * The base resume screen. Paper on the left, the build on the right.
@@ -137,6 +138,16 @@ export function BaseResumeStep({
   // Answers the student typed that no longer matched a bullet, so the panel can say so.
   const [metricsMissed, setMetricsMissed] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  /* WHICH operation failed, not merely that something did.
+   *
+   * A build failure and a save failure both land in `error`, and their recoveries are opposites: a
+   * build failure wants the build run again, a save failure wants the SAVE run again. One button
+   * reading "Try again" under both meant a student whose save returned 500 pressed the obvious
+   * thing and silently lost the document: `run` clears spec, metric answers and metricsDone, so
+   * every manual bullet edit went, every number they had typed came back out of the bullets, and
+   * the metrics ask reopened blank. Nothing warned them and nothing could undo it, because the next
+   * "Looks right" PUTs the rebuilt spec over the server's copy. */
+  const [failure, setFailure] = useState<"build" | "edits" | "finish" | null>(null);
   const [finished, setFinished] = useState(false);
   const started = useRef(false);
   const startedAt = useRef<number>(0);
@@ -212,6 +223,7 @@ export function BaseResumeStep({
           break;
         case "error":
           setError(frame.message);
+          setFailure("build");
           setStage("failed");
           break;
       }
@@ -219,10 +231,29 @@ export function BaseResumeStep({
     [note, parsed],
   );
 
+  /* A STABLE handle on the current onFrame, so nothing that starts the build has to depend on it.
+   *
+   * `onFrame` is rebuilt whenever `parsed` changes, and `parsed` arrives from /profile one render
+   * after this component mounts (app/start/page.tsx renders the base case with `parsed={profile}`,
+   * which is null until the fetch lands). Every consumer that took `onFrame` as a dependency was
+   * therefore rebuilt on first data arrival, which is exactly when the mount effect below is in the
+   * middle of its one and only run. Reading through the ref cuts that chain at the source: `emit`
+   * never changes identity, so `run` never does, so the mount effect's dependencies never do.
+   *
+   * A ref rather than the mount-time closure, because the frames still have to be handled by the
+   * CURRENT onFrame: the education frame reads `parsed` for school, degree and grad date, and a
+   * frozen mount-time closure would read the null it was created with. */
+  const onFrameRef = useRef(onFrame);
+  useEffect(() => {
+    onFrameRef.current = onFrame;
+  }, [onFrame]);
+  const emit = useCallback((frame: BuildFrame) => onFrameRef.current(frame), []);
+
   const run = useCallback(() => {
     started.current = true;
     startedAt.current = Date.now();
     setError(null);
+    setFailure(null);
     setLog([]);
     setSpec({});
     setFinished(false);
@@ -238,24 +269,42 @@ export function BaseResumeStep({
     setMetricsMissed(0);
     setWarnings([]);
     if (demo) {
-      replayDemo(onFrame);
+      replayDemo(emit);
       return;
     }
-    void buildBaseResume(onFrame).catch((e) => {
+    void buildBaseResume(emit).catch((e) => {
       setError(e instanceof Error ? e.message : "Could not build your resume.");
+      setFailure("build");
       setStage("failed");
     });
-  }, [onFrame, demo]);
+  }, [emit, demo]);
 
-  // Build on arrival, but only if there is not already one stored: a student who lands here again
-  // (a refresh mid-flow, a back button) should see the resume they already have, not burn a second
-  // model call rebuilding it into something subtly different.
+  /* Build on arrival, but only if there is not already one stored: a student who lands here again
+   * (a refresh mid-flow, a back button) should see the resume they already have, not burn a second
+   * model call rebuilding it into something subtly different.
+   *
+   * THIS EFFECT MUST RUN EXACTLY ONCE, AND ITS DEPENDENCIES MUST NEVER CHANGE. `started.current`
+   * says "run once", but a dependency that changes mid-flight does not re-enter the body - it runs
+   * the CLEANUP first, and the cleanup cancels the getBaseResume() this effect is waiting on. The
+   * re-run then returns at the guard, so nothing restarts it and the build is dropped with no error
+   * and no way forward. Measured on a production build against a mock backend on 2026-08-04: with
+   * the old dependency list, an arrival where /profile resolved before GET /resume/base issued zero
+   * POST /resume/base/stream and sat on "Making..."; the same arrival with /profile resolving after
+   * it issued one. That is a coin flip on every new student's first arrival at this step, since it
+   * is the only arrival where nothing is stored and a build is actually needed.
+   *
+   * `run` and `emit` are stable by construction (see `emit` above) and `demo` is fixed for this
+   * component's lifetime, so in a PRODUCTION build the cleanup below runs on unmount and nowhere
+   * else. That is not true under `next dev`: the App Router defaults reactStrictMode to true, and
+   * StrictMode's simulated remount runs the cleanup once, immediately, while the first
+   * getBaseResume() is still in flight. Stable dependencies do nothing about that, which is why the
+   * cleanup RELEASES the one-shot guard rather than only cancelling the request. See the cleanup. */
   useEffect(() => {
     if (started.current) return;
     started.current = true;
     if (demo) {
       startedAt.current = Date.now();
-      replayDemo(onFrame);
+      replayDemo(emit);
       return;
     }
     let cancelled = false;
@@ -273,10 +322,26 @@ export function BaseResumeStep({
       .catch(() => {
         if (!cancelled) run();
       });
+    /* Cancel the in-flight read AND release the one-shot guard.
+     *
+     * Releasing it is what makes the guard survive its own cleanup. `started.current` is set
+     * synchronously, before the work it guards has finished, so any cleanup at all used to leave
+     * the component permanently "started" with nothing running: the re-run returns at the guard and
+     * the build is simply gone. Stable dependencies removed the trigger that fired in production;
+     * they did not remove the shape, and StrictMode's simulated remount fires it on every single
+     * `next dev` load. Measured against a mock backend on 2026-08-04, `next dev` on this tree
+     * before this line: 0 POST /resume/base/stream, screen stuck on "Making...", on BOTH fetch
+     * orderings. So /start's base step could not be exercised in local dev at all.
+     *
+     * This cannot produce two builds. The re-entered effect issues a second GET, but the FIRST
+     * one's continuation is already gated on `cancelled`, which this same cleanup set, so only the
+     * surviving continuation ever reaches run(). Measured after this line: 2 GET /resume/base and
+     * exactly 1 POST /resume/base/stream per dev load, 1 and 1 per production load. */
     return () => {
       cancelled = true;
+      started.current = false;
     };
-  }, [run, onFrame, demo]);
+  }, [run, emit, demo]);
 
   /* Choosing the new resume. The rect is captured BEFORE the state change, because after it the
      old position no longer exists anywhere to measure. */
@@ -420,25 +485,37 @@ export function BaseResumeStep({
     await putBaseResume(spec as ResumeSpec);
   }, [demo, spec]);
 
+  /* Extracted from toggleEditing so the recovery button can re-run EXACTLY this, rather than the
+     nearest thing that happened to be wired up. Retrying a failed save must not also advance the
+     step: leaving edit mode is not the student asserting the document is final. */
+  const saveEdits = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    setFailure(null);
+    try {
+      await persist();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your changes.");
+      setFailure("edits");
+    } finally {
+      setSaving(false);
+    }
+  }, [persist]);
+
   const toggleEditing = useCallback(async () => {
     if (!editing) {
       setEditing(true);
       return;
     }
     setEditing(false);
-    setSaving(true);
-    try {
-      await persist();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save your changes.");
-    } finally {
-      setSaving(false);
-    }
-  }, [editing, persist]);
+    await saveEdits();
+  }, [editing, saveEdits]);
 
   const finish = useCallback(async () => {
     if (editing) return;
     setSaving(true);
+    setError(null);
+    setFailure(null);
     try {
       // Save before advancing. Anything they edited has to be on the server before the next step
       // reads it, and "Looks right" is the student asserting this exact document is the one.
@@ -466,6 +543,7 @@ export function BaseResumeStep({
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your resume.");
+      setFailure("finish");
       setSaving(false);
     }
   }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length, demo]);
@@ -565,6 +643,9 @@ export function BaseResumeStep({
             <div className="mt-5">
               {error && <ErrorNote message={error} />}
               <div className={`${error ? "mt-3 " : ""}flex flex-wrap items-center gap-3`}>
+                {/* Rebuild, unconditionally, and that is correct HERE: every control that can save
+                    (Edit, Looks right, the metrics ask) lives in the detail block below, so an
+                    error visible during the comparison can only have come from the build. */}
                 {error ? (
                   <PrimaryButton onClick={run}>Try again</PrimaryButton>
                 ) : (
@@ -654,15 +735,25 @@ export function BaseResumeStep({
             </div>
           )}
 
+          {/* The recovery, matched to what actually failed. "Try again" under a SAVE error read as
+              "retry the save" and did a full rebuild, which is the one action that destroys the
+              document the save was trying to protect. A save is retried; only a build is rebuilt. */}
           {error && (
             <div className="mt-5">
               <ErrorNote message={error} />
               <button
                 type="button"
-                onClick={run}
-                className="mt-3 px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+                onClick={
+                  failure === "edits"
+                    ? () => void saveEdits()
+                    : failure === "finish"
+                      ? () => void finish()
+                      : run
+                }
+                disabled={saving}
+                className="mt-3 px-1 py-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline disabled:opacity-40"
               >
-                Try again
+                {failure === "edits" || failure === "finish" ? "Try saving again" : "Try again"}
               </button>
             </div>
           )}
@@ -926,12 +1017,17 @@ function replayDemo(onFrame: (frame: BuildFrame) => void) {
 /** School, degree, grad date and coursework come from the parse, not the model. */
 function educationFrom(parsed: ParsedProfile | null): Partial<ResumeSpec> {
   if (!parsed) return {};
-  const p = parsed as ParsedProfile & { degree?: string; grad_date?: string; coursework?: string[] };
+  const p = parsed as ParsedProfile & { degree?: string; grad_date?: string; coursework?: unknown };
   return {
     school: p.school ?? "",
     degree: p.degree ?? "",
     grad_date: p.grad_date ?? (p.grad_year ? String(p.grad_year) : ""),
-    coursework: (p.coursework ?? []).join(", "),
+    /* Through the shared reader (ISSUE-044). The declared `string[]` was a claim about jsonb, not a
+     * guarantee from it, and the bare `.join` underneath it would have thrown a TypeError on a
+     * stored string rather than degrading - on /start, the screen where a new user approves their
+     * base resume. The type is widened to `unknown` deliberately: the annotation was the thing
+     * making the unsafe call look safe. */
+    coursework: courseworkLine(p.coursework),
   };
 }
 

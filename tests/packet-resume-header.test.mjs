@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 /* THE PREVIEW MUST NAME THE APPLICANT, AND IT MUST READ THE BACKEND'S KEYS.
  *
@@ -222,5 +223,154 @@ describe("the packet resume preview", () => {
       );
     }
     assert.match(block, /full_name:/, "the fixture needs a name, or the header bug renders clean");
+  });
+});
+
+/* THE ROOT CAUSE, AND THE GUARD THAT IS SUPPOSED TO OUTLIVE IT.
+ *
+ * The header bug above has now shipped THREE times, on three different surfaces:
+ *
+ *   1. components/app/ApplicationPacket.tsx  ResumePaper  opened with `spec.school`
+ *   2. app/dashboard/page.tsx                ResumePreview opened with `job_context.role`
+ *   3. app/dashboard/applications/page.tsx   ResumeEditor  opened with `spec.school`
+ *
+ * Three separate authors, one cause, and it is a TYPE rather than a mistake:
+ *
+ *   `ResumeSpec` has no name field. The applicant lives on `spec._contact.full_name`, and
+ *   `stripMetadata` drops `_contact` on purpose. So a component typed `spec: ResumeSpec` - the
+ *   natural, type-correct signature for something that renders a resume - is STRUCTURALLY unable to
+ *   render the applicant. The name slot is then empty, and whatever field happens to come first
+ *   floats up into it. On two of the three that was the school; on the third it was the posting.
+ *
+ * Nothing about this fails loudly. The render is valid, the types check, the page looks like a
+ * resume, and the rendered PDF is correct throughout, so the only way to notice is for a human to
+ * read the top of the preview and know what should be there. Fixing renderers one at a time found
+ * these one at a time, over weeks.
+ *
+ * So the guard below is DISCOVERY-BASED rather than a list. It finds every file that renders a
+ * resume and requires each one to render a name. A new resume surface is picked up automatically
+ * and fails until it is given the applicant, which is the only version of this test that can catch
+ * occurrence number four.
+ *
+ * It deliberately does NOT assert file order. `components/start/ResumePaper.tsx` renders the name
+ * before education, but its `Education` helper is DEFINED earlier in the file, so a positional
+ * check reports it broken. That false positive is exactly how a guard like this gets weakened into
+ * uselessness, so ordering is asserted per component, against a slice of that component, below.
+ */
+describe("every surface that renders a resume names the applicant", () => {
+  function walk(dir) {
+    return readdirSync(dir).flatMap((entry) => {
+      const full = join(dir, entry);
+      if (entry === "node_modules" || entry === ".next") return [];
+      return statSync(full).isDirectory() ? walk(full) : full.endsWith(".tsx") ? [full] : [];
+    });
+  }
+
+  /* Renders the school INTO the document, which is what makes a file a resume surface. Anchored on
+     a render or a bound value rather than on the identifier alone: plenty of files mention a school
+     while passing it around, and only the ones that draw it owe the reader a name above it. */
+  const RENDERS_SCHOOL = /\{spec\.school\}|value=\{spec\.school\}|left=\{spec\.school\}|\{[\w.]*\.school\}|value=\{[\w.]*\.school\}/;
+  /* Any of the shapes a name legitimately takes across these surfaces: a prop the caller passes
+     (`{name}`), the contact record read directly (`{contact.full_name}`), or a bound editable
+     field (`value={draft.full_name}`). */
+  const RENDERS_NAME = /\{name\}|\{[\w.]*full_name\}|value=\{[\w.]*full_name\}|full_name=\{/;
+
+  const surfaces = [...walk("app"), ...walk("components")]
+    .map((file) => ({ file, source: code(readFileSync(file, "utf8")) }))
+    .filter(({ source }) => RENDERS_SCHOOL.test(source));
+
+  test("the scan finds the surfaces it is supposed to be guarding", () => {
+    /* A discovery test that silently discovers nothing passes forever while guarding nothing, which
+       is a worse failure than the bug. These three are known resume surfaces and must be found. */
+    const found = surfaces.map(({ file }) => file.replace(/\\/g, "/"));
+    for (const expected of [
+      "components/app/ApplicationPacket.tsx",
+      "components/start/ResumePaper.tsx",
+      "app/dashboard/applications/page.tsx",
+    ]) {
+      assert.ok(found.includes(expected), `the scan must find ${expected}; it found ${found.join(", ")}`);
+    }
+  });
+
+  test("no surface draws a resume without the applicant on it", () => {
+    for (const { file, source } of surfaces) {
+      assert.ok(
+        RENDERS_NAME.test(source),
+        `${file} renders a resume but never renders a name. ResumeSpec has no name field and ` +
+          `stripMetadata drops _contact, so this component has to be GIVEN the applicant as its ` +
+          `own prop, the way ResumePaper and ResumeEditor take one. Without it the school floats ` +
+          `into the name slot and the student reads their university where their name belongs.`,
+      );
+    }
+  });
+});
+
+/* The review screen's editable resume, held to the same contract as the read-only pane. Sliced to
+   the component, because ordering is only meaningful inside one render tree. */
+describe("the review screen's resume editor", () => {
+  const REVIEW = code(readFileSync("app/dashboard/applications/page.tsx", "utf8"));
+  const editor = REVIEW.slice(REVIEW.indexOf("function ResumeEditor"), REVIEW.indexOf("function EditableLine"));
+
+  test("puts the applicant's name in the header, not their school", () => {
+    assert.ok(editor.length > 0, "the slice must cover ResumeEditor");
+    const nameAt = editor.indexOf("{name}");
+    const schoolAt = editor.indexOf("{spec.school}");
+    assert.ok(nameAt !== -1, "ResumeEditor must render the applicant's name");
+    assert.ok(schoolAt !== -1, "ResumeEditor must still render the school somewhere");
+    assert.ok(nameAt < schoolAt, "the name must come before the school: the top slot is the applicant");
+  });
+
+  test("takes the name as a prop, because its own spec cannot carry one", () => {
+    /* The signature is the fix. `spec` here is `stripMetadata(packet.spec)`, which removes
+       `_contact`, so any attempt to read the name off `spec` would be reading a field that was
+       deleted on the way in. */
+    assert.match(editor, /name: string/, "ResumeEditor must accept a name");
+    assert.match(editor, /contact: string/, "ResumeEditor must accept a contact line");
+    assert.doesNotMatch(editor, /spec\._contact/, "the editable spec has no _contact; it is stripped");
+  });
+
+  test("the caller reads the name off the raw packet, not off the editable copy", () => {
+    assert.match(REVIEW, /name=\{contactName\(selected\.spec\)\}/);
+    assert.match(REVIEW, /contact=\{contactLine\(selected\.spec\)\}/);
+    /* Shared with the packet pane rather than re-derived. The contact record's key names have
+       already been got wrong once. */
+    assert.match(REVIEW, /import \{ ApplicationPacket, contactLine, contactName \}/);
+  });
+
+  test("education becomes a section rather than a floating page header", () => {
+    /* The school sat at the top with no heading, which is how it came to look like the header slot
+       in the first place. drawEducation() emits a heading and so does this. */
+    assert.match(editor, /Education<\/p>/, "education needs its own heading");
+  });
+});
+
+/* THE REVIEW SCREEN'S SANDBOX, pinned for the reason the packet harness already was.
+ *
+ * `app/dashboard/applications/qa-data.ts` carried no `_contact` at all. That is not a cosmetic gap
+ * in a fixture: with no contact record, contactName() returns "" and the review screen correctly
+ * draws no name, so the BROKEN version and the FIXED version of that screen render identically in
+ * the sandbox. Driving `?qa=acme` could never have found this bug, and did not, for as long as the
+ * screen has existed.
+ *
+ * A fixture shaped like the bug cannot reveal the bug. */
+describe("the review screen's QA fixture", () => {
+  const FIXTURE = code(readFileSync("app/dashboard/applications/qa-data.ts", "utf8"));
+
+  test("carries the contact shape production sends", () => {
+    assert.match(FIXTURE, /_contact:/, "without _contact the sandbox cannot show a name at all");
+    assert.match(FIXTURE, /full_name:/, "the fixture needs a name, or the header bug renders clean");
+  });
+
+  test("uses the backend's key names, not invented ones", () => {
+    for (const key of KEYS_THE_BACKEND_NEVER_WRITES) {
+      assert.doesNotMatch(
+        FIXTURE,
+        new RegExp(`\\b${key}:`),
+        `"${key}" is not a key the backend stores on _contact; a fixture that invents it hides the drift`,
+      );
+    }
+    for (const key of BACKEND_CONTACT_KEYS.slice(0, 4)) {
+      assert.match(FIXTURE, new RegExp(`\\b${key}:`), `the fixture should exercise "${key}"`);
+    }
   });
 });

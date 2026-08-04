@@ -132,7 +132,7 @@ export function qaJobsPage(): JobsPage {
         department: null,
         /* THE COMMON CASE, and the one worth looking at: a Greenhouse posting states neither pay
            nor job type, so this row shows neither. It must not gain a "Full-time" chip or a
-           "Not listed" salary — see lib/pay.ts. */
+           "Not listed" salary, see lib/pay.ts. */
         employment_type: null,
         description: "",
         apply_url: "https://boards.greenhouse.io/sierralabs/5",
@@ -147,7 +147,7 @@ export function qaJobsPage(): JobsPage {
       },
       {
         // Unscorable: the posting listed too few real requirements. The row shows NO badge, which
-        // is the whole point — a 0% here would be a claim about the resume, not about the posting.
+        // is the whole point: a 0% here would be a claim about the resume, not about the posting.
         id: "qa-6",
         company_name: "Cursor",
         title: "Founding Designer",

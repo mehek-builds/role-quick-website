@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 import { TrySimulator } from "@/components/try/TrySimulator";
 import { getJobCards } from "@/lib/try-jobs";
 
@@ -35,7 +36,15 @@ export default async function TryPage({
           </p>
           {/* /try had no privacy link at all, on the one page where a visitor is
               actively deciding whether to trust this with a resume. The homepage
-              hero and the footer both carry one; the demo booth did not.
+              hero and the footer both carried one; the demo booth did not.
+
+              That premise expired on 2026-08-04: the footer is site chrome now
+              (components/SiteFooter.tsx) and /try renders it, so there IS a
+              /privacy link at the bottom of this page. This one stays anyway,
+              and not out of inertia. The decision it serves is made at the
+              paste box, several screens above the footer, and a trust question
+              answered a full page-scroll away from where it is asked is not
+              answered. Delete this only if the paste box itself grows one.
 
               Kept to the two facts that matter at this moment rather than
               restating the hero.
@@ -62,6 +71,7 @@ export default async function TryPage({
           <TrySimulator initialStep={step} jobs={jobs} />
         </div>
       </main>
+      <SiteFooter />
     </div>
   );
 }

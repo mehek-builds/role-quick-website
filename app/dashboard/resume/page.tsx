@@ -8,6 +8,7 @@ import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
 import {
+  courseworkLine,
   hasCompleteTargetRoleSet,
   parseEditableLines,
   parseEditableList,
@@ -536,7 +537,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         school={str("school") ?? ""}
         degree={str("degree") ?? ""}
         gradDate={str("grad_date") ?? (typeof gradYear === "number" ? String(gradYear) : "")}
-        coursework={str("coursework") ?? ""}
+        coursework={courseworkLine(profile["coursework"])}
         objective={str("objective") ?? ""}
         skills={skills}
         languages={languages}

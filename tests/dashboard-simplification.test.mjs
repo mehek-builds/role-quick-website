@@ -18,7 +18,11 @@ test("Applications opens the board by default and keeps selected detail first on
 });
 
 test("dashboard navigation and hero use the simplified product language", () => {
-  const layout = read("app/dashboard/layout.tsx");
+  /* The NAV table moved to dashboard-shell.tsx when the chrome was split out of the layout, so the
+     layout could go back to being a server component and declare a tab title. Three of the four
+     assertions here are doesNotMatch, so pointing at layout.tsx would still pass while checking
+     nothing. */
+  const layout = read("app/dashboard/dashboard-shell.tsx");
   const demo = read("components/flow/data.ts");
   assert.doesNotMatch(layout, /label: "Resume"/);
   assert.doesNotMatch(layout, /label: "Contact"/);

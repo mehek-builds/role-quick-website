@@ -1,9 +1,9 @@
 # Run the checks this repo already has, on every change, without anyone
 # remembering to.
 #
-# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ — the
+# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ (the
 # vocabulary gate, route integrity, the typography scale, the logo service's
-# SSRF allowlist — only held when somebody happened to run `npm test` locally.
+# SSRF allowlist) only held when somebody happened to run `npm test` locally.
 # They did not always: `main` sat red for a day on a stale assertion in
 # application-submission-gate, and a red suite is worse than no suite, because
 # once failure is normal nobody reads the output.
@@ -29,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -51,3 +51,94 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
+
+  # SEPARATE JOB ON PURPOSE, and named for what it is.
+  #
+  # This one needs a Chromium binary downloaded at run time, which is the single
+  # step in this file that can fail for a reason that has nothing to do with the
+  # product. Folded into `check` it would turn a CDN hiccup into a red tick next
+  # to "Tests" and teach everyone to ignore the tick. Kept apart, "Click path
+  # (browser)" going red while "check" stays green reads as exactly what it is:
+  # the browser did not arrive.
+  #
+  # It is also why the dependency is playwright-core rather than playwright.
+  # playwright-core has no postinstall, so `npm ci` above cannot slow down or
+  # fail on a browser fetch, and `npm test` stays a pure static suite. The
+  # browser is fetched here, once, by the one job that needs it.
+  # It now carries two browser specs rather than one, and the job id and display name still say
+  # "click path". They are deliberately NOT renamed: the name is what any branch protection rule
+  # references, and a rename silently turns a required check into a missing one. The step names say
+  # which spec failed, which is where anyone reading a red run actually looks.
+  click-path:
+    name: Click path (browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # playwright-core ships no installer, so the browser comes from the
+      # separately versioned playwright CLI. The version is DERIVED FROM THE
+      # INSTALLED PACKAGE, never written out here: package.json carries a caret,
+      # so a hard-coded CLI version stays put while `npm update` moves
+      # playwright-core underneath it, the downloaded browser revision stops
+      # matching the one playwright-core looks for, and the job dies with
+      # "Executable doesn't exist", which looks nothing like its cause.
+      # --with-deps because a bare GitHub runner is missing the shared libraries
+      # headless Chromium links against.
+      - name: Install Chromium
+        run: |
+          version="$(node -p "require('playwright-core/package.json').version")"
+          echo "installing browsers for playwright-core ${version}"
+          npx --yes "playwright@${version}" install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
+
+      # Drives the four Home Overview controls with real clicks against a
+      # stubbed backend. Every request is intercepted; nothing reaches a real
+      # service and no credential exists to reach one with.
+      - name: Click path spec
+        run: npm run test:click-path
+
+      # Same job on purpose: it reuses the build and the Chromium installed
+      # above rather than paying for either twice. This spec is the ONLY thing
+      # that can observe the per-band error boundaries actually containing a
+      # throw, so leaving it out of CI would mean a refactor could delete the
+      # containment silently. tests/section-boundary-placement.test.mjs covers
+      # the boundaries still EXISTING from inside `npm test`; only this one
+      # covers them working.
+      - name: Partial payload containment spec
+        run: npm run test:partial-payload
+
+      # Same job, same Chromium, same build. The base resume step's build start is a RACE between
+      # two fetches, so it has no source-level cover at all: tests/start-onboarding-defects.test.mjs
+      # can only pin the shape of the fix. This spec forces the losing ordering and is the only
+      # thing that fails when the defect returns, which is precisely why it must not be a script
+      # somebody remembers to run.
+      - name: Base resume build spec
+        run: npm run test:start-base
+
+      # The whole value of that spec is observing rendered behaviour, and nobody
+      # can reproduce a runner by hand. Without this, its first CI-only failure
+      # is a bare locator timeout with no picture. The spec writes a full-page
+      # screenshot, the serialised DOM and a Playwright trace on failure and
+      # nothing at all on success, so this upload is empty on a green run.
+      - name: Failure artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: click-path-artifacts
+          path: |
+            test-results/click-path/
+            test-results/start-base/
+          if-no-files-found: ignore
+          retention-days: 7

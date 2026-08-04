@@ -1,5 +1,5 @@
 import { Header } from "@/components/Header";
-import Link from "next/link";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata = {
   title: "Privacy",
@@ -28,7 +28,7 @@ export default function Privacy() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      {/* Header is a fixed floating pill now — clear it before content */}
+      {/* Header is a fixed floating pill now, clear it before content */}
       <main className="mx-auto w-full max-w-2xl flex-1 px-6 pb-20 pt-32">
         <h1 className="text-section font-[450] tracking-tight text-ink">
           What we do with your data.
@@ -294,14 +294,28 @@ export default function Privacy() {
           </p>
         </Section>
       </main>
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8 text-xs text-faint">
-          <span>&copy; {new Date().getFullYear()} Litos</span>
-          <Link href="/" className="hover:text-muted">
-            Home
-          </Link>
-        </div>
-      </footer>
+      {/* Was a one-line bar carrying a copyright and a single "Home" link.
+          Replaced 2026-08-04 by the shared footer, because leaving the stub
+          would have made /privacy the one marketing page whose footer disagreed
+          with every other one.
+
+          Not a superset, which is what this comment first claimed and is worth
+          correcting rather than rounding off. The stub had an explicit
+          href="/"; the shared footer has ten hrefs and none of them is "/".
+          Nothing is unreachable, since the header wordmark on this page goes
+          home and renders at every width, but it is one more click than it was,
+          and "strictly supersedes" was the kind of sentence that stops anyone
+          checking.
+
+          The stub also carried `border-t border-border`, which the shared
+          footer does not, so /privacy and /terms now run into the footer with
+          no rule above it. Deliberately not restored. The footer is one
+          component with one appearance: adding the border only here fragments
+          the chrome, adding it everywhere changes the homepage, and making it
+          conditional invents a variant for a problem nobody has seen. Checked
+          at phone, tablet and desktop and it reads fine. It is a one-line
+          change on this line if that judgement turns out wrong. */}
+      <SiteFooter />
     </div>
   );
 }

@@ -56,7 +56,7 @@ test("NOTHING is rendered when the employer published no pay", () => {
 
 test("a partial row renders nothing rather than a bare number", () => {
   /* The four columns are written together and cleared together, so a row missing one of them is
-     most likely a Greenhouse figure whose period the poller declined to guess — exactly the case
+     most likely a Greenhouse figure whose period the poller declined to guess, exactly the case
      that must never reach a reader as an unlabelled number. */
   assert.equal(formatPay(pay(150_000, 180_000, "USD", null)), null);
   assert.equal(formatPay(pay(150_000, 180_000, null, "year")), null);

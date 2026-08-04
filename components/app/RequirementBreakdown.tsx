@@ -100,15 +100,31 @@ export function RequirementBreakdown({
         ))}
       </ul>
 
-      {dropped > 0 && (
-        <p className="mt-3 text-[11px] leading-4 text-faint">
-          {dropped} more {dropped === 1 ? "line is" : "lines are"} about attitude rather than
-          experience, so {dropped === 1 ? "it is" : "they are"} not counted either way.
+      {/* TWO REASONS A LINE IS UNCOUNTED, and only one of them is about the posting.
+          "You stay curious" is a disposition no resume can answer, which is what this copy was
+          written for. But a model outage also leaves clauses uncounted, and calling those
+          "about attitude" tells the student something false about the job. The backend says which
+          it is; this must not guess from the count. */}
+      {result.degraded ? (
+        <p className="mt-3 text-[11px] leading-4 text-warn">
+          We could not check {dropped === 1 ? "one requirement" : `${dropped} of these requirements`} just
+          now. That is a problem on our side, not something about you or this job. Open this again in
+          a minute and it should be here.
         </p>
+      ) : (
+        dropped > 0 && (
+          <p className="mt-3 text-[11px] leading-4 text-faint">
+            {dropped} more {dropped === 1 ? "line is" : "lines are"} about attitude rather than
+            experience, so {dropped === 1 ? "it is" : "they are"} not counted either way.
+          </p>
+        )
       )}
-      {result.rejected.length > 0 && (
-        // Visible rather than swallowed. A non-empty list means a verdict could not be tied to a
-        // real bullet and was thrown away, which is worth knowing rather than smoothing over.
+      {/* Only when the run OTHERWISE succeeded. `rejected` now carries three different things:
+          a verdict that could not be tied to a real bullet, a question the model skipped, and
+          "judge unavailable". Printing "could not be traced to a line on your resume" for the last
+          one blames the resume for an outage, and the degraded line above already says the true
+          thing. */}
+      {!result.degraded && result.rejected.length > 0 && (
         <p className="mt-2 text-[11px] leading-4 text-warn">
           {result.rejected.length} judgement{result.rejected.length === 1 ? "" : "s"} could not be
           traced to a line on your resume and {result.rejected.length === 1 ? "was" : "were"} discarded.

@@ -28,8 +28,12 @@ const applications = await readFile(
   new URL("../app/dashboard/applications/page.tsx", import.meta.url),
   "utf8",
 );
+/* The rail lives in dashboard-shell.tsx, not layout.tsx. The chrome was split out of the layout so
+   the layout could go back to being a server component and declare a tab title. Reading layout.tsx
+   here would still PASS, because the assertion below is a doesNotMatch and the layout no longer
+   contains the code it guards: a silent pass that stops catching the regression it was written for. */
 const dashboardLayout = await readFile(
-  new URL("../app/dashboard/layout.tsx", import.meta.url),
+  new URL("../app/dashboard/dashboard-shell.tsx", import.meta.url),
   "utf8",
 );
 
@@ -97,7 +101,11 @@ test("every switcher chip is a 44px target that reports which packet is open", (
   const strip = ledgerSection.slice(ledgerSection.indexOf("-mx-4 overflow-x-auto"));
   const chip = strip.slice(0, strip.indexOf("</button>"));
   assert.match(chip, /min-h-11/, "a chip a thumb has to hit needs 44px");
-  assert.match(chip, /aria-pressed=\{packet\.id === selected\.id\}/, "which one is open has to be announced, not only coloured");
+  /* Optional chaining, re-pointed 2026-08-04 with ISSUE-037. The section now also renders as the
+     landing view for a ?state= deep link, where nothing is open yet, so a bare `selected.id` here
+     would throw on the exact arrival the deep link exists to serve. What this asserts is unchanged:
+     the open packet is announced and not only coloured. */
+  assert.match(chip, /aria-pressed=\{packet\.id === selected\?\.id\}/, "which one is open has to be announced, not only coloured");
   assert.match(chip, /onClick=\{\(\) => selectPacket\(packet\)\}/, "the chip is the in-context switch");
 });
 
@@ -156,7 +164,7 @@ test("the measurement suspends the touch floor, so it records the text and not t
 test("the account footer states the plan and no count beside it", () => {
   /* Supersedes an undefined-guard on the same line, 2026-08-03. The count it was guarding is gone.
      It printed "Free · 5 applications" one separator away from the tier, where a bare noun reads as
-     the allowance the plan grants rather than as what the account has already done — and free
+     the allowance the plan grants rather than as what the account has already done, and free
      grants 20 resumes a month, so the rail was quoting a quota four times under the real one.
      Momentum on Home reports the same figure labelled, so nothing was lost by removing it.
 

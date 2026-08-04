@@ -6,10 +6,10 @@
    contract is the only thing the site depends on: 121 frames at
    public/film/frame-0000.webp … frame-0120.webp, 16:9. Regenerating the
    film from a real video is: ffmpeg -i film.mp4 -vf fps=12,scale=1600:900
-   frames, then webp — same filenames, no code change.
+   frames, then webp: same filenames, no code change.
 
    Usage: node scripts/render-film.mjs  (writes PNGs to .film-tmp/, then
-   convert with ffmpeg — see printed command). */
+   convert with ffmpeg, see printed command). */
 
 import { createCanvas } from "canvas";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -135,9 +135,9 @@ function drawSheet(ctx, s, t) {
 /* Light washes: multiply gradients that sweep across as chapters pass.
    White canvas × pale tint = the wash. */
 const WASHES = [
-  { tint: [201, 212, 250], peak: 0.20, width: 0.13, maxA: 0.55 }, // blue — documents
-  { tint: [207, 232, 222], peak: 0.47, width: 0.12, maxA: 0.5 },  // teal — autofill
-  { tint: [246, 220, 204], peak: 0.72, width: 0.12, maxA: 0.5 },  // coral — outreach
+  { tint: [201, 212, 250], peak: 0.20, width: 0.13, maxA: 0.55 }, // blue: documents
+  { tint: [207, 232, 222], peak: 0.47, width: 0.12, maxA: 0.5 },  // teal: autofill
+  { tint: [246, 220, 204], peak: 0.72, width: 0.12, maxA: 0.5 },  // coral: outreach
 ];
 
 function drawWashes(ctx, t) {

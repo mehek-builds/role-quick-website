@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 import { ComboField } from "@/components/browse/ComboField";
 import { ZeroResultJobSearchMonitor } from "@/components/browse/ZeroResultJobSearchMonitor";
 import {
@@ -47,7 +48,7 @@ export const metadata: Metadata = {
 
 /* The company's own mark, top-left of the tile (Mehek, 2026-07-28).
  *
- * Served from public/company/, never from a logo API — see lib/company-logos.ts
+ * Served from public/company/, never from a logo API, see lib/company-logos.ts
  * for why. Sized 28px and left un-cropped: these are 49 different companies'
  * marks at 49 different aspect ratios, and `object-contain` inside a fixed box
  * is what stops a wide wordmark from being centre-cropped into nonsense.
@@ -116,7 +117,7 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
           <span className="text-faint/80"> +{extra} more</span>
         )}
       </p>
-      {/* Pay and job type, on the line under the location — the position Handshake gives them, and
+      {/* Pay and job type, on the line under the location, the position Handshake gives them, and
           the one a reader's eye is already travelling down.
           Either can be absent and usually is: two thirds of the board publishes no pay, and
           Greenhouse states no job type at all. An absent one renders NOTHING rather than "Not
@@ -144,7 +145,7 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
            explanation was removed from the page (Mehek, 2026-07-29: people know
            what "sponsors visas" means, they do not need it spelled out) but a
            claim about an employer's immigration practice still cannot travel
-           without it — "has filings on record" is evidence, never an offer. */
+           without it: "has filings on record" is evidence, never an offer. */
         <p
           title={
             job.sponsorship_evidence === "posting_offers"
@@ -160,7 +161,7 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
   );
 }
 
-/* "Job title “software engineer” and City “New York”" — the fields are named back
+/* "Job title “software engineer” and City “New York”": the fields are named back
  * so the reader can see which one narrowed the result, which matters most when
  * a search returns nothing and they need to know which box to change. */
 function describeFilters(filters: Filters): string {
@@ -207,7 +208,7 @@ export default async function BrowseJobs({
   /* "Other" is the last entry in all three dropdowns, and it has to mean NO
      FILTER. Searching for the literal word would return the few postings with
      "other" in the title, which is the opposite of what someone picking it
-     wants — they are being told the box is theirs to type in. */
+     wants: they are being told the box is theirs to type in. */
   const clean = (v?: string) => {
     const value = (v ?? "").slice(0, 80).trim();
     return isOther(value) ? "" : value;
@@ -268,9 +269,9 @@ export default async function BrowseJobs({
             <>
               {/* Just the number (Mehek, 2026-07-29). The sentence used to
                   explain where the postings come from, that a multi-city role is
-                  one card, and what Litos then does with it — three things the
-                  page already shows: the tiles carry "N openings", and the band
-                  at the bottom makes the offer. */}
+                  one card, and what Litos then does with it. All three are already
+                  on the page: the tiles carry "N openings", and the band at the
+                  bottom makes the offer. */}
               <span className="font-mono text-ink">{countLabel(total)}</span>{" "}
               {total === 1 ? "role" : "roles"}
               {postingsTotal === null ? "." : (
@@ -290,7 +291,7 @@ export default async function BrowseJobs({
         </p>
 
         {/* Three fields, not one box (Mehek, 2026-07-28). Each is a combobox the
-            page owns rather than one the browser draws — see ComboField for why
+            page owns rather than one the browser draws, see ComboField for why
             a datalist could not be made to sit under its field or wear our
             type. A visitor can pick a suggestion or type anything; the fields
             AND together and each works alone, so filling in only the city and
@@ -497,6 +498,7 @@ export default async function BrowseJobs({
           </div>
         </div>
       </main>
+      <SiteFooter />
     </div>
   );
 }

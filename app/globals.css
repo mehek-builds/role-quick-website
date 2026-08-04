@@ -128,13 +128,21 @@ body {
 }
 
 /* Focus ring, per brand deck section 04: 2px blue outline, offset 2px, on
-   every interactive element reached by keyboard. */
+   every interactive element reached by keyboard.
+
+   tabindex="-1" is excluded on purpose. It marks an element that is focusable
+   only programmatically, never a tab stop: a skip-link target section, a
+   dialog container, a scroll landing point. Ringing those draws the 2px
+   outline around a whole page region, and #product is a 200svh film wrapper,
+   so the "ring" becomes two blue rules down the screen edges with no visible
+   top or bottom. The repo's own focus traps already exclude tabindex="-1" by
+   the same selector (components/PacketViewer.tsx, app/dashboard/page.tsx). */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
@@ -181,7 +189,7 @@ select:focus-visible,
 }
 
 /* First-paint entrance for content in the initial viewport (hero, demo).
-   Pure CSS so it runs before hydration — the headline can never be a
+   Pure CSS so it runs before hydration: the headline can never be a
    blank page waiting on JS. Same settle as .rq-reveal. */
 @keyframes rq-enter {
   from {
@@ -232,7 +240,7 @@ select:focus-visible,
 }
 
 /* The receipt loop: log rows land one by one, hold, then the cycle restarts.
-   The one element allowed to keep moving — it IS the product demo. */
+   The one element allowed to keep moving: it IS the product demo. */
 @keyframes rq-log-row {
   0%, 3% {
     opacity: 0;
@@ -305,6 +313,73 @@ html {
 /* .rq-grain and its @keyframes were removed 2026-07-28 with the grain layer
    in CinematicPage.tsx. See the note there. */
 
+/* How much of the viewport bottom the mobile tab bar owns.
+   ONE number, declared where the bar itself is declared, because it is needed in two places that
+   are nowhere near each other: the scroll padding that keeps the end of a page off the bar, and
+   the offset a sticky action bar parks at so it sits ON the content rather than under the bar.
+   It was two hand-written magic numbers before, and they went out of sync in the only way that
+   matters: `main` carried `pb-24 sm:py-10`, where the `sm` shorthand silently cancelled the
+   clearance from 640px up while the bar itself stays on until 1024px. Every dashboard page's last
+   21px sat under the tab bar across that whole band, measured on 2026-08-04. A variable cannot be
+   cancelled by a shorthand that was reaching for something else.
+   The arithmetic is the bar's own box: pt-2 (8px) + a 44px touch target + its safe-area padding. */
+:root {
+  /* The arithmetic is the bar's own box, and every term is load-bearing:
+     border-t (1px) + pt-2 (8px) + a 44px touch target + its safe-area padding. The 1px was missing
+     in the first cut of this and made the variable one pixel short of the bar it describes, which
+     is the same defect as the 21px, just small enough to argue about. Measured: 61px at a 16px root
+     with no safe-area inset. */
+  --dashboard-bottom-bar: calc(3.25rem + 1px + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+  /* Pixels of the layout viewport's bottom edge hidden behind the software keyboard. Written by
+     DashboardShell from visualViewport; 0 everywhere that resizes the layout viewport instead
+     (Android Chrome, every desktop browser) and 0 whenever no keyboard is up. See
+     lib/keyboard-inset.ts for why the layout viewport is the wrong thing to trust on iOS. */
+  --keyboard-inset: 0px;
+  /* Where a terminal action bar comes to REST, and what `main` reserves for it.
+     One value for both, because they were 60px and 100px in the first cut and the bar visibly
+     hopped 40px up on the last scroll increment, right where a thumb was already reaching. */
+  --dashboard-action-offset: calc(var(--dashboard-bottom-bar) + 2.5rem);
+  /* Where it PARKS while stuck, which is the same thing until a keyboard opens.
+     max(), not a sum: the tab bar and the keyboard both cover the bottom of the layout viewport,
+     and when the keyboard is up it is covering the tab bar too, so adding them would float the
+     action bar a tab bar's height above the keyboard for no reason. Whichever is taller wins.
+     This is deliberately NOT what `main` reserves. Padding that grew by ~336px the moment a
+     textarea took focus would shove the document under the student mid-keystroke; the sticky
+     offset can move freely because moving is all it does. */
+  --dashboard-action-sticky-offset: calc(max(var(--dashboard-bottom-bar), var(--keyboard-inset)) + 2.5rem);
+}
+
+/* The bar is `lg:hidden`, so above lg it owns nothing and nothing should be reserved for it.
+   64rem, NOT 1024px. Tailwind 4 emits its `lg` variant as `min-width: 64rem`, and the first cut of
+   this wrote the hand-authored half in px. They are only equal at a 16px root font size. A reader
+   who has set a larger default font (a real accessibility setting) gets an lg that starts at, say,
+   1280px, so from 1024px up the tab bar is still on screen while this has already gone to zero:
+   the clearance disappears AND the sticky bar parks at bottom 0 underneath it. That is precisely
+   the bug this variable exists to fix, restored for the people most likely to be hurt by it, and
+   no viewport-width test can catch it because Playwright runs at a 16px root. Verified in the
+   compiled stylesheet: `min-width:64rem` and `min-width:1024px` were both present in one file. */
+@media (min-width: 64rem) {
+  :root {
+    --dashboard-bottom-bar: 0px;
+  }
+}
+
+/* The sticky action bar is opaque and sits over the end of the page, so a browser scrolling a
+   focused field "just into view" can park it directly underneath the bar. Every screen that uses
+   TerminalActionBar is also a screen full of textareas, so this is the common case, not the edge.
+
+   Scoped with :has(), and the scoping is not tidiness. scroll-padding belongs to the SCROLLER,
+   which is the document, so this cannot be written on .dashboard-shell itself. Written on a bare
+   `html` it applied to every route in the app, including the marketing pages that have no bottom
+   bar at all: ComboField calls scrollIntoView({ block: "nearest" }), which scrolls every ancestor
+   scroller including the root, so highlighting an option in the lower ~149px of the viewport
+   yanked the whole page upward, and tabbing into a footer link did the same. Anchor jumps were
+   never affected (they are start-aligned, and start-aligned scrolls ignore scroll-padding-bottom),
+   which is exactly why this would not have shown up in the obvious place. */
+html:has(.dashboard-shell) {
+  scroll-padding-bottom: calc(var(--dashboard-action-offset) + 3rem);
+}
+
 @media (max-width: 639px) {
   .dashboard-shell main button,
   .dashboard-shell main select,
@@ -319,23 +394,10 @@ html {
   }
 }
 
-@keyframes dashboard-drawer-in {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes dashboard-drawer-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.dashboard-drawer {
-  animation: dashboard-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dashboard-drawer-backdrop {
-  animation: dashboard-drawer-backdrop-in 180ms ease-out;
-}
+/* The dashboard-drawer animations were removed with the review drawer itself. Reviewing a packet
+   is one screen now, /dashboard/applications, reached by a link rather than by a panel sliding in
+   over Home. Their reduced-motion overrides went with them: an animation that does not exist does
+   not need turning off. */
 
 /* The reduced-motion product still is off under full motion: the film and
    the Application Roll own the opening, and a still underneath them would
@@ -409,10 +471,6 @@ html {
     opacity: 0;
   }
   .rq-fade {
-    animation: none;
-  }
-  .dashboard-drawer,
-  .dashboard-drawer-backdrop {
     animation: none;
   }
   .rq-reveal {

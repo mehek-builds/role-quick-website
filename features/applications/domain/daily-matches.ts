@@ -5,6 +5,9 @@ import type {
   ParsedProfile,
   Targeting,
 } from "@/lib/api";
+/* Relative, not "@/lib/local-day": this module is loaded directly by the node test runner, which
+   resolves no tsconfig path aliases. Every other "@/lib" import here is type-only and erased. */
+import { localDayKeyOf } from "../../../lib/local-day.ts";
 
 /* NO `match` FIELD, and that is the ISSUE-014 fix in its final form.
  *
@@ -22,7 +25,10 @@ import type {
  * needs the resume and a network round trip, so the honest thing is for this type not to offer a
  * score at all. preference_score still orders the feed - GET /jobs remains the single ranking
  * authority and this function preserves its order - and still supplies `reasons`, which is words
- * rather than a number and now says "You asked for ..." so it cannot be read as the score's
+ * rather than a number. Those words no longer render anywhere: the "You asked for ..." line was
+ * removed from Home and Jobs because it repeated the same saved search on every card. `reasons` is
+ * kept on the type because it is the honest carrier for preference signals if they are ever shown
+ * again, and because it is what stops preference fit from being reached for as the score's
  * caption. */
 export type RankedJob = MonitoredJob & {
   /** Preference signals: what the STUDENT asked for. Never a caption for the resume-coverage
@@ -59,10 +65,10 @@ export function rankJobs(
      use-job-match-scores.ts rather than derived here. preference_score stays out of the UI
      entirely; it orders the feed, which is the job it is good at.
 
-     `reasons` survives because it is WORDS, and true ones: it says what the student asked for. It
-     is rendered as "You asked for ..." rather than "Matches your ...", so it cannot be misread as
-     the caption for the coverage number sitting above it. That misreading, one metric's score over
-     another metric's reasons, is the defect the ISSUE-014 audit actually found. */
+     `reasons` survives as data, not as UI. It was rendered as "You asked for ..." rather than
+     "Matches your ...", and is now not rendered at all: the same saved search on every card said
+     nothing about any one job. The rule it enforced outlives it. One metric's score may never
+     carry another metric's reasons, which is the defect the ISSUE-014 audit actually found. */
   return jobs.map((job) => ({
     ...job,
     reasons: job.preference_reasons ?? [],
@@ -132,7 +138,15 @@ export function countPreparedJobs(jobs: RankedJob[], packets: GeneratedResume[])
   return jobs.filter((job) => packets.some((packet) => packetMatchesJob(packet, job))).length;
 }
 
-/** Whether this exact posting was submitted during the requested UTC day. */
+/**
+ * Whether this exact posting was submitted during the requested local day.
+ *
+ * dayKey comes from localDayKey, so submitted_at has to be converted to a local day too. This used
+ * to be `review.submitted_at?.slice(0, 10)`, which reads the UTC day off the stored instant. Once
+ * the caller's key is local, comparing it against a UTC day is wrong for the hours either side of
+ * local midnight, every day, in every timezone that is not UTC. The two sides of this comparison
+ * must be produced by the same function or they will drift apart again.
+ */
 export function jobSubmittedOnDay(
   job: Pick<MonitoredJob, "id" | "company_name" | "title">,
   packets: GeneratedResume[],
@@ -142,12 +156,57 @@ export function jobSubmittedOnDay(
     const review = packet.spec._review;
     return packetMatchesJob(packet, job)
       && review?.status === "submitted"
-      && review.submitted_at?.slice(0, 10) === dayKey;
+      && localDayKeyOf(review.submitted_at) === dayKey;
   });
 }
 
 /** Shortest job description the generator will accept. Mirrors the backend's `jd_text` minimum. */
 export const MIN_JD_CHARS = 20;
+
+export type ApplicationDraft = {
+  company: string;
+  role: string;
+  portalUrl: string;
+  jobDescription: string;
+};
+
+/** The four boxes, by the name the composer's own state uses for each. */
+export type ApplicationDraftField = keyof ApplicationDraft;
+
+/**
+ * WHICH of the four boxes is empty, not merely whether one of them is.
+ *
+ * ISSUE-040: pressing "Make my resume" on an empty form put "Fill in all four boxes first." in a
+ * banner at the top of the composer, measured at y = -281 on a 723px viewport while the button that
+ * raised it sat at y = 434. The job description textarea alone is ~320px tall, so that is the
+ * DEFAULT geometry rather than an edge case: a screen reader announced the refusal and a sighted
+ * student saw the button do nothing at all.
+ *
+ * Naming the fields is what lets the page attach the refusal to the boxes it is about, so the
+ * feedback survives wherever the student happens to be scrolled.
+ */
+export function missingApplicationFields(draft: ApplicationDraft): ApplicationDraftField[] {
+  const missing: ApplicationDraftField[] = [];
+  if (!draft.company.trim()) missing.push("company");
+  if (!draft.role.trim()) missing.push("role");
+  if (!draft.portalUrl.trim()) missing.push("portalUrl");
+  if (draft.jobDescription.trim().length < MIN_JD_CHARS) missing.push("jobDescription");
+  return missing;
+}
+
+/**
+ * A present link the generator will accept. Separate from emptiness because the two refusals say
+ * different things: "fill in all four boxes" is nonsense to someone who typed http://.
+ */
+export function isHttpsJobUrl(portalUrl: string): boolean {
+  const trimmed = portalUrl.trim();
+  if (!trimmed) return false;
+  try {
+    return new URL(trimmed).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whether a draft can be generated from without the request being rejected.
@@ -157,24 +216,11 @@ export const MIN_JD_CHARS = 20;
  * attempt and come back with "Fill in all four boxes first", which is nonsense to someone who
  * filled in nothing. Checking first lets the page say what is actually missing.
  *
- * Deliberately the same shape as the guard inside createApplication, sharing MIN_JD_CHARS so the
- * two cannot drift into disagreeing about what is generatable.
+ * Composed from the two predicates above rather than restating them, so the guard inside
+ * createApplication and this pre-check cannot drift into disagreeing about what is generatable.
  */
-export function canGenerateFrom(draft: {
-  company: string;
-  role: string;
-  portalUrl: string;
-  jobDescription: string;
-}): boolean {
-  if (!draft.company.trim() || !draft.role.trim()) return false;
-  if (draft.jobDescription.trim().length < MIN_JD_CHARS) return false;
-  const portalUrl = draft.portalUrl.trim();
-  if (!portalUrl) return false;
-  try {
-    return new URL(portalUrl).protocol === "https:";
-  } catch {
-    return false;
-  }
+export function canGenerateFrom(draft: ApplicationDraft): boolean {
+  return missingApplicationFields(draft).length === 0 && isHttpsJobUrl(draft.portalUrl);
 }
 
 export function resumeGenerationBody(

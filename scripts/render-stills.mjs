@@ -1,16 +1,16 @@
 /* Renders the four reference frames for the Higgsfield resume b-roll:
 
-     convert_start  — the messy resume (MessyResumeMockup, "Skipped by ATS")
-     convert_end    — the clean resume (CleanResumeMockup, "ATS-ready")
-     ats_start      — Northline posting + tailored resume, no highlights
-     ats_end        — same frame, 5/5 keywords lit in pillar colors
+     convert_start  : the messy resume (MessyResumeMockup, "Skipped by ATS")
+     convert_end    : the clean resume (CleanResumeMockup, "ATS-ready")
+     ats_start      : Northline posting + tailored resume, no highlights
+     ats_end        : same frame, 5/5 keywords lit in pillar colors
 
    Same studio background in every frame so the video model only animates
-   the page content. Content is transcribed from components/Mockups.tsx —
+   the page content. Content is transcribed from components/Mockups.tsx:
    the pages ARE the site's Before/After and JD/Tailored examples.
 
    Usage: node scripts/render-stills.mjs  (writes .stills-tmp/*.png at
-   3840x2160, then downscale to 1920x1080 with sharp — see printed cmd). */
+   3840x2160, then downscale to 1920x1080 with sharp, see printed cmd). */
 
 import { createCanvas } from "canvas";
 import { mkdirSync, writeFileSync } from "node:fs";

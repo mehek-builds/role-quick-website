@@ -4,11 +4,17 @@ import test from "node:test";
 
 /* ISSUE-016. The header's four marketing links were `hidden sm:flex` with no
  * mobile equivalent, because the hamburger was deleted on 2026-07-28 on the
- * argument that the footer carried the same links. The footer lives inside
- * app/page.tsx, so it renders on the homepage and nowhere else, which left a
- * phone on /browse-jobs, /try, /litos-vs-simplify or /for-career-centres with
- * no link to anywhere at all. Most of the site's traffic arrives from TikTok
- * and Instagram, so most of the site's traffic hit that dead end.
+ * argument that the footer carried the same links. It did not: the footer lived
+ * inside app/page.tsx, so it rendered on the homepage and nowhere else, which
+ * left a phone on /browse-jobs, /try, /litos-vs-simplify or /for-career-centres
+ * with no link to anywhere at all. Most of the site's traffic arrives from
+ * TikTok and Instagram, so most of the site's traffic hit that dead end.
+ *
+ * The footer moved to components/SiteFooter.tsx on 2026-08-04 and now renders
+ * on those routes, so that specific sentence is history rather than current
+ * state. It is kept in the past tense rather than deleted because it is the
+ * reason these assertions exist, and none of them depend on it: they pin the
+ * mobile door itself, which is still the only navigation above the fold.
  *
  * Static, in the style of tests/route-integrity.test.mjs: these assertions run
  * in milliseconds on every `npm test` and need no build, no port and no DOM.

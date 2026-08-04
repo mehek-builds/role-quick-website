@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState } from "react";
  *
  * WHY THIS IS NOT A <datalist>. It was one, and the popup a browser draws for a
  * datalist is chrome, not page: it renders in the system font at the system
- * size, sets its own width, and places itself where it likes — so next to a
+ * size, sets its own width, and places itself where it likes, so next to a
  * page set in Hanken Grotesk it read as something borrowed from another
  * application, and sat visibly off the field it belonged to (Mehek, 2026-07-29).
  * None of that is reachable from CSS. Owning the list is the only way to have it
@@ -19,7 +19,7 @@ import { useEffect, useId, useRef, useState } from "react";
  *   search stays a shareable URL and the page stays server-rendered.
  * - The keyboard. Arrow keys move, Enter picks, Escape closes, Tab leaves.
  * - No JavaScript required to search. Without JS the list never opens and the
- *   field is an ordinary text box that still submits — which is the same thing
+ *   field is an ordinary text box that still submits, which is the same thing
  *   a datalist degrades to.
  */
 export function ComboField({
@@ -95,7 +95,7 @@ export function ComboField({
       return;
     }
     /* Enter picks the highlighted row, and MUST NOT submit the form while doing
-       so — otherwise choosing a suggestion searches for whatever was half-typed
+       so, otherwise choosing a suggestion searches for whatever was half-typed
        instead of what was chosen. With nothing highlighted, Enter submits as it
        would on any text field. */
     if (event.key === "Enter" && open && active >= 0 && matches[active]) {

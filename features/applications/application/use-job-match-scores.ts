@@ -21,9 +21,10 @@ import { resumeSpecText } from "../domain/match-model";
  *
  *  1. "The score contradicted the line beneath it." It did: "0% match" sat over "Matches your
  *     product, San Francisco, CA, internship". That was one card printing two metrics in one
- *     vocabulary. Fixed by taking the word "match" away from the preference line, which now reads
- *     "You asked for ..." on both screens. The badge is the resume; the sentence is the targeting;
- *     neither borrows the other's words.
+ *     vocabulary. Fixed by taking the word "match" away from the preference line, which then read
+ *     "You asked for ..." on both screens; that line has since been removed from both, because it
+ *     repeated the same saved search on every result. The badge is the resume and is now the only
+ *     fit statement on a card. Nothing may borrow its words.
  *  2. "A bare percentage in a list has no band, no denominator, no refusal state." Also true, so
  *     this hook carries all three. The band label and the "N of M requirements" count ride along in
  *     the tooltip, and an unscorable posting resolves to `null`, which renders nothing.

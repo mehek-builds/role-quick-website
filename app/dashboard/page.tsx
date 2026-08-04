@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   api,
   getStoredEmail,
-  type ApplicationReview,
   type ApplicationProfile,
   type GeneratedResume,
   type Me,
@@ -15,12 +14,16 @@ import {
   type Targeting,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
-import { MatchScore } from "@/components/app/MatchScore";
 import { Funnel } from "@/components/app/Funnel";
+import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+/* MatchScore, ResumePaper, contactName, contactLine and stripMetadata were all imported for the
+   review drawer and went with it. The dashboard renders no resume and scores no packet against a
+   posting now; the card's ScoreRing is a different, already-fetched number. */
 import {
   AUTO_SUBMIT_PREPARED_LIMIT,
+  MATCH_WEIGHTING_NOTE,
   jobSubmittedOnDay,
   packetMatchesJob,
   rankJobs,
@@ -33,19 +36,17 @@ import {
 } from "@/features/applications";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
+import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
+import { isWaitingOnHuman, waitingApplications } from "@/lib/captcha-queue";
+import { WaitingOnYou } from "@/components/app/WaitingOnYou";
 
-type SubmissionResponse = { application_id: string; review: ApplicationReview; handoff_url?: string };
+/* SubmissionResponse and ACTIVE_SUBMISSION_STATUSES went with the review drawer. The dashboard no
+   longer starts or polls a submission, so the statuses it would have watched are not its business
+   to name. /dashboard/applications owns that vocabulary. */
 
 const MONTHLY_PRO_APPLICATION_LIMIT = 1_000;
-const ACTIVE_SUBMISSION_STATUSES = new Set<ApplicationReview["status"]>([
-  "submit_requested",
-  "preparing",
-  "filling",
-  "submitting",
-  "submission_claimed",
-]);
 
 const QA_JOBS: MonitoredJob[] = [
   {
@@ -256,9 +257,6 @@ export default function Home() {
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reviewJob, setReviewJob] = useState<RankedJob | null>(null);
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
   const [prewarmFailures, setPrewarmFailures] = useState<string[]>([]);
   /* Jobs whose packet is being built right now, by either path. This is what lets the card say
      "Getting ready" and mean it, instead of saying it about work nobody ever started. */
@@ -268,8 +266,6 @@ export default function Home() {
   const [preparationErrors, setPreparationErrors] = useState<Record<string, string>>({});
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
-  const reviewTriggerRef = useRef<HTMLElement | null>(null);
-  const activeReviewJobIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => setDismissed(readDismissed(dailyDismissalKey())));
@@ -320,7 +316,7 @@ export default function Home() {
   // The backend response is today's complete match set, and its size can vary. Home shows only
   // the next three unfinished matches, but completion must account for every match in this set.
   const todayJobs = rankedJobs;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = localDayKey();
   const submittedToday = useMemo(
     () => new Set(todayJobs.filter((job) => jobSubmittedOnDay(job, packets, todayKey)).map((job) => job.id)),
     [packets, todayJobs, todayKey],
@@ -339,9 +335,20 @@ export default function Home() {
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
   /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
   const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
+  /* Applications stopped on a human-verification check, oldest first. Kept out of the summary
+     numbers on purpose: this is a different kind of debt from the rest of "Needs you", and folding
+     it in would bury a thing that takes seconds to clear inside a count of things that do not. */
+  const waitingOnYou = useMemo(() => waitingApplications(packets), [packets]);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
-    const needsAction = packets.filter((packet) => ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")).length;
+    /* Excludes the rows the waiting-on-you block already owns. Counting them twice would be
+       tolerable; the copy is not. Tracker's action reads "N stopped for you / Finish the missing
+       answers", which is the wrong instruction for a CAPTCHA - nothing is missing, and on an
+       at_submit stall everything is already filled in. */
+    const needsAction = packets.filter((packet) => (
+      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+      && !isWaitingOnHuman(packet.spec._review)
+    )).length;
     const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
     return { ready, submitted, needsAction };
   }, [packets]);
@@ -353,61 +360,22 @@ export default function Home() {
     sent: outreach.filter((event) => ["sent", "replied"].includes(event.status)).length,
     replied: outreach.filter((event) => event.status === "replied").length,
   }), [outreach]);
-  const reviewPacket = useMemo(
-    () => reviewJob ? packets.find((packet) => packetMatchesJob(packet, reviewJob)) ?? null : null,
-    [packets, reviewJob],
-  );
+  /* THE REVIEW DRAWER AND ITS SUBMISSION MACHINERY LIVED HERE. Deleted, not moved: reviewing a
+     packet happens on ONE screen now, /dashboard/applications, and the Review button on a card is
+     a link to it.
 
-  useEffect(() => {
-    if (!reviewJob) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        activeReviewJobIdRef.current = null;
-        setReviewSubmitting(false);
-        setReviewJob(null);
-      }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-      reviewTriggerRef.current?.focus();
-    };
-  }, [reviewJob]);
+     The drawer was a second review screen that had drifted into a lesser copy of the first. It
+     rendered the job description as plain text and the resume beside it, with no requirement
+     highlighting, no legend and no gap breakdown, while showing the same MatchScore ring: a
+     student was told "1 of 8 requirements" on the screen where they decide whether to send, and
+     given no way to see WHICH one. The colour link between the panes, the thing that answers it,
+     only ever existed on the Applications pane.
 
-  useEffect(() => {
-    const packetId = reviewPacket?.id;
-    const status = reviewPacket?.spec._review?.status;
-    if (qaMode || !packetId || !status || !ACTIVE_SUBMISSION_STATUSES.has(status)) return;
+     Everything removed with it already exists there and is exercised on every application:
+     submit-request and submission/approve (continueFromResume), the 2.5s submission poll
+     (PortalProgress), the questions gate, and the failure and receipt screens.
 
-    let cancelled = false;
-    let timer: number | undefined;
-    const tick = async () => {
-      try {
-        const result = await api<SubmissionResponse>(`/applications/${packetId}/submission`);
-        if (cancelled) return;
-        setPackets((current) => current.map((packet) => packet.id === packetId
-          ? { ...packet, spec: { ...packet.spec, _review: result.review } }
-          : packet));
-        setReviewError(null);
-        if (ACTIVE_SUBMISSION_STATUSES.has(result.review.status)) {
-          timer = window.setTimeout(tick, 2_500);
-        }
-      } catch (reason) {
-        if (cancelled) return;
-        setReviewError(reason instanceof Error ? reason.message : "We could not find this application. Reload the page.");
-        timer = window.setTimeout(tick, 5_000);
-      }
-    };
-
-    timer = window.setTimeout(tick, 2_500);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [qaMode, reviewPacket?.id, reviewPacket?.spec._review?.status]);
+     Rebuilding any of it here is how the two screens diverged the first time. */
 
   /* Build resumes ahead of being asked, for automatic-submission students only.
    *
@@ -492,20 +460,6 @@ export default function Home() {
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
   }
 
-  function openReview(job: RankedJob) {
-    reviewTriggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    activeReviewJobIdRef.current = job.id;
-    setReviewSubmitting(false);
-    setReviewError(null);
-    setReviewJob(job);
-  }
-
-  function closeReview() {
-    activeReviewJobIdRef.current = null;
-    setReviewSubmitting(false);
-    setReviewJob(null);
-  }
-
   /* Build one packet, because this student asked for this job.
    *
    * The prewarm loop above only runs for students who turned automatic submission on. Everyone
@@ -573,49 +527,20 @@ export default function Home() {
     }
   }
 
+  /* Where a card's Review goes, or null when there is nothing built to review yet.
+     The same packet lookup the card used to decide "prepared", now returning the packet so the
+     link can carry its id: the card is Ready exactly when this is non-null. */
+  function reviewHrefFor(job: RankedJob): string | null {
+    const packet = packets.find((candidate) => packetMatchesJob(candidate, job));
+    return packet ? `/dashboard/applications?application=${packet.id}` : null;
+  }
+
   /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
      a counter so the effect would re-run, which does nothing at all for the students who never had
      that effect running in the first place. */
   function retryPreparation(jobId: string) {
     releasePrewarmLock(jobId);
     void preparePacket(jobId);
-  }
-
-  async function submitFromDrawer() {
-    if (!reviewPacket || reviewSubmitting) return;
-    const submittedJobId = reviewJob?.id ?? null;
-    const review = reviewPacket.spec._review;
-    if (!review) return;
-    setReviewSubmitting(true);
-    setReviewError(null);
-    try {
-      if (qaMode) {
-        await new Promise((resolve) => window.setTimeout(resolve, 550));
-        const nextReview: ApplicationReview = {
-          ...review,
-          status: "submitted",
-          submitted_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        setPackets((current) => current.map((packet) => packet.id === reviewPacket.id ? { ...packet, spec: { ...packet.spec, _review: nextReview } } : packet));
-        return;
-      }
-
-      const endpoint = review.status === "ready_for_final_approval"
-        ? `/applications/${reviewPacket.id}/submission/approve`
-        : `/applications/${reviewPacket.id}/submit-request`;
-      const result = await api<SubmissionResponse>(endpoint, {
-        method: "POST",
-        body: endpoint.endsWith("submit-request") ? JSON.stringify({ questions: review.questions }) : undefined,
-      });
-      setPackets((current) => current.map((packet) => packet.id === reviewPacket.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet));
-    } catch (reason) {
-      if (activeReviewJobIdRef.current === submittedJobId) {
-        setReviewError(reason instanceof Error ? reason.message : "We could not send this application. Try again.");
-      }
-    } finally {
-      if (activeReviewJobIdRef.current === submittedJobId) setReviewSubmitting(false);
-    }
   }
 
   /* Saved targeting only, and only the parts the "Change what you want" link below can edit. This
@@ -692,10 +617,19 @@ export default function Home() {
           account and the other two are conditional, so the row has to divide evenly across however
           many columns actually render. empty:hidden keeps the card border from drawing around
           nothing when none of them do. */}
+      <WaitingOnYou items={waitingOnYou} />
       <section aria-label="At a glance">
         <div className="grid divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-rest empty:hidden lg:auto-cols-fr lg:grid-flow-col lg:divide-x lg:divide-y-0">
-          <Funnel />
+          {/* One boundary PER COLUMN, not one around the band. A single boundary here would still
+              be an improvement on the route boundary and would still be the reported bug: Momentum
+              throwing would take Tracker and Emails with it, and Tracker is the column that carries
+              "N stopped for you", the only thing on Home that tells a student they have work
+              waiting. The three columns share a grid and nothing else, so they get three. */}
+          <SectionBoundary band="momentum" title="Momentum">
+            <Funnel />
+          </SectionBoundary>
           {applicationTotal > 0 && (
+            <SectionBoundary band="tracker-summary" title="Tracker">
             <OverviewColumn
               id="applications-summary"
               title="Tracker"
@@ -712,8 +646,10 @@ export default function Home() {
                 href: "/dashboard/applications?state=action",
               } : undefined}
             />
+            </SectionBoundary>
           )}
           {outreach.length > 0 && (
+            <SectionBoundary band="outreach-summary" title="Emails">
             <OverviewColumn
               id="outreach-summary"
               title="Emails"
@@ -725,6 +661,7 @@ export default function Home() {
                 { label: "Replied", value: outreachSummary.replied, href: "/dashboard/outreach" },
               ]}
             />
+            </SectionBoundary>
           )}
         </div>
       </section>
@@ -766,7 +703,14 @@ export default function Home() {
               key={job.id}
               job={job}
               match={matches[job.id]}
-              prepared={packets.some((packet) => packetMatchesJob(packet, job))}
+              /* `?application=<packet id>`, not `?job=<job id>`. Both are handled over there, but
+                 the job form treats "no packet found" as a request to BUILD one, and it resolves
+                 the packet out of its own 50-row history window. A packet that has aged out of
+                 that window would silently spend a resume from the student's quota and leave a
+                 duplicate behind. Addressing the packet directly cannot generate anything: the
+                 worst case is that nothing is selected. Both screens read the same history
+                 endpoint, so a packet the card can see is one that screen can find. */
+              reviewHref={reviewHrefFor(job)}
               preparing={preparingJobs.includes(job.id)}
               preparationFailed={prewarmFailures.includes(job.id)}
               /* Generating needs a name and an application profile. Without them the request is a
@@ -775,7 +719,6 @@ export default function Home() {
               canPrepare={Boolean(identity?.full_name?.trim() && applicationProfile)}
               preparationError={preparationErrors[job.id]}
               onDismiss={() => dismiss(job.id)}
-              onReview={() => openReview(job)}
               onPrepare={() => void preparePacket(job.id)}
               onRetry={() => retryPreparation(job.id)}
             />
@@ -801,16 +744,6 @@ export default function Home() {
         </section>
       )}
 
-      {reviewJob && (
-        <ReviewDrawer
-          job={reviewJob}
-          packet={reviewPacket}
-          submitting={reviewSubmitting}
-          error={reviewError}
-          onClose={closeReview}
-          onSubmit={submitFromDrawer}
-        />
-      )}
     </div>
   );
 }
@@ -910,32 +843,35 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
  * else nothing was building it, nothing ever would, and the card had no control that could start
  * anything. "Not started" and "Getting ready" are now two different states, and only one of them
  * claims work is happening. */
+/* `reviewHref` replaces the `prepared` boolean AND the `onReview` callback, which is more than a
+   plumbing change: the card is "Ready" precisely when there is a packet to review, and the link to
+   that packet is built from the packet's own id. One value now decides the chip and the control, so
+   a card cannot say "Ready" while offering nothing to open, which is what a separate boolean and a
+   separate handler make possible. Null means there is nothing to review yet. */
 function JobMatchCard({
   job,
   match,
-  prepared,
+  reviewHref,
   preparing,
   preparationFailed,
   preparationError,
   canPrepare,
   onDismiss,
-  onReview,
   onPrepare,
   onRetry,
 }: {
   job: RankedJob;
   match: JobMatch | null | undefined;
-  prepared: boolean;
+  reviewHref: string | null;
   preparing: boolean;
   preparationFailed: boolean;
   preparationError?: string;
   canPrepare: boolean;
   onDismiss: () => void;
-  onReview: () => void;
   onPrepare: () => void;
   onRetry: () => void;
 }) {
-  const status = prepared ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
+  const status = reviewHref ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
     <Card className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised">
       {/* Lead with the employer, then put the score in the corner where it can be compared across
@@ -962,9 +898,13 @@ function JobMatchCard({
               this job asks for" when the truth is that we never got an answer. */}
           {match && (
             <div className="justify-self-end text-center">
+              {/* The weighting clause is APPENDED, never folded in: the text before it is pinned
+                  literally by tests/preference-score-copy.regression-1.test.mjs.
+                  MATCH_WEIGHTING_NOTE carries why a count sits beside a score it does not divide
+                  out to. */}
               <ScoreRing
                 score={match.score}
-                metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted)`}
+                metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted). ${MATCH_WEIGHTING_NOTE}`}
               />
               <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
             </div>
@@ -998,10 +938,14 @@ function JobMatchCard({
             <span className="flex min-h-11 items-center px-3 text-sm text-muted">
               <PendingLabel>Getting ready</PendingLabel>
             </span>
-          ) : status === "ready" ? (
-            <button type="button" onClick={onReview} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+          ) : reviewHref ? (
+            /* A LINK, not a button that opened a drawer here. Reviewing a packet is one screen,
+               /dashboard/applications, and this is the way in. It navigates rather than overlaying
+               so there is exactly one place the requirement highlighting, the legend, the gap
+               breakdown and the send control have to be kept correct. */
+            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
               Review
-            </button>
+            </Link>
           ) : !canPrepare ? (
             /* No name or no application profile yet. The packet cannot be built until that exists,
                so the card points at the fix instead of offering a button that would only fail. */
@@ -1019,8 +963,16 @@ function JobMatchCard({
   );
 }
 
+/* Keyed on the LOCAL day, so "Skipped for today" lasts until the student's own midnight.
+ *
+ * No legacy read of the old UTC-dated key. Where the two disagree (the hours between local and UTC
+ * midnight) a student can see one day's skip list reset once, and that is the whole cost: the list
+ * is same-day only, it holds nothing but "not this one", and re-skipping is one click on a card
+ * that is already on screen. A fallback read would have to merge two keys, decide which one wins
+ * when both exist, and then be deleted later anyway. That is more moving parts, permanently, to
+ * avoid one cheap click, once. Take the reset. */
 function dailyDismissalKey(): string {
-  return `litos-dismissed-${new Date().toISOString().slice(0, 10)}`;
+  return `litos-dismissed-${localDayKey()}`;
 }
 
 function readDismissed(key: string): string[] {
@@ -1033,7 +985,7 @@ function readDismissed(key: string): string[] {
 }
 
 function prewarmLockKey(jobId: string): string {
-  return `litos-prewarm-${new Date().toISOString().slice(0, 10)}-${jobId}`;
+  return `litos-prewarm-${localDayKey()}-${jobId}`;
 }
 
 /* The one lock protocol, shared by both paths that can build a packet.
@@ -1071,158 +1023,26 @@ function nearLimit(me: Me): boolean {
   return me.usage.resumes.used / limit >= 0.6;
 }
 
-function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { job: RankedJob; packet: GeneratedResume | null; submitting: boolean; error: string | null; onClose: () => void; onSubmit: () => void }) {
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const review = packet?.spec._review;
-  const missingAnswers = review?.questions.filter((question) => question.required && !question.answer.trim()) ?? [];
-  const status = review?.status;
-  const submitted = status === "submitted";
-  const inProgress = status ? ACTIVE_SUBMISSION_STATUSES.has(status) : false;
-  const needsAttention = ["needs_attention", "failed"].includes(status ?? "");
-  const canSubmit = Boolean(packet && review && missingAnswers.length === 0 && !submitted && !inProgress && !needsAttention);
-  /* One word per state, and no two states that differ only by an ellipsis. "Submitting..." and
-     "Submitting" were separate labels for the same thing. */
-  const buttonLabel = submitting || inProgress
-    ? "Sending..."
-    : status === "ready_for_final_approval"
-      ? "Send it"
-      : submitted
-        ? "Sent"
-        : "Send it";
+/* ReviewDrawer lived here: a modal that reviewed a packet on the dashboard. It is gone, and the
+   Review button on a card now links to /dashboard/applications, which is the only screen that
+   reviews a packet.
 
-  useEffect(() => {
-    closeButtonRef.current?.focus();
-  }, []);
+   It was the second review screen, and it had quietly become the worse one. It showed the
+   MatchScore ring ("1 of 8 requirements we counted") over a plain-text job description, with no
+   requirement highlighting, no legend and no gap breakdown: the number without the explanation,
+   on the last screen before a send. The colour link that answers "where does my resume actually
+   say this?" lives in RequirementText and was only ever wired up on the Applications pane.
 
-  function containFocus(event: React.KeyboardEvent<HTMLElement>) {
-    if (event.key !== "Tab") return;
-    const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ));
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }
+   That pane cannot simply be lifted into a drawer, and this is the reason the duplication existed:
+   it is an editor, wired to spec editing, cover-letter generation, bank variants, undo and the
+   portal run. Two live editors of one packet on two routes is a worse problem than the one being
+   solved. So the drawer is deleted rather than upgraded, and there is one review screen.
 
-  return (
-    <div className="fixed inset-0 z-50">
-      <button type="button" tabIndex={-1} aria-label="Close review" onClick={onClose} className="dashboard-drawer-backdrop absolute inset-0 bg-ink/30 backdrop-blur-[2px]" />
-      {/* Deck 04: borders do the separating, shadows almost never appear. */}
-      <aside role="dialog" aria-modal="true" aria-labelledby="review-title" onKeyDown={containFocus} className="dashboard-drawer absolute inset-y-0 right-0 flex w-full max-w-[1120px] flex-col border-l border-border bg-white">
-        <header className="flex items-start justify-between gap-6 border-b border-border px-5 py-5 sm:px-8">
-          <div className="min-w-0">
-            <p className="text-xs text-faint">Check before you send</p>
-            <h2 id="review-title" className="mt-1 truncate text-xl font-medium tracking-[-0.02em] text-ink">{job.title}</h2>
-            <p className="mt-1 truncate text-sm text-muted">{job.company_name}{job.location ? ` · ${job.location}` : ""}</p>
-            {/* The last screen before an application is sent is the one place pay matters most. */}
-            <PayLine job={job} />
-          </div>
-          <button ref={closeButtonRef} type="button" onClick={onClose} className="flex size-11 shrink-0 items-center justify-center rounded-full border border-border text-xl text-muted transition-colors hover:border-ink hover:text-ink" aria-label="Close review">×</button>
-        </header>
+   The drawer's resume pane has its own version of this story, and it is why the drawer is gone
+   rather than patched. It began as a private ResumePreview here: a second renderer of the same
+   document whose header was the posting's role and company, in the slot where the applicant's
+   name belongs. That was fixed by pointing it at the shared ResumePaper. Days later the same
+   screen turned out to be missing the requirement highlighting too. Two defects, one cause, and
+   deduplicating a component at a time was only ever going to find them one at a time.
 
-        <div className="grid min-h-0 flex-1 overflow-y-auto lg:grid-cols-2 lg:overflow-hidden">
-          <section aria-labelledby="job-description-heading" className="border-b border-border p-5 lg:overflow-y-auto lg:border-b-0 lg:border-r sm:p-8">
-            <div className="flex items-center justify-between gap-4">
-              <h3 id="job-description-heading" className="text-sm font-medium text-ink">Job description</h3>
-              {/* The same component the Applications review pane uses, scored against the packet
-                  sitting in the right-hand column rather than against the base resume the list
-                  scores. A review screen showing a number about a document that is not on the page
-                  would be the ISSUE-014 defect in its subtlest form. */}
-              {/* The WHOLE stored job_context below, not company and role picked out of it.
-                  `job_id` is what lets the backend read the posting's offices off the live job row
-                  and keep them out of the denominator; a packet stores no location of its own, so
-                  dropping the id scores the student against the employer's cities. The Applications
-                  review pane passes it whole for the same reason. */}
-              {packet && (review?.jd_text || job.description) && (
-                <MatchScore
-                  jdText={review?.jd_text || job.description}
-                  spec={packet.spec}
-                  jobContext={packet.job_context}
-                />
-              )}
-            </div>
-            <p className="mt-6 whitespace-pre-wrap text-sm leading-7 text-muted">{review?.jd_text || job.description}</p>
-          </section>
-
-          <section aria-labelledby="resume-heading" className="bg-surface-alt p-5 lg:overflow-y-auto sm:p-8">
-            <div className="flex items-center justify-between gap-4">
-              <h3 id="resume-heading" className="text-sm font-medium text-ink">Your new resume</h3>
-              {packet?.created_at && <span className="text-xs text-faint">{formatRelativeDate(packet.created_at)}</span>}
-            </div>
-            {packet ? <ResumePreview packet={packet} /> : <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>}
-          </section>
-        </div>
-
-        <footer className="border-t border-border bg-white px-5 py-4 sm:px-8">
-          {error && <p role="alert" className="mb-3 text-sm text-warn">{userFacingError(error)}</p>}
-          {missingAnswers.length > 0 && <p className="mb-3 text-sm text-warn">{missingAnswers.length} answer{missingAnswers.length === 1 ? "" : "s"} needed.</p>}
-          {needsAttention && <p className="mb-3 text-sm text-warn">This application needs you.</p>}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-xs text-muted">If anything is missing, Litos stops and asks you first.</p>
-            <div className="flex items-center gap-2">
-              {(missingAnswers.length > 0 || needsAttention) && packet && (
-                <Link href={`/dashboard/applications?application=${packet.id}`} className="flex min-h-11 items-center px-3 text-sm font-medium text-ink">Finish your answers</Link>
-              )}
-              <button type="button" onClick={onSubmit} disabled={!canSubmit || submitting} className={`min-h-11 rounded-full px-6 text-sm font-medium transition-opacity ${submitted ? "bg-positive-soft text-positive disabled:bg-positive-soft disabled:text-positive" : "bg-brand text-white hover:opacity-90 disabled:cursor-not-allowed disabled:bg-surface-strong disabled:text-faint"}`}>
-                {buttonLabel}
-              </button>
-            </div>
-          </div>
-        </footer>
-      </aside>
-    </div>
-  );
-}
-
-function ResumePreview({ packet }: { packet: GeneratedResume }) {
-  const spec = packet.spec;
-  return (
-    <article className="mt-6 rounded-card border border-border bg-white p-5 sm:p-7">
-      <div className="border-b border-ink pb-4">
-        <h4 className="text-lg font-medium tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
-        <p className="mt-1 text-xs text-muted">{packet.job_context.company}</p>
-      </div>
-      <ResumeSection title="Education">
-        <p className="text-sm font-medium text-ink">{spec.school}</p>
-        <p className="mt-1 text-xs leading-5 text-muted">{[spec.degree, spec.grad_date].filter(Boolean).join(" · ")}</p>
-        {spec.coursework && <p className="mt-2 text-xs leading-5 text-muted">{spec.coursework}</p>}
-      </ResumeSection>
-      {spec.experience.length > 0 && (
-        <ResumeSection title="Experience">
-          <div className="space-y-5">
-            {spec.experience.map((entry, index) => (
-              <div key={`${entry.org}-${entry.title}-${index}`}>
-                <div className="flex flex-wrap justify-between gap-2">
-                  <p className="text-sm font-medium text-ink">{entry.title} · {entry.org}</p>
-                  <p className="font-mono text-[11px] text-faint">{entry.date_range}</p>
-                </div>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-muted">
-                  {entry.bullets.map((bullet, bulletIndex) => <li key={`${bullet}-${bulletIndex}`}>{bullet}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </ResumeSection>
-      )}
-      <ResumeSection title="Skills">
-        <p className="text-xs leading-6 text-muted">{spec.skills.join(" · ")}</p>
-      </ResumeSection>
-    </article>
-  );
-}
-
-function ResumeSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border-b border-border py-4 last:border-b-0 last:pb-0">
-      <h5 className="mb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">{title}</h5>
-      {children}
-    </section>
-  );
-}
+   The dashboard renders no resume now. */
