@@ -6,9 +6,12 @@ import test from "node:test";
  * because a live check on /dashboard/applications read `aria-labelledby` and
  * found null. It is null, and the dialog is named anyway: the name comes from
  * `aria-label`, which is the other half of the accname spec and the half that
- * suits this component. The review drawer in app/dashboard/page.tsx can point
- * `aria-labelledby` at `id="review-title"` because there is exactly one drawer
- * on that page. The packet dialog is instantiated per packet and its own scroll
+ * suits this component. The contrast used to be drawn against the review drawer
+ * in app/dashboard/page.tsx, which could point `aria-labelledby` at
+ * `id="review-title"` because there was exactly one drawer on that page. That
+ * drawer has since been deleted (reviewing a packet is one screen now), so the
+ * comparison is historical, but it is the clearest way to say why this component
+ * differs. The packet dialog is instantiated per packet and its own scroll
  * spy already scopes every lookup to `dialog.current` rather than to
  * document.getElementById, on the recorded grounds that its section ids are not
  * unique across instances. Naming it by id would reintroduce the collision the
@@ -82,10 +85,21 @@ for (const [name, source, label] of DIALOGS) {
   });
 }
 
-test("the review drawer keeps its own naming pattern, which is the one-per-page case", () => {
-  /* Pinned so the two are not "made consistent" in the wrong direction. The
-     drawer is a singleton with a stable heading id, and aria-labelledby is
-     right there for the same reason it is wrong in the packet dialog. */
-  assert.match(dashboard, /aria-labelledby="review-title"/);
-  assert.match(dashboard, /id="review-title"/);
+/* Was "the review drawer keeps its own naming pattern, which is the one-per-page
+   case", pinning aria-labelledby="review-title" on the dashboard drawer as the
+   deliberate counter-example to the packet dialog's aria-label.
+
+   The drawer is gone. Reviewing a packet happens on /dashboard/applications and
+   nowhere else, so the dashboard has no modal to name. The contrast the old test
+   drew is preserved in the header comment above, because the REASON the packet
+   dialog uses aria-label is still worth knowing and no longer has a live foil.
+
+   What is pinned now is the absence: Home must not grow another dialog. A second
+   review surface on this page is exactly what was removed, and it took two
+   separate fixes before anyone noticed it was a duplicate rather than a screen
+   with bugs. */
+test("Home has no dialog of its own", () => {
+  assert.doesNotMatch(dashboard, /role="dialog"/, "reviewing a packet is one screen; Home links to it");
+  assert.doesNotMatch(dashboard, /aria-modal/);
+  assert.doesNotMatch(dashboard, /aria-labelledby="review-title"/);
 });
