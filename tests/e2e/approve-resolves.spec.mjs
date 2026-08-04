@@ -306,3 +306,24 @@ browserTest("the sending clock starts when Send it is pressed", async () => {
   await context.close();
   return page;
 });
+
+
+/*
+ * NOT COVERED, deliberately and with the reason written down.
+ *
+ * `approveFinalSubmission` re-checks `selectedIdRef` after its await before installing the result,
+ * so a send that resolves once the student has switched packets cannot render A's confirmation
+ * text and reference id under B's role and company (SubmissionReceipt takes its heading from
+ * `selected` and its body from `submission`).
+ *
+ * A case for it was written and then DELETED rather than kept, because it could not see the
+ * defect: driving a packet switch through the ledger from the sending screen returns this fixture
+ * to the list rather than opening a second detail pane, so with the guard removed the receipt never
+ * rendered either and the case passed both ways. A test that passes against the bug is worse than
+ * no test, because it reads as coverage.
+ *
+ * What the guard rests on instead: `refreshSubmission` has carried the identical check since the
+ * wrong-employer finding, with a comment calling the failure "an application sent to the wrong
+ * employer", and this path reaches the same state through the same await. Anyone able to drive a
+ * mid-send packet switch in this harness should write the case and delete this note.
+ */

@@ -146,8 +146,11 @@ function Applications() {
      into every send that lasts longer than that. Nothing guarded a second press.
      A ref rather than state on purpose: it has to be readable synchronously by the poll and by a
      second click that lands in the same tick, before any re-render. */
-  const approveInFlight = useRef(false);
-  const [approving, setApproving] = useState(false);
+  /* The application currently being approved, not a bare boolean. Page-level flags meant that
+     sending A greyed out "Send it" on B with no explanation, and the guard that drops a second
+     press would have dropped a legitimate press on a different application. */
+  const approveInFlight = useRef<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   /* When the student pressed "Send it", so the progress clock measures the SEND rather than the
      review. It was anchored to `review.updated_at`, which is stamped when preparation finished, so
      a student who spent six minutes reading the packet before approving saw "6m 00s elapsed" and
@@ -366,7 +369,11 @@ function Applications() {
        after it, carrying the pre-send `ready_for_final_approval`; installing it would replace the
        receipt with a live "Send it" for an application that has already gone. The id guard above
        cannot see this, because it is the right packet, just an older answer. */
-    if (submissionRef.current?.review.status === "submitted" && result.review.status !== "submitted") return;
+    if (
+      submissionRef.current?.application_id === result.application_id
+      && submissionRef.current?.review.status === "submitted"
+      && result.review.status !== "submitted"
+    ) return;
 
     captureCompletedSubmission(result, "poll");
     setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
@@ -381,10 +388,16 @@ function Applications() {
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
     // run that had since succeeded.
     setError(null);
-    /* Never route while the student's own send is in flight. The poll is reporting the status from
-       BEFORE the approve, so its answer is stale by construction here, and acting on it walks the
-       user backwards onto a live "Send it". The approve response routes instead, once. */
-    if (approveInFlight.current) return;
+    /* While the student's own send is in flight the poll is usually reporting the status from
+       BEFORE the approve, and acting on that walks them backwards onto a live "Send it".
+       TERMINAL states are the exception, and the exception is load-bearing: `api()` has no
+       AbortController and no timeout, so a stalled approve request never rejects and the flag stays
+       set for as long as the socket hangs. Suppressing everything would then reproduce the
+       never-resolving spinner this branch is named for, reached through a hung connection instead
+       of a missing route, with the poll already holding the answer. Only the backwards moves are
+       dropped. */
+    const terminal = result.review.status === "submitted" || result.review.status === "failed";
+    if (approveInFlight.current !== null && !terminal) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
 
@@ -1018,10 +1031,11 @@ function Applications() {
 
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
-    // Second press of "Send it" while the first is still going. Dropping it is the whole point.
-    if (approveInFlight.current) return;
-    approveInFlight.current = true;
-    setApproving(true);
+    // Second press of "Send it" for THIS application while the first is still going.
+    if (approveInFlight.current === selected.id) return;
+    const requestedId = selected.id;
+    approveInFlight.current = requestedId;
+    setApprovingId(requestedId);
     setApproveStartedAt(new Date().toISOString());
     setError(null);
     setSubmittingPhase("sending");
@@ -1036,6 +1050,13 @@ function Applications() {
       } else {
         const result = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
         captureCompletedSubmission(result, "final_approval");
+        /* The packet the student is LOOKING at, which after a multi-minute send need not be the one
+           they approved: the packet switcher renders above every screen including this one, so
+           tapping another row mid-send is a single tap. refreshSubmission has guarded exactly this
+           since the wrong-employer finding; this path did not, and installing A's result while B is
+           selected renders A's confirmation text and reference id under B's role and company. The
+           send still completed and the poll will pick it up when they return to it. */
+        if (selectedIdRef.current !== requestedId) return;
         submissionRef.current = result;
         setSubmission(result);
         /* This response is the END of the send, not an acknowledgement that it started, exactly as
@@ -1060,8 +1081,8 @@ function Applications() {
       moveToScreen("portal");
       setError(reason instanceof Error ? reason.message : "Could not approve the final portal submission.");
     } finally {
-      approveInFlight.current = false;
-      setApproving(false);
+      approveInFlight.current = null;
+      setApprovingId(null);
     }
   }
 
@@ -1326,7 +1347,7 @@ function Applications() {
           sending={submittingPhase === "sending"}
         />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen submission={submission} approving={approving} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
+        <SubmissionScreen submission={submission} approving={approvingId === selected.id} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
