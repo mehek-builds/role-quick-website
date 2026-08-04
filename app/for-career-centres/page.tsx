@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   /* No brand suffix: layout.tsx's template already appends it, and including
@@ -133,6 +134,7 @@ export default function ForCareerCentres() {
           </a>
         </div>
       </main>
+      <SiteFooter />
     </div>
   );
 }

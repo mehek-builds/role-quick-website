@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 import { ComboField } from "@/components/browse/ComboField";
 import { ZeroResultJobSearchMonitor } from "@/components/browse/ZeroResultJobSearchMonitor";
 import {
@@ -497,6 +498,7 @@ export default async function BrowseJobs({
           </div>
         </div>
       </main>
+      <SiteFooter />
     </div>
   );
 }

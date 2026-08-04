@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 import { API_URL } from "@/lib/config";
 import { getStoredEmail, getToken, type Me } from "@/lib/api";
 import { litosClientHeaders } from "@/lib/product";
@@ -266,6 +267,7 @@ export default function Contact() {
           </>
         )}
       </main>
+      <SiteFooter />
     </div>
   );
 }
