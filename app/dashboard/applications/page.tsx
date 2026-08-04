@@ -126,6 +126,14 @@ function Applications() {
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   const [screen, setScreen] = useState<Screen>("review");
+  /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
+     The progress screen says one of two things, and the difference is the whole point of it:
+     preparing the form is "nothing is sent yet", and approving is "sending it now". It read that
+     off `submission.review.status`, but during an approve the status is still
+     `ready_for_final_approval` for the entire duration of the request, because the only thing that
+     updates it is the response we are waiting for. So the screen spent the whole send promising
+     that nothing was being sent, which is the one moment the reassurance must not be wrong. */
+  const [submittingPhase, setSubmittingPhase] = useState<"preparing" | "sending">("preparing");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -910,6 +918,7 @@ function Applications() {
       setError("Some answers are missing. Add them first.");
       return;
     }
+    setSubmittingPhase("preparing");
     moveToScreen("submitting");
     setError(null);
     track("application_submission_requested", { source: qaMode ? "qa" : "review" });
@@ -970,6 +979,7 @@ function Applications() {
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
     setError(null);
+    setSubmittingPhase("sending");
     moveToScreen("submitting");
     try {
       if (qaMode) {
@@ -982,6 +992,20 @@ function Applications() {
         const result = await api<SubmissionResponse>(`/applications/${selected.id}/submission/approve`, { method: "POST" });
         captureCompletedSubmission(result, "final_approval");
         setSubmission(result);
+        /* This response is the END of the send, not an acknowledgement that it started, exactly as
+           in prepareApplication above, and it was installed into state and then never routed off.
+           The QA branch four lines up has always called moveToScreen; the real one never did.
+           BE PRECISE ABOUT WHAT THAT COSTS, because the obvious overstatement is wrong: the
+           submission poll below also routes off the status, so a FOREGROUNDED tab recovers within
+           its 2.5s tick and the student sees the receipt. The poll is the only thing that was
+           saving this, and it is deliberately suppressed while `document.visibilityState` is not
+           "visible". So the screen that never resolves is the backgrounded one, which is the
+           ordinary case here: a portal run takes minutes and the whole point of the copy is that
+           you can go and do something else. Routing off the response we already hold costs nothing
+           and does not depend on the tab being watched.
+           The fallback is "portal", the screen this was entered from, so an unrecognised status
+           returns to a screen with controls on it rather than parking on the spinner again. */
+        moveToScreen(screenForStatus(result.review.status, "portal"));
       }
     } catch (reason) {
       moveToScreen("portal");
@@ -1244,7 +1268,7 @@ function Applications() {
           reviewDiscovered={submission?.review.status === "needs_attention"}
         />
       ) : screen === "submitting" ? (
-        <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
+        <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} sending={submittingPhase === "sending"} />
       ) : screen === "portal" && submission ? (
         <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
@@ -1894,7 +1918,9 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status, startedAt }: { status?: ApplicationReview["status"]; startedAt?: string }) {
+function PortalProgress({ status, startedAt, sending = false }: { status?: ApplicationReview["status"]; startedAt?: string;
+  /** True when this screen was entered by pressing "Send it". See submittingPhase. */
+  sending?: boolean }) {
   // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
   // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
   // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
@@ -1934,7 +1960,15 @@ function PortalProgress({ status, startedAt }: { status?: ApplicationReview["sta
   // The old copy asserted "Nothing is submitted during this preparation step" on every status,
   // including the genuinely-submitting one. That reassurance was false at exactly the moment it
   // mattered most, so each stage now states only what is true of that stage.
-  const submitting = status === "submitting" || status === "submission_claimed";
+  //
+  // `sending` is first and is not redundant with the status test. During an approve the status on
+  // hand is still `ready_for_final_approval` for the whole request, because the response that
+  // changes it is the thing being awaited, so the status alone put the "nothing is sent yet" line
+  // on screen for the entire duration of the send. What the caller pressed is known immediately;
+  // the status only catches up afterwards. Unlike the routing problem above, this one does NOT
+  // depend on the tab being hidden: the poll cannot fix it either, because the status genuinely is
+  // still ready_for_final_approval until the send returns.
+  const submitting = sending || status === "submitting" || status === "submission_claimed";
   const title = submitting ? "Sending it to the company now." : "Getting the company's page ready.";
   const body = submitting
     ? "You told Litos to send this. It is finishing the form now, and will not say it is sent until the company confirms it."
