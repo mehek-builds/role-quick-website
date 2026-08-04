@@ -498,98 +498,204 @@ export default function Settings() {
             <ButtonLink href="/dashboard/resume">Edit resume</ButtonLink>
           </Card>
           <TargetingCard />
+
+          {/* VISA SPONSORSHIP.
+              Its own card rather than a row inside "Answers you give every time", because it is not an
+              answer Litos gives: it never reaches an employer's form (R-004), it decides which jobs
+              exist on your board. Filed next to the automation card for the same reason - both are
+              about what the product does on your behalf.
+
+              Rendered INSIDE the tabpanel, not as a sibling of it (ISSUE-013b). It used to be its own
+              top-level `activeTab === "job-search"` block, so the tab's aria-controls named a region
+              that did not contain it and a screen reader moving by panel never reached the filter.
+              The id stays "visa-sponsorship" verbatim: /dashboard/jobs deep-links to
+              /dashboard/settings#visa-sponsorship, which is not a tab id, so tabFromHash falls back
+              to the job-search tab and the browser scrolls to this card. Renaming it breaks that.
+
+              The switch is deliberately dead when `locked`. Someone who declared a need for
+              sponsorship during setup cannot turn the filter off (the server refuses either way), and a
+              control that looks live and silently fails is worse than one that explains why it is
+              fixed. */}
+          {sponsorship && (
+            <Card className="p-6" id="visa-sponsorship">
+              <h2 className="text-base font-medium text-ink">Visa sponsorship filter</h2>
+              <div className="pt-1">
+              <p className="text-sm leading-6 text-muted">Only show jobs where sponsorship is confirmed.</p>
+              {sponsorError && <div className="mt-4"><ErrorNote message={sponsorError} /></div>}
+              <label className="mt-5 flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+                <span>
+                  <span className="block text-sm font-medium text-ink">Only show jobs where sponsorship is confirmed</span>
+                  <span className="mt-1 block text-xs leading-5 text-muted">
+                    We check H-1B filings with the US government (approved petitions, and applications
+                    the Labor Department certified), and what each job post says about sponsorship. A
+                    post that rules sponsorship out is hidden even when the company sponsors for other
+                    roles.
+                  </span>
+                  {sponsorship.locked && (
+                    <span className="mt-2 block text-xs leading-5 text-warn">
+                      You told us during setup that you need a work visa, so this stays on. Contact
+                      support if that has changed.
+                    </span>
+                  )}
+                  {sponsorship.evidence && (
+                    <span className="mt-2 block text-xs leading-5 text-faint">
+                      {sponsorship.evidence.confirmed_employers} of the{" "}
+                      {sponsorship.evidence.checked_employers} companies Litos watches have H-1B filings
+                      on record. Sources: {sponsorship.evidence.source} (FY
+                      {sponsorship.evidence.fiscal_years[0]} to FY
+                      {sponsorship.evidence.fiscal_years[sponsorship.evidence.fiscal_years.length - 1]})
+                      {sponsorship.evidence.lca_source
+                        ? `, and ${sponsorship.evidence.lca_source}${
+                            sponsorship.evidence.lca_quarters?.length
+                              ? ` (${sponsorship.evidence.lca_quarters[0].split("_")[0]})`
+                              : ""
+                          }.`
+                        : "."}
+                    </span>
+                  )}
+                </span>
+                <input
+                  aria-label="Only show jobs where sponsorship is confirmed"
+                  type="checkbox"
+                  checked={sponsorship.sponsor_only_board}
+                  disabled={sponsorBusy || sponsorship.locked}
+                  onChange={async (event) => {
+                    setSponsorBusy(true);
+                    setSponsorError(null);
+                    try {
+                      const next = await setSponsorFilter(event.target.checked);
+                      setSponsorship({ ...next, evidence: sponsorship.evidence });
+                    } catch (reason) {
+                      setSponsorError(reason instanceof Error ? reason.message : "Could not change that.");
+                    } finally {
+                      setSponsorBusy(false);
+                    }
+                  }}
+                  className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+                />
+              </label>
+              <p className="mt-4 text-xs leading-5 text-faint">
+                A filing record is not a promise to sponsor you. It is proof the company has sponsored
+                people before.
+              </p>
+              </div>
+            </Card>
+          )}
         </section>
       )}
 
-      {/* Account */}
-      {activeTab === "sign-in" && <Card className="p-6" id="panel-sign-in" role="tabpanel" aria-labelledby="tab-sign-in">
-        <div className="flex items-center justify-between gap-4">
-          <h2 className="text-base font-medium text-ink">Account</h2>
-          <button type="button" onClick={() => { clearSession(); router.replace("/"); }} className="min-h-11 px-2 text-sm text-muted hover:text-ink">Sign out</button>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <p className="text-xs text-faint">Email</p>
-            <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Not saved yet"}</p>
+      {/* Account, and the data controls under it.
+
+          One <section role="tabpanel"> around BOTH cards, matching the job-search panel above
+          (ISSUE-013b). "Your data" used to be its own top-level `activeTab === "sign-in"` block with
+          no id, no role and no aria-labelledby, which put Export data and Delete account - the two
+          most destructive controls in the product - outside the region the tab's aria-controls names.
+          A screen reader user moving by panel never reached them. The panel id stays "panel-sign-in"
+          so aria-controls on the tab still resolves; it is not a hash target ("#sign-in" is the tab
+          id, resolved by tabFromHash, not by scrolling). */}
+      {activeTab === "sign-in" && (
+        <section id="panel-sign-in" role="tabpanel" aria-labelledby="tab-sign-in" className="space-y-4">
+        <Card className="p-6">
+          <div className="flex items-center justify-between gap-4">
+            <h2 className="text-base font-medium text-ink">Account</h2>
+            <button type="button" onClick={() => { clearSession(); router.replace("/"); }} className="min-h-11 px-2 text-sm text-muted hover:text-ink">Sign out</button>
           </div>
-          <div>
-            <p className="text-xs text-faint">Plan</p>
-            <div className="mt-1">
-              <Chip
-                label={me.tier === "pro" ? "Pro" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
-                kind={me.tier === "pro" ? "ready" : "draft"}
-              />
-              {trialActive && (
-                <span className="ml-2 text-xs text-muted">
-                  trial until {new Date(me.trial_ends_at!).toLocaleDateString()}
-                </span>
-              )}
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <p className="text-xs text-faint">Email</p>
+              <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Not saved yet"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-faint">Plan</p>
+              <div className="mt-1">
+                <Chip
+                  label={me.tier === "pro" ? "Pro" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
+                  kind={me.tier === "pro" ? "ready" : "draft"}
+                />
+                {trialActive && (
+                  <span className="ml-2 text-xs text-muted">
+                    trial until {new Date(me.trial_ends_at!).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        {me.email && (
-          <details className="mt-6 border-t border-border pt-4">
-            <summary className="cursor-pointer text-sm font-medium text-ink">Password</summary>
-          <form onSubmit={changePassword} className="pt-4">
-            <h3 className="text-sm font-medium text-ink">Set or change password</h3>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              Use 15 to 128 characters. Changing it signs out every older session.
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              <input
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
-                placeholder="Current password"
-                aria-label="Current password"
-                className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-              />
-              <input
-                type="password"
-                required
-                autoComplete="new-password"
-                value={newPassword}
-                onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
-                placeholder="New password"
-                aria-label="New password"
-                className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-              />
-              <input
-                type="password"
-                required
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
-                placeholder="Confirm new password"
-                aria-label="Confirm new password"
-                className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
-              />
-            </div>
-            {passwordError && (
-              <p
-                ref={passwordErrorRef}
-                tabIndex={-1}
-                className="mt-3 text-sm text-danger outline-none"
-                role="alert"
-                aria-live="assertive"
-              >
-                {passwordError}
+          {me.email && (
+            <details className="mt-6 border-t border-border pt-4">
+              <summary className="cursor-pointer text-sm font-medium text-ink">Password</summary>
+            <form onSubmit={changePassword} className="pt-4">
+              <h3 className="text-sm font-medium text-ink">Set or change password</h3>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Use 15 to 128 characters. Changing it signs out every older session.
               </p>
-            )}
-            <div className="mt-3 flex flex-wrap items-center gap-4">
-              <Button type="submit" disabled={passwordBusy} >
-                {passwordBusy ? "Updating..." : "Update password"}
-              </Button>
-              <button type="button" onClick={() => { clearSession(); router.push("/login?flow=recovery"); }} className="text-xs text-muted hover:text-ink">
-                Sign out and verify email to reset it
-              </button>
-              {passwordNotice && <span className="text-xs text-positive" role="status">{passwordNotice}</span>}
-            </div>
-          </form>
-          </details>
-        )}
-      </Card>}
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <input
+                  type="password"
+                  autoComplete="current-password"
+                  value={currentPassword}
+                  onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
+                  placeholder="Current password"
+                  aria-label="Current password"
+                  className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                />
+                <input
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
+                  placeholder="New password"
+                  aria-label="New password"
+                  className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                />
+                <input
+                  type="password"
+                  required
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
+                  placeholder="Confirm new password"
+                  aria-label="Confirm new password"
+                  className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                />
+              </div>
+              {passwordError && (
+                <p
+                  ref={passwordErrorRef}
+                  tabIndex={-1}
+                  className="mt-3 text-sm text-danger outline-none"
+                  role="alert"
+                  aria-live="assertive"
+                >
+                  {passwordError}
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap items-center gap-4">
+                <Button type="submit" disabled={passwordBusy} >
+                  {passwordBusy ? "Updating..." : "Update password"}
+                </Button>
+                <button type="button" onClick={() => { clearSession(); router.push("/login?flow=recovery"); }} className="text-xs text-muted hover:text-ink">
+                  Sign out and verify email to reset it
+                </button>
+                {passwordNotice && <span className="text-xs text-positive" role="status">{passwordNotice}</span>}
+              </div>
+            </form>
+            </details>
+          )}
+        </Card>
+
+        {/* Data */}
+        <Card className="p-6">
+          <h2 className="text-base font-medium text-ink">Your data</h2>
+          <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
+          <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
+            <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
+            <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
+            <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
+          </div>
+        </Card>
+        </section>
+      )}
 
       {activeTab === "automation" && <Card className="p-6" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
         <h2 className="text-base font-medium text-ink">Automation</h2>
@@ -679,82 +785,6 @@ export default function Settings() {
         <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
         </div>
       </Card>}
-
-      {/* VISA SPONSORSHIP.
-          Its own card rather than a row inside "Answers you give every time", because it is not an
-          answer Litos gives: it never reaches an employer's form (R-004), it decides which jobs
-          exist on your board. Filed next to the automation card for the same reason - both are
-          about what the product does on your behalf.
-
-          The switch is deliberately dead when `locked`. Someone who declared a need for
-          sponsorship during setup cannot turn the filter off (the server refuses either way), and a
-          control that looks live and silently fails is worse than one that explains why it is
-          fixed. */}
-      {activeTab === "job-search" && sponsorship && (
-        <Card className="p-6" id="visa-sponsorship">
-          <h2 className="text-base font-medium text-ink">Visa sponsorship filter</h2>
-          <div className="pt-1">
-          <p className="text-sm leading-6 text-muted">Only show jobs where sponsorship is confirmed.</p>
-          {sponsorError && <div className="mt-4"><ErrorNote message={sponsorError} /></div>}
-          <label className="mt-5 flex items-start justify-between gap-5 rounded-inner border border-border p-4">
-            <span>
-              <span className="block text-sm font-medium text-ink">Only show jobs where sponsorship is confirmed</span>
-              <span className="mt-1 block text-xs leading-5 text-muted">
-                We check H-1B filings with the US government (approved petitions, and applications
-                the Labor Department certified), and what each job post says about sponsorship. A
-                post that rules sponsorship out is hidden even when the company sponsors for other
-                roles.
-              </span>
-              {sponsorship.locked && (
-                <span className="mt-2 block text-xs leading-5 text-warn">
-                  You told us during setup that you need a work visa, so this stays on. Contact
-                  support if that has changed.
-                </span>
-              )}
-              {sponsorship.evidence && (
-                <span className="mt-2 block text-xs leading-5 text-faint">
-                  {sponsorship.evidence.confirmed_employers} of the{" "}
-                  {sponsorship.evidence.checked_employers} companies Litos watches have H-1B filings
-                  on record. Sources: {sponsorship.evidence.source} (FY
-                  {sponsorship.evidence.fiscal_years[0]} to FY
-                  {sponsorship.evidence.fiscal_years[sponsorship.evidence.fiscal_years.length - 1]})
-                  {sponsorship.evidence.lca_source
-                    ? `, and ${sponsorship.evidence.lca_source}${
-                        sponsorship.evidence.lca_quarters?.length
-                          ? ` (${sponsorship.evidence.lca_quarters[0].split("_")[0]})`
-                          : ""
-                      }.`
-                    : "."}
-                </span>
-              )}
-            </span>
-            <input
-              aria-label="Only show jobs where sponsorship is confirmed"
-              type="checkbox"
-              checked={sponsorship.sponsor_only_board}
-              disabled={sponsorBusy || sponsorship.locked}
-              onChange={async (event) => {
-                setSponsorBusy(true);
-                setSponsorError(null);
-                try {
-                  const next = await setSponsorFilter(event.target.checked);
-                  setSponsorship({ ...next, evidence: sponsorship.evidence });
-                } catch (reason) {
-                  setSponsorError(reason instanceof Error ? reason.message : "Could not change that.");
-                } finally {
-                  setSponsorBusy(false);
-                }
-              }}
-              className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
-            />
-          </label>
-          <p className="mt-4 text-xs leading-5 text-faint">
-            A filing record is not a promise to sponsor you. It is proof the company has sponsored
-            people before.
-          </p>
-          </div>
-        </Card>
-      )}
 
       {/* Application profile.
           id="application-details" is load-bearing: /dashboard/profile's "Edit
@@ -862,17 +892,6 @@ export default function Settings() {
             You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel your subscription</a> : "Contact support to manage or cancel."}
           </div>
         ) : null}
-      </Card>}
-
-      {/* Data */}
-      {activeTab === "sign-in" && <Card className="p-6">
-        <h2 className="text-base font-medium text-ink">Your data</h2>
-        <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
-        <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
-          <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
-          <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
-          <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
-        </div>
       </Card>}
     </div>
   );
