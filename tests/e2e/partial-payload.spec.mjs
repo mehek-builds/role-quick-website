@@ -1,0 +1,455 @@
+/**
+ * Two malformed backend responses, driven against a real production build in a real browser.
+ *
+ * WHY A BROWSER, AND NOT A SOURCE-LEVEL TEST
+ * ==========================================
+ * The defect this file is about is not "a function returned the wrong value". It is "a throw
+ * during render unmounted a subtree that the throwing component does not own". Nothing about that
+ * is visible in the source of any single file: it is a property of where the React boundaries sit
+ * relative to where the collections are read, and the only artifact that can observe it is a
+ * rendered document. features/applications/infrastructure/response-shape.test.mts pins the parsing
+ * rule; only this file can prove the BLAST RADIUS shrank.
+ *
+ * Both cases are the exact payloads reported by the two independent agents on this audit:
+ *   1. GET /metrics/funnel answers `{}`. On origin/main the entire Home Overview band never
+ *      renders and section[aria-labelledby="applications-summary"] times out.
+ *   2. GET /applications/board answers `[]` instead of `{stages, cards}`. On origin/main the
+ *      entire /dashboard/applications route dies.
+ * A third case drives both endpoints with WELL-FORMED responses and asserts the page is unchanged,
+ * because a containment fix that also changed the healthy render would be its own regression.
+ *
+ * MEASURED AGAINST UNMODIFIED origin/main FIRST
+ * =============================================
+ * Every case here was run against a production build of origin/main (be7d855) before the fix, and
+ * the reproduction results are recorded case by case below. A harness that has never seen the
+ * defect proves nothing about the fix.
+ *
+ * CONSTRAINTS, INHERITED FROM tests/e2e/dashboard-click-path.spec.mjs
+ * ==================================================================
+ * That spec is the harness pattern this repo settled on and this file deliberately does not invent
+ * a third one. Same shape throughout: one catch-all route, a fabricated fixture, `next start` on a
+ * free port over 127.0.0.1, and `document.visibilityState === "visible"` asserted before any
+ * measurement, because a background tab suspends rAF and has already produced false findings here.
+ *   - No production backend, no database, no real credentials. Every request either hits the local
+ *     `next start` or is answered from the fixture; anything else is ABORTED and recorded, and
+ *     `blockedExternal` is asserted empty at the end of every case.
+ *   - A production build, never `next dev`: React's development build reports errors differently
+ *     and would let a boundary behave in a way that does not ship.
+ *   - 127.0.0.1 rather than localhost, so the applications page's `?qa` canned-fixture mode stays
+ *     shut by construction.
+ *
+ * ON SHARING fixture-data.mjs
+ * ===========================
+ * The sibling branch test/playwright-click-path introduces tests/e2e/fixture-data.mjs with exactly
+ * the account shape this file needs. It is not on origin/main yet, so importing it here would make
+ * this branch un-runnable until that one lands. The fixture below is therefore local and minimal
+ * (this spec asserts blast radius, not counts, so it needs far less of an account). WHEN THAT
+ * BRANCH LANDS, this file's FIXTURE should be deleted and replaced with an import of BOOTSTRAP and
+ * STUB from ./fixture-data.mjs, overriding only the two endpoints under test. These two specs
+ * belong side by side in tests/e2e/ and should share one fixture module.
+ *
+ * RUN IT WITH:  npm run build && node tests/e2e/partial-payload.spec.mjs
+ * Deliberately outside `npm test`, which is hundreds of fast static tests that must never depend on
+ * a browser binary. Chromium is resolved from the gstack Playwright install; override with
+ * PLAYWRIGHT_MODULE=/path/to/playwright.
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { homedir } from "node:os";
+import { setTimeout as delay } from "node:timers/promises";
+
+/* An explicit index.js: an ESM import of a bare directory is ERR_UNSUPPORTED_DIR_IMPORT, and this
+   path is outside the repo so it cannot be resolved by name. */
+const PLAYWRIGHT_MODULE =
+  process.env.PLAYWRIGHT_MODULE ?? `${homedir()}/.claude/skills/gstack/node_modules/playwright/index.js`;
+/* ...and `.default`, because that package is CommonJS: a dynamic import of it hangs its exports off
+   the default binding rather than off named ones. */
+const playwrightModule = await import(PLAYWRIGHT_MODULE);
+const { chromium } = playwrightModule.default ?? playwrightModule;
+
+/** The default backend in lib/config.ts. Recognised by the catch-all, never contacted. */
+const BACKEND_ORIGIN = "https://student-outreach-backend.vercel.app";
+/** Fabricated. Seeded into localStorage so the dashboard's auth guard lets the page render. */
+const SESSION_TOKEN = "fixture-token-not-a-real-credential";
+
+const ME = {
+  email: "fixture@example.invalid",
+  is_guest: false,
+  tier: "pro",
+  trial_ends_at: null,
+  usage: { contacts: { used: 0, limit: 100 }, drafts: { used: 0, limit: 100 }, resumes: { used: 3, limit: 100 } },
+  checkout_available: false,
+};
+
+const TARGETING = {
+  categories: ["software"],
+  titles: ["Software Engineer Intern"],
+  role_types: null,
+  locations: null,
+  remote_only: false,
+  primary_period: null,
+  backup_period: null,
+};
+
+const PROFILE = { full_name: "Fixture Student", skills: [], target_roles: [] };
+
+/* Three packets in three states, so the Tracker column has a non-zero figure to lose. The counts
+   are distinct (2 ready, 1 sent) so a Tracker that rendered SOMETHING cannot be mistaken for a
+   Tracker that rendered the right something. */
+function packet(key, status) {
+  return {
+    id: `fixture-packet-${key}`,
+    job_context: { company: `Fixture Company ${key}`, role: `Fixture Role ${key}`, jd_hash: `hash-${key}` },
+    resume_object_key: `fixture/${key}`,
+    created_at: "2026-07-21T12:00:00.000Z",
+    download_url: "#",
+    spec: {
+      school: "Fixture University",
+      degree: "B.S. Fixture Studies",
+      grad_date: "May 2027",
+      education_position: "top",
+      experience: [],
+      skills: [],
+      _review: {
+        jd_text: `Fixture job description ${key}.`,
+        portal_url: "https://jobs.example.com/fixture",
+        ats_name: "Greenhouse",
+        status,
+        edited_terms: [],
+        questions: [],
+        skipped_reasons: [],
+        updated_at: "2026-07-21T12:00:00.000Z",
+        ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
+      },
+    },
+  };
+}
+
+const RESUMES = [packet("ready-0", "resume_ready"), packet("ready-1", "questions_ready"), packet("sent-0", "submitted")];
+
+const BOOTSTRAP = {
+  schema_version: 1,
+  me: ME,
+  /* Zero matched jobs. This spec is about the Overview band, and an empty feed keeps company-logo
+     lookups, the one server-side external fetch this page can make, out of the run entirely. */
+  jobs: { jobs: [] },
+  targeting: TARGETING,
+  profile: PROFILE,
+  resume_history: { resumes: RESUMES },
+  application_profile: {},
+  outreach: [],
+  onboarding: { automatic_submission_enabled: false },
+  warnings: [],
+};
+
+/** A well-formed funnel. `days` deliberately has one non-zero bar so the healthy case has a shape. */
+const GOOD_FUNNEL = {
+  resumes_tailored: 3,
+  applications_submitted: 1,
+  fields_filled: 17,
+  submitted_this_week: 1,
+  too_early: false,
+  days: Array.from({ length: 14 }, (_, i) => ({ day: `d-${13 - i}`, submitted: i === 11 ? 1 : 0, tailored: 0 })),
+};
+
+const GOOD_BOARD = {
+  stages: ["saved", "applied", "interview", "offer", "closed"],
+  cards: [
+    {
+      id: "fixture-packet-sent-0",
+      job_id: null,
+      company: "Fixture Company sent-0",
+      role: "Fixture Role sent-0",
+      created_at: "2026-07-21T12:00:00.000Z",
+      moved_at: null,
+      reviewable: true,
+      submission_status: "submitted",
+      stage: "applied",
+    },
+  ],
+};
+
+const BASE_STUB = {
+  "/dashboard/bootstrap": BOOTSTRAP,
+  "/me": ME,
+  "/v1/meta": { product: "litos" },
+  "/metrics/funnel": GOOD_FUNNEL,
+  "/resume/history": { resumes: RESUMES },
+  "/resume/base": {},
+  "/jobs": { jobs: [] },
+  "/profile": PROFILE,
+  "/profile/application": {},
+  "/profile/targeting": TARGETING,
+  "/applications/board": GOOD_BOARD,
+  "/track/events": [],
+  "/onboarding/state": { automatic_submission_enabled: false },
+};
+
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForServer(origin, child) {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`next start exited early with code ${child.exitCode}`);
+    try {
+      const res = await fetch(`${origin}/login`, { redirect: "manual" });
+      if (res.status < 500) return;
+    } catch {
+      /* not listening yet */
+    }
+    await delay(250);
+  }
+  throw new Error(`next start never answered on ${origin}. Run "npm run build" first.`);
+}
+
+const port = await freePort();
+const ORIGIN = `http://127.0.0.1:${port}`;
+
+const server = spawn("node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", String(port)], {
+  stdio: ["ignore", "ignore", "inherit"],
+});
+await waitForServer(ORIGIN, server);
+
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+
+/** Every non-localhost request that got aborted. Asserted empty by every case. */
+const blockedExternal = [];
+/** What this case's stub answers. Reassigned per case so one route handler serves all of them. */
+let stub = { ...BASE_STUB };
+
+await context.route("**/*", async (route) => {
+  const url = route.request().url();
+  if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
+    return route.continue();
+  }
+  if (url.startsWith(BACKEND_ORIGIN)) {
+    const path = new URL(url).pathname;
+    if (path in stub) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: { "access-control-allow-origin": "*" },
+        body: JSON.stringify(stub[path]),
+      });
+    }
+    /* Unknown backend path: 404 rather than `{}`, so a page that starts depending on something the
+       stub does not model fails loudly instead of silently reading an empty object. */
+    return route.fulfill({ status: 404, contentType: "application/json", body: '{"error":"not stubbed"}' });
+  }
+  blockedExternal.push(url);
+  return route.abort();
+});
+
+/**
+ * The Momentum column, addressed structurally rather than by its text.
+ *
+ * It is the first child section of the Overview grid, and it has to be reached that way: the band
+ * is nested sections, so any text-matching locator resolves to an ancestor that also contains
+ * Tracker and Emails, and an assertion about what Momentum does or does not print would silently
+ * be reading its neighbours' figures.
+ */
+function momentumColumn(page) {
+  return page.locator('section[aria-label="At a glance"] > div > section').first();
+}
+
+async function openPage(path) {
+  const page = await context.newPage();
+  /* The exact keys lib/api.ts writes on a verified sign-in. Seeded rather than typed into the login
+     form, because this spec is about render containment and a real sign-in would need a real
+     credential. */
+  await page.addInitScript((token) => {
+    window.localStorage.setItem("rq_token", token);
+    window.localStorage.setItem("rq_email", "fixture@example.invalid");
+    window.localStorage.setItem("litos_session_mode_v1", "verified");
+    window.localStorage.setItem("litos_has_history_v1", "true");
+  }, SESSION_TOKEN);
+  await page.goto(`${ORIGIN}${path}`, { waitUntil: "domcontentloaded" });
+  /* Asserted before any measurement: a background tab suspends rAF, ResizeObserver and smooth
+     scrolling, which has already produced two false findings on this audit. */
+  assert.equal(await page.evaluate(() => document.visibilityState), "visible");
+  return page;
+}
+
+test.after(async () => {
+  await context.close();
+  await browser.close();
+  server.kill("SIGTERM");
+});
+
+/* ------------------------------------------------------------------------------------------- */
+
+test("crash 1: /metrics/funnel answering {} no longer takes the Home Overview band with it", async () => {
+  /* AGAINST origin/main (be7d855), production build: the Tracker column never appeared. The
+     selector below timed out, the whole band was absent, and the route boundary's recovery screen
+     ("This page did not load.") stood where Home should be. That is the reported defect and this
+     harness sees it. */
+  stub = { ...BASE_STUB, "/metrics/funnel": {} };
+  const page = await openPage("/dashboard");
+
+  const tracker = page.locator('section[aria-labelledby="applications-summary"]');
+  await tracker.waitFor({ state: "visible", timeout: 15000 });
+
+  /* The Tracker's own figures, which have nothing to do with the funnel, still render. Asserting
+     the section merely EXISTS would pass on an empty shell. */
+  await assert.doesNotReject(page.locator("#applications-summary").waitFor({ state: "visible" }));
+  assert.match(await tracker.innerText(), /Ready/, "the Tracker column still lists its own metrics");
+
+  /* The route boundary did NOT fire. Its copy is the tell. */
+  assert.equal(await page.getByText("This page did not load.").count(), 0);
+
+  /* And the rest of Home is intact: the matches heading below the band is a different subtree
+     again, and on origin/main it went with everything else. */
+  await page.locator("#matches-heading").waitFor({ state: "visible" });
+
+  /* THE DEGRADED BAND ITSELF. It must name the failure and offer a retry, and it must not print a
+     figure. The component's own failure state renders, because the parse boundary REJECTED the
+     payload rather than defaulting the counters to zero.
+
+     Scoped to the FIRST GRID COLUMN rather than matched by text. A hasText locator resolves to the
+     outermost matching section, which here is the whole band, so its innerText would include the
+     Tracker's figures and the "asserts no quantity" check below would read them as Momentum's. */
+  const momentum = momentumColumn(page);
+  await momentum.waitFor({ state: "visible" });
+  assert.match(await momentum.innerText(), /Could not load your activity just now\./);
+  const momentumText = await momentum.innerText();
+  assert.match(momentumText, /Momentum/);
+  assert.match(momentumText, /Try again/);
+  assert.equal(
+    /\b\d+\b/.test(momentumText),
+    false,
+    `a degraded Momentum must assert no quantity at all, got: ${JSON.stringify(momentumText)}`,
+  );
+  /* Specifically not the confident zero. "0 sent since you started" on an account with a submitted
+     application is the ISSUE-014 defect, and it is what defaulting the counters would have shipped. */
+  assert.equal(await page.getByText("sent since you started").count(), 0);
+
+  assert.deepEqual(blockedExternal, []);
+  await page.close();
+});
+
+test("crash 2: /applications/board answering [] no longer kills the Tracker route", async () => {
+  /* AGAINST origin/main: /dashboard/applications rendered the route boundary. Nothing of the route
+     survived. */
+  stub = { ...BASE_STUB, "/applications/board": [] };
+  const page = await openPage("/dashboard/applications");
+
+  assert.equal(await page.getByText("This page did not load.").count(), 0, "the route boundary must not fire");
+
+  /* The route's own shell is still there. The heading is rendered by the page, not by the Board. */
+  await page.locator("h1").first().waitFor({ state: "visible" });
+
+  /* The board degrades to its own honest line with a retry, and prints no count of applications. */
+  const failure = page.getByText("Could not load your board.");
+  await failure.waitFor({ state: "visible", timeout: 15000 });
+  assert.equal(await page.getByRole("button", { name: "Try again" }).count() >= 1, true);
+
+  assert.deepEqual(blockedExternal, []);
+  await page.close();
+});
+
+test("a well-formed response still renders exactly as before", async () => {
+  /* The other half of the fix. Containment that changed the healthy render would be a regression
+     dressed as a guard, so this case asserts the loaded state on both routes. */
+  stub = { ...BASE_STUB };
+
+  const home = await openPage("/dashboard");
+  await home.locator('section[aria-labelledby="applications-summary"]').waitFor({ state: "visible" });
+
+  const momentum = momentumColumn(home);
+  await momentum.waitFor({ state: "visible" });
+  const text = await momentum.innerText();
+  assert.match(text, /Momentum/);
+  assert.match(text, /sent since you started/);
+  /* Case-insensitive: the caption is uppercased in CSS, so innerText reports it as typed by the
+     renderer rather than as written in the source. */
+  assert.match(text, /last 14 days/i, "the sparkline caption renders when days actually arrived");
+  assert.equal(/Could not load/.test(text), false, "no degraded copy on a healthy response");
+
+  /* The counters are the numbers the fixture sent, not defaults. */
+  const bars = await home.locator('figure div[role="img"] > div').count();
+  assert.equal(bars, 14, "all fourteen days are drawn");
+
+  await home.close();
+
+  const tracker = await openPage("/dashboard/applications");
+  await tracker.getByText("Could not load your board.").waitFor({ state: "detached", timeout: 15000 }).catch(() => {});
+  assert.equal(await tracker.getByText("Could not load your board.").count(), 0);
+  assert.equal(await tracker.getByText("This page did not load.").count(), 0);
+  await tracker.close();
+
+  assert.deepEqual(blockedExternal, []);
+});
+
+test("a partial but usable funnel degrades the sparkline only, and never invents a flat fortnight", async () => {
+  /* The SECONDARY half of the rule, which the two reported crashes do not cover. A backend that
+     measured the counters but sent no daily breakdown must show the counters, because they are
+     real, and must NOT draw fourteen empty bars under "Last 14 days", because that is a chart
+     asserting a fortnight of inactivity nobody measured. */
+  stub = { ...BASE_STUB, "/metrics/funnel": { resumes_tailored: 3, applications_submitted: 1, fields_filled: 17, submitted_this_week: 1 } };
+  const page = await openPage("/dashboard");
+
+  const momentum = momentumColumn(page);
+  await momentum.waitFor({ state: "visible", timeout: 15000 });
+  const text = await momentum.innerText();
+  assert.match(text, /Momentum/);
+  assert.match(text, /sent since you started/, "the counters that WERE measured still render");
+  assert.equal(/Could not load/.test(text), false, "measured counters are not thrown away with the series");
+  assert.equal(/last 14 days/i.test(text), false, "no caption over bars that were never sent");
+  assert.equal(await page.locator('figure div[role="img"]').count(), 0, "and no bar row at all");
+
+  await page.locator('section[aria-labelledby="applications-summary"]').waitFor({ state: "visible" });
+  assert.deepEqual(blockedExternal, []);
+  await page.close();
+});
+
+test("a throw the parse boundary does NOT cover is still contained to its band", async () => {
+  /* THE HALF OF THE FIX THE OTHER CASES CANNOT SEE.
+   *
+   * With the parse boundary in front of it, the Board no longer throws on either reported payload,
+   * so nothing above would notice if the per-band error boundary were deleted. That would be a
+   * false green: the boundary is not there for the two payloads already known, it is there for the
+   * next unknown one, and the argument for it has to be demonstrated rather than asserted.
+   *
+   * This drives exactly such a payload. `cards` IS an array, so response-shape.ts accepts the
+   * envelope, which is deliberate: a card is a wide record and validating every field of every one
+   * would be the over-application that turns a loud failure into a quiet lie. The entries are not
+   * objects, so the Board's own `cards.filter((c) => c.stage === stage)` throws during render. That
+   * is a genuine, realistic residual: a backend that starts sending nulls in a list is the same
+   * class of drift as one that drops a key.
+   *
+   * AGAINST origin/main: the route boundary fired and the whole of /dashboard/applications was
+   * replaced by "This page did not load."
+   */
+  stub = { ...BASE_STUB, "/applications/board": { stages: ["applied", "interview", "offer"], cards: [null, null] } };
+  const page = await openPage("/dashboard/applications");
+
+  /* The band's own fallback, from components/app/SectionBoundary.tsx, not the route boundary's. */
+  const degraded = page.getByText("Could not load this just now.");
+  await degraded.waitFor({ state: "visible", timeout: 15000 });
+  assert.equal(await page.getByText("This page did not load.").count(), 0, "the route boundary must not fire");
+
+  /* It states no quantity, and it keeps the band's heading so the page does not lose its shape. */
+  const band = page.locator("section", { hasText: "Could not load this just now." }).last();
+  const text = await band.innerText();
+  assert.match(text, /Your applications/);
+  assert.equal(/\b\d+\b/.test(text), false, `a degraded band must assert no quantity, got: ${JSON.stringify(text)}`);
+
+  /* And the route shell survived, which is the whole point of scoping the boundary to the band. */
+  await page.locator("h1").first().waitFor({ state: "visible" });
+  assert.equal(await page.getByRole("button", { name: "Try again" }).count() >= 1, true);
+
+  assert.deepEqual(blockedExternal, []);
+  await page.close();
+});

@@ -1,6 +1,27 @@
 import { api } from "@/lib/api";
 import type { ResumeSpec } from "@/lib/api";
 import type { JdMatchResponse } from "../domain/match-model";
+/* Every response below that a component MAPS OVER goes through response-shape.ts on the way out.
+   That file is the single parse boundary for this feature: it is the only place a wire shape is
+   checked, so a `?? []` is never needed at a call site and the next component to read one of these
+   fields inherits the guard instead of having to remember it. See its header for which fields are
+   required, which are defaulted, and why the difference matters. */
+import {
+  normalizeBoard,
+  normalizeFunnel,
+  normalizeGapEvidence,
+  normalizeInterviewPrep,
+  normalizeRequirements,
+  normalizeResumeHealth,
+  setPartialPayloadReporter,
+} from "./response-shape";
+import { track } from "@/lib/analytics";
+
+/* Wired here rather than inside response-shape.ts so that module stays dependency-free. Runs once
+   on import, and `track` is a no-op without a window, so this is safe on the server too. */
+setPartialPayloadReporter((endpoint, fields) => {
+  track("api_payload_incomplete", { endpoint, fields: fields.join(",") });
+});
 
 /**
  * Client side of POST /jd-match.
@@ -86,10 +107,12 @@ export async function fetchGapEvidence(
   terms: { term: string; display: string }[],
   resumeText: string,
 ): Promise<{ answers: GapAnswer[] }> {
-  return api<{ answers: GapAnswer[] }>("/jd-match/evidence", {
-    method: "POST",
-    body: JSON.stringify({ terms, resume_text: resumeText }),
-  });
+  return normalizeGapEvidence(
+    await api<unknown>("/jd-match/evidence", {
+      method: "POST",
+      body: JSON.stringify({ terms, resume_text: resumeText }),
+    }),
+  );
 }
 
 // ---- F3: the resume health check ----
@@ -111,10 +134,12 @@ export type ResumeHealth = {
 
 /** Checks the spec ON SCREEN, not the last one saved, so the panel describes what they can see. */
 export async function fetchResumeHealth(spec: ResumeSpec): Promise<ResumeHealth> {
-  return api<ResumeHealth>("/resume/health", {
-    method: "POST",
-    body: JSON.stringify({ spec }),
-  });
+  return normalizeResumeHealth(
+    await api<unknown>("/resume/health", {
+      method: "POST",
+      body: JSON.stringify({ spec }),
+    }),
+  );
 }
 
 // ---- F4: the student's own funnel ----
@@ -133,7 +158,7 @@ export type FunnelSummary = {
 /** Sends the browser's UTC offset so the days are the student's days, not the server's. */
 export async function fetchFunnel(): Promise<FunnelSummary> {
   const offset = -new Date().getTimezoneOffset(); // getTimezoneOffset is minutes WEST of UTC
-  return api<FunnelSummary>(`/metrics/funnel?tz_offset=${offset}`);
+  return normalizeFunnel(await api<unknown>(`/metrics/funnel?tz_offset=${offset}`));
 }
 
 // ---- F5: the pipeline board ----
@@ -156,7 +181,7 @@ export type BoardCard = {
 };
 
 export async function fetchBoard(): Promise<{ stages: Stage[]; cards: BoardCard[] }> {
-  return api<{ stages: Stage[]; cards: BoardCard[] }>("/applications/board");
+  return normalizeBoard(await api<unknown>("/applications/board"));
 }
 
 export async function moveCard(id: string, stage: Stage): Promise<void> {
@@ -186,10 +211,12 @@ export async function fetchInterviewPrep(
   spec: ResumeSpec,
   jobContext?: JobContext,
 ): Promise<InterviewPrep> {
-  return api<InterviewPrep>("/interview-prep", {
-    method: "POST",
-    body: JSON.stringify({ jd_text: jdText, spec, job_context: jobContext }),
-  });
+  return normalizeInterviewPrep(
+    await api<unknown>("/interview-prep", {
+      method: "POST",
+      body: JSON.stringify({ jd_text: jdText, spec, job_context: jobContext }),
+    }),
+  );
 }
 
 /**
@@ -232,12 +259,14 @@ export async function fetchRequirements(
   spec: ResumeSpec | undefined,
   jobContext?: JobContext,
 ): Promise<RequirementsResponse> {
-  return api<RequirementsResponse>("/jd-match/requirements", {
-    method: "POST",
-    body: JSON.stringify({
-      ...(jdText === null ? {} : { jd_text: jdText }),
-      ...(spec ? { spec } : {}),
-      job_context: jobContext,
+  return normalizeRequirements(
+    await api<unknown>("/jd-match/requirements", {
+      method: "POST",
+      body: JSON.stringify({
+        ...(jdText === null ? {} : { jd_text: jdText }),
+        ...(spec ? { spec } : {}),
+        job_context: jobContext,
+      }),
     }),
-  });
+  );
 }

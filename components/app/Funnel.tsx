@@ -118,7 +118,13 @@ export function Funnel() {
         <Stat value={f.resumes_tailored} label="resumes prepared for you" />
       </div>
 
-      {!f.too_early && (
+      {/* days.length, not just too_early. The parse boundary treats `days` as a SECONDARY field and
+          defaults it to an empty array, so a backend that measured the counters but sent no daily
+          breakdown degrades to the counters alone rather than taking Home down. What must not
+          happen then is this figure rendering anyway: an empty bar row under the caption "Last 14
+          days" is a chart asserting fourteen days of no activity, which is the confident-zero
+          reading of a fact nobody measured. No bars, no caption. */}
+      {!f.too_early && f.days.length > 0 && (
         <div className="mt-4">
           {/* The caption and the bars are one figure, and the field count is deliberately OUTSIDE it.
               fields_filled is an all-time sum like the two figures above, so leaving it under the

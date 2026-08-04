@@ -17,6 +17,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { MatchScore } from "@/components/app/MatchScore";
 import { Funnel } from "@/components/app/Funnel";
+import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import {
@@ -709,8 +710,16 @@ export default function Home() {
       <WaitingOnYou items={waitingOnYou} />
       <section aria-label="At a glance">
         <div className="grid divide-y divide-border overflow-hidden rounded-card border border-border bg-surface shadow-rest empty:hidden lg:auto-cols-fr lg:grid-flow-col lg:divide-x lg:divide-y-0">
-          <Funnel />
+          {/* One boundary PER COLUMN, not one around the band. A single boundary here would still
+              be an improvement on the route boundary and would still be the reported bug: Momentum
+              throwing would take Tracker and Emails with it, and Tracker is the column that carries
+              "N stopped for you", the only thing on Home that tells a student they have work
+              waiting. The three columns share a grid and nothing else, so they get three. */}
+          <SectionBoundary band="momentum" title="Momentum">
+            <Funnel />
+          </SectionBoundary>
           {applicationTotal > 0 && (
+            <SectionBoundary band="tracker-summary" title="Tracker">
             <OverviewColumn
               id="applications-summary"
               title="Tracker"
@@ -727,8 +736,10 @@ export default function Home() {
                 href: "/dashboard/applications?state=action",
               } : undefined}
             />
+            </SectionBoundary>
           )}
           {outreach.length > 0 && (
+            <SectionBoundary band="outreach-summary" title="Emails">
             <OverviewColumn
               id="outreach-summary"
               title="Emails"
@@ -740,6 +751,7 @@ export default function Home() {
                 { label: "Replied", value: outreachSummary.replied, href: "/dashboard/outreach" },
               ]}
             />
+            </SectionBoundary>
           )}
         </div>
       </section>

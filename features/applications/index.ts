@@ -30,6 +30,7 @@ export {
 } from "./domain/daily-matches";
 export * from "./domain/requirement-terms";
 export * from "./infrastructure/applications-api";
+export { PartialPayloadError } from "./infrastructure/response-shape";
 export {
   SCORE_BATCH,
   useJobMatchScores,
