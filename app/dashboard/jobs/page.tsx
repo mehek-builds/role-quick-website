@@ -420,19 +420,10 @@ function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; 
             {type && <span className="text-muted">{type}</span>}
           </p>
         )}
-        {/* "You asked for", NOT "Matches your". The badge above is resume-to-JD coverage and this
-            sentence is preference fit: two different questions that both used to answer to the word
-            "match", which is how the same Databricks posting came to read "0% match" beside
-            "Matches your product, San Francisco, CA, internship" and assert both at once. The rule
-            that survives from that fix is that one metric's score may never carry another metric's
-            reasons. It is kept by giving the metrics different words, not by deleting one of them:
-            what you asked for and what your resume covers are both worth saying, and a student
-            reading this row needs to be able to tell which is which. */}
-        {job.preference_reasons && job.preference_reasons.length > 0 && (
-          <p className="mt-1.5 text-xs text-faint">
-            You asked for {job.preference_reasons.join(", ")}
-          </p>
-        )}
+        {/* The preference-fit line ("You asked for ...") used to sit here. It repeated the same
+            saved search on every row, so it was removed. The rule it existed to keep still holds:
+            one metric's score may never carry another metric's reasons, which is why the badge
+            above says resume-to-JD coverage and nothing else on this row speaks for it. */}
         <p className="mt-1.5 font-mono text-[11px] text-faint">
           Found {formatRelativeDate(job.first_seen_at)}
           {job.department ? ` · ${job.department}` : ""}

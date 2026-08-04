@@ -977,13 +977,9 @@ function JobMatchCard({
           {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
         </p>
         <PayLine job={job} />
-        {/* "You asked for", not "Matches your". The ring above is resume-to-JD coverage and this
-            line is preference fit; sharing the word "match" between them is what let one card
-            assert two contradictory things in the ISSUE-014 audit. Both facts stay, with a word
-            each. */}
-        {job.reasons.length > 0 && (
-          <p className="mt-2 truncate text-small text-faint">You asked for {job.reasons.join(", ")}</p>
-        )}
+        {/* The preference-fit line ("You asked for ...") used to sit here. It repeated the saved
+            search on every card, so it was removed. The ring above stays the only thing on this
+            card that speaks to fit, and it speaks only for resume-to-JD coverage. */}
 
         {/* Paused says what stopped. A status word with no reason behind it leaves a student
             deciding between waiting, fixing something and giving up, with nothing to decide on. */}
