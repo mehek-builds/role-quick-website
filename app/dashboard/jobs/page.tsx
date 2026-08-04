@@ -523,8 +523,11 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
  * WHAT THE FIRST ANSWER GOT RIGHT AND IS KEPT HERE:
  *
  *  - ONE METRIC PER CARD'S VOCABULARY. The badge and the sentence under it were resume coverage and
- *    preference fit both wearing the word "match". The sentence now reads "You asked for ...", so
- *    the two facts stay on the card and stop competing for the same word.
+ *    preference fit both wearing the word "match". The sentence was reworded to "You asked for ..."
+ *    so the two facts stopped competing for the same word, and has since been removed outright
+ *    (it repeated the saved search on every row). The badge is now the only thing on a card that
+ *    speaks to fit, and it speaks only for resume coverage. If a preference line ever comes back,
+ *    it comes back with its own vocabulary, never the badge's.
  *  - ABSENT, NEVER ZERO. A posting the backend declines to score, and a request that failed, both
  *    arrive as null and render nothing. A zero is a claim that the resume matched no requirement.
  *  - THE NUMBER NEVER CHANGES COLOUR. A 27 and a 74 look identical. A badge that shifted red to

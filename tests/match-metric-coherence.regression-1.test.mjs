@@ -95,12 +95,22 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     assert.doesNotMatch(nextMatchRow, /\brequirements? this (job )?posting lists/i);
   });
 
-  test("the preference sentence does not borrow the score's word", () => {
+  test("no surface prints preference reasons beneath the score", () => {
     // "0% match" over "Matches your product, San Francisco, CA, internship" is the original defect.
-    // Both facts are worth showing; they just cannot both be called matching.
-    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage]]) {
-      assert.match(src, /You asked for \{/, `${name} must caption preference reasons as an ask`);
-      assert.doesNotMatch(src, /Matches your \{/, `${name} must not caption them as a match`);
+    //
+    // This assertion has been through the same two answers the describe block above has. It first
+    // demanded the sentence be captioned "You asked for ...", which took the word "match" away from
+    // it and left both facts on the card. The sentence is now gone from every surface (Mehek,
+    // 2026-08-04): it named the saved search, so it printed the same words under every result and
+    // said nothing about any one job.
+    //
+    // What is asserted is the rule, not the wording, because the wording is what kept changing. A
+    // card carries ONE fit statement, the resume-to-JD badge, and preference reasons are not
+    // printed under it in any vocabulary. Bringing them back means giving them a surface of their
+    // own and a caption that is not the badge's, and changing this test on purpose.
+    for (const [name, src] of [["Jobs", jobsPage], ["Home", homePage], ["Tracker", trackerPage]]) {
+      assert.doesNotMatch(src, /Matches your \{/, `${name} must not caption reasons as a match`);
+      assert.doesNotMatch(src, /preference_reasons|\breasons\b/, `${name} must not render preference reasons`);
     }
   });
 

@@ -25,7 +25,10 @@ import { localDayKeyOf } from "../../../lib/local-day.ts";
  * needs the resume and a network round trip, so the honest thing is for this type not to offer a
  * score at all. preference_score still orders the feed - GET /jobs remains the single ranking
  * authority and this function preserves its order - and still supplies `reasons`, which is words
- * rather than a number and now says "You asked for ..." so it cannot be read as the score's
+ * rather than a number. Those words no longer render anywhere: the "You asked for ..." line was
+ * removed from Home and Jobs because it repeated the same saved search on every card. `reasons` is
+ * kept on the type because it is the honest carrier for preference signals if they are ever shown
+ * again, and because it is what stops preference fit from being reached for as the score's
  * caption. */
 export type RankedJob = MonitoredJob & {
   /** Preference signals: what the STUDENT asked for. Never a caption for the resume-coverage
@@ -62,10 +65,10 @@ export function rankJobs(
      use-job-match-scores.ts rather than derived here. preference_score stays out of the UI
      entirely; it orders the feed, which is the job it is good at.
 
-     `reasons` survives because it is WORDS, and true ones: it says what the student asked for. It
-     is rendered as "You asked for ..." rather than "Matches your ...", so it cannot be misread as
-     the caption for the coverage number sitting above it. That misreading, one metric's score over
-     another metric's reasons, is the defect the ISSUE-014 audit actually found. */
+     `reasons` survives as data, not as UI. It was rendered as "You asked for ..." rather than
+     "Matches your ...", and is now not rendered at all: the same saved search on every card said
+     nothing about any one job. The rule it enforced outlives it. One metric's score may never
+     carry another metric's reasons, which is the defect the ISSUE-014 audit actually found. */
   return jobs.map((job) => ({
     ...job,
     reasons: job.preference_reasons ?? [],
