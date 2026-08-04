@@ -513,6 +513,25 @@ function LinesField({
   );
 }
 
+/* Relevant coursework is STORED AS A LIST and edited here as one comma separated line, so it is
+   joined for display rather than read as a string.
+
+   Reading it with the str() helper below returned null for every healthy profile, because the
+   parser writes an array: this screen showed a BLANK coursework box to students whose resume listed
+   a full set of courses, and the read-only summary hid the field entirely. A student who then
+   helpfully retyped their courses into that blank box wrote a plain string back over the array, and
+   because the resume generator gates on Array.isArray, every resume generated afterwards printed an
+   EMPTY coursework line while this page went on displaying the text she had typed (ISSUE-044).
+
+   Tolerant of a stored string on purpose, permanently. The two repos deploy separately on merge, so
+   this page can never assume the API alongside it is the new one, and the rows corrupted before the
+   backfill must still display rather than silently reading as empty a second time. */
+function courseworkLine(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (!Array.isArray(value)) return "";
+  return value.filter((entry): entry is string => typeof entry === "string").join(", ");
+}
+
 /* The parse shape has evolved. The common profile facts are reviewable here, while structured work
    history stays in its purpose-built editor below. */
 function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, unknown>; onProfileChange: (profile: Record<string, unknown>) => void }) {
@@ -536,7 +555,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         school={str("school") ?? ""}
         degree={str("degree") ?? ""}
         gradDate={str("grad_date") ?? (typeof gradYear === "number" ? String(gradYear) : "")}
-        coursework={str("coursework") ?? ""}
+        coursework={courseworkLine(profile["coursework"])}
         objective={str("objective") ?? ""}
         skills={skills}
         languages={languages}
