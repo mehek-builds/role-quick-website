@@ -28,13 +28,20 @@ test("every path that receives a review routes the screen from it", async () => 
   // route, and it must be the ref (readable synchronously) rather than a state value.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,2600}if \(approveInFlight\.current\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,3400}if \(approveInFlight\.current !== null && !terminal\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+  );
+  // The exception to the exception. A stalled approve never rejects (no AbortController in
+  // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the
+  // poll already holding the answer. Terminal states must always get through.
+  assert.match(
+    dashboard,
+    /const terminal = result\.review\.status === "submitted" \|\| result\.review\.status === "failed";/,
   );
   // And the approve response itself routes, which is the whole point of the sibling fix: the QA
   // branch always did and the real one did not.
   assert.match(
     dashboard,
-    /\/submission\/approve`[\s\S]{0,2000}moveToScreen\(screenForStatus\(result\.review\.status, "portal"\)\)/,
+    /\/submission\/approve`[\s\S]{0,3000}moveToScreen\(screenForStatus\(result\.review\.status, "portal"\)\)/,
   );
   // Selecting a packet, which falls back to the review screen rather than the progress screen.
   assert.match(dashboard, /moveToScreen\(screenForStatus\(status, "review"\)\)/);
