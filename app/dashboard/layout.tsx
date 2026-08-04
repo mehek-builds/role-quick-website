@@ -33,8 +33,6 @@ const UTILITY = [
 /* The consolidated Account destination is the fifth mobile item. */
 const MOBILE_NAV = [...NAV, ...UTILITY];
 
-const ALL_DESTINATIONS = [...NAV, ...UTILITY];
-
 function isActive(href: string, pathname: string): boolean {
   // /dashboard prefix-matches every child, so it alone is compared exactly.
   return href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -50,11 +48,21 @@ export default function DashboardLayout({
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
 
-  /* One name per screen in the tab, matching the nav. A client layout cannot
-     export metadata, so all six pages inherited the marketing title (finding 41). */
+  /* One name per screen in the tab. This effect used to title every dashboard screen, because a
+     client layout cannot export metadata (finding 41), and on a hard load it lost that job to the
+     root layout's marketing title anyway. Every route below this one now declares its own title in
+     a small server layout beside its page, which is right on a hard load and on a client-side nav
+     both, so the effect is down to the single route that has nowhere else to put one: /dashboard
+     itself, whose page is this layout's own client child.
+
+     The guard is the point, not a tidy-up. Writing a title here for a route that also declares one
+     is not a harmless second opinion: on a client-side nav this effect runs after the declared
+     title has landed, so it overwrites it. That is exactly what it did to /dashboard/resume, which
+     is not a nav destination and so fell to the bare product name, wiping out "Resume" every time
+     a student reached the page from inside the app. A route's title now has exactly one owner. */
   useEffect(() => {
-    const here = ALL_DESTINATIONS.find((n) => isActive(n.href, pathname));
-    document.title = here ? `${here.label}: Litos` : "Litos";
+    if (pathname !== "/dashboard") return;
+    document.title = "Home: Litos";
   }, [pathname]);
 
   useEffect(() => {
