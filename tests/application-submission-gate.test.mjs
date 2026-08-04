@@ -28,8 +28,17 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // ready_for_final_approval and retrying only from failed; both labels have already been reworded
   // once ("Submit application" -> "Send it", "Retry preparation" -> "Try again") and broke this
   // test rather than the product. Bounded spans, so a match cannot span half the file.
-  assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{onApprove\}/);
+  assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
   assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
+  assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
+  assert.match(dashboard, /disabled=\{finalApprovalBlocked\}/);
+  assert.match(dashboard, /const requiredAnswerMissing = review\.questions\.some/);
+  assert.match(dashboard, /Litos has to show the filled form preview before this can be sent/);
+  assert.match(dashboard, /A required answer is still blank\. Check the answers before sending/);
+  assert.match(dashboard, /Resume attached to this application/);
+  assert.match(dashboard, /Answers included with final submission/);
+  assert.match(dashboard, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
+  assert.match(dashboard, /onError=\{\(\) => setPreviewState\(\{ url: previewUrl, loaded: false, failed: true \}\)\}/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I finished it myself/);
@@ -42,9 +51,15 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
-test("overview keeps three application states and reviews matches in a right-side drawer", async () => {
+test("overview keeps three application states and sends straight from the match card", async () => {
   const overview = await readFile(new URL("../app/dashboard/page.tsx", import.meta.url), "utf8");
-  const styles = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  /* Comments stripped for the doesNotMatch lines below, on purpose: the note explaining why the
+     drawer was removed has to be allowed to name what it removed. Same reason
+     tests/match-score-consistency strips before scanning. */
+  const shipped = overview
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\/.*$/gm, "");
 
   // Still three states; the labels moved onto the four-word vocabulary.
   assert.match(overview, /label: "Ready"/);
@@ -57,25 +72,33 @@ test("overview keeps three application states and reviews matches in a right-sid
   assert.doesNotMatch(overview, /Daily resume preparation/);
   assert.match(overview, /MONTHLY_PRO_APPLICATION_LIMIT = 1_000/);
   assert.match(overview, /return me\.usage\.resumes\.limit/);
-  assert.match(overview, /role="dialog"/);
-  assert.match(overview, /Job description/);
-  assert.match(overview, /Tailored resume/);
-  // The drawer's send control. Label reworded 2026-07-27 ("Submit application" -> "Send it");
-  // what matters is that the drawer can send and that sending is gated, asserted just below.
-  assert.match(overview, /"Send it"/);
-  assert.match(overview, /const canSubmit = Boolean\(packet && review && missingAnswers\.length === 0/);
+  /* The pre-send review drawer is GONE from Home (2026-08-04, Mehek's call). Two presses used to
+     send an application: Review opened a right-side drawer, and "Send it" inside it did the send.
+     The card's own Submit is the send now. These lines are the guard against it creeping back:
+     a dialog on this page would mean a second confirmation step exists again. */
+  assert.doesNotMatch(shipped, /role="dialog"/);
+  assert.doesNotMatch(shipped, /"Send it"/);
+  assert.doesNotMatch(shipped, /function ReviewDrawer/);
+  // Word-bounded: `ApplicationReview` is a live type name and ends in the same seven letters.
+  assert.doesNotMatch(shipped, /\bonReview\b/);
+  // Both endpoints still belong to the card: approve after a captured form, submit-request
+  // otherwise. Losing the branch would send every packet down one path.
+  assert.match(overview, /\/submission\/approve/);
   assert.match(overview, /\/submit-request/);
   assert.match(overview, /\/submission`/);
   assert.match(overview, /window\.setTimeout\(tick, 2_500\)/);
-  assert.match(overview, /reviewTriggerRef\.current\?\.focus\(\)/);
-  assert.match(overview, /closeButtonRef\.current\?\.focus\(\)/);
-  assert.match(overview, /onKeyDown=\{containFocus\}/);
-  /* Was /prepared \? "Review" : "Try again"/. The card carries four states now, not two: a job
-     with no packet is "Not started" with a Prepare button, and only a request actually in flight
-     shows "Getting ready". Full coverage lives in tests/prepare-on-demand.test.mjs. */
-  assert.match(overview, /status === "ready" \? \([\s\S]*?onClick=\{onReview\}[\s\S]*?Review/);
+  /* Ready means one press away from sent. The label is the promise: pressing it does not open
+     anything, it sends. */
+  assert.match(overview, /status === "ready" \? \([\s\S]*?onClick=\{onSubmit\}[\s\S]*?Submit/);
   assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
-  assert.match(overview, /activeReviewJobIdRef\.current === submittedJobId/);
+  /* The gate the drawer used to hold is what stops Submit being a button that only fails. A
+     required question with no answer, or a run handed back to the student, still has to go to the
+     screen that can clear it. */
+  assert.match(overview, /const blocked = missingAnswers\.length > 0 \|\| \["needs_attention", "failed"\]/);
+  assert.match(overview, /blocked && packet \? \([\s\S]*?Finish your answers/);
+  // Sending is not a state a card may skip past: it has to be visible while the run is live.
+  assert.match(overview, /const sending = submitting \|\| Boolean\(review && ACTIVE_SUBMISSION_STATUSES\.has\(review\.status\)\)/);
+  assert.match(overview, /<PendingLabel>Sending<\/PendingLabel>/);
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.
   assert.match(overview, /const todayJobs = rankedJobs;/);
@@ -84,7 +107,6 @@ test("overview keeps three application states and reviews matches in a right-sid
      the day's full set (todayJobs), never a pre-cut slice of it. */
   assert.match(overview, /visibleMatches\(todayJobs, \{ dismissed, submitted: submittedToday \}\)/);
   assert.doesNotMatch(overview, /rankedJobs\.slice\(0, 3\)/);
-  assert.match(styles, /dashboard-drawer-in/);
 });
 
 /* Removed 2026-07-27: this guarded that every paid surface quoted the same

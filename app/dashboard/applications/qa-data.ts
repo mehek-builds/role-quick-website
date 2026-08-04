@@ -177,7 +177,7 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
     questions: [{
       id: "deepgram-why",
       question: "What excites you about Deepgram?",
-      answer: "Deepgram combines developer infrastructure with applied voice AI, which matches the systems and product work I want to deepen.",
+      answer: "Deepgram is interesting to me because voice agents live or die on timing: recognizing when someone is done speaking, handling interruptions, and returning speech without awkward lag. Flux's turn detection and the unified Voice Agent API are exactly the kind of infrastructure problem I want to work on, because the engineering has to be both low-latency and developer-friendly. My closest fit is Litos and Elemental AI: I have built TypeScript workflow systems, tested recovery paths, and developer-facing tools where reliability and clear handoffs mattered more than demo polish.",
       kind: "essay",
       required: true,
     }, {

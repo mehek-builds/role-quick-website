@@ -414,6 +414,9 @@ export type ApplicationReview = {
   };
   submission_authorized_at?: string;
   cover_letter_supported?: boolean;
+  /** Whether Litos can fill in this posting's page at all. Derived from portal_url by the backend,
+   *  so it is known before the first send rather than discovered after a multi-minute run. */
+  portal_supported?: boolean;
   submission_claimed_at?: string;
   filled_fields?: string[];
   preview_screenshot_url?: string;

@@ -17,13 +17,13 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { MIN_JD_CHARS, canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
-import { ApplicationPacket } from "@/components/app/ApplicationPacket";
+import { ApplicationPacket, ResumePaper, contactLine, contactName } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
@@ -193,7 +193,7 @@ export default function Applications() {
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
     setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
     const status = packet.spec._review?.status;
-    moveToScreen(status === "submitted" ? "submitted" : ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status ?? "") ? "submitting" : ["needs_attention", "ready_for_final_approval", "failed"].includes(status ?? "") ? "portal" : "review");
+    moveToScreen(screenForStatus(status, "review"));
     setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
     setError(null);
     setNotice(null);
@@ -225,9 +225,7 @@ export default function Applications() {
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
     // run that had since succeeded.
     setError(null);
-    if (result.review.status === "submitted") moveToScreen("submitted");
-    else if (["needs_attention", "ready_for_final_approval", "failed"].includes(result.review.status)) moveToScreen("portal");
-    else moveToScreen("submitting");
+    moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
 
   useEffect(() => {
@@ -748,6 +746,11 @@ export default function Applications() {
         captureCompletedSubmission(result, "review");
         setSubmission(result);
         setPackets((current) => current?.map((packet) => packet.id === selected.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+        // This response is the END of the run, not an acknowledgement of its start, and it is
+        // routinely terminal ("failed", "needs_attention", "ready_for_final_approval"). It used to
+        // be installed into state and then ignored for routing, which left the progress screen
+        // spinning over a run that was already over.
+        moveToScreen(screenForStatus(result.review.status, "submitting"));
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
         const now = new Date().toISOString();
@@ -1026,7 +1029,7 @@ export default function Applications() {
       ) : screen === "submitting" ? (
         <PortalProgress status={submission?.review.status} startedAt={submission?.review.updated_at} />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
+        <SubmissionScreen packet={selected} submission={submission} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -1166,13 +1169,25 @@ export default function Applications() {
               it says what the colour MEANS rather than what it IS. Two names
               for one colour is worse than no name. Guarded by R-046 in
               tests/review-highlighting.test.mjs. */}
+          {/* The send control is gated on portal_supported, not just on saving state.
+              Packets on company-owned careers pages used to sit here behind a live "Fill the form"
+              button that could only ever fail: the run started, drove a browser for minutes, and
+              came back with "This portal is not supported yet". Nine of one account's ten failures
+              were that. The tailored resume is still worth having, so this says what Litos cannot
+              do and hands the applicant the page instead of hiding the job. */}
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
-            <p className="text-sm text-ink">Litos fills the form with your saved answers and this resume.</p>
+            <p className="text-sm text-ink">
+              {review.portal_supported === false
+                ? "Litos cannot fill in this company’s page. Your resume is ready, so apply on their site."
+                : "Litos fills the form with your saved answers and this resume."}
+            </p>
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
-              <Button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
-                {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
-              </Button>
+              {review.portal_supported === false
+                ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>
+                : <Button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                  {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
+                </Button>}
             </div>
           </div>
         </>
@@ -1478,11 +1493,22 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ packet, submission, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
+  const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
+  const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
+  const previewUrl = review.preview_screenshot_url ?? "";
+  const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
+  const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
+  const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
+  const finalApprovalBlocked = coverLetterPending || requiredAnswerMissing || !previewReady;
+  function approveVerifiedPreview() {
+    if (finalApprovalBlocked) return;
+    onApprove();
+  }
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
@@ -1517,6 +1543,34 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           </div>
         )}
         {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
+        {review.status === "ready_for_final_approval" && (
+          <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
+            <p className="text-xs font-medium text-muted">Resume attached to this application</p>
+            <div className="mt-3 max-h-[28rem] overflow-y-auto rounded-inner border border-border bg-white p-2">
+              <ResumePaper spec={stripMetadata(packet.spec)} name={contactName(packet.spec)} contact={contactLine(packet.spec)} />
+            </div>
+            {packet.download_url && packet.download_url !== "#" && (
+              <a href={packet.download_url} target="_blank" rel="noreferrer" className="mt-3 inline-block text-xs font-medium text-brand-ink underline-offset-2 hover:underline">
+                Open exact PDF
+              </a>
+            )}
+          </div>
+        )}
+        {review.status === "ready_for_final_approval" && review.questions.length > 0 && (
+          <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
+            <p className="text-xs font-medium text-muted">Answers included with final submission</p>
+            <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
+              {review.questions.map((question) => (
+                <div key={question.id} className="px-3 py-3">
+                  <p className="text-xs font-medium leading-5 text-ink">{question.question}</p>
+                  <p className={`mt-1 whitespace-pre-line text-xs leading-5 ${(question.answer ?? "").trim() ? "text-muted" : question.required ? "text-warn" : "text-faint"}`}>
+                    {(question.answer ?? "").trim() || (question.required ? "Left blank, and this one is required" : "Left blank")}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {review.verification?.status === "completed" && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Code found</p>
@@ -1539,13 +1593,35 @@ function SubmissionScreen({ submission, onHandoffComplete, onApprove, onRetry, o
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
-          {review.status === "ready_for_final_approval" && <button onClick={onApprove} disabled={coverLetterPending} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
+          {review.status === "ready_for_final_approval" && <button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
+        {review.status === "ready_for_final_approval" && !previewReady && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            Litos has to show the filled form preview before this can be sent.
+          </p>
+        )}
+        {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            A required answer is still blank. Check the answers before sending.
+          </p>
+        )}
         <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
         <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">What the form looked like after we filled it in</p></div>
-        {review.preview_screenshot_url ? <img src={review.preview_screenshot_url} alt="The company's application page after Litos filled it in" className="h-auto w-full" /> : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
+        {review.preview_screenshot_url ? (
+          previewFailed ? (
+            <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
+          ) : (
+            <img
+              src={review.preview_screenshot_url}
+              alt="The company's application page after Litos filled it in"
+              className="h-auto w-full"
+              onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
+              onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
+            />
+          )
+        ) : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
       </Card>
     </div>
   );
