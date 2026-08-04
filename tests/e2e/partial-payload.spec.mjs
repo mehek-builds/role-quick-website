@@ -20,9 +20,11 @@
  *
  * MEASURED AGAINST UNMODIFIED origin/main FIRST
  * =============================================
- * Every case here was run against a production build of origin/main (be7d855) before the fix, and
- * the reproduction results are recorded case by case below. A harness that has never seen the
- * defect proves nothing about the fix.
+ * Every case here was run against a production build of unmodified origin/main before the fix, and
+ * the reproduction results are recorded case by case below. Four of the five went red there,
+ * including both reported crashes; the fifth is the well-formed-response control, which passed on
+ * both sides and is what makes "no visual change" a measurement rather than a claim. A harness that
+ * has never seen the defect proves nothing about the fix.
  *
  * CONSTRAINTS, INHERITED FROM tests/e2e/dashboard-click-path.spec.mjs
  * ==================================================================
@@ -38,15 +40,13 @@
  *   - 127.0.0.1 rather than localhost, so the applications page's `?qa` canned-fixture mode stays
  *     shut by construction.
  *
- * ON SHARING fixture-data.mjs
- * ===========================
- * The sibling branch test/playwright-click-path introduces tests/e2e/fixture-data.mjs with exactly
- * the account shape this file needs. It is not on origin/main yet, so importing it here would make
- * this branch un-runnable until that one lands. The fixture below is therefore local and minimal
- * (this spec asserts blast radius, not counts, so it needs far less of an account). WHEN THAT
- * BRANCH LANDS, this file's FIXTURE should be deleted and replaced with an import of BOOTSTRAP and
- * STUB from ./fixture-data.mjs, overriding only the two endpoints under test. These two specs
- * belong side by side in tests/e2e/ and should share one fixture module.
+ * ONE FIXTURE, SHARED
+ * ===================
+ * The account, the token, the backend origin and the healthy stub all come from ./fixture-data.mjs,
+ * the module the click-path spec introduced. This file overrides exactly the endpoints it is about
+ * and nothing else, so a change to the fabricated account cannot make these two specs disagree
+ * about what a healthy dashboard looks like, and the "well-formed response is unchanged" case below
+ * is measured against the same baseline the other spec asserts on.
  *
  * RUN IT WITH:  npm run build && node tests/e2e/partial-payload.spec.mjs
  * Deliberately outside `npm test`, which is hundreds of fast static tests that must never depend on
@@ -70,91 +70,12 @@ const PLAYWRIGHT_MODULE =
 const playwrightModule = await import(PLAYWRIGHT_MODULE);
 const { chromium } = playwrightModule.default ?? playwrightModule;
 
-/** The default backend in lib/config.ts. Recognised by the catch-all, never contacted. */
-const BACKEND_ORIGIN = "https://student-outreach-backend.vercel.app";
-/** Fabricated. Seeded into localStorage so the dashboard's auth guard lets the page render. */
-const SESSION_TOKEN = "fixture-token-not-a-real-credential";
+import { BACKEND_ORIGIN, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
 
-const ME = {
-  email: "fixture@example.invalid",
-  is_guest: false,
-  tier: "pro",
-  trial_ends_at: null,
-  usage: { contacts: { used: 0, limit: 100 }, drafts: { used: 0, limit: 100 }, resumes: { used: 3, limit: 100 } },
-  checkout_available: false,
-};
-
-const TARGETING = {
-  categories: ["software"],
-  titles: ["Software Engineer Intern"],
-  role_types: null,
-  locations: null,
-  remote_only: false,
-  primary_period: null,
-  backup_period: null,
-};
-
-const PROFILE = { full_name: "Fixture Student", skills: [], target_roles: [] };
-
-/* Three packets in three states, so the Tracker column has a non-zero figure to lose. The counts
-   are distinct (2 ready, 1 sent) so a Tracker that rendered SOMETHING cannot be mistaken for a
-   Tracker that rendered the right something. */
-function packet(key, status) {
-  return {
-    id: `fixture-packet-${key}`,
-    job_context: { company: `Fixture Company ${key}`, role: `Fixture Role ${key}`, jd_hash: `hash-${key}` },
-    resume_object_key: `fixture/${key}`,
-    created_at: "2026-07-21T12:00:00.000Z",
-    download_url: "#",
-    spec: {
-      school: "Fixture University",
-      degree: "B.S. Fixture Studies",
-      grad_date: "May 2027",
-      education_position: "top",
-      experience: [],
-      skills: [],
-      _review: {
-        jd_text: `Fixture job description ${key}.`,
-        portal_url: "https://jobs.example.com/fixture",
-        ats_name: "Greenhouse",
-        status,
-        edited_terms: [],
-        questions: [],
-        skipped_reasons: [],
-        updated_at: "2026-07-21T12:00:00.000Z",
-        ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
-      },
-    },
-  };
-}
-
-const RESUMES = [packet("ready-0", "resume_ready"), packet("ready-1", "questions_ready"), packet("sent-0", "submitted")];
-
-const BOOTSTRAP = {
-  schema_version: 1,
-  me: ME,
-  /* Zero matched jobs. This spec is about the Overview band, and an empty feed keeps company-logo
-     lookups, the one server-side external fetch this page can make, out of the run entirely. */
-  jobs: { jobs: [] },
-  targeting: TARGETING,
-  profile: PROFILE,
-  resume_history: { resumes: RESUMES },
-  application_profile: {},
-  outreach: [],
-  onboarding: { automatic_submission_enabled: false },
-  warnings: [],
-};
-
-/** A well-formed funnel. `days` deliberately has one non-zero bar so the healthy case has a shape. */
-const GOOD_FUNNEL = {
-  resumes_tailored: 3,
-  applications_submitted: 1,
-  fields_filled: 17,
-  submitted_this_week: 1,
-  too_early: false,
-  days: Array.from({ length: 14 }, (_, i) => ({ day: `d-${13 - i}`, submitted: i === 11 ? 1 : 0, tailored: 0 })),
-};
-
+/* The one override the healthy baseline needs. The shared fixture answers the board with two empty
+   arrays, which is correct for the click-path spec (it never opens the board) and useless here: an
+   empty board and a contained failure both render nothing much, so the control case has to have a
+   card in it to be worth anything. */
 const GOOD_BOARD = {
   stages: ["saved", "applied", "interview", "offer", "closed"],
   cards: [
@@ -172,21 +93,11 @@ const GOOD_BOARD = {
   ],
 };
 
-const BASE_STUB = {
-  "/dashboard/bootstrap": BOOTSTRAP,
-  "/me": ME,
-  "/v1/meta": { product: "litos" },
-  "/metrics/funnel": GOOD_FUNNEL,
-  "/resume/history": { resumes: RESUMES },
-  "/resume/base": {},
-  "/jobs": { jobs: [] },
-  "/profile": PROFILE,
-  "/profile/application": {},
-  "/profile/targeting": TARGETING,
-  "/applications/board": GOOD_BOARD,
-  "/track/events": [],
-  "/onboarding/state": { automatic_submission_enabled: false },
-};
+/* The healthy baseline, otherwise straight from the shared fixture. Each case below shallow-copies
+   it and replaces one endpoint, so anything a case does not name is provably the same response the
+   click-path spec drives. */
+const BASE_STUB = { ...STUB, "/applications/board": GOOD_BOARD };
+
 
 async function freePort() {
   return new Promise((resolve, reject) => {
