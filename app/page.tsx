@@ -238,10 +238,14 @@ export default function Home() {
     <div className="flex flex-col flex-1">
       <StructuredData faq={FAQ_ITEMS} />
       <ScrollProgress />
-      {/* The footer claims the site is keyboard-navigable end to end, and
-          the focus rings back that up, but a page with fixed chrome and a
-          long film needs the standard escape: one skip link, visible only
-          when focused. */}
+      {/* Fixed chrome (Header, ScrollProgress) and the long scroll film
+          below sit between the first tab stop and the first real content,
+          so the page needs the standard escape: one skip link, visible only
+          when focused. Justified by layout, deliberately not by any copy
+          claim about keyboard support: the footer used to carry such a line,
+          it was reworded and then cut, and this comment outlived it by a
+          week still asserting it. Rewording anything must not be able to
+          invalidate this reason. */}
       {/* Was #product, whose whole value here was "skip the film, land on
           real content". #product is now the film wrapper itself, so that link
           would have skipped to the thing it exists to skip. #documents is the
