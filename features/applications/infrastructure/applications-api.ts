@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { ApplicationReview, ResumeSpec } from "@/lib/api";
+import type { ResumeSpec } from "@/lib/api";
 import type { JdMatchResponse } from "../domain/match-model";
 import { ACTIVE_BOARD_STAGES } from "../domain/board-stages";
 /* Every response below that a component MAPS OVER goes through response-shape.ts on the way out.
@@ -282,63 +282,4 @@ export async function fetchRequirements(
       }),
     }),
   );
-}
-
-/* Sending a prepared packet, and reading a send that is still running.
- *
- * Home sends an application on one press of Submit (2026-08-04, Mehek's call: no pre-send review
- * step on the dashboard). That means two screens can now start the same run, and the header of
- * app/dashboard/page.tsx records why a second inline copy of this is the thing to avoid: the last
- * time Home held its own submission machinery it drifted into a lesser copy of the Applications
- * pane's. So the wire calls live here, once, and both callers get the same endpoint choice, the
- * same request body, and the same idea of which statuses mean "still running". */
-export type PacketSubmission = {
-  application_id: string;
-  review: ApplicationReview;
-  handoff_url?: string;
-};
-
-/** Statuses that mean the backend is still working on the application. */
-export const ACTIVE_SUBMISSION_STATUSES: ReadonlySet<ApplicationReview["status"]> = new Set<ApplicationReview["status"]>([
-  "submit_requested",
-  "preparing",
-  "filling",
-  "submitting",
-  "submission_claimed",
-]);
-
-/**
- * Why this packet cannot be sent yet, or null when it can.
- *
- * The two blockers are the ones only the student can clear: a required question left blank, and a
- * run the backend handed back. Both have to route to /dashboard/applications rather than to a
- * Submit that would fail, which is what a caller uses this to decide.
- */
-export function submissionBlocker(review: ApplicationReview | undefined): "answers" | "attention" | null {
-  if (!review) return null;
-  if (review.questions.some((question) => question.required && !question.answer.trim())) return "answers";
-  if (review.status === "needs_attention" || review.status === "failed") return "attention";
-  return null;
-}
-
-/**
- * Start the send.
- *
- * Two endpoints, one rule: a run that already captured the form and stopped for a human is
- * APPROVED, everything else is REQUESTED. Sending an approval down submit-request would start the
- * portal run a second time.
- */
-export async function sendApplication(packetId: string, review: ApplicationReview): Promise<PacketSubmission> {
-  if (review.status === "ready_for_final_approval") {
-    return api<PacketSubmission>(`/applications/${packetId}/submission/approve`, { method: "POST" });
-  }
-  return api<PacketSubmission>(`/applications/${packetId}/submit-request`, {
-    method: "POST",
-    body: JSON.stringify({ questions: review.questions }),
-  });
-}
-
-/** Where a running send has got to. */
-export async function readSubmission(packetId: string): Promise<PacketSubmission> {
-  return api<PacketSubmission>(`/applications/${packetId}/submission`);
 }

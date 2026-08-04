@@ -6,7 +6,6 @@ import {
   api,
   getStoredEmail,
   type ApplicationProfile,
-  type ApplicationReview,
   type GeneratedResume,
   type Me,
   type MonitoredJob,
@@ -23,24 +22,18 @@ import { CompanyLogo } from "@/components/app/CompanyLogo";
    review drawer and went with it. The dashboard renders no resume and scores no packet against a
    posting now; the card's ScoreRing is a different, already-fetched number. */
 import {
-  ACTIVE_SUBMISSION_STATUSES,
   AUTO_SUBMIT_PREPARED_LIMIT,
   MATCH_WEIGHTING_NOTE,
   jobSubmittedOnDay,
   packetMatchesJob,
   rankJobs,
-  readSubmission,
   resumeGenerationBody,
-  sendApplication,
-  submissionBlocker,
   useJobMatchScores,
   visibleMatches,
   type JobMatch,
-  type PacketSubmission,
   type ProfileIdentity,
   type RankedJob,
 } from "@/features/applications";
-import { track } from "@/lib/analytics";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
 import { localDayKey } from "@/lib/local-day";
@@ -271,11 +264,6 @@ export default function Home() {
   /* Why a build stopped, per job. Kept so "Paused" can say something rather than leaving a
      student to guess whether to wait, fix something, or give up. */
   const [preparationErrors, setPreparationErrors] = useState<Record<string, string>>({});
-  /* Jobs whose application is being sent right now, and why a send did not go.
-     Home sends on one press of Submit, so these are per job rather than per open screen: several
-     can be in flight at once and each card has to report its own outcome. */
-  const [submittingJobs, setSubmittingJobs] = useState<string[]>([]);
-  const [submissionErrors, setSubmissionErrors] = useState<Record<string, string>>({});
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
 
@@ -372,57 +360,9 @@ export default function Home() {
     sent: outreach.filter((event) => ["sent", "replied"].includes(event.status)).length,
     replied: outreach.filter((event) => event.status === "replied").length,
   }), [outreach]);
-  /* Every packet the backend is still working on, as one comma-joined key. A value rather than a
-     new array each render, so the poll below has a dependency it can compare. */
-  const activeSubmissionKey = useMemo(
-    () => packets
-      .filter((packet) => {
-        const status = packet.spec._review?.status;
-        return Boolean(status && ACTIVE_SUBMISSION_STATUSES.has(status));
-      })
-      .map((packet) => packet.id)
-      .join(","),
-    [packets],
-  );
-
-  /* Follow the sends that are still running.
-   *
-   * Not the drawer's poll rebuilt: that one followed the single packet an open modal held, which
-   * is the only thing a modal can hold. Sending from a card means several runs at once and nobody
-   * watching any of them, so every active packet is followed and each lands on its own card. */
-  useEffect(() => {
-    if (qaMode || !activeSubmissionKey) return;
-    const packetIds = activeSubmissionKey.split(",");
-
-    let cancelled = false;
-    let timer: number | undefined;
-    const tick = async () => {
-      const answers = await Promise.all(packetIds.map(async (packetId) => {
-        try {
-          return await readSubmission(packetId);
-        } catch {
-          /* A read that failed is a read, not a failed submission. The card keeps saying "Sending"
-             because that is still the last thing known to be true, and the next tick asks again. */
-          return null;
-        }
-      }));
-      if (cancelled) return;
-      const received = answers.filter((answer): answer is PacketSubmission => answer !== null);
-      for (const answer of received) installReview(answer.application_id, answer.review);
-      const stillRunning = received.length !== packetIds.length
-        || received.some((answer) => ACTIVE_SUBMISSION_STATUSES.has(answer.review.status));
-      if (stillRunning) timer = window.setTimeout(tick, 2_500);
-    };
-
-    timer = window.setTimeout(tick, 2_500);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [qaMode, activeSubmissionKey]);
-
-  /* THE REVIEW DRAWER LIVED HERE. Deleted, not moved: the packet review screen is
-     /dashboard/applications, and nothing on this page renders a resume or scores one.
+  /* THE REVIEW DRAWER AND ITS SUBMISSION MACHINERY LIVED HERE. Deleted, not moved: reviewing a
+     packet happens on ONE screen now, /dashboard/applications, and the Review button on a card is
+     a link to it.
 
      The drawer was a second review screen that had drifted into a lesser copy of the first. It
      rendered the job description as plain text and the resume beside it, with no requirement
@@ -435,11 +375,7 @@ export default function Home() {
      submit-request and submission/approve (continueFromResume), the 2.5s submission poll
      (PortalProgress), the questions gate, and the failure and receipt screens.
 
-     Rebuilding any of it here is how the two screens diverged the first time. THE SEND ITSELF came
-     back to this page on 2026-08-04, when Submit on a card became one press, and the rule above is
-     the reason it came back as three calls into the applications feature rather than as a local
-     copy: sendApplication, readSubmission and submissionBlocker are shared, so there is still one
-     definition of how an application goes out. What Home does NOT do is review a packet. */
+     Rebuilding any of it here is how the two screens diverged the first time. */
 
   /* Build resumes ahead of being asked, for automatic-submission students only.
    *
@@ -591,57 +527,12 @@ export default function Home() {
     }
   }
 
-  /* Send the packet, on the press, with nothing in between.
-   *
-   * The card's second press USED to be Review, a link to /dashboard/applications where a separate
-   * Send control finished the job. Mehek's call, 2026-08-04: Submit on the card is the send. One
-   * press, the request goes.
-   *
-   * The header above records why the drawer's submission machinery must not be rebuilt here, and
-   * that still holds: the wire calls are sendApplication and readSubmission in the applications
-   * feature, so Home and the review pane cannot disagree about which endpoint sends, what the body
-   * carries, or which statuses mean a run is still going. What Home owns is only which job is in
-   * flight and what to say when one fails.
-   *
-   * The gate the review screen enforced does not disappear with the trip to it: submissionBlocker
-   * is the same check, read by the card, which renders "Finish your answers" instead of Submit for
-   * a packet that cannot legally be sent. So this is never reached without something to send. */
-  async function submitApplication(job: RankedJob) {
-    if (submittingJobs.includes(job.id)) return;
+  /* Where a card's Review goes, or null when there is nothing built to review yet.
+     The same packet lookup the card used to decide "prepared", now returning the packet so the
+     link can carry its id: the card is Ready exactly when this is non-null. */
+  function reviewHrefFor(job: RankedJob): string | null {
     const packet = packets.find((candidate) => packetMatchesJob(candidate, job));
-    const review = packet?.spec._review;
-    if (!packet || !review || submissionBlocker(review)) return;
-
-    setSubmittingJobs((current) => [...new Set([...current, job.id])]);
-    setSubmissionErrors((current) => {
-      if (!(job.id in current)) return current;
-      const next = { ...current };
-      delete next[job.id];
-      return next;
-    });
-    track("application_submission_requested", { source: qaMode ? "qa" : "home_card" });
-
-    try {
-      if (qaMode) {
-        await new Promise((resolve) => window.setTimeout(resolve, 550));
-        const now = new Date().toISOString();
-        installReview(packet.id, { ...review, status: "submitted", submitted_at: now, updated_at: now });
-        return;
-      }
-
-      const result = await sendApplication(packet.id, review);
-      installReview(packet.id, result.review);
-    } catch (reason) {
-      setSubmissionErrors((current) => ({ ...current, [job.id]: userFacingError(reason) }));
-    } finally {
-      setSubmittingJobs((current) => current.filter((id) => id !== job.id));
-    }
-  }
-
-  function installReview(packetId: string, review: ApplicationReview) {
-    setPackets((current) => current.map((packet) => packet.id === packetId
-      ? { ...packet, spec: { ...packet.spec, _review: review } }
-      : packet));
+    return packet ? `/dashboard/applications?application=${packet.id}` : null;
   }
 
   /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
@@ -812,21 +703,22 @@ export default function Home() {
               key={job.id}
               job={job}
               match={matches[job.id]}
-              /* The packet itself, because the card now decides three things from it: whether the
-                 job is Ready, whether it can be sent, and where to send the student when it
-                 cannot. */
-              packet={packets.find((packet) => packetMatchesJob(packet, job)) ?? null}
+              /* `?application=<packet id>`, not `?job=<job id>`. Both are handled over there, but
+                 the job form treats "no packet found" as a request to BUILD one, and it resolves
+                 the packet out of its own 50-row history window. A packet that has aged out of
+                 that window would silently spend a resume from the student's quota and leave a
+                 duplicate behind. Addressing the packet directly cannot generate anything: the
+                 worst case is that nothing is selected. Both screens read the same history
+                 endpoint, so a packet the card can see is one that screen can find. */
+              reviewHref={reviewHrefFor(job)}
               preparing={preparingJobs.includes(job.id)}
               preparationFailed={prewarmFailures.includes(job.id)}
-              submitting={submittingJobs.includes(job.id)}
-              submissionError={submissionErrors[job.id]}
               /* Generating needs a name and an application profile. Without them the request is a
                  guaranteed failure, so the card sends the student to the one page that fixes it
                  rather than offering a button that cannot work. */
               canPrepare={Boolean(identity?.full_name?.trim() && applicationProfile)}
               preparationError={preparationErrors[job.id]}
               onDismiss={() => dismiss(job.id)}
-              onSubmit={() => void submitApplication(job)}
               onPrepare={() => void preparePacket(job.id)}
               onRetry={() => retryPreparation(job.id)}
             />
@@ -951,49 +843,35 @@ function PayLine({ job }: { job: Pick<MonitoredJob, "employment_type"> & PayFact
  * else nothing was building it, nothing ever would, and the card had no control that could start
  * anything. "Not started" and "Getting ready" are now two different states, and only one of them
  * claims work is happening. */
-/* The packet replaces the `reviewHref` string, which replaced a `prepared` boolean and an
-   `onReview` callback before it. Same principle each time, one more thing decided from one value:
-   the card is "Ready" precisely when a packet exists, and now that Submit sends rather than
-   navigates, the card also has to know whether that packet CAN be sent and where to send the
-   student when it cannot. Null means nothing has been built yet. */
+/* `reviewHref` replaces the `prepared` boolean AND the `onReview` callback, which is more than a
+   plumbing change: the card is "Ready" precisely when there is a packet to review, and the link to
+   that packet is built from the packet's own id. One value now decides the chip and the control, so
+   a card cannot say "Ready" while offering nothing to open, which is what a separate boolean and a
+   separate handler make possible. Null means there is nothing to review yet. */
 function JobMatchCard({
   job,
   match,
-  packet,
+  reviewHref,
   preparing,
   preparationFailed,
   preparationError,
-  submitting,
-  submissionError,
   canPrepare,
   onDismiss,
-  onSubmit,
   onPrepare,
   onRetry,
 }: {
   job: RankedJob;
   match: JobMatch | null | undefined;
-  packet: GeneratedResume | null;
+  reviewHref: string | null;
   preparing: boolean;
   preparationFailed: boolean;
   preparationError?: string;
-  submitting: boolean;
-  submissionError?: string;
   canPrepare: boolean;
   onDismiss: () => void;
-  onSubmit: () => void;
   onPrepare: () => void;
   onRetry: () => void;
 }) {
-  const status = packet ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
-  /* What the review screen used to be asked before it would send. A required question left blank,
-     or a run the backend handed back, is something only the student can clear, so the card offers
-     the screen that clears it instead of a Submit that would fail. Same rule as the missing-profile
-     branch below, and the same shared check the review pane uses. */
-  const review = packet?.spec._review;
-  const blocker = submissionBlocker(review);
-  const sent = review?.status === "submitted";
-  const sending = submitting || Boolean(review && ACTIVE_SUBMISSION_STATUSES.has(review.status));
+  const status = reviewHref ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
     <Card className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised">
       {/* Lead with the employer, then put the score in the corner where it can be compared across
@@ -1006,7 +884,7 @@ function JobMatchCard({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Chip
-                  label={sent ? "Sent" : sending ? "Sending" : blocker ? "Needs you" : status === "ready" ? "Ready" : status === "preparing" ? "Getting ready" : status === "failed" ? "Paused" : "Not started"}
+                  label={status === "ready" ? "Ready" : status === "preparing" ? "Getting ready" : status === "failed" ? "Paused" : "Not started"}
                   kind={status === "ready" ? "ready" : "generating"}
                 />
                 <span className="text-small text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
@@ -1049,12 +927,6 @@ function JobMatchCard({
           <p className="mt-3 line-clamp-2 text-label text-warn">{preparationError}</p>
         )}
 
-        {/* A send that did not go says so on the card that sent it. There is no screen in between
-            any more, so this is the only place the reason can appear. */}
-        {submissionError && (
-          <p role="alert" className="mt-3 line-clamp-2 text-label text-warn">{submissionError}</p>
-        )}
-
         {/* Only one state here has nothing to click, and it is the one where a request really is
             in flight. The chip and this slot use one name for each state, so a card never says
             two things at once. */}
@@ -1062,32 +934,18 @@ function JobMatchCard({
           <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Skip
           </button>
-          {sent ? (
-            <span className="flex min-h-11 items-center px-3 text-sm text-muted">Sent</span>
-          ) : sending ? (
-            <span className="flex min-h-11 items-center px-3 text-sm text-muted">
-              <PendingLabel>Sending</PendingLabel>
-            </span>
-          ) : status === "preparing" ? (
+          {status === "preparing" ? (
             <span className="flex min-h-11 items-center px-3 text-sm text-muted">
               <PendingLabel>Getting ready</PendingLabel>
             </span>
-          ) : packet && blocker ? (
-            /* `?application=<packet id>`, not `?job=<job id>`. Both are handled over there, but the
-               job form treats "no packet found" as a request to BUILD one, and it resolves the
-               packet out of its own 50-row history window. A packet that has aged out of that
-               window would silently spend a resume from the student's quota and leave a duplicate
-               behind. Addressing the packet directly cannot generate anything: the worst case is
-               that nothing is selected. */
-            <Link href={`/dashboard/applications?application=${packet.id}`} aria-label={`Finish your answers for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-              {blocker === "answers" ? "Finish your answers" : "Open this one"}
+          ) : reviewHref ? (
+            /* A LINK, not a button that opened a drawer here. Reviewing a packet is one screen,
+               /dashboard/applications, and this is the way in. It navigates rather than overlaying
+               so there is exactly one place the requirement highlighting, the legend, the gap
+               breakdown and the send control have to be kept correct. */
+            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+              Review
             </Link>
-          ) : status === "ready" ? (
-            /* One press, and the application goes. This was a Review link to the packet screen,
-               where a second control finished the job; the two presses are one now. */
-            <button type="button" onClick={onSubmit} aria-label={`Submit your application to ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
-              Submit
-            </button>
           ) : !canPrepare ? (
             /* No name or no application profile yet. The packet cannot be built until that exists,
                so the card points at the fix instead of offering a button that would only fail. */
