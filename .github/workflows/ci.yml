@@ -105,6 +105,16 @@ jobs:
       - name: Click path spec
         run: npm run test:click-path
 
+      # Same job on purpose: it reuses the build and the Chromium installed
+      # above rather than paying for either twice. This spec is the ONLY thing
+      # that can observe the per-band error boundaries actually containing a
+      # throw, so leaving it out of CI would mean a refactor could delete the
+      # containment silently. tests/section-boundary-placement.test.mjs covers
+      # the boundaries still EXISTING from inside `npm test`; only this one
+      # covers them working.
+      - name: Partial payload containment spec
+        run: npm run test:partial-payload
+
       # The whole value of that spec is observing rendered behaviour, and nobody
       # can reproduce a runner by hand. Without this, its first CI-only failure
       # is a bare locator timeout with no picture. The spec writes a full-page

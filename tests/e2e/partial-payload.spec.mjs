@@ -48,25 +48,24 @@
  * about what a healthy dashboard looks like, and the "well-formed response is unchanged" case below
  * is measured against the same baseline the other spec asserts on.
  *
- * RUN IT WITH:  npm run build && node tests/e2e/partial-payload.spec.mjs
+ * RUN IT WITH:  npm run build && npm run test:partial-payload
  * Deliberately outside `npm test`, which is hundreds of fast static tests that must never depend on
- * a browser binary. Chromium is resolved from the gstack Playwright install; override with
- * PLAYWRIGHT_MODULE=/path/to/playwright.
+ * a browser binary. It runs in CI in the same job as the click-path spec, reusing that job's build
+ * and its already-installed Chromium.
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
 
 /* An explicit index.js: an ESM import of a bare directory is ERR_UNSUPPORTED_DIR_IMPORT, and this
    path is outside the repo so it cannot be resolved by name. */
-const PLAYWRIGHT_MODULE =
-  process.env.PLAYWRIGHT_MODULE ?? `${homedir()}/.claude/skills/gstack/node_modules/playwright/index.js`;
-/* ...and `.default`, because that package is CommonJS: a dynamic import of it hangs its exports off
-   the default binding rather than off named ones. */
+/* playwright-core, the same devDependency the click-path spec uses, so CI installs one browser for
+   both specs and the version they run against cannot drift apart. PLAYWRIGHT_MODULE overrides it
+   for a local run against a differently installed Playwright. */
+const PLAYWRIGHT_MODULE = process.env.PLAYWRIGHT_MODULE ?? "playwright-core";
 const playwrightModule = await import(PLAYWRIGHT_MODULE);
 const { chromium } = playwrightModule.default ?? playwrightModule;
 
@@ -321,6 +320,37 @@ test("a partial but usable funnel degrades the sparkline only, and never invents
   assert.equal(await page.locator('figure div[role="img"]').count(), 0, "and no bar row at all");
 
   await page.locator('section[aria-labelledby="applications-summary"]').waitFor({ state: "visible" });
+  assert.deepEqual(blockedExternal, []);
+  await page.close();
+});
+
+test("a board with no `stages` still renders every column and every move option", async () => {
+  /* THE BLOCKING DEFECT THIS CASE EXISTS FOR.
+   *
+   * The first version of the fix defaulted a missing `stages` by deriving it from the cards' own
+   * stage values. Measured here, that rendered the Applied column ALONE for a board holding one
+   * applied card: Interview and Offer disappeared, which tells a student those stages do not exist,
+   * and MoveControl draws one <option> per visible stage, so the student could not move the card
+   * forward at all. Nothing errored, nothing retried, nothing was reported. A guard that produces a
+   * healthy-looking route the student cannot use is worse than the crash it replaced.
+   *
+   * The fallback is now the client's own ACTIVE_BOARD_STAGES, which activeBoardStages() filters
+   * through one line later anyway, so this can surface nothing the client would not otherwise draw.
+   */
+  stub = { ...BASE_STUB, "/applications/board": { cards: GOOD_BOARD.cards } };
+  const page = await openPage("/dashboard/applications");
+
+  /* All three columns, addressed by their own headings rather than by text anywhere on the page. */
+  for (const stage of ["applied", "interview", "offer"]) {
+    await page.locator(`#col-${stage}`).waitFor({ state: "visible", timeout: 15000 });
+  }
+
+  /* And all three move options on the one card, which is the harm a student would actually hit. */
+  const options = await page.locator("select option").allInnerTexts();
+  assert.deepEqual(options, ["Applied", "Interview", "Offer"], "canonical order, not card iteration order");
+
+  assert.equal(await page.getByText("This page did not load.").count(), 0);
+  assert.equal(await page.getByText("Could not load your board.").count(), 0);
   assert.deepEqual(blockedExternal, []);
   await page.close();
 });

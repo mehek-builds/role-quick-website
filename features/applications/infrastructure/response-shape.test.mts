@@ -31,8 +31,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { ACTIVE_BOARD_STAGES } from "../domain/board-stages.ts";
 import {
   PartialPayloadError,
+  setPartialPayloadReporter,
   normalizeBoard,
   normalizeFunnel,
   normalizeGapEvidence,
@@ -114,36 +116,85 @@ test("/metrics/funnel", async (t) => {
 
 test("/applications/board", async (t) => {
   await t.test("rejects the `[]` that killed the whole /dashboard/applications route", () => {
-    rejects(() => normalizeBoard([]), ["<envelope>"]);
+    rejects(() => normalizeBoard([], ACTIVE_BOARD_STAGES), ["<envelope>"]);
   });
 
   await t.test("rejects a body with no cards", () => {
-    rejects(() => normalizeBoard({ stages: ["applied"] }), ["cards"]);
+    rejects(() => normalizeBoard({ stages: ["applied"] }, ACTIVE_BOARD_STAGES), ["cards"]);
   });
 
-  await t.test("accepts cards with `stages` absent, deriving the columns from the cards", () => {
-    const board = normalizeBoard<{ stages: string[]; cards: unknown[] }>({
-      cards: [
-        { id: "a", stage: "applied" },
-        { id: "b", stage: "interview" },
-        { id: "c", stage: "applied" },
-      ],
-    });
-    assert.deepEqual(board.stages, ["applied", "interview"], "deduped, and only stages the response itself named");
-    assert.equal(board.cards.length, 3, "no card is lost to the missing field");
+  await t.test("falls back to the client's own canonical stage list, in order", () => {
+    /* NOT derived from the cards. activeBoardStages() filters whatever arrives through this exact
+       constant, so a derived list could only ever be a subset of it: one card in `applied` would
+       render the Applied column alone, hiding Interview and Offer and leaving MoveControl with a
+       single option, which means the student cannot move a card forward and nothing says so. */
+    const board = normalizeBoard<{ stages: string[]; cards: unknown[] }>(
+      { cards: [{ id: "a", stage: "applied" }] },
+      ACTIVE_BOARD_STAGES,
+    );
+    assert.deepEqual(board.stages, ["applied", "interview", "offer"]);
+    assert.equal(board.cards.length, 1, "no card is lost to the missing field");
   });
 
-  await t.test("invents no stage when there is no card to name one", () => {
-    const board = normalizeBoard<{ stages: string[] }>({ cards: [] });
-    assert.deepEqual(board.stages, []);
+  await t.test("gives every column even when no card is in it", () => {
+    const board = normalizeBoard<{ stages: string[] }>({ cards: [] }, ACTIVE_BOARD_STAGES);
+    assert.deepEqual(board.stages, [...ACTIVE_BOARD_STAGES]);
   });
 
-  await t.test("prefers the sent stages over the derived ones when both exist", () => {
-    const board = normalizeBoard<{ stages: string[] }>({
-      stages: ["saved", "applied", "interview", "offer", "closed"],
-      cards: [{ id: "a", stage: "applied" }],
-    });
+  await t.test("copies the fallback rather than aliasing the shared constant", () => {
+    /* A caller that sorted or spliced board.stages in place would otherwise mutate the module-level
+       constant for every other reader in the app. */
+    const board = normalizeBoard<{ stages: string[] }>({ cards: [] }, ACTIVE_BOARD_STAGES);
+    board.stages.push("nonsense");
+    assert.deepEqual([...ACTIVE_BOARD_STAGES], ["applied", "interview", "offer"]);
+  });
+
+  await t.test("prefers the sent stages over the fallback when both exist", () => {
+    const board = normalizeBoard<{ stages: string[] }>(
+      { stages: ["saved", "applied", "interview", "offer", "closed"], cards: [{ id: "a", stage: "applied" }] },
+      ACTIVE_BOARD_STAGES,
+    );
     assert.equal(board.stages.length, 5);
+  });
+});
+
+test("the drift reporter", async (t) => {
+  /* api_payload_incomplete is the ONLY signal that the hand-deployed backend and the
+     auto-deployed frontend have drifted, so it is worth pinning rather than assuming. */
+  const seen: { endpoint: string; fields: string[] }[] = [];
+  t.after(() => setPartialPayloadReporter(() => {}));
+  setPartialPayloadReporter((endpoint, fields) => seen.push({ endpoint, fields: [...fields] }));
+
+  await t.test("fires once per rejection, with the endpoint and the field names", () => {
+    seen.length = 0;
+    assert.throws(() => normalizeResumeHealth({ findings: [] }));
+    assert.deepEqual(seen, [{ endpoint: "/resume/health", fields: ["bullet_count", "quantified_count"] }]);
+  });
+
+  await t.test("carries the literal path, so no query string can ride along", () => {
+    /* fetchFunnel requests `/metrics/funnel?tz_offset=NNN`. The endpoint reported here is the
+       hardcoded literal, so the student's UTC offset never reaches the analytics payload. */
+    seen.length = 0;
+    assert.throws(() => normalizeFunnel({}));
+    assert.equal(seen[0].endpoint, "/metrics/funnel");
+  });
+
+  await t.test("stays silent on an accepted response", () => {
+    seen.length = 0;
+    normalizeBoard({ cards: [] }, ACTIVE_BOARD_STAGES);
+    assert.deepEqual(seen, []);
+  });
+
+  await t.test("a throwing reporter does not replace the error it was reporting", () => {
+    setPartialPayloadReporter(() => {
+      throw new Error("analytics is down");
+    });
+    rejects(() => normalizeFunnel({ days: [] }), [
+      "resumes_tailored",
+      "applications_submitted",
+      "fields_filled",
+      "submitted_this_week",
+    ]);
   });
 });
 

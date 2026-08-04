@@ -164,20 +164,30 @@ export function normalizeFunnel<T>(raw: unknown): T {
  * SUBJECT: `cards`. The board is the cards. `[]` for the whole body, the shape that killed the
  * route, fails the envelope check before this even runs.
  *
- * SECONDARY: `stages`. Defaulting it to [] would technically not throw and would still lose the
- * board, because the columns ARE the stages and cards are only ever rendered inside one: the
- * student would get an empty screen over a full response. So when `stages` is absent it is derived
- * from the cards' own `stage` values instead. That invents nothing. Every stage it names is one the
- * backend put on a card in this very response, and a card whose stage the allow-list rejects is
- * dropped by activeBoardStages exactly as it would be if the field had arrived.
+ * SECONDARY: `stages`, defaulted to the CLIENT'S OWN canonical stage list, which the caller passes
+ * in. The first attempt at this derived the list from the cards' own stage values, and that was
+ * wrong in exactly the way this file exists to prevent. activeBoardStages() already filters
+ * whatever arrives through the fixed constant ACTIVE_BOARD_STAGES, so a derived list can only ever
+ * be a SUBSET of something the client already hard-codes: deriving cannot add information, it can
+ * only subtract it. Measured in the browser, a board with one card in `applied` and no `stages`
+ * rendered the Applied column alone. Interview and Offer vanished, which tells a student those
+ * stages do not exist, and MoveControl draws one option per visible stage, so the student could not
+ * move a card forward at all. No error, no retry, no telemetry, a route that looks healthy. That is
+ * ISSUE-014 with a guard's face on. Derived order was a second hazard: it follows card iteration,
+ * so the board could draw Offer before Applied.
+ *
+ * Passing the constant instead invents strictly less. It cannot surface a stage the client would
+ * not otherwise display, because the same constant filters it one line later, and it keeps
+ * canonical order. It is a PARAMETER rather than an import so this module stays dependency-free and
+ * its test can pin the exact fallback.
  */
-export function normalizeBoard<T>(raw: unknown): T {
+export function normalizeBoard<T>(raw: unknown, fallbackStages: readonly string[]): T {
   const record = required("/applications/board", raw, { cards: Array.isArray });
-  const cards = collection<Record<string, unknown>>(record.cards);
-  const stages = Array.isArray(record.stages)
-    ? record.stages
-    : [...new Set(cards.map((card) => card.stage).filter((stage) => typeof stage === "string"))];
-  return { ...record, stages, cards } as T;
+  return {
+    ...record,
+    stages: Array.isArray(record.stages) ? record.stages : [...fallbackStages],
+    cards: collection(record.cards),
+  } as T;
 }
 
 /**

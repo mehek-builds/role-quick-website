@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import type { ResumeSpec } from "@/lib/api";
 import type { JdMatchResponse } from "../domain/match-model";
+import { ACTIVE_BOARD_STAGES } from "../domain/board-stages";
 /* Every response below that a component MAPS OVER goes through response-shape.ts on the way out.
    That file is the single parse boundary for this feature: it is the only place a wire shape is
    checked, so a `?? []` is never needed at a call site and the next component to read one of these
@@ -181,7 +182,9 @@ export type BoardCard = {
 };
 
 export async function fetchBoard(): Promise<{ stages: Stage[]; cards: BoardCard[] }> {
-  return normalizeBoard(await api<unknown>("/applications/board"));
+  /* The client's own canonical stage list is the fallback when the backend omits `stages`. See
+     normalizeBoard for why deriving the columns from the cards was worse than useless. */
+  return normalizeBoard(await api<unknown>("/applications/board"), ACTIVE_BOARD_STAGES);
 }
 
 export async function moveCard(id: string, stage: Stage): Promise<void> {
