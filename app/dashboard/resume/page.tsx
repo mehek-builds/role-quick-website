@@ -100,17 +100,37 @@ export default function ResumeWorkspace() {
           org: e.org.trim(),
           title: e.title?.trim() || undefined,
           date_range: e.date_range?.trim() || undefined,
-          /* Sent back unchanged because this PUT replaces the whole bank. Omitting it does not
-             leave the stored value alone, it deletes it - which is how every parsed city was lost
-             the first time. Not editable here; it comes off the resume. */
+          /* This PUT replaces the whole bank, so omitting a field does not leave the stored value
+             alone, it deletes it - which is how every parsed city was lost the first time. Now
+             editable above, so an empty string here is the student clearing it on purpose. */
           location: e.location?.trim() || undefined,
           bullet_variants: e.bullet_variants.map((b) => b.trim()).filter(Boolean),
           tags: (e.tags ?? []).map((t) => t.trim()).filter(Boolean),
-        }))
-        .filter((e) => e.org && e.bullet_variants.length > 0);
+        }));
+      /* The API requires an org and at least one bullet per entry, so incomplete rows cannot be
+         sent. They used to be dropped here silently and the page still said "Saved", so a half
+         filled entry disappeared and reported success. That was survivable while the only way in
+         was one "Add entry" button; two Add buttons and two empty states inviting "add one by
+         hand" make it the common case. Say what is wrong instead, and save nothing until it is
+         fixed: a partial save would renumber the bank under the student mid-edit.
+         A row with nothing typed in it at all is the student changing their mind after clicking
+         Add, so it is dropped without complaint. */
+      const started = cleaned.filter((e) => !(e.org && e.bullet_variants.length > 0))
+        .filter((e) => e.org || e.bullet_variants.length > 0 || e.title || e.date_range);
+      if (started.length > 0) {
+        const named = started.find((e) => e.org)?.org;
+        setError(
+          started.length === 1
+            ? `${named ? `"${named}"` : "One entry"} needs both an organization and at least one bullet before it can be saved.`
+            : `${started.length} entries need both an organization and at least one bullet before they can be saved.`,
+        );
+        setSaving(false);
+        return;
+      }
+      const complete = cleaned.filter((e) => e.org && e.bullet_variants.length > 0);
       const res = await api<{ entries: ExperienceEntry[] }>(
         "/profile/experience-bank",
-        { method: "PUT", body: JSON.stringify({ entries: cleaned }) },
+        { method: "PUT", body: JSON.stringify({ entries: complete }) },
       );
       setEntries(res.entries);
       setSavedAt(Date.now());
@@ -635,7 +655,12 @@ function ParsedProfileEditor({
           ...(draft.school.trim() || school ? { school: draft.school } : {}),
           degree: draft.degree,
           grad_date: draft.grad_date,
-          coursework: draft.coursework,
+          /* Sent ONLY when it changed, which makes this screen work against a backend that does not
+             know the field yet. parsedProfilePatchSchema is .strict(), so an unknown key is a 400 on
+             the whole save, not a partial one: shipping this page ahead of the matching backend
+             would break every profile save rather than just the coursework part of one. Same shape
+             as target_roles below, for the same reason. */
+          ...(draft.coursework !== coursework ? { coursework: draft.coursework } : {}),
           objective: draft.objective,
           skills: parseEditableList(draft.skills),
           languages: parseEditableList(draft.languages),
