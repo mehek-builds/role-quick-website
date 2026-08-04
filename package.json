@@ -10,6 +10,7 @@
     "test": "node --experimental-strip-types --test 'app/**/*.test.mts' 'features/**/*.test.mts' 'lib/**/*.test.mts' tests/**/*.test.mjs",
     "test:partial-payload": "node tests/e2e/partial-payload.spec.mjs",
     "test:click-path": "node --test tests/e2e/dashboard-click-path.spec.mjs",
+    "test:start-base": "node --test tests/e2e/start-base-build.spec.mjs",
     "verify:logos": "node --experimental-strip-types scripts/verify-logo-service.mjs",
     "verify:suggestions": "node --experimental-strip-types scripts/verify-board-suggestions.mjs"
   },
