@@ -21,6 +21,8 @@ test("Home's ring is labelled with the metric it actually shows", () => {
   assert.match(home, /\$\{match\.matched\} of the \$\{match\.total\} requirements Litos counted/);
   // ISSUE-023's qualifier: term_count is capped, so a bare "requirements" claims the posting's
   // whole list. A screen reader user gets only this string.
-  assert.doesNotMatch(home, /requirements this job posting lists/);
+  // Either number, either case: the plural-only spelling of this ban let the singular form ship
+  // live in the review screen's zero-gaps line, so it banned a spelling rather than the claim.
+  assert.doesNotMatch(home, /\brequirements? this (job )?posting lists/i);
   assert.match(scoreRing, /aria-label={`\$\{pct\} out of 100 \$\{metricLabel\}`}/);
 });

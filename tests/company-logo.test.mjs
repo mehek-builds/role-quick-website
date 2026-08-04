@@ -13,7 +13,7 @@ const componentUrl = new URL("../components/app/CompanyLogo.tsx", import.meta.ur
 const homeUrl = new URL("../app/dashboard/page.tsx", import.meta.url);
 
 /* Comments are stripped before anything is asserted. These checks describe what the component
-   DOES, and the comments here explain the bugs it must not repeat by quoting them verbatim — so a
+   DOES, and the comments here explain the bugs it must not repeat by quoting them verbatim, so a
    naive search matches the explanation and reports a failure that is not real. That happened on
    the first run of this file. */
 async function code() {
@@ -24,7 +24,7 @@ async function code() {
 test("the row logo is never lazy-loaded", async () => {
   /* FAILURE 1, measured on trylitos.com 2026-07-29: with loading="lazy", not one of the 41 logos
      on the first page ever loaded. Every circle rendered empty, including rows sitting in the
-     viewport, and because the image never errored the monogram fallback never ran either — so the
+     viewport, and because the image never errored the monogram fallback never ran either, so the
      row showed nothing at all rather than a letter. Forcing the same element to eager painted it
      immediately, and probing the URL from that page returned a 64px image.
 
@@ -40,7 +40,7 @@ test("the row logo is never lazy-loaded", async () => {
 
 test("a logo that fails still leaves something in the circle", async () => {
   /* The circle must never be empty. If the image errors we fall back to the company's initial, so
-     onError has to set that state — without it a dead icon leaves a blank disc with no clue whose
+     onError has to set that state: without it a dead icon leaves a blank disc with no clue whose
      row it is. */
   const source = await code();
   assert.match(source, /onError=\{\(\) => setBroken\(true\)\}/);

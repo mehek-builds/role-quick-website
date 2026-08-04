@@ -181,7 +181,7 @@ select:focus-visible,
 }
 
 /* First-paint entrance for content in the initial viewport (hero, demo).
-   Pure CSS so it runs before hydration — the headline can never be a
+   Pure CSS so it runs before hydration: the headline can never be a
    blank page waiting on JS. Same settle as .rq-reveal. */
 @keyframes rq-enter {
   from {
@@ -232,7 +232,7 @@ select:focus-visible,
 }
 
 /* The receipt loop: log rows land one by one, hold, then the cycle restarts.
-   The one element allowed to keep moving — it IS the product demo. */
+   The one element allowed to keep moving: it IS the product demo. */
 @keyframes rq-log-row {
   0%, 3% {
     opacity: 0;

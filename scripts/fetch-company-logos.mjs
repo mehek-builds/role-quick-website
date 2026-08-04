@@ -66,7 +66,7 @@ function pngInsideIco(buf) {
 }
 
 /* The other half of the .ico population stores raw DIB bitmaps rather than
-   PNGs — MongoDB, Palantir, Supabase and Baseten all do, and they are four of
+   PNGs: MongoDB, Palantir, Supabase and Baseten all do, and they are four of
    the busiest boards we watch, so "no logo" would show up constantly. Only the
    32-bit BGRA case is handled, which is what every one of them ships; the
    palette formats are pre-2010 and not worth a decoder. Rows are bottom-up and
@@ -132,8 +132,8 @@ async function candidates(domain) {
 
     /* The web app manifest is where a modern site declares its 192 and 512px
        PNGs. Several of these companies (Asana, Supabase, MongoDB, Palantir)
-       declare only a .ico in <head> — and theirs hold raw DIB bitmaps, which
-       have no PNG inside for pngInsideIco to find — while the manifest points
+       declare only a .ico in <head>, and theirs hold raw DIB bitmaps, which
+       have no PNG inside for pngInsideIco to find, while the manifest points
        at exactly the crisp raster we want. */
     const manifestHref =
       /<link\b[^>]*rel=["'][^"']*manifest[^"']*["'][^>]*>/i

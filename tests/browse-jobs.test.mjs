@@ -213,7 +213,7 @@ describe("pageCount", () => {
 describe("the board's layout", () => {
   test("a tile can shrink below its own nowrap content", () => {
     /* The location line is `truncate`, which is white-space: nowrap, and a grid
-       item defaults to min-width: auto — so the track grew to fit the longest
+       item defaults to min-width: auto, so the track grew to fit the longest
        unwrapped location instead of clipping it. On a 375px phone the document
        came out 809px wide and the whole page scrolled sideways, while desktop
        looked perfect and review showed nothing. min-w-0 is what lets truncate
@@ -337,14 +337,14 @@ describe("the three dropdowns", () => {
   test("the title field offers fifty role families, not raw postings", async () => {
     /* Mehek, 2026-07-29: fifty common titles, nothing more. The suggestions
        used to be the board's most common RAW titles, so the field opened on
-       "Senior Product Manager - Network Path" — a real posting, and not a thing
+       "Senior Product Manager - Network Path", a real posting, and not a thing
        anyone types into a box labelled Job title. */
     const { JOB_TITLES } = await import("../lib/job-titles.ts");
     assert.equal(JOB_TITLES.length, 50, `expected 50 titles, got ${JOB_TITLES.length}`);
     assert.equal(new Set(JOB_TITLES).size, 50, "the list must not repeat a title");
     for (const t of JOB_TITLES) {
       assert.ok(t.length < 40, `"${t}" reads like a posting, not a role family`);
-      assert.ok(!/[-–—(]/.test(t), `"${t}" carries posting punctuation`);
+      assert.ok(!/[-–\u2014(]/.test(t), `"${t}" carries posting punctuation`);
     }
   });
 
@@ -449,7 +449,7 @@ describe("the dropdowns read A to Z", () => {
 
   test("every field is sorted, and Other is always last", async () => {
     /* Other is not one of the options, it is the sentence telling you the box is
-       yours to type in — so it must not sort in among the O's. */
+       yours to type in, so it must not sort in among the O's. */
     const { withOther, OTHER } = await import("../lib/job-titles.ts");
     const out = withOther(["Zebra", "Other-Worldly Inc", "apple", "Mango"]);
     assert.equal(out.at(-1), OTHER);
@@ -490,13 +490,13 @@ describe("the board's cache windows", () => {
     assert.equal(
       windows.length,
       fetches,
-      `${fetches} fetch call(s) but ${windows.length} cache window(s) — one is unwindowed`,
+      `${fetches} fetch call(s) but ${windows.length} cache window(s), one is unwindowed`,
     );
     for (const w of windows) {
       assert.match(
         w,
         /^(LISTINGS_REVALIDATE|SUGGESTIONS_REVALIDATE)$/,
-        `"${w}" is not a bare named constant — an expression here re-splits the windows`,
+        `"${w}" is not a bare named constant: an expression here re-splits the windows`,
       );
     }
   });

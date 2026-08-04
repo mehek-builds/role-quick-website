@@ -24,7 +24,7 @@ export function Reveal({
     if (!el) return;
 
     // Already in view at mount (deep link, scroll restoration, reload
-    // mid-page): appear immediately — a settle the viewer never saw start
+    // mid-page): appear immediately: a settle the viewer never saw start
     // is just missing content.
     const rect = el.getBoundingClientRect();
     if (rect.top < window.innerHeight && rect.bottom > 0) {
@@ -36,7 +36,7 @@ export function Reveal({
     // Pre-trigger half a viewport before entry so normal scrolling lands on
     // content already settling. If the first callback finds the element
     // already inside the real viewport (End key, anchor jump, fast flick),
-    // the viewer is looking at it now — appear instantly instead.
+    // the viewer is looking at it now, appear instantly instead.
     const io = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {

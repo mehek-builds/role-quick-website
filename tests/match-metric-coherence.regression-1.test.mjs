@@ -78,7 +78,10 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     // suite below holds the same rule for MatchScore; a list badge may not overclaim where the
     // review screen is forbidden to.
     assert.match(jobsPage, /requirements Litos counted in this posting/);
-    assert.doesNotMatch(jobsPage, /requirements this posting lists/);
+    // Either number, either case. The plural-only spelling of this ban is how the singular form
+    // shipped live in the review screen's zero-gaps line: a ban that holds in one grammatical
+    // number bans a spelling, not the claim.
+    assert.doesNotMatch(jobsPage, /\brequirements? this (job )?posting lists/i);
   });
 
   test("the Tracker row's badge carries the same band and denominator", () => {
@@ -88,7 +91,8 @@ describe("the score on a card is resume-to-JD coverage, on every surface", () =>
     const nextMatchRow = code(readFileSync("components/app/Autopilot.tsx", "utf8"));
     assert.match(nextMatchRow, /match\.match\.band \?\? "Match"/, "the row must name the band");
     assert.match(nextMatchRow, /\$\{match\.match\.matched\} of the \$\{match\.match\.total\} requirements Litos counted/);
-    assert.doesNotMatch(nextMatchRow, /requirements this posting lists/);
+    // Singular included for the same reason as the Jobs badge above.
+    assert.doesNotMatch(nextMatchRow, /\brequirements? this (job )?posting lists/i);
   });
 
   test("the preference sentence does not borrow the score's word", () => {
@@ -217,12 +221,67 @@ describe("the match caption states which requirements it counted", () => {
     assert.ok(qualifier.length > "requirements".length, `unqualified caption: "${qualifier}"`);
   });
 
+  // Walks to the end of one JSX opening tag from its "<", stepping over quoted values, `{...}`
+  // expressions and template literals, so no attribute value can end the tag early or hold it open.
+  // Quoted values are skipped for BOTH reasons: a ">" inside one would close the tag early (the
+  // scan would stop mid-tag and the label would read as missing), and an unbalanced "{" inside one
+  // would leave depth above zero so the real ">" never closes it. The second is the dangerous
+  // direction. It runs off the end of the opening tag and into the element's children, and a
+  // descendant's aria-label would then be read as the ring's own and silently satisfy the
+  // assertion below. That is the same class of bug this whole helper exists to remove, so the scan
+  // treats a quoted value as opaque rather than trusting its contents to be balanced.
+  const tagEnd = (source, start) => {
+    let depth = 0;
+    let inTemplate = false;
+    let quote = "";
+    for (let i = start; i < source.length; i++) {
+      const c = source[i];
+      if (quote) {
+        if (c === quote) quote = "";
+      } else if (inTemplate) {
+        if (c === "`") inTemplate = false;
+      } else if (c === '"' || c === "'") quote = c;
+      else if (c === "`") inTemplate = true;
+      else if (c === "{") depth++;
+      else if (c === "}") depth--;
+      else if (c === ">" && depth === 0) return i + 1;
+    }
+    return source.length;
+  };
+
+  // The score ring's aria-label, selected by ANCHORING to the element that renders it rather than
+  // by position in the file. The earlier version read `matchScore.match(/aria-label=\{`(...)`\}/)`,
+  // and `String.match` without /g returns the FIRST hit only: it was the ring's label purely
+  // because the ring happened to own the file's first template-literal aria-label. Add one above it
+  // and the ban AND the positive assertion below would both have silently retargeted to the new
+  // string, leaving the ring's real label unasserted while the suite stayed green. It also never
+  // saw plain-string labels like the evidence dot's at all. strokeDasharray is the ring's
+  // structural marker (the refusal test below anchors to the same one), and the ring's wrapper is
+  // the last role="img" opened before it.
+  const ringAriaLabel = (source) => {
+    const ringAt = source.indexOf("strokeDasharray");
+    assert.notEqual(ringAt, -1, "the ring must still be rendered");
+    let tagStart = -1;
+    for (const m of source.matchAll(/\srole="img"/g)) {
+      if (m.index > ringAt) break;
+      const open = source.lastIndexOf("<", m.index);
+      if (open !== -1) tagStart = open;
+    }
+    assert.notEqual(tagStart, -1, 'the ring must keep its role="img" wrapper');
+    const tag = source.slice(tagStart, tagEnd(source, tagStart));
+    // Both quoting forms, so moving the label off a template literal cannot drop it out of scope.
+    const label = tag.match(/aria-label=(?:\{`([^`]*)`\}|"([^"]*)")/);
+    assert.ok(label, "the ring must keep an aria-label");
+    return label[1] ?? label[2];
+  };
+
   test("the accessible label carries the same qualifier the caption does", () => {
     // A screen reader user gets ONLY this string, so it is the one that must not overclaim.
-    const aria = matchScore.match(/aria-label=\{`([^`]*)`\}/);
-    assert.ok(aria, "the ring must keep an aria-label");
-    assert.doesNotMatch(aria[1], /requirements this job posting lists/);
-    assert.match(aria[1], /requirements Litos counted/);
+    const aria = ringAriaLabel(matchScore);
+    // Singular included: the same file shipped "Every requirement this posting lists" in visible
+    // copy while every plural-only ban in this suite read straight past it.
+    assert.doesNotMatch(aria, /\brequirements? this (job )?posting lists/i);
+    assert.match(aria, /requirements Litos counted/);
   });
 
   test("the refusal state is still a sentence, not a zero", () => {

@@ -3,8 +3,9 @@ import type { Metadata } from "next";
 /**
  * The tab title for /dashboard/jobs, declared rather than assigned.
  *
- * app/dashboard/layout.tsx sets document.title from its NAV table in an effect, because a client
- * layout cannot export metadata (finding 41). That effect is correct on a client-side nav and
+ * app/dashboard/layout.tsx used to set document.title for every dashboard screen from its NAV
+ * table in an effect, because a client layout cannot export metadata (finding 41). That effect was
+ * correct on a client-side nav and
  * loses a race on a hard load: Next streams the resolved metadata as its own deferred RSC chunk,
  * which lands AFTER the first hydration commit, so the effect writes "Jobs: Litos" and the root
  * layout's marketing title is then written over the top of it. Nothing in the layout can win that
@@ -13,8 +14,8 @@ import type { Metadata } from "next";
  * A route segment is allowed to declare its own metadata even when the layout above it is a client
  * component, so the streamed answer is simply made correct at the source. The title is then right
  * in the served HTML, right after hydration, and right on a client-side nav, with no effect
- * involved. The effect above stays: it still titles the segments that have no metadata of their
- * own, and on this route the two now agree word for word.
+ * involved. Every sibling route now does the same, so the effect above no longer titles this one
+ * at all: it is scoped to /dashboard, the only screen with nowhere of its own to declare a title.
  *
  * "Jobs", not "Jobs: Litos". The root layout declares the template `%s: Litos` (app/layout.tsx),
  * so the product name is appended here rather than typed twice.

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
 import { isQaRender } from "@/lib/qa-mode";
+import { PRODUCT_NAME } from "@/lib/product";
 import {
   ClipboardIcon,
   GearIcon,
@@ -33,8 +34,6 @@ const UTILITY = [
 /* The consolidated Account destination is the fifth mobile item. */
 const MOBILE_NAV = [...NAV, ...UTILITY];
 
-const ALL_DESTINATIONS = [...NAV, ...UTILITY];
-
 function isActive(href: string, pathname: string): boolean {
   // /dashboard prefix-matches every child, so it alone is compared exactly.
   return href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -50,11 +49,25 @@ export default function DashboardLayout({
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
 
-  /* One name per screen in the tab, matching the nav. A client layout cannot
-     export metadata, so all six pages inherited the marketing title (finding 41). */
+  /* One name per screen in the tab. This effect used to title every dashboard screen, because a
+     client layout cannot export metadata (finding 41), and on a hard load it lost that job to the
+     root layout's marketing title anyway. Every route below this one now declares its own title in
+     a small server layout beside its page, which is right on a hard load and on a client-side nav
+     both, so the effect is down to the single route that has nowhere else to put one: /dashboard
+     itself, whose page is this layout's own client child.
+
+     The guard is the point, not a tidy-up. Writing a title here for a route that also declares one
+     is not a harmless second opinion: on a client-side nav this effect runs after the declared
+     title has landed, so it overwrites it. That is exactly what it did to /dashboard/resume, which
+     is not a nav destination and so fell to the bare product name, wiping out "Resume" every time
+     a student reached the page from inside the app. A route's title now has exactly one owner.
+
+     The label is still read out of NAV rather than typed here, so renaming the destination renames
+     the tab with it and the sidebar and the tab cannot drift apart. */
   useEffect(() => {
-    const here = ALL_DESTINATIONS.find((n) => isActive(n.href, pathname));
-    document.title = here ? `${here.label}: Litos` : "Litos";
+    if (pathname !== "/dashboard") return;
+    const home = NAV.find((n) => n.href === "/dashboard");
+    if (home) document.title = `${home.label}: ${PRODUCT_NAME}`;
   }, [pathname]);
 
   useEffect(() => {
@@ -214,7 +227,7 @@ function RailLink({
  *
  * This used to print the account's all-time submitted count beside the tier, and the adjacency was
  * the whole problem: "Free · 5 applications" is a fact about what someone has already done, but one
- * separator away from a plan name it reads as what the plan grants — and free grants 20 resumes a
+ * separator away from a plan name it reads as what the plan grants, and free grants 20 resumes a
  * month, so the rail was quietly quoting a quota four times smaller than the real one. Rewording it
  * to a verb would have fixed the misreading; removing it also settles the redundancy, because Home's
  * Momentum panel already reports that number labelled and in context. Say it once, where it means
@@ -226,7 +239,7 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
 
   useEffect(() => {
     /* QA renders have no session. Calling /me here anyway would 401, and api() answers a 401 by
-       clearing the session and sending the browser to /login — so the footer alone was enough to
+       clearing the session and sending the browser to /login, so the footer alone was enough to
        bounce every QA render of every dashboard page off the screen it was there to show.
 
        Asked of window, not of the `qaMode` prop, and that is the whole point. The prop is state the

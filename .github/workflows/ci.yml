@@ -1,9 +1,9 @@
 # Run the checks this repo already has, on every change, without anyone
 # remembering to.
 #
-# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ — the
+# WHY THIS EXISTS. The repo had no CI at all. Every guarantee in tests/ (the
 # vocabulary gate, route integrity, the typography scale, the logo service's
-# SSRF allowlist — only held when somebody happened to run `npm test` locally.
+# SSRF allowlist) only held when somebody happened to run `npm test` locally.
 # They did not always: `main` sat red for a day on a stale assertion in
 # application-submission-gate, and a red suite is worse than no suite, because
 # once failure is normal nobody reads the output.
@@ -29,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -70,9 +70,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -122,7 +122,7 @@ jobs:
       # nothing at all on success, so this upload is empty on a green run.
       - name: Failure artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: click-path-artifacts
           path: test-results/click-path/
