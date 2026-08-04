@@ -80,10 +80,19 @@ jobs:
       - run: npm ci
 
       # playwright-core ships no installer, so the browser comes from the
-      # matching versioned playwright CLI. --with-deps because a bare GitHub
-      # runner is missing the shared libraries headless Chromium links against.
+      # separately versioned playwright CLI. The version is DERIVED FROM THE
+      # INSTALLED PACKAGE, never written out here: package.json carries a caret,
+      # so a hard-coded CLI version stays put while `npm update` moves
+      # playwright-core underneath it, the downloaded browser revision stops
+      # matching the one playwright-core looks for, and the job dies with
+      # "Executable doesn't exist", which looks nothing like its cause.
+      # --with-deps because a bare GitHub runner is missing the shared libraries
+      # headless Chromium links against.
       - name: Install Chromium
-        run: npx --yes playwright@1.62.1 install --with-deps chromium
+        run: |
+          version="$(node -p "require('playwright-core/package.json').version")"
+          echo "installing browsers for playwright-core ${version}"
+          npx --yes "playwright@${version}" install --with-deps chromium
 
       - name: Build
         run: npm run build
@@ -95,3 +104,17 @@ jobs:
       # service and no credential exists to reach one with.
       - name: Click path spec
         run: npm run test:click-path
+
+      # The whole value of that spec is observing rendered behaviour, and nobody
+      # can reproduce a runner by hand. Without this, its first CI-only failure
+      # is a bare locator timeout with no picture. The spec writes a full-page
+      # screenshot, the serialised DOM and a Playwright trace on failure and
+      # nothing at all on success, so this upload is empty on a green run.
+      - name: Failure artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: click-path-artifacts
+          path: test-results/click-path/
+          if-no-files-found: ignore
+          retention-days: 7

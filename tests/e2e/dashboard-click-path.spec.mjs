@@ -16,9 +16,20 @@
  * which is why the goto cases are kept here beside the click cases rather than left implicit.
  *
  * Every other regression test in this repo is static analysis of source text, so it pins the SHAPE
- * of today's implementation rather than its behaviour. A mutation that hard-coded the filter while
- * leaving the correct expression behind in a COMMENT stayed green against that suite. The only
- * artifact that has ever caught this defect class is a real click.
+ * of today's implementation rather than its behaviour.
+ *
+ * BE PRECISE ABOUT WHAT THAT DOES AND DOES NOT BUY, because an earlier draft of this comment
+ * overclaimed and the overclaim was believed. tests/application-state-deeplink.regression-1.test.mjs
+ * DOES catch a literal reversion: revert the fix in source and `npm test` goes to 644 pass / 2 fail
+ * on "the page actually reads its filter from the URL" and "the filter is not read once at mount".
+ * That assertion is real and it is load-bearing.
+ *
+ * What it cannot catch is BEHAVIOUR: a different implementation carrying the same defect, or a
+ * correct-looking one that breaks the click path some other way. A mutation that hard-coded the
+ * filter while leaving the correct expression behind in a COMMENT stayed green against that suite,
+ * and ISSUE-037 shipped green through the whole suite before any such assertion existed. So the
+ * honest claim is the narrow one: this is the only artifact that catches this defect class by
+ * BEHAVIOUR rather than by source shape.
  *
  * PROOF THAT THIS SPEC CAN SEE THE DEFECT
  * =======================================
@@ -53,6 +64,11 @@
  *    filtered list has a unique signature and mere presence cannot be mistaken for correctness.
  *  - A sentinel planted on `window` before the click must SURVIVE the navigation. If it does not,
  *    the browser did a full document load and the case proved nothing about the click path.
+ *  - A failing case must leave something to LOOK at. The entire value of this spec is observing
+ *    rendered behaviour, and on a CI runner nobody can reproduce the run by hand, so a bare locator
+ *    timeout with no picture is close to useless. Every case writes a full-page screenshot, the
+ *    serialised DOM and a short context file into test-results/click-path/ on failure, and the whole
+ *    run's Playwright trace is saved alongside them.
  *
  * RUN IT WITH:  npm run build && npm run test:click-path
  * Deliberately outside `npm test`: that suite is hundreds of fast static tests and must never
@@ -62,7 +78,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
@@ -141,12 +159,70 @@ await context.addInitScript((token) => {
   window.localStorage.setItem("litos_has_history_v1", "true");
 }, SESSION_TOKEN);
 
+/* Started before the first case and only ever WRITTEN OUT on failure, so a green run leaves no
+   megabytes behind and a red one leaves a scrubbable recording of every click. */
+await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
+
 const page = await context.newPage();
 page.on("pageerror", (reason) => {
   throw new Error(`uncaught error on the page under test: ${reason}`);
 });
 
+const ARTIFACT_DIR = path.join(process.cwd(), "test-results", "click-path");
+let anyFailure = false;
+
+/**
+ * Leave evidence.
+ *
+ * The first failure of this spec will almost certainly happen on a runner, where nobody can open
+ * the page and look. A locator timeout on its own does not say whether the route errored, the
+ * fixture went stale, the layout bounced to /login, or the control genuinely did nothing, and all
+ * four have already happened at least once while this file was being written.
+ */
+async function captureFailure(label, reason) {
+  anyFailure = true;
+  const slug = label.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase();
+  try {
+    await mkdir(ARTIFACT_DIR, { recursive: true });
+    await page.screenshot({ path: path.join(ARTIFACT_DIR, `${slug}.png`), fullPage: true });
+    await writeFile(path.join(ARTIFACT_DIR, `${slug}.html`), await page.content());
+    await writeFile(path.join(ARTIFACT_DIR, `${slug}.txt`), [
+      `case:      ${label}`,
+      `url:       ${page.url()}`,
+      `visibility ${await page.evaluate(() => document.visibilityState).catch(() => "unknown")}`,
+      `sentinel:  ${await page.evaluate(() => window.__clickPathSentinel ?? null).catch(() => "unknown")}`,
+      `blocked:   ${JSON.stringify(blockedExternal)}`,
+      `unstubbed: ${JSON.stringify([...unstubbedBackendPaths])}`,
+      "",
+      String(reason?.stack ?? reason),
+      "",
+    ].join("\n"));
+  } catch (captureFault) {
+    /* Never let the evidence gathering replace the real failure. */
+    process.stderr.write(`could not capture artifacts for "${label}": ${captureFault}\n`);
+  }
+}
+
+/** Every case runs through here, so no failure can escape without leaving a picture behind. */
+function browserTest(name, body) {
+  test(name, async () => {
+    try {
+      await body();
+    } catch (reason) {
+      await captureFailure(name, reason);
+      throw reason;
+    }
+  });
+}
+
 test.after(async () => {
+  if (anyFailure) {
+    await mkdir(ARTIFACT_DIR, { recursive: true }).catch(() => {});
+    await context.tracing.stop({ path: path.join(ARTIFACT_DIR, "trace.zip") }).catch(() => {});
+    process.stderr.write(`\nclick-path artifacts written to ${ARTIFACT_DIR}\n`);
+  } else {
+    await context.tracing.stop().catch(() => {});
+  }
   await context.close().catch(() => {});
   await browser.close().catch(() => {});
   server.kill("SIGTERM");
@@ -219,7 +295,7 @@ const CASES = [
   },
 ];
 
-test("the fixture gives each Overview view a distinct signature", async () => {
+browserTest("the fixture gives each Overview view a distinct signature", async () => {
   await openHome();
   const tracker = (await page.locator(TRACKER).textContent()) ?? "";
   assert.match(tracker, new RegExp(`${COUNTS.ready}Ready`), "Ready tile should print the fixture's ready count");
@@ -232,7 +308,7 @@ test("the fixture gives each Overview view a distinct signature", async () => {
 });
 
 for (const item of CASES) {
-  test(`CLICK: ${item.name} filters the Tracker`, async () => {
+  browserTest(`CLICK: ${item.name} filters the Tracker`, async () => {
     await openHome();
 
     const control = item.control();
@@ -263,7 +339,7 @@ for (const item of CASES) {
    the shipped-broken build. Keeping it in the suite records the asymmetry instead of relying on a
    note about it: if this ever goes red at the same time as the click cases, the fault is in the
    fixture or the harness rather than in the transition. */
-test("GOTO parity: the same four URLs also work on a hard load", async () => {
+browserTest("GOTO parity: the same four URLs also work on a hard load", async () => {
   for (const item of CASES) {
     await page.goto(`${ORIGIN}${item.url}`, { waitUntil: "domcontentloaded" });
     assert.equal(await page.evaluate(() => document.visibilityState), "visible");
@@ -275,7 +351,7 @@ test("GOTO parity: the same four URLs also work on a hard load", async () => {
   assert.deepEqual(blockedExternal, []);
 });
 
-test("nothing reached the network and nothing reached a real backend", () => {
+browserTest("nothing reached the network and nothing reached a real backend", async () => {
   assert.deepEqual(blockedExternal, [], "external requests were attempted during this run");
   assert.deepEqual([...unstubbedBackendPaths], [], "a backend path was hit with no canned answer");
 });
