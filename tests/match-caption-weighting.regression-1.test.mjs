@@ -20,9 +20,16 @@ const weightingNote = async () =>
 // WHY THIS IS NOT COSMETIC, which is the reading it has to survive. Section weights run 1 (under a
 // requirements heading) down to 0.4 (unlabelled prose) and the kept term set runs 4 to 12, so the
 // gap is bounded by every covered term at 1 against every missed one at 0.4 and its reverse: "5 of
-// 12" reads 42% beside a badge of 64, "7 of 12" reads 58% beside a badge of 36. Around 22 points
-// either way, and wide enough to straddle a band line - the backend scorer records "5 of 12"
-// scoring 46 or 32 on its own SWE fixture, Strong or Solid on identical caption text.
+// 12" reads 42% beside a badge of 64, "7 of 12" reads 58% beside a badge of 36. Brute-forced over
+// every n from 4 to 12 the maximum is 22.67 points, at n of 6, 9 and 12. "4 of 12" beside a badge
+// of 56 is reachable and can carry the label Strong match, since four covered `required` terms put
+// required_coverage at 1 and 56 clears BAND_STRONG.
+//
+// Under the commoner 1-against-0.7 mix the badge-versus-caption gap maxes at 9.3 points, still
+// worth copy. That is NOT the backend docblock's "5 of 12 is 46 or 35" figure, which measures the
+// spread between two possible badges for one caption rather than badge against caption. (The
+// docblock says 32; on its own fixture of eight terms at 1 and four at 0.7, total 10.8, the lowest
+// "5 of 12" is 3.8/10.8 = 35. Pre-existing inaccuracy over there, not repeated here.)
 //
 // THE FIX IS THE CLAUSE, NOT A SECOND NUMBER. Restating the weighted share in words would print
 // the badge twice, and the count is the fact the student acts on: it is the size of the gap list.
@@ -42,23 +49,40 @@ const code = (text) =>
     .filter((line) => !line.trim().startsWith("//"))
     .join("\n");
 
-/** Every surface that prints the count and the score in one breath. */
+/** Every surface that prints the count and the score in one breath.
+ *
+ *  `extraCarriers` is for a surface that hands the clause to more than one audience. The review
+ *  screen is the only one: its ring's accessible name is the ONLY route a screen-reader user has to
+ *  the correction, and its visible caption's tooltip is the only route a mouse user has. An
+ *  either-or assertion let the aria-label be emptied with the suite green, which would have taken
+ *  the clause away from exactly the audience that cannot see the ring at all. Both are required. */
 const SURFACES = [
-  ["Jobs", "app/dashboard/jobs/page.tsx"],
-  ["Home", "app/dashboard/page.tsx"],
-  ["Tracker next-best-match row", "components/app/Autopilot.tsx"],
-  ["the review screen", "components/app/MatchScore.tsx"],
+  { name: "Jobs", path: "app/dashboard/jobs/page.tsx", extraCarriers: [] },
+  { name: "Home", path: "app/dashboard/page.tsx", extraCarriers: [] },
+  { name: "Tracker next-best-match row", path: "components/app/Autopilot.tsx", extraCarriers: [] },
+  {
+    name: "the review screen",
+    path: "components/app/MatchScore.tsx",
+    extraCarriers: [
+      [/title=\{MATCH_WEIGHTING_NOTE\}/, "the visible caption's tooltip, the only route for a mouse user"],
+    ],
+  },
 ];
 
 describe("the weighting note is one string, and it says the right thing", () => {
   test("it explains that the score is weighted rather than the printed fraction", async () => {
     // Asserted as PROPERTIES of the sentence, not as one blessed wording, so a rewrite passes as
-    // long as it still names weighting and still denies the division. A student who can divide is
-    // the whole reason this exists.
+    // long as it still says some requirements matter more and still denies the division. A student
+    // who can divide is the whole reason this exists.
+    //
+    // NOT asserted on the word "weigh". The first draft used it and was reworded to "count for
+    // more" against tests/vocabulary.js's bar, so pinning the engineering verb would have pushed
+    // the next author back up the reading level to keep this green.
     const note = await weightingNote();
     assert.ok(typeof note === "string", "the shared clause must exist and be a string");
-    assert.match(note, /weigh/i, "it must name the weighting");
+    assert.match(note, /more than/i, "it must say some requirements matter more than others");
     assert.match(note, /requirements?/i, "it must be about the requirement terms");
+    assert.match(note, /not that fraction/i, "it must deny that the score is the printed fraction");
     assert.ok(note.trim().length > 40, `too short to explain anything: "${note}"`);
   });
 
@@ -66,8 +90,14 @@ describe("the weighting note is one string, and it says the right thing", () => 
     // The extractor's set is capped at EMPHASIS_LIMIT and is NOT the employer's stated set. This
     // clause is allowed to talk about how the counted set is weighted and never about whether it
     // is complete.
+    //
+    // CASE-INSENSITIVE, and that flag is the whole assertion. Without it this guard only caught
+    // mid-sentence phrasings: "Requirements this posting lists as required count for more..." is
+    // the NATURAL sentence-initial form of the banned ISSUE-023 wording, and it passed a
+    // case-sensitive version of this line while the guard on the line below it, which always
+    // carried /i, bit correctly. One test, two conventions, one hole.
     const note = await weightingNote();
-    assert.doesNotMatch(note ?? "", /requirements this (posting|job posting) lists/);
+    assert.doesNotMatch(note ?? "", /requirements this (posting|job posting) lists/i);
     assert.doesNotMatch(note ?? "", /\ball (of the )?requirements\b/i);
   });
 
@@ -79,8 +109,8 @@ describe("the weighting note is one string, and it says the right thing", () => 
 });
 
 describe("every surface that prints the count beside the score carries the note", () => {
-  for (const [name, path] of SURFACES) {
-    test(`${name} appends it to the string that states the count`, () => {
+  for (const { name, path, extraCarriers } of SURFACES) {
+    test(`${name} appends it to EVERY string that states the count`, () => {
       const src = code(readFileSync(path, "utf8"));
       assert.match(
         src,
@@ -88,17 +118,25 @@ describe("every surface that prints the count beside the score carries the note"
         `${name} must carry the weighting clause, not leave the division to the student`,
       );
       // In the SAME template literal as the count, not parked in some unrelated string: a student
-      // reading the caption has to be reading the qualifier too.
+      // reading the caption has to be reading the qualifier too. `every`, not `some`: a surface
+      // with two of these must not be allowed to correct one audience and not the other.
       const carriers = [...src.matchAll(/`[^`]*`/g)]
         .map((m) => m[0])
         .filter((lit) => /requirements (Litos counted|we counted)/.test(lit));
       assert.ok(carriers.length > 0, `${name} no longer states the counted denominator at all`);
-      assert.ok(
-        carriers.some((lit) => lit.includes("${MATCH_WEIGHTING_NOTE}")) ||
-          /title=\{MATCH_WEIGHTING_NOTE\}/.test(src),
-        `${name} states the count without the qualifier beside it`,
-      );
+      for (const lit of carriers) {
+        assert.ok(
+          lit.includes("${MATCH_WEIGHTING_NOTE}"),
+          `${name} states the count without the qualifier beside it: ${lit}`,
+        );
+      }
     });
+
+    for (const [pattern, why] of extraCarriers) {
+      test(`${name} also carries it in ${why}`, () => {
+        assert.match(code(readFileSync(path, "utf8")), pattern);
+      });
+    }
 
     test(`${name} imports the note rather than copying its words`, () => {
       const src = code(readFileSync(path, "utf8"));
@@ -110,7 +148,7 @@ describe("every surface that prints the count beside the score carries the note"
       // Four hand-written copies is how the caption drifted onto four surfaces in the first place.
       assert.doesNotMatch(
         src,
-        /weigh more than ones it only mentions/,
+        /count for more than ones it only mentions/,
         `${name} has an inlined copy of the clause`,
       );
     });
@@ -123,10 +161,12 @@ describe("the ISSUE-023 wording the note sits next to is untouched", () => {
   // to exactly those literals, so the file doing the appending is the one that should fail if a
   // future edit folds the clause in and rewrites them.
   test("no surface says the posting's full list", () => {
-    for (const [name, path] of SURFACES) {
+    for (const { name, path } of SURFACES) {
       const src = code(readFileSync(path, "utf8"));
-      assert.doesNotMatch(src, /requirements this posting lists/, `${name} overclaims`);
-      assert.doesNotMatch(src, /requirements this job posting lists/, `${name} overclaims`);
+      // Case-insensitive for the same reason the clause's own guard is: the sentence-initial form
+      // is the one an author would naturally write, and a case-sensitive ban misses it.
+      assert.doesNotMatch(src, /\brequirements this posting lists/i, `${name} overclaims`);
+      assert.doesNotMatch(src, /\brequirements this job posting lists/i, `${name} overclaims`);
     }
   });
 });

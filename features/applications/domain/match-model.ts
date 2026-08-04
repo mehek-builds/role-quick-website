@@ -40,9 +40,16 @@ export type JdMatchResponse = {
  * 1 down to 0.4 and the term set runs 4 to 12 (MIN_SCORABLE_TERMS to EMPHASIS_LIMIT), so the worst
  * case is every covered term at 1 and every missed one at 0.4, or the reverse: "5 of 12" is a
  * caption reading 42% beside a badge of 64, and "7 of 12" is a caption reading 58% beside a badge
- * of 36. Roughly 22 points in either direction, and the spread straddles band lines - the scorer
- * records "5 of 12" scoring 46 or 32 on its own SWE fixture, which is Strong or Solid on identical
- * copy.
+ * of 36. Brute-forced over every n from 4 to 12, the maximum gap is 22.67 points, reached at n of
+ * 6, 9 and 12. "4 of 12" beside a badge of 56 is reachable AND can be labelled Strong match: four
+ * covered terms all `required` gives required_coverage 4/4, clear of REQUIRED_COVERAGE_GATE, and 56
+ * clears BAND_STRONG.
+ *
+ * A NARROWER MIX IS STILL WORTH COPY. Where a posting only mixes 1 with 0.7, which is the common
+ * shape (a requirements block plus a responsibilities block), the badge-versus-caption gap maxes at
+ * 9.3 points. Do not confuse that quantity with the backend docblock's "5 of 12 is 46 or 35", which
+ * is the spread between two possible BADGES for one caption, not the gap between a badge and its
+ * caption. Both matter and they are different measurements.
  *
  * WHY A CLAUSE RATHER THAN A NEW NUMBER. Restating the weighted share in words would print the
  * badge twice, and the count is the fact the student can act on: it is the size of the gap list
@@ -51,9 +58,18 @@ export type JdMatchResponse = {
  * IT MAY NOT SAY "requirements this posting lists". That wording is ISSUE-023's overclaim, banned
  * and pinned, because the extractor's set is capped at EMPHASIS_LIMIT and is not the employer's
  * stated set. This clause talks about how the counted set is weighted, never about its completeness.
+ *
+ * IT IS ALSO HELD TO tests/vocabulary.js's BAR, which is a ten-year-old with intermediate English
+ * who understands the job market. The first draft ended "so the score is weighted coverage rather
+ * than that fraction", and "weighted coverage" is a modeling noun doing the half of the work that
+ * actually explains the thing. It passed the gate only because it was not on the RETIRED list,
+ * which is not the same as meeting the bar. "Counts for more" carries it at the reading level.
+ *
+ * THE FOUR WEIGHT TIERS ARE COMPRESSED TO TWO on purpose. A tooltip that enumerated 1, 0.7, 0.6 and
+ * 0.4 would be a spec, and the student's question is only ever "why is that not the fraction".
  */
 export const MATCH_WEIGHTING_NOTE =
-  "Requirements the posting listed as required weigh more than ones it only mentions in passing, so the score is weighted coverage rather than that fraction.";
+  "Requirements the posting listed as required count for more than ones it only mentions in passing, so the score is not that fraction.";
 
 /**
  * What the Tracker's next-best-match row has to ask for, so its number is the SAME number Home and

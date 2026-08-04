@@ -128,7 +128,21 @@ export function MatchScore({
             ISSUE-041. The words are unchanged, because they are correct and because this line is an
             11px column that cannot take a sentence; what is added is MATCH_WEIGHTING_NOTE on hover
             and in the ring's accessible name, which is the same affordance Jobs, Home and the
-            Tracker row already use for it. */}
+            Tracker row already use for it.
+
+            TWO KNOWN LIMITATIONS OF THE `title` BELOW, recorded rather than solved, because solving
+            either is an inline info affordance and that is a design change, not an audit fix:
+
+              1. `title` is a NATIVE TOOLTIP THAT WAS NOT HERE BEFORE, and it is unreachable for
+                 keyboard-only and touch users. So on the single surface where the count and the
+                 number are both visible at once, a touch user still gets no correction. Nothing
+                 shown is untrue without it - the caption is a count and says so - but the student
+                 who is most able to notice the gap is the least able to reach the explanation.
+              2. "that fraction", inside this attribute, DANGLES. Everywhere else the clause is
+                 appended to a sentence that just stated the count, so the referent is right there;
+                 alone in a title it has no antecedent. Kept anyway rather than given a second
+                 wording, because two versions of one clause is the drift this constant exists to
+                 prevent, and the fraction it refers to is the line the tooltip is attached to. */}
         <p className="text-[11px] leading-4 text-faint" title={MATCH_WEIGHTING_NOTE}>
           {result.matched.length} of {result.term_count} requirements we counted
         </p>
