@@ -394,23 +394,10 @@ html:has(.dashboard-shell) {
   }
 }
 
-@keyframes dashboard-drawer-in {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
-}
-
-@keyframes dashboard-drawer-backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.dashboard-drawer {
-  animation: dashboard-drawer-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dashboard-drawer-backdrop {
-  animation: dashboard-drawer-backdrop-in 180ms ease-out;
-}
+/* The dashboard-drawer animations were removed with the review drawer itself. Reviewing a packet
+   is one screen now, /dashboard/applications, reached by a link rather than by a panel sliding in
+   over Home. Their reduced-motion overrides went with them: an animation that does not exist does
+   not need turning off. */
 
 /* The reduced-motion product still is off under full motion: the film and
    the Application Roll own the opening, and a still underneath them would
@@ -484,10 +471,6 @@ html:has(.dashboard-shell) {
     opacity: 0;
   }
   .rq-fade {
-    animation: none;
-  }
-  .dashboard-drawer,
-  .dashboard-drawer-backdrop {
     animation: none;
   }
   .rq-reveal {

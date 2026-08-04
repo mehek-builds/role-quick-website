@@ -96,9 +96,26 @@ describe("the list scores the posting, not the preview of it", () => {
     assert.match(code, /job_id: job\.id,/);
   });
 
-  test("Home's review drawer passes the whole stored job_context", () => {
+  /* Was "Home's review drawer passes the whole stored job_context". The drawer is gone: reviewing a
+     packet is one screen now, /dashboard/applications, so that is where the invariant lives.
+
+     The invariant itself has not changed. `job_id` inside the stored job_context is what lets the
+     backend read the posting's offices off the live job row and keep them out of the denominator.
+     Picking company and role out of the object drops the id and scores the student against the
+     employer's cities. */
+  test("the review screen passes the whole stored job_context", () => {
+    const applications = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+    assert.match(applications, /jobContext=\{selected\.job_context\}/);
+    assert.doesNotMatch(applications, /jobContext=\{\{ company: selected\.job_context\.company/);
+  });
+
+  /* The other half, and the reason the drawer could drift at all: Home must not score a packet
+     against a posting. It used to, in the drawer, which meant one packet had two review surfaces
+     each computing its own number. Home ranks jobs and shows the already-fetched list score; the
+     packet-vs-JD comparison belongs to the screen that can also explain it. */
+  test("Home does not score a packet against a posting", () => {
     const home = readFileSync("app/dashboard/page.tsx", "utf8");
-    assert.match(home, /jobContext=\{packet\.job_context\}/);
-    assert.doesNotMatch(home, /jobContext=\{\{ company: packet\.job_context\.company/);
+    assert.doesNotMatch(home, /<MatchScore/, "MatchScore belongs to the review screen, not to Home");
+    assert.doesNotMatch(home, /jobContext=\{/, "Home passes no job_context: it scores no packet");
   });
 });

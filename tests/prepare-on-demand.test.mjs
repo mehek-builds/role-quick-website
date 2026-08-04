@@ -25,7 +25,11 @@ test("a card with no packet offers a control that starts one", async () => {
 test("the four card states stay distinct and only one claims work is happening", async () => {
   const home = await readFile(homeUrl, "utf8");
 
-  assert.match(home, /const status = prepared \? "ready" : preparing \? "preparing" : preparationFailed \? "failed" : "idle"/);
+  /* `reviewHref` where this used to read `prepared`. The boolean and the Review control used to be
+     two independent props, so "Ready" and "there is something to open" could disagree. They are one
+     value now: the card is Ready exactly when there is a packet id to link to. */
+  assert.match(home, /const status = reviewHref \? "ready" : preparing \? "preparing" : preparationFailed \? "failed" : "idle"/);
+  assert.doesNotMatch(home, /prepared: boolean/, "the prepared boolean is gone; reviewHref decides the state");
   // "Not started" and "Getting ready" are different states now. Conflating them was the bug.
   assert.match(home, /status === "failed" \? "Paused" : "Not started"/);
   assert.match(home, /status === "preparing" \? "Getting ready"/);
