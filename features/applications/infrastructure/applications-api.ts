@@ -246,6 +246,16 @@ export type RequirementClauseView = {
 };
 
 export type RequirementsResponse = {
+  /**
+   * True when the model could not be reached, so competency clauses are unscoreable because we
+   * never got an answer rather than because nothing could decide them.
+   *
+   * The backend cannot express that in `verdict` alone: `unscoreable` already means "no test a
+   * resume can pass", which is right for "you stay curious" and a lie about "communicate nuance to
+   * partners" when a rate limit stopped us asking. Told, not inferred: a null score also happens on
+   * a perfectly healthy posting whose every clause is a disposition.
+   */
+  degraded?: boolean;
   score: number | null;
   scored: number;
   met: number;
