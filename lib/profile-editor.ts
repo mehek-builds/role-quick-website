@@ -32,11 +32,28 @@ export function splitBankByCategory<T extends { type: string }>(
  * Tolerant of a stored string on purpose, permanently. The site and the API are separate repos that
  * deploy independently on merge, so no page here can assume the API beside it is the newer one. The
  * cost of tolerating is one branch; the cost of not tolerating was a silently empty resume line, and
- * on the join path below it would be a TypeError, since a string has no .join. */
+ * on the join path below it would be a TypeError, since a string has no .join.
+ *
+ * TRIMS AND DEDUPES, because the API's courseworkFromParsed does. A version of this that only
+ * joined displayed "  Math  , Math" on the dashboard while the generated PDF printed "Math" - the
+ * screen and the document disagreeing about the same field, which is ISSUE-044 again in miniature
+ * rather than a cosmetic difference. The parser writes parsed_json.coursework straight from the
+ * model without normalising, so untrimmed and duplicate entries are reachable without anyone
+ * hand-editing jsonb. Keep the two functions behaviourally identical; profile-editor.test.mts
+ * pins the cases where they could drift apart. */
 export function courseworkLine(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (!Array.isArray(value)) return "";
-  return value.filter((entry): entry is string => typeof entry === "string").join(", ");
+  const raw = typeof value === "string"
+    ? value.split(",")
+    : Array.isArray(value)
+      ? value.filter((entry): entry is string => typeof entry === "string")
+      : [];
+  const courses: string[] = [];
+  for (const candidate of raw) {
+    const course = candidate.trim();
+    if (!course || courses.some((existing) => existing.toLowerCase() === course.toLowerCase())) continue;
+    courses.push(course);
+  }
+  return courses.join(", ");
 }
 
 export function parseEditableList(value: string): string[] {

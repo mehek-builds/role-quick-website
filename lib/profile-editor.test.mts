@@ -97,4 +97,28 @@ test("a missing or malformed coursework value reads as empty rather than crashin
   assert.equal(courseworkLine(null), "");
   assert.equal(courseworkLine({ nope: true }), "");
   assert.equal(courseworkLine([1, "Real Course", null]), "Real Course");
+  assert.equal(courseworkLine([]), "");
+  assert.equal(courseworkLine(""), "");
+  assert.equal(courseworkLine("   "), "");
+});
+
+/* Behavioural parity with the API's courseworkFromParsed, pinned case by case.
+ *
+ * These two functions live in different repos and are the reason a dashboard and a PDF can disagree
+ * about the same field, so "they do roughly the same thing" is not good enough. The parser writes
+ * parsed_json.coursework straight from the model with no normalising, so untrimmed and duplicate
+ * entries reach storage without anyone hand-editing jsonb: a display that only joined would show
+ * "  Math  , Math" while the generated resume printed "Math". Each case below is an input where a
+ * join-only implementation gave a different answer from the generator. */
+test("the displayed line matches what the generator prints, entry for entry", () => {
+  assert.equal(courseworkLine(["  Math  ", "Physics"]), "Math, Physics");
+  assert.equal(courseworkLine(["Math", "math"]), "Math");
+  assert.equal(courseworkLine(["Math", "", "  ", "Physics"]), "Math, Physics");
+  // A stored string normalises the same way, so a legacy row reads identically on both sides.
+  assert.equal(courseworkLine("  Math ,  Physics , "), "Math, Physics");
+  // The separator is the comma alone: "and" and "&" are ordinary content inside one course title.
+  assert.equal(
+    courseworkLine(["Data Structures and Object-Oriented Design", "Financial Analysis & Valuation"]),
+    "Data Structures and Object-Oriented Design, Financial Analysis & Valuation",
+  );
 });
