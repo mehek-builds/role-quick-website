@@ -36,6 +36,7 @@ import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
+import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -89,6 +90,9 @@ export default function ApplicationsPage() {
 function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
+  /* The student's education block as GET /profile serves it today. Null means "not loaded or the
+     request failed", which educationDrift treats as "nothing to compare against". */
+  const [educationProfile, setEducationProfile] = useState<EducationProfile | null>(null);
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* The packet being looked at in the read-only viewer, held as an ID and resolved against `packets`
@@ -406,6 +410,12 @@ function Applications() {
         if (requested) selectPacket(requested);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
+    /* The education block as it stands NOW, to check the frozen packet against. Failure leaves it
+       null, and educationDrift reports nothing for a null profile: a warning is worth having, but
+       not at the price of blocking a send because one extra request did not come back. */
+    api<EducationProfile>("/profile")
+      .then((result) => !cancelled && setEducationProfile(result))
+      .catch(() => undefined);
     api<JobsPage>("/jobs?offset=0")
       .then((result) => {
         if (cancelled) return;
@@ -589,6 +599,19 @@ function Applications() {
     async (id: string) => {
       const packet = (packets ?? []).find((item) => item.id === id);
       if (!packet || qaMode) return;
+      /* THE ONE PLACE A PACKET GOES OUT WITH NOTHING RE-CHECKED. Sending from the review screen
+         runs saveResume first, and PATCH /applications/:id/resume re-validates the spec's
+         education against the current profile server-side, so a drifted packet is refused there
+         already (with an opaque message, which the banner below fixes). This path posts
+         submit-request on its own, and the backend then uploads the PDF blob rendered at build
+         time. So an unattended send is the only way a resume stating a graduation year the
+         student has since corrected reaches an employer with no human and no check in between.
+         Refusing keeps the packet; it just has to be opened. */
+      const drift = educationDriftMessage(educationDrift(packet.spec, educationProfile));
+      if (drift) {
+        setError(`We did not send this one on its own. ${drift}`);
+        return;
+      }
       try {
         track("application_submission_requested", { source: "autopilot" });
         const result = await api<SubmissionResponse>(`/applications/${id}/submit-request`, {
@@ -605,13 +628,17 @@ function Applications() {
         setError(reason instanceof Error ? reason.message : "Could not send that application on its own. It is still here for you.");
       }
     },
-    [captureCompletedSubmission, packets, qaMode],
+    [captureCompletedSubmission, educationProfile, packets, qaMode],
   );
   // The review surface is meant to be read without scrolling, so while it is open the page chrome
   // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
   // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
   // the resume are supposed to share.
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
+  const educationDriftBanner = useMemo(
+    () => (spec ? educationDriftMessage(educationDrift(spec, educationProfile)) : null),
+    [educationProfile, spec],
+  );
   const deferredSpec = useDeferredValue(spec);
   const editedTerms = useMemo(() => explicitTerms(review?.edited_terms ?? []), [review?.edited_terms]);
   const requirementIndex = useMemo(
@@ -1038,6 +1065,11 @@ function Applications() {
           not something a placement fix can reach: it needs this banner reserved or moved, which is
           a layout change to the whole screen. */}
       {error && <ErrorNote message={error} />}
+      {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
+          the student fixes the education line rather than sitting there until she saves. */}
+      {reviewOpen && educationDriftBanner && (
+        <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">{educationDriftBanner}</p>
+      )}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
       {showNewApplication && (
         <NewApplicationPanel
