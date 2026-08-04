@@ -15,13 +15,26 @@ import { describe, test } from "node:test";
 const page = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
 
 describe("the job list column cannot be widened by its own contents", () => {
-  // The list is one <ul> in this file, and it is the one the rows are mapped into.
-  const listTag = page.slice(page.indexOf("<ul"), page.indexOf(">", page.indexOf("<ul")) + 1);
+  // Anchored to the rows, not to the file. Taking the first <ul> in the file would quietly start
+  // reading a different element the moment an unrelated list is added above this one, so the
+  // opening tag is found by walking back from the map that renders the rows. That is the only
+  // <ul> whose track width is the thing under test.
+  const listTag = () => {
+    const rowsAt = page.indexOf("{jobs.map(");
+    assert.notEqual(rowsAt, -1, "the rows are no longer rendered by a jobs.map in this file");
+    const opensAt = page.lastIndexOf("<ul", rowsAt);
+    assert.notEqual(opensAt, -1, "the rows are no longer inside a <ul>");
+    const tag = page.slice(opensAt, page.indexOf(">", opensAt) + 1);
+    // Nothing but whitespace may sit between the tag and the map, or the tag found by walking
+    // back is an ancestor rather than the rows' own parent.
+    assert.match(page.slice(opensAt, rowsAt), /^<ul[^>]*>\s*$/);
+    return tag;
+  };
 
   test("the list is the element the rows are mapped into", () => {
-    // Guards the slice above: if the <ul> stops being the rows' parent, every assertion below is
-    // reading the wrong tag and would keep passing while proving nothing.
-    assert.match(page.slice(page.indexOf("<ul")), /^<ul[^>]*>\s*\{jobs\.map\(/);
+    // The resolution above is itself asserted, so it cannot silently drift onto the wrong tag and
+    // keep reporting green about an element nobody is looking at.
+    assert.match(listTag(), /^<ul /);
   });
 
   test("the list carries grid-cols-1, not a bare grid", () => {
@@ -34,7 +47,7 @@ describe("the job list column cannot be widened by its own contents", () => {
     // Tailwind's grid-cols-1 is `repeat(1, minmax(0, 1fr))`. The 0 minimum is the whole fix: the
     // track can no longer be argued wider than its container, so the truncation does its job
     // instead of the page scrolling sideways.
-    assert.match(listTag, /className="[^"]*\bgrid-cols-1\b/);
+    assert.match(listTag(), /className="[^"]*\bgrid-cols-1\b/);
   });
 
   test("the rows still truncate, which is why the 0 minimum is load-bearing", () => {
@@ -57,28 +70,44 @@ describe("the /dashboard/jobs tab title is declared, and declared once", () => {
     assert.ok(existsSync(layoutPath), `${layoutPath} is what makes the title survive a hard load`);
   });
 
-  // Read inside the tests, not beside them. Deleting the file is one of the two ways this fix gets
+  // Read inside the tests, not beside them. Deleting the file is one of the ways this fix gets
   // reverted, and a readFileSync in the suite body would throw while node is still collecting
-  // tests: the suite would report zero failures rather than the three it should.
+  // tests: the suite would report zero failures rather than the several it should.
   const layout = () => readFileSync(layoutPath, "utf8");
 
   test("the title is exactly Jobs", () => {
     assert.match(layout(), /export const metadata: Metadata = \{\s*title: "Jobs",/);
   });
 
-  test("the product name is not typed into the title", () => {
-    // The root layout appends it. Writing the full string here renders "Jobs: Litos: Litos".
-    assert.doesNotMatch(layout(), /title: "Jobs: Litos"/);
-    assert.doesNotMatch(layout(), /title: "[^"]*Litos[^"]*"/);
+  // What actually has to hold is a property of the composition, not of either file alone: the
+  // segment title and the root template are only correct with respect to each other. Asserting
+  // them side by side would accept a pair that reads fine line by line and still renders wrong,
+  // so the rendered title is reconstructed the way Next composes it and checked as one string.
+  // This is the assertion that survives someone editing either end.
+  const renderedTitle = () => {
+    const segment = /title: "([^"]*)"/.exec(layout());
+    assert.ok(segment, "the jobs segment declares no title");
+
+    const template = /template: `([^`]*)`/.exec(readFileSync("app/layout.tsx", "utf8"));
+    assert.ok(template, "the root layout declares no title template to append the product name");
+
+    const product = /export const PRODUCT_NAME = "([^"]*)"/.exec(readFileSync("lib/product.ts", "utf8"));
+    assert.ok(product, "PRODUCT_NAME is no longer declared where the root layout reads it from");
+
+    // `%s: ${PRODUCT_NAME}` with the segment's own title substituted in, which is the whole of
+    // what the browser tab ends up showing.
+    return template[1].replace("${PRODUCT_NAME}", product[1]).replace("%s", segment[1]);
+  };
+
+  test("the tab renders Jobs: Litos, with the product name appearing once", () => {
+    assert.equal(renderedTitle(), "Jobs: Litos");
   });
 
-  test("the root layout is still the thing appending the product name", () => {
-    // The bare "Jobs" above is only correct while this template exists. If the template is
-    // dropped or renamed, the title silently loses the product name rather than doubling it, so
-    // the two files are asserted together.
-    const root = readFileSync("app/layout.tsx", "utf8");
-    assert.match(root, /template: `%s: \$\{PRODUCT_NAME\}`/);
-    assert.match(readFileSync("lib/product.ts", "utf8"), /export const PRODUCT_NAME = "Litos"/);
+  test("the product name is not typed into the segment title", () => {
+    // The failure this is really about. "Jobs: Litos" here renders "Jobs: Litos: Litos", which
+    // the composition test above already catches; this one names the cause at the line that
+    // causes it, so the diff that breaks it gets pointed at directly.
+    assert.doesNotMatch(layout(), /title: "[^"]*Litos[^"]*"/);
   });
 });
 
