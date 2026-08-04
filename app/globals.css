@@ -358,8 +358,17 @@ html {
 
 /* The sticky action bar is opaque and sits over the end of the page, so a browser scrolling a
    focused field "just into view" can park it directly underneath the bar. Every screen that uses
-   TerminalActionBar is also a screen full of textareas, so this is the common case, not the edge. */
-html {
+   TerminalActionBar is also a screen full of textareas, so this is the common case, not the edge.
+
+   Scoped with :has(), and the scoping is not tidiness. scroll-padding belongs to the SCROLLER,
+   which is the document, so this cannot be written on .dashboard-shell itself. Written on a bare
+   `html` it applied to every route in the app, including the marketing pages that have no bottom
+   bar at all: ComboField calls scrollIntoView({ block: "nearest" }), which scrolls every ancestor
+   scroller including the root, so highlighting an option in the lower ~149px of the viewport
+   yanked the whole page upward, and tabbing into a footer link did the same. Anchor jumps were
+   never affected (they are start-aligned, and start-aligned scrolls ignore scroll-padding-bottom),
+   which is exactly why this would not have shown up in the obvious place. */
+html:has(.dashboard-shell) {
   scroll-padding-bottom: calc(var(--dashboard-action-offset) + 3rem);
 }
 
