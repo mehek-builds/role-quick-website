@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Header } from "@/components/Header";
+import { SiteFooter } from "@/components/SiteFooter";
 
 export const metadata: Metadata = {
   title: "Litos vs Simplify",
@@ -136,6 +137,7 @@ export default function LitosVsSimplify() {
           and it gets corrected.
         </p>
       </main>
+      <SiteFooter />
     </div>
   );
 }

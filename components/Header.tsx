@@ -45,11 +45,19 @@ const MENU_ID = "header-mobile-nav";
      after the cut) and /try. You cannot scroll to a different page.
    - "Plus a second copy of Add to Chrome." The pill's CTA is /login now, and
      the sheet below carries no CTA at all, so there is nothing to duplicate.
-   - "The footer carries all four." The footer lives inside app/page.tsx and
-     renders on the homepage only. On /browse-jobs, /try, /litos-vs-simplify
-     and /for-career-centres there is no footer, and with the nav at
-     `hidden sm:flex` a phone had no link to anywhere: wordmark, one CTA, dead
-     end. Traffic arrives from TikTok and Instagram, so that was most of it.
+   - "The footer carries all four." It did not, at the time: the footer lived
+     inside app/page.tsx and rendered on the homepage only, so on /browse-jobs,
+     /try, /litos-vs-simplify and /for-career-centres there was no footer at
+     all, and with the nav at `hidden sm:flex` a phone had no link to anywhere:
+     wordmark, one CTA, dead end. Traffic arrives from TikTok and Instagram, so
+     that was most of it.
+
+     That specific fact changed on 2026-08-04: the footer is now
+     components/SiteFooter.tsx and renders on the marketing routes alongside
+     this pill (ISSUE-026). The hamburger stays regardless. A phone visitor
+     should not have to scroll a full page to find navigation, and the footer's
+     four columns are a different job from the pill's four destinations. The
+     first two premises above are untouched and are enough on their own.
 
    The sheet is deliberately links only. The pill keeps "Get started" visible
    at all widths, which is why this can be four quiet destinations rather than
