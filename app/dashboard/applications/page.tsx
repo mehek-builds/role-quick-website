@@ -28,6 +28,7 @@ import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
+import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { ApplicationPacket } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
@@ -1207,6 +1208,11 @@ function Applications() {
            that replaced their spreadsheet, and what retains is that the data accumulates and stays
            theirs. The flat list this replaces showed only role and company, with no way to record
            what had actually happened with any of them. */
+        /* The board is the whole of this branch, so containing it here does not save a sibling on
+           this screen. It saves the SHELL: the sidebar, the mobile tab bar and the page title stay
+           mounted, so a student whose board fails still has Home, Jobs and Emails one tap away
+           rather than the route boundary's full-page recovery screen. */
+        <SectionBoundary band="tracker-board" title="Your applications">
         <Board
           openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
@@ -1225,6 +1231,7 @@ function Applications() {
              that cannot act should be absent, not dead. */
           revisitableIds={new Set((packets ?? []).filter((item) => item.spec._review).map((item) => item.id))}
         />
+        </SectionBoundary>
       ) : screen === "questions" ? (
         <QuestionsScreen
           questions={questions}
@@ -1331,7 +1338,14 @@ function Applications() {
                       Resume checks
                     </p>
                     <div className="mt-3">
-                      <ResumeHealth spec={deferredSpec ?? spec} disabled={qaMode !== false} />
+                      {/* The first of the three occurrences was here: an undefined `findings` from
+                          /resume/health crashed this whole review screen, taking the JD, the resume,
+                          the match score and the gap list with it, for a panel that is four lines of
+                          advice in the corner. It is the clearest case in the audit for scoping a
+                          boundary to a panel. */}
+                      <SectionBoundary band="resume-health" title="Resume checks">
+                        <ResumeHealth spec={deferredSpec ?? spec} disabled={qaMode !== false} />
+                      </SectionBoundary>
                     </div>
                   </div>
                 </div>

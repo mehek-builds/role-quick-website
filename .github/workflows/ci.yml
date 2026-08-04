@@ -109,6 +109,16 @@ jobs:
       - name: Click path spec
         run: npm run test:click-path
 
+      # Same job on purpose: it reuses the build and the Chromium installed
+      # above rather than paying for either twice. This spec is the ONLY thing
+      # that can observe the per-band error boundaries actually containing a
+      # throw, so leaving it out of CI would mean a refactor could delete the
+      # containment silently. tests/section-boundary-placement.test.mjs covers
+      # the boundaries still EXISTING from inside `npm test`; only this one
+      # covers them working.
+      - name: Partial payload containment spec
+        run: npm run test:partial-payload
+
       # Same job, same Chromium, same build. The base resume step's build start is a RACE between
       # two fetches, so it has no source-level cover at all: tests/start-onboarding-defects.test.mjs
       # can only pin the shape of the fix. This spec forces the losing ordering and is the only

@@ -253,7 +253,7 @@ export function MatchGaps({
   }
 
   const byTerm = new Map((answers ?? []).map((a) => [a.term, a]));
-  const supported = (answers ?? []).filter((a) => !a.unsupported).length;
+  const supported = (answers ?? []).filter(hasOwnWording).length;
 
   return (
     <div>
@@ -289,6 +289,21 @@ export function MatchGaps({
 }
 
 /**
+ * Does this answer actually carry the student's own wording?
+ *
+ * THREE READERS, ONE ANSWER. `unsupported` is the backend's verdict and an empty evidence list is
+ * the same fact arriving a different way, now a reachable one: the parse boundary defaults a
+ * missing per-answer `evidence` to [], which is right, because an answer must not be dropped
+ * because its evidence list went missing, but it left three places claiming something that is not
+ * there. A printed count of how many gaps their experience covers, a filled dot promising the chip
+ * is worth opening, and a heading reading "This is your own wording:" over an empty list. Each is a
+ * claim, and all three now ask the same question.
+ */
+function hasOwnWording(answer: GapAnswer): boolean {
+  return !answer.unsupported && answer.evidence.length > 0;
+}
+
+/**
  * What Litos will and will not do about a gap.
  *
  * The competitive version of this (Rezi's keyword targeting, the most praised feature in its
@@ -307,7 +322,7 @@ function GapDetail({
   answer: GapAnswer;
   onUseVariant?: (evidence: { org: string; variant: string }) => void;
 }) {
-  if (answer.unsupported) {
+  if (!hasOwnWording(answer)) {
     return (
       <div className="mt-4 rounded-card border border-border bg-surface-alt px-4 py-3">
         <p className="text-sm text-ink">
@@ -368,7 +383,7 @@ function GapChip({
   const { active, setActive } = useTermHover();
   const isActive = active === term.term;
   // A filled dot means their own experience already covers this, so the chip is worth opening.
-  const hasEvidence = answer !== undefined && !answer.unsupported;
+  const hasEvidence = answer !== undefined && hasOwnWording(answer);
   return (
     <li>
       <button
