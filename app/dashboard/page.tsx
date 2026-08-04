@@ -20,6 +20,7 @@ import { Funnel } from "@/components/app/Funnel";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+import { ResumePaper, contactLine, contactName } from "@/components/app/ApplicationPacket";
 import {
   AUTO_SUBMIT_PREPARED_LIMIT,
   MATCH_WEIGHTING_NOTE,
@@ -27,6 +28,7 @@ import {
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
+  stripMetadata,
   useJobMatchScores,
   visibleMatches,
   type JobMatch,
@@ -1200,7 +1202,26 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
               <h3 id="resume-heading" className="text-sm font-medium text-ink">Your new resume</h3>
               {packet?.created_at && <span className="text-xs text-faint">{formatRelativeDate(packet.created_at)}</span>}
             </div>
-            {packet ? <ResumePreview packet={packet} /> : <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>}
+            {/* The shared ResumePaper, not a local render of the spec. This pane had its own copy
+                that opened with the posting's role and company, so the last screen before a
+                submission showed the job title where the applicant's name belongs. See the header
+                note on ResumePaper: `ResumeSpec` carries no name at all, so any renderer reading
+                only the spec puts whatever sorts first into the top slot.
+
+                stripMetadata for the spec, raw packet for name and contact, because `_contact` is
+                exactly what that helper strips. Same three arguments the Applications pane
+                passes, and the reason they are three. */}
+            {packet ? (
+              <div className="mt-6">
+                <ResumePaper
+                  spec={stripMetadata(packet.spec)}
+                  name={contactName(packet.spec)}
+                  contact={contactLine(packet.spec)}
+                />
+              </div>
+            ) : (
+              <p className="mt-6 text-sm text-muted">Resume is still preparing.</p>
+            )}
           </section>
         </div>
 
@@ -1225,48 +1246,8 @@ function ReviewDrawer({ job, packet, submitting, error, onClose, onSubmit }: { j
   );
 }
 
-function ResumePreview({ packet }: { packet: GeneratedResume }) {
-  const spec = packet.spec;
-  return (
-    <article className="mt-6 rounded-card border border-border bg-white p-5 sm:p-7">
-      <div className="border-b border-ink pb-4">
-        <h4 className="text-lg font-medium tracking-[-0.02em] text-ink">{packet.job_context.role || "Tailored resume"}</h4>
-        <p className="mt-1 text-xs text-muted">{packet.job_context.company}</p>
-      </div>
-      <ResumeSection title="Education">
-        <p className="text-sm font-medium text-ink">{spec.school}</p>
-        <p className="mt-1 text-xs leading-5 text-muted">{[spec.degree, spec.grad_date].filter(Boolean).join(" · ")}</p>
-        {spec.coursework && <p className="mt-2 text-xs leading-5 text-muted">{spec.coursework}</p>}
-      </ResumeSection>
-      {spec.experience.length > 0 && (
-        <ResumeSection title="Experience">
-          <div className="space-y-5">
-            {spec.experience.map((entry, index) => (
-              <div key={`${entry.org}-${entry.title}-${index}`}>
-                <div className="flex flex-wrap justify-between gap-2">
-                  <p className="text-sm font-medium text-ink">{entry.title} · {entry.org}</p>
-                  <p className="font-mono text-[11px] text-faint">{entry.date_range}</p>
-                </div>
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-muted">
-                  {entry.bullets.map((bullet, bulletIndex) => <li key={`${bullet}-${bulletIndex}`}>{bullet}</li>)}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </ResumeSection>
-      )}
-      <ResumeSection title="Skills">
-        <p className="text-xs leading-6 text-muted">{spec.skills.join(" · ")}</p>
-      </ResumeSection>
-    </article>
-  );
-}
-
-function ResumeSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="border-b border-border py-4 last:border-b-0 last:pb-0">
-      <h5 className="mb-2 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">{title}</h5>
-      {children}
-    </section>
-  );
-}
+/* ResumePreview and ResumeSection lived here and are deliberately gone, not moved. They were a
+   second renderer of the same document, and the drift was not cosmetic: the header was the
+   posting's role and company, experience folded org and title into one line, skills joined on a
+   middot, and there was no name or contact line anywhere. Every one of those had already been
+   corrected in ResumePaper. The screen now imports that component instead. */

@@ -40,11 +40,11 @@ import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/
    It failed silently because a missing key is indistinguishable from an empty one after the
    filter. If these ever drift again they will drift the same quiet way, so the order below is
    the renderer's order (engine/resumeRender.ts contactLine) rather than a fresh opinion. */
-function contactName(spec: GeneratedResume["spec"]): string {
+export function contactName(spec: GeneratedResume["spec"]): string {
   return (spec._contact?.full_name ?? "").trim();
 }
 
-function contactLine(spec: GeneratedResume["spec"]): string {
+export function contactLine(spec: GeneratedResume["spec"]): string {
   const contact = spec._contact ?? {};
   /* An explicit key order, not Object.values: the record is loosely typed, so
      iteration order is whatever the backend happened to serialise, and a resume
@@ -72,8 +72,16 @@ function contactLine(spec: GeneratedResume["spec"]): string {
    to depict, so the order here is its order: name, target role, rule, contact details, and then
    education as a section like any other. A preview that composes differently from the file is
    worse than no preview, because the student approves one document and the employer receives
-   another. */
-function ResumePaper({
+   another.
+
+   EXPORTED, AND THE ONLY RESUME PAPER IN THE APP. The dashboard's review pane used to carry its
+   own private copy of this component, which was never given the fix above: it opened with
+   `job_context.role` over `job_context.company`, so the "Check before you send" screen showed the
+   posting's job title where the applicant's name belongs and named neither the student nor their
+   contact details. Two renderers of one document is the defect, not the styling of either, because
+   only one of them was ever going to receive the next correction. Anything that shows a spec as a
+   document imports this. */
+export function ResumePaper({
   spec,
   name,
   contact,
