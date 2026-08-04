@@ -231,7 +231,7 @@ test("R-046: the highlight tones are visually distinct", () => {
   );
 
   // Colour is never the only carrier: every mark states its meaning to a screen reader.
-  assert.match(requirementText, /aria-label=\{`\$\{children\} — \$\{TONE_LABEL\[tone\]\}`\}/);
+  assert.match(requirementText, /aria-label=\{`\$\{children\}, \$\{TONE_LABEL\[tone\]\}`\}/);
 });
 
 test("the submitting screen names the dashboard authorization", () => {

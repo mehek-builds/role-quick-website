@@ -56,7 +56,7 @@ export function CompanyLogo({
           width={24}
           height={24}
           /* NOT lazy, and this is load-bearing. Measured on trylitos.com 2026-07-29: with
-             loading="lazy" not one of the 41 logos on the first page ever loaded — every circle
+             loading="lazy" not one of the 41 logos on the first page ever loaded, every circle
              rendered empty, including rows sitting in the viewport. Because the image never
              errored, the monogram fallback never ran either, so the row showed NOTHING rather
              than a letter. Setting the same element to eager painted it immediately, and probing

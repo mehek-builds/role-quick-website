@@ -88,7 +88,7 @@ export function TermMark({
       // GapChip already does this; the marks were the half that got left behind.
       tabIndex={0}
       role="button"
-      aria-label={`${children} — ${TONE_LABEL[tone]}`}
+      aria-label={`${children}, ${TONE_LABEL[tone]}`}
       onMouseEnter={() => setActive(term)}
       onMouseLeave={() => setActive(null)}
       onFocus={() => setActive(term)}

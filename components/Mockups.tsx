@@ -320,7 +320,7 @@ export function InboxMockup() {
 }
 
 /* A real Greenhouse-shaped form: labels over inputs, dropdowns, the resume
-   attached, screening answered — and the two things deliberately NOT filled
+   attached, screening answered, and the two things deliberately NOT filled
    (the essay, EEO beyond decline-to-default) shown honestly. Teal = the
    autofill pillar doing its job. */
 function FormField({

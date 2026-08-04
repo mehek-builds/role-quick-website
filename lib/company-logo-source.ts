@@ -9,14 +9,14 @@
  * The rules below are not fussiness. They were each paid for:
  *
  * .com ONLY. The first version also tried .ai/.io/.co and every false positive
- * came from them — Block resolved to block.co, an NFT company, not Jack
+ * came from them: Block resolved to block.co, an NFT company, not Jack
  * Dorsey's Block; Ashby to ashby.ai rather than ashbyhq.com; Elastic to
  * elastic.io. The impostor's own title contains the word, so no name check can
  * separate them. A company whose real domain is not .com keeps its monogram.
  *
  * THE SITE MUST NAME THE COMPANY. A candidate is accepted only if its <title>
  * or og:site_name contains the company name. Necessary, and famously not
- * sufficient — hence the two rules either side of it.
+ * sufficient, hence the two rules either side of it.
  *
  * A DENYLIST, because reading the 79 shortest names by hand rejected 13 that
  * passed every automated check: crisp.com is a programmers' editor (ours is
@@ -77,7 +77,7 @@ export function isDenied(company: string): boolean {
   return slugs(company).some((s) => WRONG_DOTCOM.has(s.replace(/-/g, "")));
 }
 
-/* Candidate hosts for a company, best first. .com only — see the file header. */
+/* Candidate hosts for a company, best first. .com only, see the file header. */
 export function domainCandidates(company: string): string[] {
   if (isDenied(company)) return [];
   return slugs(company).map((s) => `${s}.com`);
@@ -168,7 +168,7 @@ export function monogram(company: string): string {
  * to notice and swap in a fallback, which means client JavaScript on a page that
  * has none, and a broken-image icon in the window before it does. This way the
  * tile is one <img> that always renders something, and the page stays static.
- * Deliberately not a coloured circle — DESIGN.md bans those. */
+ * Deliberately not a coloured circle: DESIGN.md bans those. */
 export function monogramSvg(company: string): string {
   const ch = monogram(company).replace(/[<&>"']/g, "");
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-hidden="true">
@@ -215,12 +215,12 @@ export function imageTypeOf(contentType: string | null, bytes: Uint8Array): stri
  *
  * This is the better source, and the reason is that identity is not inferred at
  * all. We poll each employer's board by a token WE chose when the source was
- * added — greenhouse/block, ashby/crisp — so the page at that token is that
+ * added (greenhouse/block, ashby/crisp) so the page at that token is that
  * company's, by construction. Whatever it says about itself is authoritative.
  *
  * Measured on 30 random live sources: 14 gave a logo the ATS hosts directly,
  * 10 more gave a verified domain, 6 gave nothing (mostly bot-blocked boards).
- * It also recovers names guessing could never reach — rocketlabcorp.com,
+ * It also recovers names guessing could never reach: rocketlabcorp.com,
  * akunacapital.com, oldmissioncapital.com, sigmacomputing.com.
  * ------------------------------------------------------------------------- */
 
@@ -281,7 +281,7 @@ const NOT_THE_EMPLOYER =
  * TOKEN.
  *
  * The anchor is what makes this safe. The most-linked outbound host is a good
- * guess and no more — it picked datasubject.com for `honor`. Requiring the
+ * guess and no more: it picked datasubject.com for `honor`. Requiring the
  * host's own label to relate to the board token turns a guess into a check,
  * because the token is the slug the employer chose on their ATS and we recorded
  * when we added them: greenhouse/block -> block.xyz, greenhouse/suki ->

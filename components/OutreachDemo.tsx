@@ -4,7 +4,7 @@ import { useState } from "react";
 
 /* Interactive outreach demo: pick a contact, see their customized draft.
    Every draft is grounded in the same resume facts but angled to the
-   persona. The LinkedIn-only contact shows the honest no-email state —
+   persona. The LinkedIn-only contact shows the honest no-email state:
    we never guess an address (Guardrails, made visible). */
 
 type Contact = {

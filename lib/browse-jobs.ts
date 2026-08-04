@@ -18,7 +18,7 @@ export type BrowseJob = {
   title: string;
   /* Every city this exact role at this exact company and ATS family is open in. The API groups
      by (company, title, ATS), so one tile is one job even when the employer posted it
-     once per office — MongoDB posts a single role in 23 places. */
+     once per office: MongoDB posts a single role in 23 places. */
   locations: string[];
   openings: number;
   apply_url: string;
@@ -34,7 +34,7 @@ export type BrowseJob = {
   first_seen_at: string;
   ats_name: string;
   /* What the employer published about pay, and what kind of job it is. Null on most rows, and
-     rendered as nothing at all — see lib/pay.ts.
+     rendered as nothing at all, see lib/pay.ts.
      On this endpoint these are GROUP aggregates: one tile is one role that may be open in 23
      cities, and the API only fills them in when every city that published a figure agreed on the
      currency and the period. A role paying USD in Austin and CAD in Toronto has no single range,
@@ -44,14 +44,14 @@ export type BrowseJob = {
   salary_currency?: string | null;
   salary_interval?: string | null;
   employment_type?: string | null;
-  /* The employer's board on their ATS — the URL we poll. Carried onto the tile
+  /* The employer's board on their ATS, the URL we poll. Carried onto the tile
      so the logo service can ask that board who the company is, instead of
      guessing from the name. */
   career_url?: string | null;
 };
 
 /* The board's three fields. All optional, all AND together, any combination
-   works on its own — a visitor who fills in only "city" and presses Search gets
+   works on its own: a visitor who fills in only "city" and presses Search gets
    every role in that city. */
 export type Filters = {
   title?: string;
@@ -74,7 +74,7 @@ export type JobsPage = {
   /** Raw postings behind those groups. Null only while an older backend is still deploying. */
   postingsTotal: number | null;
   /* null when the API could not be reached at all, which the page has to show
-     as a fault rather than as "no jobs match" — those look identical to a
+     as a fault rather than as "no jobs match", those look identical to a
      reader and only one of them is our problem to fix. */
   ok: boolean;
 };
@@ -89,7 +89,7 @@ export const PER_PAGE = 24;
  * The suggestions are ONE query behind two cache keys (with and without the
  * sponsor filter). The listings key on page x title x company x city x q x
  * sponsor, and the three text filters are free text off the query string, so
- * their key space is effectively unbounded — every distinct search is its own
+ * their key space is effectively unbounded: every distinct search is its own
  * entry and its own origin miss. Giving both the same window would have bought
  * the listings a 5x increase in grouped aggregates against a Hobby-tier Neon
  * for freshness nobody asked for: the postings themselves only move on the
@@ -104,7 +104,7 @@ export const PER_PAGE = 24;
  * comment got it wrong: /browse-jobs reads searchParams and sets no route-level
  * `revalidate`, so it is dynamically rendered per request and there is NO
  * edge-cached HTML. The only thing between a visitor and the backend is Next's
- * Data Cache, which is per-deployment and not shared across regions — it is
+ * Data Cache, which is per-deployment and not shared across regions, it is
  * cold after every deploy.
  *
  * And SWR means "fresh on the NEXT load", not "fresh in 60 seconds": on a
@@ -185,7 +185,7 @@ export async function fetchJobs(
    version of this page got wrong. Lever gives createdAt, Ashby gives publishedAt,
    and Workable gives published_on: all are genuinely when the job went up.
    Greenhouse's board API exposes only updated_at, which moves
-   every time anyone edits the posting — 620 of 5,920 Greenhouse rows carried
+   every time anyone edits the posting: 620 of 5,920 Greenhouse rows carried
    today's date on the day they were first pulled. Printing POSTED TODAY across
    a whole page off the back of that is precisely the claim this page exists
    not to make, so Greenhouse says UPDATED, which is what the number is.
@@ -264,7 +264,7 @@ export function locationList(job: Pick<BrowseJob, "locations" | "remote">): stri
 }
 
 /* What the tile actually prints. A role open in 23 cities cannot list 23 on a
-   tile without burying the job title, so it names a few and counts the rest —
+   tile without burying the job title, so it names a few and counts the rest:
    the count is the honest part, and it is why the number is shown rather than
    the list being silently cut. */
 export function locationSummary(
@@ -301,8 +301,8 @@ export async function fetchFacets(sponsorOnly = false): Promise<Facets> {
        returns nothing and reads as a broken board. */
     /* `v` is a cache key, not a parameter the API reads.
        Next's Data Cache survives a deployment, so when /jobs/facets changed
-       shape — 202 alphabetical companies and a `titles` field became 50 ranked
-       companies and no titles — the board went on serving the OLD payload for
+       shape: 202 alphabetical companies and a `titles` field became 50 ranked
+       companies and no titles, the board went on serving the OLD payload for
        an hour after both sides had shipped: the title dropdown was correct
        while the company one still opened on "AQR" with 203 entries. Stale would
        have been tolerable; the wrong shape is not, and another deploy does not

@@ -47,7 +47,7 @@ const MENA =
 
 const clean = (s) =>
   String(s ?? "")
-    .replace(/—/g, "-")
+    .replace(/\u2014/g, "-")
     .replace(/"/g, '\\"')
     .trim();
 

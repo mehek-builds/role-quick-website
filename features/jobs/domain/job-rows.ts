@@ -5,8 +5,8 @@ import type { MonitoredJob } from "@/lib/api";
  * These lived in `app/dashboard/jobs/page.tsx` and `components/app/CompanyLogo.tsx` and were
  * therefore untestable: this repo's runner is `node --experimental-strip-types`, which strips
  * types but cannot parse JSX, so nothing in a .tsx file can be imported by a test. They carry the
- * two decisions on that page a student would actually notice getting wrong — whether a row says
- * "Applied", and whose logo is on it — so "untestable" was the wrong place for them. */
+ * two decisions on that page a student would actually notice getting wrong: whether a row says
+ * "Applied", and whose logo is on it, so "untestable" was the wrong place for them. */
 
 /** Job boards, not employers. A careers URL on one of these tells us nothing about the company. */
 const ATS_HOSTS = [
@@ -40,7 +40,7 @@ const ATS_HOSTS = [
  *
  * PREFERS THE SERVER'S ANSWER, and that is the whole fix. This used to derive the domain from
  * `career_url` alone, and on 2026-07-28 every one of the 51 polled sources had a JOB BOARD in that
- * field — `job-boards.greenhouse.io/lyft`, `jobs.ashbyhq.com/linear` — because that is what a
+ * field (`job-boards.greenhouse.io/lyft`, `jobs.ashbyhq.com/linear`) because that is what a
  * careers URL honestly is for these employers. So this function correctly returned null on 100 rows
  * out of 100 and the logo never once appeared. The backend now resolves the employer's real domain
  * from a verified mapping and sends it as `company_domain`.
@@ -143,7 +143,7 @@ export function applicationKey(company: string, role: string): string {
 /** Board stages that mean an application was actually sent.
  *
  *  A WHITELIST, deliberately. The previous rule was `stage !== "saved"`, which counted `closed` as
- *  applied — and `closed` is where a student puts a posting that expired, that they lost interest
+ *  applied, and `closed` is where a student puts a posting that expired, that they lost interest
  *  in, or that was a duplicate. Those they never applied to, and the row would have shown the green
  *  "Applied" statement with no control on it at all, so they could not have applied even if they
  *  wanted to. A missed application is the one failure on this page that cannot be undone. */
@@ -221,7 +221,7 @@ export function isJobApplied(job: AppliedJob, index: AppliedIndex | null): boole
  *
  * Counts THE ROWS IT IS GIVEN, which is the page currently loaded, not the whole board. On a
  * ranked list those rows are the best-fitting ones rather than the newest, so this is "new today
- * among the roles in view" — which is what the badge says, because a number the reader cannot
+ * among the roles in view", which is what the badge says, because a number the reader cannot
  * reconcile with what is on screen is worse than a smaller true one.
  */
 export function countNewToday(jobs: Pick<MonitoredJob, "first_seen_at">[]): number {
