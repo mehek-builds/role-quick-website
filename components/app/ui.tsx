@@ -238,6 +238,47 @@ export function EmptyState({
   );
 }
 
+/**
+ * The action that ENDS a screen, kept on screen while you read the screen.
+ *
+ * The review screen is one long document: a job description, an editable resume, a cover letter,
+ * and then, last, the button that fills the form. On a laptop that is fine, the whole thing is
+ * about a viewport and a half. At 744x789 the same screen is ~2900px and the primary action is
+ * roughly 2100px of scrolling away, past an editable resume that swallows Page_Down and End
+ * because focus lands inside a textarea. The product's core action was the hardest thing on its
+ * own screen to reach, and Litos's traffic is TikTok and Instagram, so narrow is the common case.
+ *
+ * So below lg the bar parks at the bottom of the viewport and settles into its real place in the
+ * document once you scroll that far. `sticky` and not `fixed`: fixed would need the surrounding
+ * document to reserve a hole for it and would sit there on desktop too, where there is no problem
+ * to solve. Sticky costs nothing above lg (`lg:static`) and needs no reserved space, because at
+ * the end of the scroll the element IS in its flow position.
+ *
+ * `bottom` is --dashboard-bottom-bar, so the sticky bar rides directly on top of the mobile tab
+ * bar rather than under it, and lands flush at the viewport bottom above lg where that bar is gone.
+ *
+ * WHY THIS WORKS AT ALL, since it is the part that is easy to break: a bottom-sticky element can
+ * only travel inside its containing block, and this bar is always the LAST child of its section.
+ * The travel therefore comes from the PARENT being tall, not from anything below the bar. Keep it
+ * as a direct child of the screen's full-height wrapper. Move it inside a short card and it will
+ * silently stop sticking, with nothing failing loudly to tell you.
+ */
+export function TerminalActionBar({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`sticky bottom-[var(--dashboard-bottom-bar)] z-20 flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4 shadow-raised lg:static lg:shadow-none ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function ErrorNote({ message }: { message: string }) {
   return (
     <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">

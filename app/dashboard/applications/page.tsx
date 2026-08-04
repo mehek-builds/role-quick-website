@@ -16,7 +16,7 @@ import {
   type MonitoredJob,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
@@ -1399,7 +1399,7 @@ function Applications() {
               came back with "This portal is not supported yet". Nine of one account's ten failures
               were that. The tailored resume is still worth having, so this says what Litos cannot
               do and hands the applicant the page instead of hiding the job. */}
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-border bg-surface-alt p-4">
+          <TerminalActionBar>
             <p className="text-sm text-ink">
               {review.portal_supported === false
                 ? "Litos cannot fill in this company’s page. Your resume is ready, so apply on their site."
@@ -1413,7 +1413,7 @@ function Applications() {
                   {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
                 </Button>}
             </div>
-          </div>
+          </TerminalActionBar>
         </>
       )}
 
@@ -1751,7 +1751,12 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
-      <div className="flex justify-end"><Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button></div>
+      {/* Same trap as the review screen, one screen later: N six-row textareas and then the button
+          that ends the screen, so at 744px the action is off the bottom of a document whose every
+          other element eats the keyboard. Same treatment. */}
+      <TerminalActionBar className="justify-end">
+        <Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button>
+      </TerminalActionBar>
     </div>
   );
 }

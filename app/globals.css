@@ -305,6 +305,27 @@ html {
 /* .rq-grain and its @keyframes were removed 2026-07-28 with the grain layer
    in CinematicPage.tsx. See the note there. */
 
+/* How much of the viewport bottom the mobile tab bar owns.
+   ONE number, declared where the bar itself is declared, because it is needed in two places that
+   are nowhere near each other: the scroll padding that keeps the end of a page off the bar, and
+   the offset a sticky action bar parks at so it sits ON the content rather than under the bar.
+   It was two hand-written magic numbers before, and they went out of sync in the only way that
+   matters: `main` carried `pb-24 sm:py-10`, where the `sm` shorthand silently cancelled the
+   clearance from 640px up while the bar itself stays on until 1024px. Every dashboard page's last
+   21px sat under the tab bar across that whole band, measured on 2026-08-04. A variable cannot be
+   cancelled by a shorthand that was reaching for something else.
+   The arithmetic is the bar's own box: pt-2 (8px) + a 44px touch target + its safe-area padding. */
+.dashboard-shell {
+  --dashboard-bottom-bar: calc(3.25rem + max(0.5rem, env(safe-area-inset-bottom, 0px)));
+}
+
+/* The bar is lg:hidden, so above lg it owns nothing and nothing should be reserved for it. */
+@media (min-width: 1024px) {
+  .dashboard-shell {
+    --dashboard-bottom-bar: 0px;
+  }
+}
+
 @media (max-width: 639px) {
   .dashboard-shell main button,
   .dashboard-shell main select,

@@ -150,7 +150,14 @@ export function DashboardShell({
             </Link>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-7 pb-24 sm:px-6 sm:py-10 lg:pb-10">{children}</main>
+        {/* Top and bottom padding are set SEPARATELY on purpose. This was `py-7 pb-24 sm:py-10`,
+            where the `sm:py-10` shorthand quietly overwrote the `pb-24` that exists to keep the end
+            of a page off the tab bar below. The bar is `lg:hidden`, so from 640px to 1023px it was
+            still on screen with nothing reserved for it, and the last 21px of every dashboard page
+            sat underneath it. On /dashboard/applications those 21px are where the primary action
+            lives. Nothing here may use a `py-*` shorthand again: the bottom is the bar's to claim,
+            through --dashboard-bottom-bar, which goes to 0 exactly when the bar goes away. */}
+        <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-7 pb-[calc(var(--dashboard-bottom-bar)+2.5rem)] sm:px-6 sm:pt-10">{children}</main>
       </div>
 
       <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
