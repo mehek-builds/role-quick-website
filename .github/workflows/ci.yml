@@ -51,3 +51,47 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
+
+  # SEPARATE JOB ON PURPOSE, and named for what it is.
+  #
+  # This one needs a Chromium binary downloaded at run time, which is the single
+  # step in this file that can fail for a reason that has nothing to do with the
+  # product. Folded into `check` it would turn a CDN hiccup into a red tick next
+  # to "Tests" and teach everyone to ignore the tick. Kept apart, "Click path
+  # (browser)" going red while "check" stays green reads as exactly what it is:
+  # the browser did not arrive.
+  #
+  # It is also why the dependency is playwright-core rather than playwright.
+  # playwright-core has no postinstall, so `npm ci` above cannot slow down or
+  # fail on a browser fetch, and `npm test` stays a pure static suite. The
+  # browser is fetched here, once, by the one job that needs it.
+  click-path:
+    name: Click path (browser)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # playwright-core ships no installer, so the browser comes from the
+      # matching versioned playwright CLI. --with-deps because a bare GitHub
+      # runner is missing the shared libraries headless Chromium links against.
+      - name: Install Chromium
+        run: npx --yes playwright@1.62.1 install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
+
+      # Drives the four Home Overview controls with real clicks against a
+      # stubbed backend. Every request is intercepted; nothing reaches a real
+      # service and no credential exists to reach one with.
+      - name: Click path spec
+        run: npm run test:click-path

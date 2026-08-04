@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --test 'app/**/*.test.mts' 'features/**/*.test.mts' 'lib/**/*.test.mts' tests/**/*.test.mjs",
+    "test:click-path": "node --test tests/e2e/dashboard-click-path.spec.mjs",
     "verify:logos": "node --experimental-strip-types scripts/verify-logo-service.mjs",
     "verify:suggestions": "node --experimental-strip-types scripts/verify-board-suggestions.mjs"
   },
@@ -35,6 +36,7 @@
     "canvas": "^3.2.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
+    "playwright-core": "^1.62.1",
     "sharp": "^0.35.3",
     "tailwindcss": "^4",
     "typescript": "^5"

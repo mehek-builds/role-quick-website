@@ -1,0 +1,281 @@
+/**
+ * The four Home Overview controls, driven by a real click.
+ *
+ * WHY THIS FILE EXISTS, AND WHY IT CANNOT BE A SOURCE-LEVEL TEST
+ * =============================================================
+ * ISSUE-042 shipped to production having passed a thorough verification: 22 killed mutations, 5
+ * killed predicate probes, heading visibility measured in pixels. It was still dead when a student
+ * clicked the button, because every test and every live probe entered /dashboard/applications by
+ * HARD-LOADING a URL.
+ *
+ * In the Next.js App Router a hard load and a client-side navigation are genuinely different code
+ * paths. The router renders the incoming route inside a transition BEFORE it commits the new URL,
+ * so a first-mount-only read of `window.location.search` samples the OLD location and resolves to
+ * "all". `page.goto("/dashboard/applications?state=action")` passes, because there the URL is
+ * already correct at first render. A click fails. THAT ASYMMETRY IS THE ENTIRE POINT OF THIS FILE,
+ * which is why the goto cases are kept here beside the click cases rather than left implicit.
+ *
+ * Every other regression test in this repo is static analysis of source text, so it pins the SHAPE
+ * of today's implementation rather than its behaviour. A mutation that hard-coded the filter while
+ * leaving the correct expression behind in a COMMENT stayed green against that suite. The only
+ * artifact that has ever caught this defect class is a real click.
+ *
+ * PROOF THAT THIS SPEC CAN SEE THE DEFECT
+ * =======================================
+ * The defect was temporarily restored in app/dashboard/applications/page.tsx, swapping the
+ * useSearchParams-derived filter back for the old first-mount-only initialiser:
+ *
+ *     const [applicationFilter, setApplicationFilter] =
+ *       useState(() => applicationFilterFromSearch(window.location.search));
+ *
+ * Against that production build, measured on 2026-08-04:
+ *   - all four CLICK cases went RED. The URL was right every time and the sentinel survived every
+ *     time, so the click genuinely was a client-side transition, and the filter still resolved to
+ *     "all". On "all" the ledger does not render at all, so the observed state on all four was: no
+ *     ledger section, no filter select, zero rows. Nothing on screen answered the click.
+ *   - the GOTO parity case, loading those same four URLs with page.goto, stayed GREEN and read
+ *     "Applications that need you"/action/5, "Applications ready to send"/ready/2 and
+ *     "Applications you have sent"/submitted/4 exactly as it does on the fixed build.
+ * A suite made only of goto would have shipped the defect a second time.
+ *
+ * CONSTRAINTS THIS FILE HOLDS ITSELF TO
+ * =====================================
+ *  - No production backend, no database, no real credentials. Every request passes through one
+ *    catch-all route: same-origin requests are served by the local `next start`, backend requests
+ *    are fulfilled from the fabricated fixture, and anything else is ABORTED and recorded.
+ *    `blockedExternal` must be empty at the end of every case, so nothing leaves this machine.
+ *  - Production build (`npm run build` then `next start`), never `next dev`, so the transition
+ *    behaviour under test is the behaviour that ships.
+ *  - `document.visibilityState === "visible"` is asserted before any measurement. A background tab
+ *    suspends rAF, ResizeObserver and smooth scrolling, which has already produced two false
+ *    findings on this audit.
+ *  - Fixture counts are DISTINCT per view (2 ready, 5 needs you, 4 sent, 11 reviewable), so a
+ *    filtered list has a unique signature and mere presence cannot be mistaken for correctness.
+ *  - A sentinel planted on `window` before the click must SURVIVE the navigation. If it does not,
+ *    the browser did a full document load and the case proved nothing about the click path.
+ *
+ * RUN IT WITH:  npm run build && npm run test:click-path
+ * Deliberately outside `npm test`: that suite is hundreds of fast static tests and must never
+ * depend on a browser binary being present.
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
+import { chromium } from "playwright-core";
+
+import { BACKEND_ORIGIN, COUNTS, REVIEWABLE_TOTAL, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+
+async function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForServer(origin, child) {
+  for (let attempt = 0; attempt < 160; attempt += 1) {
+    if (child.exitCode !== null) throw new Error(`next start exited early with code ${child.exitCode}`);
+    try {
+      const res = await fetch(`${origin}/login`, { redirect: "manual" });
+      if (res.status < 500) return;
+    } catch {
+      /* not listening yet */
+    }
+    await delay(250);
+  }
+  throw new Error(`next start never answered on ${origin}. Run "npm run build" first.`);
+}
+
+const port = await freePort();
+/* 127.0.0.1, not localhost. The applications page treats hostname "localhost" plus a ?qa parameter
+   as its canned-fixture mode; running off the loopback IP keeps that door shut by construction. */
+const ORIGIN = `http://127.0.0.1:${port}`;
+
+const server = spawn("node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", String(port)], {
+  stdio: ["ignore", "ignore", "inherit"],
+});
+await waitForServer(ORIGIN, server);
+
+const browser = await chromium.launch();
+const context = await browser.newContext({
+  /* Wide enough for the ledger's desktop table. Below lg the same rows render as a scrolling chip
+     strip instead, and the row count would be measuring a different control. */
+  viewport: { width: 1280, height: 900 },
+});
+
+/** Every non-localhost request that got aborted. Asserted empty by every case. */
+const blockedExternal = [];
+/** Backend paths the stub had no canned answer for. Fails the last case rather than passing `{}`. */
+const unstubbedBackendPaths = new Set();
+
+await context.route("**/*", async (route) => {
+  const url = route.request().url();
+  if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
+    await route.continue();
+    return;
+  }
+  if (url.startsWith(BACKEND_ORIGIN)) {
+    const path = new URL(url).pathname;
+    const body = STUB[path];
+    if (body === undefined) unstubbedBackendPaths.add(path);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
+    return;
+  }
+  blockedExternal.push(url);
+  await route.abort();
+});
+
+/* Runs before any page script on every navigation, so a session exists by the time the dashboard
+   layout's auth guard reads it. A fabricated string; it is never sent anywhere real. */
+await context.addInitScript((token) => {
+  window.localStorage.setItem("rq_token", token);
+  window.localStorage.setItem("rq_email", "fixture@example.invalid");
+  window.localStorage.setItem("litos_session_mode_v1", "verified");
+  window.localStorage.setItem("litos_has_history_v1", "true");
+}, SESSION_TOKEN);
+
+const page = await context.newPage();
+page.on("pageerror", (reason) => {
+  throw new Error(`uncaught error on the page under test: ${reason}`);
+});
+
+test.after(async () => {
+  await context.close().catch(() => {});
+  await browser.close().catch(() => {});
+  server.kill("SIGTERM");
+});
+
+const TRACKER = 'section[aria-labelledby="applications-summary"]';
+const LEDGER = 'section[aria-labelledby="application-ledger-heading"]';
+
+/** Heading, filter value and row count, read off the Tracker the way a student sees them. */
+async function readLedger() {
+  await page.locator(LEDGER).waitFor({ state: "visible", timeout: 15_000 });
+  const heading = (await page.locator("#application-ledger-heading").textContent())?.trim();
+  const select = await page.locator("#application-filter").inputValue();
+  /* :visible matters. Below lg the same packets render again as a horizontally scrolling chip
+     strip, and counting the DOM blind would double every number. */
+  const rows = await page.locator(`${LEDGER} button[aria-pressed]:visible`).count();
+  const counter = (await page.locator(`${LEDGER} span.font-mono`).first().textContent())?.trim();
+  return { heading, select, rows, counter };
+}
+
+/** Land on Home with the fixture loaded and a sentinel planted on window. */
+async function openHome() {
+  await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
+  await page.locator(TRACKER).waitFor({ state: "visible", timeout: 15_000 });
+  await page.evaluate(() => { window.__clickPathSentinel = "planted"; });
+  assert.equal(
+    await page.evaluate(() => document.visibilityState),
+    "visible",
+    "the page must be foregrounded: a background tab suspends rAF, ResizeObserver and smooth scrolling",
+  );
+}
+
+/** A control inside the Tracker column, matched on its own text and required to be unique. */
+function trackerControl(text) {
+  return page.locator(TRACKER).getByRole("link").filter({ hasText: text });
+}
+
+const CASES = [
+  {
+    name: 'banner "Finish the missing answers"',
+    control: () => trackerControl("Finish the missing answers"),
+    url: "/dashboard/applications?state=action",
+    heading: "Applications that need you",
+    select: "action",
+    rows: COUNTS.action,
+  },
+  {
+    name: 'tile "Ready"',
+    control: () => trackerControl("Ready"),
+    url: "/dashboard/applications?state=ready",
+    heading: "Applications ready to send",
+    select: "ready",
+    rows: COUNTS.ready,
+  },
+  {
+    name: 'tile "Needs you"',
+    control: () => trackerControl("Needs you"),
+    url: "/dashboard/applications?state=action",
+    heading: "Applications that need you",
+    select: "action",
+    rows: COUNTS.action,
+  },
+  {
+    name: 'tile "Sent"',
+    control: () => trackerControl("Sent"),
+    url: "/dashboard/applications?state=submitted",
+    heading: "Applications you have sent",
+    select: "submitted",
+    rows: COUNTS.submitted,
+  },
+];
+
+test("the fixture gives each Overview view a distinct signature", async () => {
+  await openHome();
+  const tracker = (await page.locator(TRACKER).textContent()) ?? "";
+  assert.match(tracker, new RegExp(`${COUNTS.ready}Ready`), "Ready tile should print the fixture's ready count");
+  assert.match(tracker, new RegExp(`${COUNTS.action}Needs you`), "Needs you tile should print the fixture's action count");
+  assert.match(tracker, new RegExp(`${COUNTS.submitted}Sent`), "Sent tile should print the fixture's submitted count");
+  assert.notEqual(COUNTS.ready, COUNTS.action);
+  assert.notEqual(COUNTS.ready, COUNTS.submitted);
+  assert.notEqual(COUNTS.action, COUNTS.submitted);
+  assert.deepEqual(blockedExternal, []);
+});
+
+for (const item of CASES) {
+  test(`CLICK: ${item.name} filters the Tracker`, async () => {
+    await openHome();
+
+    const control = item.control();
+    assert.equal(await control.count(), 1, `${item.name} must resolve to exactly one control on Home`);
+    await control.waitFor({ state: "visible", timeout: 10_000 });
+    await control.click();
+    await page.waitForURL(`${ORIGIN}${item.url}`, { timeout: 15_000 });
+
+    /* The whole reason this file exists. If the sentinel is gone the browser did a full document
+       load, which is the code path that has always passed and the one students never take. */
+    assert.equal(
+      await page.evaluate(() => window.__clickPathSentinel ?? null),
+      "planted",
+      `${item.name} navigated by hard load, not by a client-side transition: this case proved nothing`,
+    );
+    assert.equal(await page.evaluate(() => document.visibilityState), "visible");
+
+    const ledger = await readLedger();
+    assert.equal(ledger.heading, item.heading, `${item.name}: heading`);
+    assert.equal(ledger.select, item.select, `${item.name}: filter select value`);
+    assert.equal(ledger.rows, item.rows, `${item.name}: row count`);
+    assert.equal(ledger.counter, `${item.rows} of ${REVIEWABLE_TOTAL}`, `${item.name}: "N of M" counter`);
+    assert.deepEqual(blockedExternal, [], "no request may leave this machine");
+  });
+}
+
+/* The contrast case. These four URLs are the ones a hard load has ALWAYS got right, including on
+   the shipped-broken build. Keeping it in the suite records the asymmetry instead of relying on a
+   note about it: if this ever goes red at the same time as the click cases, the fault is in the
+   fixture or the harness rather than in the transition. */
+test("GOTO parity: the same four URLs also work on a hard load", async () => {
+  for (const item of CASES) {
+    await page.goto(`${ORIGIN}${item.url}`, { waitUntil: "domcontentloaded" });
+    assert.equal(await page.evaluate(() => document.visibilityState), "visible");
+    const ledger = await readLedger();
+    assert.equal(ledger.heading, item.heading, `goto ${item.url}: heading`);
+    assert.equal(ledger.select, item.select, `goto ${item.url}: filter select value`);
+    assert.equal(ledger.rows, item.rows, `goto ${item.url}: row count`);
+  }
+  assert.deepEqual(blockedExternal, []);
+});
+
+test("nothing reached the network and nothing reached a real backend", () => {
+  assert.deepEqual(blockedExternal, [], "external requests were attempted during this run");
+  assert.deepEqual([...unstubbedBackendPaths], [], "a backend path was hit with no canned answer");
+});
