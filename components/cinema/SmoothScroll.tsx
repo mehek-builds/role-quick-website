@@ -8,14 +8,24 @@ import { handleAnchorActivation } from "@/lib/anchor-navigation";
 
 /* Scroll pacing (effect 6 of 6): Lenis gives the page scroll weight, and
    every ScrollTrigger on the page reads from it. Mounted once on the
-   homepage. Reduced motion: never initialized, native scroll untouched. */
+   homepage. Reduced motion: Lenis is still never initialized and the native
+   scroll is still untouched, but a click listener runs the focus half of
+   anchor navigation, which the native hash jump does not do on its own. */
+/* How far above an anchor target the Lenis glide stops, so the fixed header
+   does not sit on top of what the visitor just asked to see. The native path
+   (reduced motion) gets the same clearance from Tailwind's scroll-mt on the
+   target sections instead, which is why the two are not one value. */
+const HEADER_CLEARANCE_PX = 56;
+
 export function SmoothScroll() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      /* No Lenis here, so the browser's own hash jump does the scrolling and
-         is left alone. Focus still has to be moved by hand: without it the
-         skip link scrolls the page and then hands the next Tab back to the
-         header it just skipped. Same handler, no scroll callback. */
+      /* No Lenis here, so the browser's own hash jump is left alone to do the
+         scrolling: it runs as the default action, right after this handler
+         returns. Focus still has to be moved by hand, because a hash jump
+         scrolls without focusing anything. Without it the skip link moves the
+         page and then hands the next Tab back to the header it just skipped.
+         Same handler, no scroll callback. */
       const onNativeAnchor = (e: MouseEvent) =>
         handleAnchorActivation(e, document, null);
       document.addEventListener("click", onNativeAnchor);
@@ -42,7 +52,10 @@ export function SmoothScroll() {
        have to be spelled out. */
     const onClick = (e: MouseEvent) =>
       handleAnchorActivation(e, document, (target) =>
-        lenis.scrollTo(target, { offset: -56, duration: 1.3 })
+        lenis.scrollTo(target, {
+          offset: -HEADER_CLEARANCE_PX,
+          duration: 1.3,
+        })
       );
     document.addEventListener("click", onClick);
 

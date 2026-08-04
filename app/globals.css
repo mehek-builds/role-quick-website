@@ -128,13 +128,21 @@ body {
 }
 
 /* Focus ring, per brand deck section 04: 2px blue outline, offset 2px, on
-   every interactive element reached by keyboard. */
+   every interactive element reached by keyboard.
+
+   tabindex="-1" is excluded on purpose. It marks an element that is focusable
+   only programmatically, never a tab stop: a skip-link target section, a
+   dialog container, a scroll landing point. Ringing those draws the 2px
+   outline around a whole page region, and #product is a 200svh film wrapper,
+   so the "ring" becomes two blue rules down the screen edges with no visible
+   top or bottom. The repo's own focus traps already exclude tabindex="-1" by
+   the same selector (components/PacketViewer.tsx, app/dashboard/page.tsx). */
 a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
-[tabindex]:focus-visible {
+[tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
