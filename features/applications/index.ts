@@ -4,6 +4,7 @@
  * Presentation code imports from this file so internal layers can move without
  * forcing route and component changes.
  */
+export * from "./domain/application-filter";
 export * from "./domain/application-review";
 export * from "./domain/apply-variant";
 export * from "./domain/board-stages";
@@ -14,12 +15,16 @@ export {
   MIN_JD_CHARS,
   canGenerateFrom,
   countPreparedJobs,
+  isHttpsJobUrl,
   jobSubmittedOnDay,
+  missingApplicationFields,
   nextPreferredReadyPacket,
   packetMatchesJob,
   rankJobs,
   resumeGenerationBody,
   visibleMatches,
+  type ApplicationDraft,
+  type ApplicationDraftField,
   type ProfileIdentity,
   type RankedJob,
 } from "./domain/daily-matches";

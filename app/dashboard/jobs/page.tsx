@@ -6,7 +6,7 @@ import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
 import { fetchBoard, useJobMatchScores, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
-import { buildAppliedIndex, countNewToday, isJobApplied, type AppliedIndex } from "@/features/jobs";
+import { activeJobFilters, buildAppliedIndex, countNewToday, emptyJobsBody, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
@@ -216,7 +216,22 @@ export default function JobsPage() {
   }, [employmentType, hasMore, jobs, loadingMore, location, query, remoteOnly]);
 
   const newToday = useMemo(() => (jobs ? countNewToday(jobs) : 0), [jobs]);
-  const filtering = query.trim() !== "" || location.trim() !== "" || remoteOnly || employmentType !== "";
+  /* One reading of "what is narrowing this list", shared by the branch and by the sentence, so the
+     two can never name different filters. See features/jobs/domain/job-filters.ts. */
+  const filters = useMemo(
+    () => ({ query, location, remoteOnly, employmentType }),
+    [employmentType, location, query, remoteOnly],
+  );
+  const activeFilters = useMemo(() => activeJobFilters(filters), [filters]);
+  /* All four, including the two that are not text boxes. A control offering to clear "filters"
+     while leaving the job type or Remote only set would leave the student staring at the same
+     empty board having done exactly what they were told. */
+  const clearFilters = useCallback(() => {
+    setQuery("");
+    setLocation("");
+    setRemoteOnly(false);
+    setEmploymentType("");
+  }, []);
   const commitTargetRole = () => {
     if (!query.trim()) return;
     const key = filterKey(query, location, remoteOnly, employmentType);
@@ -319,14 +334,16 @@ export default function JobsPage() {
       {jobs === null ? (
         <ShimmerRows rows={5} />
       ) : jobs.length === 0 ? (
-        <EmptyState
-          title="No matching roles"
-          body={
-            filtering
-              ? "Try a shorter search, or clear the location. New jobs show up here as Litos finds them."
-              : "New jobs show up here as Litos finds them."
-          }
-        />
+        <EmptyState title="No matching roles" body={emptyJobsBody(filters)}>
+          {/* No breakpoint gate on this, and no collapsing toolbar to tuck it into. ISSUE-028 was
+              a recovery control that only existed on large screens; the only way out of an empty
+              board has to be reachable at the width the student is actually holding. */}
+          {activeFilters.length > 0 && (
+            <Button type="button" onClick={clearFilters} variant="secondary">
+              Clear filters
+            </Button>
+          )}
+        </EmptyState>
       ) : (
         <>
           <ul className="grid gap-3">

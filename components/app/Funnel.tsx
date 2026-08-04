@@ -102,16 +102,15 @@ export function Funnel() {
           over an all-time 13. The window moved down to caption the bars, the one thing it describes.
           Rescoping the figures to 14 days instead would have meant changing what /metrics/funnel
           returns to make a label true, and would have taken away the running total a student opens
-          this panel to watch. The figures keep their own wording, see the note below. */}
+          this panel to watch. The figures keep the wording they carry today; the only change here is
+          where the window sits. */}
       <h2 className="text-base font-medium text-ink">Momentum</h2>
       <div className="mt-4 grid grid-cols-3 gap-3">
-        {/* The wording of these two labels is Mehek's call in 44edb10 and is not a drive-by fix.
-            "all time counter" was chosen over "applications sent, all time" to hold the label to one
-            line and keep the three figures on a common baseline. The cost is recorded in that commit
-            and is known and accepted: "applications" now appears nowhere in Momentum, because the
-            rail that carried the noun was removed for reading as a quota beside the tier, so neither
-            of the first two figures names what it counts. Reopen it with her, not from here. */}
-        <Stat value={f.applications_submitted} label="all time counter" />
+        {/* "all time counter" shipped here: the name of the variable rather than the name of the
+            thing, under a card headed LAST 14 DAYS, so the card argued with itself. The backend
+            builds this field as submittedAt.length, every application ever sent with no window on
+            it at all, so the label has to say the span out loud or the header speaks for it. */}
+        <Stat value={f.applications_submitted} label="sent since you started" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.
@@ -125,14 +124,18 @@ export function Funnel() {
               fields_filled is an all-time sum like the two figures above, so leaving it under the
               caption inside a shared parent would have put "LAST 14 DAYS" over an all-time number
               again, two lines down instead of four, and a caption binds harder than a card eyebrow.
-              Its own wording is left exactly as it shipped: moving the caption is the whole fix, and
-              the copy on this card is Mehek's call, not this change's. */}
+              Its own wording is left exactly as it shipped: moving the caption is the whole fix.
+              The gap under the caption is the caption's own mb-2 rather than a margin on the bar
+              row, so the plot box below keeps the exact className the height invariant is pinned
+              to. Nothing between them collapses: the figure is a block formatting context whose
+              children are adjacent siblings, and the bar row's top margin is zero, so the caption's
+              8px bottom margin is the whole gap. */}
           <figure>
-            <figcaption className="font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</figcaption>
+            <figcaption className="mb-2 font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</figcaption>
             {/* A fixed plot box. The bars used to be drawn into whatever vertical space the stretched
                 card had left over, so a 14-day history with two active days rendered as two marks
                 floating in an empty field and read as a rendering fault rather than a chart. */}
-            <div className="mt-2 flex h-8 items-end gap-1" role="img" aria-label={dailyLabel(f)}>
+            <div className="flex h-8 items-end gap-1" role="img" aria-label={dailyLabel(f)}>
               {f.days.map((day) => (
                 <div key={day.day} className="flex h-full flex-1 flex-col justify-end">
                   {/* No minimum height on an empty day. A 2px floor made a day with one

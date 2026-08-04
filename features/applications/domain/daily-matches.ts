@@ -5,6 +5,9 @@ import type {
   ParsedProfile,
   Targeting,
 } from "@/lib/api";
+/* Relative, not "@/lib/local-day": this module is loaded directly by the node test runner, which
+   resolves no tsconfig path aliases. Every other "@/lib" import here is type-only and erased. */
+import { localDayKeyOf } from "../../../lib/local-day.ts";
 
 /* NO `match` FIELD, and that is the ISSUE-014 fix in its final form.
  *
@@ -132,7 +135,15 @@ export function countPreparedJobs(jobs: RankedJob[], packets: GeneratedResume[])
   return jobs.filter((job) => packets.some((packet) => packetMatchesJob(packet, job))).length;
 }
 
-/** Whether this exact posting was submitted during the requested UTC day. */
+/**
+ * Whether this exact posting was submitted during the requested local day.
+ *
+ * dayKey comes from localDayKey, so submitted_at has to be converted to a local day too. This used
+ * to be `review.submitted_at?.slice(0, 10)`, which reads the UTC day off the stored instant. Once
+ * the caller's key is local, comparing it against a UTC day is wrong for the hours either side of
+ * local midnight, every day, in every timezone that is not UTC. The two sides of this comparison
+ * must be produced by the same function or they will drift apart again.
+ */
 export function jobSubmittedOnDay(
   job: Pick<MonitoredJob, "id" | "company_name" | "title">,
   packets: GeneratedResume[],
@@ -142,12 +153,57 @@ export function jobSubmittedOnDay(
     const review = packet.spec._review;
     return packetMatchesJob(packet, job)
       && review?.status === "submitted"
-      && review.submitted_at?.slice(0, 10) === dayKey;
+      && localDayKeyOf(review.submitted_at) === dayKey;
   });
 }
 
 /** Shortest job description the generator will accept. Mirrors the backend's `jd_text` minimum. */
 export const MIN_JD_CHARS = 20;
+
+export type ApplicationDraft = {
+  company: string;
+  role: string;
+  portalUrl: string;
+  jobDescription: string;
+};
+
+/** The four boxes, by the name the composer's own state uses for each. */
+export type ApplicationDraftField = keyof ApplicationDraft;
+
+/**
+ * WHICH of the four boxes is empty, not merely whether one of them is.
+ *
+ * ISSUE-040: pressing "Make my resume" on an empty form put "Fill in all four boxes first." in a
+ * banner at the top of the composer, measured at y = -281 on a 723px viewport while the button that
+ * raised it sat at y = 434. The job description textarea alone is ~320px tall, so that is the
+ * DEFAULT geometry rather than an edge case: a screen reader announced the refusal and a sighted
+ * student saw the button do nothing at all.
+ *
+ * Naming the fields is what lets the page attach the refusal to the boxes it is about, so the
+ * feedback survives wherever the student happens to be scrolled.
+ */
+export function missingApplicationFields(draft: ApplicationDraft): ApplicationDraftField[] {
+  const missing: ApplicationDraftField[] = [];
+  if (!draft.company.trim()) missing.push("company");
+  if (!draft.role.trim()) missing.push("role");
+  if (!draft.portalUrl.trim()) missing.push("portalUrl");
+  if (draft.jobDescription.trim().length < MIN_JD_CHARS) missing.push("jobDescription");
+  return missing;
+}
+
+/**
+ * A present link the generator will accept. Separate from emptiness because the two refusals say
+ * different things: "fill in all four boxes" is nonsense to someone who typed http://.
+ */
+export function isHttpsJobUrl(portalUrl: string): boolean {
+  const trimmed = portalUrl.trim();
+  if (!trimmed) return false;
+  try {
+    return new URL(trimmed).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Whether a draft can be generated from without the request being rejected.
@@ -157,24 +213,11 @@ export const MIN_JD_CHARS = 20;
  * attempt and come back with "Fill in all four boxes first", which is nonsense to someone who
  * filled in nothing. Checking first lets the page say what is actually missing.
  *
- * Deliberately the same shape as the guard inside createApplication, sharing MIN_JD_CHARS so the
- * two cannot drift into disagreeing about what is generatable.
+ * Composed from the two predicates above rather than restating them, so the guard inside
+ * createApplication and this pre-check cannot drift into disagreeing about what is generatable.
  */
-export function canGenerateFrom(draft: {
-  company: string;
-  role: string;
-  portalUrl: string;
-  jobDescription: string;
-}): boolean {
-  if (!draft.company.trim() || !draft.role.trim()) return false;
-  if (draft.jobDescription.trim().length < MIN_JD_CHARS) return false;
-  const portalUrl = draft.portalUrl.trim();
-  if (!portalUrl) return false;
-  try {
-    return new URL(portalUrl).protocol === "https:";
-  } catch {
-    return false;
-  }
+export function canGenerateFrom(draft: ApplicationDraft): boolean {
+  return missingApplicationFields(draft).length === 0 && isHttpsJobUrl(draft.portalUrl);
 }
 
 export function resumeGenerationBody(

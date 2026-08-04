@@ -136,10 +136,15 @@ describe("daily match preparation", () => {
   });
 
   test("finishes a daily match only after that exact posting was submitted today", () => {
+    /* Timestamps are built from LOCAL components on purpose. The day key is now the student's own
+       calendar day, so a hardcoded "...T23:59:59.000Z" is not reliably the day before anywhere
+       east of Greenwich: in Dubai that instant is already the next morning. Local 08:00 on a given
+       date is that date in every timezone, which keeps the fixture about the assertion. */
     const today = "2026-07-30";
+    const at8am = (year, month, day) => new Date(year, month - 1, day, 8, 0, 0).toISOString();
     const submitted = {
       job_context: { company: "Acme Labs", role: "Product Engineer", job_id: jobs[0].id },
-      spec: { _review: { status: "submitted", submitted_at: `${today}T08:00:00.000Z` } },
+      spec: { _review: { status: "submitted", submitted_at: at8am(2026, 7, 30) } },
     };
     const ready = {
       ...submitted,
@@ -147,7 +152,7 @@ describe("daily match preparation", () => {
     };
     const yesterday = {
       ...submitted,
-      spec: { _review: { status: "submitted", submitted_at: "2026-07-29T23:59:59.000Z" } },
+      spec: { _review: { status: "submitted", submitted_at: at8am(2026, 7, 29) } },
     };
 
     assert.equal(jobSubmittedOnDay(jobs[0], [submitted], today), true);
