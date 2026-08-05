@@ -516,6 +516,7 @@ export type ApplicationProfile = {
   citizenship?: string | null;
   work_authorized?: boolean | null;
   needs_sponsorship?: boolean | null;
+  eeo_prefs?: Record<string, string> | null;
   availability_date?: string | null;
   desired_salary?: string | null;
   desired_salary_currency?: string | null;

@@ -38,15 +38,23 @@ import {
 import TargetingCard from "@/components/app/TargetingCard";
 
 /* Application profile: exactly the fields the backend encrypts and the
-   extension autofills (PRD-v2 Section 4). EEO self-identification is not
-   editable here on purpose: it defaults to decline-to-answer everywhere and
-   is only ever set by an explicit opt-in inside the extension. */
+   extension autofills (PRD-v2 Section 4). Voluntary self-identification only
+   fills when the student explicitly saves an answer here. */
 
 const TRI = [
   { value: "", label: "Not set" },
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
 ];
+
+const SELF_ID_OPTIONS = {
+  gender: ["", "Female", "Male", "Non-binary", "Decline to self-identify"],
+  transgender_status: ["", "Yes", "No", "Decline to self-identify"],
+  sexual_orientation: ["", "Heterosexual", "Gay or lesbian", "Bisexual", "Decline to self-identify"],
+  disability_status: ["", "Yes", "No", "Decline to self-identify"],
+  veteran_status: ["", "Yes", "No", "Decline to self-identify"],
+  race: ["", "White", "Asian", "Black or African American", "Hispanic or Latino", "Middle Eastern or North African", "Native American or Alaska Native", "Native Hawaiian or Pacific Islander", "Decline to self-identify"],
+} as const;
 
 const ACCOUNT_TABS = [
   { id: "job-search", label: "Job search" },
@@ -221,6 +229,19 @@ export default function Settings() {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
   }
 
+  function patchEeo(key: keyof typeof SELF_ID_OPTIONS, value: string) {
+    setProfile((prev) => {
+      const current = prev ?? {};
+      const nextPrefs = { ...(current.eeo_prefs ?? {}) };
+      if (value) nextPrefs[key] = value;
+      else delete nextPrefs[key];
+      return {
+        ...current,
+        eeo_prefs: Object.keys(nextPrefs).length > 0 ? nextPrefs : null,
+      };
+    });
+  }
+
   async function saveAutomation(patch: Partial<{ automatic_submission_enabled: boolean; automatic_verification_enabled: boolean }>) {
     if (automaticSubmission === null || automaticVerification === null) return;
     const previousSubmission = automaticSubmission;
@@ -253,7 +274,6 @@ export default function Settings() {
       delete body.user_id;
       delete body.created_at;
       delete body.updated_at;
-      delete body.eeo_prefs;
       const res = await api<ApplicationProfile>("/profile/application", {
         method: "PUT",
         body: JSON.stringify(body),
@@ -858,7 +878,17 @@ export default function Settings() {
           <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="Company careers page" />
         </div>
 
-        <p className="mt-5 text-xs leading-5 text-faint">Personal questions stay unanswered unless you choose an answer.</p>
+        <div className="mt-6 border-t border-border pt-5">
+          <p className="text-xs font-medium text-muted">Personal questions</p>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <StringSelect label="Gender identity" value={profile.eeo_prefs?.gender} options={SELF_ID_OPTIONS.gender} onChange={(v) => patchEeo("gender", v)} />
+            <StringSelect label="Transgender experience" value={profile.eeo_prefs?.transgender_status} options={SELF_ID_OPTIONS.transgender_status} onChange={(v) => patchEeo("transgender_status", v)} />
+            <StringSelect label="Sexual orientation" value={profile.eeo_prefs?.sexual_orientation} options={SELF_ID_OPTIONS.sexual_orientation} onChange={(v) => patchEeo("sexual_orientation", v)} />
+            <StringSelect label="Disability status" value={profile.eeo_prefs?.disability_status} options={SELF_ID_OPTIONS.disability_status} onChange={(v) => patchEeo("disability_status", v)} />
+            <StringSelect label="Veteran status" value={profile.eeo_prefs?.veteran_status} options={SELF_ID_OPTIONS.veteran_status} onChange={(v) => patchEeo("veteran_status", v)} />
+            <StringSelect label="Race / ethnicity" value={profile.eeo_prefs?.race} options={SELF_ID_OPTIONS.race} onChange={(v) => patchEeo("race", v)} />
+          </div>
+        </div>
       </Card>}
 
       {/* Plan + usage */}
@@ -997,6 +1027,37 @@ function Select({
         {TRI.map((o) => (
           <option key={o.value} value={o.value}>
             {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function StringSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string | null | undefined;
+  options: readonly string[];
+  onChange: (v: string) => void;
+}) {
+  const fieldId = useId();
+  return (
+    <div>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
+      <select
+        id={fieldId}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+      >
+        {options.map((option) => (
+          <option key={option || "not-set"} value={option}>
+            {option || "Not set"}
           </option>
         ))}
       </select>
