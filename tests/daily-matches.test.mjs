@@ -163,7 +163,17 @@ describe("daily match preparation", () => {
 });
 
 describe("resumeGenerationBody", () => {
-  const identity = { full_name: "Alex Rivera", email: "alex@example.com" };
+  const identity = {
+    full_name: "Alex Rivera",
+    email: "alex@example.com",
+    school: "University of Southern California, Viterbi School of Engineering",
+    degree: "Bachelor of Science in Computer Science",
+    grad_date: "May 2028",
+    grad_year: 2028,
+    currently_enrolled: true,
+    coursework: ["Data Structures & Algorithms", "Object-Oriented Programming"],
+    school_location: "Los Angeles, CA",
+  };
   const applicationProfile = { phone: "+1 213 555 0100" };
 
   /* The prewarm loop is how most packets are created, and once a packet exists, opening the posting
@@ -173,6 +183,19 @@ describe("resumeGenerationBody", () => {
   test("records the posting id, so the Applied badge can be exact", () => {
     const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
     assert.equal(body.job_id, jobs[0].id);
+  });
+
+  test("sends profile education for every generated resume path", () => {
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
+    assert.deepEqual(body.profile_education, {
+      school: "University of Southern California, Viterbi School of Engineering",
+      degree: "Bachelor of Science in Computer Science",
+      grad_date: "May 2028",
+      grad_year: 2028,
+      currently_enrolled: true,
+      coursework: ["Data Structures & Algorithms", "Object-Oriented Programming"],
+      school_location: "Los Angeles, CA",
+    });
   });
 
   test("still sends everything the generate route needs", () => {
