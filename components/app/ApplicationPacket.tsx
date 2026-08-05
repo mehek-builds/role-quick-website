@@ -3,7 +3,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
 import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications/domain/submission-checklist";
 import { resumeContactLine } from "@/lib/resumeContact";
+import { userFacingError } from "@/lib/user-facing-error";
 
 /* REVISITING AN APPLICATION, against real packet data.
  *
@@ -218,6 +220,29 @@ function fieldLabel(field: string): string {
   return field.startsWith("question:") ? field.slice("question:".length).trim() : field;
 }
 
+function CheckRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
+  return (
+    <li className="grid grid-cols-[18px_1fr] gap-2 text-[12px] leading-5 text-muted">
+      <span
+        aria-hidden
+        className={`mt-0.5 flex h-[14px] w-[14px] items-center justify-center rounded-[3px] border ${
+          checked ? "border-teal/40 bg-teal-soft text-teal-ink" : "border-warn/40 bg-warn-soft text-warn"
+        }`}
+      >
+        {checked ? (
+          <svg viewBox="0 0 16 16" className="h-3 w-3">
+            <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
+      </span>
+      <span>
+        <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
+        {item.detail && <span className="block text-[11px] text-faint">{item.detail}</span>}
+      </span>
+    </li>
+  );
+}
+
 function formatMoment(value: string | null | undefined): string {
   if (!value) return "";
   const date = new Date(value);
@@ -257,6 +282,12 @@ export function ApplicationPacket({
   const company = packet.job_context.company || "the company";
   const questions = review.questions ?? [];
   const filledFields = review.filled_fields ?? [];
+  const safeAttentionReason = review.attention_reason
+    ? userFacingError(review.attention_reason, "Litos could not finish the company's form. Try again in a minute.")
+    : undefined;
+  const attentionReview = { ...review, attention_reason: safeAttentionReason };
+  const needsInput = humanInputItems(attentionReview);
+  const completedItems = completedSubmissionItems(review);
   const receipt = review.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
   const builtAt = formatMoment(packet.created_at);
@@ -502,6 +533,35 @@ export function ApplicationPacket({
                       : "Nothing here has gone to the employer. This is what is waiting to."
                   }
                 />
+
+                {(needsInput.length > 0 || completedItems.length > 0) && (
+                  <div className="mt-3 overflow-hidden rounded-inner border border-border bg-surface">
+                    {needsInput.length > 0 && (
+                      <div className="border-b border-border bg-warn-soft/40 px-4 py-3">
+                        <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-warn">
+                          Needs your input
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {needsInput.map((item) => (
+                            <CheckRow key={item.id} item={item} checked={false} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {completedItems.length > 0 && (
+                      <div className="px-4 py-3">
+                        <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-teal-ink">
+                          Done by Litos
+                        </p>
+                        <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                          {completedItems.slice(0, 12).map((item) => (
+                            <CheckRow key={item.id} item={item} checked />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {questions.length === 0 ? (
                   <p className="mt-3 rounded-inner border border-dashed border-border px-5 py-4 text-[12px] text-faint">

@@ -43,6 +43,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
+import { completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications/domain/submission-checklist";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -2000,6 +2001,12 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
   const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
+  const safeAttentionReason = review.attention_reason
+    ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
+    : undefined;
+  const attentionReview = { ...review, attention_reason: safeAttentionReason };
+  const needsInputItems = humanInputItems(attentionReview);
+  const completedItems = completedSubmissionItems(review);
   const educationDriftWarning = educationDriftMessage(educationDrift(packet.spec, educationProfile));
   const educationProfilePending = educationProfileStatus !== "ready";
   const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
@@ -2022,7 +2029,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
             is how "CAPTCHA requires your attention ... is required required field is required ..."
             reached the screen. Each blocker is its own item, because each is its own task. */}
         {needsAttention ? (
-          <BlockerList reason={review.attention_reason} />
+          <BlockerList items={needsInputItems} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed" ? userFacingError(review.submission_error, "Litos could not open the company’s form. Try again in a minute.") : "You asked to check every application first. Look it over, then send it when you are happy."}
@@ -2043,8 +2050,10 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         )}
         {review.filled_fields && review.filled_fields.length > 0 && (
           <div className="mt-6">
-            <p className="text-xs font-medium text-muted">Fields filled by Litos</p>
-            <div className="mt-2 flex flex-wrap gap-2">{review.filled_fields.map((field) => <Chip key={field} label={field.replace("question:", "Answer: ")} kind="ready" />)}</div>
+            <p className="text-xs font-medium text-muted">Everything else is done</p>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+              {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
+            </ul>
           </div>
         )}
         {submission.cover_letter && (
@@ -2172,24 +2181,44 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
 }
 
-function BlockerList({ reason }: { reason?: string }) {
-  const safeReason = userFacingError(reason, "Litos could not finish the company’s form. Try again in a minute.");
-  const blockers = reason ? safeReason.split("\n").map((line) => line.trim()).filter(Boolean) : [];
-  if (blockers.length === 0) {
+function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
+  return (
+    <li className="grid grid-cols-[18px_1fr] gap-2 text-sm leading-5 text-muted">
+      <span
+        aria-hidden
+        className={`mt-0.5 flex h-[14px] w-[14px] items-center justify-center rounded-[3px] border ${
+          checked ? "border-teal/40 bg-teal-soft text-teal-ink" : "border-warn/40 bg-warn-soft text-warn"
+        }`}
+      >
+        {checked ? (
+          <svg viewBox="0 0 16 16" className="h-3 w-3">
+            <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : null}
+      </span>
+      <span>
+        <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
+        {item.detail && <span className="block text-xs text-faint">{item.detail}</span>}
+      </span>
+    </li>
+  );
+}
+
+function BlockerList({ items }: { items: readonly SubmissionChecklistItem[] }) {
+  if (items.length === 0) {
     return <p className="mt-2 text-sm leading-6 text-muted">Finish the last step on the company&apos;s page.</p>;
   }
-  if (blockers.length === 1) {
-    return <p className="mt-2 text-sm leading-6 text-muted">{blockers[0]}</p>;
-  }
   return (
-    <ul className="mt-3 space-y-1.5">
-      {blockers.map((blocker, index) => (
-        <li key={index} className="grid grid-cols-[14px_1fr] gap-2 text-sm leading-6 text-muted">
-          <span aria-hidden className="mt-[1px] text-faint">•</span>
-          <span>{blocker}</span>
-        </li>
+    <div className="mt-4 rounded-inner border border-warn/30 bg-warn-soft/50 px-4 py-3">
+      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">
+        Needs your input
+      </p>
+      <ul className="mt-2 space-y-2">
+      {items.map((item) => (
+        <ChecklistRow key={item.id} item={item} checked={false} />
       ))}
-    </ul>
+      </ul>
+    </div>
   );
 }
 
