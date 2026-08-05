@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
 import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications/domain/submission-checklist";
+import { completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 
