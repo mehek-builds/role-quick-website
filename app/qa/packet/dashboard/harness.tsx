@@ -105,14 +105,30 @@ const UNSENT_REVIEW: ApplicationReview = {
   ...SENT_REVIEW,
   status: "needs_attention",
   submitted_at: undefined,
-  attention_reason: "The portal asked for a login code sent to your email.",
-  filled_fields: ["First name", "Last name", "Email", "Resume"],
+  attention_reason: [
+    "CAPTCHA requires your attention",
+    "Are you legally authorized to work in Canada? required field is required",
+    "Do you consent to BrightHire recording this interview process? required field is required",
+  ].join("\n"),
+  filled_fields: [
+    "First name",
+    "Last name",
+    "Email",
+    "Phone",
+    "Resume",
+    "Cover letter",
+    "School",
+    "Degree",
+    "Discipline",
+    "question:Are you eligible to work in the U.S.?",
+    "question:Will you require immigration support in the future?",
+  ],
   receipt: undefined,
   questions: [
     SENT_REVIEW.questions[0],
     SENT_REVIEW.questions[1],
     /* The case worth looking at: required, and blank. */
-    { id: "q4", question: "Desired salary", answer: "", kind: "required", required: true },
+    { id: "q4", question: "When are you available to start full-time?", answer: "", kind: "required", required: true },
     { id: "q5", question: "Portfolio", answer: "", kind: "required", required: false },
   ],
 };
