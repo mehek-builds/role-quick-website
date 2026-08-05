@@ -37,12 +37,17 @@ const PAGE = code(readFileSync("app/dashboard/applications/page.tsx", "utf8"));
 
 /** The body of a named function declaration, matched by brace depth. */
 function functionBody(source, name) {
-  const start = source.indexOf(`${name} = useCallback(`);
+  const callbackStart = source.indexOf(`${name} = useCallback(`);
+  const declarationStart = source.indexOf(`function ${name}(`);
+  const start = callbackStart === -1 ? declarationStart : callbackStart;
   assert.notEqual(start, -1, `${name} is no longer declared the way this test finds it`);
+  const open = callbackStart === -1 ? source.indexOf("{", start) : source.indexOf("(", start);
+  const close = callbackStart === -1 ? "}" : ")";
+  const openToken = callbackStart === -1 ? "{" : "(";
   let depth = 0;
-  for (let i = source.indexOf("(", start); i < source.length; i += 1) {
-    if (source[i] === "(") depth += 1;
-    else if (source[i] === ")") {
+  for (let i = open; i < source.length; i += 1) {
+    if (source[i] === openToken) depth += 1;
+    else if (source[i] === close) {
       depth -= 1;
       if (depth === 0) return source.slice(start, i + 1);
     }
@@ -76,11 +81,34 @@ describe("the unattended send checks the packet against the profile first", () =
 });
 
 describe("the review screen says so before the student presses send", () => {
+  const approveBody = functionBody(PAGE, "approveFinalSubmission");
+
   test("a drift banner renders while the review screen is open", () => {
     assert.match(PAGE, /reviewOpen && educationDriftBanner/);
   });
 
   test("the banner is derived from the spec being edited, so fixing the line clears it", () => {
     assert.match(PAGE, /educationDriftBanner = useMemo\(\s*\(\) =>\s*\(spec \? educationDriftMessage\(educationDrift\(spec,/);
+  });
+
+  test("the final approval screen blocks drifted packets and sends the user back to the resume", () => {
+    assert.match(PAGE, /educationDriftWarning = educationDriftMessage\(educationDrift\(packet\.spec, educationProfile\)\)/);
+    assert.match(PAGE, /educationProfilePending = educationProfileStatus !== "ready"/);
+    assert.match(PAGE, /finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\)/);
+    assert.match(PAGE, /onCheckResume=\{\(\) => moveToScreen\("review"\)\}/);
+    assert.match(PAGE, /Save the corrected resume, then Litos will refill the company form with the updated PDF/);
+    assert.match(PAGE, /Litos is checking this resume against your current profile before it can be sent/);
+  });
+
+  test("the final approval action rechecks drift before it posts approval", () => {
+    const status = approveBody.indexOf('educationProfileStatus !== "ready"');
+    const drift = approveBody.indexOf("educationDrift");
+    const approve = approveBody.indexOf("submission/approve");
+    assert.notEqual(status, -1, "the final approval action does not wait for profile verification");
+    assert.notEqual(drift, -1, "the final approval action does not check the packet's education");
+    assert.notEqual(approve, -1, "the final approval action no longer posts approval");
+    assert.ok(status < approve, "profile verification must finish before approval is posted");
+    assert.ok(drift < approve, "the education check must run before approval is posted");
+    assert.match(approveBody, /if \(drift\) \{[\s\S]{0,160}?moveToScreen\("review"\);[\s\S]{0,80}?return;/);
   });
 });

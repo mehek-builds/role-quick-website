@@ -65,6 +65,7 @@ type ProfileIdentity = {
   coursework?: string[];
   school_location?: string;
 };
+type EducationProfileStatus = "loading" | "ready" | "failed";
 type NewApplicationDraft = {
   company: string;
   role: string;
@@ -106,9 +107,10 @@ export default function ApplicationsPage() {
 function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
-  /* The student's education block as GET /profile serves it today. Null means "not loaded or the
-     request failed", which educationDrift treats as "nothing to compare against". */
+  /* The student's education block as GET /profile serves it today. Status is separate from the
+     profile object because null is not safe: a missing comparison cannot approve a real send. */
   const [educationProfile, setEducationProfile] = useState<EducationProfile | null>(null);
+  const [educationProfileStatus, setEducationProfileStatus] = useState<EducationProfileStatus>("loading");
   const [preferenceError, setPreferenceError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   /* The packet being looked at in the read-only viewer, held as an ID and resolved against `packets`
@@ -466,6 +468,7 @@ function Applications() {
         const scenario = qaScenario === "1" ? "acme" : qaScenario === "no-questions" ? "stripe" : qaScenario;
         const packet = QA_SCENARIOS[scenario ?? "acme"] ?? QA_PACKET;
         setQaMode(true);
+        setEducationProfileStatus("ready");
         setPackets(Object.values(QA_SCENARIOS));
         selectPacket(packet);
       });
@@ -485,12 +488,20 @@ function Applications() {
         if (requested) selectPacket(requested);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
-    /* The education block as it stands NOW, to check the frozen packet against. Failure leaves it
-       null, and educationDrift reports nothing for a null profile: a warning is worth having, but
-       not at the price of blocking a send because one extra request did not come back. */
+    /* The education block as it stands NOW, to check the frozen packet against. Failure is not the
+       same as agreement: sending stays blocked until the comparison succeeds. */
+    setEducationProfileStatus("loading");
     api<EducationProfile>("/profile")
-      .then((result) => !cancelled && setEducationProfile(result))
-      .catch(() => undefined);
+      .then((result) => {
+        if (cancelled) return;
+        setEducationProfile(result);
+        setEducationProfileStatus("ready");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setEducationProfile(null);
+        setEducationProfileStatus("failed");
+      });
     api<JobsPage>("/jobs?offset=0")
       .then((result) => {
         if (cancelled) return;
@@ -674,6 +685,10 @@ function Applications() {
     async (id: string) => {
       const packet = (packets ?? []).find((item) => item.id === id);
       if (!packet || qaMode) return;
+      if (educationProfileStatus !== "ready") {
+        setError("We did not send this one on its own. Litos has to check this resume against your current profile first.");
+        return;
+      }
       /* THE ONE PLACE A PACKET GOES OUT WITH NOTHING RE-CHECKED. Sending from the review screen
          runs saveResume first, and PATCH /applications/:id/resume re-validates the spec's
          education against the current profile server-side, so a drifted packet is refused there
@@ -703,7 +718,7 @@ function Applications() {
         setError(reason instanceof Error ? reason.message : "Could not send that application on its own. It is still here for you.");
       }
     },
-    [captureCompletedSubmission, educationProfile, packets, qaMode],
+    [captureCompletedSubmission, educationProfile, educationProfileStatus, packets, qaMode],
   );
   // The review surface is meant to be read without scrolling, so while it is open the page chrome
   // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
@@ -1056,6 +1071,17 @@ function Applications() {
 
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
+    if (qaMode === false && educationProfileStatus !== "ready") {
+      setError("Litos has to check this resume against your current profile before sending.");
+      moveToScreen("portal");
+      return;
+    }
+    const drift = educationDriftMessage(educationDrift(selected.spec, educationProfile));
+    if (drift) {
+      setError(drift);
+      moveToScreen("review");
+      return;
+    }
     // Second press of "Send it" for THIS application while the first is still going.
     if (approveInFlight.current === selected.id) return;
     const requestedId = selected.id;
@@ -1372,7 +1398,18 @@ function Applications() {
           sending={submittingPhase === "sending"}
         />
       ) : screen === "portal" && submission ? (
-        <SubmissionScreen packet={selected} submission={submission} approving={approvingId === selected.id} onHandoffComplete={completeHandoff} onApprove={approveFinalSubmission} onRetry={retryPreparation} onReviewQuestions={reviewPortalQuestions} />
+        <SubmissionScreen
+          packet={selected}
+          submission={submission}
+          approving={approvingId === selected.id}
+          educationProfile={educationProfile}
+          educationProfileStatus={qaMode === true ? "ready" : educationProfileStatus}
+          onCheckResume={() => moveToScreen("review")}
+          onHandoffComplete={completeHandoff}
+          onApprove={approveFinalSubmission}
+          onRetry={retryPreparation}
+          onReviewQuestions={reviewPortalQuestions}
+        />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
@@ -1947,18 +1984,20 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ packet, submission, approving, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ packet, submission, approving, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
   const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
+  const educationDriftWarning = educationDriftMessage(educationDrift(packet.spec, educationProfile));
+  const educationProfilePending = educationProfileStatus !== "ready";
   const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
   const previewUrl = review.preview_screenshot_url ?? "";
   const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
   const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
   const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
-  const finalApprovalBlocked = coverLetterPending || requiredAnswerMissing || !previewReady || approving;
+  const finalApprovalBlocked = educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || !previewReady || approving;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -1977,6 +2016,19 @@ function SubmissionScreen({ packet, submission, approving, onHandoffComplete, on
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed" ? userFacingError(review.submission_error, "Litos could not open the company’s form. Try again in a minute.") : "You asked to check every application first. Look it over, then send it when you are happy."}
+          </p>
+        )}
+        {review.status === "ready_for_final_approval" && educationDriftWarning && (
+          <div role="alert" className="mt-4 rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">
+            <p>{educationDriftWarning}</p>
+            <button type="button" onClick={onCheckResume} className="mt-3 rounded-full bg-danger px-4 py-2 text-sm font-medium text-white">Check resume</button>
+          </div>
+        )}
+        {review.status === "ready_for_final_approval" && educationProfilePending && (
+          <p role="alert" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+            {educationProfileStatus === "loading"
+              ? "Litos is checking this resume against your current profile before it can be sent."
+              : "Litos could not check this resume against your current profile. Reload, then review it again before sending."}
           </p>
         )}
         {review.filled_fields && review.filled_fields.length > 0 && (
@@ -2047,8 +2099,19 @@ function SubmissionScreen({ packet, submission, approving, onHandoffComplete, on
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
+          {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
           {review.status === "ready_for_final_approval" && <button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
+        {review.status === "ready_for_final_approval" && educationDriftWarning && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            Save the corrected resume, then Litos will refill the company form with the updated PDF.
+          </p>
+        )}
+        {review.status === "ready_for_final_approval" && educationProfilePending && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            The current profile check has to finish before this can be sent.
+          </p>
+        )}
         {review.status === "ready_for_final_approval" && !previewReady && (
           <p className="mt-3 text-xs leading-5 text-warn">
             Litos has to show the filled form preview before this can be sent.

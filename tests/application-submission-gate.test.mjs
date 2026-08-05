@@ -122,9 +122,10 @@ test("the review screen gates and performs the submission", async () => {
   assert.match(review, /\/submit-request/);
   assert.match(review, /\/submission\/approve/);
   assert.match(review, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
-  assert.match(review, /const finalApprovalBlocked = coverLetterPending \|\| requiredAnswerMissing \|\| !previewReady \|\| approving/);
+  assert.match(review, /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| !previewReady \|\| approving/);
   assert.match(review, /onClick=\{approveVerifiedPreview\}/);
   assert.match(review, /disabled=\{finalApprovalBlocked\}/);
+  assert.match(review, /Check resume/);
   assert.match(review, /Resume attached to this application/);
   assert.match(review, /Answers included with final submission/);
   assert.match(review, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
