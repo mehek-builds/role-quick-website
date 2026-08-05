@@ -27,7 +27,7 @@ function isHumanOnlyChecklistLabel(label: string): boolean {
   if (/captcha|recaptcha|hcaptcha/.test(normalized)) return true;
   if (/privacy|privacy policy|privacy notice|candidate-privacy|consent|recording|brighthire/.test(normalized)) return true;
   if (/salary|compensation|pay expectation|expected pay|annualized total compensation/.test(normalized)) return true;
-  if (/(legally authorized|work authorization|authorized to work|require sponsorship|visa sponsorship)/.test(normalized)) {
+  if (/(immigration support|legally authorized|work authorization|authorized to work|require sponsorship|visa sponsorship)/.test(normalized)) {
     return !/(u\.s\.|us\b|united states|usa\b)/.test(normalized);
   }
   return false;

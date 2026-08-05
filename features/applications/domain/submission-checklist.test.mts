@@ -45,6 +45,13 @@ const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status
       kind: "required",
       required: true,
     },
+    {
+      id: "immigration-support",
+      question: "Will you require immigration support in the future?",
+      answer: "Yes",
+      kind: "required",
+      required: true,
+    },
   ],
   filled_fields: [
     "First name",
@@ -71,6 +78,7 @@ test("humanInputItems turns portal blockers and missing answers into checklist r
     "What are your annualized total compensation expectations?",
     "Do you consent to BrightHire recording your interview?",
     "Are you legally authorized to work in Canada?",
+    "Will you require immigration support in the future?",
   ]);
   assert.equal(items.find((item) => item.label === "Why Stripe?")?.detail, "Drafted answer ready for review");
   assert.equal(items.find((item) => item.label === "When are you available to start full-time?")?.detail, "Required answer missing");
@@ -89,4 +97,5 @@ test("completedSubmissionItems shows safe filled fields as done", () => {
   assert.equal(items.some((item) => item.label.includes("CAPTCHA")), false);
   assert.equal(items.some((item) => item.label === "Do you consent to BrightHire recording your interview?"), false);
   assert.equal(items.some((item) => item.label === "Are you legally authorized to work in Canada?"), false);
+  assert.equal(items.some((item) => item.label === "Will you require immigration support in the future?"), false);
 });
