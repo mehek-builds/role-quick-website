@@ -20,7 +20,8 @@ function keyFor(value: string): string {
 
 function displayField(field: string): string {
   const label = field.startsWith("question:") ? field.slice("question:".length).trim() : field;
-  return label.replaceAll("_", " ").replace(/\s+/g, " ").trim();
+  const display = label.replaceAll("_", " ").replace(/\s+/g, " ").trim();
+  return display ? display.charAt(0).toUpperCase() + display.slice(1) : "";
 }
 
 function normalizedChecklistText(value: string): string {
@@ -65,7 +66,7 @@ export function humanInputItems(review: Pick<ApplicationReview, "attention_reaso
     addUnique(items, {
       id: `blocker-${keyFor(blocker)}`,
       label: blocker,
-      action: "Finish on company page",
+      action: "Open page",
     });
   }
 
@@ -76,7 +77,7 @@ export function humanInputItems(review: Pick<ApplicationReview, "attention_reaso
         id: `missing-${question.id}`,
         label: question.question,
         detail: "Required answer missing",
-        action: "Add answer",
+        action: "Answer",
       });
       continue;
     }
@@ -85,7 +86,7 @@ export function humanInputItems(review: Pick<ApplicationReview, "attention_reaso
         id: `review-${question.id}`,
         label: question.question,
         detail: "Drafted answer ready for review",
-        action: "Review draft",
+        action: "Review",
       });
       continue;
     }

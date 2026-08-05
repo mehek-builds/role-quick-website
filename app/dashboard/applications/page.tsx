@@ -1972,16 +1972,14 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <button onClick={onBack} className="text-sm text-muted hover:text-ink">← {reviewDiscovered ? "Back to how it is going" : "Back to resume"}</button>
+      <button onClick={onBack} className="text-sm text-muted hover:text-ink">Back</button>
       <div>
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{reviewDiscovered ? "Their questions" : "Questions we could not answer"}</p>
-        <h2 className="mt-2 text-heading font-medium tracking-tight text-ink">{reviewDiscovered ? "The company asked for these." : "A few answers we could not work out."}</h2>
-        <p className="mt-1 text-sm text-muted">{reviewDiscovered ? "The form asked for things we did not know. Answer them, then try again." : "Everything we already knew is filled in. This page only shows the blanks."}</p>
+        <h2 className="text-heading font-medium tracking-tight text-ink">{reviewDiscovered ? "Review answers" : "Answer these"}</h2>
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required information missing" : "Review before retry"}</p>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
           <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
         </Card>
       ))}
@@ -1989,7 +1987,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
           that ends the screen, so at 744px the action is off the bottom of a document whose every
           other element eats the keyboard. Same treatment. */}
       <TerminalActionBar className="justify-end">
-        <Button onClick={onSubmit} >{reviewDiscovered ? "Save answers and try again" : "Save answers and make my application"}</Button>
+        <Button onClick={onSubmit} >Save</Button>
       </TerminalActionBar>
     </div>
   );
@@ -2022,8 +2020,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
-        <p className="text-xs text-muted">Filling it in for you</p>
-        <h2 className="mt-2 text-heading font-medium text-ink">{needsAttention ? "This one needs you." : review.status === "failed" ? "Litos stopped before sending." : "Check it over before it goes."}</h2>
+        <h2 className="text-heading font-medium text-ink">{needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
@@ -2032,7 +2029,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
           <BlockerList items={needsInputItems} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed" ? userFacingError(review.submission_error, "Litos could not open the company’s form. Try again in a minute.") : "You asked to check every application first. Look it over, then send it when you are happy."}
+            {review.status === "failed" ? userFacingError(review.submission_error, "Try again in a minute.") : "Check the preview, then send."}
           </p>
         )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
@@ -2051,7 +2048,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         {completedItems.length > 0 && (
           <div className="mt-6">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-medium text-muted">Everything else is done</p>
+              <p className="text-xs font-medium text-positive">Done</p>
               <p className="font-mono text-[11px] text-faint">{completedItems.length} checked</p>
             </div>
             <ul className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -2061,7 +2058,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         )}
         {submission.cover_letter && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
-            <p className="text-xs font-medium text-muted">Cover letter included with final submission</p>
+            <p className="text-xs font-medium text-muted">Cover letter</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.cover_letter.body}</p>
             {submission.cover_letter.warnings.length > 0 && (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-warn">
@@ -2070,10 +2067,10 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
             )}
           </div>
         )}
-        {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading the exact cover letter that will be attached before final approval.</p>}
+        {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading cover letter.</p>}
         {review.status === "ready_for_final_approval" && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
-            <p className="text-xs font-medium text-muted">Resume attached to this application</p>
+            <p className="text-xs font-medium text-muted">Resume</p>
             <div className="mt-3 max-h-[28rem] overflow-y-auto rounded-inner border border-border bg-white p-2">
               <ResumePaper spec={stripMetadata(packet.spec)} name={contactName(packet.spec)} contact={contactLine(packet.spec)} />
             </div>
@@ -2086,7 +2083,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         )}
         {review.status === "ready_for_final_approval" && review.questions.length > 0 && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
-            <p className="text-xs font-medium text-muted">Answers included with final submission</p>
+            <p className="text-xs font-medium text-muted">Answers</p>
             <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
               {review.questions.map((question) => (
                 <div key={question.id} className="px-3 py-3">
@@ -2102,22 +2099,16 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         {review.verification?.status === "completed" && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">Code found</p>
-            <p className="mt-1 text-xs text-muted">
-              Litos used the one-time code from your connected {review.verification.provider === "outlook" ? "Outlook" : "Gmail"} account. The code was not saved.
-            </p>
           </div>
         )}
         {review.verification?.status === "handoff" && (
           <div className="mt-4 rounded-inner border border-border bg-surface px-4 py-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">The code needs you</p>
-            <p className="mt-1 text-xs text-muted">
-              Litos was not sure it finished this step. Open the company page and finish it yourself.
-            </p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Code needed</p>
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>}
-          {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
+          {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Answer</Button>}
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
@@ -2126,28 +2117,27 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         </div>
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
           <p className="mt-3 text-xs leading-5 text-warn">
-            Save the corrected resume, then Litos will refill the company form with the updated PDF.
+            Save the resume first.
           </p>
         )}
         {review.status === "ready_for_final_approval" && educationProfilePending && (
           <p className="mt-3 text-xs leading-5 text-warn">
-            The current profile check has to finish before this can be sent.
+            Checking profile.
           </p>
         )}
         {review.status === "ready_for_final_approval" && !previewReady && (
           <p className="mt-3 text-xs leading-5 text-warn">
-            Litos has to show the filled form preview before this can be sent.
+            Loading preview.
           </p>
         )}
         {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
           <p className="mt-3 text-xs leading-5 text-warn">
-            A required answer is still blank. Check the answers before sending.
+            Required answer missing.
           </p>
         )}
-        <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
-        <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">What the form looked like after we filled it in</p></div>
+        <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Preview</p></div>
         {previewUrl ? (
           <img
             src={previewUrl}
@@ -2157,7 +2147,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
             onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
           />
         ) : (
-          <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>
+          <div className="p-10 text-center text-sm text-muted">Loading preview.</div>
         )}
       </Card>
     </div>
@@ -2168,7 +2158,7 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
   const receipt = review.receipt;
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <CenteredState title="Sent to the company." body={`${role} at ${company} is complete. The company confirmed receipt.`} />
+      <CenteredState title="Sent" body={`${role} at ${company}`} />
       {receipt && <Card className="overflow-hidden">
         <div className="grid gap-5 p-6 sm:grid-cols-2">
           <div><p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Proof it was sent</p><p className="mt-2 text-sm leading-6 text-ink">{receipt.confirmation_text}</p></div>
@@ -2180,8 +2170,8 @@ function SubmissionReceipt({ review, role, company }: { review: ApplicationRevie
   );
 }
 
-function CenteredState({ title, body, loading = false }: { title: string; body: string; loading?: boolean }) {
-  return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2><p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p></Card>;
+function CenteredState({ title, body, loading = false }: { title: string; body?: string; loading?: boolean }) {
+  return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2>{body && <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p>}</Card>;
 }
 
 function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
@@ -2194,12 +2184,12 @@ function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checke
           </svg>
         </span>
       ) : (
-        <input type="checkbox" aria-label={`Mark ${item.label} done`} className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/40 text-warn focus:ring-warn/30" />
+        <input type="checkbox" aria-label={`Mark ${item.label} done`} className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/60 bg-surface text-warn focus:ring-warn/30" />
       )}
       <span>
         <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
         {item.detail && <span className="block text-xs text-faint">{item.detail}</span>}
-        {item.action && <span className="mt-1 inline-flex rounded-full border border-warn/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-warn">{item.action}</span>}
+        {item.action && <span className="mt-1 flex w-fit rounded-full bg-warn px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{item.action}</span>}
       </span>
     </li>
   );
@@ -2207,15 +2197,14 @@ function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checke
 
 function BlockerList({ items }: { items: readonly SubmissionChecklistItem[] }) {
   if (items.length === 0) {
-    return <p className="mt-2 text-sm leading-6 text-muted">Finish the last step on the company&apos;s page.</p>;
+    return <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>;
   }
   return (
-    <div className="mt-4 rounded-inner border border-warn/30 bg-warn-soft/50 px-4 py-3">
+    <div className="mt-4 rounded-inner border border-warn/45 bg-warn-soft px-4 py-3 shadow-rest">
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Needs your input</p>
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Your turn</p>
         <p className="font-mono text-[11px] text-warn">{items.length} to check</p>
       </div>
-      <p className="mt-1 text-xs leading-5 text-muted">Only these rows need you before Litos can keep going.</p>
       <ul className="mt-2 space-y-2">
       {items.map((item) => (
         <ChecklistRow key={item.id} item={item} checked={false} />
@@ -2285,16 +2274,16 @@ function PortalProgress({ status, startedAt, sending = false }: { status?: Appli
   // depend on the tab being hidden: the poll cannot fix it either, because the status genuinely is
   // still ready_for_final_approval until the send returns.
   const submitting = sending || status === "submitting" || status === "submission_claimed";
-  const title = submitting ? "Sending it to the company now." : "Getting the company's page ready.";
+  const title = submitting ? "Sending" : "Filling form";
   const body = submitting
-    ? "You told Litos to send this. It is finishing the form now, and will not say it is sent until the company confirms it."
-    : "Litos is typing in your saved answers, your new resume, and the cover letter you approved. Nothing is sent yet.";
+    ? "Waiting for confirmation."
+    : "Not sent yet.";
 
   const milestone =
     elapsed >= PORTAL_STUCK_AFTER_S
-      ? "This is taking longer than usual. It is still going, so you can leave this page and come back. If it has not moved soon, start the application again."
+      ? "Still working."
       : elapsed >= PORTAL_SLOW_AFTER_S
-        ? "This normally takes a few minutes. It is still going."
+        ? "Still working."
         : null;
 
   return (

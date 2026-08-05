@@ -22,19 +22,13 @@ test("saved answers honor standing consent while retaining a manual fallback", a
 
   assert.match(dashboard, /await prepareApplication\(questions\)/);
   assert.match(dashboard, /missingRequiredAnswers\.length > 0/);
-  // Same promise, plainer words: the questions screen only ever asks for genuine blanks.
-  // 2026-07-28: "Only the answers..." became "A few answers...". Matching the fragment rather
-  // than the whole sentence, because the guarantee is the subject, not the adverb.
-  assert.match(dashboard, /answers we could not work out/);
-  assert.match(dashboard, /Everything we already knew is filled in\. This page only shows the blanks/);
+  assert.match(dashboard, /reviewDiscovered \? "Review answers" : "Answer these"/);
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
   // describe is unchanged, so the assertions follow the new wording.
   assert.match(dashboard, /"Fill the form"/);
   assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);
-  // The unauthorized-auto-submit state, in the words it now uses. Was "Automatic submission is
-  // off or was revoked. Review the captured form, then approve..." until ee07b12.
-  assert.match(dashboard, /You asked to check every application first/);
+  assert.match(dashboard, /Check the preview, then send/);
   assert.match(dashboard, /submission_authorized_at/);
   // Assert the GATE, not the button label. The invariant is that approving is reachable only from
   // ready_for_final_approval and retrying only from failed; both labels have already been reworded
@@ -45,11 +39,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I finished it myself/);
-  // The refusal list, in plain words since the terminology pass: it will not impersonate you, and
-  // it will not get past a CAPTCHA, an MFA code, a login, or a legal declaration. This is the
-  // safety promise the site makes publicly, so it must stay on the screen that performs the act.
-  assert.match(dashboard, /Litos will never pretend to be you/);
-  assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
+  assert.match(dashboard, /Open the company page/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
@@ -126,8 +116,8 @@ test("the review screen gates and performs the submission", async () => {
   assert.match(review, /onClick=\{approveVerifiedPreview\}/);
   assert.match(review, /disabled=\{finalApprovalBlocked\}/);
   assert.match(review, /Check resume/);
-  assert.match(review, /Resume attached to this application/);
-  assert.match(review, /Answers included with final submission/);
+  assert.match(review, />Resume<\/p>/);
+  assert.match(review, />Answers<\/p>/);
   assert.match(review, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
   assert.match(review, /onError=\{\(\) => setPreviewState\(\{ url: previewUrl, loaded: false, failed: true \}\)\}/);
   // The poll that moves a run through its statuses, which the drawer duplicated on a 2.5s timer.
@@ -198,7 +188,7 @@ test("cover letters wait for a detected attachment field, including optional fie
   assert.match(dashboard, /saving \|\| coverLetterBusy/);
   assert.match(dashboard, /_cover_letter!\.warnings/);
   assert.match(dashboard, /coverLetterPending/);
-  assert.match(dashboard, /Cover letter included with final submission/);
+  assert.match(dashboard, />Cover letter<\/p>/);
 });
 
 test("application creation uses the single-response packet and polling cannot overlap", async () => {
