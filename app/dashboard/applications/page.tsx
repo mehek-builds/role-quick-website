@@ -19,7 +19,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
@@ -568,7 +568,7 @@ function Applications() {
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
-      statusMatchesApplicationFilter(packet.spec._review?.status, applicationFilter));
+      statusMatchesApplicationFilter(packet.spec._review, applicationFilter));
     return [...filtered].sort((a, b) => applicationSort === "company"
       ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
       : packetTimestamp(b).localeCompare(packetTimestamp(a)));
@@ -583,7 +583,7 @@ function Applications() {
   const nextPacket = useMemo(
     () => qaMode
       ? reviewablePackets
-          .filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? ""))
+          .filter((packet) => reviewCanBeSent(packet.spec._review))
           .sort((a, b) => packetTimestamp(b).localeCompare(packetTimestamp(a)))[0] ?? null
       : nextPreferredReadyPacket(reviewablePackets, currentMatches ?? []),
     [currentMatches, qaMode, reviewablePackets],

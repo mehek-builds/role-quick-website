@@ -19,6 +19,7 @@ export type ApplicationFilter = "all" | "action" | "ready" | "submitted";
 const ACTION_STATUSES = ["needs_attention", "ready_for_final_approval", "failed"];
 /** Built and waiting to go out. */
 const READY_STATUSES = ["resume_ready", "questions_ready", "ready_to_submit"];
+type FilterableReview = { status?: string; portal_supported?: boolean } | null | undefined;
 
 const FILTERS: readonly ApplicationFilter[] = ["all", "action", "ready", "submitted"];
 
@@ -38,11 +39,21 @@ export function applicationFilterFromSearch(search: string): ApplicationFilter {
   return isApplicationFilter(requested) ? requested : "all";
 }
 
-/** Does this application's submission status belong in the chosen view? */
-export function statusMatchesApplicationFilter(status: string | undefined, filter: ApplicationFilter): boolean {
-  if (filter === "action") return ACTION_STATUSES.includes(status ?? "");
-  if (filter === "ready") return READY_STATUSES.includes(status ?? "");
-  if (filter === "submitted") return status === "submitted";
+export function reviewCanBeSent(review: FilterableReview): boolean {
+  return READY_STATUSES.includes(review?.status ?? "") && review?.portal_supported !== false;
+}
+
+function reviewNeedsAction(review: FilterableReview): boolean {
+  return ACTION_STATUSES.includes(review?.status ?? "")
+    || (READY_STATUSES.includes(review?.status ?? "") && review?.portal_supported === false);
+}
+
+/** Does this application's review belong in the chosen view? */
+export function statusMatchesApplicationFilter(review: string | FilterableReview, filter: ApplicationFilter): boolean {
+  const normalized = typeof review === "string" ? { status: review } : review;
+  if (filter === "action") return reviewNeedsAction(normalized);
+  if (filter === "ready") return reviewCanBeSent(normalized);
+  if (filter === "submitted") return normalized?.status === "submitted";
   return true;
 }
 

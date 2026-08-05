@@ -27,6 +27,7 @@ import {
   jobSubmittedOnDay,
   packetMatchesJob,
   rankJobs,
+  reviewCanBeSent,
   resumeGenerationBody,
   useJobMatchScores,
   visibleMatches,
@@ -346,10 +347,16 @@ export default function Home() {
        answers", which is the wrong instruction for a CAPTCHA - nothing is missing, and on an
        at_submit stall everything is already filled in. */
     const needsAction = packets.filter((packet) => (
-      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+      (
+        ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+        || (
+          ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")
+          && packet.spec._review?.portal_supported === false
+        )
+      )
       && !isWaitingOnHuman(packet.spec._review)
     )).length;
-    const ready = packets.filter((packet) => ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")).length;
+    const ready = packets.filter((packet) => reviewCanBeSent(packet.spec._review)).length;
     return { ready, submitted, needsAction };
   }, [packets]);
   /* Each summary block gates on its own total, so a student with emails but no applications is
@@ -642,7 +649,7 @@ export default function Home() {
               ]}
               action={applicationSummary.needsAction > 0 ? {
                 label: `${applicationSummary.needsAction} stopped for you`,
-                detail: "Finish the missing answers",
+                detail: "Review the stopped applications",
                 href: "/dashboard/applications?state=action",
               } : undefined}
             />

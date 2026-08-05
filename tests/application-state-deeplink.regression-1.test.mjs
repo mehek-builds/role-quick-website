@@ -136,7 +136,7 @@ describe("the ?state= deep link resolves to a view", () => {
        hat: a list that ignores the filter, or a heading that misdescribes a list that honours it. */
     assert.match(
       applications,
-      /statusMatchesApplicationFilter\(packet\.spec\._review\?\.status, applicationFilter\)/,
+      /statusMatchesApplicationFilter\(packet\.spec\._review, applicationFilter\)/,
       "the rows have to be filtered by the chosen view, not by a constant",
     );
     assert.match(
@@ -166,6 +166,9 @@ describe("the ?state= deep link resolves to a view", () => {
       assert.equal(statusMatchesApplicationFilter(status, "ready"), true, status);
       assert.equal(statusMatchesApplicationFilter(status, "action"), false, status);
     }
+    const unsupportedReady = { status: "ready_to_submit", portal_supported: false };
+    assert.equal(statusMatchesApplicationFilter(unsupportedReady, "ready"), false);
+    assert.equal(statusMatchesApplicationFilter(unsupportedReady, "action"), true);
     assert.equal(statusMatchesApplicationFilter("submitted", "submitted"), true);
     assert.equal(statusMatchesApplicationFilter("submitted", "action"), false);
     // A packet with no review at all belongs in no filtered view, and in the unfiltered one.
@@ -178,7 +181,8 @@ describe("the ?state= deep link resolves to a view", () => {
        rather than by importing them, because Home computes the summary inline. If that moves into
        the domain, point this at it. */
     assert.match(home, /\["needs_attention", "ready_for_final_approval", "failed"\]/);
-    assert.match(home, /\["resume_ready", "questions_ready", "ready_to_submit"\]/);
+    assert.match(home, /reviewCanBeSent\(packet\.spec\._review\)/);
+    assert.match(home, /packet\.spec\._review\?\.portal_supported === false/);
   });
 });
 
