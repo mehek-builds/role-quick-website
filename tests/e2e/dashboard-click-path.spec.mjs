@@ -255,15 +255,49 @@ async function openHome() {
   );
 }
 
-/** A control inside the Tracker column, matched on its own text and required to be unique. */
+/** A control inside the Tracker column, matched on its own text and required to be unique.
+ *
+ * Still text-matched, and deliberately so: the three tiles are matched on their METRIC LABELS
+ * ("Ready", "Needs you", "Sent"), which are the same strings the fixture-signature case above
+ * asserts against. Those labels are the vocabulary of the feature rather than prose about it, so
+ * pinning them is the point. If one of them changes, a test that no longer mentions it is a test
+ * that stopped describing the product. */
 function trackerControl(text) {
   return page.locator(TRACKER).getByRole("link").filter({ hasText: text });
 }
 
+/* The action banner, matched by STRUCTURE rather than by its words.
+ *
+ * This is the one place in this file that breaks the match-what-a-student-reads rule, so here is
+ * the reasoning rather than just the exception.
+ *
+ * The banner's copy has now broken this spec twice. ISSUE-042-era copy read "Finish the missing
+ * answers"; 8ea7edd renamed it to "Review the stopped applications" for a CAPTCHA stall, which is
+ * the more accurate line. Both renames were correct product decisions, and both turned this file
+ * red without a single thing having changed about the click path it exists to protect. A selector
+ * that fails on an IMPROVEMENT to the copy is not testing the student's click, it is taxing the
+ * writer, and the failure it produces ("must resolve to exactly one control") points at the test
+ * rather than at anything a reader can act on.
+ *
+ * The tiles above keep their text match because their labels ARE the assertion. The banner's
+ * detail line is prose: it explains the same href the "Needs you" tile already carries. There is
+ * nothing about the click path that the exact wording proves.
+ *
+ * Why `>` and not just the href: the "Needs you" tile points at this identical URL, so href alone
+ * matches two links and the exactly-one assertion fails. The banner is the only link that is a
+ * DIRECT child of the column's section - "View all" sits inside the heading row's div, the three
+ * tiles inside the metrics grid - so the child combinator is what separates them. That is a claim
+ * about OverviewColumn's markup, and if someone reparents the banner this locator goes to zero and
+ * the exactly-one assertion fails loudly, which is the correct outcome: the banner moving IS a
+ * change to the click path, unlike the banner being reworded. */
+function trackerBanner() {
+  return page.locator(`${TRACKER} > a[href="/dashboard/applications?state=action"]`);
+}
+
 const CASES = [
   {
-    name: 'banner "Review the stopped applications"',
-    control: () => trackerControl("Review the stopped applications"),
+    name: "the action banner",
+    control: trackerBanner,
     url: "/dashboard/applications?state=action",
     heading: "Applications that need you",
     select: "action",
