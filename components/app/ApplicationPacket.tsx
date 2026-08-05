@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
 import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { resumeContactLine } from "@/lib/resumeContact";
 
 /* REVISITING AN APPLICATION, against real packet data.
  *
@@ -45,17 +46,7 @@ export function contactName(spec: GeneratedResume["spec"]): string {
 }
 
 export function contactLine(spec: GeneratedResume["spec"]): string {
-  const contact = spec._contact ?? {};
-  /* An explicit key order, not Object.values: the record is loosely typed, so
-     iteration order is whatever the backend happened to serialise, and a resume
-     header that reorders itself between packets looks like a rendering bug. */
-  return ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]
-    .map((key) => contact[key])
-    .filter((value): value is string => Boolean(value && value.trim()))
-    /* A PIPE, because that is what the renderer joins with. Missed when the skills separator was
-       corrected: two separators drifted from the PDF and only one got fixed, which is the exact
-       failure mode this pane keeps having. The renderer's contactLine is the reference. */
-    .join(" | ");
+  return resumeContactLine(spec._contact ?? {});
 }
 
 /* The resume, read-only, from the same spec the editor renders. Black and white
