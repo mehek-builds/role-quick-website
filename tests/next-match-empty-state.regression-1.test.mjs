@@ -58,19 +58,19 @@ describe("NextMatchCard tells the two causes of null apart", () => {
   });
 
   test("a settled empty result gets a stated outcome instead of the spinner", () => {
-    assert.match(autopilot, /No ready application matches your current preferences\./);
+    assert.match(autopilot, /No ready match\./);
   });
 
   test("the empty state does not pulse, because nothing is still coming", () => {
     const emptyBranch = autopilot.slice(
-      autopilot.indexOf("No ready application matches"),
+      autopilot.indexOf("No ready match"),
       autopilot.indexOf("const paused ="),
     );
     assert.doesNotMatch(emptyBranch, /animate-pulse/);
   });
 
-  test("the empty state names what the student can change", () => {
-    assert.match(autopilot, /Widen your preferences in Account/);
+  test("the empty state does not explain controls the student can already see", () => {
+    assert.doesNotMatch(autopilot, /Widen your preferences in Account/);
   });
 
   test("searching is driven by the fetch that settles, so it cannot stay true forever", () => {

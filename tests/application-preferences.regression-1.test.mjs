@@ -9,5 +9,6 @@ test("Applications gates the next send through the current preference-ranked job
   assert.match(page, /api<JobsPage>\("\/jobs\?offset=0"\)/);
   assert.match(page, /nextPreferredReadyPacket\(reviewablePackets, currentMatches \?\? \[\]\)/);
   assert.match(page, /Automatic sending is paused/);
-  assert.match(page, /full application history stays here/);
+  assert.match(page, /<AutopilotLockNote/);
+  assert.match(page, /<NextMatchCard/);
 });
