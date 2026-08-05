@@ -35,7 +35,10 @@ function code(source) {
 }
 
 const PACKET = code(readFileSync("components/app/ApplicationPacket.tsx", "utf8"));
+const START_PAPER = code(readFileSync("components/start/ResumePaper.tsx", "utf8"));
+const CONTACT_HELPER = code(readFileSync("lib/resumeContact.ts", "utf8"));
 const HARNESS = code(readFileSync("app/qa/packet/dashboard/harness.tsx", "utf8"));
+const { RESUME_CONTACT_KEYS, resumeContactLine } = await import("../lib/resumeContact.ts");
 
 /* The backend's contact schema, from student-outreach-backend
    src/routes/resumeRequestSchema.ts. If that schema gains a field, this list is the reminder that
@@ -162,10 +165,27 @@ describe("the packet resume preview", () => {
       "the renderer joins skills with a bullet, not a middot"
     );
     assert.match(
-      PACKET,
+      CONTACT_HELPER,
       /\.join\(" \| "\)/,
       "the renderer joins contact details with a pipe, not a middot"
     );
+  });
+
+  test("shortens and deduplicates contact links", () => {
+    const line = resumeContactLine({
+      email: "mehekmandal05@gmail.com",
+      phone: "+971 567417451",
+      linkedin_url: "https://www.linkedin.com/in/mehekmandal/",
+      github_url: "https://github.com/mehek-builds",
+      portfolio_url: "github.com/mehek-builds/",
+    });
+
+    assert.equal(
+      line,
+      "mehekmandal05@gmail.com | +971 567417451 | linkedin.com/in/mehekmandal | github.com/mehek-builds"
+    );
+    assert.equal(line.match(/github\.com\/mehek-builds/g)?.length, 1);
+    assert.doesNotMatch(line, /https?:\/\//);
   });
 
   test("gives education its own section rather than floating it under the header", () => {
@@ -196,20 +216,27 @@ describe("the packet resume preview", () => {
   });
 
   test("reads only contact keys the backend actually writes", () => {
+    assert.deepEqual([...RESUME_CONTACT_KEYS], ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]);
     for (const key of KEYS_THE_BACKEND_NEVER_WRITES) {
       assert.doesNotMatch(
-        PACKET,
+        CONTACT_HELPER,
         new RegExp(`"${key}"`),
         `"${key}" is not a key the backend stores on _contact; it will silently resolve to nothing`
       );
     }
-    for (const key of ["email", "phone", "linkedin_url"]) {
+    for (const key of ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]) {
       assert.match(
-        PACKET,
+        CONTACT_HELPER,
         new RegExp(`"${key}"`),
         `the contact line must read "${key}", which is what the backend stores`
       );
     }
+  });
+
+  test("all resume previews use the shared contact formatter", () => {
+    assert.match(PACKET, /resumeContactLine\(spec\._contact \?\? \{\}\)/);
+    assert.match(START_PAPER, /resumeContactLine\(contact\)/);
+    assert.doesNotMatch(START_PAPER, /function contactLine/);
   });
 
   test("the QA fixture carries the same contact shape production does", () => {

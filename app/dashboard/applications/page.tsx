@@ -497,7 +497,9 @@ function Applications() {
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
     /* The education block as it stands NOW, to check the frozen packet against. Failure is not the
        same as agreement: sending stays blocked until the comparison succeeds. */
-    setEducationProfileStatus("loading");
+    queueMicrotask(() => {
+      if (!cancelled) setEducationProfileStatus("loading");
+    });
     api<EducationProfile>("/profile")
       .then((result) => {
         if (cancelled) return;
@@ -1750,22 +1752,22 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text", 
  * worse than a printed line. The name is changed where it is stored, on the profile. */
 function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry }: { spec: ResumeSpec; name: string; contact: string; editedTerms: ReadonlySet<string>; onChange: (spec: ResumeSpec) => void; onPatchEntry: (index: number, patch: Partial<ResumeSpec["experience"][number]>) => void }) {
   return (
-    <div className="mx-auto max-w-[640px] rounded-card border border-border bg-white px-4 py-8 text-[13px] leading-5 text-ink sm:px-7">
+    <div className="mx-auto max-w-[640px] rounded-inner border border-border bg-white px-5 py-5 font-serif text-[11.5px] leading-[1.35] text-black shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-12px_rgba(0,0,0,0.18)] sm:px-8">
       {/* Name, rule, contact line: the order drawHeader() draws them in, and the order the packet
           pane shows. On a packet generated before `_contact` existed there is no name, and then
           education simply leads under its own heading rather than a blank line appearing. */}
-      {name && <p className="text-center text-sm font-semibold sm:text-lg">{name}</p>}
+      {name && <p className="text-center text-[15px] font-semibold leading-tight">{name}</p>}
       {contact && (
         <>
-          <div className="mt-1.5 h-px w-full bg-neutral-300" />
-          <p className="mt-1.5 text-center text-[11px] text-muted">{contact}</p>
+          <div className="mt-1 h-px w-full bg-neutral-300" />
+          <p className="mt-1 text-center text-[9.5px] leading-tight text-neutral-600">{contact}</p>
         </>
       )}
 
       {/* EDUCATION as a real section, because it is one. Without the heading the school sat at the
           top of the page looking like a header, which is exactly how it came to occupy the name
           slot: nothing marked it as belonging to a section. drawEducation() emits this heading. */}
-      <p className="mb-2 mt-6 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Education</p>
+      <p className="mb-1.5 mt-4 border-b border-ink pb-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em]">Education</p>
       <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="font-semibold" />
       {/* STILL two fields, never one string round-tripped through a " · " separator. The separator
           form was lossy in both directions: a degree legitimately containing " · " split wrong, and
@@ -1801,9 +1803,9 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
         const heading = sectionHeading(entry.type);
         const startsSection = startsNewSection(spec.experience.map((item) => item.type), index);
         return (
-          <section key={`${entry.org}-${index}`} className={startsSection ? "mt-6" : "mt-4"}>
+          <section key={`${entry.org}-${index}`} className={startsSection ? "mt-4" : "mt-3"}>
             {startsSection && (
-              <p className="mb-2 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
+              <p className="mb-1.5 border-b border-ink pb-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em]">{heading}</p>
             )}
             <div className="flex items-baseline justify-between gap-4">
               <span className="min-w-0 flex-1">
@@ -1811,12 +1813,12 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
               </span>
               {/* Wide enough for the longest real range ("September 2025 - Present") so the date
                   does not wrap, and fixed so it cannot squeeze the org name beside it. */}
-              <span className="w-[10.5rem] shrink-0">
+              <span className="w-[9.8rem] shrink-0">
                 <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="text-right text-xs text-muted" />
               </span>
             </div>
             <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
-            <ul className="mt-2 space-y-1.5">
+            <ul className="mt-1 space-y-0.5">
               {entry.bullets.map((bullet, bulletIndex) => (
                 <li key={bulletIndex} className="grid grid-cols-[12px_1fr] gap-1.5"><span>•</span><EditableHighlight value={bullet} terms={editedTerms} onChange={(value) => onPatchEntry(index, { bullets: entry.bullets.map((item, i) => (i === bulletIndex ? value : item)) })} /></li>
               ))}
@@ -1825,8 +1827,8 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
         );
       })}
 
-      <section className="mt-6">
-        <p className="mb-2 border-b border-ink pb-1 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]">Skills</p>
+      <section className="mt-4">
+        <p className="mb-1.5 border-b border-ink pb-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em]">Skills</p>
         <EditableHighlight value={spec.skills.join(" • ")} terms={editedTerms} onChange={(value) => onChange({ ...spec, skills: value.split("•").map((item) => item.trim()).filter(Boolean) })} />
       </section>
     </div>
@@ -1956,7 +1958,7 @@ function EditableHighlight({ value, terms, onChange }: { value: string; terms: R
   return editing ? (
     <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-inner border border-brand bg-white px-2 py-1 outline-none" />
   ) : (
-    <button type="button" onClick={() => setEditing(true)} className="text-left leading-5 hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30">
+    <button type="button" onClick={() => setEditing(true)} className="text-left leading-[1.35] hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30">
       {/* hideMissing: an amber "asked for and NOT on your resume" mark cannot honestly appear on
           the resume. If the word were here the scorer would have counted it as covered. */}
       <RequirementText text={value} editedTerms={terms} hideMissing />

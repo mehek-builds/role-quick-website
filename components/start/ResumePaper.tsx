@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ResumeSpec, ResumeEntry } from "@/lib/api";
+import { resumeContactLine } from "@/lib/resumeContact";
 import { startsWithStrongVerb } from "@/lib/strong-verbs";
 
 /* The base resume, drawn as paper.
@@ -58,22 +59,6 @@ const GAP_UNITS = {
   splitLine: 0.62,
   bullet: 0.3,
 } as const;
-
-/* Mirrors contactLine() in resumeRender.ts, field order and separator included. The renderer joins
-   with " | ", so this does too - a preview that separates with a middot while the PDF uses a pipe
-   is a small lie about the document the student is approving. */
-function contactLine(contact: ContactHeader): string {
-  return [
-    contact.phone,
-    contact.email,
-    contact.location,
-    contact.linkedin_url?.replace(/^https?:\/\/(www\.)?/, ""),
-    contact.github_url?.replace(/^https?:\/\/(www\.)?/, ""),
-    contact.portfolio_url?.replace(/^https?:\/\/(www\.)?/, ""),
-  ]
-    .filter((part): part is string => Boolean(part?.trim()))
-    .join("  |  ");
-}
 
 /* Solve for the vertical rhythm that fills the page.
  *
@@ -558,7 +543,7 @@ export function ResumePaper({
   onChange?: (next: ResumeSpec) => void;
 }) {
   const full = spec as ResumeSpec;
-  const line = contactLine(contact);
+  const line = resumeContactLine(contact);
 
   const editApi = useMemo<EditApi>(
     () => ({ editing: editing && Boolean(onChange), update: onChange ?? (() => {}), spec: full }),
