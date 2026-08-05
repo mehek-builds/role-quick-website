@@ -238,6 +238,8 @@ export type RequirementVerdict = "met" | "unmet" | "unscoreable";
 
 export type RequirementClauseView = {
   text: string;
+  /** Required sections are 1.0; preferences are lower. The backend owns the scale. */
+  weight?: number;
   verdict: RequirementVerdict;
   basis: "terms" | "degree" | "graduation" | "experience-years" | "competency" | "none";
   /** The student's own bullet when met, or what is missing when not. */

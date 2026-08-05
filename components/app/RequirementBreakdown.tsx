@@ -136,6 +136,7 @@ export function RequirementBreakdown({
 
 function ClauseRow({ clause }: { clause: RequirementClauseView }) {
   const met = clause.verdict === "met";
+  const priority = typeof clause.weight === "number" && clause.weight < 1 ? "Preference" : "Required";
   return (
     <li className="flex gap-2.5">
       <span
@@ -143,6 +144,7 @@ function ClauseRow({ clause }: { clause: RequirementClauseView }) {
         className={`mt-1.5 size-1.5 shrink-0 rounded-full ${met ? "bg-positive" : "bg-faint"}`}
       />
       <div className="min-w-0">
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{priority}</p>
         <p className="text-xs leading-5 text-ink">
           <span className="sr-only">{met ? "Met: " : "Not met: "}</span>
           {clause.text}
