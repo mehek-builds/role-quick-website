@@ -4,6 +4,7 @@ import { API_URL } from "./config";
 import { resetAnalytics } from "./analytics";
 import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
+import { apiErrorMessage } from "./api-error-message";
 
 const TOKEN_KEY = "rq_token";
 const EMAIL_KEY = "rq_email";
@@ -63,9 +64,11 @@ export function clearSession() {
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  issues: string[];
+  constructor(status: number, message: string, issues: string[] = []) {
     super(message);
     this.status = status;
+    this.issues = issues;
   }
 }
 
@@ -106,9 +109,8 @@ async function requestApi<T>(
     data = await res.json().catch(() => null);
   }
   if (!res.ok) {
-    const message =
-      (data as { error?: string } | null)?.error ?? `Request failed (${res.status})`;
-    throw new ApiError(res.status, message);
+    const { message, issues } = apiErrorMessage(data, res.status);
+    throw new ApiError(res.status, message, issues);
   }
   return data as T;
 }
