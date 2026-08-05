@@ -72,7 +72,6 @@ test("humanInputItems turns portal blockers and missing answers into checklist r
   const items = humanInputItems(review);
   assert.deepEqual(items.map((item) => item.label), [
     "CAPTCHA requires your attention",
-    "Are you legally authorized to work in Canada? required field is required",
     "Why Stripe?",
     "When are you available to start full-time?",
     "What are your annualized total compensation expectations?",

@@ -2048,9 +2048,12 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
               : "Litos could not check this resume against your current profile. Reload, then review it again before sending."}
           </p>
         )}
-        {review.filled_fields && review.filled_fields.length > 0 && (
+        {completedItems.length > 0 && (
           <div className="mt-6">
-            <p className="text-xs font-medium text-muted">Everything else is done</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-muted">Everything else is done</p>
+              <p className="font-mono text-[11px] text-faint">{completedItems.length} checked</p>
+            </div>
             <ul className="mt-2 grid gap-2 sm:grid-cols-2">
               {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
             </ul>
@@ -2184,21 +2187,19 @@ function CenteredState({ title, body, loading = false }: { title: string; body: 
 function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
   return (
     <li className="grid grid-cols-[18px_1fr] gap-2 text-sm leading-5 text-muted">
-      <span
-        aria-hidden
-        className={`mt-0.5 flex h-[14px] w-[14px] items-center justify-center rounded-[3px] border ${
-          checked ? "border-teal/40 bg-teal-soft text-teal-ink" : "border-warn/40 bg-warn-soft text-warn"
-        }`}
-      >
-        {checked ? (
+      {checked ? (
+        <span aria-hidden className="mt-0.5 flex h-[14px] w-[14px] items-center justify-center rounded-[3px] border border-teal/40 bg-teal-soft text-teal-ink">
           <svg viewBox="0 0 16 16" className="h-3 w-3">
             <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-        ) : null}
-      </span>
+        </span>
+      ) : (
+        <input type="checkbox" aria-label={`Mark ${item.label} done`} className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/40 text-warn focus:ring-warn/30" />
+      )}
       <span>
         <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
         {item.detail && <span className="block text-xs text-faint">{item.detail}</span>}
+        {item.action && <span className="mt-1 inline-flex rounded-full border border-warn/30 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-warn">{item.action}</span>}
       </span>
     </li>
   );
@@ -2210,9 +2211,11 @@ function BlockerList({ items }: { items: readonly SubmissionChecklistItem[] }) {
   }
   return (
     <div className="mt-4 rounded-inner border border-warn/30 bg-warn-soft/50 px-4 py-3">
-      <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">
-        Needs your input
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Needs your input</p>
+        <p className="font-mono text-[11px] text-warn">{items.length} to check</p>
+      </div>
+      <p className="mt-1 text-xs leading-5 text-muted">Only these rows need you before Litos can keep going.</p>
       <ul className="mt-2 space-y-2">
       {items.map((item) => (
         <ChecklistRow key={item.id} item={item} checked={false} />
