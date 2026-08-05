@@ -19,6 +19,7 @@ function keyFor(value: string): string {
 }
 
 function displayField(field: string): string {
+  if (/^question(?:\s*text)?[:_]/i.test(field)) return "";
   const label = field.startsWith("question:") ? field.slice("question:".length).trim() : field;
   const display = label.replaceAll("_", " ").replace(/\s+/g, " ").trim();
   return display ? display.charAt(0).toUpperCase() + display.slice(1) : "";
@@ -37,6 +38,7 @@ function normalizedChecklistText(value: string): string {
 
 function blockerDuplicatesQuestion(blocker: string, questions: readonly { question: string }[] | undefined): boolean {
   const normalizedBlocker = normalizedChecklistText(blocker);
+  if (normalizedBlocker.startsWith("ai drafted answer")) return true;
   return (questions ?? []).some((question) => {
     const normalizedQuestion = normalizedChecklistText(question.question);
     return normalizedQuestion.length > 10 && normalizedBlocker.includes(normalizedQuestion);

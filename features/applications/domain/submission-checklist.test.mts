@@ -8,6 +8,7 @@ const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status
   attention_reason: [
     "CAPTCHA requires your attention",
     "Are you legally authorized to work in Canada? required field is required",
+    "AI-drafted answer needs your review before this goes out: \"Why Stripe?\"",
   ].join("\n"),
   questions: [
     {
@@ -62,6 +63,7 @@ const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status
     "Degree",
     "Discipline",
     "question:Are you eligible to work in the U.S.?",
+    "Question text:8:Expected graduation year",
     "question:What are your annualized total compensation expectations?",
     "question:By checking this box, I consent to the Candidate Privacy Policy",
     "question:CAPTCHA requires your attention",
@@ -89,7 +91,8 @@ test("completedSubmissionItems shows safe filled fields as done", () => {
   assert.ok(items.some((item) => item.label === "School"));
   assert.ok(items.some((item) => item.label === "Degree"));
   assert.ok(items.some((item) => item.label === "Discipline"));
-  assert.ok(items.some((item) => item.label === "Are you eligible to work in the U.S.?"));
+  assert.equal(items.some((item) => item.label === "Are you eligible to work in the U.S.?"), false);
+  assert.equal(items.some((item) => item.label.includes("Question text")), false);
   assert.equal(items.some((item) => item.label === "Why Stripe?"), false);
   assert.equal(items.some((item) => item.label === "What are your annualized total compensation expectations?"), false);
   assert.equal(items.some((item) => item.label.includes("Candidate Privacy Policy")), false);
