@@ -1190,11 +1190,6 @@ function Applications() {
       {/* No autopilot.error row here any more. That error is only ever set by the toggle's own
           save, and the toggle is on Jobs now, so a copy on this page could never fire. */}
       {!selected && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
-      {!selected && (
-        <p className="text-sm leading-6 text-muted">
-          Your full application history stays here. Next best match and automatic sending follow your current Account preferences.
-        </p>
-      )}
       {!selected && preferenceError && <ErrorNote message={preferenceError} />}
       {!selected && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard

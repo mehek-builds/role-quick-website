@@ -139,9 +139,7 @@ export function AutopilotLockNote({
   if (enabled || eligibility?.eligible !== false) return null;
   return (
     <p className="text-[13px] leading-5 text-warn">
-      Sending without asking becomes available after you have approved {eligibility.required}{" "}
-      applications yourself. {eligibility.remaining} to go. That way you have seen what Litos fills
-      in on a real form before it sends one without you.
+      Sending without asking: {eligibility.remaining} to go.
     </p>
   );
 }
@@ -262,7 +260,7 @@ export function NextMatchCard({
         {header}
         <div className="flex items-center gap-3 rounded-card border border-border bg-surface px-5 py-4">
           <span aria-hidden="true" className="h-4 w-4 animate-pulse rounded-full bg-surface-alt" />
-          <p className="text-sm text-muted">Looking for your next match...</p>
+          <p className="text-sm text-muted">Checking matches.</p>
         </div>
       </div>
     );
@@ -280,11 +278,7 @@ export function NextMatchCard({
       <div>
         {header}
         <div className="rounded-card border border-border bg-surface px-5 py-4">
-          <p className="text-sm text-ink">No ready application matches your current preferences.</p>
-          <p className="mt-1 text-sm text-muted">
-            Your prepared applications are below. Widen your preferences in Account, or start a new
-            application from Jobs, and the next best match will appear here.
-          </p>
+          <p className="text-sm text-ink">No ready match.</p>
         </div>
       </div>
     );
