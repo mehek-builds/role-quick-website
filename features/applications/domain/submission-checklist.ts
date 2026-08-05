@@ -22,6 +22,17 @@ function displayField(field: string): string {
   return label.replaceAll("_", " ").replace(/\s+/g, " ").trim();
 }
 
+function isHumanOnlyChecklistLabel(label: string): boolean {
+  const normalized = label.toLowerCase();
+  if (/captcha|recaptcha|hcaptcha/.test(normalized)) return true;
+  if (/privacy|privacy policy|privacy notice|candidate-privacy|consent|recording|brighthire/.test(normalized)) return true;
+  if (/salary|compensation|pay expectation|expected pay|annualized total compensation/.test(normalized)) return true;
+  if (/(legally authorized|work authorization|authorized to work|require sponsorship|visa sponsorship)/.test(normalized)) {
+    return !/(u\.s\.|us\b|united states|usa\b)/.test(normalized);
+  }
+  return false;
+}
+
 function addUnique(items: SubmissionChecklistItem[], item: SubmissionChecklistItem) {
   if (items.some((existing) => existing.id === item.id || existing.label === item.label)) return;
   items.push(item);
@@ -52,6 +63,14 @@ export function humanInputItems(review: Pick<ApplicationReview, "attention_reaso
         label: question.question,
         detail: "Drafted answer ready for review",
       });
+      continue;
+    }
+    if (review.status !== "submitted" && answer && isHumanOnlyChecklistLabel(question.question)) {
+      addUnique(items, {
+        id: `confirm-${question.id}`,
+        label: question.question,
+        detail: "Needs your confirmation",
+      });
     }
   }
 
@@ -63,6 +82,7 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "filled
   for (const field of review.filled_fields ?? []) {
     const label = displayField(field);
     if (!label) continue;
+    if (isHumanOnlyChecklistLabel(label)) continue;
     addUnique(items, {
       id: `field-${keyFor(label)}`,
       label,
@@ -72,6 +92,8 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "filled
   for (const question of review.questions ?? []) {
     const answer = (question.answer ?? "").trim();
     if (!answer) continue;
+    if (question.kind === "essay" && review.status !== "submitted") continue;
+    if (isHumanOnlyChecklistLabel(question.question)) continue;
     addUnique(items, {
       id: `answer-${question.id}`,
       label: question.question,
