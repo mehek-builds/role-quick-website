@@ -174,6 +174,11 @@ function Applications() {
      a student who spent six minutes reading the packet before approving saw "6m 00s elapsed" and
      the "start the application again" milestone the instant their send actually began. */
   const [approveStartedAt, setApproveStartedAt] = useState<string | null>(null);
+  /* Same idea for "Fill the form": the selected packet may still carry the timestamp from an older
+     ready state while the fresh submit-request is in flight. The server now clears stale run fields
+     too, but the screen is entered before that response returns, so the UI needs its own local
+     click-time anchor. */
+  const [prepareStartedAt, setPrepareStartedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -363,6 +368,8 @@ function Applications() {
     /* A different packet, so any "sending" flag belongs to the one we are leaving. Without this,
        switching to a packet whose stored status is `filling` captioned it "You told Litos to send
        this" for an application the student never authorised. */
+    setPrepareStartedAt(null);
+    setApproveStartedAt(null);
     setSubmittingPhase("preparing");
     moveToScreen(screenForStatus(status, "review"));
     setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
@@ -1011,6 +1018,7 @@ function Applications() {
       setError("Some answers are missing. Add them first.");
       return;
     }
+    setPrepareStartedAt(new Date().toISOString());
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
     setError(null);
@@ -1394,7 +1402,7 @@ function Applications() {
       ) : screen === "submitting" ? (
         <PortalProgress
           status={submission?.review.status}
-          startedAt={submittingPhase === "sending" ? approveStartedAt ?? submission?.review.updated_at : submission?.review.updated_at}
+          startedAt={submittingPhase === "sending" ? approveStartedAt ?? submission?.review.updated_at : prepareStartedAt ?? submission?.review.updated_at}
           sending={submittingPhase === "sending"}
         />
       ) : screen === "portal" && submission ? (
