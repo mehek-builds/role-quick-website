@@ -4,7 +4,9 @@ type ReviewPacket = {
 
 type AnsweredQuestion = {
   id: string;
+  question: string;
   answer: string;
+  required?: boolean;
 };
 
 export function reviewablePackets<T extends ReviewPacket>(packets: T[]): T[] {
@@ -17,13 +19,63 @@ export function reviewablePackets<T extends ReviewPacket>(packets: T[]): T[] {
  * and newly found controls; a non-empty local answer is authoritative for its text.
  */
 export function mergeDiscoveredQuestions<T extends AnsweredQuestion>(local: readonly T[], discovered: readonly T[]): T[] {
+  const dedupedDiscovered: T[] = [];
+  const discoveredIndexByQuestion = new Map<string, number>();
+  for (const question of discovered) {
+    const key = questionKey(question.question);
+    if (!key) {
+      dedupedDiscovered.push(question);
+      continue;
+    }
+    const existingIndex = discoveredIndexByQuestion.get(key);
+    if (existingIndex === undefined) {
+      discoveredIndexByQuestion.set(key, dedupedDiscovered.length);
+      dedupedDiscovered.push(question);
+      continue;
+    }
+    const existing = dedupedDiscovered[existingIndex];
+    if ((question.required === true && existing.required !== true) || (!existing.answer.trim() && question.answer.trim())) {
+      dedupedDiscovered[existingIndex] = {
+        ...existing,
+        ...(question.required === true ? { required: true } : {}),
+        ...(!existing.answer.trim() && question.answer.trim() ? { answer: question.answer } : {}),
+      };
+    }
+  }
   const localById = new Map(local.map((question) => [question.id, question]));
+  const localByQuestion = new Map<string, T>();
+  for (const question of local) {
+    const key = questionKey(question.question);
+    if (!key) continue;
+    const existing = localByQuestion.get(key);
+    if (!existing || (!existing.answer.trim() && question.answer.trim())) {
+      localByQuestion.set(key, question);
+    }
+  }
   const discoveredIds = new Set(discovered.map((question) => question.id));
-  const merged = discovered.map((question) => {
-    const localQuestion = localById.get(question.id);
-    return localQuestion?.answer.trim() ? { ...question, answer: localQuestion.answer } : question;
+  const discoveredQuestions = new Set(discovered.map((question) => questionKey(question.question)).filter(Boolean));
+  const merged = dedupedDiscovered.map((question) => {
+    const localByIdMatch = localById.get(question.id);
+    const localByQuestionMatch = localByQuestion.get(questionKey(question.question));
+    let answeredLocal: T | undefined;
+    if (localByIdMatch?.answer.trim()) {
+      answeredLocal = localByIdMatch;
+    } else if (localByQuestionMatch?.answer.trim()) {
+      answeredLocal = localByQuestionMatch;
+    }
+    return answeredLocal ? { ...question, answer: answeredLocal.answer } : question;
   });
-  return [...merged, ...local.filter((question) => !discoveredIds.has(question.id))];
+  return [
+    ...merged,
+    ...local.filter((question) => {
+      const key = questionKey(question.question);
+      return !discoveredIds.has(question.id) && (!key || !discoveredQuestions.has(key));
+    }),
+  ];
+}
+
+function questionKey(question: string): string {
+  return question.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 export function portalName(portalUrl: string): string {

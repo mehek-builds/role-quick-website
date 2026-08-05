@@ -31,4 +31,70 @@ describe("dashboard application review compatibility", () => {
       { id: "work-auth", question: "Authorized to work?", answer: "", kind: "required", required: true },
     ]);
   });
+
+  test("dedupes rediscovered questions by label and keeps the non-empty answer", () => {
+    const local = [
+      { id: "old-gender", question: "gender", answer: "", kind: "required", required: true },
+      { id: "old-work-auth", question: "Are you legally authorized to work in the country in which you are applying?", answer: "", kind: "required", required: true },
+    ];
+    const discovered = [
+      { id: "new-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+      { id: "new-work-auth", question: "are you legally authorized to work in the country in which you are applying?", answer: "Yes", kind: "required", required: true },
+    ];
+
+    assert.deepEqual(mergeDiscoveredQuestions(local, discovered), [
+      { id: "new-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+      { id: "new-work-auth", question: "are you legally authorized to work in the country in which you are applying?", answer: "Yes", kind: "required", required: true },
+    ]);
+  });
+
+  test("prefers a non-empty local duplicate over a later blank duplicate", () => {
+    const local = [
+      { id: "answered-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+      { id: "blank-gender", question: "gender", answer: "", kind: "required", required: true },
+    ];
+    const discovered = [
+      { id: "new-gender", question: "gender", answer: "", kind: "required", required: true },
+    ];
+
+    assert.deepEqual(mergeDiscoveredQuestions(local, discovered), [
+      { id: "new-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+    ]);
+  });
+
+  test("prefers the non-empty label match when the discovered id matches a blank duplicate", () => {
+    const local = [
+      { id: "answered-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+      { id: "blank-gender", question: "gender", answer: "", kind: "required", required: true },
+    ];
+    const discovered = [
+      { id: "blank-gender", question: "gender", answer: "", kind: "required", required: true },
+    ];
+
+    assert.deepEqual(mergeDiscoveredQuestions(local, discovered), [
+      { id: "blank-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+    ]);
+  });
+
+  test("dedupes duplicate discovered labels before sending answers back", () => {
+    const discovered = [
+      { id: "answered-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+      { id: "blank-gender", question: "gender", answer: "", kind: "required", required: true },
+    ];
+
+    assert.deepEqual(mergeDiscoveredQuestions([], discovered), [
+      { id: "answered-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+    ]);
+  });
+
+  test("keeps required metadata when an answered duplicate arrives later", () => {
+    const discovered = [
+      { id: "required-gender", question: "gender", answer: "", kind: "required", required: true },
+      { id: "answered-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: false },
+    ];
+
+    assert.deepEqual(mergeDiscoveredQuestions([], discovered), [
+      { id: "required-gender", question: "gender", answer: "Decline to self-identify", kind: "required", required: true },
+    ]);
+  });
 });
