@@ -36,7 +36,17 @@ export type RankedJob = MonitoredJob & {
   reasons: string[];
 };
 
-export type ProfileIdentity = { full_name?: string; email?: string };
+export type ProfileIdentity = {
+  full_name?: string;
+  email?: string;
+  school?: string;
+  degree?: string;
+  grad_date?: string;
+  grad_year?: number;
+  currently_enrolled?: boolean;
+  coursework?: string[];
+  school_location?: string;
+};
 
 /**
  * How many of the day's top matches get a resume built ahead of time, for students who have turned
@@ -233,6 +243,15 @@ export function resumeGenerationBody(
     company: job.company_name,
     role: job.title,
     jd_text: job.description,
+    profile_education: {
+      school: identity.school,
+      degree: identity.degree,
+      grad_date: identity.grad_date,
+      grad_year: identity.grad_year,
+      currently_enrolled: identity.currently_enrolled,
+      coursework: identity.coursework,
+      school_location: identity.school_location,
+    },
     /* The posting this resume is for, recorded at creation so the jobs list can later mark exactly
        this row "Applied" rather than every posting sharing its company and title.
 
