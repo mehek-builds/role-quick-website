@@ -22,6 +22,11 @@ describe("the breakdown tells an outage apart from a disposition", () => {
     assert.match(api, /degraded\?: boolean;/);
   });
 
+  test("the response type carries the clause weight", () => {
+    assert.match(api, /weight\?: number;/);
+    assert.match(component, /const priority = typeof clause\.weight === "number"/);
+  });
+
   test("the attitude sentence is behind the not-degraded branch", () => {
     /* Comments are stripped first. The explanation of this bug necessarily quotes the copy it is
        about, so an index comparison against the raw file compared the COMMENT's mention, not the
