@@ -343,9 +343,14 @@ test('the elapsed clock is anchored to the server, not to component mount', () =
   // stamped when preparation finished, so a student who read the packet for six minutes before
   // pressing "Send it" opened the sending screen already reading "6m 00s elapsed", past the
   // five-minute threshold that tells them to start the application again. The send is anchored to
-  // when the send began, and falls back to the server stamp if that is somehow absent.
-  assert.match(dashboard, /startedAt=\{submittingPhase === "sending" \? approveStartedAt \?\? submission\?\.review\.updated_at : submission\?\.review\.updated_at\}/);
+  // when the send began, and falls back to the server stamp if that is somehow absent. The same
+  // local anchor is now used for preparing, because a fresh click enters the screen before the
+  // backend returns a fresh submit-request review.
+  assert.match(dashboard, /startedAt=\{submittingPhase === "sending" \? approveStartedAt \?\? submission\?\.review\.updated_at : prepareStartedAt \?\? submission\?\.review\.updated_at\}/);
   assert.match(dashboard, /setApproveStartedAt\(new Date\(\)\.toISOString\(\)\)/);
+  assert.match(dashboard, /setPrepareStartedAt\(new Date\(\)\.toISOString\(\)\)/);
+  assert.match(dashboard, /setApproveStartedAt\(null\)/);
+  assert.match(dashboard, /setPrepareStartedAt\(null\)/);
   assert.match(dashboard, /Date\.parse\(startedAt\)/);
 });
 
