@@ -36,6 +36,16 @@ describe("the selection function returning null is an answer, not a pending stat
     const job = { id: "job-1", company_name: "Acme Labs", title: "Product Engineer" };
     assert.equal(nextPreferredReadyPacket([readyPacket], [job])?.id, "packet-1");
   });
+
+  test("a packet on an unsupported portal is not selected for sending", () => {
+    const job = { id: "job-1", company_name: "Acme Labs", title: "Product Engineer" };
+    const unsupported = {
+      ...readyPacket,
+      spec: { _review: { ...readyPacket.spec._review, portal_supported: false } },
+    };
+
+    assert.equal(nextPreferredReadyPacket([unsupported], [job]), null);
+  });
 });
 
 describe("NextMatchCard tells the two causes of null apart", () => {

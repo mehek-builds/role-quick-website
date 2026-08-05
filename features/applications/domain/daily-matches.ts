@@ -8,6 +8,7 @@ import type {
 /* Relative, not "@/lib/local-day": this module is loaded directly by the node test runner, which
    resolves no tsconfig path aliases. Every other "@/lib" import here is type-only and erased. */
 import { localDayKeyOf } from "../../../lib/local-day.ts";
+import { reviewCanBeSent } from "./application-filter.ts";
 
 /* NO `match` FIELD, and that is the ISSUE-014 fix in its final form.
  *
@@ -112,12 +113,6 @@ export function packetMatchesJob(
     && normalized(packet.job_context.role) === normalized(job.title);
 }
 
-const READY_TO_SEND_STATUSES = new Set([
-  "resume_ready",
-  "questions_ready",
-  "ready_to_submit",
-]);
-
 /**
  * Select the next ready packet in the backend's current preference order.
  *
@@ -132,7 +127,7 @@ export function nextPreferredReadyPacket(
 ): GeneratedResume | null {
   for (const job of currentJobs) {
     const matching = packets
-      .filter((packet) => READY_TO_SEND_STATUSES.has(packet.spec._review?.status ?? ""))
+      .filter((packet) => reviewCanBeSent(packet.spec._review))
       .filter((packet) => packetMatchesJob(packet, job))
       .sort((a, b) => packetUpdatedAt(b).localeCompare(packetUpdatedAt(a)));
     if (matching[0]) return matching[0];
