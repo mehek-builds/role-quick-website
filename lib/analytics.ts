@@ -123,6 +123,35 @@ export function track(
   }
 }
 
+/* Attach the anonymous browsing history to the account that just signed in.
+ *
+ * Until this existed, every PostHog person was a cookie and nothing else. The
+ * site could show that eight people asked Litos to apply to a job and that one
+ * submission ever completed, but not whether those were the same eight people
+ * who had accounts, because there was no shared key between PostHog and the
+ * database. Measured 2026-08-05: 36 identified visitors, 38 real accounts, and
+ * no way to say how those two sets overlap.
+ *
+ * The id is the backend's user UUID, which is the same key the database uses,
+ * so a person can now be followed from their first pageview through to their
+ * first application.
+ *
+ * DELIBERATELY NO PROPERTIES. posthog.identify accepts a property bag and the
+ * obvious thing to put in it is the email address, which is exactly what the
+ * privacy posture here forbids: sanitizePostHogEvent already strips referrers,
+ * UTM tags and full URLs, and an email sent at identify time would walk around
+ * all of it. The UUID is opaque, already in PostHog's own person index, and
+ * enough to do the join. */
+export function identifyUser(userId: string | null | undefined) {
+  if (typeof window === "undefined") return;
+  if (!userId) return;
+  try {
+    posthog.identify(userId);
+  } catch {
+    /* analytics must never break authentication */
+  }
+}
+
 export function resetAnalytics() {
   try {
     posthog.reset();
