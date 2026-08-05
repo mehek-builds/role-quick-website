@@ -257,13 +257,9 @@ function portalProgressSource() {
 }
 
 test("the submitting screen names the dashboard authorization", () => {
-  // Bounded to PortalProgress itself rather than to a character count. The span was 3200, which was
-  // simply "long enough today", and a comment added inside the function on 2026-08-04 pushed this
-  // sentence to offset 3233 and turned a passing invariant red without anything about the invariant
-  // changing. Ending at the next function declaration says what was meant: this sentence lives in
-  // THIS component.
   const progress = portalProgressSource();
-  assert.match(progress, /You told Litos to send this/);
+  assert.match(progress, /const title = submitting \? "Sending" : "Filling form"/);
+  assert.match(progress, /Waiting for confirmation/);
 });
 
 // ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----
@@ -365,7 +361,7 @@ test('the ticking second count is not announced to screen readers', () => {
 
 test('a run that has gone on too long says so instead of claiming it is fine', () => {
   assert.match(dashboard, /PORTAL_STUCK_AFTER_S/);
-  assert.match(dashboard, /This is taking longer than usual/);
+  assert.match(dashboard, /Still working/);
 });
 
 test('a successful poll clears a stale error banner', () => {

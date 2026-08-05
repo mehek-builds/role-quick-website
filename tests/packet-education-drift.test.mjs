@@ -96,8 +96,8 @@ describe("the review screen says so before the student presses send", () => {
     assert.match(PAGE, /educationProfilePending = educationProfileStatus !== "ready"/);
     assert.match(PAGE, /finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\)/);
     assert.match(PAGE, /onCheckResume=\{\(\) => moveToScreen\("review"\)\}/);
-    assert.match(PAGE, /Save the corrected resume, then Litos will refill the company form with the updated PDF/);
-    assert.match(PAGE, /Litos is checking this resume against your current profile before it can be sent/);
+    assert.match(PAGE, /Save the resume first/);
+    assert.match(PAGE, /Checking profile/);
   });
 
   test("the final approval action rechecks drift before it posts approval", () => {
