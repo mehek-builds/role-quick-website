@@ -1,7 +1,8 @@
 "use client";
 
 import { API_URL } from "./config";
-import { resetAnalytics } from "./analytics";
+import { identifyUser, resetAnalytics } from "./analytics";
+import { userIdFromToken } from "./session-identity";
 import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
@@ -52,6 +53,19 @@ export function setSession(token: string, email?: string | null, isGuest = false
   window.localStorage.setItem(SESSION_MODE_KEY, isGuest ? "guest" : "verified");
   window.localStorage.setItem(HISTORY_KEY, "true");
   if (!isGuest) window.localStorage.removeItem(GUEST_KEY);
+
+  /* Name the PostHog person after the account, so the anonymous pageviews that
+   * led here stop being a separate stranger.
+   *
+   * Placed at the end of setSession rather than next to each
+   * `track("authentication_completed")` call, because there are five of those
+   * (password, email verification, email code, Google, guest) and a sixth auth
+   * method would silently miss one. Every path already funnels through here.
+   *
+   * Order matters: this must come AFTER the reset above. identify() then reset()
+   * would throw the association away in the one case that needs it most, a
+   * guest who signs up for a real account on the same browser. */
+  identifyUser(userIdFromToken(token));
 }
 
 export function clearSession() {
