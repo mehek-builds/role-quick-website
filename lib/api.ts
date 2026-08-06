@@ -521,7 +521,6 @@ export type ApplicationProfile = {
   citizenship?: string | null;
   work_authorized?: boolean | null;
   needs_sponsorship?: boolean | null;
-  eeo_prefs?: Record<string, string> | null;
   availability_date?: string | null;
   desired_salary?: string | null;
   desired_salary_currency?: string | null;
@@ -530,6 +529,8 @@ export type ApplicationProfile = {
   major?: string | null;
   /** Language names the student is fluent in, stored as a jsonb array of strings. */
   languages?: string[] | null;
+  /** Optional answers for questions about race and gender, used exactly as written. */
+  eeo_prefs?: Record<string, string> | null;
   referral_source_default?: string | null;
 };
 

@@ -44,3 +44,12 @@ test("no field label on the settings page is left as a bare sibling", async () =
     assert.match(match[0], /htmlFor=/, `label rendering {label} without htmlFor: ${match[0]}`);
   }
 });
+
+test("settings preserves optional race and gender preferences on save", async () => {
+  const source = await readFile(settingsPage, "utf8");
+
+  assert.doesNotMatch(source, /delete body\.eeo_prefs/, "saving settings must not erase race and gender preferences");
+  assert.match(source, /Optional questions about race and gender/);
+  assert.match(source, /patchRaceAndGender\("gender"/);
+  assert.match(source, /eeo_prefs: Object\.keys\(nextPrefs\)\.length > 0 \? nextPrefs : null/);
+});

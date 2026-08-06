@@ -38,11 +38,8 @@ describe("the languages declaration in onboarding", () => {
   });
 
   test("the answer goes to the declaration store, not the parsed one", () => {
-    assert.match(
-      STEP,
-      /putApplicationProfile\(\{\s*languages:/,
-      "must write application_profile.languages, the store a form is answered from"
-    );
+    assert.match(STEP, /profilePatch\.languages = declared/, "must stage application_profile.languages");
+    assert.match(STEP, /putApplicationProfile\(profilePatch\)/, "must write the application-profile store a form is answered from");
     assert.doesNotMatch(
       STEP,
       /profile\/parsed/,
@@ -78,7 +75,7 @@ describe("the languages declaration in onboarding", () => {
   test("the declaration write is guarded for QA sessions, like every other write here", () => {
     assert.match(
       STEP,
-      /if \(!demo\) await putApplicationProfile/,
+      /if \(!demo && Object\.keys\(profilePatch\)\.length > 0\) await putApplicationProfile/,
       "an unguarded write breaks ?qa=1&step=base, which has no account to write against"
     );
   });
@@ -89,5 +86,16 @@ describe("the languages declaration in onboarding", () => {
       /finished && languageGap/,
       "asking while the resume is still building puts a question above an unfinished document"
     );
+  });
+});
+
+describe("optional race and gender preferences in onboarding", () => {
+  test("the base step asks and stores race and gender preferences", () => {
+    assert.match(STEP, /Optional questions about race and gender/);
+    assert.match(STEP, /RACE_AND_GENDER_QUESTION_FIELDS/);
+    assert.match(STEP, /profilePatch\.eeo_prefs = Object\.keys\(raceAndGenderPrefs\)\.length > 0 \? raceAndGenderPrefs : null/);
+    assert.match(STEP, /key: "transgender_status"/);
+    assert.match(STEP, /key: "sexual_orientation"/);
+    assert.doesNotMatch(STEP, /hispanic_ethnicity/);
   });
 });

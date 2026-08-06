@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/app/Button";
+import { Button, ButtonLink } from "@/components/app/Button";
 import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
@@ -103,6 +103,12 @@ export default function ApplicationsPage() {
       <Applications />
     </Suspense>
   );
+}
+
+function requiresSensitiveQuestionReview(label: string, answer?: string | null): boolean {
+  if (/\b(?:social security|ssn|driver'?s?\s*licen[sc]e)\b/i.test(label)) return true;
+  if (!/\b(?:transgender|gender|sex|race|ethnic|hispanic|latino|veteran|military|disab|sexual orientation)\b/i.test(label)) return false;
+  return !(answer ?? "").trim();
 }
 
 function Applications() {
@@ -2011,6 +2017,9 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
+  const handoffUrl = needsAttention ? submission.handoff_url : undefined;
+  const portalUrl = review.portal_url?.trim();
+  const canFinishInDashboard = Boolean(handoffUrl);
   const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
   const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
   const safeAttentionReason = review.attention_reason
@@ -2021,12 +2030,13 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
   const completedItems = completedSubmissionItems(review);
   const educationDriftWarning = educationDriftMessage(educationDrift(packet.spec, educationProfile));
   const educationProfilePending = educationProfileStatus !== "ready";
+  const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer));
   const [previewState, setPreviewState] = useState<{ url: string; loaded: boolean; failed: boolean } | null>(null);
   const previewUrl = review.preview_screenshot_url ?? "";
   const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
   const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
   const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
-  const finalApprovalBlocked = educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || !previewReady || approving;
+  const finalApprovalBlocked = educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || approving;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -2117,12 +2127,25 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
         )}
         {review.verification?.status === "handoff" && (
           <div className="mt-4 rounded-inner border border-border bg-surface px-4 py-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Code needed</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">The code needs you</p>
+            <p className="mt-1 text-xs text-muted">
+              Litos was not sure it finished this step. Finish it in the browser panel here when it is available, or open the company page.
+            </p>
+          </div>
+        )}
+        {needsAttention && !canFinishInDashboard && (
+          <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">No live browser to reopen</p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              This stop came from a managed Stratus run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. The fastest path is to open the company page once, finish the check, then mark it done.
+            </p>
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
-          {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>}
-          {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Answer</Button>}
+          {canFinishInDashboard && <a href="#live-company-page" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Finish in this dashboard</a>}
+          {needsAttention && handoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
+          {needsAttention && !handoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
+          {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
@@ -2150,20 +2173,35 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
             Required answer missing.
           </p>
         )}
+        {review.status === "ready_for_final_approval" && sensitiveQuestionPresent && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            A sensitive demographic, identity, or legal question is present. Leave it for the applicant before sending.
+          </p>
+        )}
+        <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
-        <div className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">Preview</p></div>
-        {previewUrl ? (
-          <img
-            src={previewUrl}
-            alt="The company's application page after Litos filled it in"
-            className="h-auto w-full"
-            onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
-            onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
+        <div id="live-company-page" className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">{canFinishInDashboard ? "Finish the company page here" : "What the form looked like after we filled it in"}</p></div>
+        {canFinishInDashboard && handoffUrl ? (
+          <iframe
+            src={handoffUrl}
+            title="Live company application page"
+            className="h-[72vh] min-h-[560px] w-full bg-white"
+            allow="clipboard-read; clipboard-write"
           />
-        ) : (
-          <div className="p-10 text-center text-sm text-muted">Loading preview.</div>
-        )}
+        ) : review.preview_screenshot_url ? (
+          previewFailed ? (
+            <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
+          ) : (
+            <img
+              src={review.preview_screenshot_url}
+              alt="The company's application page after Litos filled it in"
+              className="h-auto w-full"
+              onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
+              onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
+            />
+          )
+        ) : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
       </Card>
     </div>
   );
