@@ -1053,15 +1053,34 @@ function Applications() {
     }
   }
 
-  async function completeHandoff() {
+  async function completeHandoff(outcome: "cleared" | "submitted" = "cleared") {
     if (!selected || !submission) return;
     setError(null);
     try {
       const result = qaMode
-        ? { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
-        : await api<SubmissionResponse>(`/applications/${selected.id}/submission/handoff-complete`, { method: "POST" });
+        ? outcome === "submitted"
+          ? {
+            ...submission,
+            review: {
+              ...submission.review,
+              status: "submitted" as const,
+              submitted_at: new Date().toISOString(),
+              attention_reason: undefined,
+              receipt: {
+                confirmation_text: "Submitted by the applicant in the live company page",
+                final_url: submission.review.portal_url ?? "/qa/portal-submission/success",
+                captured_at: new Date().toISOString(),
+                source: "attended_handoff" as const,
+              },
+            },
+          }
+          : { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
+        : await api<SubmissionResponse>(`/applications/${selected.id}/submission/handoff-complete`, {
+          method: "POST",
+          body: JSON.stringify({ outcome }),
+        });
       setSubmission(result);
-      moveToScreen("portal");
+      moveToScreen(result.review.status === "submitted" ? "submitted" : "portal");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "We could not tell whether it went through.");
     }
@@ -1993,7 +2012,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ packet, submission, approving, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: () => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ packet, submission, approving, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
@@ -2110,7 +2129,8 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
           {needsAttention && submission.handoff_url && <a href={submission.handoff_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>}
           {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Answer</Button>}
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
-          {needsAttention && <Button onClick={onHandoffComplete} variant="secondary">I finished it myself</Button>}
+          {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
+          {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
           {review.status === "ready_for_final_approval" && <button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}

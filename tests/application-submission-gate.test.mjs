@@ -38,7 +38,10 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
-  assert.match(dashboard, /I finished it myself/);
+  assert.match(dashboard, /I cleared the check/);
+  assert.match(dashboard, /I submitted it myself/);
+  assert.match(dashboard, /JSON\.stringify\(\{ outcome \}\)/);
+  assert.match(dashboard, /source: "attended_handoff"/);
   assert.match(dashboard, /Open the company page/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
