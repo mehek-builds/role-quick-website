@@ -1021,9 +1021,12 @@ function Applications() {
     await prepareApplication(questions);
   }
 
-  async function prepareApplication(finalQuestions = questions) {
+  async function prepareApplication(
+    finalQuestions = questions,
+    options: { allowServerAnswerRefresh?: boolean } = {},
+  ) {
     if (!selected) return;
-    if (finalQuestions.some((question) => question.required && !question.answer.trim())) {
+    if (!options.allowServerAnswerRefresh && finalQuestions.some((question) => question.required && !question.answer.trim())) {
       setError("Some answers are missing. Add them first.");
       return;
     }
@@ -1102,7 +1105,7 @@ function Applications() {
     if (!submission) return;
     const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
     setQuestions(currentQuestions);
-    await prepareApplication(currentQuestions);
+    await prepareApplication(currentQuestions, { allowServerAnswerRefresh: true });
   }
 
   async function approveFinalSubmission() {
