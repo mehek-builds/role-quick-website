@@ -22,7 +22,7 @@ import {
   setSession,
   setAutomationSettings,
 } from "@/lib/api";
-import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
+import { isSafeCheckoutUrl } from "@/lib/billing";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { API_URL } from "@/lib/config";
 import { passwordFormProblem } from "@/app/login/password-form";
@@ -352,7 +352,7 @@ export default function Settings() {
     setError(null);
     try {
       const checkout = await createCheckout();
-      if (!isLemonSqueezyCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
+      if (!isSafeCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
       track("checkout_started");
       window.location.assign(checkout.url);
     } catch (checkoutError) {

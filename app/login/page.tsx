@@ -15,7 +15,7 @@ import {
   hasLitosHistory,
   createCheckout,
 } from "@/lib/api";
-import { isLemonSqueezyCheckoutUrl } from "@/lib/billing";
+import { isSafeCheckoutUrl } from "@/lib/billing";
 import { litosClientHeaders } from "@/lib/product";
 import { googleSignInError, requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
@@ -359,7 +359,7 @@ export default function Login() {
         if (next === "upgrade") {
           try {
             const checkout = await createCheckout();
-            if (isLemonSqueezyCheckoutUrl(checkout.url)) {
+            if (isSafeCheckoutUrl(checkout.url)) {
               track("checkout_started", { source: "post_login_upgrade" });
               window.location.assign(checkout.url);
               return;
