@@ -302,6 +302,10 @@ export type JobsPage = {
   ranked?: boolean;
   /** How many postings were scored to produce this ordering, or null when nothing was ranked. */
   ranked_pool?: number | null;
+  /** How many resume-ranked postings were hidden because their match score was below the board floor. */
+  match_hidden?: number;
+  /** Minimum visible match score for resume-ranked boards, or null for preference-only ranking. */
+  minimum_match_score?: number | null;
   /** True when postings matched that were never ranked, so the list can say why it stopped. */
   pool_exhausted?: boolean;
   /** True when this list only holds employers whose sponsorship Litos could confirm. */

@@ -89,6 +89,7 @@ export default function JobsPage() {
      Both are needed to describe the list truthfully: see the footer. */
   const [rankedPool, setRankedPool] = useState<number | null>(null);
   const [poolExhausted, setPoolExhausted] = useState(false);
+  const [minimumMatchScore, setMinimumMatchScore] = useState<number | null>(null);
   /* Whether the board being shown is the sponsor-only one. Read off the RESPONSE rather than off
      the account, because the server is what decides it: an account that declared a need for
      sponsorship at setup gets the filter whether or not this page asks for it. */
@@ -136,6 +137,7 @@ export default function JobsPage() {
       setHasMore(page.has_more === true);
       setRankedPool(page.ranked_pool ?? null);
       setPoolExhausted(page.pool_exhausted ?? false);
+      setMinimumMatchScore(page.minimum_match_score ?? null);
       setApplied(buildAppliedIndex(QA_APPLIED));
     });
     return () => {
@@ -157,6 +159,7 @@ export default function JobsPage() {
           setHasMore(result.has_more === true);
           setRankedPool(result.ranked_pool ?? null);
           setPoolExhausted(result.pool_exhausted === true);
+          setMinimumMatchScore(result.minimum_match_score ?? null);
           setSponsorOnly(result.sponsor_only === true);
           const completed = {
             key,
@@ -221,6 +224,7 @@ export default function JobsPage() {
       setHasMore(result.has_more === true);
       setRankedPool(result.ranked_pool ?? null);
       setPoolExhausted(result.pool_exhausted === true);
+      setMinimumMatchScore(result.minimum_match_score ?? null);
       /* Carried forward from every page, not just the first. The banner is the only thing telling
          the reader their list is filtered, and leaving it on page one's answer means a filter that
          turns on mid-session shows a filtered list under no explanation. */
@@ -400,8 +404,8 @@ export default function JobsPage() {
             {ranked
               ? rankedByResume
                 ? rankedPool !== null && poolExhausted
-                  ? ` · best resume matches from ${rankedPool} recently matched roles`
-                  : " · sorted by resume match"
+                  ? ` · best ${minimumMatchScore ?? 25}%+ resume matches from ${rankedPool} recently matched roles`
+                  : ` · sorted by resume match${minimumMatchScore !== null ? ` · ${minimumMatchScore}%+ only` : ""}`
                 : rankedPool !== null && poolExhausted
                   ? ` · best preference matches from ${rankedPool} recently matched roles`
                   : " · sorted by your preferences"

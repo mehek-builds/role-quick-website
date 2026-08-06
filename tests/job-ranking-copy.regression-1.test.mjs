@@ -8,8 +8,10 @@ test("Jobs describes resume-match and preference fallback ranking accurately", (
 
   assert.match(page, /function hasServerMatchScores/);
   assert.match(page, /const rankedByResume = useMemo\(\(\) => hasServerMatchScores\(jobs\), \[jobs\]\)/);
+  assert.match(page, /minimum_match_score/);
+  assert.match(page, /minimumMatchScore[\s\S]*%\+ only/);
   assert.match(page, /sorted by resume match/);
-  assert.match(page, /best resume matches/);
+  assert.match(page, /best [\s\S]*%\+ resume matches/);
   assert.match(page, /sorted by your preferences/);
   assert.match(page, /best preference matches/);
   assert.doesNotMatch(page, /sorted by fit to your resume/);
