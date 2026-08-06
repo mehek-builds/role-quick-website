@@ -36,6 +36,27 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // test rather than the product. Bounded spans, so a match cannot span half the file.
   assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
   assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
+  assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
+  assert.match(dashboard, /disabled=\{finalApprovalBlocked\}/);
+  assert.match(dashboard, /const requiredAnswerMissing = review\.questions\.some/);
+  assert.match(dashboard, /const sensitiveQuestionPresent = review\.questions\.some/);
+  assert.match(dashboard, /requiresSensitiveQuestionReview\(question\.question, question\.answer\)/);
+  assert.match(dashboard, /return !\(answer \?\? ""\)\.trim\(\)/);
+  assert.match(dashboard, /Loading preview\./);
+  assert.match(dashboard, /Required answer missing\./);
+  assert.match(dashboard, /A sensitive demographic, identity, or legal question is present/);
+  assert.match(dashboard, />Resume<\/p>/);
+  assert.match(dashboard, />Answers<\/p>/);
+  assert.match(dashboard, /<ResumePaper spec=\{stripMetadata\(packet\.spec\)\} name=\{contactName\(packet\.spec\)\} contact=\{contactLine\(packet\.spec\)\} \/>/);
+  assert.match(dashboard, /onError=\{\(\) => setPreviewState\(\{ url: previewUrl, loaded: false, failed: true \}\)\}/);
+  // A CAPTCHA handoff is only a live control when the backend gives the dashboard a live browser
+  // URL. Managed Stratus preview stops carry only screenshot evidence, so those must not render
+  // a button-shaped promise that opens nowhere.
+  assert.match(dashboard, /const handoffUrl = needsAttention \? submission\.handoff_url : undefined/);
+  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\)/);
+  assert.match(dashboard, /<iframe[\s\S]{0,300}src=\{handoffUrl\}[\s\S]{0,300}Live company application page/);
+  assert.match(dashboard, /No live browser to reopen/);
+  assert.match(dashboard, /Open company page/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);
@@ -43,6 +64,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /JSON\.stringify\(\{ outcome \}\)/);
   assert.match(dashboard, /source: "attended_handoff"/);
   assert.match(dashboard, /Open the company page/);
+  assert.match(dashboard, /Litos will never pretend to be you/);
+  assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
@@ -61,7 +84,6 @@ test("overview keeps three application states and sends matches to the review sc
   assert.doesNotMatch(overview, /Daily resume preparation/);
   assert.match(overview, /MONTHLY_PRO_APPLICATION_LIMIT = 1_000/);
   assert.match(overview, /return me\.usage\.resumes\.limit/);
-
   /* THE REVIEW DRAWER IS GONE, and most of what this test used to assert went with it: role=dialog,
      the two panes, "Send it", canSubmit, /submit-request, the 2.5s poll, the focus trap and the
      focus restore. None of those are deleted behaviours. They are the review screen's behaviours,
@@ -76,6 +98,20 @@ test("overview keeps three application states and sends matches to the review sc
   assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
   assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
 
+  /* Home is a launcher, not an approval surface. The card may prepare a packet, but a ready packet
+     must open Tracker so the student sees the exact resume, answers, PDF and filled preview before
+     the route that can submit is ever called. */
+  const shipped = shippedCode(overview);
+  assert.doesNotMatch(shipped, /role="dialog"/);
+  assert.doesNotMatch(shipped, /"Send it"/);
+  assert.doesNotMatch(shipped, /function ReviewDrawer/);
+  // Word-bounded: `ApplicationReview` is a live type name and ends in the same seven letters.
+  assert.doesNotMatch(shipped, /\bonReview\b/);
+  assert.doesNotMatch(shipped, /\/submission\/approve/);
+  assert.doesNotMatch(shipped, /\/submit-request/);
+  assert.doesNotMatch(shipped, /async function submitApplication/);
+  assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
+  assert.match(overview, /<PendingLabel>Getting ready<\/PendingLabel>/);
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.
   assert.match(overview, /const todayJobs = rankedJobs;/);
@@ -115,7 +151,8 @@ test("the review screen gates and performs the submission", async () => {
   assert.match(review, /\/submit-request/);
   assert.match(review, /\/submission\/approve/);
   assert.match(review, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
-  assert.match(review, /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| !previewReady \|\| approving/);
+  assert.match(review, /const sensitiveQuestionPresent = review\.questions\.some/);
+  assert.match(review, /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| approving/);
   assert.match(review, /onClick=\{approveVerifiedPreview\}/);
   assert.match(review, /disabled=\{finalApprovalBlocked\}/);
   assert.match(review, /Check resume/);

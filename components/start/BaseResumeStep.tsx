@@ -73,6 +73,14 @@ const SHEET_CAP = {
 } as const;
 
 type LogRow = { t: string; text: string };
+const RACE_AND_GENDER_QUESTION_FIELDS = [
+  { key: "gender", label: "Gender", placeholder: "Female, Male, Non-binary, Decline to self-identify" },
+  { key: "transgender_status", label: "Transgender experience", placeholder: "Yes, No, Decline to self-identify" },
+  { key: "sexual_orientation", label: "Sexual orientation", placeholder: "Heterosexual, Gay or lesbian, Bisexual, Decline to self-identify" },
+  { key: "disability_status", label: "Disability status", placeholder: "Yes, No, Decline to self-identify" },
+  { key: "veteran_status", label: "Veteran status", placeholder: "Yes, No, Decline to self-identify" },
+  { key: "race", label: "Race / ethnicity", placeholder: "White, Asian, Black or African American, Hispanic or Latino, Decline to self-identify" },
+] as const;
 
 export function BaseResumeStep({
   parsed,
@@ -117,6 +125,7 @@ export function BaseResumeStep({
      explicit is not a fluency claim; pressing "Looks right" is what makes it a declaration. Left
      blank, nothing is written and it stays a gap, so a skip is never mistaken for "no languages". */
   const [languages, setLanguages] = useState(languageSuggestion.join(", "));
+  const [raceAndGenderPrefs, setRaceAndGenderPrefs] = useState<Record<string, string>>(() => profile?.eeo_prefs ?? {});
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
   /* Two phases, one screen. `compare` puts the upload beside the rebuild so the difference is an
      observation rather than a claim; `detail` is what they get after choosing. Local state, not a
@@ -524,6 +533,7 @@ export function BaseResumeStep({
          A blank stays a gap on purpose: an empty list would record "no languages", which is a
          different and wrong answer to the next form that asks. Written AFTER persist so a failure
          here cannot cost them the resume edits they just made. */
+      const profilePatch: Partial<ApplicationProfile> = {};
       if (languageGap) {
         const declared = languages
           .split(",")
@@ -533,20 +543,32 @@ export function BaseResumeStep({
           /* `!demo` for the same reason persist() has it: a QA session has no account, so an
              unguarded write here would 401 and show "Could not save your resume" on the one screen
              the harness exists to make reviewable without logging in. */
-          if (!demo) await putApplicationProfile({ languages: declared });
+          profilePatch.languages = declared;
           track("onboarding_languages_declared", {
             count: declared.length,
             prefilled: languageSuggestion.length > 0,
           });
         }
       }
+      profilePatch.eeo_prefs = Object.keys(raceAndGenderPrefs).length > 0 ? raceAndGenderPrefs : null;
+      if (!demo && Object.keys(profilePatch).length > 0) await putApplicationProfile(profilePatch);
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your resume.");
       setFailure("finish");
       setSaving(false);
     }
-  }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length, demo]);
+  }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo]);
+
+  function patchRaceAndGenderPref(key: string, value: string) {
+    setRaceAndGenderPrefs((prev) => {
+      const next = { ...prev };
+      const trimmed = value.trim();
+      if (trimmed) next[key] = trimmed;
+      else delete next[key];
+      return next;
+    });
+  }
 
   const contact: ContactHeader = {
     full_name: parsed?.full_name ?? "",
@@ -874,6 +896,29 @@ export function BaseResumeStep({
                 placeholder="English, Hindi, Spanish"
                 className="mt-2.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
               />
+            </div>
+          )}
+
+          {finished && (
+            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+              <p className="text-[13px] text-ink">Optional questions about race and gender</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Employers ask these on voluntary forms. Litos uses your exact wording, or chooses decline when you leave a field blank.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-3">
+                {RACE_AND_GENDER_QUESTION_FIELDS.map((field) => (
+                  <label key={field.key} htmlFor={`base-race-gender-${field.key}`} className="block">
+                    <span className="text-xs font-medium text-muted">{field.label}</span>
+                    <input
+                      id={`base-race-gender-${field.key}`}
+                      value={raceAndGenderPrefs[field.key] ?? ""}
+                      onChange={(event) => patchRaceAndGenderPref(field.key, event.target.value)}
+                      placeholder={field.placeholder}
+                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    />
+                  </label>
+                ))}
+              </div>
             </div>
           )}
 

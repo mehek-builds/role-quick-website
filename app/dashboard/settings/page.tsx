@@ -37,9 +37,10 @@ import {
 } from "./email-verification-flow";
 import TargetingCard from "@/components/app/TargetingCard";
 
-/* Application profile: exactly the fields the backend encrypts and the
-   extension autofills (PRD-v2 Section 4). Voluntary self-identification only
-   fills when the student explicitly saves an answer here. */
+/* Application profile: exactly the fields the backend stores and the extension
+   autofills (PRD-v2 Section 4). Questions about race and gender are optional,
+   but editable here so a student can answer once and have Litos use that
+   wording instead of stopping every application on the same voluntary screen. */
 
 const TRI = [
   { value: "", label: "Not set" },
@@ -229,7 +230,7 @@ export default function Settings() {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
   }
 
-  function patchEeo(key: keyof typeof SELF_ID_OPTIONS, value: string) {
+  function patchRaceAndGender(key: keyof typeof SELF_ID_OPTIONS, value: string) {
     setProfile((prev) => {
       const current = prev ?? {};
       const nextPrefs = { ...(current.eeo_prefs ?? {}) };
@@ -880,15 +881,21 @@ export default function Settings() {
 
         <div className="mt-6 border-t border-border pt-5">
           <p className="text-xs font-medium text-muted">Personal questions</p>
+          <h3 className="text-sm font-medium text-ink">Optional questions about race and gender</h3>
+          <p className="mt-1 text-xs leading-5 text-muted">
+            Litos uses these exact answers for voluntary questions about race and gender. Leave any field blank and it will choose decline when the form offers it.
+          </p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <StringSelect label="Gender identity" value={profile.eeo_prefs?.gender} options={SELF_ID_OPTIONS.gender} onChange={(v) => patchEeo("gender", v)} />
-            <StringSelect label="Transgender experience" value={profile.eeo_prefs?.transgender_status} options={SELF_ID_OPTIONS.transgender_status} onChange={(v) => patchEeo("transgender_status", v)} />
-            <StringSelect label="Sexual orientation" value={profile.eeo_prefs?.sexual_orientation} options={SELF_ID_OPTIONS.sexual_orientation} onChange={(v) => patchEeo("sexual_orientation", v)} />
-            <StringSelect label="Disability status" value={profile.eeo_prefs?.disability_status} options={SELF_ID_OPTIONS.disability_status} onChange={(v) => patchEeo("disability_status", v)} />
-            <StringSelect label="Veteran status" value={profile.eeo_prefs?.veteran_status} options={SELF_ID_OPTIONS.veteran_status} onChange={(v) => patchEeo("veteran_status", v)} />
-            <StringSelect label="Race / ethnicity" value={profile.eeo_prefs?.race} options={SELF_ID_OPTIONS.race} onChange={(v) => patchEeo("race", v)} />
+            <StringSelect label="Gender identity" value={profile.eeo_prefs?.gender} options={SELF_ID_OPTIONS.gender} onChange={(v) => patchRaceAndGender("gender", v)} />
+            <StringSelect label="Transgender experience" value={profile.eeo_prefs?.transgender_status} options={SELF_ID_OPTIONS.transgender_status} onChange={(v) => patchRaceAndGender("transgender_status", v)} />
+            <StringSelect label="Sexual orientation" value={profile.eeo_prefs?.sexual_orientation} options={SELF_ID_OPTIONS.sexual_orientation} onChange={(v) => patchRaceAndGender("sexual_orientation", v)} />
+            <StringSelect label="Disability status" value={profile.eeo_prefs?.disability_status} options={SELF_ID_OPTIONS.disability_status} onChange={(v) => patchRaceAndGender("disability_status", v)} />
+            <StringSelect label="Veteran status" value={profile.eeo_prefs?.veteran_status} options={SELF_ID_OPTIONS.veteran_status} onChange={(v) => patchRaceAndGender("veteran_status", v)} />
+            <StringSelect label="Race / ethnicity" value={profile.eeo_prefs?.race} options={SELF_ID_OPTIONS.race} onChange={(v) => patchRaceAndGender("race", v)} />
           </div>
         </div>
+
+        <p className="mt-5 text-xs leading-5 text-faint">Personal questions are answered only from values you save here, or declined when possible.</p>
       </Card>}
 
       {/* Plan + usage */}
