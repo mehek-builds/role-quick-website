@@ -36,18 +36,62 @@ function normalizedChecklistText(value: string): string {
     .trim();
 }
 
+function isCaptchaChecklistText(value: string): boolean {
+  return /captcha|recaptcha|hcaptcha|prove you are human/i.test(value);
+}
+
 function blockerDuplicatesQuestion(blocker: string, questions: readonly { question: string }[] | undefined): boolean {
   const normalizedBlocker = normalizedChecklistText(blocker);
   if (normalizedBlocker.startsWith("ai drafted answer")) return true;
+  if (normalizedBlocker.startsWith("open ended question left for you")) return true;
+  if (normalizedBlocker.startsWith("work eligibility question left for you")) return true;
   return (questions ?? []).some((question) => {
     const normalizedQuestion = normalizedChecklistText(question.question);
     return normalizedQuestion.length > 10 && normalizedBlocker.includes(normalizedQuestion);
   });
 }
 
+function fieldEvidenceAlreadyCoversBlocker(
+  blocker: string,
+  filledFields: readonly string[] | undefined,
+  questions: readonly { question: string; answer?: string }[] | undefined,
+): boolean {
+  const normalizedBlocker = normalizedChecklistText(blocker);
+  const evidence = [
+    ...(filledFields ?? []),
+    ...(questions ?? [])
+      .filter((question) => (question.answer ?? "").trim())
+      .map((question) => question.question),
+  ].map(normalizedChecklistText);
+  const hasEvidence = (pattern: RegExp) => evidence.some((item) => pattern.test(item));
+
+  if (/\bdiscipline\b|field of study|degree subject|major\b/.test(normalizedBlocker)) {
+    return hasEvidence(/\bdiscipline\b|field of study|degree subject|major\b/);
+  }
+  if (/graduation year|expected graduation year|graduate year|grad year|end year/.test(normalizedBlocker)) {
+    return hasEvidence(/graduation year|expected graduation year|grad year|end year|education end year/);
+  }
+  if (/graduation month|expected graduation month|end month/.test(normalizedBlocker)) {
+    return hasEvidence(/graduation month|expected graduation month|end month|education end month/);
+  }
+  if (/graduation date|expected graduation date|graduate date/.test(normalizedBlocker)) {
+    return hasEvidence(/graduation date|expected graduation date|grad date|education end/);
+  }
+  if (/\bgpa\b|grade point average/.test(normalizedBlocker)) {
+    return hasEvidence(/\bgpa\b|grade point average/);
+  }
+  if (/university|school|college|institution/.test(normalizedBlocker)) {
+    return hasEvidence(/university|school|college|institution/);
+  }
+  if (/\bdegree\b|education level/.test(normalizedBlocker)) {
+    return hasEvidence(/\bdegree\b|education level/);
+  }
+  return false;
+}
+
 function isHumanOnlyChecklistLabel(label: string): boolean {
   const normalized = label.toLowerCase();
-  if (/captcha|recaptcha|hcaptcha/.test(normalized)) return true;
+  if (isCaptchaChecklistText(normalized)) return true;
   if (/privacy|privacy policy|privacy notice|candidate-privacy|consent|recording|brighthire/.test(normalized)) return true;
   if (/salary|compensation|pay expectation|expected pay|annualized total compensation/.test(normalized)) return true;
   if (/(immigration support|legally authorized|work authorization|authorized to work|require sponsorship|visa sponsorship)/.test(normalized)) {
@@ -61,10 +105,26 @@ function addUnique(items: SubmissionChecklistItem[], item: SubmissionChecklistIt
   items.push(item);
 }
 
-export function humanInputItems(review: Pick<ApplicationReview, "attention_reason" | "questions" | "status">): SubmissionChecklistItem[] {
+export function humanInputItems(review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "filled_fields" | "questions" | "stall" | "status">): SubmissionChecklistItem[] {
   const items: SubmissionChecklistItem[] = [];
-  for (const blocker of compactLines(review.attention_reason)) {
+  const blockers = compactLines(review.attention_reason);
+  const captchaBlockers = blockers.filter(isCaptchaChecklistText);
+  const captchaOnly = captchaBlockers.length > 0
+    || review.stall?.kind === "human_verification"
+    || review.attention_categories?.includes("captcha");
+
+  if (captchaOnly) {
+    addUnique(items, {
+      id: "blocker-captcha-requires-your-attention",
+      label: captchaBlockers[0] ?? "CAPTCHA requires your attention",
+      action: "Open page",
+    });
+    return items;
+  }
+
+  for (const blocker of blockers) {
     if (blockerDuplicatesQuestion(blocker, review.questions)) continue;
+    if (fieldEvidenceAlreadyCoversBlocker(blocker, review.filled_fields, review.questions)) continue;
     addUnique(items, {
       id: `blocker-${keyFor(blocker)}`,
       label: blocker,
