@@ -52,6 +52,29 @@ function appendUnseen(current: MonitoredJob[], incoming: MonitoredJob[]): Monito
   return [...current, ...incoming.filter((job) => !seen.has(job.id))];
 }
 
+type BadgeMatch = {
+  score: number;
+  band?: string | null;
+  matched?: number | null;
+  total?: number | null;
+};
+
+function badgeMatchFor(job: MonitoredJob, detail: JobMatch | null | undefined): BadgeMatch | null | undefined {
+  if (job.match_score !== undefined && job.match_score !== null) {
+    return {
+      score: job.match_score,
+      band: detail?.band ?? null,
+      matched: detail?.matched ?? null,
+      total: detail?.total ?? null,
+    };
+  }
+  return detail;
+}
+
+function hasServerMatchScores(jobs: MonitoredJob[] | null): boolean {
+  return jobs?.some((job) => job.match_score !== undefined && job.match_score !== null) ?? false;
+}
+
 export default function JobsPage() {
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
   const [ranked, setRanked] = useState(false);
@@ -216,6 +239,7 @@ export default function JobsPage() {
   }, [employmentType, hasMore, jobs, loadingMore, location, query, remoteOnly]);
 
   const newToday = useMemo(() => (jobs ? countNewToday(jobs) : 0), [jobs]);
+  const rankedByResume = useMemo(() => hasServerMatchScores(jobs), [jobs]);
   /* One reading of "what is narrowing this list", shared by the branch and by the sentence, so the
      two can never name different filters. See features/jobs/domain/job-filters.ts. */
   const filters = useMemo(
@@ -364,19 +388,23 @@ export default function JobsPage() {
           <ul className="grid grid-cols-1 gap-3">
             {jobs.map((job) => (
               <li key={job.id}>
-                <JobRow job={job} applied={isJobApplied(job, applied)} match={matches[job.id]} />
+                <JobRow job={job} applied={isJobApplied(job, applied)} match={badgeMatchFor(job, matches[job.id])} />
               </li>
             ))}
           </ul>
 
-          {/* Name the loaded pool and the account preferences that now drive its ordering. */}
+          {/* Name the loaded pool and the score family that actually drives its ordering. */}
           <p className="pt-1 text-center text-xs text-muted">
             {jobs.length} role{jobs.length === 1 ? "" : "s"} loaded
             {hasMore ? ", more to load" : ""}
             {ranked
-              ? rankedPool !== null && poolExhausted
-                ? ` · best preference matches of the ${rankedPool} newest roles`
-                : " · sorted by your preferences"
+              ? rankedByResume
+                ? rankedPool !== null && poolExhausted
+                  ? ` · best resume matches from ${rankedPool} recently matched roles`
+                  : " · sorted by resume match"
+                : rankedPool !== null && poolExhausted
+                  ? ` · best preference matches from ${rankedPool} recently matched roles`
+                  : " · sorted by your preferences"
               : " · newest first"}
           </p>
 
@@ -408,7 +436,7 @@ export default function JobsPage() {
  * obvious thing in the world to click, and giving the row two side-by-side buttons made the student
  * choose between them before they had read the role.
  */
-function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; match: JobMatch | null | undefined }) {
+function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; match: BadgeMatch | null | undefined }) {
   const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]
     .filter(Boolean)
     .join(" · ");
@@ -535,21 +563,25 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
  *    not a prediction of anything. DESIGN.md's blue-soft exception stands, at Mehek's direction
  *    (2026-07-28), so the number reads at a glance while scanning a column of rows.
  *
- * WHAT IS ADDED, because the objection to a bare percentage in a list was correct: the band label
- * and the "N of M requirements" denominator ride in the tooltip, so the number can be interrogated
- * where it sits instead of only on the review screen.
+ * WHAT IS ADDED, because the objection to a bare percentage in a list was correct: the visible
+ * number comes from the server-ranked score, and the tooltip may add the denominator when the
+ * detail call has it.
  */
-function MatchBadge({ match }: { match: JobMatch | null | undefined }) {
+function MatchBadge({ match }: { match: BadgeMatch | null | undefined }) {
   // undefined = still scoring, null = nothing honest to say. Neither prints.
   if (!match) return null;
   const pct = Math.max(0, Math.min(100, Math.round(match.score)));
+  const detail =
+    match.matched !== undefined && match.matched !== null && match.total !== undefined && match.total !== null
+      ? ` Your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting. ${MATCH_WEIGHTING_NOTE}`
+      : " The list is sorted by the same resume match score shown here.";
   // The weighting clause is APPENDED, not folded in: the sentence before it is pinned literally by
   // tests/match-metric-coherence.regression-1.test.mjs and stays exactly as it was. See
   // MATCH_WEIGHTING_NOTE for why a count beside a weighted score needed saying out loud.
   return (
     <span
       className="shrink-0 rounded-full bg-brand-soft px-2.5 py-0.5 font-mono text-[11px] font-medium text-brand-ink"
-      title={`${match.band ?? "Match"}: your resume covers ${match.matched} of the ${match.total} requirements Litos counted in this posting. ${MATCH_WEIGHTING_NOTE}`}
+      title={`${pct}% match.${detail}`}
     >
       {pct}% match
     </span>
