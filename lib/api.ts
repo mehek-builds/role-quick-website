@@ -486,6 +486,7 @@ export type ApplicationReview = {
     screenshot_url?: string;
     captured_at: string;
     reference_id?: string;
+    source?: "managed_browser" | "chrome_extension" | "email_fallback" | "ats_api" | "attended_handoff";
   };
 };
 
