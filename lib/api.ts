@@ -141,7 +141,7 @@ export type Me = {
   guest_expires_at?: string | null;
   usage: { contacts: Usage; drafts: Usage; resumes: Usage };
   upgrade_url?: string;
-  billing_provider?: "lemonsqueezy";
+  billing_provider?: "litos" | "lemonsqueezy";
   checkout_available?: boolean;
   billing_status?: string | null;
   billing_renews_at?: string | null;
@@ -150,7 +150,14 @@ export type Me = {
 };
 
 export function createCheckout() {
-  return api<{ provider: "lemonsqueezy"; url: string }>("/billing/checkout", { method: "POST" });
+  return api<{
+    provider: "litos" | "lemonsqueezy";
+    url: string;
+    checkout_intent_id?: string;
+    interval?: "monthly" | "annual";
+    amount_cents?: number;
+    currency?: string;
+  }>("/billing/checkout", { method: "POST" });
 }
 
 export type OutreachContact = {
