@@ -273,6 +273,16 @@ test('an in-flight poll cannot install another packet under the current one', ()
   assert.match(dashboard, /selectedIdRef\.current = packet\.id;/);
 });
 
+test('portal controls only render for the selected packet submission', () => {
+  // A fast packet switch can leave the old packet's submission state in React for one commit. The
+  // portal controls must disappear until the submission id matches the selected packet, because
+  // those controls start, approve, or complete work against the selected packet id.
+  assert.match(dashboard, /const selectedSubmission = selected && submission\?\.application_id === selected\.id \? submission : null/);
+  assert.match(dashboard, /screen === "portal" && selectedSubmission/);
+  assert.match(dashboard, /submission=\{selectedSubmission\}/);
+  assert.match(dashboard, /if \(submission\.application_id !== selected\.id\) return;/);
+});
+
 test('resume fields cannot contain a newline', () => {
   // These were structurally single-line under <input>. The value flows into the resume spec, the
   // rendered PDF and the portal autofill payload, where a newline in an org or date field is a
@@ -342,7 +352,7 @@ test('the elapsed clock is anchored to the server, not to component mount', () =
   // when the send began, and falls back to the server stamp if that is somehow absent. The same
   // local anchor is now used for preparing, because a fresh click enters the screen before the
   // backend returns a fresh submit-request review.
-  assert.match(dashboard, /startedAt=\{submittingPhase === "sending" \? approveStartedAt \?\? submission\?\.review\.updated_at : prepareStartedAt \?\? submission\?\.review\.updated_at\}/);
+  assert.match(dashboard, /startedAt=\{submittingPhase === "sending" \? approveStartedAt \?\? selectedSubmission\?\.review\.updated_at : prepareStartedAt \?\? selectedSubmission\?\.review\.updated_at\}/);
   assert.match(dashboard, /setApproveStartedAt\(new Date\(\)\.toISOString\(\)\)/);
   assert.match(dashboard, /setPrepareStartedAt\(new Date\(\)\.toISOString\(\)\)/);
   assert.match(dashboard, /setApproveStartedAt\(null\)/);

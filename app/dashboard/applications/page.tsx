@@ -603,6 +603,7 @@ function Applications() {
 
   const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
   const review = selected?.spec._review;
+  const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
@@ -1026,6 +1027,7 @@ function Applications() {
     options: { allowServerAnswerRefresh?: boolean } = {},
   ) {
     if (!selected) return;
+    const applicationId = selected.id;
     if (!options.allowServerAnswerRefresh && finalQuestions.some((question) => question.required && !question.answer.trim())) {
       setError("Some answers are missing. Add them first.");
       return;
@@ -1037,13 +1039,14 @@ function Applications() {
     track("application_submission_requested", { source: qaMode ? "qa" : "review" });
     try {
       if (!qaMode) {
-        const result = await api<SubmissionResponse>(`/applications/${selected.id}/submit-request`, {
+        const result = await api<SubmissionResponse>(`/applications/${applicationId}/submit-request`, {
           method: "POST",
           body: JSON.stringify({ questions: finalQuestions }),
         });
         captureCompletedSubmission(result, "review");
+        setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+        if (selectedIdRef.current !== applicationId) return;
         setSubmission(result);
-        setPackets((current) => current?.map((packet) => packet.id === selected.id ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
         // This response is the END of the run, not an acknowledgement of its start, and it is
         // routinely terminal ("failed", "needs_attention", "ready_for_final_approval"). It used to
         // be installed into state and then ignored for routing, which left the progress screen
@@ -1064,6 +1067,7 @@ function Applications() {
 
   async function completeHandoff(outcome: "cleared" | "submitted" = "cleared") {
     if (!selected || !submission) return;
+    if (submission.application_id !== selected.id) return;
     setError(null);
     try {
       const result = qaMode
@@ -1096,13 +1100,13 @@ function Applications() {
   }
 
   function reviewPortalQuestions() {
-    if (!submission) return;
+    if (!selected || !submission || submission.application_id !== selected.id) return;
     setQuestions((current) => mergeDiscoveredQuestions(current, submission.review.questions));
     moveToScreen("questions");
   }
 
   async function retryPreparation() {
-    if (!submission) return;
+    if (!selected || !submission || submission.application_id !== selected.id) return;
     const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
     setQuestions(currentQuestions);
     await prepareApplication(currentQuestions, { allowServerAnswerRefresh: true });
@@ -1110,6 +1114,7 @@ function Applications() {
 
   async function approveFinalSubmission() {
     if (!selected || !submission) return;
+    if (submission.application_id !== selected.id) return;
     if (qaMode === false && educationProfileStatus !== "ready") {
       setError("Litos has to check this resume against your current profile before sending.");
       moveToScreen("portal");
@@ -1421,20 +1426,20 @@ function Applications() {
         <QuestionsScreen
           questions={questions}
           onChange={setQuestions}
-          onBack={() => moveToScreen(submission?.review.status === "needs_attention" ? "portal" : "review")}
+          onBack={() => moveToScreen(selectedSubmission?.review.status === "needs_attention" ? "portal" : "review")}
           onSubmit={() => prepareApplication()}
-          reviewDiscovered={submission?.review.status === "needs_attention"}
+          reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
         />
       ) : screen === "submitting" ? (
         <PortalProgress
-          status={submission?.review.status}
-          startedAt={submittingPhase === "sending" ? approveStartedAt ?? submission?.review.updated_at : prepareStartedAt ?? submission?.review.updated_at}
+          status={selectedSubmission?.review.status}
+          startedAt={submittingPhase === "sending" ? approveStartedAt ?? selectedSubmission?.review.updated_at : prepareStartedAt ?? selectedSubmission?.review.updated_at}
           sending={submittingPhase === "sending"}
         />
-      ) : screen === "portal" && submission ? (
+      ) : screen === "portal" && selectedSubmission ? (
         <SubmissionScreen
           packet={selected}
-          submission={submission}
+          submission={selectedSubmission}
           approving={approvingId === selected.id}
           educationProfile={educationProfile}
           educationProfileStatus={qaMode === true ? "ready" : educationProfileStatus}
@@ -1445,7 +1450,7 @@ function Applications() {
           onReviewQuestions={reviewPortalQuestions}
         />
       ) : screen === "submitted" ? (
-        <SubmissionReceipt review={submission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
+        <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
       ) : (
         <>
           {/* The review surface is built to be read WITHOUT SCROLLING. It used to stack a JD pane, a
