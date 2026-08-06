@@ -74,6 +74,16 @@ test("humanInputItems turns portal blockers and missing answers into checklist r
   const items = humanInputItems(review);
   assert.deepEqual(items.map((item) => item.label), [
     "CAPTCHA requires your attention",
+  ]);
+  assert.equal(items[0]?.action, "Open page");
+});
+
+test("humanInputItems still shows non-captcha answer work when there is no captcha stop", () => {
+  const items = humanInputItems({
+    ...review,
+    attention_reason: "Are you legally authorized to work in Canada? required field is required\nAI-drafted answer needs your review before this goes out: \"Why Stripe?\"",
+  });
+  assert.deepEqual(items.map((item) => item.label), [
     "Why Stripe?",
     "When are you available to start full-time?",
     "What are your annualized total compensation expectations?",
@@ -84,6 +94,24 @@ test("humanInputItems turns portal blockers and missing answers into checklist r
   assert.equal(items.find((item) => item.label === "Why Stripe?")?.detail, "Drafted answer ready for review");
   assert.equal(items.find((item) => item.label === "When are you available to start full-time?")?.detail, "Required answer missing");
   assert.equal(items.find((item) => item.label === "What are your annualized total compensation expectations?")?.detail, "Needs your confirmation");
+});
+
+test("humanInputItems hides stale academic provider blockers already covered by filled evidence", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: [
+      "\"Discipline\" is required and is still empty",
+      "\"What is your expected graduation year?\" is required and is still empty",
+      "open-ended question left for you (could not draft a confident answer): \"are you interested in our women's winternship program?\"",
+    ].join("\n"),
+    questions: [],
+    filled_fields: [
+      "discipline* discipline--0",
+      "education end year field",
+    ],
+  });
+
+  assert.deepEqual(items, []);
 });
 
 test("completedSubmissionItems shows safe filled fields as done", () => {

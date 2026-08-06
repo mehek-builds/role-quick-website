@@ -467,6 +467,15 @@ export type ApplicationReview = {
   browser_context_id?: string;
   browser_session_id?: string;
   attention_reason?: string;
+  attention_categories?: Array<
+    | "captcha"
+    | "required_document"
+    | "sensitive_attestation"
+    | "required_field"
+    | "evidence_gap"
+    | "cover_letter"
+    | "unknown"
+  >;
   /* The typed half of attention_reason. Written by the backend when an application stops on a
      human-verification check; nothing here is rendered as prose. `stalled_at` is the queue's sort
      key and is deliberately not `updated_at`, which moves on unrelated writes. A stall is closed
