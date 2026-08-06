@@ -147,6 +147,9 @@ test("the review screen gates and performs the submission", async () => {
 
   // A required question with no answer stops the send, on the screen that can also collect it.
   assert.match(review, /questions\.filter\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
+  assert.match(review, /allowServerAnswerRefresh\?: boolean/);
+  assert.match(review, /!options\.allowServerAnswerRefresh && finalQuestions\.some/);
+  assert.match(review, /prepareApplication\(currentQuestions, \{ allowServerAnswerRefresh: true \}\)/);
   // Both endpoints: the first request, and the approval of a run already waiting on the student.
   assert.match(review, /\/submit-request/);
   assert.match(review, /\/submission\/approve/);
