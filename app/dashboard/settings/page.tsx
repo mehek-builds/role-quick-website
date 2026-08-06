@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import {
   api,
   ApplicationProfile,
+  type ApplicationEmailStatusResponse,
   clearSession,
   createCheckout,
   createEmailConnection,
   disconnectEmailConnection,
   type EmailConnectionsResponse,
   type EmailProvider,
+  getApplicationEmailStatus,
   getEmailConnections,
   getOnboardingState,
   getSponsorship,
@@ -96,6 +98,7 @@ export default function Settings() {
   const [sponsorBusy, setSponsorBusy] = useState(false);
   const [sponsorError, setSponsorError] = useState<string | null>(null);
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
+  const [applicationEmail, setApplicationEmail] = useState<ApplicationEmailStatusResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
@@ -152,11 +155,12 @@ export default function Settings() {
       try {
         const callbackProvider = new URLSearchParams(window.location.search).get("connection") as EmailProvider | null;
         const callbackStatus = new URLSearchParams(window.location.search).get("status");
-        const [meRes, profileRes, onboardingRes, initialConnections, sponsorRes] = await Promise.all([
+        const [meRes, profileRes, onboardingRes, initialConnections, applicationEmailRes, sponsorRes] = await Promise.all([
           api<Me>("/me"),
           api<ApplicationProfile>("/profile/application").catch(() => ({})),
           getOnboardingState(),
           getEmailConnections(),
+          getApplicationEmailStatus().catch(() => null),
           /* Null on a backend that predates this, which renders no card at all rather than an
              empty one. The two repos deploy separately and in either order. */
           getSponsorship().catch(() => null),
@@ -198,6 +202,7 @@ export default function Settings() {
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
         setEmailConnections(connectionRes);
+        setApplicationEmail(applicationEmailRes);
         setSponsorship(sponsorRes);
         if (verificationEnableProblem) setError(verificationEnableProblem);
         if (callbackProvider && callbackStatus) {
@@ -749,6 +754,32 @@ export default function Settings() {
               className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
             />
           </label>
+          <div className="rounded-inner border border-border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-ink">Use a Litos application email</p>
+                <p className="mt-1 text-xs leading-5 text-muted">
+                  New application packets use a Litos address when this is configured. Employer mail forwards to your account email.
+                </p>
+              </div>
+              <Chip
+                label={applicationEmail === null ? "Checking" : applicationEmail.configured ? "Active" : "Not configured"}
+                kind={applicationEmail?.configured ? "happened" : "quiet"}
+              />
+            </div>
+            <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium text-muted">Application domain</p>
+                <p className="mt-1 break-words text-sm text-ink">{applicationEmail?.domain ?? "Unavailable"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-muted">Forwarding</p>
+                <p className="mt-1 text-sm text-ink">
+                  {applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
+                </p>
+              </div>
+            </div>
+          </div>
           <div className="rounded-inner border border-border p-4">
             <div className="flex items-start justify-between gap-5">
               <label htmlFor="automatic-email-verification">

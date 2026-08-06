@@ -178,6 +178,10 @@ test("automation settings send field-specific updates so stale clients cannot re
   assert.match(settings, /verificationEnableDecision\(emailConnections\)/);
   assert.match(settings, /\(connected \? disconnectProvider\(provider\) : connectProvider\(provider, true\)\)/);
   assert.match(settings, /Inbox access/);
+  assert.match(settings, /getApplicationEmailStatus\(\)\.catch\(\(\) => null\)/);
+  assert.match(settings, /Use a Litos application email/);
+  assert.match(settings, /Employer mail forwards to your account email/);
+  assert.match(api, /getApplicationEmailStatus\(\)/);
   assert.doesNotMatch(settings, /Email connections<\/p>/);
   assert.match(settings, /shouldEnableVerificationAfterCallback/);
   assert.match(settings, /setAutomationSettings\(\{ automatic_verification_enabled: true \}\)/);

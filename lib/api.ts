@@ -215,6 +215,21 @@ export type GeneratedResume = {
   created_at: string | null;
 };
 
+export type ApplicationEmailAlias = {
+  alias: string;
+  forward_to: string;
+  status: string;
+  generated_resume_id: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type ApplicationEmailStatusResponse = {
+  configured: boolean;
+  domain: string | null;
+  aliases: ApplicationEmailAlias[];
+};
+
 export type CoverLetter = {
   body: string;
   word_count: number;
@@ -695,6 +710,10 @@ export type EmailConnectionsResponse = {
 
 export function getEmailConnections() {
   return api<EmailConnectionsResponse>("/email-connections");
+}
+
+export function getApplicationEmailStatus() {
+  return api<ApplicationEmailStatusResponse>("/application-email");
 }
 
 export function createEmailConnection(provider: EmailProvider) {
