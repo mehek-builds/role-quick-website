@@ -71,6 +71,14 @@ describe("the hook does not amplify requests or outlive its component", () => {
 });
 
 describe("the list scores the posting, not the preview of it", () => {
+  test("Jobs displays the match_score that also orders the server list", () => {
+    const jobsPage = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
+    assert.match(jobsPage, /function badgeMatchFor\(job: MonitoredJob, detail: JobMatch \| null \| undefined\)/);
+    assert.match(jobsPage, /job\.match_score !== undefined && job\.match_score !== null/);
+    assert.match(jobsPage, /score: job\.match_score,/);
+    assert.match(jobsPage, /match=\{badgeMatchFor\(job, matches\[job\.id\]\)\}/);
+  });
+
   test("the list sends no jd_text, so the route reads the full description", () => {
     /* The defect this closes, found on a real account 2026-08-04: GET /jobs sends
        `left(description, 600)`, and scoring that preview yields two or three requirement terms, so
