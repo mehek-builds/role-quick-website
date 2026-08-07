@@ -34,7 +34,13 @@ test("punctuation is normalized away, and short tokens survive only when high-si
   const terms = normalizedTerms("Go C R rust, node.js! at by");
   assert.equal(terms.has("go"), true); // short, but a language
   assert.equal(terms.has("rust"), true);
-  assert.equal(terms.has("node.js"), true);
+  // `nodejs`, not `node.js`. This module used to carry its own normalizeTerm, which DELETED every
+  // character outside [a-z0-9+#./-] and so kept the dot, while requirement-terms.ts - the one the
+  // panes actually look words up with, and the one kept byte-identical with the backend's
+  // engine/jdMatch.ts - deletes dots so that node.js and nodejs key the same. Two term keys for one
+  // term meant no dotted, slashed, hyphenated or multiword edited term could ever be underlined
+  // green. There is one normalizeTerm now; this is what it spells.
+  assert.equal(terms.has("nodejs"), true);
   assert.equal(terms.has("at"), false); // short AND a function word
   assert.equal(terms.has("by"), false);
 });
