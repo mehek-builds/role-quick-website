@@ -1,3 +1,7 @@
+// Extension included so the node test runner can load this module directly, the same convention
+// daily-matches.ts uses for application-filter.ts. See allowImportingTsExtensions in tsconfig.json.
+import { normalizeTerm } from "./requirement-terms.ts";
+
 type ReviewPacket = {
   spec?: { _review?: unknown };
 };
@@ -130,9 +134,21 @@ const SHORT_SIGNAL_TERMS: ReadonlySet<string> = new Set(
   "go c r c# c++ ml ai ui ux qa db os js ts sql aws gcp api cli css llm etl bi nlp cv rl".split(" "),
 );
 
-function normalizeTerm(term: string): string {
-  return term.toLowerCase().replace(/[^a-z0-9+#./-]/g, "");
-}
+/**
+ * THERE IS ONE normalizeTerm AND IT LIVES IN requirement-terms.ts.
+ *
+ * This file used to carry a second one - lowercase, then DELETE every character outside
+ * [a-z0-9+#./-] - sitting in the same directory as the one that lowercases, deletes dots and
+ * apostrophes, and turns everything else into a SEPARATOR. The two agreed only on a bare
+ * alphanumeric word. explicitTerms built the edited-term set with the local copy while segmentText
+ * read the page with the shared one, so the set held "node.js", "ci/cd", "machine-learning" and
+ * "productengineering" against lookup keys of "nodejs", "ci cd", "machine learning" and "product
+ * engineering", and no dotted, slashed, hyphenated or multiword edit could ever be underlined. The
+ * green tone had, in consequence, never rendered.
+ *
+ * A term key is a term key. Both callers below use the shared one, which is also the one the
+ * backend's engine/jdMatch.ts is kept byte-identical with.
+ */
 
 /**
  * Candidate terms from free prose (a job description, or the resume corpus it is matched against).
