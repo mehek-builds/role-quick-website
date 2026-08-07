@@ -563,6 +563,40 @@ export type ApplicationProfile = {
   /** Optional answers for questions about race and gender, used exactly as written. */
   eeo_prefs?: Record<string, string> | null;
   referral_source_default?: string | null;
+
+  /* ---- application facts, asked once in /start ----
+   *
+   * Questions employers keep asking that nothing on file could answer, so every application
+   * stalled on them. Measured across the 25 most recent packets; see the backend's schema.ts for
+   * the per-field counts and db/apply-application-facts-schema.mjs for the migration.
+   *
+   * null everywhere means NEVER ANSWERED, and the submission runner leaves those questions for the
+   * applicant rather than filling something adjacent. That is deliberate: these are declarations
+   * about a person and consents given to an employer, and a default for any of them would be Litos
+   * saying something on her behalf that she never said.
+   */
+  /** Typed exactly as it should appear on a form, e.g. "she/her". "Prefer not to say" is an answer. */
+  pronouns?: string | null;
+  /** Only for the person whose legal first name is not the name on their resume. */
+  legal_first_name?: string | null;
+  preferred_first_name?: string | null;
+  /** Month and year, e.g. "June 2024". Not the university graduation date. */
+  high_school_grad_date?: string | null;
+  /** Employers applied to before. [] is the answer "none", which is not the same as null. */
+  prior_application_employers?: string[] | null;
+  has_outstanding_offers?: boolean | null;
+  outstanding_offer_details?: string | null;
+  /** "Yes" / "No" / "Prefer not to say", as declared. Never inferred. */
+  military_service?: string | null;
+  /** Politically exposed person, self and immediate family. Never inferred. */
+  politically_exposed?: string | null;
+  politically_exposed_family?: string | null;
+  advanced_study_plan?: "no" | "considering" | "committed" | null;
+  /** The only two things an automated submission may ever tick on the applicant's behalf. */
+  attest_truthful_information?: boolean | null;
+  accept_privacy_notices?: boolean | null;
+  /** Server-set when either attestation above is written. Read-only to the client. */
+  application_attestations_consented_at?: string | null;
 };
 
 // ---- onboarding ----

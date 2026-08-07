@@ -82,6 +82,151 @@ const RACE_AND_GENDER_QUESTION_FIELDS = [
   { key: "race", label: "Race / ethnicity", placeholder: "White, Asian, Black or African American, Hispanic or Latino, Decline to self-identify" },
 ] as const;
 
+/* ---- the questions employers keep asking that nothing on file could answer ----
+ *
+ * ASKED HERE, ON THIS SCREEN, and not on a new one. Every step in /start is single-purpose by an
+ * explicit ruling (see SponsorshipStep's header on why the visa question cannot be "the fourth
+ * control on a screen about job categories"), and this screen is already where the flow collects
+ * one-time declarations alongside the document: the fluency question and the race-and-gender
+ * questions both live here for the same reason. A tenth screen would be a detour; a third card is
+ * the pattern that is already here.
+ *
+ * Measured across the 25 most recent packets. Each line below names a question that blocked at
+ * least two distinct job postings with "is required and is still empty":
+ *   pronouns (Akuna, 9 packets), legal first name (Akuna, 7 packets), high school graduation
+ *   (Akuna and IMC), previous applications (Akuna, IMC, Point72), outstanding offers (Akuna, Five
+ *   Rings, IMC, Tower, Virtu), further education (Akuna, Five Rings, IMC).
+ *
+ * EVERY ONE IS OPTIONAL, AND BLANK MEANS "DO NOT ANSWER IT FOR ME". Nothing here is written unless
+ * the student types it, because a blank that got saved as "No" would be Litos making a declaration
+ * to an employer on her behalf. The copy says that rather than implying it.
+ */
+const APPLICATION_FACT_FIELDS = [
+  {
+    key: "pronouns",
+    label: "Pronouns",
+    placeholder: "she/her, he/him, they/them, Prefer not to say",
+    hint: "Typed exactly as you write it.",
+  },
+  {
+    key: "legal_first_name",
+    label: "Legal first name, if it is not the name on your resume",
+    placeholder: "Leave blank if they are the same",
+    hint: "",
+  },
+  {
+    key: "preferred_first_name",
+    label: "Name you go by, if it is not your legal one",
+    placeholder: "Leave blank if they are the same",
+    // The pair, not the half: "legal first name" only means anything on a form that also asks
+    // which name you actually use, and Akuna asks both in consecutive fields.
+    hint: "",
+  },
+  {
+    key: "high_school_grad_date",
+    label: "High school graduation",
+    placeholder: "June 2024",
+    hint: "Month and year. Trading firms ask for this surprisingly often.",
+  },
+  {
+    key: "military_service",
+    label: "Have you served in the military?",
+    placeholder: "Yes, No, Prefer not to say",
+    hint: "",
+  },
+  {
+    key: "politically_exposed",
+    label: "Have you held a government, international organisation, or state-owned enterprise position?",
+    placeholder: "Yes, No, Prefer not to say",
+    hint: "",
+  },
+  {
+    key: "politically_exposed_family",
+    label: "Has an immediate family member held one?",
+    placeholder: "Yes, No, Prefer not to say",
+    hint: "",
+  },
+] as const;
+
+const ADVANCED_STUDY_OPTIONS = [
+  { value: "", label: "Prefer not to answer now" },
+  { value: "no", label: "No further study planned" },
+  { value: "considering", label: "Considering it" },
+  { value: "committed", label: "Committed to it" },
+] as const;
+
+/** What the form starts with: whatever is already stored, so nothing here can overwrite it blank. */
+export function applicationFactSeed(profile: ApplicationProfile | null): Record<string, string> {
+  const seed: Record<string, string> = {};
+  for (const field of APPLICATION_FACT_FIELDS) {
+    const stored = profile?.[field.key];
+    if (typeof stored === "string" && stored.trim()) seed[field.key] = stored;
+  }
+  return seed;
+}
+
+/**
+ * The profile patch for one pass through this card.
+ *
+ * THE ONLY RULE THAT MATTERS HERE: a field the student left alone is OMITTED, never sent as null
+ * and never sent as a default. Every one of these is a declaration about her or a consent given to
+ * an employer, and writing "No" into an untouched box would put a sentence in her mouth on a real
+ * application. Omission leaves the column null, which the resolver reads as "never asked" and
+ * responds to by leaving the employer's question for her.
+ *
+ * Two deliberate exceptions, both of which are answers rather than absences:
+ *   - `prior_application_employers: []` is "I have not applied anywhere before", which is what
+ *     turns every "have you applied here before?" into a No. It is only sent when the student
+ *     picked that option, not when she skipped the question.
+ *   - The two attestation booleans are sent as `false` once the card has been seen, so a consent
+ *     granted earlier and unticked now is actually withdrawn rather than silently kept.
+ *
+ * Exported so a test can pin the shape without rendering the step.
+ */
+export function applicationFactPatch(input: {
+  facts: Record<string, string>;
+  priorEmployers: string;
+  offers: "" | "none" | "some";
+  offerDetails: string;
+  advancedStudy: string;
+  attestTruthful: boolean;
+  acceptPrivacy: boolean;
+}): Partial<ApplicationProfile> {
+  const patch: Partial<ApplicationProfile> = {};
+  for (const field of APPLICATION_FACT_FIELDS) {
+    const typed = input.facts[field.key]?.trim();
+    if (typed) (patch as Record<string, unknown>)[field.key] = typed;
+  }
+
+  if (input.offers === "none") {
+    patch.has_outstanding_offers = false;
+  } else if (input.offers === "some") {
+    patch.has_outstanding_offers = true;
+    const details = input.offerDetails.trim();
+    if (details) patch.outstanding_offer_details = details;
+  }
+
+  if (input.advancedStudy === "no" || input.advancedStudy === "considering" || input.advancedStudy === "committed") {
+    patch.advanced_study_plan = input.advancedStudy;
+  }
+
+  /* "none" is typed as the literal string rather than an empty box, because an empty box is
+     indistinguishable from a skipped question and the two mean opposite things to a form. */
+  const employers = input.priorEmployers.trim();
+  if (employers.toLowerCase() === "none") {
+    patch.prior_application_employers = [];
+  } else if (employers) {
+    patch.prior_application_employers = employers
+      .split(",")
+      .map((name) => name.trim())
+      .filter(Boolean);
+  }
+
+  patch.attest_truthful_information = input.attestTruthful;
+  patch.accept_privacy_notices = input.acceptPrivacy;
+  return patch;
+}
+
 export function BaseResumeStep({
   parsed,
   profile,
@@ -126,6 +271,20 @@ export function BaseResumeStep({
      blank, nothing is written and it stays a gap, so a skip is never mistaken for "no languages". */
   const [languages, setLanguages] = useState(languageSuggestion.join(", "));
   const [raceAndGenderPrefs, setRaceAndGenderPrefs] = useState<Record<string, string>>(() => profile?.eeo_prefs ?? {});
+  /* Prefilled from whatever is already stored, so a student who comes back does not retype it, and
+     so nothing here can silently overwrite an answer she gave in Settings with a blank. */
+  const [facts, setFacts] = useState<Record<string, string>>(() => applicationFactSeed(profile));
+  const [priorEmployers, setPriorEmployers] = useState(() => (profile?.prior_application_employers ?? []).join(", "));
+  /* Three states, not two: "not answered" is the default and must stay reachable, because a
+     checkbox that starts unticked and a student who never looked at it are the same thing, and
+     neither is a declaration that she has no offers. */
+  const [offers, setOffers] = useState<"" | "none" | "some">(() => (
+    profile?.has_outstanding_offers === true ? "some" : profile?.has_outstanding_offers === false ? "none" : ""
+  ));
+  const [offerDetails, setOfferDetails] = useState(() => profile?.outstanding_offer_details ?? "");
+  const [advancedStudy, setAdvancedStudy] = useState<string>(() => profile?.advanced_study_plan ?? "");
+  const [attestTruthful, setAttestTruthful] = useState(() => profile?.attest_truthful_information === true);
+  const [acceptPrivacy, setAcceptPrivacy] = useState(() => profile?.accept_privacy_notices === true);
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
   /* Two phases, one screen. `compare` puts the upload beside the rebuild so the difference is an
      observation rather than a claim; `detail` is what they get after choosing. Local state, not a
@@ -551,6 +710,15 @@ export function BaseResumeStep({
         }
       }
       profilePatch.eeo_prefs = Object.keys(raceAndGenderPrefs).length > 0 ? raceAndGenderPrefs : null;
+      Object.assign(profilePatch, applicationFactPatch({
+        facts,
+        priorEmployers,
+        offers,
+        offerDetails,
+        advancedStudy,
+        attestTruthful,
+        acceptPrivacy,
+      }));
       if (!demo && Object.keys(profilePatch).length > 0) await putApplicationProfile(profilePatch);
       onDone();
     } catch (e) {
@@ -558,7 +726,20 @@ export function BaseResumeStep({
       setFailure("finish");
       setSaving(false);
     }
-  }, [editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo]);
+  }, [
+    editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo,
+    facts, priorEmployers, offers, offerDetails, advancedStudy, attestTruthful, acceptPrivacy,
+  ]);
+
+  function patchFact(key: string, value: string) {
+    setFacts((prev) => {
+      const next = { ...prev };
+      const trimmed = value.trim();
+      if (trimmed) next[key] = value;
+      else delete next[key];
+      return next;
+    });
+  }
 
   function patchRaceAndGenderPref(key: string, value: string) {
     setRaceAndGenderPrefs((prev) => {
@@ -918,6 +1099,119 @@ export function BaseResumeStep({
                     />
                   </label>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sits above the button for the same reason the fluency question does: pressing it is
+              what writes these answers, and a question below the button is one you agreed to
+              without reading. */}
+          {finished && (
+            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+              <p className="text-[13px] text-ink">Questions employers keep asking</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Answer once and Litos fills them everywhere. Leave anything blank and it stays blank on the form too: we never answer these for you.
+              </p>
+
+              <div className="mt-3 grid grid-cols-1 gap-3">
+                {APPLICATION_FACT_FIELDS.map((field) => (
+                  <label key={field.key} htmlFor={`base-fact-${field.key}`} className="block">
+                    <span className="text-xs font-medium text-muted">{field.label}</span>
+                    <input
+                      id={`base-fact-${field.key}`}
+                      value={facts[field.key] ?? ""}
+                      onChange={(event) => patchFact(field.key, event.target.value)}
+                      placeholder={field.placeholder}
+                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    />
+                    {field.hint && <span className="mt-1 block text-xs leading-5 text-muted">{field.hint}</span>}
+                  </label>
+                ))}
+
+                <label htmlFor="base-fact-prior-employers" className="block">
+                  <span className="text-xs font-medium text-muted">Employers you have applied to before</span>
+                  <input
+                    id="base-fact-prior-employers"
+                    value={priorEmployers}
+                    onChange={(event) => setPriorEmployers(event.target.value)}
+                    placeholder="Akuna Capital, Jane Street. Type none if you have not applied anywhere."
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                  />
+                </label>
+
+                <label htmlFor="base-fact-offers" className="block">
+                  <span className="text-xs font-medium text-muted">Do you have any outstanding offers?</span>
+                  <select
+                    id="base-fact-offers"
+                    value={offers}
+                    onChange={(event) => setOffers(event.target.value as "" | "none" | "some")}
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                  >
+                    <option value="">Prefer not to answer now</option>
+                    <option value="none">No offers right now</option>
+                    <option value="some">Yes, I have at least one</option>
+                  </select>
+                </label>
+
+                {offers === "some" && (
+                  <label htmlFor="base-fact-offer-details" className="block">
+                    <span className="text-xs font-medium text-muted">Offers and deadlines</span>
+                    <input
+                      id="base-fact-offer-details"
+                      value={offerDetails}
+                      onChange={(event) => setOfferDetails(event.target.value)}
+                      placeholder="One offer from Optiver, decision due 1 December 2026"
+                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    />
+                  </label>
+                )}
+
+                <label htmlFor="base-fact-advanced-study" className="block">
+                  <span className="text-xs font-medium text-muted">Further study after this degree</span>
+                  <select
+                    id="base-fact-advanced-study"
+                    value={advancedStudy}
+                    onChange={(event) => setAdvancedStudy(event.target.value)}
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                  >
+                    {ADVANCED_STUDY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              {/* THE TWO TICKBOXES LITOS IS ALLOWED TO TICK, and the copy says exactly which two.
+                  Everything else on an employer form - an exclusivity commitment, a code of
+                  conduct - is left for the applicant no matter what is stored here, so promising
+                  more than these two would be a promise the runner deliberately breaks. */}
+              <div className="mt-4 border-t border-border pt-3">
+                <p className="text-xs font-medium text-muted">Boxes we may tick for you</p>
+                <label className="mt-2.5 flex cursor-pointer gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={attestTruthful}
+                    onChange={(event) => setAttestTruthful(event.target.checked)}
+                    className="mt-0.5 accent-brand"
+                  />
+                  <span className="min-w-0 text-xs leading-5 text-muted">
+                    Confirm that the information in my application is true, complete and accurate.
+                  </span>
+                </label>
+                <label className="mt-2 flex cursor-pointer gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={acceptPrivacy}
+                    onChange={(event) => setAcceptPrivacy(event.target.checked)}
+                    className="mt-0.5 accent-brand"
+                  />
+                  <span className="min-w-0 text-xs leading-5 text-muted">
+                    Accept an employer&rsquo;s candidate privacy notice.
+                  </span>
+                </label>
+                <p className="mt-2.5 text-xs leading-5 text-muted">
+                  Nothing else. Anything that commits you to something, like &ldquo;this role is my top preference&rdquo;, always waits for you.
+                </p>
               </div>
             </div>
           )}
