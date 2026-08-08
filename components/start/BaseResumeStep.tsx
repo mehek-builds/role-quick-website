@@ -148,6 +148,34 @@ const APPLICATION_FACT_FIELDS = [
   },
 ] as const;
 
+/* ---- where you will work from, and how you found the job ----
+ *
+ * ADDED 2026-08-09, and not speculatively. A Redwood Materials packet was ready to send with "Are
+ * you available to work from our office in San Francisco?" answered YES, for someone who lives in
+ * Dubai and studies in Los Angeles. The backend had a constant where a column should have been.
+ *
+ * These two clear the two-posting bar by a mile - counted by replaying every question label Litos
+ * has ever stored:
+ *   office / onsite / in-person commitment ... 15 labels, 12 employers
+ *   how did you hear about us ................ 25 labels, 20 employers
+ *
+ * "Prefer not to answer now" is the default on both, and it is a real option rather than a polite
+ * one: unanswered leaves the employer's field blank and raises it for you, which is the whole
+ * point. A default here would be the constant again, wearing a dropdown.
+ */
+const ONSITE_COMMITMENT_OPTIONS = [
+  { value: "", label: "Prefer not to answer now" },
+  { value: "anywhere", label: "Yes, any office, wherever it is" },
+  { value: "listed_locations", label: "Only in certain places" },
+  { value: "no", label: "No, I need remote" },
+] as const;
+
+const RELOCATION_OPTIONS = [
+  { value: "", label: "Prefer not to answer now" },
+  { value: "yes", label: "Yes, I would move for the right role" },
+  { value: "no", label: "No" },
+] as const;
+
 const ADVANCED_STUDY_OPTIONS = [
   { value: "", label: "Prefer not to answer now" },
   { value: "no", label: "No further study planned" },
@@ -189,6 +217,10 @@ export function applicationFactPatch(input: {
   offers: "" | "none" | "some";
   offerDetails: string;
   advancedStudy: string;
+  onsiteCommitment: string;
+  onsiteLocations: string;
+  relocation: string;
+  referralSource: string;
   attestTruthful: boolean;
   acceptPrivacy: boolean;
 }): Partial<ApplicationProfile> {
@@ -221,6 +253,35 @@ export function applicationFactPatch(input: {
       .map((name) => name.trim())
       .filter(Boolean);
   }
+
+  /* WHERE SHE WILL WORK FROM. Same omission rule as everything above: an untouched dropdown sends
+     nothing, so the column stays null and the resolver keeps refusing. The one thing worth saying
+     out loud is that "listed_locations" with an EMPTY list is not written, because "only in certain
+     places" followed by no places is a half-answer, and half of this declaration is the half that
+     decides whether an employer hears yes or no. */
+  if (input.onsiteCommitment === "anywhere" || input.onsiteCommitment === "no") {
+    patch.onsite_commitment = input.onsiteCommitment;
+  } else if (input.onsiteCommitment === "listed_locations") {
+    const places = input.onsiteLocations
+      .split(",")
+      .map((place) => place.trim())
+      .filter(Boolean);
+    if (places.length > 0) {
+      patch.onsite_commitment = "listed_locations";
+      patch.onsite_locations = places;
+    }
+  }
+
+  if (input.relocation === "yes" || input.relocation === "no") {
+    patch.relocation_willingness = input.relocation;
+  }
+
+  /* HOW SHE FOUND THE POSTING. This column used to default to "Company website" in the database,
+     and every production row carried it without anyone having typed it - so the most-asked question
+     on any application form was answered with a fact nobody supplied, and usually a false one. The
+     default is gone; this box is the only thing that fills it now. */
+  const referral = input.referralSource.trim();
+  if (referral) patch.referral_source_default = referral;
 
   patch.attest_truthful_information = input.attestTruthful;
   patch.accept_privacy_notices = input.acceptPrivacy;
@@ -283,6 +344,13 @@ export function BaseResumeStep({
   ));
   const [offerDetails, setOfferDetails] = useState(() => profile?.outstanding_offer_details ?? "");
   const [advancedStudy, setAdvancedStudy] = useState<string>(() => profile?.advanced_study_plan ?? "");
+  /* Prefilled from what is stored and from nothing else. In particular NOT prefilled from
+     address_city: where she lives is not a declaration about which offices she will work from, and
+     seeding this from her address would put the guess back in, just with a human's hand on it. */
+  const [onsiteCommitment, setOnsiteCommitment] = useState<string>(() => profile?.onsite_commitment ?? "");
+  const [onsiteLocations, setOnsiteLocations] = useState(() => (profile?.onsite_locations ?? []).join(", "));
+  const [relocation, setRelocation] = useState<string>(() => profile?.relocation_willingness ?? "");
+  const [referralSource, setReferralSource] = useState(() => profile?.referral_source_default ?? "");
   const [attestTruthful, setAttestTruthful] = useState(() => profile?.attest_truthful_information === true);
   const [acceptPrivacy, setAcceptPrivacy] = useState(() => profile?.accept_privacy_notices === true);
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
@@ -716,6 +784,10 @@ export function BaseResumeStep({
         offers,
         offerDetails,
         advancedStudy,
+        onsiteCommitment,
+        onsiteLocations,
+        relocation,
+        referralSource,
         attestTruthful,
         acceptPrivacy,
       }));
@@ -728,7 +800,8 @@ export function BaseResumeStep({
     }
   }, [
     editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo,
-    facts, priorEmployers, offers, offerDetails, advancedStudy, attestTruthful, acceptPrivacy,
+    facts, priorEmployers, offers, offerDetails, advancedStudy,
+    onsiteCommitment, onsiteLocations, relocation, referralSource, attestTruthful, acceptPrivacy,
   ]);
 
   function patchFact(key: string, value: string) {
@@ -1165,6 +1238,69 @@ export function BaseResumeStep({
                     />
                   </label>
                 )}
+
+                {/* THE REDWOOD QUESTION. Above further study because it is asked more often than
+                    everything else on this card put together. */}
+                <label htmlFor="base-fact-onsite" className="block">
+                  <span className="text-xs font-medium text-muted">Can you work from an employer&rsquo;s office?</span>
+                  <select
+                    id="base-fact-onsite"
+                    value={onsiteCommitment}
+                    onChange={(event) => setOnsiteCommitment(event.target.value)}
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                  >
+                    {ONSITE_COMMITMENT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                  <span className="mt-1 block text-xs leading-5 text-muted">
+                    Asked as &ldquo;are you available to work from our office in San Francisco?&rdquo; on most applications.
+                  </span>
+                </label>
+
+                {onsiteCommitment === "listed_locations" && (
+                  <label htmlFor="base-fact-onsite-locations" className="block">
+                    <span className="text-xs font-medium text-muted">Which places, most preferred first</span>
+                    <input
+                      id="base-fact-onsite-locations"
+                      value={onsiteLocations}
+                      onChange={(event) => setOnsiteLocations(event.target.value)}
+                      placeholder="Los Angeles, New York, San Francisco"
+                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    />
+                    <span className="mt-1 block text-xs leading-5 text-muted">
+                      An employer asking about a city on this list hears yes, and one asking about a city that is not hears no. The order is also your answer to &ldquo;what is your preferred work location?&rdquo;
+                    </span>
+                  </label>
+                )}
+
+                <label htmlFor="base-fact-relocation" className="block">
+                  <span className="text-xs font-medium text-muted">Would you relocate for a role?</span>
+                  <select
+                    id="base-fact-relocation"
+                    value={relocation}
+                    onChange={(event) => setRelocation(event.target.value)}
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                  >
+                    {RELOCATION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label htmlFor="base-fact-referral" className="block">
+                  <span className="text-xs font-medium text-muted">How you usually find the jobs you apply to</span>
+                  <input
+                    id="base-fact-referral"
+                    value={referralSource}
+                    onChange={(event) => setReferralSource(event.target.value)}
+                    placeholder="LinkedIn, Job board, Company website, University career fair"
+                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                  />
+                  <span className="mt-1 block text-xs leading-5 text-muted">
+                    Answers &ldquo;how did you hear about this job?&rdquo;, which almost every form asks.
+                  </span>
+                </label>
 
                 <label htmlFor="base-fact-advanced-study" className="block">
                   <span className="text-xs font-medium text-muted">Further study after this degree</span>
