@@ -218,24 +218,45 @@ describe("the chosen view is visible on the page it lands on", () => {
   });
 
   test("the gate opens on exactly the arrivals that need it", () => {
-    /* The truth table the wiring above delegates to. Every one of these was a surviving mutant.
-
-       Inverted polarity is the nastier of the two, because it is not a return to the old bug: it
-       makes ?state=action render NO list while a plain visit renders a spurious one, so the deep
-       link is dead AND the default view grows a duplicate of the board under a heading that says
-       "Your applications". */
+    /* The truth table the wiring above delegates to. Every one of these was a surviving mutant. */
     for (const filter of ["action", "ready", "submitted"]) {
       assert.equal(ledgerRendersOnLanding(filter, 1), true, `${filter} with one application must render the list`);
       assert.equal(ledgerRendersOnLanding(filter, 9), true, `${filter} with a real history must render the list`);
       assert.equal(ledgerRendersOnLanding(filter, 0), false, `${filter} on an empty history leaves the empty state to speak`);
     }
-    // The unfiltered board view: the list would only restate the board below it.
-    assert.equal(ledgerRendersOnLanding("all", 9), false);
-    assert.equal(ledgerRendersOnLanding("all", 1), false);
+    /* THE UNFILTERED VIEW NOW RENDERS THE LIST, and this line used to assert the opposite.
+       Measured on 2026-08-08 on the owner account: /applications/board returned 83 cards, all at
+       stage "saved" because pipeline_stage is NULL on every row and nothing has ever been sent, and
+       the board draws applied/interview/offer only. So the reason this exclusion gave for itself,
+       that the list "would only restate the board below it", described a board that was empty. A
+       student with 83 applications and 49 of them stopped on an answerable question opened the
+       sidebar's Tracker link and saw three empty columns and "0 applied today".
+
+       The same view was reachable the whole time through /dashboard/applications?job=<uuid>, the
+       Jobs page's Apply link, because that selects a packet and the ledger has always rendered
+       beside a selection. The bare path, which is the sidebar's, was the one arrival with nothing
+       on it. */
+    assert.equal(ledgerRendersOnLanding("all", 83), true, "the sidebar's own link must not be the one arrival that shows nothing");
+    assert.equal(ledgerRendersOnLanding("all", 9), true);
+    assert.equal(ledgerRendersOnLanding("all", 1), true);
+    /* Empty is still empty, on every view. The EmptyState below speaks for that page, and a list
+       header reading "0 of 0" over nothing is worse than the sentence it would sit above. */
     assert.equal(ledgerRendersOnLanding("all", 0), false);
     /* A threshold above one is the purest reproduction of ISSUE-037: every deep link inert for
        every real account, with nothing on screen to say why. */
     assert.equal(ledgerRendersOnLanding("action", 1), true, "one matching application is a list worth rendering");
+
+    /* The gate cannot go back to keying on the filter at all. Whichever way that ternary points,
+       one real arrival ends up with no list on it, and the arrival it silences is invisible from
+       the source: both directions were live defects, four days apart. */
+    const byCount = [0, 1, 9, 83].map((count) => ledgerRendersOnLanding("all", count));
+    for (const filter of ["action", "ready", "submitted"]) {
+      assert.deepEqual(
+        [0, 1, 9, 83].map((count) => ledgerRendersOnLanding(filter, count)),
+        byCount,
+        `${filter} and the unfiltered view must open the list on the same histories`,
+      );
+    }
   });
 
   test("nothing inside the list assumes a packet is selected", () => {

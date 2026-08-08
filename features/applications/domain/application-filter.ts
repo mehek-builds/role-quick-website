@@ -58,23 +58,47 @@ export function statusMatchesApplicationFilter(review: string | FilterableReview
 }
 
 /**
- * Does the Tracker owe the student a filtered list, with no packet open?
+ * Does the Tracker owe the student a list, with no packet open?
  *
  * This is the gate ISSUE-037 was: the ledger used to render only beside an open packet, so every
  * ?state= arrival applied its filter to nothing and showed no control to change it. It is a named
- * predicate rather than an inline condition because the two ways to get it wrong are silent on the
- * page and invisible to a source-level test. Inverting it hides the list on exactly the arrivals
- * that need it and shows a duplicate of the board on the ones that do not; raising the count
- * threshold makes every deep link inert again for every real account. Both survived an earlier
- * version of the test that only checked this condition MENTIONED the filter. The truth table sits
- * beside this in tests/application-state-deeplink.regression-1.test.mjs.
+ * predicate rather than an inline condition because the ways to get it wrong are silent on the page
+ * and invisible to a source-level test. Raising the count threshold makes every deep link inert
+ * again for every real account, and that survived an earlier version of the test that only checked
+ * this condition MENTIONED the filter. The truth table sits beside this in
+ * tests/application-state-deeplink.regression-1.test.mjs.
  *
- * Not on "all": on the unfiltered board view the list would only restate the board below it, and
- * setting the select back to Everything is how the student clears the filter.
- * Not on an empty history: the empty state speaks for that page instead.
+ * THE "all" EXCLUSION IS GONE, and the reason it gave for itself turned out to be false in
+ * production.
+ *
+ * It read: "on the unfiltered board view the list would only restate the board below it".
+ * MEASURED on 2026-08-08 against the owner account (a18f774b, mehekmandal05@gmail.com): GET
+ * /applications/board answered 200 with 83 cards and every one of them at stage "saved", because
+ * generated_resumes.pipeline_stage is NULL on all 83 rows and none has ever reached "submitted", so
+ * deriveStage sends the lot to "saved". The board draws applied/interview/offer only, per
+ * ACTIVE_BOARD_STAGES, so it restated nothing: three empty columns over 83 applications, 49 of them
+ * stopped on a question the applicant could have answered in seconds, and "0 applied today".
+ *
+ * The consequence was a routing accident rather than a missing feature. Everything the student
+ * needed already existed and rendered only beside a SELECTED packet: this list, its status badges,
+ * its "Needs you" filter, and the blocker panel on the submission screen. The one link that selects
+ * a packet on arrival is /dashboard/applications?job=<uuid>, which is where the Jobs page's Apply
+ * button points. The sidebar's own Tracker link goes to the bare path, so the primary route into
+ * the product's main screen was the only route that showed nothing.
+ *
+ * So the list renders whenever there is a history to list. On "all" beside a board that does have
+ * cards on it the two now overlap, and that is the right trade: the board carries the stage the
+ * STUDENT put a card in, the list carries what LITOS is doing with it, and the list is the only
+ * surface from which a stopped application can be reached at all.
+ *
+ * The filter argument stays in the signature. Every caller passes it, the select still narrows the
+ * rows, and a future view that genuinely should hide the list would be expressed here rather than
+ * inline on the page.
+ *
+ * Still not on an empty history: the empty state speaks for that page instead.
  */
-export function ledgerRendersOnLanding(filter: ApplicationFilter, reviewableCount: number): boolean {
-  return filter !== "all" && reviewableCount > 0;
+export function ledgerRendersOnLanding(_filter: ApplicationFilter, reviewableCount: number): boolean {
+  return reviewableCount > 0;
 }
 
 /**

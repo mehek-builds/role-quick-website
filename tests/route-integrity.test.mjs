@@ -327,6 +327,12 @@ const UNLINKED_BY_DESIGN = new Map([
   ["/qa/waiting-on-you", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission/[board]/[case]", "internal QA harness, must not be linked from a public surface"],
+  /* The 404 for a mistyped /dashboard address. Nothing can link to it by definition: it is reached
+     by typing a path that is not a page. It exists because an unmatched URL under /dashboard would
+     otherwise fall to the root app/not-found.tsx, which renders the marketing header and a "Get
+     started" button at someone who is signed in. Measured on 2026-08-08 with /dashboard/account,
+     which nothing in this codebase links to and which reads as having been signed out. */
+  ["/dashboard/[...unknown]", "404 catch-all; reached by typing a path, never by a link"],
 ]);
 
 test("every shipped route is either linked from somewhere or exempt on purpose", () => {

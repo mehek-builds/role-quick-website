@@ -25,6 +25,7 @@ import {
   setAutomationSettings,
 } from "@/lib/api";
 import { isSafeCheckoutUrl } from "@/lib/billing";
+import { applicationEmailAddressInUse, applicationEmailBadge } from "@/lib/application-email-status";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { API_URL } from "@/lib/config";
 import { passwordFormProblem } from "@/app/login/password-form";
@@ -759,23 +760,35 @@ export default function Settings() {
               <div>
                 <p className="text-sm font-medium text-ink">Use a Litos application email</p>
                 <p className="mt-1 text-xs leading-5 text-muted">
-                  New application packets use a Litos address when this is configured. Employer mail forwards to your account email.
+                  New application packets use a Litos address when replies to it are arriving. Employer mail forwards to your account email.
                 </p>
               </div>
-              <Chip
-                label={applicationEmail === null ? "Checking" : applicationEmail.configured ? "Active" : "Not configured"}
-                kind={applicationEmail?.configured ? "happened" : "quiet"}
-              />
+              {/* THE BADGE READS THE LIVE PROBE, NOT THE CONFIGURATION. It used to read
+                  `configured`, which is true whenever an environment variable is set. Measured on
+                  2026-08-08: configured was true, /health reported this subsystem degraded with
+                  deliverable false, every run that day fell back to the plain account address with
+                  tracked false, and this panel said the feature was on. See
+                  lib/application-email-status.ts. */}
+              <Chip label={applicationEmailBadge(applicationEmail).label} kind={applicationEmailBadge(applicationEmail).kind} />
             </div>
+            {applicationEmailBadge(applicationEmail).note && (
+              <p className="mt-3 text-xs leading-5 text-warn">{applicationEmailBadge(applicationEmail).note}</p>
+            )}
             <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
               <div>
-                <p className="text-xs font-medium text-muted">Application domain</p>
-                <p className="mt-1 break-words text-sm text-ink">{applicationEmail?.domain ?? "Unavailable"}</p>
+                {/* "Address", not "domain": the value the backend sends here is a full mailbox
+                    (applications@trylitos.com), and the aliases minted off it are
+                    applications+app-<id>@trylitos.com. Calling it a domain invited the reading that
+                    aliases live on a subdomain, which they do not. */}
+                <p className="text-xs font-medium text-muted">Address on your applications</p>
+                <p className="mt-1 break-words text-sm text-ink">
+                  {applicationEmailAddressInUse(applicationEmail, me.email)}
+                </p>
               </div>
               <div>
                 <p className="text-xs font-medium text-muted">Forwarding</p>
                 <p className="mt-1 text-sm text-ink">
-                  {applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
+                  {applicationEmail?.forward_to ?? applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
                 </p>
               </div>
             </div>

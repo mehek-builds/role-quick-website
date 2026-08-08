@@ -40,7 +40,7 @@ import { loadDashboardInitialState } from "@/features/dashboard";
 import { localDayKey } from "@/lib/local-day";
 import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
-import { isWaitingOnHuman, waitingApplications } from "@/lib/captcha-queue";
+import { waitingApplications } from "@/lib/captcha-queue";
 import { WaitingOnYou } from "@/components/app/WaitingOnYou";
 
 /* SubmissionResponse and ACTIVE_SUBMISSION_STATUSES went with the review drawer. The dashboard no
@@ -342,19 +342,21 @@ export default function Home() {
   const waitingOnYou = useMemo(() => waitingApplications(packets), [packets]);
   const applicationSummary = useMemo(() => {
     const submitted = packets.filter((packet) => packet.spec._review?.status === "submitted").length;
-    /* Excludes the rows the waiting-on-you block already owns. Counting them twice would be
-       tolerable; the copy is not. Tracker's action reads "N stopped for you / Finish the missing
-       answers", which is the wrong instruction for a CAPTCHA - nothing is missing, and on an
-       at_submit stall everything is already filled in. */
+    /* THIS COUNTS EXACTLY WHAT ?state=action HOLDS, including the rows the waiting-on-you block
+       above already names.
+       It used to exclude them, and the reason it gave has since stopped being true: "Tracker's
+       action reads 'N stopped for you / Finish the missing answers', which is the wrong instruction
+       for a CAPTCHA". That copy is now "Review the stopped applications", which is right for a
+       CAPTCHA and for a missing answer alike. What the exclusion cost was a tile reading 20 over a
+       link that landed on a list headed "21 of 50", measured on 2026-08-08, and a number you cannot
+       reconcile with the screen it takes you to is the defect this whole pass is about. Overlapping
+       with the block above is the cheaper error: that block is an emphasis, not a partition. */
     const needsAction = packets.filter((packet) => (
-      (
-        ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
-        || (
-          ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")
-          && packet.spec._review?.portal_supported === false
-        )
+      ["needs_attention", "ready_for_final_approval", "failed"].includes(packet.spec._review?.status ?? "")
+      || (
+        ["resume_ready", "questions_ready", "ready_to_submit"].includes(packet.spec._review?.status ?? "")
+        && packet.spec._review?.portal_supported === false
       )
-      && !isWaitingOnHuman(packet.spec._review)
     )).length;
     const ready = packets.filter((packet) => reviewCanBeSent(packet.spec._review)).length;
     return { ready, submitted, needsAction };
@@ -633,7 +635,10 @@ export default function Home() {
               "N stopped for you", the only thing on Home that tells a student they have work
               waiting. The three columns share a grid and nothing else, so they get three. */}
           <SectionBoundary band="momentum" title="Momentum">
-            <Funnel />
+            {/* The same count the Tracker tile prints, from the same packets, so the two figures on
+                this row can never disagree. It is what turns "N prepared / 0 sent" from two true
+                numbers with an unexplained gap into a sentence with somewhere to go. */}
+            <Funnel stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
           </SectionBoundary>
           {applicationTotal > 0 && (
             <SectionBoundary band="tracker-summary" title="Tracker">

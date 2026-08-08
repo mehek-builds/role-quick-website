@@ -232,8 +232,17 @@ export type ApplicationEmailAlias = {
 };
 
 export type ApplicationEmailStatusResponse = {
+  /** An environment variable is set. Says nothing about whether any mail arrives. */
   configured: boolean;
+  /* Employer replies really do come back through Litos, from the live deliverability probe rather
+     than from the presence of configuration. Optional because a backend that predates it sends
+     neither field, and lib/application-email-status.ts treats that as "cannot tell" rather than
+     guessing in either direction. On 2026-08-08 these two disagreed for the whole day: configured
+     true, tracking_active false, and the Automation tab was reading only the first. */
+  tracking_active?: boolean;
+  tracking_blocked_reason?: string | null;
   domain: string | null;
+  forward_to?: string | null;
   aliases: ApplicationEmailAlias[];
 };
 
