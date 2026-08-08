@@ -678,6 +678,26 @@ export type ApplicationProfile = {
   accept_privacy_notices?: boolean | null;
   /** Server-set when either attestation above is written. Read-only to the client. */
   application_attestations_consented_at?: string | null;
+
+  /* ---- where you will actually work from ----
+   *
+   * "Are you available to work from our office in San Francisco?" was answered YES by a constant in
+   * the backend resolver, with no column behind it, on a packet for an applicant who lives in Dubai
+   * and studies in Los Angeles. It is the most-asked question of its kind: 15 distinct labels
+   * across 12 employers in the stored corpus.
+   *
+   * Three fields rather than one boolean, because this is the fact with a LOCATION DIMENSION: yes
+   * to Los Angeles and no to New York are both true, and which one an employer gets depends on
+   * which office it asked about. Relocating is a separate promise from commuting to an office in a
+   * city you already live in.
+   *
+   * null on any of them means NEVER ANSWERED, and the runner then leaves the employer's question
+   * blank and raises it, rather than defaulting.
+   */
+  onsite_commitment?: "anywhere" | "listed_locations" | "no" | null;
+  /** Metros, her own words, most preferred first. Doubles as the preferred-work-location answer. */
+  onsite_locations?: string[] | null;
+  relocation_willingness?: "yes" | "no" | null;
 };
 
 // ---- onboarding ----
