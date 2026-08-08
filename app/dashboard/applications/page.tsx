@@ -43,7 +43,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -153,6 +153,12 @@ function Applications() {
   const capturedSubmissionIds = useRef(new Set<string>());
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
+  /* Which question the answers screen should open on, set by the Your turn row that was pressed.
+     Null for "Check the answers", which is a request to read the whole list. The token is what
+     makes pressing the SAME row twice focus twice: without it the effect's dependency never
+     changes on the second press and the second click looks dead, which is the defect this whole
+     change exists to remove. */
+  const [focusQuestion, setFocusQuestion] = useState<{ id: string; token: number } | null>(null);
   const [screen, setScreen] = useState<Screen>("review");
   /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
      The progress screen says one of two things, and the difference is the whole point of it:
@@ -320,10 +326,15 @@ function Applications() {
     track("application_submission_completed", { source });
   }, []);
 
-  const moveToScreen = useCallback((next: Screen) => {
+  /* `scrollToTop: false` for the one caller that is navigating TO something rather than to a new
+     screen: a Your turn row opens the answers editor on the question that was pressed, and the top
+     of the page is not where that question is. Racing the two was tried and is not sound, because
+     this scroll is scheduled in a requestAnimationFrame and rAF does not run at all in a hidden
+     tab, so the winner differed between a real browser and an automated one. */
+  const moveToScreen = useCallback((next: Screen, options: { scrollToTop?: boolean } = {}) => {
     setScreen((current) => {
       if (current === next) return current;
-      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
+      if (options.scrollToTop !== false) requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
       return next;
     });
   }, []);
@@ -1099,10 +1110,21 @@ function Applications() {
     }
   }
 
-  function reviewPortalQuestions() {
+  /* The one place an answer can be seen, edited and saved. "Check the answers" has always come
+     here; the Your turn rows now come here too, carrying WHICH question was pressed so the student
+     lands on it rather than at the top of a list of twelve. Save from here goes out through
+     POST /applications/:id/submit-request, which is the existing persistence path for answers, so
+     nothing about how an answer reaches the employer changed. */
+  function reviewPortalQuestions(focusQuestionId?: string) {
     if (!selected || !submission || submission.application_id !== selected.id) return;
-    setQuestions((current) => mergeDiscoveredQuestions(current, submission.review.questions));
-    moveToScreen("questions");
+    const merged = mergeDiscoveredQuestions(questions, submission.review.questions);
+    setQuestions(merged);
+    setFocusQuestion(
+      focusQuestionId && merged.some((question) => question.id === focusQuestionId)
+        ? { id: focusQuestionId, token: Date.now() }
+        : null,
+    );
+    moveToScreen("questions", { scrollToTop: !focusQuestionId });
   }
 
   async function retryPreparation() {
@@ -1429,6 +1451,7 @@ function Applications() {
           onBack={() => moveToScreen(selectedSubmission?.review.status === "needs_attention" ? "portal" : "review")}
           onSubmit={() => prepareApplication()}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
+          focusQuestion={focusQuestion}
         />
       ) : screen === "submitting" ? (
         <PortalProgress
@@ -1447,7 +1470,8 @@ function Applications() {
           onHandoffComplete={completeHandoff}
           onApprove={approveFinalSubmission}
           onRetry={retryPreparation}
-          onReviewQuestions={reviewPortalQuestions}
+          onReviewQuestions={() => reviewPortalQuestions()}
+          onOpenQuestion={(questionId) => reviewPortalQuestions(questionId)}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -1995,14 +2019,37 @@ function EditableHighlight({ value, terms, onChange }: { value: string; terms: R
   );
 }
 
-function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean }) {
+function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false, focusQuestion = null }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean; focusQuestion?: { id: string; token: number } | null }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
   const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
+  const focusQuestionId = focusQuestion?.id ?? null;
+  const focusToken = focusQuestion?.token ?? 0;
+  /* Arriving from a Your turn row means the student pressed ONE thing, so the caret belongs in that
+     answer. Without this the screen opens at the top of a list of every question the form asked and
+     the row she pressed can be several screens down, which is close enough to nothing happening.
+
+     Done in the effect body rather than in a requestAnimationFrame: the element exists as soon as
+     this runs, and rAF does not fire in a hidden tab, which made the behaviour differ between a
+     real browser and a driven one. The caller suppresses moveToScreen's scroll to the top of the
+     page for exactly this navigation, so there is nothing left to race. */
+  useEffect(() => {
+    if (!focusQuestionId) return;
+    const field = document.getElementById(`question-${focusQuestionId}`);
+    if (!(field instanceof HTMLTextAreaElement)) return;
+    field.scrollIntoView({ block: "center", behavior: "auto" });
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  }, [focusQuestionId, focusToken]);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">Back</button>
       <div>
         <h2 className="text-heading font-medium tracking-tight text-ink">{reviewDiscovered ? "Review answers" : "Answer these"}</h2>
+        {reviewDiscovered && (
+          <p className="mt-1 text-sm leading-6 text-muted">
+            Nothing here has gone to the employer. Change anything that is wrong, then save to put these answers on the company&apos;s form.
+          </p>
+        )}
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
@@ -2021,7 +2068,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ packet, submission, approving, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void }) {
+function SubmissionScreen({ packet, submission, approving, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
   const { review } = submission;
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
@@ -2058,7 +2105,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
             is how "CAPTCHA requires your attention ... is required required field is required ..."
             reached the screen. Each blocker is its own item, because each is its own task. */}
         {needsAttention ? (
-          <BlockerList items={needsInputItems} />
+          <BlockerList items={needsInputItems} portalUrl={handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed" ? userFacingError(review.submission_error, "Try again in a minute.") : "Check the preview, then send."}
@@ -2235,7 +2282,22 @@ function CenteredState({ title, body, loading = false }: { title: string; body?:
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2>{body && <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p>}</Card>;
 }
 
-function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
+const CHECKLIST_ACTION_CLASS = "mt-1 flex w-fit rounded-full bg-warn px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warn";
+
+/* The action pill was a <span>. Not a disabled button, not a button with a missing handler: a span
+   with pill styling, `bg-warn ... text-white`, sitting under a row that says an application is
+   waiting on this exact thing. Pressing REVIEW or CONFIRM fired no request, threw nothing, and
+   changed nothing, because there was nothing there to fire. Reproduced on the Anduril packet on
+   2026-08-08, and it is why an account with 79 prepared resumes has sent none: the panel names the
+   work, and the only control it offers is decoration.
+
+   Every pill now comes from checklistRowControl, which returns a real <a href> or a real <button>
+   bound to onOpenQuestion, or NOTHING when there is no target to act on. There is no branch left
+   that draws the word without the element. Each control also carries its own accessible name, so a
+   screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
+   bare "button" read_page found on the live page. */
+function ChecklistRow({ item, checked, portalUrl, onOpenQuestion }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string) => void }) {
+  const control = checked ? null : checklistRowControl(item, { portalUrl });
   return (
     <li className="grid grid-cols-[18px_1fr] gap-2 text-sm leading-5 text-muted">
       {checked ? (
@@ -2250,13 +2312,22 @@ function ChecklistRow({ item, checked }: { item: SubmissionChecklistItem; checke
       <span>
         <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
         {item.detail && <span className="block text-xs text-faint">{item.detail}</span>}
-        {item.action && <span className="mt-1 flex w-fit rounded-full bg-warn px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white">{item.action}</span>}
+        {control?.element === "link" && (
+          <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={CHECKLIST_ACTION_CLASS}>
+            {control.label}
+          </a>
+        )}
+        {control?.element === "button" && onOpenQuestion && (
+          <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId)} className={CHECKLIST_ACTION_CLASS}>
+            {control.label}
+          </button>
+        )}
       </span>
     </li>
   );
 }
 
-function BlockerList({ items }: { items: readonly SubmissionChecklistItem[] }) {
+function BlockerList({ items, portalUrl, onOpenQuestion }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string) => void }) {
   if (items.length === 0) {
     return <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>;
   }
@@ -2268,7 +2339,7 @@ function BlockerList({ items }: { items: readonly SubmissionChecklistItem[] }) {
       </div>
       <ul className="mt-2 space-y-2">
       {items.map((item) => (
-        <ChecklistRow key={item.id} item={item} checked={false} />
+        <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} />
       ))}
       </ul>
     </div>
