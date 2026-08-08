@@ -1586,7 +1586,7 @@ function Applications() {
                 />
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
-                <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} />
+                <MatchLegend missingCount={matchResult?.scorable ? matchResult.missing.length : null} editedCount={editedTerms.size} />
                 {/* "Point at any highlighted term to see it light up on both
                     sides." came off 2026-07-28: instructions for a hover. */}
               </div>
@@ -1900,7 +1900,17 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
           top of the page looking like a header, which is exactly how it came to occupy the name
           slot: nothing marked it as belonging to a section. drawEducation() emits this heading. */}
       <p className="mb-1.5 mt-4 border-b border-ink pb-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em]">Education</p>
-      <EditableLine value={spec.school} onChange={(school) => onChange({ ...spec, school })} className="font-semibold" />
+      {/* EDUCATION IS HIGHLIGHTED, because the scorer already credits it and this pane could not
+          show where. Measured over the 85 production packets on 2026-08-09: 111 of 313 blue marks
+          (35.5%) had no blue anywhere in the resume pane, and 83 of those came from fields the pane
+          rendered through EditableLine, which has no highlighting, or did not render at all.
+          `degree` alone accounted for 65 - the term `computer science`, credited from "Bachelor of
+          Science in Computer Science" and marked nowhere.
+
+          Blue means "asked for by this job, AND on your resume". An unanchored blue is the page
+          contradicting its own legend: the student is told the requirement is met and given nothing
+          to point at. The credit is right, so the fix is the anchor, not the credit. */}
+      <EditableHighlight value={spec.school} terms={editedTerms} onChange={(school) => onChange({ ...spec, school })} className="font-semibold" />
       {/* STILL two fields, never one string round-tripped through a " · " separator. The separator
           form was lossy in both directions: a degree legitimately containing " · " split wrong, and
           any third separator silently discarded the tail. R-047 was a mangled degree that could not
@@ -1921,12 +1931,24 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
           needs. */}
       <div className="mt-0.5 flex items-baseline justify-between gap-3 text-xs text-muted">
         <span className="min-w-0 flex-1">
-          <EditableLine value={spec.degree} onChange={(degree) => onChange({ ...spec, degree })} className="italic" />
+          <EditableHighlight value={spec.degree} terms={editedTerms} onChange={(degree) => onChange({ ...spec, degree })} className="italic" />
         </span>
         <span className="w-[5.5rem] shrink-0">
           <EditableLine value={spec.grad_date} onChange={(grad_date) => onChange({ ...spec, grad_date })} className="text-right" />
         </span>
       </div>
+      {/* COURSEWORK, which the resume PRINTS and this pane did not render at all. drawEducation()
+          in the backend's engine/resumeRender.ts writes "Relevant coursework: ..." between the
+          degree and the experience, and resumeSpecText scores it, so 13 more blue marks were
+          credited from a line the student could not see on the screen that exists for checking the
+          document before sending it. Rendered under the same label the PDF uses, so the two
+          documents read the same way. */}
+      {spec.coursework ? (
+        <p className="mt-0.5 text-xs text-muted">
+          <span className="italic">Relevant coursework: </span>
+          <EditableHighlight value={spec.coursework} terms={editedTerms} onChange={(coursework) => onChange({ ...spec, coursework })} />
+        </p>
+      ) : null}
 
       {/* The section heading used to render inside this map, so four jobs printed "EXPERIENCE" four
           times down the page. A resume has one Experience section containing four roles. Print the
@@ -1941,7 +1963,11 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
             )}
             <div className="flex items-baseline justify-between gap-4">
               <span className="min-w-0 flex-1">
-                <EditableLine value={entry.org} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
+                {/* Same reason as the education line above: the scorer reads `org` and `title`, so
+                    the pane has to be able to mark them. Five Rings' packet 0c6e832a is the case -
+                    the requirement `software developers` was one of only two the scorer matched,
+                    worth about half the packet's score, and it is on the resume as a job TITLE. */}
+                <EditableHighlight value={entry.org} terms={editedTerms} onChange={(org) => onPatchEntry(index, { org })} className="font-semibold" />
               </span>
               {/* Wide enough for the longest real range ("September 2025 - Present") so the date
                   does not wrap, and fixed so it cannot squeeze the org name beside it. */}
@@ -1949,7 +1975,7 @@ function ResumeEditor({ spec, name, contact, editedTerms, onChange, onPatchEntry
                 <EditableLine value={entry.date_range} onChange={(date_range) => onPatchEntry(index, { date_range })} className="text-right text-xs text-muted" />
               </span>
             </div>
-            <EditableLine value={entry.title} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
+            <EditableHighlight value={entry.title} terms={editedTerms} onChange={(title) => onPatchEntry(index, { title })} className="text-xs italic text-muted" />
             <ul className="mt-1 space-y-0.5">
               {entry.bullets.map((bullet, bulletIndex) => (
                 <li key={bulletIndex} className="grid grid-cols-[12px_1fr] gap-1.5"><span>•</span><EditableHighlight value={bullet} terms={editedTerms} onChange={(value) => onPatchEntry(index, { bullets: entry.bullets.map((item, i) => (i === bulletIndex ? value : item)) })} /></li>
@@ -2085,12 +2111,16 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
   );
 }
 
-function EditableHighlight({ value, terms, onChange }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void }) {
+/* `className` carries the caller's typography onto the resting state, which is what lets the
+   education fields use this instead of EditableLine without losing the semibold school name or the
+   italic degree. It is deliberately NOT applied to the editing textarea: that control is a form
+   field wherever it appears and should look like one. */
+function EditableHighlight({ value, terms, onChange, className = "" }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void; className?: string }) {
   const [editing, setEditing] = useState(false);
   return editing ? (
     <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-inner border border-brand bg-white px-2 py-1 outline-none" />
   ) : (
-    <button type="button" onClick={() => setEditing(true)} className="text-left leading-[1.35] hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30">
+    <button type="button" onClick={() => setEditing(true)} className={`text-left leading-[1.35] hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30 ${className}`}>
       {/* hideMissing: an amber "asked for and NOT on your resume" mark cannot honestly appear on
           the resume. If the word were here the scorer would have counted it as covered. */}
       <RequirementText text={value} editedTerms={terms} hideMissing />

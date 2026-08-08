@@ -73,17 +73,20 @@ function lookupTone(
   index: RequirementIndex,
   candidate: string,
 ): { term: string; tone: TermTone } | undefined {
+  // Every return resolves through `alias`, so a mark on a same-capability spelling still identifies
+  // the REQUIREMENT it satisfies. See buildRequirementIndex.
+  const key = (k: string) => index.alias.get(k) ?? k;
   const direct = index.tone.get(candidate);
-  if (direct) return { term: candidate, tone: direct };
+  if (direct) return { term: key(candidate), tone: direct };
   const sing = candidate.split(" ").map(singular).join(" ");
   if (sing !== candidate) {
     const viaSingular = index.tone.get(sing);
-    if (viaSingular) return { term: sing, tone: viaSingular };
+    if (viaSingular) return { term: key(sing), tone: viaSingular };
   }
   const bare = candidate.replace(/s$/, "");
   if (bare !== candidate) {
     const viaBare = index.tone.get(bare);
-    if (viaBare) return { term: bare, tone: viaBare };
+    if (viaBare) return { term: key(bare), tone: viaBare };
   }
   // The other direction: the requirement is plural and the page writes the singular. Only the last
   // word is inflected, because that is the head of the noun phrase and the only part resumeCovers
@@ -94,7 +97,7 @@ function lookupTone(
   for (const suffix of ["s", "es"]) {
     const plural = [...head, `${last}${suffix}`].join(" ");
     const viaPlural = index.tone.get(plural);
-    if (viaPlural) return { term: plural, tone: viaPlural };
+    if (viaPlural) return { term: key(plural), tone: viaPlural };
   }
   return undefined;
 }
@@ -102,21 +105,57 @@ function lookupTone(
 export type RequirementIndex = {
   /** normalized term -> tone */
   tone: ReadonlyMap<string, TermTone>;
+  /** A spelling the resume uses -> the requirement it satisfies. See buildRequirementIndex. */
+  alias: ReadonlyMap<string, string>;
   /** longest term in words, so the matcher knows how far to look ahead */
   maxWords: number;
 };
 
+/**
+ * `satisfied_by` IS INDEXED AS A SECOND KEY FOR THE SAME REQUIREMENT, which is what lets the resume
+ * pane mark a requirement the resume does not spell out.
+ *
+ * The scorer credits a small enumerated set of same-capability pairs - React satisfies `frontend`,
+ * TypeScript satisfies `javascript`, REST satisfies `api` - and one vendor-spelling merge. Those are
+ * real matches and the backend defends them at length, but the resume never contains the
+ * requirement's own word, so this pane had nothing to colour: measured over the 85 production
+ * packets on 2026-08-09, `frontend` was blue on 8 packets with no blue anywhere in the resume, and
+ * after the other anchoring fixes it was the last unanchored case left.
+ *
+ * THE MARK CARRIES THE REQUIREMENT'S KEY, not the alias, which is the whole point of a separate map.
+ * TermMark keys the hover link on `term`, so pointing at `frontend` in the job description lifts
+ * `React` in the resume and the student gets the answer they came for. Indexing the alias under its
+ * own name would have coloured the right words and linked them to nothing.
+ *
+ * It never widens what counts as a match. The backend has already decided this requirement is met;
+ * this only records which spelling met it.
+ */
 export function buildRequirementIndex(matched: JdTermView[], missing: JdTermView[]): RequirementIndex {
   const tone = new Map<string, TermTone>();
+  const alias = new Map<string, string>();
   for (const t of matched) tone.set(t.term, "covered");
+  for (const t of matched) {
+    if (!t.satisfied_by) continue;
+    const key = normalizeTerm(t.satisfied_by);
+    // A requirement the posting states in its own right always wins the key: `react` is a
+    // requirement on plenty of postings AND the thing that satisfies `frontend`, and on a posting
+    // that asks for both it must stay its own term.
+    if (!key || tone.has(key)) continue;
+    tone.set(key, "covered");
+    alias.set(key, t.term);
+  }
   // A term cannot be both; matched wins if the backend ever disagrees with itself.
   for (const t of missing) if (!tone.has(t.term)) tone.set(t.term, "missing");
   let maxWords = 1;
   for (const key of tone.keys()) maxWords = Math.max(maxWords, key.split(" ").length);
-  return { tone, maxWords };
+  return { tone, alias, maxWords };
 }
 
-export const EMPTY_REQUIREMENT_INDEX: RequirementIndex = { tone: new Map(), maxWords: 1 };
+export const EMPTY_REQUIREMENT_INDEX: RequirementIndex = {
+  tone: new Map(),
+  alias: new Map(),
+  maxWords: 1,
+};
 
 export type Segment =
   | { kind: "text"; text: string }
@@ -281,6 +320,43 @@ export function segmentText(
         (editedTerms && candidate.length > 2 && editedTerms.has(candidate)
           ? ({ term: candidate, tone: "edited" } as const)
           : undefined);
+
+      // A HYPHENATED COMPOUND CONTAINS ITS PARTS, because the scorer says it does.
+      //
+      // resumeCovers searches a normalized WHOLE-TEXT haystack: the bullet "Built LLM-agent cost
+      // infrastructure" normalizes to "...built llm agent cost infrastructure...", so ` llm ` is
+      // found and the requirement `llm` is counted as covered. This pane matches token by token,
+      // and both tokenizers keep `-` inside a token (see WORD_RE and the backend's tokenizeSection),
+      // so the candidate here is the two-word key `llm agent`, which is not `llm`, and the mark
+      // never appeared. Four instances across packets ff37b063, edb20a2b, 31528fd9 and 56d9c011:
+      // the student was told the requirement was met and given nowhere to look.
+      //
+      // ONLY WHEN THE WRITTEN TOKEN CARRIES ITS OWN SEPARATOR, which is what `len === 1` plus a
+      // multi-word candidate means. A phrase built from several tokens is not this case: those
+      // words are separated by spaces on the page and are matched as a phrase or not at all.
+      // Marking a PART of a written compound mirrors exactly what the scorer credited, and nothing
+      // wider: `llm` is marked inside "LLM-agent" because ` llm ` is what resumeCovers found there.
+      let partial: { start: number; end: number; term: string; tone: TermTone } | null = null;
+      if (!match && len === 1 && candidate.includes(" ")) {
+        const token = tokens[i];
+        const { core, lead } = pieces[0];
+        let at = 0;
+        for (const part of core.split(/[^A-Za-z0-9+#]+/)) {
+          if (!part) continue;
+          const offset = core.indexOf(part, at);
+          at = offset + part.length;
+          const found = lookupTone(index, normalizeTerm(part));
+          if (!found) continue;
+          const start = token.start + lead.length + offset;
+          if (start < cursor) continue;
+          partial = { start, end: start + part.length, term: found.term, tone: found.tone };
+          break;
+        }
+      }
+      if (partial) {
+        hit = partial;
+        continue;
+      }
       if (!match) continue;
 
       // A REQUIREMENT WHOSE FIRST WORDS WERE ALREADY MARKED STILL MARKS ITS REMAINDER.

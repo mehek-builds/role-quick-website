@@ -4,6 +4,9 @@ export type JdTermView = {
   term: string;
   display: string;
   weight: number;
+  /** MATCHED terms only: the words on the resume that covered this requirement, when they are not
+   *  the requirement's own. Written by the backend's resumeSatisfies; see buildRequirementIndex. */
+  satisfied_by?: string;
 };
 
 export type JdMatchResponse = {
@@ -122,12 +125,12 @@ export type NextMatchScoreRequest = {
   jdText: string | null;
   resumeText: string;
   /* Structural rather than the infrastructure layer's JobContext: domain may not import infra. */
-  jobContext: { company?: string; role?: string; job_id?: string | null };
+  jobContext: { company?: string; role?: string; location?: string | null; job_id?: string | null };
 };
 
 export function nextMatchScoreRequest(
   packet: {
-    job_context: { company?: string; role?: string; job_id?: string | null };
+    job_context: { company?: string; role?: string; location?: string | null; job_id?: string | null };
     spec: { _review?: { jd_text?: string | null } | null };
   } | null | undefined,
   /** The base resume, the same document the list surfaces score against. Null while it loads. */
@@ -144,6 +147,10 @@ export function nextMatchScoreRequest(
     jobContext: {
       company: packet.job_context.company,
       role: packet.job_context.role,
+      // See JobContext in applications-api.ts: the backend can only exclude the posting's own
+      // offices from the requirement set if it is given one, and its fallback to the monitored
+      // posting cannot fire on a packet that points at no posting.
+      location: packet.job_context.location ?? null,
       job_id: jobId,
     },
   };
@@ -157,11 +164,24 @@ export function nextMatchScoreRequest(
  * dashboard, and the edited spec only exists in the browser. The two copies must list the same
  * fields: if this one omits something, the student loses credit for work that is on their resume.
  *
+ * NO target_role, WHICH IS THE BACKEND'S DECISION AND THIS COPY HAD DRIFTED FROM IT. That file has
+ * carried the reason since the header stopped printing the posting's job title:
+ *
+ *   "This is 'every word a resume spec puts on the page', and since the header stopped printing the
+ *    posting's job title, that title is no longer on the page. Leaving it in would credit the
+ *    student's match score for text no employer will ever read... It also scored a free hit every
+ *    time: the string came FROM the posting, so it matched the posting by construction."
+ *
+ * Measured over the 85 production packets on 2026-08-09, the drift was visible on the review screen
+ * as well as in the number: 13 of the 111 blue marks with no blue anywhere in the resume pane were
+ * credited from this field alone. Blue means "asked for by this job, AND on your resume", so an
+ * unanchored blue is a claim the page cannot support - and here it could not support it because the
+ * words are not on the resume at all.
+ *
  * Covered by the applications feature tests, which assert the field list matches the backend's.
  */
 export function resumeSpecText(spec: ResumeSpec): string {
   return [
-    spec.target_role ?? "",
     spec.school,
     spec.degree,
     spec.grad_date,
