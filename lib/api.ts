@@ -447,6 +447,51 @@ export type ApplicationQuestion = {
   answer: string;
   kind: "essay" | "required";
   required: boolean;
+  /* ---- present only on a question that came from the Apply-time pre-script ----
+   *
+   * All three are display-only and none of them is sent back: submit-request accepts
+   * id/question/answer/kind/required and nothing else, deliberately. They exist so the answers
+   * editor can show the employer's real option list instead of an empty box, and can say in one
+   * line why a question is hers rather than leaving her to guess. */
+  options?: string[] | null;
+  /** One line under the label saying why Litos did not answer this. */
+  explanation?: string;
+  /** True when the answer shown is one she gave on an earlier posting. */
+  remembered?: boolean;
+};
+
+/** One question from GET /postings/:jobId/questions that needs the applicant. */
+export type PostingPrescriptQuestion = {
+  question: string;
+  input_type: string;
+  options: string[] | null;
+  required: boolean;
+  max_length: number | null;
+  answer: string;
+  reusable: boolean;
+  remembered: boolean;
+  reason?: "self_declaration" | "choice_for_you" | "nothing_on_file" | "needs_your_words";
+  explanation?: string;
+};
+
+/**
+ * What a posting's application form asks, known before she clicks Apply.
+ *
+ * `ask` is only the questions that need her; `already_answered` counts the ones Litos fills from
+ * her profile, and is the honest counterweight that makes a four-question screen read as progress.
+ */
+export type PostingPrescript = {
+  job_id: string;
+  company: string;
+  role: string;
+  apply_url: string;
+  portal: string | null;
+  discovery_status: "ok" | "form_not_reached" | "failed";
+  discovered_at: string | null;
+  scanned_now: boolean;
+  question_count: number;
+  ask: PostingPrescriptQuestion[];
+  already_answered: number;
 };
 
 export type ApplicationReview = {
@@ -800,6 +845,18 @@ export function getApplicationProfile() {
     if (e instanceof ApiError && e.status === 404) return {} as ApplicationProfile;
     throw e;
   });
+}
+
+/**
+ * The extra questions this posting asks, and which of them only she can answer.
+ *
+ * Never fatal. Every failure mode here - the posting is gone, the scan could not reach the form,
+ * the endpoint is not deployed yet - means the same thing to the Apply flow: there is nothing extra
+ * to ask, which is exactly the behaviour that exists today. Failing the whole Apply because a
+ * lookahead did not work would trade a stall for a wall.
+ */
+export function getPostingQuestions(jobId: string): Promise<PostingPrescript | null> {
+  return api<PostingPrescript>(`/postings/${jobId}/questions`).catch(() => null);
 }
 
 export function putApplicationProfile(body: Partial<ApplicationProfile>) {

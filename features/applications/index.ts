@@ -10,6 +10,7 @@ export * from "./domain/apply-variant";
 export * from "./domain/board-stages";
 export * from "./domain/education-drift";
 export * from "./domain/match-model";
+export * from "./domain/prescript";
 export {
   AUTO_SUBMIT_PREPARED_LIMIT,
   HOME_MATCH_WINDOW,
