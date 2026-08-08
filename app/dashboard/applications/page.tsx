@@ -22,6 +22,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { nextMatchScoreRequest } from "@/features/applications";
@@ -627,6 +628,11 @@ function Applications() {
   const review = selected?.spec._review;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
+  /* Computed over EVERY reviewable packet, not over visiblePackets, and that is the whole point.
+     A filter of "Needs you" hides the sent Akuna application and leaves the eleven that cannot be
+     sent looking like eleven live opportunities. The mark has to know about the row the filter
+     just removed. */
+  const duplicateMarks = useMemo(() => duplicatePostingMarks(reviewablePackets), [reviewablePackets]);
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
       statusMatchesApplicationFilter(packet.spec._review, applicationFilter));
@@ -1386,6 +1392,9 @@ function Applications() {
                 {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
               </h2>
               <span className="font-mono text-[11px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
+              {duplicatePostingNote(duplicateMarks) && (
+                <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
+              )}
             </div>
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="application-filter">Filter applications</label>
@@ -1424,6 +1433,11 @@ function Applications() {
                   >
                     <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
+                    {duplicateBadge(duplicateMarks.get(packet.id)) && (
+                      <span className="mt-1 truncate text-[10px] uppercase tracking-[0.05em] text-faint">
+                        {duplicateBadge(duplicateMarks.get(packet.id))!.label}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1452,7 +1466,18 @@ function Applications() {
                       <time className="hidden text-xs text-faint sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
                       {/* A column where every cell reads the same carries no information and costs
                           a fifth of the row. It only renders when the rows actually differ. */}
-                      {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
+                      {/* Two chips, not one, and the order is deliberate: the status is what the
+                          row IS and the duplicate mark is what it costs. "Already applied" is the
+                          one that changes what she can do, because the backend refuses that send
+                          with a 409 rather than sending a second application the employer counts
+                          against her. */}
+                      <span className="flex items-center gap-1.5">
+                        {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
+                        {(() => {
+                          const badge = duplicateBadge(duplicateMarks.get(packet.id));
+                          return badge ? <Chip label={badge.label} kind={badge.kind} /> : null;
+                        })()}
+                      </span>
                     </button>
                   ))}
                 </div>
