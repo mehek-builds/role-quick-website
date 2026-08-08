@@ -205,6 +205,80 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
       required: true,
     }],
   }),
+  /* The Anduril run, transcribed from production `_review` on 2026-08-08 (generated_resumes
+     5cd3aff6-03ad-4a08-805e-f03b4a964676). It exists because the Your turn panel's REVIEW and
+     CONFIRM rows were unreachable in every fixture: `deepgram` trips the captcha short-circuit,
+     which collapses the panel to a single Open page row, so the only way anyone ever saw a REVIEW
+     pill was on a real stopped application against a real employer. This scenario reaches the panel
+     at localhost/dashboard/applications?qa=anduril with all four row kinds on screen at once:
+     an Open page blocker, a REVIEW essay, a CONFIRM sponsorship answer, and an answer the run says
+     is still empty on the form. The duplicated location line is kept exactly as the runner wrote
+     it, because collapsing it to one row is part of what this fixture is for. */
+  anduril: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b07",
+    company: "Anduril",
+    role: "Software Engineering Intern",
+    ats: "Greenhouse",
+    score: 71,
+    jd: "Anduril is hiring a Software Engineering Intern to build defense software in C++ and Python. You will work on distributed systems, write tested code, and collaborate across hardware and software teams over a twelve week in-person internship.",
+    title: "Software Engineer",
+    bullets: [
+      "Built reliable TypeScript services that automated 18 operational handoffs.",
+      "Shipped tested developer tools with visible recovery paths for production failures.",
+    ],
+    skills: ["C++", "Python", "Distributed Systems", "Software Engineering", "Testing"],
+    editedTerms: ["reliable", "tested", "production", "Distributed Systems", "Software Engineering"],
+    status: "needs_attention",
+    attentionReason: [
+      '"Discipline" is required and is still empty',
+      '"Are you willing to work in-person for 12 weeks during the internship?" is required and is still empty',
+      '"What is your top location preference?" is required and is still empty',
+      '"How did you hear about Anduril?" is required and is still empty',
+      "drafted answer needs your review: Names/orgs not found in your background or the job post (verify): Los Angeles",
+      'location choice left for you: "what is your top location preference?"',
+    ].join("\n"),
+    filledFields: [
+      "first_name",
+      "last_name",
+      "email",
+      "phone",
+      "education_end_year_field",
+      "resume",
+      "question:website",
+      "question:linkedin profile",
+      "question:u.s. work authorization",
+    ],
+    questions: [
+      {
+        id: "anduril-in-person",
+        question: "are you willing to work in-person for 12 weeks during the internship?",
+        answer: "Yes. I am glad to be on site in Los Angeles for the full twelve weeks and can arrange housing for the internship period.",
+        kind: "essay",
+        required: false,
+      },
+      {
+        id: "anduril-work-auth",
+        question: "u.s. work authorization",
+        answer: "Yes",
+        kind: "required",
+        required: false,
+      },
+      {
+        id: "anduril-sponsorship",
+        question: "will you require sponsorship from anduril for employment now or in the future (e.g, h1b visa)?",
+        answer: "Yes",
+        kind: "required",
+        required: false,
+      },
+      {
+        id: "anduril-heard",
+        question: "how did you hear about anduril?",
+        answer: "Company website",
+        kind: "required",
+        required: false,
+      },
+    ],
+  }),
 };
 
 function qaVariant(packet: GeneratedResume, options: {
