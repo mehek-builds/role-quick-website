@@ -1186,6 +1186,51 @@ function Applications() {
     moveToScreen("questions", { scrollToTop: !focusQuestionId });
   }
 
+  /* Hand the employer's emailed code to the backend and let it finish the send.
+   *
+   * The guard is a ref, not state, for the same reason approveInFlight is: a second Enter or a
+   * second click can land in the same tick, before any re-render, and the thing on the other end of
+   * this request is a real application to a real employer.
+   *
+   * A repeat of the SAME code is not actually dangerous - the endpoint fingerprints it and answers
+   * from the stored attempt without making a run - but a repeat that arrives while the first is
+   * still going would start a second run before the first has written anything for the fingerprint
+   * to match. So both ends hold the line. */
+  const securityCodeInFlight = useRef<string | null>(null);
+  const [securityCodeId, setSecurityCodeId] = useState<string | null>(null);
+  const [securityCodeError, setSecurityCodeError] = useState<string | null>(null);
+
+  async function submitSecurityCode(code: string) {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    if (securityCodeInFlight.current === selected.id) return;
+    const requestedId = selected.id;
+    securityCodeInFlight.current = requestedId;
+    setSecurityCodeId(requestedId);
+    setSecurityCodeError(null);
+    try {
+      const result = await api<SubmissionResponse & { already_attempted?: boolean; outcome?: string }>(
+        `/applications/${requestedId}/security-code`,
+        { method: "POST", body: JSON.stringify({ code }) },
+      );
+      // The packet on screen after a multi-minute run need not be the one this started on: the
+      // switcher renders above this screen, so tapping another row mid-run is a single tap. Same
+      // guard, same reason, as approveFinalSubmission.
+      if (selectedIdRef.current !== requestedId) return;
+      submissionRef.current = result;
+      setSubmission(result);
+      if (result.already_attempted && result.outcome !== "accepted") {
+        setSecurityCodeError("Litos already tried that exact code and the employer did not accept it. Use the newest email.");
+      }
+      moveToScreen(screenForStatus(result.review.status, "portal"));
+    } catch (reason) {
+      if (selectedIdRef.current !== requestedId) return;
+      setSecurityCodeError(reason instanceof Error ? reason.message : "Could not send the security code.");
+    } finally {
+      securityCodeInFlight.current = null;
+      setSecurityCodeId(null);
+    }
+  }
+
   async function retryPreparation() {
     if (!selected || !submission || submission.application_id !== selected.id) return;
     const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
@@ -1543,6 +1588,9 @@ function Applications() {
           packet={selected}
           submission={selectedSubmission}
           approving={approvingId === selected.id}
+          securityCodeSubmitting={securityCodeId === selected.id}
+          securityCodeError={securityCodeError}
+          onSubmitSecurityCode={submitSecurityCode}
           educationProfile={educationProfile}
           educationProfileStatus={qaMode === true ? "ready" : educationProfileStatus}
           onCheckResume={() => moveToScreen("review")}
@@ -2211,8 +2259,101 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   );
 }
 
-function SubmissionScreen({ packet, submission, approving, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
+/**
+ * The one control that can finish an application the employer is holding behind an emailed code.
+ *
+ * A REAL FORM, A REAL INPUT AND A REAL BUTTON, and that sentence is here because this app has
+ * shipped the opposite: buttons rendered as <span> elements with nothing to bind to, which is how 79
+ * prepared resumes produced 0 sent applications. This is a <form> with an onSubmit, so Enter in the
+ * field works as well as the button, the field is a labelled <input> the browser can autofill from a
+ * one-time-code SMS or mail, and the button is a <button type="submit">. features/applications
+ * carries a test that asserts all of that against this file's source.
+ *
+ * NOTHING SURVIVES OUTSIDE THE MANAGED SESSION, and the copy says so. The attended-handoff path in
+ * this same product promises "Everything else is filled in" and then opens a completely empty
+ * employer form, because the filled page lived in a browser that no longer exists. The finishing run
+ * here does not depend on any surviving page: it fills the form again from the same packet and sends
+ * it with the code in place. The applicant is told that, rather than left to discover it.
+ */
+function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
+  review: ApplicationReview;
+  submitting: boolean;
+  error: string | null;
+  onSubmitCode: (code: string) => void;
+}) {
+  const [code, setCode] = useState("");
+  const digits = review.security_code?.digits ?? 0;
+  const sentTo = review.security_code?.sent_to;
+  const lastRejected = review.security_code?.attempts?.some((attempt) => attempt.outcome === "rejected") === true;
+  // Trimmed of the spacing a code picks up on its way out of an email, and measured only when the
+  // page told us a length. A field that claims "8 characters" about a control that never said so
+  // would refuse a valid code.
+  const cleaned = code.replace(/[\s-]/g, "");
+  const ready = cleaned.length > 0 && (digits === 0 ? cleaned.length >= 4 : cleaned.length === digits);
+  return (
+    <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
+      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on the security code</p>
+      <p className="mt-2 text-sm leading-6 text-ink">
+        {sentTo
+          ? <>Litos sent this application and {review.ats_name === "greenhouse" ? "the employer" : "the employer"} emailed a{digits > 0 ? ` ${digits}-character` : ""} security code to <span className="font-medium">{sentTo}</span>. It is not filed until that code goes in.</>
+          : <>Litos sent this application and the employer emailed a{digits > 0 ? ` ${digits}-character` : ""} security code before it will file it. Check the inbox you applied with.</>}
+      </p>
+      {lastRejected && (
+        <p role="alert" className="mt-2 text-xs leading-5 text-warn">
+          The last code Litos tried was not accepted. Use the newest email.
+        </p>
+      )}
+      <form
+        className="mt-4 flex flex-wrap items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!ready || submitting) return;
+          onSubmitCode(cleaned);
+        }}
+      >
+        <div>
+          <label htmlFor="security-code" className="block text-xs font-medium text-muted">Security code</label>
+          <input
+            id="security-code"
+            name="security-code"
+            type="text"
+            inputMode="text"
+            // The browser's own name for this, so a code that arrives by mail or SMS can be filled
+            // in one tap instead of copied across apps.
+            autoComplete="one-time-code"
+            // Never lower-cased or upper-cased. Greenhouse's own example code is TPHJrFMJ, which is
+            // mixed case on purpose, and normalising it destroys a valid code.
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            {...(digits > 0 ? { maxLength: digits * 2 } : {})}
+            value={code}
+            onChange={(event) => setCode(event.target.value)}
+            disabled={submitting}
+            className="mt-1 w-48 rounded-inner border border-border bg-surface px-3 py-2 font-mono text-sm tracking-[0.2em] text-ink disabled:opacity-50"
+            placeholder={digits > 0 ? "".padEnd(digits, "x") : "code"}
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={!ready || submitting}
+          className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50"
+        >
+          {submitting ? "Finishing" : "Finish sending"}
+        </button>
+      </form>
+      {error && <p role="alert" className="mt-2 text-xs leading-5 text-danger">{error}</p>}
+      <p className="mt-3 text-xs leading-5 text-muted">
+        Litos fills the company form again from this packet and sends it with the code in place, so
+        nothing needs to still be open in a browser anywhere.
+      </p>
+    </div>
+  );
+}
+
+function SubmissionScreen({ packet, submission, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
   const { review } = submission;
+  const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const handoffUrl = needsAttention ? submission.handoff_url : undefined;
@@ -2242,7 +2383,7 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
-        <h2 className="text-heading font-medium text-ink">{needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
+        <h2 className="text-heading font-medium text-ink">{awaitingSecurityCode ? "One code away" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
@@ -2251,8 +2392,22 @@ function SubmissionScreen({ packet, submission, approving, educationProfile, edu
           <BlockerList items={needsInputItems} portalUrl={handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed" ? userFacingError(review.submission_error, "Try again in a minute.") : "Check the preview, then send."}
+            {review.status === "failed"
+              ? userFacingError(review.submission_error, "Try again in a minute.")
+              /* NOT "Check the preview, then send." This application has already been sent once, and
+                 offering a send is what the three measured packets of 2026-08-08 did wrong. */
+              : awaitingSecurityCode
+                ? "This one is with the employer already. It needs the code they emailed before it counts as filed."
+                : "Check the preview, then send."}
           </p>
+        )}
+        {awaitingSecurityCode && (
+          <SecurityCodeCard
+            review={review}
+            submitting={securityCodeSubmitting}
+            error={securityCodeError}
+            onSubmitCode={onSubmitSecurityCode}
+          />
         )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
           <div role="alert" className="mt-4 rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">

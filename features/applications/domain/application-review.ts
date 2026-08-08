@@ -179,7 +179,7 @@ export function explicitTerms(source: readonly string[]): ReadonlySet<string> {
 
 export type ReviewStatus =
   | "resume_ready" | "questions_ready" | "ready_to_submit" | "submit_requested" | "preparing"
-  | "filling" | "needs_attention" | "ready_for_final_approval" | "submitting" | "submission_claimed" | "submitted" | "failed";
+  | "filling" | "needs_attention" | "ready_for_final_approval" | "awaiting_security_code" | "submitting" | "submission_claimed" | "submitted" | "failed";
 
 /**
  * The chip beside the page title. "Submitting" used to cover the entire preparing/filling stretch,
@@ -197,7 +197,10 @@ export type ReviewStatus =
  */
 export function statusLabel(onSubmittingScreen: boolean, status: ReviewStatus): string {
   if (status === "submitted") return "Sent";
-  if (status === "needs_attention" || status === "failed" || status === "ready_for_final_approval") return "Needs you";
+  // "Needs you" and not "Sent", even though an application really has gone in: the employer will
+  // not file it until she supplies the emailed code, so a label that reads as finished would park it
+  // forever. She is the only person who can move it.
+  if (status === "needs_attention" || status === "failed" || status === "ready_for_final_approval" || status === "awaiting_security_code") return "Needs you";
   if (onSubmittingScreen || ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "Getting ready";
   return "Ready";
 }
@@ -223,7 +226,7 @@ export type ReviewScreen = "review" | "submitting" | "portal" | "submitted";
  */
 export function screenForStatus(status: ReviewStatus | string | undefined, fallback: ReviewScreen): ReviewScreen {
   if (status === "submitted") return "submitted";
-  if (status === "needs_attention" || status === "ready_for_final_approval" || status === "failed") return "portal";
+  if (status === "needs_attention" || status === "ready_for_final_approval" || status === "failed" || status === "awaiting_security_code") return "portal";
   if (status && ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "submitting";
   return fallback;
 }
@@ -236,7 +239,7 @@ export function screenForStatus(status: ReviewStatus | string | undefined, fallb
 export function isLivePacketStatus(status: string | undefined): boolean {
   return (
     status !== undefined &&
-    ["submit_requested", "preparing", "filling", "submitting", "submission_claimed", "needs_attention", "ready_for_final_approval", "failed"].includes(status)
+    ["submit_requested", "preparing", "filling", "submitting", "submission_claimed", "needs_attention", "ready_for_final_approval", "awaiting_security_code", "failed"].includes(status)
   );
 }
 
