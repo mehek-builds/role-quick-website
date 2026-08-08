@@ -30,11 +30,15 @@ const completeSpec: ResumeSpec = {
   skill_source: { TypeScript: "Litos", React: "Resume Lab" },
 };
 
+/* NO "Software Engineer" AT THE HEAD OF THIS LIST, and its absence is the assertion. `target_role`
+ * is the POSTING's job title, and the resume header stopped printing it: the backend's
+ * resumeSpecText dropped it for that reason and this copy had not followed, so the score took a free
+ * hit on a string that came from the posting itself and the review screen showed 13 blue marks with
+ * nothing in the resume pane to anchor them. See the note on resumeSpecText. */
 test("resumeSpecText includes every rendered ResumeSpec field in display order", () => {
   assert.equal(
     resumeSpecText(completeSpec),
     [
-      "Software Engineer",
       "University of Southern California",
       "B.S. Computer Science",
       "May 2027",
@@ -51,6 +55,13 @@ test("resumeSpecText includes every rendered ResumeSpec field in display order",
       "TypeScript",
       "React",
     ].join(" "),
+  );
+});
+
+test("the posting's job title is not scored as if it were on the resume", () => {
+  assert.ok(
+    !resumeSpecText(completeSpec).includes("Software Engineer"),
+    "target_role is the posting's title, so scoring it matches the posting by construction",
   );
 });
 

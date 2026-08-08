@@ -46,7 +46,15 @@ setPartialPayloadReporter((endpoint, fields) => {
  * backend read the live job row, which also covers every packet built before this existed.
  * Absent for packets from the extension or a hand-typed link, which point at no monitored posting.
  */
-export type JobContext = { company?: string; role?: string; job_id?: string | null };
+/* `location` IS PART OF THE CONTEXT, and leaving it out was not a cosmetic omission. The backend
+ * excludes the posting's own offices from its requirement set (see locationTokens in the engine's
+ * jdMatch.ts), and it can only do that with a location to exclude. POST /jd-match falls back to the
+ * monitored posting's row when the caller sends none, so the exclusion USUALLY still fired and the
+ * gap was silent - but 5 of the 85 production packets point at no posting we hold, and on those the
+ * student was scored against the employer's cities. Fluency's packet ff37b063 carried
+ * `san francisco` and Junior AI's 56d9c011 carried `london` for exactly that reason. The packet
+ * itself stores the location, so there is nothing to look up: pass what we already have. */
+export type JobContext = { company?: string; role?: string; location?: string | null; job_id?: string | null };
 
 /**
  * `jdText` is NULL when the caller wants the server to read the posting itself.

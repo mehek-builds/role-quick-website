@@ -171,17 +171,21 @@ describe("rankJobs carries preference evidence and no score at all", () => {
 // most needs the posting's offices out of its denominator and its missing list. A packet stores no
 // location, so the id is what lets the backend read it off the live job row.
 describe("the review screen sends what the backend needs to exclude the posting's offices", () => {
-  test("the next-match score request carries the job id", () => {
+  test("the next-match score request carries the job id and the stored location", () => {
     // The invariant is unchanged. Its subject moved: ISSUE-038 lifted the request out of the effect
     // and into nextMatchScoreRequest, so this is asserted on the value that function produces
     // rather than on the literal that used to sit in the page. A regex over page source could not
     // follow it, and deleting the test rather than moving it is how this invariant got broken once
     // already.
     const request = nextMatchScoreRequest(
-      { id: "p1", job_context: { company: "PsiQuantum", role: "Intern", job_id: "job-1" }, spec: { _review: { jd_text: "text" } } },
+      { id: "p1", job_context: { company: "PsiQuantum", role: "Intern", location: "Palo Alto, CA", job_id: "job-1" }, spec: { _review: { jd_text: "text" } } },
       "base resume",
     );
     assert.equal(request.jobContext.job_id, "job-1");
+    // The id only reaches the offices through the route's fallback to the monitored posting, and
+    // 5 of the 85 production packets point at no posting we hold. The packet's own location is the
+    // direct answer and it was being dropped on the floor. See nextMatchScoreRequest.
+    assert.equal(request.jobContext.location, "Palo Alto, CA");
     const applications = code(readFileSync("app/dashboard/applications/page.tsx", "utf8"));
     assert.match(applications, /nextMatchScoreRequest\(nextPacket, baseResumeText\)/, "the page must build the request through it");
   });
@@ -197,7 +201,7 @@ describe("the review screen sends what the backend needs to exclude the posting'
 
   test("JobContext carries the id for every caller of it", () => {
     const apiFile = readFileSync("features/applications/infrastructure/applications-api.ts", "utf8");
-    assert.match(apiFile, /export type JobContext = \{ company\?: string; role\?: string; job_id\?: string \| null \};/);
+    assert.match(apiFile, /export type JobContext = \{ company\?: string; role\?: string; location\?: string \| null; job_id\?: string \| null \};/);
   });
 });
 

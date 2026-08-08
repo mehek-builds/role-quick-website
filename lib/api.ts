@@ -216,7 +216,7 @@ export type GeneratedResume = {
   /* job_id is the monitored posting this packet was built for. Absent on everything generated
      before 2026-07-28 and on anything from the extension, which has no posting to point at, so
      every reader needs a path that works without it. */
-  job_context: { company?: string; role?: string; jd_hash?: string; job_id?: string | null };
+  job_context: { company?: string; role?: string; location?: string | null; jd_hash?: string; job_id?: string | null };
   spec: ResumeSpec & {
     _quality?: Record<string, unknown>;
     _contact?: Record<string, string | undefined>;

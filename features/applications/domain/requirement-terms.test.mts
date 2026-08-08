@@ -151,3 +151,69 @@ describe("review regressions: the panes must agree with the score", () => {
     ]);
   });
 });
+
+/**
+ * ISSUE-047. Blue means "asked for by this job, AND on your resume", so a blue mark in the job
+ * description with no blue anywhere in the resume pane is the page contradicting its own legend.
+ *
+ * Measured over the 85 production packets on 2026-08-09: 111 of 313 matched terms (35.5%) were
+ * unanchored, across 76 of the 83 scorable packets. Most of it was fields the pane did not render
+ * through RequirementText at all, which is fixed in the pane. Two causes were here.
+ */
+describe("a blue requirement can be found in the resume pane", () => {
+  test("a hyphenated compound anchors the part the scorer credited", () => {
+    // The backend's resumeCovers searches a normalized whole-text haystack, so the bullet "Built
+    // LLM-agent cost infrastructure" contains ` llm ` and the requirement is counted as covered.
+    // This pane matched token by token and both tokenizers keep `-` inside a token, so the
+    // candidate was the two-word key `llm agent` and nothing was marked. Packets ff37b063,
+    // edb20a2b, 31528fd9 and 56d9c011.
+    const out = segmentText("Built LLM-agent cost infrastructure", idx(["llm"]));
+    assert.deepEqual(marks(out), [["LLM", "covered"]]);
+    assert.equal(out.map((s) => s.text).join(""), "Built LLM-agent cost infrastructure");
+  });
+
+  test("the whole compound still wins when the compound is itself the requirement", () => {
+    const out = segmentText("Built LLM-agent cost infrastructure", idx(["llm agent"]));
+    assert.deepEqual(marks(out), [["LLM-agent", "covered"]]);
+  });
+
+  test("a phrase spanning separate written words is not split into parts", () => {
+    // The narrowness of the rule: it fires only where ONE written token carries its own separator.
+    // Two words with a space between them are matched as a phrase or not at all.
+    const out = segmentText("Built machine learning systems", idx(["machine"]));
+    assert.deepEqual(marks(out), [["machine", "covered"]]);
+  });
+
+  test("a same-capability spelling is marked, and it names the requirement it satisfies", () => {
+    // The scorer credits React for `frontend` (SAME_CAPABILITY_TERMS in the backend's jdMatch.ts),
+    // and the resume never writes the word "frontend", so this pane had nothing to colour. It was
+    // the last unanchored case on the corpus: 8 packets, all of them this.
+    const index = buildRequirementIndex(
+      [{ term: "frontend", display: "front-end", weight: 1, satisfied_by: "react" }],
+      [],
+    );
+    const out = segmentText("Built the dashboard in React and TypeScript", index);
+    assert.deepEqual(marks(out), [["React", "covered"]]);
+    const mark = out.find((s) => s.kind === "mark");
+    assert.equal(
+      mark && mark.kind === "mark" ? mark.term : null,
+      "frontend",
+      "hovering the requirement in the JD has to lift this mark, so it carries the requirement's key",
+    );
+  });
+
+  test("a requirement the posting states in its own right keeps its own key", () => {
+    // A posting asking for BOTH `frontend` and `react` must not relabel React as frontend: the
+    // alias only fills a key nothing else claims.
+    const index = buildRequirementIndex(
+      [
+        { term: "frontend", display: "front-end", weight: 1, satisfied_by: "react" },
+        { term: "react", display: "React", weight: 1 },
+      ],
+      [],
+    );
+    const out = segmentText("Built the dashboard in React", index);
+    const mark = out.find((s) => s.kind === "mark");
+    assert.equal(mark && mark.kind === "mark" ? mark.term : null, "react");
+  });
+});

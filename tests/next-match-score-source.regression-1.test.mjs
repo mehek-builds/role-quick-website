@@ -28,7 +28,7 @@ import { nextMatchScoreRequest } from "../features/applications/domain/match-mod
 
 const packet = (overrides = {}) => ({
   id: "p1",
-  job_context: { company: "PsiQuantum", role: "Intern, Quantum Architecture", job_id: "job-1", ...(overrides.job_context ?? {}) },
+  job_context: { company: "PsiQuantum", role: "Intern, Quantum Architecture", location: "Palo Alto, CA", job_id: "job-1", ...(overrides.job_context ?? {}) },
   spec: { _review: { jd_text: "FROZEN posting text captured when the resume was tailored." }, ...(overrides.spec ?? {}) },
 });
 
@@ -73,14 +73,30 @@ describe("the next-best-match row is scored against the same document every othe
     }
   });
 
-  test("the job id rides along, so the backend can exclude the posting's own offices", () => {
-    // B3's invariant, kept as behaviour rather than as a regex over page source. A packet stores no
-    // location; without the id the student is scored against the employer's cities.
+  test("the job id AND the location ride along, so the backend can exclude the posting's offices", () => {
+    // B3's invariant, kept as behaviour rather than as a regex over page source.
+    //
+    // "A packet stores no location" was this comment's premise and it is not true: 80 of the 85
+    // production packets carry one on `job_context`, Flow Traders' b43dbe37 reading "New York" and
+    // Roblox's 9f1138c0 reading "San Mateo, CA, United States". The id alone works only through the
+    // route's FALLBACK to the monitored posting, and 5 packets point at no posting we hold, so on
+    // those the exclusion never fired at all: Fluency's ff37b063 carried `san francisco` as a
+    // requirement and Junior AI's 56d9c011 carried `london`. Send what we already have.
     assert.deepEqual(nextMatchScoreRequest(packet(), BASE).jobContext, {
       company: "PsiQuantum",
       role: "Intern, Quantum Architecture",
+      location: "Palo Alto, CA",
       job_id: "job-1",
     });
+  });
+
+  test("a packet with no stored location sends null rather than dropping the field", () => {
+    const noLocation = {
+      id: "p1",
+      job_context: { company: "Acme", role: "Intern", job_id: "job-1" },
+      spec: { _review: { jd_text: "text" } },
+    };
+    assert.equal(nextMatchScoreRequest(noLocation, BASE).jobContext.location, null);
   });
 
   test("no packet, no request", () => {

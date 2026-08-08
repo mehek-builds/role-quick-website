@@ -163,14 +163,32 @@ function Swatch({ tone, label }: { tone: TermTone; label: string }) {
   );
 }
 
-/** missingCount is null when the posting was not scorable: claiming "(0)" gaps beside a panel that
- *  says the posting could not be scored asserts a measurement that never happened. */
-export function MatchLegend({ missingCount }: { missingCount: number | null }) {
+/**
+ * missingCount is null when the posting was not scorable: claiming "(0)" gaps beside a panel that
+ * says the posting could not be scored asserts a measurement that never happened.
+ *
+ * THE THIRD SWATCH IS CONDITIONAL, because on 83 of 85 production packets there is no green on the
+ * page for it to name. Measured 2026-08-09: `_review.edited_terms` exists on all 85 and is non-empty
+ * on two, so 97.6% of the time this legend defined a colour the student would never see, next to two
+ * that are everywhere. A legend is a promise about what the marks mean, and a swatch for a colour
+ * that is not there reads as "you missed something".
+ *
+ * THE PRODUCER IS NOT BROKEN AND THAT WAS CHECKED, not assumed, before the legend was touched.
+ * deriveEditedTerms was re-run over all 85 packets against the live experience bank and reproduced
+ * the two stored results exactly. Of 903 rendered bullets, 813 are byte-identical to a stored bank
+ * variant and ZERO come from outside the default prefix, which is the only shape a SELECTION edit
+ * can be attributed to this job; every bank entry holds at most as many variants as the packet
+ * renders, so there was no choice to make. That is the finding applicationReview.ts already records
+ * in its own words - "tailoring below the skills line is not rewriting, it is CHOOSING which of the
+ * student's own phrasings to put on this page" - and green is therefore rare BY NATURE rather than
+ * missing by defect. When a packet does have edits, the swatch appears and means what it says.
+ */
+export function MatchLegend({ missingCount, editedCount = 0 }: { missingCount: number | null; editedCount?: number }) {
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <Swatch tone="covered" label="asked for, and on your resume" />
       <Swatch tone="missing" label={missingCount === null ? "asked for, not on your resume" : `asked for, not on your resume (${missingCount})`} />
-      <Swatch tone="edited" label="wording Litos changed for this job" />
+      {editedCount > 0 && <Swatch tone="edited" label="wording Litos changed for this job" />}
     </div>
   );
 }
