@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/app/ui";
-import { describeRemainingWork, describeWait, type WaitingApplication } from "@/lib/captcha-queue";
+import { describeRemainingWork, describeWait, type HandoffFill, type WaitingApplication } from "@/lib/captcha-queue";
+import { getToken, isGuestSession } from "@/lib/api";
+import { armHandoffs, ensureExtensionSession } from "@/lib/extension-bridge";
 
 /**
  * Applications stopped on a human-verification check.
@@ -16,7 +18,14 @@ import { describeRemainingWork, describeWait, type WaitingApplication } from "@/
  * Litos does not and will not solve these. The check exists to establish that the person applying
  * is a person, and answering it on their behalf would defeat the thing the employer is asking for.
  * What this can do is remove every other obstacle: which application, how long it has waited, what
- * is already filled in, and one click to the exact page.
+ * will actually be filled in when they get there, and one click to the exact page.
+ *
+ * "what will actually be filled in when they get there" is doing real work in that sentence. The
+ * earlier fill lived in a managed browser session on a server and does not survive the click, so
+ * the only thing that can fill the employer's form is the extension, in this browser. That is why
+ * this component talks to it: it asks whether the extension is there and signed in before making
+ * any claim about the form, and it tells the extension which pages the applicant is about to open
+ * so the fill starts on arrival instead of waiting to be asked a question they already answered.
  */
 export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }) {
   /* Rendered from a client-side clock, set after mount. Formatting a duration during SSR produces
@@ -35,6 +44,30 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, [waiting]);
+
+  /* What will actually happen when they click through, measured rather than assumed.
+     Starts at "none" and only becomes "extension" once the extension has answered and holds a
+     session for this account. Defaulting the other way would put the old overpromise back on the
+     screen for everyone whose extension is missing, signed out, or slow to wake. */
+  const [fill, setFill] = useState<HandoffFill>("none");
+  useEffect(() => {
+    if (waiting === 0) return;
+    let live = true;
+    void ensureExtensionSession({ token: getToken(), guest: isGuestSession() }).then((state) => {
+      if (live) setFill(state.signedIn ? "extension" : "none");
+    });
+    return () => {
+      live = false;
+    };
+  }, [waiting]);
+
+  /* Armed when the queue renders, not when a link is clicked. The click navigates immediately, so
+     arming from its handler is a race against the employer's page load; arming everything up front
+     has no race to lose. Each arming is handed out once and expires on its own. */
+  useEffect(() => {
+    if (fill !== "extension") return;
+    void armHandoffs(items.map((item) => ({ id: item.id, portalUrl: item.portalUrl })));
+  }, [fill, items]);
 
   if (items.length === 0) return null;
 
@@ -63,7 +96,7 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
               <p className="mt-0.5 text-sm text-muted">
                 {now === null ? "Waiting" : describeWait(item.stalledAt, now)}
                 {". "}
-                {describeRemainingWork(item.stage)}
+                {describeRemainingWork(item.stage, fill)}
               </p>
             </div>
             {item.portalUrl ? (

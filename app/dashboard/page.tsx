@@ -2,9 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { ensureExtensionSession } from "@/lib/extension-bridge";
 import {
   api,
   getStoredEmail,
+  getToken,
+  isGuestSession,
   type ApplicationProfile,
   type GeneratedResume,
   type Me,
@@ -267,6 +270,16 @@ export default function Home() {
   const [preparationErrors, setPreparationErrors] = useState<Record<string, string>>({});
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
+
+  /* Hand this session to the extension.
+   *
+   * Here rather than inside the one card that needs it, because the extension being signed out is
+   * not a "waiting on you" problem: it breaks every fill on every employer page. Home is the screen
+   * everybody lands on, so this is the earliest honest moment. Idempotent, cheap, and a no-op when
+   * the extension is not installed. */
+  useEffect(() => {
+    void ensureExtensionSession({ token: getToken(), guest: isGuestSession() });
+  }, []);
 
   useEffect(() => {
     queueMicrotask(() => setDismissed(readDismissed(dailyDismissalKey())));

@@ -106,15 +106,33 @@ export function describeWait(stalledAt: string, now: number): string {
 }
 
 /**
- * What is actually left to do, which differs by stage and must not overstate it.
+ * Whether anything will actually fill the form once the applicant gets there.
  *
- * 'at_submit' means the form is filled and one check remains. 'before_fill' means the run stopped
- * before touching anything, so the form is still blank - telling that applicant to "finish the last
- * step" sends them to an empty page and costs the trust to believe the next message. The backend
- * draws the same distinction for the same reason.
+ * "extension" means the Litos extension is installed and signed in to this account, so it will
+ * refill the application on arrival. "none" means nothing will: no extension, or an extension that
+ * is not signed in as this person. This is the only honest input to the sentence below, and it has
+ * to be measured rather than assumed.
  */
-export function describeRemainingWork(stage: "before_fill" | "at_submit"): string {
+export type HandoffFill = "extension" | "none";
+
+/**
+ * What is actually left to do, which must not overstate it.
+ *
+ * This block used to tell an 'at_submit' applicant "Everything else is filled in. Solve the check
+ * and send it." That was true of the run that stalled and false of the page they were about to
+ * open. The fill happened inside a managed browser session on a server; clicking through opens a
+ * fresh load of the employer's own site in the applicant's own browser, where none of it exists.
+ * Three applications sat behind that sentence, and every one of them opened blank under a promise
+ * that they would not.
+ *
+ * So the stage is no longer the whole story. The stage says what the earlier run reached; `fill`
+ * says what will happen next, which is the thing the applicant is actually being told. When the
+ * extension is there, it refills and the promise is kept by construction. When it is not, the honest
+ * thing is to say the form opens blank, and why.
+ */
+export function describeRemainingWork(stage: "before_fill" | "at_submit", fill: HandoffFill): string {
+  if (fill === "extension") return "Litos fills it in again in your browser. Solve the check and send it.";
   return stage === "at_submit"
-    ? "Everything else is filled in. Solve the check and send it."
-    : "Nothing is filled in yet. Solve the check and Litos can take it from there.";
+    ? "Litos filled it in the run that stopped, but that ran in a different browser, so the form opens blank. Fill it in, solve the check, and send it."
+    : "Nothing is filled in yet, so the form opens blank. Fill it in, solve the check, and send it.";
 }

@@ -109,12 +109,33 @@ test("an unreadable timestamp degrades to something true rather than throwing", 
   assert.equal(describeWait("not a date", NOW), "Waiting");
 });
 
-/* The distinction the backend already draws, for the same reason: telling someone their form is
- * filled and one step remains, when the run stopped before touching it, sends them to a blank page
- * and costs the trust to believe the next message. */
-test("the remaining work is described honestly for each stage", () => {
-  assert.match(describeRemainingWork("at_submit"), /Everything else is filled in/);
-  assert.match(describeRemainingWork("before_fill"), /Nothing is filled in yet/);
+/* The reported defect, in one assertion.
+ *
+ * "Everything else is filled in. Solve the check and send it." was shown for an 'at_submit' stall
+ * and was false: that fill happened inside a managed browser session on a server, and "Finish this
+ * one" opens a fresh load of the employer's site in the applicant's own browser, where none of it
+ * survives. Three applications sat behind that sentence and every one of them opened blank. Nothing
+ * may claim the form is already filled unless something is actually going to fill it. */
+test("nothing claims the form is filled when nothing is going to fill it", () => {
+  for (const stage of ["at_submit", "before_fill"] as const) {
+    const copy = describeRemainingWork(stage, "none");
+    assert.match(copy, /opens blank/);
+    assert.doesNotMatch(copy, /Everything else is filled in/);
+  }
+});
+
+/* The stage still carries a real distinction when nobody is going to refill: one run got as far as
+ * the check, the other never touched the form. Both open blank, and both say so. */
+test("the stage still says how far the earlier run actually got", () => {
+  assert.match(describeRemainingWork("at_submit", "none"), /the run that stopped/);
+  assert.match(describeRemainingWork("before_fill", "none"), /Nothing is filled in yet/);
+});
+
+/* With the extension signed in, the promise is kept by construction: it refills the application on
+ * arrival, so this is the one case where the applicant can be told the fill is handled. */
+test("the promise is only made when the extension is there to keep it", () => {
+  assert.match(describeRemainingWork("at_submit", "extension"), /Litos fills it in again in your browser/);
+  assert.match(describeRemainingWork("before_fill", "extension"), /Litos fills it in again in your browser/);
 });
 
 // ---- link safety ----
