@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
   ApiError,
+  getPostingQuestions,
   getStoredEmail,
   type ApplicationQuestion,
   type ApplicationProfile,
@@ -44,6 +45,7 @@ import { RequirementProvider, RequirementText, MatchLegend } from "@/components/
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -159,6 +161,10 @@ function Applications() {
      changes on the second press and the second click looks dead, which is the defect this whole
      change exists to remove. */
   const [focusQuestion, setFocusQuestion] = useState<{ id: string; token: number } | null>(null);
+  /* The one line at the top of the Apply questions screen, set only when the pre-script put us
+     there. Empty on every other route into the answers editor, which keeps that screen exactly as
+     it was for "Check the answers" and for a stalled run. */
+  const [prescriptNote, setPrescriptNote] = useState("");
   const [screen, setScreen] = useState<Screen>("review");
   /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
      The progress screen says one of two things, and the difference is the whole point of it:
@@ -820,6 +826,31 @@ function Applications() {
      the draft and generates from it in the same tick. React has not committed setNewApplication by
      then, so reading state here would generate from the PREVIOUS draft, or from an empty one on
      first load. The panel's own button passes nothing and gets the state, as before. */
+  /* ASK HER THE EXTRA QUESTIONS HERE, at Apply, instead of discovering them mid-run.
+   *
+   * Until now the first anyone heard of a question Litos cannot answer was after the packet was
+   * built, a browser was open, and the run had stopped: she then had to find the stalled
+   * application and come back to it. Litos owns the board, so the posting's form can be read
+   * before any of that, and the handful of questions that genuinely need her can be put in front
+   * of her while she is still looking at the job.
+   *
+   * Nothing here blocks. The pre-script is fetched after the packet exists, so a scan that is slow,
+   * refused, or not deployed costs her nothing: getPostingQuestions swallows every failure and this
+   * falls through to the review screen, which is exactly today's behaviour.
+   *
+   * The answers land in the SAME `questions` state that "Check the answers" edits and travel out
+   * through the same POST /applications/:id/submit-request. There is no second path for an answer.
+   */
+  async function askPrescriptQuestions(jobId: string) {
+    const prescript = await getPostingQuestions(jobId);
+    if (!prescriptNeedsHer(prescript)) return;
+    const asked = prescriptEditableQuestions(prescript);
+    setQuestions((current) => mergeDiscoveredQuestions(current, asked));
+    setPrescriptNote(prescriptSummary(prescript));
+    setFocusQuestion(null);
+    moveToScreen("questions");
+  }
+
   async function createApplication(draft: NewApplicationDraft = newApplication) {
     const company = draft.company.trim();
     const role = draft.role.trim();
@@ -890,6 +921,7 @@ function Applications() {
         setShowNewApplication(false);
         track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
         setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
+        if (draft.jobId) await askPrescriptQuestions(draft.jobId);
         return;
       }
 
@@ -1117,6 +1149,9 @@ function Applications() {
      nothing about how an answer reaches the employer changed. */
   function reviewPortalQuestions(focusQuestionId?: string) {
     if (!selected || !submission || submission.application_id !== selected.id) return;
+    // Reading the whole list, or answering a stalled run: not the Apply-time pre-script, so its
+    // summary line goes away rather than describing the wrong screen.
+    setPrescriptNote("");
     const merged = mergeDiscoveredQuestions(questions, submission.review.questions);
     setQuestions(merged);
     setFocusQuestion(
@@ -1452,6 +1487,7 @@ function Applications() {
           onSubmit={() => prepareApplication()}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
+          prescriptNote={prescriptNote}
         />
       ) : screen === "submitting" ? (
         <PortalProgress
@@ -2019,7 +2055,7 @@ function EditableHighlight({ value, terms, onChange }: { value: string; terms: R
   );
 }
 
-function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false, focusQuestion = null }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean; focusQuestion?: { id: string; token: number } | null }) {
+function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean; focusQuestion?: { id: string; token: number } | null; prescriptNote?: string }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
   const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
   const focusQuestionId = focusQuestion?.id ?? null;
@@ -2035,10 +2071,12 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
   useEffect(() => {
     if (!focusQuestionId) return;
     const field = document.getElementById(`question-${focusQuestionId}`);
-    if (!(field instanceof HTMLTextAreaElement)) return;
+    // A pre-script question with a closed option list renders as a select, so the caret placement
+    // below cannot apply to it. Scroll and focus still do, which is the part that matters.
+    if (!(field instanceof HTMLTextAreaElement) && !(field instanceof HTMLSelectElement)) return;
     field.scrollIntoView({ block: "center", behavior: "auto" });
     field.focus();
-    field.setSelectionRange(field.value.length, field.value.length);
+    if (field instanceof HTMLTextAreaElement) field.setSelectionRange(field.value.length, field.value.length);
   }, [focusQuestionId, focusToken]);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -2050,12 +2088,44 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
             Nothing here has gone to the employer. Change anything that is wrong, then save to put these answers on the company&apos;s form.
           </p>
         )}
+        {/* The Apply-time line, which says what Litos already handled as well as what is left. A
+            screen that only counts what is still owed reads as a bill. */}
+        {!reviewDiscovered && prescriptNote && (
+          <p className="mt-1 text-sm leading-6 text-muted">{prescriptNote}</p>
+        )}
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
           <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
-          <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+          {/* Why this one is hers. Written by the backend so that the Apply screen and a stalled
+              run's attention reason cannot describe the same refusal in two different voices. */}
+          {question.explanation && (
+            <p className="mt-1 text-xs leading-5 text-muted">{question.explanation}</p>
+          )}
+          {question.options && question.options.length > 0 ? (
+            /* The employer's own list, so a fixed choice is a choice rather than a box she has to
+               guess the wording for. Sixteen DRW self-ratings and Point72's office list are all
+               this shape, and a free-text answer to any of them is an answer the form rejects.
+               The first entry is blank on purpose: nothing here is pre-picked. */
+            <select
+              id={`question-${question.id}`}
+              value={question.answer}
+              onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))}
+              className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
+            >
+              <option value="">Choose an answer</option>
+              {question.options.map((option) => <option key={option} value={option}>{option}</option>)}
+            </select>
+          ) : (
+            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+          )}
+          {/* Said once, on the row it is true of, rather than as a promise at the top of a screen
+              she cannot check. A declaration about her carries to the next posting; an answer about
+              this one never does, and neither claim belongs anywhere but next to its question. */}
+          {question.remembered && (
+            <p className="mt-2 text-xs leading-5 text-muted">You answered this before. Change it if it is out of date.</p>
+          )}
         </Card>
       ))}
       {/* Same trap as the review screen, one screen later: N six-row textareas and then the button
