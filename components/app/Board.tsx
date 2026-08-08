@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { activeBoardStages, fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
+import { activeBoardStages, boardCoverage, boardCoverageNote, fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 
 /**
@@ -126,6 +126,9 @@ export function Board({
     Boolean(onRevisit) && (revisitableIds === undefined ? openable(card) : revisitableIds.has(card.id));
 
   const visibleStages = activeBoardStages(stages);
+  /* What the columns are not drawing, in a sentence, or null when they are drawing everything.
+     Counted off `cards`, the same array the columns filter, so the two cannot disagree. */
+  const coverageNote = cards ? boardCoverageNote(boardCoverage(cards, visibleStages)) : null;
 
   if (failed) {
     return (
@@ -145,6 +148,14 @@ export function Board({
         <p role="status" className="mb-3 rounded-inner bg-warn-soft px-4 py-2.5 text-[13px] text-warn">
           {moveError}
         </p>
+      )}
+      {/* WHAT THE COLUMNS ARE NOT SHOWING, above them rather than below, because it is the first
+          thing true of this board on most accounts: nothing has been sent, so every card derives
+          to "saved" and no column draws it. Without this the board is three boxes reading "Nothing
+          here" over the student's whole history. Not an ErrorNote and not a warning: an account
+          that has not sent anything yet is an ordinary account. */}
+      {coverageNote && (
+        <p className="mb-3 text-[13px] leading-5 text-muted">{coverageNote}</p>
       )}
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1 md:hidden" aria-label="Application stage">
         {visibleStages.map((stage) => (

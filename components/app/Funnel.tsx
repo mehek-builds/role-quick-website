@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { fetchFunnel, type FunnelSummary } from "@/features/applications";
 import { isQaRender } from "@/lib/qa-mode";
 
@@ -35,7 +36,22 @@ const QA_FUNNEL: FunnelSummary = {
  * honest versions would be self-reported. There is no "time saved" either: the field count is real,
  * and multiplying it by a made-up minutes-per-application constant would not be.
  */
-export function Funnel() {
+/**
+ * The one number a student comes here to watch, and the reason it can be zero.
+ *
+ * "79 resumes prepared for you" beside "0 sent since you started" is two measured facts and no
+ * account of the gap between them, and on 2026-08-08 the gap was the whole story: 49 of those
+ * applications had stopped on a question the applicant could answer in seconds, and nothing on
+ * Home said so or led anywhere. Both figures were true and the panel was still misleading.
+ *
+ * `stopped` is passed in rather than fetched because Home already counts it, from the same packets
+ * its Tracker tile counts, so the sentence here and the tile beside it are one number. Null, or a
+ * count of zero, prints nothing: this line exists to explain a gap, and inventing one on an account
+ * that simply has not started yet would be worse than silence.
+ */
+export type FunnelStopped = { count: number; href: string };
+
+export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
   const [state, setState] = useState<{ data: FunnelSummary | null; failed: boolean }>({
     data: null,
     failed: false,
@@ -117,6 +133,20 @@ export function Funnel() {
             Calling it their own throughput would be the one thing this panel must not do. */}
         <Stat value={f.resumes_tailored} label="resumes prepared for you" />
       </div>
+
+      {/* Only when the zero needs accounting for: work was prepared, none of it went out, and
+          something is actually waiting. Every other combination leaves this off. */}
+      {f.applications_submitted === 0 && f.resumes_tailored > 0 && (stopped?.count ?? 0) > 0 && (
+        <p className="mt-3 text-label leading-5 text-muted">
+          None sent yet.{" "}
+          <Link href={stopped!.href} className="font-medium text-brand hover:text-brand-ink">
+            {stopped!.count === 1
+              ? "1 is waiting on an answer from you"
+              : `${stopped!.count} are waiting on an answer from you`}
+          </Link>
+          .
+        </p>
+      )}
 
       {/* days.length, not just too_early. The parse boundary treats `days` as a SECONDARY field and
           defaults it to an empty array, so a backend that measured the counters but sent no daily

@@ -323,8 +323,14 @@ export function NextMatchCard({
               >
                 Cancel
               </button>
+              {/* "Sending in 8s", not "Sending 8s". This is the CANCEL WINDOW counting down and,
+                  as the note at the top of this file says, nothing is happening during it. The old
+                  wording read as a stopwatch on a send already in progress, which put a number that
+                  looks like elapsed time next to "0 applied today" and made the counter look
+                  broken rather than correct: nothing had been sent, so nothing was counted.
+                  Two words, and the two figures agree. */}
               <span className="rounded-full bg-brand-soft px-3.5 py-1.5 font-mono text-[11px] font-medium text-brand-ink">
-                Sending {remaining}s
+                Sending in {remaining}s
               </span>
             </>
           ) : counting ? (
