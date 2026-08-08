@@ -580,7 +580,16 @@ export type ApplicationReview = {
     consent_version?: string;
   };
   submission_authorized_at?: string;
+  /** Whether the form has a cover-letter file control Litos can attach to. A capability of the
+   *  portal, never a requirement of the employer. See cover_letter_required. */
   cover_letter_supported?: boolean;
+  /** Whether the employer MARKED the cover letter required, measured by the run off their own
+   *  form. Tri-state: undefined means no run has measured it, and undefined must never block a
+   *  send. Only true blocks. */
+  cover_letter_required?: boolean;
+  /** Whether the run that filled this form actually carried a cover letter. Only an approved letter
+   *  is attached, so a generated draft she has not read is stored and deliberately not sent. */
+  cover_letter_attached?: boolean;
   /** Whether Litos can fill in this posting's page at all. Derived from portal_url by the backend,
    *  so it is known before the first send rather than discovered after a multi-minute run. */
   portal_supported?: boolean;

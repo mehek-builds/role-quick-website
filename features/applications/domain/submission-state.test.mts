@@ -102,18 +102,34 @@ test("cover letter identity ignores nothing that distinguishes two letters", () 
 });
 
 test("the gate never leaves the applicant reading a progress message that cannot resolve", () => {
-  assert.equal(coverLetterGate({ supported: undefined, coverLetter: null, waited: true }), "not_applicable");
-  assert.equal(coverLetterGate({ supported: false, coverLetter: null, waited: true }), "not_applicable");
-  assert.equal(coverLetterGate({ supported: true, coverLetter: { body: "hi" }, waited: true }), "present");
-  assert.equal(coverLetterGate({ supported: true, coverLetter: null, waited: false }), "loading");
+  assert.equal(coverLetterGate({ supported: undefined, required: true, coverLetter: null, waited: true }), "not_applicable");
+  assert.equal(coverLetterGate({ supported: false, required: true, coverLetter: null, waited: true }), "not_applicable");
+  assert.equal(coverLetterGate({ supported: true, required: true, coverLetter: { body: "hi" }, waited: true }), "present");
+  assert.equal(coverLetterGate({ supported: true, required: true, coverLetter: null, waited: false }), "loading");
   // The whole point: the wait ENDS, and what it ends in is a named state with a way out.
-  assert.equal(coverLetterGate({ supported: true, coverLetter: null, waited: true }), "unavailable");
+  assert.equal(coverLetterGate({ supported: true, required: true, coverLetter: null, waited: true }), "unavailable");
 });
 
-test("both unresolved gates block the send, and neither resolved one does", () => {
+/* AN OPTIONAL COVER LETTER IS NOT A REASON TO GREY THE BUTTON OUT.
+ *
+ * Cresta packet 8142004c-3358-4538-8778-16df5e31c5bb: a Greenhouse form offering Attach / Dropbox /
+ * Enter manually, no required marker on it while First Name, Last Name and Email all carried one.
+ * The gate ran on `supported`, which only means the form HAS the control, so a complete application
+ * on any form that merely offers a cover letter could never be sent. It runs on `required` now, and
+ * `required` is tri-state: unknown is not required. */
+test("a cover letter the employer does not require never blocks the send", () => {
+  assert.equal(coverLetterGate({ supported: true, required: false, coverLetter: null, waited: true }), "optional");
+  // Every packet filled before the run measured the requirement reads undefined here.
+  assert.equal(coverLetterGate({ supported: true, coverLetter: null, waited: true }), "optional");
+  // A letter she has written still shows as present rather than as an absence.
+  assert.equal(coverLetterGate({ supported: true, required: false, coverLetter: { body: "hi" }, waited: true }), "present");
+});
+
+test("both unresolved gates block the send, and no resolved one does", () => {
   assert.equal(coverLetterBlocks("loading"), true);
   assert.equal(coverLetterBlocks("unavailable"), true);
   assert.equal(coverLetterBlocks("present"), false);
+  assert.equal(coverLetterBlocks("optional"), false);
   assert.equal(coverLetterBlocks("not_applicable"), false);
 });
 

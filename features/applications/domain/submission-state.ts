@@ -87,22 +87,35 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
  */
 export const COVER_LETTER_WAIT_MS = 15_000;
 
-export type CoverLetterGate = "not_applicable" | "present" | "loading" | "unavailable";
+export type CoverLetterGate = "not_applicable" | "present" | "optional" | "loading" | "unavailable";
 
 /**
  * What the review screen should say about the cover letter, and whether the send is blocked.
  *
+ * TWO DIFFERENT FACTS, and this gate used to run on the wrong one. `supported` means the form has a
+ * cover-letter file control Litos can attach to. `required` means the employer marked that control
+ * required, measured by the run off their own form. Blocking on `supported` made every complete
+ * application on a form that merely OFFERS a cover letter unsendable: the Cresta packet's Greenhouse
+ * form gave Attach / Dropbox / Enter manually with no required marker, while First Name, Last Name
+ * and Email all carried one, and the green button was dead.
+ *
+ * `required` is tri-state and only `true` blocks. `undefined` is every packet filled before the run
+ * measured it, and treating unknown as required is the same refusal wearing a different field name.
+ *
  * `unavailable` is a REAL state with two causes the client cannot tell apart: the server has no
- * cover letter for this packet, or the client could not get the one it has. Both are blocking, and
- * both have a way out, so the screen offers both doors rather than a progress message.
+ * cover letter for this packet, or the client could not get the one it has. Both are blocking when
+ * the employer requires one, and both have a way out, so the screen offers both doors rather than a
+ * progress message.
  */
-export function coverLetterGate({ supported, coverLetter, waited }: {
+export function coverLetterGate({ supported, required, coverLetter, waited }: {
   supported: boolean | undefined;
+  required?: boolean | undefined;
   coverLetter: CoverLetterLike | null | undefined;
   waited: boolean;
 }): CoverLetterGate {
   if (supported !== true) return "not_applicable";
   if (coverLetter) return "present";
+  if (required !== true) return "optional";
   return waited ? "unavailable" : "loading";
 }
 
