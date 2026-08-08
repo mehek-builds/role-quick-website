@@ -514,6 +514,12 @@ export type ApplicationReview = {
     | "filling"
     | "needs_attention"
     | "ready_for_final_approval"
+    /** Submitted once, not filed, waiting on a code the employer emailed. Greenhouse answers an
+     *  unauthenticated submit by emailing an 8-character code and rendering a code field, and files
+     *  nothing until that code is entered and the form is sent again. Three packets sat at
+     *  ready_for_final_approval in this condition on 2026-08-08, behind a green "Send it" button
+     *  that would only have issued another code. */
+    | "awaiting_security_code"
     | "submitting"
     | "submission_claimed"
     | "submitted"
@@ -530,6 +536,7 @@ export type ApplicationReview = {
   attention_reason?: string;
   attention_categories?: Array<
     | "captcha"
+    | "security_code"
     | "required_document"
     | "sensitive_attestation"
     | "required_field"
@@ -550,6 +557,19 @@ export type ApplicationReview = {
     stage: "before_fill" | "at_submit";
     source: "observed" | "assumed";
     resolved_at?: string;
+  };
+  /** When a submit provably reached the employer, whatever made it. Separate from submitted_at,
+   *  which means "filed, with a receipt". */
+  submission_attempted_at?: string;
+  /** What the employer is holding this application behind. `digits` is read off the code control on
+   *  the page, so 0 means the page did not say how long the code is and the field must not claim a
+   *  length. `sent_to` is the address the employer said it mailed. */
+  security_code?: {
+    digits: number;
+    sent_to?: string;
+    requested_at: string;
+    submit_was_authorized: boolean;
+    attempts?: Array<{ at: string; fingerprint: string; outcome: "accepted" | "rejected" | "not_entered" | "no_control" | "error" }>;
   };
   handoff_expires_at?: string;
   final_approved_at?: string;
