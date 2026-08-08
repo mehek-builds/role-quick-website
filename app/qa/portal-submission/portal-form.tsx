@@ -53,19 +53,38 @@ export function PortalForm({ board, caseId }: { board: Board; caseId: string }) 
     return <main className="min-h-screen bg-[#f7f7f3] px-6 py-16"><section className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-10 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5e9] text-2xl text-[#24713b]">✓</div><h1 className="mt-5 text-3xl font-semibold text-[#151512]">Thank you. Your application was received.</h1><p className="mt-3 text-[#63635d]">This is a Litos test page. No employer got this application.</p><p className="mt-5 font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p></section></main>;
   }
 
-  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2">{board === "greenhouse" && <GreenhouseFields />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}{board === "rippling" && <RipplingFields />}{board === "breezy" && <BreezyFields />}</div><button type="submit" data-testid={board === "rippling" ? "Apply" : undefined} className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
+  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2"><BoardContactFields board={board} /></div><button type="submit" data-testid={board === "rippling" ? "Apply" : undefined} className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
 }
 
-function GreenhouseFields() {
-  return <><Field name="job_application[first_name]" label="First name" required /><Field name="job_application[last_name]" label="Last name" required /><Field id="email" label="Email" type="email" required /><Field id="phone" label="Phone" /><Field id="candidate-location" label="Location" /><FileField id="resume" name="job_application[resume]" /></>;
+/* The per-board contact block, extracted so the shape pages (shape-form.tsx) render the SAME fields
+ * this page does rather than a second copy of them. A shape page is "this board's real contact block
+ * plus the one control that breaks", and if the contact block were duplicated the two would drift
+ * the way the ?board= route and the backend's board list already drifted once.
+ *
+ * Paylocity and BambooHR are absent for the reason given above: PortalForm returns early for both,
+ * and after those returns TypeScript narrows `board` so that comparing against either here is an
+ * impossible comparison that fails `next build`. Shape pages therefore render the greenhouse block
+ * for those two boards; see shape-form.tsx.
+ */
+// `omitPhone` exists for exactly one shape and is worth the parameter. The adapter's phone fill is
+// fillFirst over GREENHOUSE_PHONE_SELECTOR, which returns on the FIRST selector that matches, and
+// the contact block's own #phone matches before anything a shape page adds. So the phone-country
+// shape - the one whose entire subject is what gets written into a phone field that has a separate
+// country selector - would never be reached, and the case would pass by never running.
+export function BoardContactFields({ board, omitPhone = false }: { board: Exclude<Board, "paylocity" | "bamboohr">; omitPhone?: boolean }) {
+  return <>{board === "greenhouse" && <GreenhouseFields omitPhone={omitPhone} />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields omitPhone={omitPhone} />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}{board === "rippling" && <RipplingFields />}{board === "breezy" && <BreezyFields />}</>;
+}
+
+function GreenhouseFields({ omitPhone = false }: { omitPhone?: boolean }) {
+  return <><Field name="job_application[first_name]" label="First name" required /><Field name="job_application[last_name]" label="Last name" required /><Field id="email" label="Email" type="email" required />{!omitPhone && <Field id="phone" label="Phone" />}<Field id="candidate-location" label="Location" /><FileField id="resume" name="job_application[resume]" /></>;
 }
 
 function LeverFields() {
   return <><Field name="name" label="Full name" required /><Field name="email" label="Email" type="email" required /><Field name="phone" label="Phone" /><Field name="urls[LinkedIn]" label="LinkedIn" /><Field name="urls[GitHub]" label="GitHub" /><Field name="urls[Portfolio]" label="Portfolio" /><FileField name="resume" /></>;
 }
 
-function AshbyFields() {
-  return <><Field name="_systemfield_name" label="Full name" required /><Field name="_systemfield_email" label="Email" type="email" required /><Field name="_systemfield_phone" label="Phone" /><Field name="_systemfield_location" label="Location" /><Field name="_systemfield_linkedin" label="LinkedIn profile" /><Field name="github-profile" label="GitHub profile" /><Field name="portfolio-url" label="Portfolio" /><FileField name="resume" /></>;
+function AshbyFields({ omitPhone = false }: { omitPhone?: boolean }) {
+  return <><Field name="_systemfield_name" label="Full name" required /><Field name="_systemfield_email" label="Email" type="email" required />{!omitPhone && <Field name="_systemfield_phone" label="Phone" />}<Field name="_systemfield_location" label="Location" /><Field name="_systemfield_linkedin" label="LinkedIn profile" /><Field name="github-profile" label="GitHub profile" /><Field name="portfolio-url" label="Portfolio" /><FileField name="resume" /></>;
 }
 
 function SmartRecruitersFields() {
@@ -321,7 +340,14 @@ function Field({ id, name, label, type = "text", required = false, ariaLabel, no
   // default `name ?? id` fallback would quietly give them a name, and an adapter matching by name
   // would then pass here and fail on the live form - the exact class of false-confidence this
   // fixture is meant to rule out.
-  return <label className="block text-sm text-[#31312d]">{label}<input id={id} name={noName ? undefined : (name ?? id)} type={type} required={required} aria-label={ariaLabel} className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>;
+  // htmlFor only when the field ALREADY has an id, so no new id is invented on any board. A real
+  // form pairs label[for] with the input's id, and the pre-submit gate's label reader
+  // (READ_SUBMIT_READINESS_SCRIPT, labelOf) looks for exactly that pairing before it gives up. With
+  // a wrapping label and no `for`, a genuinely empty required field is reported as "A required field
+  // on the form has no label Litos can read", which is true of this fixture and NOT true of the live
+  // forms it stands for - so the fixture was making the gate look worse than it is, and hiding
+  // whether it can name the field it is refusing to submit over.
+  return <label className="block text-sm text-[#31312d]" htmlFor={id}>{label}<input id={id} name={noName ? undefined : (name ?? id)} type={type} required={required} aria-label={ariaLabel} className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2" /></label>;
 }
 
 function FileField({ id, name, bare = false, dataUi, dataTestId, ariaLabel, label = "Resume", required = true }: { id?: string; name: string; bare?: boolean; dataUi?: string; dataTestId?: string; ariaLabel?: string; label?: string; required?: boolean }) {
