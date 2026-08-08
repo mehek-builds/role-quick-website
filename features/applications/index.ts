@@ -8,6 +8,7 @@ export * from "./domain/application-filter";
 export * from "./domain/application-review";
 export * from "./domain/apply-variant";
 export * from "./domain/board-stages";
+export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
 export * from "./domain/match-model";
 export * from "./domain/prescript";
