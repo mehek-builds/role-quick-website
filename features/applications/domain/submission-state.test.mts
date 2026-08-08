@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   COVER_LETTER_WAIT_MS,
+  HANDOFF_CLOCK_TICK_MS,
   coverLetterBlocks,
   coverLetterGate,
   coverLetterIdentity,
+  handoffWindowExpired,
   nextSubmissionState,
   type SubmissionSnapshot,
 } from "./submission-state.ts";
@@ -120,4 +122,44 @@ test("both unresolved gates block the send, and neither resolved one does", () =
 test("the wait is longer than one poll round and short enough to notice", () => {
   assert.ok(COVER_LETTER_WAIT_MS > 2500, "one 2.5s poll round must not be called a stall");
   assert.ok(COVER_LETTER_WAIT_MS <= 30_000, "a minute of 'Loading' beside a dead button is the defect");
+});
+
+/* R: THE SEND BUTTON THE SERVER WAS ALWAYS GOING TO REFUSE.
+ *
+ * Same Cresta packet as above, one screen further on. 2026-08-09 03:06:19,
+ * POST /applications/8142004c.../submission/approve -> 409, "That took too long and timed out.
+ * Start the application again." The page showed nothing, the button stayed enabled, and the refusal
+ * was only findable in the server log.
+ *
+ * The stored review: handoff_expires_at 2026-08-08T23:05:10.431Z, updated_at 22:10:10.431Z,
+ * browser_session_id NULL. Read out of production the same hour: 11 packets at
+ * ready_for_final_approval, all 11 with a null session id, 10 of them past their stamp.
+ */
+const EXPIRED = "2026-08-08T23:05:10.431Z";
+const STILL_OPEN = "2026-08-09T04:05:10.431Z";
+const AT_THE_CLICK = Date.parse("2026-08-09T03:06:19.000Z");
+
+test("a packet with no live session is never blocked by the window", () => {
+  // The measured Cresta review, field for field. The managed provider writes the stamp and no
+  // session, and its submit path refills from the packet, so there is nothing stale to protect.
+  assert.equal(handoffWindowExpired({ handoff_expires_at: EXPIRED }, AT_THE_CLICK), false);
+  assert.equal(handoffWindowExpired({ handoff_expires_at: EXPIRED, browser_session_id: "" }, AT_THE_CLICK), false);
+});
+
+test("a packet whose live session has closed is blocked, because submit reconnects to it", () => {
+  assert.equal(handoffWindowExpired({ handoff_expires_at: EXPIRED, browser_session_id: "bb_sess_9f1c" }, AT_THE_CLICK), true);
+  assert.equal(handoffWindowExpired({ handoff_expires_at: STILL_OPEN, browser_session_id: "bb_sess_9f1c" }, AT_THE_CLICK), false);
+});
+
+test("nothing to read is not an expiry, in either field", () => {
+  assert.equal(handoffWindowExpired({}, AT_THE_CLICK), false);
+  assert.equal(handoffWindowExpired({ browser_session_id: "bb_sess_9f1c" }, AT_THE_CLICK), false);
+  // A stamp the server sent that this client cannot parse must not grey out a working Send button.
+  assert.equal(handoffWindowExpired({ handoff_expires_at: "soon", browser_session_id: "bb_sess_9f1c" }, AT_THE_CLICK), false);
+});
+
+test("the clock ticks often enough that a deadline is noticed, and rarely enough to be free", () => {
+  // Nothing arrives when a deadline passes, so this term cannot wait for an event.
+  assert.ok(HANDOFF_CLOCK_TICK_MS >= 5_000, "a per-second re-render of the resume preview is not worth it");
+  assert.ok(HANDOFF_CLOCK_TICK_MS <= 60_000, "a minute of offering a send the server refuses is the defect");
 });

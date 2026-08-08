@@ -68,6 +68,21 @@ function packet(key, status) {
           ? [{ id: `q-${key}`, question: "Why do you want to work here?", answer: "", kind: "essay", required: true }]
           : [],
         skipped_reasons: [],
+        /* THE HARNESS COULD NOT PRESS ITS OWN BUTTON WITHOUT THIS, and had not been able to for a
+           while. `previewReady` joined finalApprovalBlocked as `Boolean(previewUrl) && loaded &&
+           !failed`, and this fixture had no preview_screenshot_url at all, so `Boolean("")` was
+           false, so the Send it button in tests/e2e/approve-resolves.spec.mjs was permanently
+           disabled and all five of its cases timed out clicking it. Measured on origin/main
+           2026-08-09: 5 tests, 0 pass, 5 fail, every one "element is not enabled".
+
+           That is the previewReady risk playing out on the test suite instead of on a student: the
+           term that strands has no timeout and no retry, and the surface that was supposed to guard
+           the send button was the first thing it stranded.
+
+           Same-origin on purpose. The spec's route handler continues anything under ORIGIN and
+           aborts everything else, so a remote screenshot URL would 404 into `previewFailed` and
+           disable the button just as thoroughly. */
+        preview_screenshot_url: "/qa/portal-preview.svg",
         updated_at: "2026-07-21T12:00:00.000Z",
         ...(status === "submitted" ? { submitted_at: "2026-07-21T12:30:00.000Z" } : {}),
       },

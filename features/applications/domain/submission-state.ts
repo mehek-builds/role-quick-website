@@ -110,3 +110,53 @@ export function coverLetterGate({ supported, coverLetter, waited }: {
 export function coverLetterBlocks(gate: CoverLetterGate): boolean {
   return gate === "loading" || gate === "unavailable";
 }
+
+/**
+ * The seventh reason a "Send it" must be grey, and the first one the SERVER already knew about.
+ *
+ * WHAT HAPPENED. Cresta packet 8142004c-3358-4538-8778-16df5e31c5bb, 2026-08-09 03:06:19. A
+ * complete Greenhouse application, no screener questions, a fully enabled green Send it. The click
+ * produced `POST /applications/.../submission/approve -> 409` and the page showed nothing at all:
+ * no error, no toast, no state change, the button still enabled and still clickable. The refusal
+ * was only findable in server logs.
+ *
+ * `finalApprovalBlocked` computed six terms. The seventh, this one, was not among them, so the
+ * dashboard offered an action the backend had a standing rule against.
+ *
+ * WHY THIS TERM CANNOT STRAND THE WAY THE OTHER SIX CAN. The cover-letter fix's report ranked the
+ * remaining terms by risk and named `previewReady` next: it hangs on an <img> load with no timeout
+ * and no retry, so a 404'd screenshot leaves "Loading preview." beside a dead button forever. This
+ * term is the opposite shape on purpose:
+ *
+ *   - It is DERIVED FROM DATA ALREADY IN THE REVIEW, not from an async load that may never settle.
+ *     Two fields, both present in every GET /applications/:id/submission response.
+ *   - It is TRUE OR FALSE, never pending. There is no third "still finding out" state to get stuck
+ *     in, so there is no message that can fail to resolve.
+ *   - It SHIPS WITH ITS OWN EXIT. The line under the greyed button names a restart, and the
+ *     restart is a real control bound to POST /submit-request {restart:true}. A blocking term with
+ *     no way out is the trap; this one is the door.
+ *
+ * IT MIRRORS THE SERVER'S PREDICATE EXACTLY, including the session clause. `handoff_expires_at` is
+ * a deadline on a persistent browser session, and the managed provider creates none, so the backend
+ * now refuses only when `browser_session_id` is set. If this function disagreed with that one in
+ * either direction the screen would be lying again, just in the other direction.
+ */
+export function handoffWindowExpired(
+  review: { handoff_expires_at?: string; browser_session_id?: string },
+  now: number,
+): boolean {
+  if (!review.browser_session_id) return false;
+  if (!review.handoff_expires_at) return false;
+  const expiresAt = Date.parse(review.handoff_expires_at);
+  return Number.isFinite(expiresAt) && expiresAt < now;
+}
+
+/**
+ * How often the review screen re-reads the clock.
+ *
+ * A time-based blocking term is the one kind that can go stale with no event behind it: nothing
+ * arrives when a deadline passes. The 2.5s poll happens to re-render this screen today, which would
+ * mask it, and that is exactly the sort of accidental dependency that breaks the next time the poll
+ * is touched. So the term gets its own tick and does not borrow one.
+ */
+export const HANDOFF_CLOCK_TICK_MS = 15_000;

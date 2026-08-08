@@ -24,7 +24,7 @@ import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnL
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, coverLetterBlocks, coverLetterGate, nextSubmissionState } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, handoffWindowExpired, nextSubmissionState } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { nextMatchScoreRequest } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -210,6 +210,24 @@ function Applications() {
   const [prepareStartedAt, setPrepareStartedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* THE POLL'S OWN BANNER, AND WHY IT CANNOT SHARE ONE WITH THE STUDENT'S ACTIONS.
+   *
+   * `refreshSubmission` used to end with a bare `setError(null)` on every successful tick, for a
+   * good reason it stated out loud: one 502 during a multi-minute run otherwise pins "Could not
+   * refresh portal status" over a run that has since succeeded. The trouble is that `error` is also
+   * where every REFUSAL to an action the student just took lands, and the poll cannot tell the two
+   * apart.
+   *
+   * That is the second half of the Cresta finding. The approve 409 was caught and displayed exactly
+   * as written; the poll runs every 2.5s while the screen is "portal" or "submitting", and its next
+   * successful tick wiped it. The server said "That took too long and timed out. Start the
+   * application again.", the banner said it for under two and a half seconds, and the student
+   * reasonably reported that clicking Send it did nothing at all.
+   *
+   * Two channels, so a self-healing transient can still clear itself without erasing an answer
+   * nobody else is going to repeat. `error` wins the render when both are set: a refusal to
+   * something she did outranks news about the connection. */
+  const [pollError, setPollError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /* Null means the localhost-only fixture gate has not resolved yet. Treating that as false let
      authenticated effects fire during the first render of a QA page, and a 401 redirected the
@@ -270,6 +288,19 @@ function Applications() {
   const refuseInComposer = useCallback((at: ComposerSlot, message: string, fields: ApplicationDraftField[]) => {
     setError(null);
     setComposerRefusal({ message, fields, at });
+  }, []);
+  /* What the server said when she pressed Send it, held against the packet it was said about.
+   *
+   * Keyed by application id for the same reason the approve handler re-checks `selectedIdRef`: the
+   * packet switcher renders above this screen, so a refusal about Cresta must not be left sitting
+   * under the Send button for Redwood. Render-time comparison rather than an effect, so switching
+   * away is enough to retire it. */
+  const [sendRefusal, setSendRefusal] = useState<{ applicationId: string; message: string; issues: string[] } | null>(null);
+  const [restartingId, setRestartingId] = useState<string | null>(null);
+  const refuseSend = useCallback((applicationId: string, message: string, issues: string[] = []) => {
+    // One live region at a time, the rule refuseInComposer already sets on this screen.
+    setError(null);
+    setSendRefusal({ applicationId, message, issues });
   }, []);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
   const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
@@ -414,6 +445,8 @@ function Applications() {
       ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, partial: true }
       : null);
     setError(null);
+    setPollError(null);
+    setSendRefusal(null);
     setNotice(null);
   }, [moveToScreen]);
 
@@ -453,8 +486,10 @@ function Applications() {
     });
     // A poll that succeeds clears a stale banner from an earlier transient failure. Without this a
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
-    // run that had since succeeded.
-    setError(null);
+    // run that had since succeeded. It clears the POLL's banner and only that one: this line used
+    // to be setError(null), which also erased the server's answer to a Send the student had just
+    // pressed, within 2.5 seconds of it appearing.
+    setPollError(null);
     /* While the student's own send is in flight the poll is usually reporting the status from
        BEFORE the approve, and acting on that walks them backwards onto a live "Send it".
        TERMINAL states are the exception, and the exception is load-bearing: `api()` has no
@@ -506,7 +541,7 @@ function Applications() {
       try {
         await refreshSubmission();
       } catch (reason) {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : "We lost sight of the form. Reload the page to check.");
+        if (!cancelled) setPollError(reason instanceof Error ? reason.message : "We lost sight of the form. Reload the page to check.");
       } finally {
         inFlight = false;
       }
@@ -1128,7 +1163,11 @@ function Applications() {
 
   async function prepareApplication(
     finalQuestions = questions,
-    options: { allowServerAnswerRefresh?: boolean } = {},
+    /* `restart` is PR #375's flag and rides this function rather than a fourth caller of
+       submit-request. There were two call sites of that route and there is a rule about it: a
+       second send path is how a gate gets routed around. What a restart needs that a first
+       preparation does not is one boolean in the body, so it is one boolean here. */
+    options: { allowServerAnswerRefresh?: boolean; restart?: boolean } = {},
   ) {
     if (!selected) return;
     const applicationId = selected.id;
@@ -1140,14 +1179,15 @@ function Applications() {
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
     setError(null);
-    track("application_submission_requested", { source: qaMode ? "qa" : "review" });
+    setSendRefusal(null);
+    track("application_submission_requested", { source: qaMode ? "qa" : options.restart ? "restart" : "review" });
     try {
       if (!qaMode) {
         const result = await api<SubmissionResponse>(`/applications/${applicationId}/submit-request`, {
           method: "POST",
-          body: JSON.stringify({ questions: finalQuestions }),
+          body: JSON.stringify({ questions: finalQuestions, ...(options.restart ? { restart: true } : {}) }),
         });
-        captureCompletedSubmission(result, "review");
+        captureCompletedSubmission(result, options.restart ? "restart" : "review");
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
         if (selectedIdRef.current !== applicationId) return;
         setSubmission(result);
@@ -1164,8 +1204,13 @@ function Applications() {
         return;
       }
     } catch (reason) {
-      moveToScreen("review");
-      setError(reason instanceof Error ? reason.message : "We could not open the company's application page.");
+      /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
+         goes back there and lands beside the control, not on the review screen behind a banner. */
+      moveToScreen(options.restart ? "portal" : "review");
+      const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
+      const issues = reason instanceof ApiError ? reason.issues : [];
+      if (options.restart) refuseSend(applicationId, message, issues);
+      else setError(message);
     }
   }
 
@@ -1296,6 +1341,7 @@ function Applications() {
     setApprovingId(requestedId);
     setApproveStartedAt(new Date().toISOString());
     setError(null);
+    setSendRefusal(null);
     setSubmittingPhase("sending");
     moveToScreen("submitting");
     try {
@@ -1337,10 +1383,51 @@ function Applications() {
          would caption the NEXT run of the progress screen as a send that is not happening. */
       setSubmittingPhase("preparing");
       moveToScreen("portal");
-      setError(reason instanceof Error ? reason.message : "Could not approve the final portal submission.");
+      /* WHERE A REFUSED SEND IS SAID, and it is beside the button rather than at the top of the
+         page. The same argument ISSUE-043 settled for the composer: this screen is long, the Send
+         it button sits below a resume preview and an answers table, and a banner rendered above all
+         of that is measured off screen from the control that raised it. A 409 named after the
+         button that caused it is the only version she can act on.
+
+         `issues` is carried separately from the sentence because the 422 on this route,
+         FINAL_APPROVAL_VERIFICATION_FAILED, sends a list of named blockers and every one of them is
+         a specific thing to go and fix. apiErrorMessage folds up to five of them into the message
+         string; holding the array lets them be rendered as the list they are. */
+      refuseSend(
+        requestedId,
+        reason instanceof Error ? reason.message : "Could not approve the final portal submission.",
+        reason instanceof ApiError ? reason.issues : [],
+      );
     } finally {
       approveInFlight.current = null;
       setApprovingId(null);
+    }
+  }
+
+  /* THE WAY OUT THE SERVER'S OWN SENTENCE PROMISES.
+   *
+   * "That took too long and timed out. Start the application again." had nothing behind it on this
+   * screen: no control started an application again, and R-066 makes packets write-once with no
+   * delete, so there was no second route either. PR #375 added `restart: true` on
+   * POST /applications/:id/submit-request for exactly this, and its own 409 names the flag.
+   *
+   * The questions go with it, unchanged, because that is the body this route takes and dropping
+   * them would restart the run against an empty answer set. */
+  async function restartPreparedRun() {
+    if (!selected || !submission || restartingId) return;
+    if (submission.application_id !== selected.id) return;
+    setRestartingId(selected.id);
+    try {
+      /* The stored questions, not the local `questions` state: this is pressed from the portal
+         screen, where the editor may never have been opened for this packet.
+
+         `allowServerAnswerRefresh` because the local blank-required check in front of this route is
+         a closed loop for a restart. Only a fill run discovers and answers a form's questions, so
+         refusing to start one because a discovered question is blank means it can never be filled.
+         The server keeps its own send gates, which see what the run found rather than this. */
+      await prepareApplication(submission.review.questions, { allowServerAnswerRefresh: true, restart: true });
+    } finally {
+      setRestartingId(null);
     }
   }
 
@@ -1417,7 +1504,9 @@ function Applications() {
           student's cursor when a genuine page-level error lands mid-press. Not a regression, and
           not something a placement fix can reach: it needs this banner reserved or moved, which is
           a layout change to the whole screen. */}
-      {error && <ErrorNote message={error} />}
+      {/* One banner, two sources, and `error` wins. A refusal to something the student pressed
+          outranks news about the connection, and the poll can no longer overwrite either. */}
+      {(error ?? pollError) && <ErrorNote message={error ?? pollError!} />}
       {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
           the student fixes the education line rather than sitting there until she saves. */}
       {reviewOpen && educationDriftBanner && (
@@ -1636,6 +1725,9 @@ function Applications() {
           coverLetterReloading={coverLetterReloading}
           onHandoffComplete={completeHandoff}
           onApprove={approveFinalSubmission}
+          sendRefusal={sendRefusal?.applicationId === selected.id ? sendRefusal : null}
+          onRestart={() => void restartPreparedRun()}
+          restarting={restartingId === selected.id}
           onRetry={retryPreparation}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId) => reviewPortalQuestions(questionId)}
@@ -2391,7 +2483,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
+function SubmissionScreen({ packet, submission, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -2434,7 +2526,21 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
   const previewLoaded = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.loaded;
   const previewFailed = Boolean(previewUrl) && previewState?.url === previewUrl && previewState.failed;
   const previewReady = Boolean(previewUrl) && previewLoaded && !previewFailed;
-  const finalApprovalBlocked = educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || approving;
+  /* A deadline passing raises no event, so this term needs a clock of its own rather than borrowing
+     the submission poll's re-render. Seeded from the first render and stepped on a self-rescheduling
+     timeout; the repo bans setInterval. */
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    let timer: number | undefined;
+    const tick = () => {
+      setNowMs(Date.now());
+      timer = window.setTimeout(tick, HANDOFF_CLOCK_TICK_MS);
+    };
+    timer = window.setTimeout(tick, HANDOFF_CLOCK_TICK_MS);
+    return () => { if (timer !== undefined) window.clearTimeout(timer); };
+  }, []);
+  const handoffExpired = handoffWindowExpired(review, nowMs);
+  const finalApprovalBlocked = educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -2572,8 +2678,30 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
           {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
+          {/* A REAL <button>, from the shared component, and that is not a stylistic preference on
+              this screen. Seventy-nine prepared resumes and zero sent applications came out of pills
+              rendered as <span> with nothing bound to them: a control that looks pressable and has
+              no handler fails silently and looks exactly like a working one. `Button` renders
+              `<button type="button">` and takes onClick and disabled directly, so there is no shape
+              here that can go dead. */}
+          {review.status === "ready_for_final_approval" && handoffExpired && (
+            <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
+          )}
           {review.status === "ready_for_final_approval" && <button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
         </div>
+        {/* The server's own answer to the last press, beside the button that made it. Never routed
+            through the page banner: the poll clears that one, and this screen is long enough that a
+            message at the top of it is off screen from the control it is about. */}
+        {sendRefusal && (
+          <div role="alert" className="mt-3 rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">
+            <p>{sendRefusal.message}</p>
+            {sendRefusal.issues.length > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs leading-5">
+                {sendRefusal.issues.map((issue) => <li key={issue}>{issue}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
           <p className="mt-3 text-xs leading-5 text-warn">
             Save the resume first.
@@ -2587,6 +2715,14 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
         {review.status === "ready_for_final_approval" && !previewReady && (
           <p className="mt-3 text-xs leading-5 text-warn">
             Loading preview.
+          </p>
+        )}
+        {/* The seventh reason, and the first one that the SERVER was already enforcing while this
+            screen offered the action anyway. Says the same thing the 409 says, and says it before
+            the press rather than after it. The control that resolves it is in the row above. */}
+        {review.status === "ready_for_final_approval" && handoffExpired && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            Too much time has passed for Litos to finish this filled form, so it cannot be sent as it stands. Start it again and Litos will fill the company&rsquo;s page fresh.
           </p>
         )}
         {/* The cover letter was the ONE blocking term with no line here, so the greyed-out Send
