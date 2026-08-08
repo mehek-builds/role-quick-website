@@ -6,6 +6,7 @@ import { userIdFromToken } from "./session-identity";
 import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
+import { clearExtensionSession } from "./extension-bridge";
 
 const TOKEN_KEY = "rq_token";
 const EMAIL_KEY = "rq_email";
@@ -74,6 +75,12 @@ export function clearSession() {
   window.localStorage.removeItem(EMAIL_KEY);
   window.localStorage.removeItem(SESSION_MODE_KEY);
   window.localStorage.removeItem(GUEST_KEY);
+  /* The extension now takes its session from this one (lib/extension-bridge), so it has to be told
+     when this one ends. Placed here rather than beside each Sign out button for the same reason
+     identifyUser lives in setSession: there are several exits, including the 401 handler and the
+     recovery flow, and a sign-out that leaves the extension applying as the previous account is
+     exactly the failure this pairing has to not introduce. */
+  clearExtensionSession();
 }
 
 export class ApiError extends Error {
