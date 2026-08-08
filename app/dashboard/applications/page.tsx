@@ -161,9 +161,14 @@ function Applications() {
      changes on the second press and the second click looks dead, which is the defect this whole
      change exists to remove. */
   const [focusQuestion, setFocusQuestion] = useState<{ id: string; token: number } | null>(null);
-  /* The one line at the top of the Apply questions screen, set only when the pre-script put us
-     there. Empty on every other route into the answers editor, which keeps that screen exactly as
-     it was for "Check the answers" and for a stalled run. */
+  /* The one line at the top of the Apply questions screen, and the marker that the pre-script is
+     what put us there. Empty on every other route into the answers editor, which keeps that screen
+     exactly as it was for "Check the answers" and for a stalled run.
+
+     It also decides what Save does. From a stalled run, Save means "send it again with these
+     answers" and goes straight to prepareApplication, which is what that button has always done.
+     From Apply it must not: she has not read the resume yet, and starting a submission because she
+     answered a question would take a screen away from her rather than give her one. */
   const [prescriptNote, setPrescriptNote] = useState("");
   const [screen, setScreen] = useState<Screen>("review");
   /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
@@ -841,6 +846,19 @@ function Applications() {
    * The answers land in the SAME `questions` state that "Check the answers" edits and travel out
    * through the same POST /applications/:id/submit-request. There is no second path for an answer.
    */
+  /* Save on the Apply questions screen. Keeps the answers and hands her back the resume.
+   *
+   * The answers stay in `questions`, which is the same state continueFromResume passes to
+   * prepareApplication, so they ride into the packet on the next step with nothing re-entered and
+   * no second request. "Filled in immediately" means the packet is built with her answers already
+   * in it, not that it is sent the moment she types one. */
+  function saveApplyAnswers() {
+    setPrescriptNote("");
+    setFocusQuestion(null);
+    moveToScreen("review");
+    setNotice("Saved. Check the resume, then send it and Litos will put these answers on the form.");
+  }
+
   async function askPrescriptQuestions(jobId: string) {
     const prescript = await getPostingQuestions(jobId);
     if (!prescriptNeedsHer(prescript)) return;
@@ -1484,7 +1502,7 @@ function Applications() {
           questions={questions}
           onChange={setQuestions}
           onBack={() => moveToScreen(selectedSubmission?.review.status === "needs_attention" ? "portal" : "review")}
-          onSubmit={() => prepareApplication()}
+          onSubmit={() => (prescriptNote ? saveApplyAnswers() : prepareApplication())}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}

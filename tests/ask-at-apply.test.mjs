@@ -81,6 +81,17 @@ test("focusing a pre-script row works when it rendered as a select", () => {
   assert.match(screen, /if \(field instanceof HTMLTextAreaElement\) field\.setSelectionRange/);
 });
 
+test("saving at Apply hands the resume back rather than starting a submission", () => {
+  const save = functionBody(PAGE, "function saveApplyAnswers()");
+  assert.match(save, /moveToScreen\("review"\)/);
+  assert.doesNotMatch(save, /prepareApplication/);
+  // The answers stay in `questions`, which is what continueFromResume passes to prepareApplication,
+  // so they ride into the packet on the next step with nothing re-entered.
+  assert.doesNotMatch(save, /setQuestions\(\[\]\)/);
+  // And the stalled-run route keeps the behaviour it has always had.
+  assert.match(PAGE, /onSubmit=\{\(\) => \(prescriptNote \? saveApplyAnswers\(\) : prepareApplication\(\)\)\}/);
+});
+
 test("nothing on the Apply screen is filled by a guess", () => {
   // The only answer that arrives non-empty is one she typed herself on an earlier posting, and the
   // client never manufactures one. There is no draft call anywhere on this path.

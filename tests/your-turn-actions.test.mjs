@@ -81,7 +81,12 @@ test("pressing a row opens the answer editor on that question, and saving there 
 
   // Answers persist through submit-request, which is what the answers screen has always saved
   // through. This fix adds an entry point, not a second way for an answer to reach the employer.
-  assert.match(page, /onSubmit=\{\(\) => prepareApplication\(\)\}/);
+  //
+  // The Save branch was added later, when the Apply-time pre-script gained its own route into this
+  // screen: from a stalled run Save still means "send it again with these answers" and still calls
+  // prepareApplication, while from Apply it hands the resume back instead, because she has not read
+  // it yet. Both branches leave the persistence path untouched, which is what this test is about.
+  assert.match(page, /onSubmit=\{\(\) => \(prescriptNote \? saveApplyAnswers\(\) : prepareApplication\(\)\)\}/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 
   const questions = functionBody(page, "QuestionsScreen");
