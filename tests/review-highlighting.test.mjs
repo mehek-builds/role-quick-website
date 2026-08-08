@@ -380,12 +380,21 @@ test('a run that has gone on too long says so instead of claiming it is fine', (
   assert.match(dashboard, /Still working/);
 });
 
-test('a successful poll clears a stale error banner', () => {
+test('a successful poll clears its OWN stale banner, and nothing else', () => {
   // Bounded to refreshSubmission itself. The span was 1800 characters, which is "long enough
   // today": adding the in-flight guard and its comment pushed setError past it and turned a
   // passing invariant red without the invariant changing.
   const start = dashboard.indexOf("const refreshSubmission");
   const end = dashboard.indexOf("\n  useEffect(", start);
   assert.ok(end > start, "could not find the end of refreshSubmission");
-  assert.match(dashboard.slice(start, end), /setError\(null\);/);
+  // Comments stripped, the way R-046 does it further up this file: the line below explains what
+  // this used to be, and the explanation names the very call it is asserting is gone.
+  const refresh = dashboard.slice(start, end).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assert.match(refresh, /setPollError\(null\);/);
+  /* This line used to be `setError(null)`, and that channel is also where a refusal to something
+     the student just pressed lands. On 2026-08-09 a 409 from /submission/approve was displayed
+     correctly and then wiped by the next 2.5s tick, which is why the Cresta Send it button looked
+     like it did nothing at all. A self-healing transient still clears itself; it no longer clears
+     an answer nobody is going to repeat. */
+  assert.doesNotMatch(refresh, /setError\(null\)/);
 });

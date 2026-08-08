@@ -58,7 +58,10 @@ test("completed applications are captured on submission transitions, not receipt
   const source = await read("app/dashboard/applications/page.tsx");
   assert.match(source, /captureCompletedSubmission\(result, "poll"\)/);
   assert.match(source, /captureCompletedSubmission\(result, "autopilot"\)/);
-  assert.match(source, /captureCompletedSubmission\(result, "review"\)/);
+  // "review" and "restart" are the same call site: a restart is prepareApplication with one extra
+  // flag, deliberately, so there is no second submit-request path. The source still distinguishes
+  // them, because a run started by a timed-out packet is not the same funnel step as a first fill.
+  assert.match(source, /captureCompletedSubmission\(result, options\.restart \? "restart" : "review"\)/);
   assert.match(source, /captureCompletedSubmission\(result, "final_approval"\)/);
   const receipt = source.slice(source.indexOf("function SubmissionReceipt"));
   assert.doesNotMatch(receipt, /track\("application_submission_completed"/);

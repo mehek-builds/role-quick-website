@@ -155,7 +155,11 @@ test("the review screen gates and performs the submission", async () => {
   assert.match(review, /\/submission\/approve/);
   assert.match(review, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
   assert.match(review, /const sensitiveQuestionPresent = review\.questions\.some/);
-  assert.match(review, /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| approving/);
+  /* `handoffExpired` joined the list on 2026-08-09, after the Cresta 409. Pinned as the whole
+     expression rather than a substring, on purpose: this is the one gate in front of a real
+     employer submission, and a term silently dropped from it is a button that offers a send the
+     server refuses. See tests/expired-handoff-send.regression-1.test.mjs. */
+  assert.match(review, /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/);
   assert.match(review, /onClick=\{approveVerifiedPreview\}/);
   assert.match(review, /disabled=\{finalApprovalBlocked\}/);
   assert.match(review, /Check resume/);

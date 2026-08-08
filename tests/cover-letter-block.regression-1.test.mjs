@@ -101,6 +101,7 @@ test("the disabled Send button names the cover letter the way it names every oth
   assert.match(source, /coverLetterState === "unavailable" &&[\s\S]{0,300}No cover letter to show you\./);
   assert.match(
     shippedCode(source),
-    /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| approving/,
+    // `handoffExpired` and `restarting` were added on 2026-08-09; see the expired-handoff regression.
+    /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/,
   );
 });
