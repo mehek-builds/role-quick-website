@@ -1,0 +1,112 @@
+/**
+ * Which submission snapshot the dashboard keeps when a poll answers.
+ *
+ * WHY THIS EXISTS. GET /applications/:id/submission returns FOUR things: `review`, `cover_letter`,
+ * `handoff_url` and `configured`. Only the first of those carries a version (`review.updated_at`).
+ * The 2.5s poll used to decide whether to install the whole response by comparing that one
+ * timestamp, which is a version for the review and for nothing else:
+ *
+ *     setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
+ *
+ * The other half of the defect is that `submission` is SEEDED, not fetched. selectPacket builds it
+ * from the board row, which carries `spec._review` and nothing else, so the seed has no
+ * `cover_letter` at all. A packet parked in `ready_for_final_approval` has a frozen
+ * `review.updated_at`: nothing is advancing it. So every poll for the rest of that packet's life
+ * compared the frozen seed timestamp against the identical server timestamp, matched, and threw
+ * away the response that carried the cover letter. The client concluded there was no cover letter
+ * while the server was handing it one every 2.5 seconds, and the "Send it" button was disabled by
+ * `coverLetterPending` permanently. Measured on the live Cresta packet
+ * 8142004c-3358-4538-8778-16df5e31c5bb on 2026-08-09: the row's `spec->'_cover_letter'` held a
+ * complete 294 word artifact and the screen read "Loading cover letter." with a dead button.
+ *
+ * THE RULE THIS ENCODES. A dedupe may only drop a response that says nothing new. It may never
+ * drop a response that carries a field the current snapshot does not have. So every field that
+ * lives OUTSIDE `review` is compared here in its own right, and a seed that never came from the
+ * server is marked `partial` and can never win a comparison.
+ */
+
+export type CoverLetterLike = {
+  body?: string;
+  object_key?: string;
+  generated_at?: string;
+  approved_at?: string;
+};
+
+export type SubmissionSnapshot = {
+  application_id: string;
+  review: { updated_at: string };
+  cover_letter?: CoverLetterLike | null;
+  handoff_url?: string;
+  configured?: boolean;
+  /**
+   * True only on the snapshot selectPacket seeds from a board row. It is a statement about
+   * PROVENANCE, not about content: a seed is not a server answer, so the first real answer always
+   * replaces it even when the two agree on `review.updated_at`. Without this a field added to the
+   * response later, which the seed would again not have, reproduces this same bug.
+   */
+  partial?: boolean;
+};
+
+/** Stable identity for a cover letter, used only to tell two snapshots apart. */
+export function coverLetterIdentity(coverLetter: CoverLetterLike | null | undefined): string {
+  if (!coverLetter) return "";
+  return [
+    coverLetter.object_key ?? "",
+    coverLetter.generated_at ?? "",
+    coverLetter.approved_at ?? "",
+    String(coverLetter.body?.length ?? 0),
+  ].join("|");
+}
+
+/**
+ * The snapshot to hold after a poll answers.
+ *
+ * Returns `current` ONLY when the incoming response is the same packet and adds nothing. That is
+ * the case the dedupe exists for: a 2.5s poll on a settled packet must not re-render the review
+ * pane, the resume preview and the filled-form image forever.
+ */
+export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | null | undefined, incoming: T): T {
+  if (!current) return incoming;
+  // A snapshot for a different packet is not a version of this one, it is the wrong application.
+  if (current.application_id !== incoming.application_id) return incoming;
+  // Never let a board seed outrank the server.
+  if (current.partial) return incoming;
+  if (current.review.updated_at !== incoming.review.updated_at) return incoming;
+  if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(incoming.cover_letter)) return incoming;
+  if ((current.handoff_url ?? null) !== (incoming.handoff_url ?? null)) return incoming;
+  if ((current.configured ?? null) !== (incoming.configured ?? null)) return incoming;
+  return current;
+}
+
+/**
+ * How long the screen waits for a cover letter before it stops calling the wait progress.
+ *
+ * The poll answers every 2.5s, so anything still missing after this many rounds is not "loading".
+ * Saying "Loading cover letter." forever next to a button that cannot be pressed is how a
+ * permanently blocked send went unnoticed for a day.
+ */
+export const COVER_LETTER_WAIT_MS = 15_000;
+
+export type CoverLetterGate = "not_applicable" | "present" | "loading" | "unavailable";
+
+/**
+ * What the review screen should say about the cover letter, and whether the send is blocked.
+ *
+ * `unavailable` is a REAL state with two causes the client cannot tell apart: the server has no
+ * cover letter for this packet, or the client could not get the one it has. Both are blocking, and
+ * both have a way out, so the screen offers both doors rather than a progress message.
+ */
+export function coverLetterGate({ supported, coverLetter, waited }: {
+  supported: boolean | undefined;
+  coverLetter: CoverLetterLike | null | undefined;
+  waited: boolean;
+}): CoverLetterGate {
+  if (supported !== true) return "not_applicable";
+  if (coverLetter) return "present";
+  return waited ? "unavailable" : "loading";
+}
+
+/** A cover letter gate that stops the applicant sending. */
+export function coverLetterBlocks(gate: CoverLetterGate): boolean {
+  return gate === "loading" || gate === "unavailable";
+}

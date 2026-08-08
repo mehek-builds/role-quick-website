@@ -24,6 +24,7 @@ import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnL
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, coverLetterBlocks, coverLetterGate, nextSubmissionState } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { nextMatchScoreRequest } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -54,7 +55,10 @@ import { replaceClosedComposerUrl } from "./composer-url";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "recent" | "company";
-type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean };
+/* `partial` marks the snapshot selectPacket seeds from a board row, which carries `review` and
+   nothing else. nextSubmissionState reads it so the first real server answer always replaces the
+   seed. See features/applications/domain/submission-state.ts for what that fixes. */
+type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean; partial?: boolean };
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type CoverLetterResponse = { cover_letter: CoverLetter; download_url: string };
@@ -402,7 +406,13 @@ function Applications() {
     setApproveStartedAt(null);
     setSubmittingPhase("preparing");
     moveToScreen(screenForStatus(status, "review"));
-    setSubmission(status ? { application_id: packet.id, review: packet.spec._review! } : null);
+    /* Seeded from the board row so the portal screen has something to draw before the first poll
+       answers, and marked `partial` because that is exactly what it is. The cover letter is carried
+       across too: /resume/history already sends `spec._cover_letter` on every row, and leaving it
+       out was half of why the send stayed disabled. */
+    setSubmission(status
+      ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, partial: true }
+      : null);
     setError(null);
     setNotice(null);
   }, [moveToScreen]);
@@ -431,7 +441,9 @@ function Applications() {
     ) return;
 
     captureCompletedSubmission(result, "poll");
-    setSubmission((current) => current?.review.updated_at === result.review.updated_at ? current : result);
+    /* NOT a bare `review.updated_at` comparison: that versions the review alone, and this response
+       also carries cover_letter, handoff_url and configured. See submission-state.ts. */
+    setSubmission((current) => nextSubmissionState(current, result));
     setQuestions((current) => mergeDiscoveredQuestions(current, result.review.questions));
     setPackets((current) => {
       if (!current) return current;
@@ -455,6 +467,28 @@ function Applications() {
     if (approveInFlight.current !== null && !terminal) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
+
+  /* The applicant's own escape hatch when the cover letter has not arrived. The 2.5s poll already
+     asks for it, so this exists for the case the poll cannot recover from on its own: a hung or
+     failed fetch. It reports failure instead of swallowing it, which is the whole point. */
+  const [coverLetterReloading, setCoverLetterReloading] = useState(false);
+  const reloadCoverLetter = useCallback(async () => {
+    setCoverLetterReloading(true);
+    try {
+      await refreshSubmission();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not fetch the cover letter. Check your connection, then try again.");
+    } finally {
+      setCoverLetterReloading(false);
+    }
+  }, [refreshSubmission]);
+
+  /* `packets` and `submission` hold two copies of the same cover letter, and generate/save/delete
+     wrote only the first. So writing a cover letter on the review screen left the portal screen
+     still blocked on the letter that had just been written. Every writer goes through here. */
+  const applyCoverLetterToSubmission = useCallback((applicationId: string, coverLetter: CoverLetter | null) => {
+    setSubmission((current) => current && current.application_id === applicationId ? { ...current, cover_letter: coverLetter } : current);
+  }, []);
 
   useEffect(() => {
     if (!selectedId || qaMode || !["submitting", "portal"].includes(screen)) return;
@@ -992,6 +1026,7 @@ function Applications() {
       }
       const result = await api<CoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { method: "POST" });
       setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
+      applyCoverLetterToSubmission(applicationId, result.cover_letter);
       if (selectedIdRef.current === applicationId) {
         setCoverLetterBody(result.cover_letter.body);
         setCoverLetterDownloadUrl(result.download_url);
@@ -1018,6 +1053,7 @@ function Applications() {
             setPackets((current) => current?.map((packet) => packet.id === applicationId
               ? { ...packet, cover_letter_download_url: undefined, spec: { ...packet.spec, _cover_letter: undefined } }
               : packet) ?? current);
+            applyCoverLetterToSubmission(applicationId, null);
             if (selectedIdRef.current === applicationId) setCoverLetterDownloadUrl(null);
             setNotice("Cover letter removed from this application.");
           }
@@ -1025,6 +1061,7 @@ function Applications() {
         }
         const result = await api<CoverLetterResponse>(`/applications/${selected.id}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
+        applyCoverLetterToSubmission(applicationId, result.cover_letter);
         if (selectedIdRef.current === applicationId) {
           setCoverLetterBody(result.cover_letter.body);
           setCoverLetterDownloadUrl(result.download_url);
@@ -1594,6 +1631,9 @@ function Applications() {
           educationProfile={educationProfile}
           educationProfileStatus={qaMode === true ? "ready" : educationProfileStatus}
           onCheckResume={() => moveToScreen("review")}
+          onReloadCoverLetter={() => void reloadCoverLetter()}
+          onWriteCoverLetter={() => moveToScreen("review")}
+          coverLetterReloading={coverLetterReloading}
           onHandoffComplete={completeHandoff}
           onApprove={approveFinalSubmission}
           onRetry={retryPreparation}
@@ -2351,7 +2391,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onHandoffComplete, onApprove, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
+function SubmissionScreen({ packet, submission, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -2359,7 +2399,26 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
   const handoffUrl = needsAttention ? submission.handoff_url : undefined;
   const portalUrl = review.portal_url?.trim();
   const canFinishInDashboard = Boolean(handoffUrl);
-  const coverLetterPending = review.cover_letter_supported === true && !submission.cover_letter;
+  /* A wait that ends. "Loading cover letter." used to be the ONLY thing this screen said about a
+     cover letter that never arrived, and it said it forever, beside a Send button that was greyed
+     out and gave no reason. The wait is now bounded: after COVER_LETTER_WAIT_MS, which is six
+     rounds of the 2.5s poll, the screen stops calling it progress and says what is actually true,
+     that the cover letter is not here, with the two things that fix it.
+
+     State holds the packet the wait has RUN OUT FOR, not a bare boolean, so nothing has to be reset
+     synchronously inside the effect: a different packet, or a cover letter that has since arrived,
+     simply fails the comparison at render time. */
+  const [coverLetterWaitedFor, setCoverLetterWaitedFor] = useState<string | null>(null);
+  const coverLetterMissing = review.cover_letter_supported === true && !submission.cover_letter;
+  const waitedApplicationId = submission.application_id;
+  useEffect(() => {
+    if (!coverLetterMissing) return;
+    const timer = window.setTimeout(() => setCoverLetterWaitedFor(waitedApplicationId), COVER_LETTER_WAIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [coverLetterMissing, waitedApplicationId]);
+  const coverLetterWaited = coverLetterMissing && coverLetterWaitedFor === waitedApplicationId;
+  const coverLetterState = coverLetterGate({ supported: review.cover_letter_supported, coverLetter: submission.cover_letter, waited: coverLetterWaited });
+  const coverLetterPending = coverLetterBlocks(coverLetterState);
   const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
   const safeAttentionReason = review.attention_reason
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
@@ -2444,7 +2503,16 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
             )}
           </div>
         )}
-        {coverLetterPending && <p className="mt-6 text-sm text-muted">Loading cover letter.</p>}
+        {coverLetterState === "loading" && <p className="mt-6 text-sm text-muted">Loading cover letter.</p>}
+        {coverLetterState === "unavailable" && (
+          <div role="alert" className="mt-6 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
+            <p>This company takes a cover letter and Litos does not have one to show you, so it cannot send this yet. Fetch it again, or write it yourself and come back.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={onReloadCoverLetter} disabled={coverLetterReloading} className="rounded-full bg-warn px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">{coverLetterReloading ? "Fetching..." : "Fetch it again"}</button>
+              <button type="button" onClick={onWriteCoverLetter} className="rounded-full border border-warn px-4 py-2 text-sm font-medium text-warn">Write it yourself</button>
+            </div>
+          </div>
+        )}
         {review.status === "ready_for_final_approval" && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-xs font-medium text-muted">Resume</p>
@@ -2519,6 +2587,18 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
         {review.status === "ready_for_final_approval" && !previewReady && (
           <p className="mt-3 text-xs leading-5 text-warn">
             Loading preview.
+          </p>
+        )}
+        {/* The cover letter was the ONE blocking term with no line here, so the greyed-out Send
+            named every reason it was blocked except the one that was actually blocking it. */}
+        {review.status === "ready_for_final_approval" && coverLetterState === "loading" && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            Loading cover letter.
+          </p>
+        )}
+        {review.status === "ready_for_final_approval" && coverLetterState === "unavailable" && (
+          <p className="mt-3 text-xs leading-5 text-warn">
+            No cover letter to show you.
           </p>
         )}
         {review.status === "ready_for_final_approval" && requiredAnswerMissing && (
