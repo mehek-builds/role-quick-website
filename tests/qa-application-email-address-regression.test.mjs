@@ -5,18 +5,18 @@ import {
   applicationEmailBadge,
 } from "../lib/application-email-status.ts";
 
-test("an active flag cannot make a domain-shaped value look like a working mailbox", () => {
-  const malformed = {
+test("a proven managed receiving domain is shown as the packet-specific address route", () => {
+  const managed = {
     configured: true,
     tracking_active: true,
     domain: "garaierkaa.resend.app",
   };
 
-  assert.equal(applicationEmailBadge(malformed).label, "Not delivering");
-  assert.match(applicationEmailBadge(malformed).note ?? "", /invalid/);
+  assert.equal(applicationEmailBadge(managed).label, "Active");
+  assert.equal(applicationEmailBadge(managed).note, null);
   assert.equal(
-    applicationEmailAddressInUse(malformed, "applicant@example.com"),
-    "applicant@example.com",
+    applicationEmailAddressInUse(managed, "applicant@example.com"),
+    "A packet-specific address at garaierkaa.resend.app",
   );
 });
 

@@ -27,6 +27,7 @@ test("enabling verification requires a connection when no inbox is active", () =
   assert.equal(verificationEnableDecision(disconnected), "connect");
   assert.equal(verificationEnableDecision({ configured: false, connections: [] }), "unavailable");
   assert.equal(verificationEnableDecision(connected), "enable");
+  assert.equal(verificationEnableDecision({ configured: false, connections: [] }, true), "enable");
 });
 
 test("the OAuth callback enables permission only for the requested active provider", () => {

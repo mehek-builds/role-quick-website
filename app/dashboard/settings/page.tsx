@@ -323,7 +323,7 @@ export default function Settings() {
       return;
     }
     if (!emailConnections) return;
-    const decision = verificationEnableDecision(emailConnections);
+    const decision = verificationEnableDecision(emailConnections, applicationEmail?.tracking_active === true);
     if (decision === "enable") {
       void saveAutomation({ automatic_verification_enabled: true });
       return;
@@ -345,11 +345,12 @@ export default function Settings() {
       await disconnectEmailConnection(provider);
       const connections = await getEmailConnections();
       setEmailConnections(connections);
-      if (!hasActiveInbox(connections)) {
+      const aliasAvailable = applicationEmail?.tracking_active === true;
+      if (!hasActiveInbox(connections) && !aliasAvailable) {
         setAutomaticVerification(false);
         setVerificationConnectionPrompt(false);
       }
-      setConnectionNotice(`${label} disconnected.${hasActiveInbox(connections) ? " Email verification is still on through your other inbox." : " Email verification is off."}`);
+      setConnectionNotice(`${label} disconnected.${aliasAvailable ? " Email verification is still on through your Litos application inbox." : hasActiveInbox(connections) ? " Email verification is still on through your other inbox." : " Email verification is off."}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Could not disconnect ${label}.`);
     } finally {
@@ -801,23 +802,26 @@ export default function Settings() {
             <div className="flex items-start justify-between gap-5">
               <label htmlFor="automatic-email-verification">
                 <span className="block text-sm font-medium text-ink">Read the code a company emails me</span>
-                <span className="mt-1 block text-xs leading-5 text-muted">Let Litos find a code tied to an active application using only an inbox you connect below.</span>
+                <span className="mt-1 block text-xs leading-5 text-muted">Let Litos find a code tied to an active application in its application inbox, or in an inbox you connect below.</span>
               </label>
               <input
                 id="automatic-email-verification"
                 aria-label="Read the code a company emails me"
                 type="checkbox"
                 checked={automaticVerification}
-                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
+                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured && applicationEmail?.tracking_active !== true)}
                 onChange={(event) => changeAutomaticVerification(event.target.checked)}
                 className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
               />
             </div>
-            {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
+            {verificationConnectionPrompt && applicationEmail?.tracking_active !== true && !hasActiveInbox(emailConnections) && (
               <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
             )}
-            {automaticVerification && !hasActiveInbox(emailConnections) && (
-              <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until an inbox is connected.</p>
+            {automaticVerification && applicationEmail?.tracking_active !== true && !hasActiveInbox(emailConnections) && (
+              <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until one verification inbox is available.</p>
+            )}
+            {applicationEmail?.tracking_active === true && (
+              <p className="mt-3 text-xs leading-5 text-muted">Litos can read codes sent to the packet-specific application address. Connecting another inbox is optional.</p>
             )}
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs font-medium text-muted">Inbox access</p>
