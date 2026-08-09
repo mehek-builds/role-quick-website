@@ -39,11 +39,15 @@ import {
   verificationEnableDecision,
 } from "./email-verification-flow";
 import TargetingCard from "@/components/app/TargetingCard";
+import {
+  editableProfileText,
+  nullableProfileList,
+  nullableProfileText,
+} from "@/lib/application-profile-form";
 
-/* Application profile: exactly the fields the backend stores and the extension
-   autofills (PRD-v2 Section 4). Questions about race and gender are optional,
-   but editable here so a student can answer once and have Litos use that
-   wording instead of stopping every application on the same voluntary screen. */
+/* Application profile: exactly the fields the backend stores, including legacy
+   fields retained only so a full-profile save cannot erase them. Rendering a
+   field below does not by itself authorize the extension to reuse it. */
 
 const TRI = [
   { value: "", label: "Not set" },
@@ -869,7 +873,7 @@ export default function Settings() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-medium text-ink">Application details</h2>
-            <p className="mt-1 text-sm text-muted">Contact, links, and form answers</p>
+            <p className="mt-1 text-sm text-muted">Contact details and saved profile facts. Employer-specific choices stay on each application.</p>
           </div>
         <div className="flex justify-end">
           <div className="flex items-center gap-3">
@@ -904,7 +908,7 @@ export default function Settings() {
             onChange={(v) => patch({ needs_sponsorship: v })}
           />
           <Input label="Major" value={profile.major} onChange={(v) => patch({ major: v })} placeholder="Computer Science" />
-          <LanguagesInput
+          <StringListInput
             label="Languages you are fluent in"
             value={profile.languages}
             onChange={(v) => patch({ languages: v })}
@@ -916,6 +920,8 @@ export default function Settings() {
           <Input label="GPA" value={profile.gpa} onChange={(v) => patch({ gpa: v })} placeholder="3.89" />
           <Input label="GPA scale" value={profile.gpa_scale} onChange={(v) => patch({ gpa_scale: v })} placeholder="4.0" />
           <Input label="Available from" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" />
+          <Input label="Date of birth" value={profile.date_of_birth} onChange={(v) => patch({ date_of_birth: v })} placeholder="YYYY-MM-DD" hint="Optional. Used only when an application asks for your birth date." />
+          <Input label="Current degree start" value={profile.education_start_date} onChange={(v) => patch({ education_start_date: v })} placeholder="August 2024" hint="Month and year when your current degree began." />
           <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
           {/* A figure without a unit is not an answer: replaying "80000" from a Munich posting
               onto a Toronto one states something you never said. Both or neither get filled. */}
@@ -983,11 +989,13 @@ function Input({
   value,
   onChange,
   placeholder,
+  hint,
 }: {
   label: string;
   value: string | null | undefined;
   onChange: (v: string | null) => void;
   placeholder?: string;
+  hint?: string;
 }) {
   /* htmlFor/id, not aria-label: the visible text IS the accessible name, so tying
      them together means a future copy edit cannot leave a screen reader reading
@@ -996,56 +1004,61 @@ function Input({
      a bare "edit text" (WCAG 4.1.2). useId gives a value that matches between the
      server render and the client render, which a hand-rolled counter would not. */
   const fieldId = useId();
+  const hintId = `${fieldId}-hint`;
   return (
     <div>
       <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <input
         id={fieldId}
+        aria-describedby={hint ? hintId : undefined}
         value={value ?? ""}
-        onChange={(e) => onChange(e.target.value || null)}
+        onChange={(e) => onChange(editableProfileText(e.target.value))}
+        onBlur={(e) => onChange(nullableProfileText(e.target.value))}
         placeholder={placeholder}
         className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
+      {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
   );
 }
 
 /* Comma-separated text over a chip widget on purpose: every other field on this
-   page is a plain input, and the backend wants a plain array of language names.
+   page is a plain input, and the backend wants a plain array of factual names.
    Local text state keeps typing natural (a trailing comma is not destroyed by a
    re-render); the parsed array is what lands in the profile. */
-function LanguagesInput({
+function StringListInput({
   label,
   value,
   onChange,
   placeholder,
+  hint,
 }: {
   label: string;
   value: string[] | null | undefined;
   onChange: (v: string[] | null) => void;
   placeholder?: string;
+  hint?: string;
 }) {
   const [text, setText] = useState((value ?? []).join(", "));
   /* Same label association as Input: this field looks identical to the reader,
      so it has to announce identically too. */
   const fieldId = useId();
+  const hintId = `${fieldId}-hint`;
   return (
     <div>
       <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <input
         id={fieldId}
+        aria-describedby={hint ? hintId : undefined}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
-          const parsed = e.target.value
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean);
-          onChange(parsed.length > 0 ? parsed : null);
+          onChange(nullableProfileList(e.target.value));
         }}
         placeholder={placeholder}
         className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
+      {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
   );
 }

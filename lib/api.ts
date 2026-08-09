@@ -634,8 +634,12 @@ export type ApplicationProfile = {
   work_authorized?: boolean | null;
   needs_sponsorship?: boolean | null;
   availability_date?: string | null;
+  /** A duration such as "14 weeks". Separate from the date availability begins. */
+  availability_term?: string | null;
   desired_salary?: string | null;
   desired_salary_currency?: string | null;
+  /** Applicant-provided date only. Never inferred from education or employment dates. */
+  date_of_birth?: string | null;
   gpa?: string | null;
   gpa_scale?: string | null;
   major?: string | null;

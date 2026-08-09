@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 /* ISSUE-012. The Application details panel renders roughly twenty controls
-   through three helpers, and each helper used to put its visible <label> next to
+   through shared helpers, and each helper used to put its visible <label> next to
    the control as a plain sibling: no htmlFor, no wrapping element, so nothing
    computed an accessible name and a screen reader announced every field as an
    unnamed box (WCAG 4.1.2 and 3.3.2). Sighted users saw a correct-looking form,
@@ -24,7 +24,7 @@ function helperBody(source, name) {
 test("every Application details field helper names its control programmatically", async () => {
   const source = await readFile(settingsPage, "utf8");
 
-  for (const name of ["Input", "LanguagesInput", "Select"]) {
+  for (const name of ["Input", "StringListInput", "Select", "StringSelect"]) {
     const body = helperBody(source, name);
     assert.match(body, /const fieldId = useId\(\);/, `${name} must derive a stable id`);
     assert.match(body, /<label htmlFor=\{fieldId\}/, `${name} label must point at its control`);
@@ -32,6 +32,17 @@ test("every Application details field helper names its control programmatically"
     /* aria-label would satisfy a checker while letting the spoken name drift away
        from the visible text on the next copy edit. The visible label is the name. */
     assert.doesNotMatch(body, /aria-label=/, `${name} should associate its visible label, not duplicate it`);
+  }
+});
+
+test("shared helpers associate explanatory hints with their controls", async () => {
+  const source = await readFile(settingsPage, "utf8");
+
+  for (const name of ["Input", "StringListInput"]) {
+    const body = helperBody(source, name);
+    assert.match(body, /const hintId = `\$\{fieldId\}-hint`;/, `${name} must derive a stable hint id`);
+    assert.match(body, /aria-describedby=\{hint \? hintId : undefined\}/, `${name} control must reference its hint`);
+    assert.match(body, /<p id=\{hintId\}/, `${name} hint must carry the referenced id`);
   }
 });
 
