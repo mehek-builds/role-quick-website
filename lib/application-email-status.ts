@@ -55,6 +55,10 @@ function isMailbox(value: string | null | undefined): value is string {
   return Boolean(value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
 }
 
+function isDomain(value: string | null | undefined): value is string {
+  return Boolean(value && /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/i.test(value));
+}
+
 export function applicationEmailBadge(status: ApplicationEmailTracking | null): ApplicationEmailBadge {
   if (status === null) return { label: "Checking", kind: "draft", note: null };
   if (!status.configured) {
@@ -78,7 +82,7 @@ export function applicationEmailBadge(status: ApplicationEmailTracking | null): 
         note: "Litos cannot confirm which address is on applications, so it uses your own email.",
       };
     }
-    if (!isMailbox(status.domain)) {
+    if (!isMailbox(status.domain) && !isDomain(status.domain)) {
       return {
         label: "Not delivering",
         kind: "warn",
@@ -108,5 +112,6 @@ export function applicationEmailAddressInUse(
   accountEmail: string | null | undefined,
 ): string {
   if (status?.tracking_active && isMailbox(status.domain)) return status.domain;
+  if (status?.tracking_active && isDomain(status.domain)) return `A packet-specific address at ${status.domain}`;
   return accountEmail ?? "Your account email";
 }

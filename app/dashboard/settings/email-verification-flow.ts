@@ -8,7 +8,9 @@ export function hasActiveInbox(connections: EmailConnectionsResponse): boolean {
 
 export function verificationEnableDecision(
   connections: EmailConnectionsResponse,
+  applicationAliasAvailable = false,
 ): "enable" | "connect" | "unavailable" {
+  if (applicationAliasAvailable) return "enable";
   if (hasActiveInbox(connections)) return "enable";
   return connections.configured ? "connect" : "unavailable";
 }

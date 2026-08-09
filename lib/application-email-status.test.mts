@@ -114,6 +114,15 @@ describe("the address the panel prints", () => {
     );
   });
 
+  test("a managed receiving domain is a valid packet-specific application address", () => {
+    const status = { configured: true, tracking_active: true, domain: "garaierkaa.resend.app" };
+    assert.equal(applicationEmailBadge(status).label, "Active");
+    assert.equal(
+      applicationEmailAddressInUse(status, "mehekmandal05@gmail.com"),
+      "A packet-specific address at garaierkaa.resend.app",
+    );
+  });
+
   test("and when this client cannot tell, it does not claim the Litos address either", () => {
     assert.equal(applicationEmailAddressInUse(status, "mehekmandal05@gmail.com"), "mehekmandal05@gmail.com");
   });
