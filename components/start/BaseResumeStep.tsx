@@ -143,7 +143,13 @@ const APPLICATION_FACT_FIELDS = [
     key: "date_of_birth",
     label: "Date of birth",
     placeholder: "YYYY-MM-DD",
-    hint: "Optional. Litos uses this only when an application asks for your birth date.",
+    /* The hint used to read "Litos uses this only when an application asks for your birth date",
+     * which undersold it into being skipped. Employers ask "at the time of application, are you
+     * 18+ years of age?" far more often than they ask for the date, and a live Roblox run stopped
+     * on exactly that with no way to answer it: an age is only honest if it is arithmetic on a
+     * date the applicant gave, so a blank here is the one thing that keeps the question blocking.
+     * Naming the question is the difference between an optional box and a box worth filling. */
+    hint: "Month, day and year. This is also what lets Litos answer \"are you 18 or older?\", which employers ask more often than they ask for the date itself. Leave it blank and both come back to you.",
   },
   {
     key: "military_service",
