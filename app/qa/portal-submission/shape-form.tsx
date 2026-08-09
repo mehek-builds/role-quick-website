@@ -308,7 +308,104 @@ function ShapeControls({ shape, answered }: { shape: PortalShape; answered: bool
   if (shape === "security-code") return null;
   if (shape === "stale-error") return <StaleErrors realBlockerId={null} />;
   if (shape === "stale-error-real") return <StaleErrors realBlockerId="stale-cover-note" />;
+  if (shape === "cover-letter-attach") return <CoverLetterAttachment />;
   return null;
+}
+
+/* ─── 11. Greenhouse's cover-letter control ─────────────────────────────────────────────────── */
+
+/* THE CONTROL THAT NO LITOS APPLICATION HAS EVER PUT A FILE INTO.
+ *
+ * Copied from the live Cresta form, 2026-08-09
+ * (job-boards.greenhouse.io/embed/job_app?for=cresta&token=5213417008), where the whole block is:
+ *
+ *   <div>Cover Letter</div>
+ *   <button>Attach</button> <button>Dropbox</button> <button>Enter manually</button>
+ *   <input id="cover_letter" class="visually-hidden" type="file" accept=".pdf,.doc,.docx,.txt,.rtf">
+ *
+ * Four properties of that markup, each one of which has to survive into this fixture or the shape
+ * proves nothing:
+ *
+ *  1. NO name attribute. `input[type="file"][name*="cover" i]` cannot match it.
+ *  2. The caption is a plain div, not label[for]. `label:has-text("Cover Letter") input[type=file]`
+ *     cannot match it either.
+ *  3. The input is CLIPPED, not display:none. setInputFiles works on it; a click-the-visible-control
+ *     approach does not, because "Attach" opens the OS file dialog.
+ *  4. It is OPTIONAL. The product's promise on the pre-fill screen is that Litos attaches a cover
+ *     letter "even when it is marked optional", so required here would test the wrong form.
+ *
+ * The third input is the trap. "Additional documents" carries no cover in its name or id, sits
+ * after the cover letter in DOM order, and is what a page-wide input[type=file] sweep or an
+ * off-by-one nth-match lands on. A run that files the letter there is worse than one that files it
+ * nowhere: the employer receives the applicant's cover letter under a heading she did not choose.
+ *
+ * Nothing is uploaded anywhere. onChange reads files[0].name off the input and mirrors it to the QA
+ * log so the trial's verdict comes from THE PAGE rather than from the runner's own report - the
+ * runner pushes an upload's label into filledFields on the strength of setInputFiles not throwing,
+ * which is exactly the kind of self-certification this harness exists to go behind.
+ */
+function CoverLetterAttachment() {
+  const record = (slot: string) => (event: React.ChangeEvent<HTMLInputElement>) => {
+    const name = event.currentTarget.files?.[0]?.name ?? "";
+    qaMirror(`${slot}-file`, name);
+    qaRecord("file_attached", `${slot}:${name}`);
+  };
+  /* The resume input belongs to BoardContactFields, so it is instrumented from here rather than
+     forked. Both files matter to this shape: the defect it stands for is one document missing, and
+     the failure mode next door is the two documents swapped. */
+  useEffect(() => {
+    const resume = document.getElementById("resume") as HTMLInputElement | null;
+    if (!resume) return;
+    const onChange = () => {
+      const name = resume.files?.[0]?.name ?? "";
+      qaMirror("resume-file", name);
+      qaRecord("file_attached", `resume:${name}`);
+    };
+    resume.addEventListener("change", onChange);
+    return () => resume.removeEventListener("change", onChange);
+  }, []);
+  return (
+    <>
+      <div className="field col-span-full">
+        {/* A DIV, not a label. See property 2 above. */}
+        <div className="text-sm text-[#31312d]">Cover Letter</div>
+        <div className="mt-2 flex gap-2">
+          {["Attach", "Dropbox", "Enter manually"].map((choice) => (
+            <button
+              key={choice}
+              type="button"
+              className="rounded-lg border border-[#cfcfc6] px-3 py-1.5 text-sm text-[#31312d]"
+              onClick={() => qaRecord("cover_trio_clicked", choice)}
+            >
+              {choice}
+            </button>
+          ))}
+        </div>
+        <input
+          id="cover_letter"
+          type="file"
+          accept=".pdf,.doc,.docx,.txt,.rtf"
+          // sr-only is the same clip Greenhouse's own .visually-hidden applies. NOT hidden and NOT
+          // display:none: the live input is in the layout and reachable by setInputFiles, and a
+          // fixture that removed it from the box model would be an easier form than the real one.
+          className="sr-only"
+          onChange={record("cover")}
+        />
+      </div>
+      {/* THE DECOY. No cover anywhere in its name or id, and it comes last. */}
+      <div className="field col-span-full">
+        <div className="text-sm text-[#31312d]">Additional documents</div>
+        <input
+          id="additional_documents"
+          name="job_application[additional]"
+          type="file"
+          accept=".pdf,.doc,.docx,.txt,.rtf"
+          className="sr-only"
+          onChange={record("extra")}
+        />
+      </div>
+    </>
+  );
 }
 
 /* ─── 6. Ashby's segmented Yes/No ───────────────────────────────────────────────────────────── */
