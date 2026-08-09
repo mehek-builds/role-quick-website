@@ -23,19 +23,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
 const TUNNEL_HOST = "controlled-origin.trycloudflare.com";
-const certificateDirectory = mkdtempSync(join(tmpdir(), "litos-qa-tunnel-cert-"));
-const certificateKey = join(certificateDirectory, "key.pem");
-const certificate = join(certificateDirectory, "cert.pem");
-const certificateResult = spawnSync("openssl", [
-  "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "1",
-  "-subj", `/CN=${TUNNEL_HOST}`,
-  "-addext", `subjectAltName=DNS:${TUNNEL_HOST}`,
-  "-keyout", certificateKey,
-  "-out", certificate,
-], { stdio: "ignore" });
-if (certificateResult.status !== 0) {
-  throw new Error("openssl could not create the local controlled-tunnel test certificate");
-}
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -72,69 +59,94 @@ async function waitForServer(port, child) {
   throw new Error("next dev never answered through the controlled tunnel host");
 }
 
-const port = await freePort();
-const origin = `https://${TUNNEL_HOST}:${port}`;
-const serverErrors = [];
-const server = spawn(
-  "node_modules/.bin/next",
-  [
-    "dev",
-    "--experimental-https",
-    "--experimental-https-key", certificateKey,
-    "--experimental-https-cert", certificate,
-    "-H", "0.0.0.0",
-    "-p", String(port),
-  ],
-  {
-    env: {
-      ...process.env,
-      LITOS_TEST_PORTAL_PUBLIC_ORIGIN: `https://${TUNNEL_HOST}`,
-    },
-    stdio: ["ignore", "ignore", "pipe"],
-  },
-);
-server.stderr.on("data", (chunk) => serverErrors.push(String(chunk)));
-
-let browser;
-let context;
-
-test.after(async () => {
-  await context?.close().catch(() => {});
-  await browser?.close().catch(() => {});
-  server.kill("SIGTERM");
-  rmSync(certificateDirectory, { recursive: true, force: true });
-});
+async function stopChild(child) {
+  if (!child || child.exitCode !== null) return;
+  const exited = new Promise((resolve) => child.once("exit", resolve));
+  child.kill("SIGTERM");
+  await Promise.race([exited, delay(5_000)]);
+  if (child.exitCode === null) {
+    child.kill("SIGKILL");
+    await exited;
+  }
+}
 
 test("the exact configured HTTPS tunnel host hydrates the controlled portal", async () => {
-  await waitForServer(port, server);
-  browser = await chromium.launch({
-    args: [`--host-resolver-rules=MAP ${TUNNEL_HOST} 127.0.0.1`],
-  });
-  context = await browser.newContext({ ignoreHTTPSErrors: true });
-  const page = await context.newPage();
-  const browserErrors = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") browserErrors.push(message.text());
-  });
-  page.on("pageerror", (error) => browserErrors.push(error.message));
+  const certificateDirectory = mkdtempSync(join(tmpdir(), "litos-qa-tunnel-cert-"));
+  let browser;
+  let context;
+  let server;
+  try {
+    const certificateKey = join(certificateDirectory, "key.pem");
+    const certificate = join(certificateDirectory, "cert.pem");
+    const certificateResult = spawnSync("openssl", [
+      "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "1",
+      "-subj", `/CN=${TUNNEL_HOST}`,
+      "-addext", `subjectAltName=DNS:${TUNNEL_HOST}`,
+      "-keyout", certificateKey,
+      "-out", certificate,
+    ], { stdio: "ignore" });
+    if (certificateResult.status !== 0) {
+      throw new Error("openssl could not create the local controlled-tunnel test certificate");
+    }
 
-  await page.goto(`${origin}/qa/portal-submission?board=greenhouse&shape=security-code`, {
-    waitUntil: "domcontentloaded",
-    timeout: 30_000,
-  });
-  const form = page.locator('form[data-litos-controlled-portal][data-litos-qa-ready="1"]');
-  await form.waitFor({ state: "visible", timeout: 15_000 }).catch((error) => {
-    throw new Error([
-      error.message,
-      `Browser errors: ${JSON.stringify(browserErrors)}`,
-      `Server errors: ${serverErrors.join("")}`,
-    ].join("\n"));
-  });
+    const port = await freePort();
+    const origin = `https://${TUNNEL_HOST}:${port}`;
+    const serverErrors = [];
+    server = spawn(
+      "node_modules/.bin/next",
+      [
+        "dev",
+        "--experimental-https",
+        "--experimental-https-key", certificateKey,
+        "--experimental-https-cert", certificate,
+        "-H", "0.0.0.0",
+        "-p", String(port),
+      ],
+      {
+        env: {
+          ...process.env,
+          LITOS_TEST_PORTAL_PUBLIC_ORIGIN: `https://${TUNNEL_HOST}`,
+        },
+        stdio: ["ignore", "ignore", "pipe"],
+      },
+    );
+    server.stderr.on("data", (chunk) => serverErrors.push(String(chunk)));
 
-  assert.equal(await form.getAttribute("data-litos-qa-ready"), "1");
-  assert.equal(
-    browserErrors.some((message) => /WebSocket.*(?:403|502)|blocked cross-origin/i.test(message)),
-    false,
-    `the tunnel HMR channel was blocked: ${JSON.stringify(browserErrors)}`,
-  );
+    await waitForServer(port, server);
+    browser = await chromium.launch({
+      args: [`--host-resolver-rules=MAP ${TUNNEL_HOST} 127.0.0.1`],
+    });
+    context = await browser.newContext({ ignoreHTTPSErrors: true });
+    const page = await context.newPage();
+    const browserErrors = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") browserErrors.push(message.text());
+    });
+    page.on("pageerror", (error) => browserErrors.push(error.message));
+
+    await page.goto(`${origin}/qa/portal-submission?board=greenhouse&shape=security-code`, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    const form = page.locator('form[data-litos-controlled-portal][data-litos-qa-ready="1"]');
+    await form.waitFor({ state: "visible", timeout: 15_000 }).catch((error) => {
+      throw new Error([
+        error.message,
+        `Browser errors: ${JSON.stringify(browserErrors)}`,
+        `Server errors: ${serverErrors.join("")}`,
+      ].join("\n"));
+    });
+
+    assert.equal(await form.getAttribute("data-litos-qa-ready"), "1");
+    assert.equal(
+      browserErrors.some((message) => /WebSocket.*(?:403|502)|blocked cross-origin/i.test(message)),
+      false,
+      `the tunnel HMR channel was blocked: ${JSON.stringify(browserErrors)}`,
+    );
+  } finally {
+    await context?.close().catch(() => {});
+    await browser?.close().catch(() => {});
+    await stopChild(server);
+    rmSync(certificateDirectory, { recursive: true, force: true });
+  }
 });
