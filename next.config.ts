@@ -78,14 +78,80 @@ if (rawBuildTime !== undefined && Number.isNaN(Date.parse(rawBuildTime))) {
 }
 const BUILD_TIME = new Date(rawBuildTime ?? Date.now()).toISOString();
 
+export const CONTROLLED_PORTAL_ORIGIN_ENV = "LITOS_TEST_PORTAL_PUBLIC_ORIGIN";
+
+type Environment = Record<string, string | undefined>;
+
+/**
+ * Next development mode validates the browser Origin on its HMR WebSocket.
+ * The controlled runner reaches this local server through one short-lived
+ * Cloudflare tunnel, so that exact configured hostname has to be present in
+ * allowedDevOrigins or React never hydrates the server-rendered fixture.
+ *
+ * This does not make a wildcard trust decision. The backend signs the exact
+ * controlled portal URL separately. Here we accept one exact origin from the
+ * same environment key, validate it even in production, and expose its hostname
+ * only when this process is a local development server.
+ */
+export function controlledPortalDevOrigin(env: Environment = process.env): string | null {
+  const raw = env[CONTROLLED_PORTAL_ORIGIN_ENV]?.trim();
+  if (!raw) return null;
+
+  let origin: URL;
+  try {
+    origin = new URL(raw);
+  } catch {
+    throw new Error(`${CONTROLLED_PORTAL_ORIGIN_ENV} must be an absolute URL.`);
+  }
+
+  if (
+    origin.username
+    || origin.password
+    || origin.pathname !== "/"
+    || origin.search
+    || origin.hash
+  ) {
+    throw new Error(`${CONTROLLED_PORTAL_ORIGIN_ENV} must contain only an origin, without credentials, path, query, or fragment.`);
+  }
+
+  const hostname = origin.hostname.toLowerCase();
+  if (hostname === "trylitos.com" || hostname === "www.trylitos.com") {
+    throw new Error(`${CONTROLLED_PORTAL_ORIGIN_ENV} must never name a Litos production host.`);
+  }
+
+  const loopback = hostname === "127.0.0.1" || hostname === "localhost" || hostname === "[::1]";
+  if (loopback) {
+    if (origin.protocol !== "http:" && origin.protocol !== "https:") {
+      throw new Error(`${CONTROLLED_PORTAL_ORIGIN_ENV} loopback origins must use HTTP or HTTPS.`);
+    }
+  } else {
+    if (origin.protocol !== "https:" || origin.port) {
+      throw new Error(`${CONTROLLED_PORTAL_ORIGIN_ENV} public origins must use HTTPS with no custom port.`);
+    }
+    if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.trycloudflare\.com$/.test(hostname)) {
+      throw new Error(`${CONTROLLED_PORTAL_ORIGIN_ENV} public origins must be one exact trycloudflare.com tunnel host.`);
+    }
+  }
+
+  return env.NODE_ENV === "development" ? hostname : null;
+}
+
+const controlledPortalOrigin = controlledPortalDevOrigin();
+const extraControlledDevOrigins = controlledPortalOrigin
+  && controlledPortalOrigin !== "127.0.0.1"
+  && controlledPortalOrigin !== "localhost"
+  ? [controlledPortalOrigin]
+  : [];
+
 const nextConfig: NextConfig = {
   /* The controlled end-to-end harness opens the local development server through
    * 127.0.0.1 so its API, website, portal, and disposable database all use an
    * explicit loopback address. Next blocks development assets when that origin
    * differs from its default localhost origin. The server HTML still arrives,
    * but React never hydrates, so Guest mode and every other client interaction
-   * silently disappear. This is development-only and grants no remote host. */
-  allowedDevOrigins: ["127.0.0.1"],
+   * silently disappear. A controlled tunnel host is admitted only after the
+   * exact-origin validation above, and only in development. */
+  allowedDevOrigins: ["127.0.0.1", ...extraControlledDevOrigins],
   env: { BUILD_TIME },
   async redirects() {
     return [
