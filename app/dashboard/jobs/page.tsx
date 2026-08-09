@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/app/Button";
+import { Button, ButtonLink } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
@@ -8,7 +8,7 @@ import { fetchBoard, useJobMatchScores, MATCH_WEIGHTING_NOTE, SCORE_BATCH, type 
 import { CompanyLogo } from "@/components/app/CompanyLogo";
 import { activeJobFilters, buildAppliedIndex, countNewToday, emptyJobsBody, isJobApplied, type AppliedIndex } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
-import { Card, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, DataErrorState, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
 import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
 import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
@@ -128,6 +128,23 @@ export default function JobsPage() {
 
   useEffect(() => {
     if (qaMode !== true) return;
+    const qaScenario = new URLSearchParams(window.location.search).get("qa");
+    if (qaScenario === "error" || qaScenario === "empty") {
+      queueMicrotask(() => {
+        if (qaScenario === "error") {
+          setError("We could not load your jobs.");
+          return;
+        }
+        setJobs([]);
+        setRanked(false);
+        setHasMore(false);
+        setRankedPool(0);
+        setPoolExhausted(true);
+        setMinimumMatchScore(null);
+        setApplied(buildAppliedIndex([]));
+      });
+      return;
+    }
     let cancelled = false;
     void import("./qa-data").then(({ qaJobsPage, QA_APPLIED }) => {
       if (cancelled) return;
@@ -363,19 +380,30 @@ export default function JobsPage() {
         </p>
       )}
 
-      {error && <ErrorNote message={error} />}
+      {error && jobs !== null && <ErrorNote message={error} />}
 
-      {jobs === null ? (
+      {error && jobs === null ? (
+        <DataErrorState
+          headingLevel="h2"
+          title="Jobs did not load."
+          body="Your filters and profile are still saved. Try loading the job board again."
+          onRetry={() => window.location.reload()}
+        />
+      ) : jobs === null ? (
         <ShimmerRows rows={5} />
       ) : jobs.length === 0 ? (
-        <EmptyState title="No matching roles" body={emptyJobsBody(filters)}>
+        <EmptyState title="No matching roles" body={emptyJobsBody(filters)} visual="jobs">
           {/* No breakpoint gate on this, and no collapsing toolbar to tuck it into. ISSUE-028 was
               a recovery control that only existed on large screens; the only way out of an empty
               board has to be reachable at the width the student is actually holding. */}
-          {activeFilters.length > 0 && (
+          {activeFilters.length > 0 ? (
             <Button type="button" onClick={clearFilters} variant="secondary">
               Clear filters
             </Button>
+          ) : (
+            <ButtonLink href="/dashboard/settings#job-search">
+              Change job preferences
+            </ButtonLink>
           )}
         </EmptyState>
       ) : (

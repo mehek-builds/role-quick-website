@@ -415,8 +415,12 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   return (
     <StartShell
       step="resume"
-      title="Tell us what you want."
+      title="Start with your resume."
     >
+      <p className="mb-6 max-w-xl text-sm leading-6 text-muted">
+        Welcome to Litos. Upload the resume you already use. You will review the one-page version
+        and target roles before Litos finds jobs. Finish later any time.
+      </p>
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div
@@ -893,6 +897,9 @@ export function DoneStep({
       title="Your job matches are ready."
     >
       <div>
+        <p role="status" className="mb-6 text-sm leading-6 text-muted">
+          Setup complete. Your resume and role choices are saved.
+        </p>
         <PrimaryButton
           onClick={() => {
             setBusy(true);

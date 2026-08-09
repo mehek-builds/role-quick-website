@@ -39,6 +39,8 @@ export default function DashboardError({
   return (
     <div className="py-10">
       <EmptyState
+        visual="error"
+        headingLevel="h1"
         title="This page did not load."
         body="Nothing you saved was lost. Try loading it again, and the rest of your dashboard is still working."
       >

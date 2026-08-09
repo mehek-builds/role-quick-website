@@ -130,6 +130,12 @@ jobs:
       - name: Onboarding gaps spec
         run: npm run test:start-gaps
 
+      - name: Onboarding and empty-state checklist spec
+        run: npm run test:checklist-flow
+
+      - name: Narrow viewport actions spec
+        run: npm run test:narrow-viewport
+
       # The whole value of that spec is observing rendered behaviour, and nobody
       # can reproduce a runner by hand. Without this, its first CI-only failure
       # is a bare locator timeout with no picture. The spec writes a full-page
@@ -144,5 +150,6 @@ jobs:
             test-results/click-path/
             test-results/start-base/
             test-results/start-gaps/
+            test-results/narrow-viewport/
           if-no-files-found: ignore
           retention-days: 7

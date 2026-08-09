@@ -27,6 +27,7 @@ import {
   getToken,
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
+import { Button } from "@/components/app/Button";
 import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
@@ -158,6 +159,9 @@ export default function Start() {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <ErrorNote message={error} />
+        <Button type="button" onClick={() => window.location.reload()} className="mt-4">
+          Try again
+        </Button>
       </div>
     );
   }

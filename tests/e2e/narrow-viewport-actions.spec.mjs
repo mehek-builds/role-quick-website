@@ -373,7 +373,7 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
       const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
       await rows.first().waitFor({ state: "visible", timeout: 20_000 });
       await rows.first().click();
-      const check = page.getByRole("button", { name: "Answer" });
+      const check = page.getByRole("button", { name: /^Answer:/ });
       await check.waitFor({ state: "visible", timeout: 20_000 });
       await check.click();
 
