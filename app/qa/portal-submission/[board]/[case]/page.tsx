@@ -1,7 +1,11 @@
+import { requireQaAccess } from "../../../gate";
 import { PortalForm } from "../../portal-form";
 import { ShapeForm } from "../../shape-form";
 import { toBoard } from "../../boards";
 import { normalizeCaseId, toShape } from "../../shapes";
+
+/* A gate that a build could prerender past is not a gate. See app/qa/gate.ts. */
+export const dynamic = "force-dynamic";
 
 export default async function ControlledPortalCase({
   params,
@@ -12,6 +16,9 @@ export default async function ControlledPortalCase({
 }) {
   const route = await params;
   const query = await searchParams;
+  // Same fabricated employer form as the ?board= entry point, so the same gate. Two entry points
+  // where only one is protected is the drift the toBoard/toShape comments below already warn about.
+  await requireQaAccess(query);
   // Shared with the ?board= route via toBoard, so the two entry points into the harness cannot drift.
   const board = toBoard(route.board);
   const caseId = normalizeCaseId(route.case, `${board}-01`);

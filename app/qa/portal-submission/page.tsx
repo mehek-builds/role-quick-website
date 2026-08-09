@@ -1,7 +1,11 @@
+import { requireQaAccess } from "../gate";
 import { PortalForm } from "./portal-form";
 import { ShapeForm } from "./shape-form";
 import { toBoard } from "./boards";
 import { normalizeCaseId, toShape } from "./shapes";
+
+/* A gate that a build could prerender past is not a gate. See app/qa/gate.ts. */
+export const dynamic = "force-dynamic";
 
 export default async function ControlledPortalSubmission({
   searchParams,
@@ -9,6 +13,9 @@ export default async function ControlledPortalSubmission({
   searchParams: Promise<{ board?: string; case?: string; shape?: string; answered?: string }>;
 }) {
   const params = await searchParams;
+  // This page renders a fabricated employer application form on the marketing domain. It answers
+  // 404 to anyone without the shared secret; lib/qa-gate.ts holds the whole argument.
+  await requireQaAccess(params);
   // See CONTROLLED_BOARDS: this page used to carry its own three-board list and was not updated when
   // Workable, JazzHR and Paylocity shipped, so ?board=workable rendered a Greenhouse form while the
   // backend resolved the url to controlled_workable.

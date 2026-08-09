@@ -77,6 +77,34 @@ NEXT_PUBLIC_POSTHOG_HOST=https://us.i.posthog.com
 
 Set both variables in Vercel Production and Preview. The project token is public by design and must never be replaced with a PostHog personal API key.
 
+### The QA fixture gate
+
+Everything under `/qa/` is a test fixture: fabricated Greenhouse/Lever/Ashby application forms and
+dashboard harnesses fed invented data. Until 2026-08-09 the whole directory answered 200 to the
+open internet, protected only by a `robots.txt` disallow, which is a request made of crawlers and
+not access control. It is now behind a shared secret:
+
+```env
+LITOS_QA_PORTAL_SECRET=32-to-128-chars-of-A-Za-z0-9_-
+```
+
+Generate one with `openssl rand -base64 48 | tr -d '=+/' | cut -c1-48`.
+
+- Send it as `?litos_qa_key=<secret>` or as the `x-litos-qa-key` header. The query parameter is the
+  one that matters: the trial harness drives these pages through a remote managed browser that
+  navigates to a URL and cannot set headers.
+- Anything else gets `notFound()`. Unset or malformed, the gate is CLOSED on every Vercel runtime
+  including Preview, and open only under `next dev` off Vercel, so `npm run dev` is unaffected.
+- The local production-build config (`litos-website-prod`, :3501) sets `NODE_ENV=production`, so it
+  needs the variable in `.env.local` to reach `/qa/`.
+- **Set it in Vercel Production and Preview before merging a change that relies on it, and set the
+  same value in the backend project.** The backend's `scripts/trial-portal-shapes.mts` reads
+  `LITOS_QA_PORTAL_SECRET` and appends it to every fixture URL; if the two do not match, every
+  managed trial case 404s.
+
+The whole argument, including what a secret in a query string does and does not buy, is in
+`lib/qa-gate.ts`.
+
 Registered launch configs (vault `.claude/launch.json`):
 `litos-website` (dev, :3500) and `litos-website-prod`
 (build + start, :3501).

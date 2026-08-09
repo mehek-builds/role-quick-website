@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { QA_GATE_HEADER, QA_GATE_PARAM, qaAccessAllowed } from "../lib/qa-gate.ts";
 
 /* Every internal link on a public surface must point at a route that exists.
  *
@@ -536,4 +537,112 @@ test("the exemption list does not quietly cover a public page", () => {
       `${route} is exempt with no reason written down`,
     );
   }
+});
+
+/* ---------- 6. nothing under /qa/ answers a stranger ---------- */
+
+/* The other half of the exemptions above, and the half that was missing.
+ *
+ * UNLINKED_BY_DESIGN says the four QA harnesses must not be LINKED from a public surface, and that
+ * assertion passed for months while every one of them was SERVED to the public internet. Measured
+ * on 2026-08-09: https://trylitos.com/qa/portal-submission?board=ashby&shape=security-code returned
+ * 200 to anonymous traffic and rendered a complete fabricated job application headed "Software
+ * Engineering Intern, Summer 2027", one shape of which ends on a "Thank you for submitting your
+ * application" panel. Not linking a page is not the same as not shipping it, exactly as the section
+ * 5 header says in the other direction.
+ *
+ * The belief at the time was that /qa/ was gated by an environment variable called
+ * LITOS_ENABLE_TEST_PORTAL. That variable is real, but it lives in the BACKEND repo and gates
+ * whether the backend will treat such a URL as a controlled portal. It has never existed in this
+ * project and gated nothing here. The only thing here was app/robots.ts, which is a request made of
+ * crawlers.
+ *
+ * So this section pins both halves: that the decision function refuses an anonymous request, and
+ * that every route under app/qa/ actually calls it. The second half is what stops the next harness
+ * page from shipping open, which is the way this failed the first time. */
+
+const QA_DIR = join(APP, "qa");
+const qaFiles = walk(QA_DIR);
+const qaPages = qaFiles.filter((f) => /(^|\/)page\.tsx$/.test(f));
+const qaRouteHandlers = qaFiles.filter((f) => /(^|\/)route\.ts$/.test(f));
+
+test("the QA gate 404s an anonymous request in production and stays open in local dev", () => {
+  const secret = "L".repeat(48);
+  const prod = { VERCEL_ENV: "production", NODE_ENV: "production", LITOS_QA_PORTAL_SECRET: secret };
+
+  /* The measured defect, as an assertion: no key, production, must not be allowed. */
+  assert.equal(qaAccessAllowed(undefined, prod), false);
+  assert.equal(qaAccessAllowed(null, prod), false);
+  assert.equal(qaAccessAllowed("", prod), false);
+  assert.equal(qaAccessAllowed("wrong", prod), false);
+  assert.equal(qaAccessAllowed(secret.slice(0, -1) + "M", prod), false);
+  assert.equal(qaAccessAllowed(secret, prod), true);
+
+  /* Unset secret fails CLOSED anywhere Vercel is running the code, preview included: a preview URL
+     is public, and "it is only a preview" is how the fixtures got out the first time. */
+  for (const env of [
+    { VERCEL_ENV: "production", NODE_ENV: "production" },
+    { VERCEL_ENV: "preview", NODE_ENV: "production" },
+    { VERCEL_ENV: "development", NODE_ENV: "development" },
+    { NODE_ENV: "production" },
+  ]) {
+    assert.equal(qaAccessAllowed(undefined, env), false, `open with no secret under ${JSON.stringify(env)}`);
+    assert.equal(qaAccessAllowed("anything", env), false, `open with no secret under ${JSON.stringify(env)}`);
+  }
+
+  /* A secret that is too short or oddly shaped is treated as unset rather than accepted, so
+     LITOS_QA_PORTAL_SECRET=1 cannot look like protection. */
+  for (const bad of ["1", "short", "L".repeat(31), "L".repeat(129), `${"L".repeat(47)}!`]) {
+    const env = { VERCEL_ENV: "production", NODE_ENV: "production", LITOS_QA_PORTAL_SECRET: bad };
+    assert.equal(qaAccessAllowed(bad, env), false, `accepted a malformed secret: ${JSON.stringify(bad)}`);
+  }
+
+  /* npm run dev keeps working untouched. */
+  assert.equal(qaAccessAllowed(undefined, { NODE_ENV: "development" }), true);
+});
+
+test("every page under app/qa calls the gate before it renders anything", () => {
+  assert.ok(qaPages.length >= 4, `expected the QA harness pages, found ${qaPages.length}`);
+  const ungated = [];
+  for (const file of qaPages) {
+    const shipped = shippedSource(readFileSync(file, "utf8"));
+    if (!/\bawait requireQaAccess\(/.test(shipped)) ungated.push(`${relative(ROOT, file)}: no requireQaAccess call`);
+    if (!/from "[^"]*\/gate"/.test(shipped)) ungated.push(`${relative(ROOT, file)}: does not import app/qa/gate`);
+    /* A page Next can prerender answers from the build's environment forever, which is not a gate.
+       requireQaAccess reads headers() and opts out on its own, but that is a side effect one
+       refactor away from disappearing, so each page states it. */
+    if (!/export const dynamic = "force-dynamic"/.test(shipped)) {
+      ungated.push(`${relative(ROOT, file)}: no force-dynamic, so the gate could be prerendered past`);
+    }
+  }
+  assert.deepEqual(
+    ungated,
+    [],
+    `QA pages that a stranger can reach. Every page under app/qa must start with\n` +
+      `await requireQaAccess(searchParams):\n  ${ungated.join("\n  ")}`,
+  );
+});
+
+test("every route handler under app/qa checks the gate", () => {
+  assert.ok(qaRouteHandlers.length >= 1, "expected at least the security-code route handler");
+  const ungated = [];
+  for (const file of qaRouteHandlers) {
+    const shipped = shippedSource(readFileSync(file, "utf8"));
+    if (!/if \(!qaRequestAllowed\(request\)\) notFound\(\);/.test(shipped)) {
+      ungated.push(relative(ROOT, file));
+    }
+  }
+  assert.deepEqual(
+    ungated,
+    [],
+    `QA route handlers that answer anyone:\n  ${ungated.join("\n  ")}`,
+  );
+});
+
+test("the gate's contract names are the ones the harness is told to send", () => {
+  /* The harness in the backend repo (scripts/trial-portal-shapes.mts) appends these by literal
+     name. Renaming either here without renaming it there is a silent 404 on every managed case,
+     so the names are pinned rather than merely exported. */
+  assert.equal(QA_GATE_PARAM, "litos_qa_key");
+  assert.equal(QA_GATE_HEADER, "x-litos-qa-key");
 });
