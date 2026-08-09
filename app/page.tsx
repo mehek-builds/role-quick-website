@@ -399,11 +399,11 @@ export default function Home() {
                       receipt the page states elsewhere. Do not re-add it. */}
                   <PillarChip icon="autofill" bg="bg-teal-soft" tone="text-teal-ink">02 · Forms</PillarChip>
                   <h2 className="mt-4 text-section font-[450] tracking-[-0.02em] text-ink">
-                    You autofill every application.
+                    Autofill the reusable parts of every application.
                   </h2>
                   <p className="mt-4 text-base leading-7 text-muted">
-                    Most forms ask the same 27 questions. We fill them in,
-                    then wait for you to check.
+                    Most forms ask the same questions. We fill reusable facts,
+                    leave personal decisions for you, then wait for you to check.
                   </p>
                   {/* SIMPLIFIED 2026-07-30, on Mehek's call: this band was a
                       lead paragraph, a five-line machine-voice list and a

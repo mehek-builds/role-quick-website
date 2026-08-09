@@ -632,7 +632,7 @@ export function CinematicHero() {
                 Apply <span className="text-brand-ink xl:block">in seconds.</span>
               </h1>
               <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted xl:mx-0">
-                You choose where to apply. Litos handles the rest.
+                Litos prepares the application. You make every personal decision and choose when to send it.
               </p>
             </div>
 
