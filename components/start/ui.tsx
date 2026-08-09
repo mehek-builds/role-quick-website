@@ -29,6 +29,19 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
      in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
   { key: "sponsorship", label: "Work visa", weight: 1 },
   { key: "base", label: "Your one page", weight: 2 },
+  /* Reinstated as a real screen by #279 ("Make referral onboarding gap reachable") and NOT added
+     here at the time, which is the whole reason this entry exists.
+     `StepRail` resolves an unknown key through `Math.max(0, findIndex(...))`, so a rendered screen
+     whose key is missing from this list does not fail loudly: it silently reports itself as index
+     0. The gaps screen was therefore telling every student it was "Step 1 of 6, Your resume" while
+     sitting second from last. A wayfinding device that points backwards is worse than none.
+
+     Weight 1, alongside focus and sponsorship: it is a handful of short inputs, and the rail is a
+     map of TIME. It is also the one CONDITIONAL screen in the flow, shown only when the server
+     reports outstanding gaps. That makes the denominator a slight overcount for a student who has
+     none, which is the cheaper of the two errors by a wide margin: an occasional "6 of 7" that
+     skips a number beats a screen that misreports where it is every single time it renders. */
+  { key: "gaps", label: "A few details", weight: 1 },
   { key: "done", label: "Done", weight: 0 },
 ];
 

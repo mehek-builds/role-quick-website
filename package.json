@@ -12,6 +12,7 @@
     "test:click-path": "node --test tests/e2e/dashboard-click-path.spec.mjs",
     "test:narrow-viewport": "node --test tests/e2e/narrow-viewport-actions.spec.mjs",
     "test:start-base": "node --test tests/e2e/start-base-build.spec.mjs",
+    "test:start-checklist": "node --test tests/e2e/start-onboarding-checklist.spec.mjs",
     "test:start-gaps": "node --test tests/e2e/start-gaps.spec.mjs",
     "test:qa-guest-entry": "node --test tests/e2e/qa-guest-entry.spec.mjs",
     "verify:logos": "node --experimental-strip-types scripts/verify-logo-service.mjs",

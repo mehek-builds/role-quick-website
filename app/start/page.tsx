@@ -75,7 +75,10 @@ export default function Start() {
           has_focus: true,
           has_resume: true,
           has_impact_review: qaStep !== "impact",
-          has_base_resume: false,
+          // Same convention as has_impact_review above: every step except the one being reviewed
+          // reads as finished. The done screen's setup receipt is derived from these flags, so a
+          // flat `false` here would make QA of that screen show a resume it never built.
+          has_base_resume: qaStep !== "base",
           has_applied: false,
           has_targeting: false,
           learned: [],
@@ -300,6 +303,7 @@ export default function Start() {
         <>
         {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
         <DoneStep
+          state={state}
           verificationEnabled={state.automatic_verification_enabled}
           onFinish={async (settings) => {
             try {

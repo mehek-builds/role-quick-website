@@ -110,16 +110,19 @@ test.after(async () => {
   server.kill("SIGTERM");
 });
 
+/* The heading this waits on is the done screen's, and it is "Setup complete." rather than the
+ * old "Your job matches are ready.": that screen now confirms setup before it hands off, and the
+ * forward-looking line moved into the first-action prompt below the receipt. See DoneStep. */
 test("the referral gap renders, saves the typed source, and advances", async (t) => {
   try {
     await page.goto(`${PAGE_ORIGIN}/start?qa=1&step=gaps`, { waitUntil: "networkidle" });
     const input = page.getByLabel("Default referral source");
     await input.waitFor({ state: "visible" });
-    assert.equal(await page.getByText("Your job matches are ready.").count(), 0);
+    assert.equal(await page.getByText("Setup complete.").count(), 0);
 
     await input.fill("LinkedIn");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByText("Your job matches are ready.").waitFor({ state: "visible" });
+    await page.getByText("Setup complete.").waitFor({ state: "visible" });
 
     assert.deepEqual(savedBody, { referral_source_default: "LinkedIn" });
     assert.deepEqual(blockedExternal, []);
