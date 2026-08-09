@@ -309,7 +309,149 @@ function ShapeControls({ shape, answered }: { shape: PortalShape; answered: bool
   if (shape === "stale-error") return <StaleErrors realBlockerId={null} />;
   if (shape === "stale-error-real") return <StaleErrors realBlockerId="stale-cover-note" />;
   if (shape === "cover-letter-attach") return <CoverLetterAttachment />;
+  if (shape === "eeo-radio-groups") return <EeoRadioGroups answered={answered} />;
   return null;
+}
+
+/* ─── 12. Ashby's EEO radio groups, and the preamble that swallowed them ────────────────────── */
+
+/* Copied from the live Skydio Ashby form, 2026-08-09
+ * (jobs.ashbyhq.com/skydio/.../application), the same board and the same four questions as
+ * production packet 13bccb2d-d726-4c47-80bc-e8090ae1463e.
+ *
+ * Five properties, each one load-bearing. Drop any of them and the shape passes against the broken
+ * runner:
+ *
+ *  1. THE PREAMBLE COMES FIRST AND CONTAINS THE QUESTION WORDS. This is the whole defect. The
+ *     equal-opportunity paragraph says "race, color, religion, sex, gender identity" three questions
+ *     above any control, so the first element on the page containing "gender" is prose, and an
+ *     anchor of getByText(question).first() resolves the question's "container" to the section that
+ *     holds every group at once.
+ *  2. TWO GROUPS IN ONE SECTION. Eleven radios across two questions is what the wrong anchor then
+ *     searches, in DOM order.
+ *  3. BOTH GROUPS END IN "Decline to self-identify". So the race answer matches the GENDER option
+ *     first and sets it, which is not merely a miss: it silently replaces an answer the applicant
+ *     gave with one she did not, on the one family of questions that is hers alone. Measured on the
+ *     live form, the gender control finished holding "Decline to self-identify" after a run whose
+ *     packet said Female.
+ *  4. THE TWO GROUPS ARE SPELLED DIFFERENTLY. Gender is Ashby's shipped markup: a name on every
+ *     radio and a label[for]. Race carries NO name attribute and associates its labels by WRAPPING
+ *     the input, which is the harder spelling and the one a name-based group check cannot see.
+ *  5. ONE OPTION IS QUALIFIED WITH EXTRA WORDS. "Asian (Not Hispanic or Latino)" is off the real
+ *     form verbatim. A stored "Asian" fails containment against it at both layers - the resolver's
+ *     chooseClosestOption and the runner's optionMatches - and the answer falls to the opt-out. That
+ *     gap is open and this shape exists partly to keep it measured rather than forgotten.
+ *
+ * The verdict is read off the FIXTURE. Both groups publish the option they currently hold, computed
+ * from the DOM rather than from React state, so a run that ticks two radios in one group (which the
+ * unnamed group physically permits) reports both instead of hiding one.
+ */
+const EEO_GENDER_OPTIONS = ["Male", "Female", "Decline to self-identify"];
+
+const EEO_RACE_OPTIONS = [
+  "Hispanic or Latino",
+  "White (Not Hispanic or Latino)",
+  "Black or African American (Not Hispanic or Latino)",
+  "Native Hawaiian or Other Pacific Islander (Not Hispanic or Latino)",
+  "Asian (Not Hispanic or Latino)",
+  "American Indian or Alaska Native (Not Hispanic or Latino)",
+  "Two or More Races (Not Hispanic or Latino)",
+  "Decline to self-identify",
+];
+
+/* Read out of the DOM, for both groups at once, rather than off React state. The race group has no
+   name, so the browser does not enforce one-of, and "what does this question hold" is a question
+   only the DOM can answer honestly. Joined with " + " so a group left holding two answers is
+   visible as one string rather than silently reported as the last one written. */
+function publishEeoGroups() {
+  for (const group of ["gender", "race"]) {
+    const held = [...document.querySelectorAll<HTMLInputElement>(`input[data-eeo-group="${group}"]`)]
+      .filter((input) => input.checked)
+      .map((input) => input.getAttribute("data-eeo-option") ?? "");
+    qaMirror(`eeo-${group}`, held.join(" + "));
+  }
+}
+
+function EeoRadioGroups({ answered }: { answered: boolean }) {
+  useEffect(() => { publishEeoGroups(); }, []);
+
+  const onPick = (group: "gender" | "race", option: string) => () => {
+    qaRecord("eeo_option_set", `${group}:${option}`);
+    publishEeoGroups();
+  };
+
+  return (
+    <div className="field col-span-full" data-litos-qa-eeo-section>
+      {/* (1) The trap. Word for word off the live form, and the reason the anchor missed. */}
+      <h2 className="text-lg font-semibold text-[#151512]">
+        Voluntary Self-Identification
+      </h2>
+      <p className="mt-2 text-sm text-[#63635d]">
+        Skydio provides equal employment opportunities to applicants and employees without regard to
+        race, color, religion, sex, gender identity, sexual orientation, national origin, age,
+        disability, protected veteran status, or any other characteristic protected by law.
+      </p>
+      <p className="mt-2 text-sm text-[#63635d]">
+        We invite all applicants to voluntarily self-identify their race, ethnicity and gender. Your
+        answers are voluntary and will not be considered in the hiring decision.
+      </p>
+
+      {/* (2) and (4a). Ashby's own spelling: a shared name and label[for]. */}
+      <fieldset className="mt-6" data-field-path="_systemfield_eeoc_gender">
+        <label className="block text-sm font-medium text-[#31312d]" htmlFor="_systemfield_eeoc_gender">
+          Gender
+        </label>
+        <div className="mt-1 text-xs text-[#63635d]"><p>Input gender</p></div>
+        {EEO_GENDER_OPTIONS.map((option, index) => (
+          <div key={option} className="mt-2 flex items-center gap-2">
+            <span>
+              <input
+                type="radio"
+                id={`eeoc-gender-labeled-radio-${index}`}
+                name="_systemfield_eeoc_gender"
+                data-eeo-group="gender"
+                data-eeo-option={option}
+                defaultChecked={answered && option === "Female"}
+                onChange={onPick("gender", option)}
+              />
+            </span>
+            <label htmlFor={`eeoc-gender-labeled-radio-${index}`} className="text-sm text-[#31312d]">
+              {option}
+            </label>
+          </div>
+        ))}
+      </fieldset>
+
+      {/* (2), (3), (4b) and (5). No name anywhere, labels associated by wrapping, eight options, the
+          last one identical to the gender group's last one, and one qualified with extra words. */}
+      <fieldset className="mt-6" data-field-path="_systemfield_eeoc_race">
+        <label className="block text-sm font-medium text-[#31312d]" htmlFor="_systemfield_eeoc_race">
+          Race
+        </label>
+        <div className="mt-1 text-xs text-[#63635d]">
+          <ul>
+            <li><p><strong>Asian</strong> (Not Hispanic or Latino) - A person having origins in any of the original peoples of the Far East, Southeast Asia, or the Indian Subcontinent.</p></li>
+            <li><p><strong>Two or More Races</strong> (Not Hispanic or Latino) - All persons who identify with more than one of the above races.</p></li>
+          </ul>
+        </div>
+        {EEO_RACE_OPTIONS.map((option, index) => (
+          <div key={option} className="mt-2">
+            <label className="flex items-center gap-2 text-sm text-[#31312d]">
+              <input
+                type="radio"
+                id={`eeoc-race-labeled-radio-${index}`}
+                data-eeo-group="race"
+                data-eeo-option={option}
+                defaultChecked={false}
+                onChange={onPick("race", option)}
+              />
+              {option}
+            </label>
+          </div>
+        ))}
+      </fieldset>
+    </div>
+  );
 }
 
 /* ─── 11. Greenhouse's cover-letter control ─────────────────────────────────────────────────── */

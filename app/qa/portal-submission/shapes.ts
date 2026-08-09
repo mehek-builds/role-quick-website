@@ -79,6 +79,30 @@ export const PORTAL_SHAPES = [
         cover in its name, is here so a page-wide input[type=file] sweep files the letter in the
         wrong place instead of passing. */
   'cover-letter-attach',
+  /* 12. Skydio packet 13bccb2d-d726-4c47-80bc-e8090ae1463e (Ashby) came back with filled_fields
+        ["name","email","phone","resume"] and four lines reading 'Litos could not leave this answer
+        on the form ... value did not persist after fillByLabelText' - gender, race, veteran status
+        and disability status, every one of them resolved correctly from the stored profile.
+
+        Measured against the live form on 2026-08-09, the report was not even the worst of it. Ashby
+        renders each of these as a real radio group inside its own fieldset, but the whole
+        self-identification block sits in ONE section, and the section opens with the equal-opportunity
+        preamble - "...without regard to race, color, religion, sex, gender identity...". The runner
+        anchored on the first element containing the question word, which is that paragraph, so the
+        block it then searched for options was the entire section: eleven radios across two questions.
+        The race answer "Decline to self-identify" matched GENDER's "Decline to self-identify" first
+        in DOM order and set it, overwriting the Female that had been set moments earlier, and race
+        and veteran status were left blank. Verified end to end against jobs.ashbyhq.com/skydio: the
+        gender control finished on "Decline to self-identify" while filled_fields claimed nothing.
+
+        So this shape carries the preamble as well as the controls, because the preamble is the trap.
+        Two groups, one of them eight options long, sharing a "Decline to self-identify" option; the
+        second group deliberately carries NO name attribute and associates its labels by WRAPPING
+        rather than by for, which is the harder of the two spellings Ashby ships. And one option is
+        qualified with extra distinguishing words - "Asian (Not Hispanic or Latino)" - which is the
+        known open gap: a stored "Asian" fails containment against it, and this shape makes that
+        visible rather than hiding it. */
+  'eeo-radio-groups',
 ] as const;
 
 export type PortalShape = (typeof PORTAL_SHAPES)[number];
