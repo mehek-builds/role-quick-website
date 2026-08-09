@@ -21,7 +21,14 @@
 import { useEffect, useState } from "react";
 import { BoardContactFields, type Board } from "./portal-form";
 import { ReactSelectFixture } from "./react-select-fixture";
-import { JD_DECOY_BULLET, JD_DECOY_OPTION, securityCodeFor, type PortalShape } from "./shapes";
+import {
+  ASHBY_SUCCESS_MESSAGE,
+  JD_DECOY_BULLET,
+  JD_DECOY_OPTION,
+  SUBMIT_DECOY_PROSE,
+  securityCodeFor,
+  type PortalShape,
+} from "./shapes";
 import { QA_LOG_ELEMENT_ID, qaMirror, qaRecord, qaReady } from "./qa-instrument";
 
 /* THE ONE ELEMENT THE REAL RUNNER CAN READ.
@@ -97,6 +104,39 @@ export function ShapeForm({
      receipt. */
   useEffect(() => { qaReady(shape); qaMirror("ready", "1"); setHydrated(true); }, [shape]);
   useEffect(() => { qaMirror("submit-attempts", String(attempts)); }, [attempts]);
+
+  /* ASHBY'S OWN SUCCESS STATE, not the harness's generic receipt.
+   *
+   * Read out of the live Skydio posting's bundle on 2026-08-09
+   * (cdn.ashbyprd.com/frontend_non_user/87a4960/assets/index-BFELy06m.js): on success Ashby mounts
+   * a container carrying the published class `ashby-application-form-success-container` around a
+   * role="status" aria-live="polite" region that holds the word "Success" and then the ORG'S OWN
+   * applicationSubmittedSuccessMessage. The class is Ashby's - it is enumerated in the bundle as a
+   * styling API for customers - and the sentence is the employer's, which is exactly why the runner
+   * keys on the container and merely carries the sentence along as evidence.
+   *
+   * The decoy prose stays on screen here too. It is on the page in both states, so it can never be
+   * what distinguishes them. */
+  if (phase === "done" && shape === "submit-no-challenge") {
+    return (
+      <main className="min-h-screen bg-[#f7f7f3] px-6 py-16">
+        <section
+          className="mx-auto max-w-2xl"
+          data-litos-qa-shape={shape}
+          data-litos-qa-submit-attempts={attempts}
+        >
+          <div className="ashby-application-form-success-container rounded-2xl border border-[#bfe3c8] bg-white p-10">
+            <div role="status" aria-live="polite">
+              <p className="text-sm font-semibold uppercase tracking-wide text-[#24713b]">Success</p>
+              <p className="mt-3 text-[#31312d]">{ASHBY_SUCCESS_MESSAGE}</p>
+            </div>
+          </div>
+          <p className="mt-6 text-center text-sm text-[#63635d]">{SUBMIT_DECOY_PROSE}</p>
+          <p className="mt-2 text-center font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p>
+        </section>
+      </main>
+    );
+  }
 
   if (phase === "done") {
     return (
@@ -175,6 +215,13 @@ export function ShapeForm({
             completely correct application and would have refused every Greenhouse submission there
             is. LEGEND_TEXT exists to exclude it, so the fixture has to carry it. */}
         <p className="mt-4 text-xs text-[#63635d]">* indicates a required field</p>
+
+        {/* THE DECOY, on the UNSUBMITTED form. It matches the confirmation regex the caller used to
+            scrape the page body with, so any reader that keys on page text rather than on the state
+            the ATS renders will call this blank form a filed application. */}
+        {shape === "submit-no-challenge"
+          ? <p className="mt-4 text-sm text-[#63635d]" data-litos-qa-decoy>{SUBMIT_DECOY_PROSE}</p>
+          : null}
 
         {shape === "select-jd-decoy" ? <JobDescriptionBody /> : null}
 
@@ -306,6 +353,9 @@ function ShapeControls({ shape, answered }: { shape: PortalShape; answered: bool
   if (shape === "date-overlay") return <DateOverlay answered={answered} />;
   if (shape === "phone-country") return <PhoneWithCountry answered={answered} />;
   if (shape === "security-code") return null;
+  /* Nothing extra. The whole point of the no-challenge shape is a form with no trap on it: the
+     board's own contact block, a submit button, and a clean confirmation state. */
+  if (shape === "submit-no-challenge") return null;
   if (shape === "stale-error") return <StaleErrors realBlockerId={null} />;
   if (shape === "stale-error-real") return <StaleErrors realBlockerId="stale-cover-note" />;
   if (shape === "cover-letter-attach") return <CoverLetterAttachment />;
