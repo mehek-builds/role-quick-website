@@ -38,6 +38,7 @@ import {
   shouldEnableVerificationAfterCallback,
   VERIFICATION_CONNECTION_INTENT_KEY,
   verificationEnableDecision,
+  verificationRouteAvailability,
 } from "./email-verification-flow";
 import TargetingCard from "@/components/app/TargetingCard";
 import {
@@ -172,11 +173,17 @@ export default function Settings() {
           getSponsorship().catch(() => null),
         ]);
         let connectionRes = initialConnections;
-        if (callbackStatus === "success" && callbackProvider) {
-          for (let attempt = 0; attempt < 4 && !connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected); attempt += 1) {
-            await new Promise((resolve) => window.setTimeout(resolve, 750));
-            connectionRes = await getEmailConnections();
+        let currentApplicationEmail = applicationEmailRes;
+        if (callbackProvider && callbackStatus) {
+          if (callbackStatus === "success") {
+            for (let attempt = 0; attempt < 4 && !connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected); attempt += 1) {
+              await new Promise((resolve) => window.setTimeout(resolve, 750));
+              connectionRes = await getEmailConnections();
+            }
           }
+          // A provider callback is a route-status change. Re-read the independent Litos inbox
+          // probe too, so this screen never carries an old green status through the callback.
+          currentApplicationEmail = await getApplicationEmailStatus().catch(() => null);
         }
         let resolvedVerification = onboardingRes.automatic_verification_enabled;
         let verificationEnableProblem: string | null = null;
@@ -208,16 +215,27 @@ export default function Settings() {
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
         setEmailConnections(connectionRes);
-        setApplicationEmail(applicationEmailRes);
+        setApplicationEmail(currentApplicationEmail);
         setSponsorship(sponsorRes);
         if (verificationEnableProblem) setError(verificationEnableProblem);
         if (callbackProvider && callbackStatus) {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
           const connected = connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected);
+          const callbackAvailability = verificationRouteAvailability({
+            applicationEmail: currentApplicationEmail,
+            connections: connectionRes,
+            personalInboxConsent: resolvedVerification,
+          });
           setConnectionNotice(
             callbackStatus === "success" && connected
-              ? `${label} connected.${resolvedVerification ? " Email verification is on." : ""}`
-              : `${label} connection was not completed. Email verification is still off.`,
+              ? `${label} connected.${resolvedVerification ? " Your personal inbox fallback is on." : " Personal inbox fallback is off."}`
+              : callbackAvailability === "litos_inbox"
+                ? `${label} connection was not completed. Personal inbox fallback is unchanged. The Litos application inbox remains active.`
+                : callbackAvailability === "personal_inbox"
+                  ? `${label} connection was not completed. Your other connected personal inbox remains available as a fallback.`
+                  : callbackAvailability === "personal_inbox_disconnected"
+                    ? `${label} connection was not completed. Personal inbox fallback still needs a connected inbox.`
+                    : `${label} connection was not completed. No verification inbox is active.`,
           );
           setActiveTab("automation");
           const cleanUrl = new URL(window.location.href);
@@ -324,7 +342,9 @@ export default function Settings() {
       return;
     }
     if (!emailConnections) return;
-    const decision = verificationEnableDecision(emailConnections, applicationEmail?.tracking_active === true);
+    // This switch grants access to a connected personal inbox only. A healthy Litos application
+    // inbox is a separate route and must never turn this permission on.
+    const decision = verificationEnableDecision(emailConnections);
     if (decision === "enable") {
       void saveAutomation({ automatic_verification_enabled: true });
       return;
@@ -353,10 +373,15 @@ export default function Settings() {
       setApplicationEmail(refreshedApplicationEmail);
       setAutomaticVerification(refreshedOnboarding.automatic_verification_enabled);
       const aliasAvailable = refreshedApplicationEmail?.tracking_active === true;
+      const personalFallbackActive = refreshedOnboarding.automatic_verification_enabled && hasActiveInbox(connections);
       if (!refreshedOnboarding.automatic_verification_enabled) {
         setVerificationConnectionPrompt(false);
       }
-      setConnectionNotice(`${label} disconnected.${refreshedOnboarding.automatic_verification_enabled && aliasAvailable ? " Email verification is still on through your Litos application inbox." : refreshedOnboarding.automatic_verification_enabled && hasActiveInbox(connections) ? " Email verification is still on through your other inbox." : " Email verification is off."}`);
+      setConnectionNotice(
+        aliasAvailable
+          ? `${label} disconnected.${personalFallbackActive ? " Your personal inbox fallback is still on through your other inbox." : " Personal inbox fallback is off."} The Litos application inbox remains active.`
+          : `${label} disconnected.${personalFallbackActive ? " Your personal inbox fallback is still on through your other inbox." : " Personal inbox fallback is off. No verification inbox is active."}`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : `Could not disconnect ${label}.`);
     } finally {
@@ -474,6 +499,12 @@ export default function Settings() {
         <ShimmerRows rows={3} />
       </div>
     );
+
+  const verificationAvailability = verificationRouteAvailability({
+    applicationEmail,
+    connections: emailConnections,
+    personalInboxConsent: automaticVerification,
+  });
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
@@ -807,27 +838,33 @@ export default function Settings() {
           <div className="rounded-inner border border-border p-4">
             <div className="flex items-start justify-between gap-5">
               <label htmlFor="automatic-email-verification">
-                <span className="block text-sm font-medium text-ink">Read the code a company emails me</span>
-                <span className="mt-1 block text-xs leading-5 text-muted">Let Litos find a code tied to an active application in its application inbox, or in an inbox you connect below.</span>
+                <span className="block text-sm font-medium text-ink">Use my connected inbox as a fallback</span>
+                <span className="mt-1 block text-xs leading-5 text-muted">Allow Litos to read an application code from Gmail or Outlook only when a company sends it to that personal inbox.</span>
               </label>
               <input
                 id="automatic-email-verification"
-                aria-label="Read the code a company emails me"
+                aria-label="Use my connected inbox as a fallback"
                 type="checkbox"
                 checked={automaticVerification}
-                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured && applicationEmail?.tracking_active !== true)}
+                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
                 onChange={(event) => changeAutomaticVerification(event.target.checked)}
                 className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
               />
             </div>
-            {verificationConnectionPrompt && applicationEmail?.tracking_active !== true && !hasActiveInbox(emailConnections) && (
+            {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
               <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
             )}
-            {automaticVerification && applicationEmail?.tracking_active !== true && !hasActiveInbox(emailConnections) && (
+            {verificationAvailability === "personal_inbox_disconnected" && (
               <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until one verification inbox is available.</p>
             )}
-            {applicationEmail?.tracking_active === true && (
-              <p className="mt-3 text-xs leading-5 text-muted">Litos can read codes sent to the packet-specific application address. Connecting another inbox is optional.</p>
+            {verificationAvailability === "litos_inbox" && (
+              <p className="mt-3 text-xs leading-5 text-muted">The Litos application inbox is active. Codes sent to its packet-specific address do not require access to Gmail or Outlook.</p>
+            )}
+            {verificationAvailability === "personal_inbox" && (
+              <p className="mt-3 text-xs leading-5 text-muted">Your connected personal inbox is available as a fallback.</p>
+            )}
+            {verificationAvailability === "none" && (
+              <p className="mt-3 text-xs leading-5 text-warn">No verification inbox is active. Litos will stop and ask you for the code.</p>
             )}
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs font-medium text-muted">Inbox access</p>
@@ -848,7 +885,7 @@ export default function Settings() {
                       <Button
                         type="button"
                         disabled={!emailConnections.configured || connectionBusy !== null}
-                        onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, true))}
+                        onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, verificationConnectionPrompt))}
                         variant={connected ? "secondary" : "primary"}
                         size="sm"
                       >
