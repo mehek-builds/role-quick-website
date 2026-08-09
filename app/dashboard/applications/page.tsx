@@ -570,6 +570,18 @@ function Applications() {
     const localQa = window.location.hostname === "localhost" && qaScenario !== null;
     if (localQa) {
       queueMicrotask(async () => {
+        if (qaScenario === "error") {
+          setQaMode(true);
+          setEducationProfileStatus("failed");
+          setError("We could not load your applications.");
+          return;
+        }
+        if (qaScenario === "empty") {
+          setQaMode(true);
+          setEducationProfileStatus("ready");
+          setPackets([]);
+          return;
+        }
         const { QA_PACKET, QA_SCENARIOS } = await import("./qa-data");
         const scenario = qaScenario === "1" ? "acme" : qaScenario === "no-questions" ? "stripe" : qaScenario;
         const packet = QA_SCENARIOS[scenario ?? "acme"] ?? QA_PACKET;
@@ -1431,7 +1443,19 @@ function Applications() {
     }
   }
 
-  if (error && packets === null) return <ErrorNote message={error} />;
+  if (error && packets === null) {
+    return (
+      <EmptyState
+        visual="error"
+        title="Applications did not load."
+        body="Your applications are still saved. Try loading this view again."
+      >
+        <Button type="button" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
+      </EmptyState>
+    );
+  }
 
   return (
     <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
@@ -1591,7 +1615,16 @@ function Applications() {
               visibly cut rather than looking like the end of the list. */}
           <div className="-mx-4 overflow-x-auto border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
             {visiblePackets.length === 0 ? (
-              <p className="py-2 text-sm text-muted">No applications in this view.</p>
+              <>
+                <p className="py-2 text-sm text-muted">No applications in this view.</p>
+                <Button
+                  type="button"
+                  onClick={() => setApplicationFilter("all")}
+                  variant="secondary"
+                >
+                  Show all applications
+                </Button>
+              </>
             ) : (
               <div className="flex min-w-max gap-2">
                 {visiblePackets.map((packet) => (
@@ -1618,7 +1651,16 @@ function Applications() {
               rather than as "there is more below". */}
           <div className="hidden max-h-[280px] overflow-y-auto border-t border-border lg:block">
             {visiblePackets.length === 0 ? (
-              <p className="py-5 text-sm text-muted">No applications in this view.</p>
+              <div className="flex items-center justify-between gap-4 py-3">
+                <p className="text-sm text-muted">No applications in this view.</p>
+                <Button
+                  type="button"
+                  onClick={() => setApplicationFilter("all")}
+                  variant="secondary"
+                >
+                  Show all applications
+                </Button>
+              </div>
             ) : (
               <>
                 {/* An unlabelled column of company names and bare dates left "Jul 21, 2026"
@@ -1661,7 +1703,7 @@ function Applications() {
       {packets === null ? (
         <ShimmerRows rows={4} />
       ) : reviewablePackets.length === 0 ? (
-        <EmptyState title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to create your first reviewable application." : "Add a job URL. Litos will prepare the resume and review."}>
+        <EmptyState visual="applications" title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to create your first reviewable application." : "Add a job URL. Litos will prepare the resume and review."}>
           <Button type="button" onClick={() => setShowNewApplication(true)} >Start an application</Button>
         </EmptyState>
       ) : !selected || !spec || !review ? (

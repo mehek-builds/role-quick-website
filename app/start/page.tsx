@@ -158,6 +158,13 @@ export default function Start() {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <ErrorNote message={error} />
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-4 min-h-11 rounded-control bg-brand px-5 text-sm font-medium text-white"
+        >
+          Try again
+        </button>
       </div>
     );
   }

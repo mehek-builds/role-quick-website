@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, OutreachEvent } from "@/lib/api";
 import { STORE_URL } from "@/lib/config";
-import { Card, Chip, EmptyState, ErrorNote, PageHeader, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Button } from "@/components/app/Button";
+import { Card, Chip, EmptyState, PageHeader, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 
 const FILTERS = ["all", "drafted", "sent", "replied", "bounced"] as const;
+type Filter = (typeof FILTERS)[number];
 
 /* The same four words the extension uses (src/lib/outreach-status.ts). The page used to print
    whatever the status column happened to hold, with a capital letter bolted on. */
@@ -23,7 +25,12 @@ const FILTER_LABELS: Record<string, string> = {
   replied: "Replied",
   bounced: "Did not arrive",
 };
-type Filter = (typeof FILTERS)[number];
+const FILTER_EMPTY_TITLES: Record<Exclude<Filter, "all">, string> = {
+  drafted: "No written emails",
+  sent: "No sent emails",
+  replied: "No replies yet",
+  bounced: "No emails marked as undelivered",
+};
 
 // Keys MUST match the backend persona union (resolve.ts personaOrder): alumni | near_peer |
 // senior_ic | hiring_manager | recruiter. The old map keyed on "alum"/"team" (which never
@@ -68,6 +75,7 @@ const QA_EVENTS: OutreachEvent[] = [
 export default function Outreach() {
   const [events, setEvents] = useState<OutreachEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
@@ -85,11 +93,17 @@ export default function Outreach() {
   useEffect(() => {
     // Same localhost-only QA bypass Home and Applications already use, so this page can be
     // reviewed without a live account. It was the one dashboard view with no fixture.
-    if (window.location.hostname === "localhost" && new URLSearchParams(window.location.search).has("qa")) {
-      setEvents(QA_EVENTS);
+    const qaScenario = new URLSearchParams(window.location.search).get("qa");
+    if (window.location.hostname === "localhost" && qaScenario !== null) {
+      if (qaScenario === "error") {
+        setError("We could not load your emails.");
+        return;
+      }
+      setEvents(qaScenario === "empty" ? [] : QA_EVENTS);
       return;
     }
     let cancelled = false;
+    setError(null);
     (async () => {
       try {
         const res = await api<{ events?: OutreachEvent[] } | OutreachEvent[]>(
@@ -105,7 +119,7 @@ export default function Outreach() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAttempt]);
 
   const filtered = useMemo(() => {
     if (!events) return null;
@@ -115,7 +129,19 @@ export default function Outreach() {
     return filter === "all" ? sorted : sorted.filter((e) => e.status === filter);
   }, [events, filter]);
 
-  if (error) return <ErrorNote message={error} />;
+  if (error) {
+    return (
+      <EmptyState
+        visual="error"
+        title="Emails did not load."
+        body="Your emails are still saved. Try loading this view again."
+      >
+        <Button type="button" onClick={() => setLoadAttempt((attempt) => attempt + 1)}>
+          Try again
+        </Button>
+      </EmptyState>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -143,16 +169,23 @@ export default function Outreach() {
         <ShimmerRows rows={4} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title={filter === "all" ? "No emails yet" : `Nothing ${filter} yet`}
-          body="Litos finds someone worth writing to and drafts the email. Every one you send shows up here, with whether they wrote back."
+          visual="emails"
+          title={filter === "all" ? "No emails yet" : FILTER_EMPTY_TITLES[filter]}
+          body={filter === "all"
+            ? "Litos finds someone worth writing to and drafts the email. Every one you send shows up here, with whether they wrote back."
+            : `There are no emails in the ${FILTER_LABELS[filter].toLowerCase()} view. Clear the filter to see every email.`}
         >
-          {filter === "all" && (
+          {filter === "all" ? (
             <a
               href={STORE_URL}
               className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
             >
               Add Litos to Chrome
             </a>
+          ) : (
+            <Button type="button" variant="secondary" onClick={() => setFilter("all")}>
+              Clear filter
+            </Button>
           )}
         </EmptyState>
       ) : (

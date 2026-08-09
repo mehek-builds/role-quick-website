@@ -223,18 +223,103 @@ export function PageHeader({
 export function EmptyState({
   title,
   body,
+  visual,
   children,
 }: {
   title: string;
   body: string;
+  visual: "applications" | "emails" | "jobs" | "profile" | "error";
   children?: React.ReactNode;
 }) {
   return (
     <div className="border-y border-border py-10 text-center">
+      <EmptyStateVisual kind={visual} />
       <h3 className="text-base font-medium text-ink">{title}</h3>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">{body}</p>
       {children && <div className="mt-6 flex justify-center">{children}</div>}
     </div>
+  );
+}
+
+export function DataErrorState({
+  title,
+  body,
+  onRetry,
+}: {
+  title: string;
+  body: string;
+  onRetry: () => void;
+}) {
+  return (
+    <EmptyState visual="error" title={title} body={body}>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="min-h-11 rounded-control bg-brand px-5 text-sm font-medium text-white"
+      >
+        Try again
+      </button>
+    </EmptyState>
+  );
+}
+
+/**
+ * A small diagram of the missing object, not decoration. Each first-use state gets its own
+ * silhouette, while failure gets a broken connection rather than an empty container. Keeping the
+ * drawings unfilled and neutral preserves the quiet-instrument system and avoids the familiar
+ * icon-in-a-coloured-circle treatment this product deliberately rejects.
+ */
+function EmptyStateVisual({
+  kind,
+}: {
+  kind: "applications" | "emails" | "jobs" | "profile" | "error";
+}) {
+  const shared = "mx-auto mb-5 h-11 w-11 text-faint";
+
+  if (kind === "emails") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 44 44" className={shared} fill="none" stroke="currentColor" strokeWidth="1.4">
+        <rect x="5.5" y="10" width="33" height="24" rx="4" />
+        <path d="m7 13 15 11 15-11" />
+        <path d="M13 38h18" strokeDasharray="2 3" />
+      </svg>
+    );
+  }
+
+  if (kind === "jobs") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 44 44" className={shared} fill="none" stroke="currentColor" strokeWidth="1.4">
+        <circle cx="19" cy="19" r="10.5" />
+        <path d="m27 27 8.5 8.5M14 16h10M14 20h7" />
+      </svg>
+    );
+  }
+
+  if (kind === "profile") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 44 44" className={shared} fill="none" stroke="currentColor" strokeWidth="1.4">
+        <circle cx="22" cy="15" r="6" />
+        <path d="M10 35c1.8-7 6-10.5 12-10.5S32.2 28 34 35" />
+        <path d="M8 39h28" strokeDasharray="2 3" />
+      </svg>
+    );
+  }
+
+  if (kind === "error") {
+    return (
+      <svg aria-hidden="true" viewBox="0 0 44 44" className={shared} fill="none" stroke="currentColor" strokeWidth="1.4">
+        <path d="M7 22h8l4-6 6 12 4-6h8" />
+        <path d="M8 10h28v24H8z" strokeDasharray="3 3" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg aria-hidden="true" viewBox="0 0 44 44" className={shared} fill="none" stroke="currentColor" strokeWidth="1.4">
+      <path d="M12 5.5h15l7 7V38H12z" />
+      <path d="M27 5.5v7h7M17 20h12M17 25h9M17 30h7" />
+      <path d="M7 10v28h22" strokeDasharray="2 3" />
+    </svg>
   );
 }
 

@@ -574,7 +574,23 @@ export default function Home() {
     me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
   );
 
-  if (error && !jobs) return <ErrorNote message={error} />;
+  if (error && !jobs) {
+    return (
+      <EmptyState
+        visual="error"
+        title="Your dashboard did not load."
+        body="Nothing you saved was lost. Try loading your dashboard again."
+      >
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
+        >
+          Try again
+        </button>
+      </EmptyState>
+    );
+  }
 
   return (
     /* One rhythm down the page. The desktop step-up this replaces existed to help the stretched
@@ -708,6 +724,7 @@ export default function Home() {
           /* Reached only when the day never had a match to begin with. Sending someone to "Browse
              all jobs" here would be sending them to another empty list. */
           <EmptyState
+            visual="profile"
             title="No matches yet"
             body="Fill in your profile so Litos can pick out the best jobs from the job boards it watches."
           >
