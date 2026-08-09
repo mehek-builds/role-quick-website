@@ -920,7 +920,7 @@ export default function Settings() {
           <Input label="GPA" value={profile.gpa} onChange={(v) => patch({ gpa: v })} placeholder="3.89" />
           <Input label="GPA scale" value={profile.gpa_scale} onChange={(v) => patch({ gpa_scale: v })} placeholder="4.0" />
           <Input label="Available from" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" />
-          <Input label="Date of birth" value={profile.date_of_birth} onChange={(v) => patch({ date_of_birth: v })} placeholder="YYYY-MM-DD" hint="Optional. Used only when an application asks for your birth date." />
+          <Input label="Date of birth" value={profile.date_of_birth} onChange={(v) => patch({ date_of_birth: v })} placeholder="YYYY-MM-DD" hint="Used when an application asks for your birth date, and to answer &quot;are you 18 or older?&quot;. Blank leaves both for you." />
           <Input label="Current degree start" value={profile.education_start_date} onChange={(v) => patch({ education_start_date: v })} placeholder="August 2024" hint="Month and year when your current degree began." />
           <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
           {/* A figure without a unit is not an answer: replaying "80000" from a Munich posting

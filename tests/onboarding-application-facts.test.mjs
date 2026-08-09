@@ -110,6 +110,42 @@ describe("the application facts asked on the base resume step", () => {
     assert.equal("legal_first_name" in applicationFactPatch({ ...UNTOUCHED, facts: { legal_first_name: "   " } }), false);
   });
 
+  /* DATE OF BIRTH, and the reason it is worth typing.
+   *
+   * The column is what the backend computes the 18+ attestation from - "at the time of
+   * application, are you 18+ years of age?" stopped a live Roblox run, and an age is only honest
+   * if it is arithmetic on a date the applicant gave. Two properties have to hold together, and
+   * they pull in opposite directions:
+   *
+   *   - NULL MUST KEEP MEANING "NEVER ASKED". A blank cannot be sent, cannot become a default, and
+   *     cannot be inferred from a graduation year, so an existing user is asked rather than
+   *     guessed at, and the backend goes on refusing the question until she answers.
+   *   - SHE HAS TO KNOW IT IS WORTH ANSWERING. The hint used to say the date was used "only when
+   *     an application asks for your birth date", which is a rare field and reads as skippable.
+   *     Skipping it is what leaves the 18+ question blocking, so the hint names that question.
+   */
+  test("date of birth is asked, is never defaulted, and says what it unblocks", () => {
+    assert.match(STEP, /key: "date_of_birth"/);
+    assert.ok(STEP.includes('id={`base-fact-${field.key}`}'));
+
+    // A blank writes nothing, so the column stays null and the backend keeps refusing.
+    assert.equal("date_of_birth" in applicationFactPatch(UNTOUCHED), false);
+    assert.equal("date_of_birth" in applicationFactPatch({ ...UNTOUCHED, facts: { date_of_birth: "  " } }), false);
+    assert.equal(
+      applicationFactPatch({ ...UNTOUCHED, facts: { date_of_birth: "2005-09-25" } }).date_of_birth,
+      "2005-09-25",
+    );
+    // No literal default anywhere on the screen: not as a value, not as a fallback.
+    assert.doesNotMatch(STEP, /date_of_birth:\s*"/);
+
+    /* The hint names the age question, which is the reason to fill an otherwise rare field.
+     * Read off STEP, the comment-stripped source, not off RAW: the comment beside the field quotes
+     * the old wording to explain why it changed, and matching that would pass on a reverted hint. */
+    const hint = STEP.split(/key: "date_of_birth"/)[1]?.split("},")[0] ?? "";
+    assert.match(hint, /18 or older/, "the date-of-birth hint must name the 18+ question");
+    assert.doesNotMatch(hint, /only when an application asks for your birth date/);
+  });
+
   test("the extracted copy matches the component", () => {
     // Guards the whole file: if the component's builder changes shape and this one does not, the
     // tests above are pinning a fiction.
