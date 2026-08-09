@@ -112,9 +112,10 @@ describe("the jobs page uses that one reading, and offers a way out", () => {
     assert.match(page, /body=\{emptyJobsBody\(filters\)\}/);
   });
 
-  test("the branch and the wording read from the same list of active filters", () => {
+  test("the recovery action reads from the same list of active filters", () => {
     assert.match(page, /const activeFilters = useMemo\(\(\) => activeJobFilters\(filters\), \[filters\]\)/);
-    assert.match(page, /\{activeFilters\.length > 0 && \(/);
+    assert.match(page, /\{activeFilters\.length > 0 \? \(/);
+    assert.match(page, /Change job preferences/);
   });
 
   test("Clear filters clears all four, including the select and the checkbox", () => {
