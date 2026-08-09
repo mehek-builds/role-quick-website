@@ -49,6 +49,12 @@ const BACKEND_WRITABLE_FIELDS = [
   "onsite_commitment",
   "onsite_locations",
   "relocation_willingness",
+  // The scoped availability window that replaced availability_date as the only thing an employer's
+  // date question may be answered from. All four or the backend answers nothing.
+  "availability_window_start",
+  "availability_window_end",
+  "availability_cycle",
+  "availability_valid_through",
 ];
 
 function applicationProfileBody() {

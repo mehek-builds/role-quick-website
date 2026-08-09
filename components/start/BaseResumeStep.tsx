@@ -20,6 +20,14 @@ import { LaterLink, PrimaryButton, SkipLink, StartShell } from "./ui";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { humanizeBuildNote } from "@/lib/buildNotes";
 import { courseworkLine } from "@/lib/profile-editor";
+/* The availability window lives in lib/ rather than here because Settings edits the same four
+   values, and one rule described two ways on two screens is how the pair drifts. */
+import {
+  availabilityCycleOptions,
+  availabilityWindowPatch,
+  availabilityWindowStatus,
+  type AvailabilityWindowInput,
+} from "@/lib/availability-window";
 
 /* ─────────────────────────────────────────────────────────────────────────────
  * The base resume screen. Paper on the left, the build on the right.
@@ -308,6 +316,16 @@ export function BaseResumeStep({
   ));
   const [offerDetails, setOfferDetails] = useState(() => profile?.outstanding_offer_details ?? "");
   const [advancedStudy, setAdvancedStudy] = useState<string>(() => profile?.advanced_study_plan ?? "");
+  /* The availability window, prefilled from whatever is stored so a returning student does not
+     retype it and a blank on this pass cannot clear it. Four pieces of one answer; see
+     lib/availability-window.ts for why they are not folded into the fact list. */
+  const [availabilityWindow, setAvailabilityWindow] = useState<AvailabilityWindowInput>(() => ({
+    start: profile?.availability_window_start ?? "",
+    end: profile?.availability_window_end ?? "",
+    cycle: profile?.availability_cycle ?? "",
+    validThrough: profile?.availability_valid_through ?? "",
+  }));
+  const availabilityStatus = availabilityWindowStatus(availabilityWindow);
   const [referralSource, setReferralSource] = useState(() => profile?.referral_source_default ?? "");
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
   /* Two phases, one screen. `compare` puts the upload beside the rebuild so the difference is an
@@ -742,6 +760,7 @@ export function BaseResumeStep({
         advancedStudy,
         referralSource,
       }));
+      Object.assign(profilePatch, availabilityWindowPatch(availabilityWindow));
       if (!demo && Object.keys(profilePatch).length > 0) await putApplicationProfile(profilePatch);
       onDone();
     } catch (e) {
@@ -752,7 +771,7 @@ export function BaseResumeStep({
   }, [
     editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo,
     facts, priorEmployers, offers, offerDetails, advancedStudy,
-    referralSource,
+    referralSource, availabilityWindow,
   ]);
 
   function patchFact(key: string, value: string) {
@@ -1204,6 +1223,89 @@ export function BaseResumeStep({
                     For forms that ask how did you hear about this job. Use a source you personally choose. Litos detects job boards for each application.
                   </span>
                 </label>
+
+                {/* The internship window. Four controls, one answer, and the note underneath says
+                    plainly what a partial answer does, because a student who fills three boxes and
+                    sees them save would otherwise believe the question is handled. */}
+                <div className="rounded-inner border border-border px-3 py-3">
+                  <p className="text-xs font-medium text-ink">When could an internship run?</p>
+                  <p className="mt-1 text-xs leading-5 text-muted">
+                    Employers ask this more than any other question Litos cannot answer. It is filled only for a posting whose own description names the cycle you pick here, and only until the date you set below.
+                  </p>
+
+                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label htmlFor="base-fact-availability-start" className="block">
+                      <span className="text-xs font-medium text-muted">Earliest you could start</span>
+                      <input
+                        id="base-fact-availability-start"
+                        type="date"
+                        value={availabilityWindow.start}
+                        onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, start: event.target.value }))}
+                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                      />
+                    </label>
+
+                    <label htmlFor="base-fact-availability-end" className="block">
+                      <span className="text-xs font-medium text-muted">Latest you are available through</span>
+                      <input
+                        id="base-fact-availability-end"
+                        type="date"
+                        value={availabilityWindow.end}
+                        onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, end: event.target.value }))}
+                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                      />
+                    </label>
+
+                    <label htmlFor="base-fact-availability-cycle" className="block">
+                      <span className="text-xs font-medium text-muted">Which cycle this is for</span>
+                      <select
+                        id="base-fact-availability-cycle"
+                        value={availabilityWindow.cycle}
+                        onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, cycle: event.target.value }))}
+                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                      >
+                        <option value="">Prefer not to answer now</option>
+                        {availabilityCycleOptions().map((cycle) => (
+                          <option key={cycle} value={cycle}>{cycle}</option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label htmlFor="base-fact-availability-valid-through" className="block">
+                      <span className="text-xs font-medium text-muted">Use this answer until</span>
+                      <input
+                        id="base-fact-availability-valid-through"
+                        type="date"
+                        aria-describedby="base-fact-availability-valid-through-hint"
+                        value={availabilityWindow.validThrough}
+                        onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, validThrough: event.target.value }))}
+                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                      />
+                      <span id="base-fact-availability-valid-through-hint" className="mt-1 block text-xs leading-5 text-muted">
+                        After this date Litos stops giving these dates and asks you again.
+                      </span>
+                    </label>
+                  </div>
+
+                  {availabilityStatus === "incomplete" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">
+                      All four are needed before Litos will answer a dates question. Until then it leaves them blank and tells you.
+                    </p>
+                  )}
+                  {availabilityStatus === "incoherent" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">
+                      These do not line up yet: the end date must come after the start date, and the cycle year must match them. Litos will leave the question for you until they agree.
+                    </p>
+                  )}
+                  {availabilityStatus === "ready" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">
+                      Litos will answer availability dates on {availabilityWindow.cycle} postings with these dates, and leave every other posting for you.
+                    </p>
+                  )}
+                  <p className="mt-3 text-xs leading-5 text-muted">
+                    Hours are a separate promise and stay with you. A question about working full time, or a set number of hours a week, is never answered from this.
+                  </p>
+                </div>
 
                 <label htmlFor="base-fact-advanced-study" className="block">
                   <span className="text-xs font-medium text-muted">Further study after this degree</span>

@@ -24,6 +24,7 @@ import {
   setSession,
   setAutomationSettings,
 } from "@/lib/api";
+import { availabilityCycleOptions } from "@/lib/availability-window";
 import { isSafeCheckoutUrl } from "@/lib/billing";
 import { applicationEmailAddressInUse, applicationEmailBadge } from "@/lib/application-email-status";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
@@ -928,7 +929,18 @@ export default function Settings() {
               on, and guessing there would be a fabricated academic claim. */}
           <Input label="GPA" value={profile.gpa} onChange={(v) => patch({ gpa: v })} placeholder="3.89" />
           <Input label="GPA scale" value={profile.gpa_scale} onChange={(v) => patch({ gpa_scale: v })} placeholder="4.0" />
-          <Input label="Available from" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" />
+          {/* LEGACY, and kept honest by its own hint. Litos has never answered an employer's date
+              question from this box and still does not: it carries no recruiting cycle and no
+              expiry, so a date typed for one summer would go on answering the next summer's forms.
+              The four controls below it are the scoped replacement. */}
+          <Input label="Available from (saved reference only)" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" hint="Reference only. Employer date questions are answered from the internship window below, never from this." />
+          {/* THE INTERNSHIP WINDOW. All four or none: the backend answers a dates question only when
+              the window is complete, has not expired, and the posting's own description names the
+              same cycle. Anything less and the question comes back to you. */}
+          <Input label="Internship window: earliest start" type="date" value={profile.availability_window_start} onChange={(v) => patch({ availability_window_start: v })} hint="The earliest date you could begin." />
+          <Input label="Internship window: available through" type="date" value={profile.availability_window_end} onChange={(v) => patch({ availability_window_end: v })} hint="The last date you are available." />
+          <ChoiceSelect label="Internship window: which cycle" value={profile.availability_cycle} options={availabilityCycleOptions()} onChange={(v) => patch({ availability_cycle: v })} hint="Only postings whose description names this cycle are answered with these dates." />
+          <Input label="Internship window: use until" type="date" value={profile.availability_valid_through} onChange={(v) => patch({ availability_valid_through: v })} hint="After this date Litos stops giving these dates and asks you again." />
           <Input label="Date of birth" value={profile.date_of_birth} onChange={(v) => patch({ date_of_birth: v })} placeholder="YYYY-MM-DD" hint="Used when an application asks for your birth date, and to answer &quot;are you 18 or older?&quot;. Blank leaves both for you." />
           <Input label="Current degree start" value={profile.education_start_date} onChange={(v) => patch({ education_start_date: v })} placeholder="August 2024" hint="Month and year when your current degree began." />
           <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
@@ -999,12 +1011,17 @@ function Input({
   onChange,
   placeholder,
   hint,
+  /* "date" for the internship window, which the backend validates as ISO YYYY-MM-DD and rejects in
+     any other shape. A native picker is what makes that shape the only one the student can produce;
+     typed free text here would 400 the whole save, including every unrelated field on the panel. */
+  type,
 }: {
   label: string;
   value: string | null | undefined;
   onChange: (v: string | null) => void;
   placeholder?: string;
   hint?: string;
+  type?: "text" | "date";
 }) {
   /* htmlFor/id, not aria-label: the visible text IS the accessible name, so tying
      them together means a future copy edit cannot leave a screen reader reading
@@ -1019,6 +1036,7 @@ function Input({
       <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <input
         id={fieldId}
+        type={type ?? "text"}
         aria-describedby={hint ? hintId : undefined}
         value={value ?? ""}
         onChange={(e) => onChange(editableProfileText(e.target.value))}
@@ -1026,6 +1044,50 @@ function Input({
         placeholder={placeholder}
         className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
+      {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
+    </div>
+  );
+}
+
+/* An EDITABLE select, unlike Select and StringSelect above.
+ *
+ * Those two are deliberately disabled: they hold work authorization and the race and gender
+ * self-identifications, which are saved reference data that Litos does not answer forms from. This
+ * one holds the recruiting cycle the availability window is scoped to, which is a scheduling fact
+ * the student sets and changes every season. A select rather than a text box because the backend
+ * accepts exactly "Season Year" and rejects the save otherwise, and a rejected save on this panel
+ * loses every other field on it too.
+ */
+function ChoiceSelect({
+  label,
+  value,
+  options,
+  onChange,
+  hint,
+}: {
+  label: string;
+  value: string | null | undefined;
+  options: readonly string[];
+  onChange: (v: string | null) => void;
+  hint?: string;
+}) {
+  const fieldId = useId();
+  const hintId = `${fieldId}-hint`;
+  return (
+    <div>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
+      <select
+        id={fieldId}
+        aria-describedby={hint ? hintId : undefined}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
+        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+      >
+        <option value="">Not set</option>
+        {options.map((option) => (
+          <option key={option} value={option}>{option}</option>
+        ))}
+      </select>
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
   );
