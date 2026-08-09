@@ -198,6 +198,9 @@ test("automation settings send field-specific updates so stale clients cannot re
   assert.match(settings, /getApplicationEmailStatus\(\)\.catch\(\(\) => null\)/);
   assert.match(settings, /setAutomaticVerification\(refreshedOnboarding\.automatic_verification_enabled\)/);
   assert.match(settings, /The Litos application inbox remains active/);
+  assert.match(settings, /callbackAvailability === "litos_inbox"/);
+  assert.match(settings, /callbackAvailability === "personal_inbox"/);
+  assert.doesNotMatch(settings, /connection was not completed\. Email verification is still off/);
   assert.doesNotMatch(settings, /aliasAvailable \? " Email verification/);
   assert.doesNotMatch(settings, /verificationEnableDecision\(emailConnections, applicationEmail/);
   assert.match(api, /setAutomationSettings\(settings: Partial<AutomationSettings>\)/);

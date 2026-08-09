@@ -221,10 +221,21 @@ export default function Settings() {
         if (callbackProvider && callbackStatus) {
           const label = callbackProvider === "gmail" ? "Gmail" : "Outlook";
           const connected = connectionRes.connections.some((item) => item.provider === callbackProvider && item.connected);
+          const callbackAvailability = verificationRouteAvailability({
+            applicationEmail: currentApplicationEmail,
+            connections: connectionRes,
+            personalInboxConsent: resolvedVerification,
+          });
           setConnectionNotice(
             callbackStatus === "success" && connected
-              ? `${label} connected.${resolvedVerification ? " Email verification is on." : ""}`
-              : `${label} connection was not completed. Email verification is still off.`,
+              ? `${label} connected.${resolvedVerification ? " Your personal inbox fallback is on." : " Personal inbox fallback is off."}`
+              : callbackAvailability === "litos_inbox"
+                ? `${label} connection was not completed. Personal inbox fallback is unchanged. The Litos application inbox remains active.`
+                : callbackAvailability === "personal_inbox"
+                  ? `${label} connection was not completed. Your other connected personal inbox remains available as a fallback.`
+                  : callbackAvailability === "personal_inbox_disconnected"
+                    ? `${label} connection was not completed. Personal inbox fallback still needs a connected inbox.`
+                    : `${label} connection was not completed. No verification inbox is active.`,
           );
           setActiveTab("automation");
           const cleanUrl = new URL(window.location.href);

@@ -65,6 +65,14 @@ const baseConnections = (connected = false, configured = true) => ({
   ],
 });
 
+const outlookConnected = {
+  configured: true,
+  connections: [
+    { provider: "gmail", connected: false, status: "NOT_CONNECTED" },
+    { provider: "outlook", connected: true, status: "ACTIVE" },
+  ],
+};
+
 const activeAlias = {
   configured: true,
   tracking_active: true,
@@ -259,6 +267,34 @@ test("connection callback refreshes application-email health instead of retainin
   await page.getByText("No verification inbox is active. Litos will stop and ask you for the code.").waitFor();
   assert.equal(await page.getByText(/Litos application inbox is active/).count(), 0);
   assert.equal(scenario.applicationEmailReads, 2);
+  await page.close();
+});
+
+test("failed personal-inbox callback preserves truthful healthy Litos inbox copy", async () => {
+  scenario = freshScenario({
+    applicationEmail: activeAlias,
+    applicationEmailResponses: [activeAlias, activeAlias],
+  });
+  const page = await openSettings("?connection=gmail&status=failed");
+  await page.getByText("Gmail connection was not completed. Personal inbox fallback is unchanged. The Litos application inbox remains active.").waitFor();
+  await page.getByText(/The Litos application inbox is active/).waitFor();
+  assert.equal(await page.getByText(/Email verification is still off/).count(), 0);
+  assert.equal(scenario.applicationEmailReads, 2);
+  await page.close();
+});
+
+test("failed callback preserves another consented personal inbox as the active fallback", async () => {
+  scenario = freshScenario({
+    applicationEmail: inactiveAlias,
+    applicationEmailResponses: [inactiveAlias, inactiveAlias],
+    connections: outlookConnected,
+    consent: true,
+  });
+  const page = await openSettings("?connection=gmail&status=failed");
+  await page.getByText("Gmail connection was not completed. Your other connected personal inbox remains available as a fallback.").waitFor();
+  await page.getByText("Your connected personal inbox is available as a fallback.").waitFor();
+  assert.equal(await page.getByText(/Email verification is still off/).count(), 0);
+  assert.equal(await page.getByRole("checkbox", { name: "Use my connected inbox as a fallback" }).isChecked(), true);
   await page.close();
 });
 
