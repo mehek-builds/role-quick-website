@@ -129,6 +129,17 @@ const APPLICATION_FACT_FIELDS = [
     hint: "Month and year. Trading firms ask for this surprisingly often.",
   },
   {
+    key: "education_start_date",
+    label: "When you started your current degree",
+    placeholder: "August 2024",
+    // The single widest gap in the 2026-08-08 run: "Start date month" and "Start date year" on the
+    // employer's own education row blocked 7 applications across DRW, Flow Traders, IMC and Five
+    // Rings. It is asked rather than worked out because it cannot be worked out: a graduation date
+    // fixes the end and says nothing about the start, and a high school year plus a graduation year
+    // fits a five-year degree and a gap year equally well.
+    hint: "Month and year. Your graduation date only says when you finish, so this one has to come from you.",
+  },
+  {
     key: "military_service",
     label: "Have you served in the military?",
     placeholder: "Yes, No, Prefer not to say",

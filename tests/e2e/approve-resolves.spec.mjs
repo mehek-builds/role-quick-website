@@ -131,8 +131,10 @@ const SENT = {
  *                         while it is still going
  * @param pollAnswer       what the submission poll reports; SENT lets the poll rescue a broken
  *                         route, AWAITING keeps the poll honest about lagging behind the response
+ * @param approveRefusal   {status, body} to answer the approve with instead of SENT, for the cases
+ *                         where the interesting behaviour is what the screen does with a REFUSAL
  */
-async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING } = {}) {
+async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, approveRefusal = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const approveCalls = [];
   await context.route("**/*", async (route) => {
@@ -147,6 +149,14 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING }
       if (p.endsWith("/submission/approve")) {
         approveCalls.push(Date.now ? 1 : 1);
         if (holdApproveMs) await delay(holdApproveMs);
+        if (approveRefusal) {
+          await route.fulfill({
+            status: approveRefusal.status,
+            contentType: "application/json",
+            body: JSON.stringify(approveRefusal.body),
+          });
+          return;
+        }
         await json(SENT);
         return;
       }
@@ -220,10 +230,10 @@ browserTest("a hidden tab still leaves the progress screen once the send returns
 browserTest("the progress screen does not claim nothing is sent while it is sending", async () => {
   const { context, page, sendIt } = await openApproval(false, { holdApproveMs: 4000 });
   await sendIt.click();
-  await page.getByText("Sending it to the company now.").waitFor({ state: "visible", timeout: 10_000 });
+  await page.getByText("Waiting for confirmation.").waitFor({ state: "visible", timeout: 10_000 });
   const body = await page.locator("main").innerText();
   assert.ok(
-    !body.includes("Nothing is sent yet"),
+    !body.includes("Not sent yet."),
     `the send was in flight and the screen still said nothing was sent:\n${body.slice(0, 600)}`,
   );
   await context.close();
@@ -294,7 +304,7 @@ browserTest("the sending clock starts when Send it is pressed", async () => {
   };
   const { context, page, sendIt } = await openApproval(false, { holdApproveMs: 6000, pollAnswer: STALE });
   await sendIt.click();
-  await page.getByText("Sending it to the company now.").waitFor({ state: "visible", timeout: 10_000 });
+  await page.getByText("Waiting for confirmation.").waitFor({ state: "visible", timeout: 10_000 });
   await page.waitForTimeout(1500);
   const elapsedText = await page.locator("main").innerText();
   const shown = elapsedText.match(/(\d+)m (\d+)s elapsed|(\d+)s elapsed/);
@@ -307,6 +317,77 @@ browserTest("the sending clock starts when Send it is pressed", async () => {
   return page;
 });
 
+
+/**
+ * A REFUSAL THE STUDENT CAN ACTUALLY READ, past the poll that used to erase it.
+ *
+ * Cresta packet 8142004c-3358-4538-8778-16df5e31c5bb, production 2026-08-09 03:06:19:
+ * POST /submission/approve -> 409, "That took too long and timed out. Start the application again."
+ * The screen showed nothing. No error, no toast, no change, and a Send it that stayed enabled. The
+ * refusal was findable only by reading server logs.
+ *
+ * The catch was never the problem: it set the sentence exactly as the server wrote it.
+ * `refreshSubmission` ended with an unconditional `setError(null)` on every successful tick, and it
+ * ticks every 2.5 seconds while this screen is up. The message was on screen for under one poll
+ * round, which for someone watching a button is the same as never.
+ *
+ * So the wait here is SEVEN SECONDS, three poll ticks, and the assertion is that the sentence is
+ * still there. Pre-fix that is the whole defect and this case goes red; a one-second check would
+ * have passed against the bug.
+ *
+ * The 422 rides along in the second case because it is the same catch and the same channel, and
+ * because its `issues` array is the more valuable payload: a list of named, fixable blockers that
+ * apiErrorMessage would otherwise fold into one sentence.
+ */
+const TIMED_OUT = "That took too long and timed out. Start the application again.";
+
+browserTest("a refused send says why, and is still saying it three poll ticks later", async () => {
+  const { context, page, sendIt } = await openApproval(false, {
+    pollAnswer: AWAITING,
+    approveRefusal: {
+      status: 409,
+      body: { error: TIMED_OUT, code: "PREPARED_RUN_HANDOFF_EXPIRED", restartable: true },
+    },
+  });
+  await sendIt.click();
+  await page.getByText(TIMED_OUT).waitFor({ state: "visible", timeout: 15_000 });
+  // Three ticks of the 2.5s poll, each of which used to clear this.
+  await page.waitForTimeout(7000);
+  const body = await page.locator("main").innerText();
+  assert.ok(
+    body.includes(TIMED_OUT),
+    `the server's refusal was wiped by the poll within three ticks:\n${body.slice(0, 800)}`,
+  );
+  await context.close();
+  return page;
+});
+
+browserTest("a 422 brings its issue list with it rather than a generic failure", async () => {
+  const { context, page, sendIt } = await openApproval(false, {
+    pollAnswer: AWAITING,
+    approveRefusal: {
+      status: 422,
+      body: {
+        error: "Verify the complete application before sending. The current packet is not ready for final approval.",
+        code: "FINAL_APPROVAL_VERIFICATION_FAILED",
+        issues: ["The filled form preview is missing.", "A required application answer is still blank."],
+      },
+    },
+  });
+  await sendIt.click();
+  // The <li>, not the folded-up sentence: apiErrorMessage also splices the first five issues into
+  // the message string, so a bare getByText matches both and trips strict mode. Rendering it as a
+  // LIST is the point of carrying `issues` separately.
+  await page.locator("li", { hasText: "The filled form preview is missing." }).first()
+    .waitFor({ state: "visible", timeout: 15_000 });
+  await page.waitForTimeout(7000);
+  const body = await page.locator("main").innerText();
+  for (const issue of ["The filled form preview is missing.", "A required application answer is still blank."]) {
+    assert.ok(body.includes(issue), `the 422 issue list did not survive on screen:\n${body.slice(0, 800)}`);
+  }
+  await context.close();
+  return page;
+});
 
 /*
  * NOT COVERED, deliberately and with the reason written down.

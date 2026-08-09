@@ -672,6 +672,13 @@ export type ApplicationProfile = {
   preferred_first_name?: string | null;
   /** Month and year, e.g. "June 2024". Not the university graduation date. */
   high_school_grad_date?: string | null;
+  /**
+   * Month and year the CURRENT degree started, e.g. "August 2024".
+   *
+   * Not the graduation date and not derivable from it: a high school class of 2023 graduating in
+   * 2028 fits both a five-year programme and a gap year, and those start in different Augusts.
+   */
+  education_start_date?: string | null;
   /** Employers applied to before. [] is the answer "none", which is not the same as null. */
   prior_application_employers?: string[] | null;
   has_outstanding_offers?: boolean | null;
