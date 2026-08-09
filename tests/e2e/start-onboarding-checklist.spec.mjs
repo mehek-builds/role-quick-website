@@ -19,10 +19,14 @@
  * the real derived-step machinery in app/start/page.tsx, and checks each criterion at the point in
  * the walk where a student would meet it.
  *
- * It also pins the rail's arithmetic, which is the one thing here that can rot silently: STEPS in
- * components/start/ui.tsx is the denominator, and adding a screen without adding it to that list
- * would leave the flow claiming six steps while walking seven. The walk counts the screens it
- * visits and asserts the count against the denominator the rail prints.
+ * It also pins the rail's arithmetic, which is the one thing here that can rot silently. The walk
+ * counts the screens it visits and asserts that count against the denominator the rail prints, so
+ * a screen added to the flow but not to STEPS in components/start/ui.tsx fails here. Since that
+ * denominator became the steps a given student's flow CONTAINS rather than the length of STEPS,
+ * the walk pins the other direction too: it runs against an account with details outstanding and
+ * requires the total to stay six, because the flow does not route to the screen that collects
+ * them. The two cases after it hold the ends: a profile with no gaps at all, and the gaps screen
+ * rendering anyway.
  *
  * CONSTRAINTS, THE SAME ONES start-base-build.spec.mjs HOLDS
  * =========================================================
@@ -171,8 +175,26 @@ function resetProgress() {
    neither is reachable through the happy-path walk. */
 let forceStep = null;
 let omitSponsorshipFlag = false;
+/** Clears `gaps` without walking a screen: the student whose profile had no holes to begin with. */
+let noGaps = false;
+/** Stalls GET /onboarding/state so the pre-state render is observable. See the loading-rail case. */
+let stateDelayMs = 0;
 
-/** Rail order, and it must stay rail order: components/start/ui.tsx STEPS is the same sequence. */
+/** Rail order, and it must stay rail order: components/start/ui.tsx STEPS is the same sequence.
+ *
+ * THERE IS NO `gaps` BRANCH HERE, and its absence is a correction rather than an omission. This
+ * stub exists to mirror the real derivation, and the real one is `onboardingStepFrom` in the
+ * backend's routes/onboarding.ts, whose return type is
+ * 'focus' | 'sponsorship' | 'resume' | 'impact' | 'base' | 'done'. Backend #116 dropped 'gaps' from
+ * it, with the reason recorded in that diff: the fields are optional and skippable, so gating on
+ * `gaps.length` derived 'gaps' forever and parked the student on a screen they had already
+ * answered. Optional profile gaps are collected in context when a real application needs them.
+ *
+ * So a student is never ROUTED to the gaps screen, whatever their profile is missing, and a stub
+ * that routed there was walking a seventh screen the product cannot produce. That fiction is what
+ * made a static denominator of 7 look correct here while every real student saw the printed count
+ * jump from 5 to 7. The screen itself still renders when a step name reaches the client (an older
+ * backend, or ?qa=1&step=gaps), and it is covered as that: see the case at the end of this file. */
 function derivedStep() {
   if (forceStep) return forceStep;
   if (!progress.resume) return "resume";
@@ -180,7 +202,6 @@ function derivedStep() {
   if (!progress.focus) return "focus";
   if (!progress.sponsorship) return "sponsorship";
   if (!progress.base) return "base";
-  if (!progress.gaps) return "gaps";
   return "done";
 }
 
@@ -198,10 +219,12 @@ function onboardingState() {
     has_applied: false,
     has_targeting: progress.focus,
     learned: [],
-    /* What is STILL outstanding, so it empties as the gaps screen is answered. Languages is left
-       out deliberately: that one gap turns the BASE step into a second question screen, and this
-       walk is measuring the flow's shape rather than that screen's branch. */
-    gaps: progress.gaps ? [] : ["gpa", "gpa_scale", "major"],
+    /* What is STILL outstanding. Non-empty for the whole walk, on purpose: nothing in the derived
+       flow closes these, and that is the case the rail's denominator has to get right. A student
+       finishes setup with details outstanding and is asked for them later, in context.
+       Languages is left out deliberately: that one gap turns the BASE step into a second question
+       screen, and this walk is measuring the flow's shape rather than that screen's branch. */
+    gaps: noGaps || progress.gaps ? [] : ["gpa", "gpa_scale", "major"],
     gap_suggestions: {},
     source_pages: 3,
     source_resume_url: null,
@@ -327,6 +350,7 @@ await context.route("**/*", async (route) => {
     return;
   }
   if (pathname === "/onboarding/state") {
+    if (stateDelayMs) await delay(stateDelayMs);
     await jsonRoute(route, onboardingState());
     return;
   }
@@ -610,18 +634,11 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     await looksRight.waitFor({ timeout: 25000 });
     await looksRight.click();
 
-    /* ── Step 6, A few details ─────────────────────────────────────────────
-       The conditional screen. It renders only because this fixture reports outstanding gaps, and
-       it is in the walk precisely because it is the one that used to misreport itself as step 1:
-       `screen()` resolves on the rail's own accessible name, so a regression there fails here
-       rather than passing quietly. GPA and its scale go together or the screen refuses to save. */
-    visited.push(await screen("A few details"));
-    await page.locator("#gap-gpa").fill("3.89");
-    await page.locator("#gap-gpa_scale").fill("4.0");
-    await page.locator("#gap-major").fill("Fixture Studies");
-    await page.locator("button", { hasText: "Continue" }).click();
-
-    /* ── Step 7, Done ──────────────────────────────────────────────────────*/
+    /* ── Step 6, Done ──────────────────────────────────────────────────────
+       Straight from the one-page review, with the student's gpa, gpa_scale and major still
+       outstanding. That is the ordinary end of setup rather than a shortcut through it: the
+       derived step goes 'base' -> 'done' for everybody (see derivedStep above), and the details
+       are collected later, in context, when an application actually needs them. */
     visited.push(await screen("Done"));
   } catch (reason) {
     await captureFailure("walk");
@@ -648,7 +665,11 @@ test("criteria 5-6: the last screen confirms setup is over, then names the first
       ["Your roles", "Saved"],
       ["Work visa", "Answered"],
       ["Your one page", "Built"],
-      ["A few details", "None missing"],
+      /* The one row the walk does NOT set, and it belongs here rather than only in the partial
+         case below: the receipt lists every step in the rail, and `gaps` is the step the flow does
+         not route to, so an honest walk ends with it outstanding. The row is about the account's
+         details, not about a screen the student was shown. */
+      ["A few details", "Some outstanding"],
     ]) {
       assert.match(
         main,
@@ -683,9 +704,11 @@ test("criteria 5-6: the last screen confirms setup is over, then names the first
  *
  * WHY IT EXISTS: without it the six receipt assertions in the previous test are satisfied by a
  * receipt printed from constants. Measured, on this tree: replacing the row value expression with
- * a flat `spec.done` left all five other cases green, because the happy-path walk sets every flag
- * true and therefore never renders a single pending or unknown value. A receipt whose whole claim
- * is "these rows are derived from your account" needs at least one case where the account says no.
+ * a flat `spec.done` left all five other cases green, because the happy-path walk then set every
+ * flag true and therefore never rendered a single pending or unknown value. (The walk now ends
+ * with the details row outstanding, so one pending value is covered there, but "unknown" and the
+ * rest of the pending branches still are not.) A receipt whose whole claim is "these rows are
+ * derived from your account" needs a case where the account says no to more than one of them.
  *
  * It drives the rolling-deploy path deliberately: a legacy step name that app/start/page.tsx routes
  * to DoneStep, carrying a payload with one flag false, one list non-empty, and one field missing
@@ -719,18 +742,31 @@ test("criterion 6: the receipt reports the account, not a fixed list", async () 
     forceStep = null;
     omitSponsorshipFlag = false;
     progress.base = true;
-    progress.gaps = true;
+    /* Back to where the walk left it, which is outstanding. Restoring it to `true` would leave the
+       cases below reading an account no walk in this file ever produced. */
+    progress.gaps = false;
   }
 });
 
 test("the rail's arithmetic matches the flow that was actually walked", async () => {
   try {
-    assert.equal(visited.length, 7, `the walk visited ${visited.length} screens`);
+    assert.equal(visited.length, 6, `the walk visited ${visited.length} screens`);
     const total = visited[0].total;
     assert.equal(
       visited.length,
       total,
       `the rail claims ${total} steps and the walk found ${visited.length}: STEPS in components/start/ui.tsx is out of sync with the flow`,
+    );
+    /* THE ASSERTION THIS FILE WAS MISSING, and the reason the count used to skip a number.
+     *
+     * Every screen in the walk above was rendered for an account with gpa, gpa_scale and major
+     * outstanding. A denominator read from `gaps.length` rather than from the flow reads 7 here,
+     * promises the student a seventh screen, and then ends at the sixth. The count printed on
+     * screen has to be the count of screens they will actually be shown. */
+    assert.equal(
+      total,
+      6,
+      `the rail claims ${total} steps for an account with details outstanding: the denominator is counting a screen the flow never routes to`,
     );
     visited.forEach((entry, index) => {
       assert.equal(entry.step, index + 1, `screen ${index + 1} reported itself as step ${entry.step}`);
@@ -739,6 +775,93 @@ test("the rail's arithmetic matches the flow that was actually walked", async ()
   } catch (reason) {
     await captureFailure("rail-arithmetic");
     throw reason;
+  }
+});
+
+/* The other half of the denominator, and the case neither spec covered before this one.
+ *
+ * The walk proves outstanding gaps do not ADD a step. This proves the absence of them does not
+ * REMOVE one: the number a student reads must not depend on how complete their profile happens to
+ * be, because the screens are the same six either way. Together the two cases say the denominator
+ * is a property of the flow and of nothing else. */
+test("a profile with no gaps at all reads the same six steps", async () => {
+  try {
+    noGaps = true;
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    const done = await screen("Done");
+    assert.equal(done.total, 6, `an account with no outstanding details reads a total of ${done.total}`);
+    assert.equal(done.step, 6, "the last screen is not the last step");
+
+    // And the receipt's finished branch, which the walk itself no longer reaches.
+    const main = await page.locator("main").innerText();
+    assert.match(main, /A few details\s*\n?\s*None missing/i, "an account with no gaps reports details outstanding");
+  } catch (reason) {
+    await captureFailure("no-gaps");
+    throw reason;
+  } finally {
+    noGaps = false;
+  }
+});
+
+/* THE #285 REGRESSION GUARD, kept alive now that the walk no longer visits this screen.
+ *
+ * The gaps screen is still reachable when a step name arrives that the current backend cannot
+ * derive: an older one mid-rolling-deploy, or ?qa=1&step=gaps. What #285 fixed is that a rendered
+ * screen missing from STEPS resolves through `findIndex` to -1 and reports itself as the FIRST
+ * step. So the screen has to be in the list, and when the flow is standing on it, it is also in
+ * the count: seven screens, and this is the sixth of them. "Step 1 of 6, Your resume" here is the
+ * original bug, and a denominator that dropped the entry entirely would bring it straight back. */
+test("a gaps screen that does render names its own position", async () => {
+  try {
+    forceStep = "gaps";
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    const here = await screen("A few details");
+    assert.equal(here.step, 6, `the gaps screen reported itself as step ${here.step}`);
+    assert.equal(here.total, 7, `the flow standing on the gaps screen claims ${here.total} steps`);
+    // It is a real screen, not just a rail label: the questions it exists to ask are on it.
+    await page.locator("#gap-gpa").waitFor({ timeout: 10000 });
+  } catch (reason) {
+    await captureFailure("rendered-gaps");
+    throw reason;
+  } finally {
+    forceStep = null;
+  }
+});
+
+/* The rail before there is anything to say.
+ *
+ * app/start/page.tsx renders it while GET /onboarding/state is still in flight, and it used to
+ * pass "resume" as a stand-in step. For a returning student halfway through setup that is the one
+ * device on the screen whose entire job is to say where they are, telling them the wrong thing for
+ * the length of a request. It now draws the shape of the flow and makes no claim inside it. */
+test("the rail claims no position before the state arrives", async () => {
+  try {
+    stateDelayMs = 5000;
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+
+    const loading = page.locator("[aria-label='Setup'][aria-busy='true']");
+    await loading.first().waitFor({ timeout: 15000 });
+    assert.equal(
+      await page.locator("[aria-label^='Setup: step']").count(),
+      0,
+      "the rail named a step before the state that determines it had arrived",
+    );
+    assert.equal(
+      await page.locator("text=/^Step \\d+ of \\d+$/i").count(),
+      0,
+      "the rail printed a step count before the state that determines it had arrived",
+    );
+
+    /* Then it has to actually resolve, or the assertions above are satisfied by a rail that never
+       says anything at all. Same request, released: nothing is reloaded. */
+    stateDelayMs = 0;
+    await screen("Done");
+    await loading.first().waitFor({ state: "detached", timeout: 15000 });
+  } catch (reason) {
+    await captureFailure("loading-rail");
+    throw reason;
+  } finally {
+    stateDelayMs = 0;
   }
 });
 

@@ -32,7 +32,7 @@ import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
-import { StepRail } from "@/components/start/ui";
+import { StartFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 
 export default function Start() {
@@ -177,15 +177,32 @@ export default function Start() {
   }
 
   if (!state) {
+    /* No `current`, on purpose. This branch renders before GET /onboarding/state has answered, so
+       the step is not known yet, and it used to pass "resume" as a stand-in: a returning student
+       halfway through setup read "Step 1 of 7, Your resume" for the length of the request, on the
+       one device in the flow whose whole job is to say where they are. The rail draws the shape of
+       the flow and nothing else until there is a real answer to give. */
     return (
-      <div className="mx-auto max-w-2xl px-6 py-16">
-        <StepRail current="resume" />
-        <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
-        <div className="rq-shimmer mt-6 h-32 rounded-inner" />
-      </div>
+      <StartFlowProvider state={null}>
+        <div className="mx-auto max-w-2xl px-6 py-16">
+          <StepRail />
+          <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+          <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+        </div>
+      </StartFlowProvider>
     );
   }
 
+  /* Every screen below renders StartShell, which renders the rail, and the rail's denominator is
+     the steps THIS student's flow contains (components/start/ui.tsx flowSteps). Provided once here
+     rather than threaded through every step component's props to reach one string. */
+  return <StartFlowProvider state={state}>{renderStep(state)}</StartFlowProvider>;
+
+  /* Hoisted so the provider can wrap it above without re-indenting every branch of the switch.
+     The parameter deliberately shadows the outer `state`: a hoisted declaration can be called from
+     anywhere, so TypeScript drops the non-null narrowing the guard above established, and taking it
+     as an argument restores it for every branch at once rather than a `!` per use. */
+  function renderStep(state: OnboardingState) {
   switch (state.step) {
     case "focus":
       // During a rolling backend deploy an older state response can still say "focus" before a
@@ -331,5 +348,6 @@ export default function Start() {
         />
         </>
       );
+  }
   }
 }
