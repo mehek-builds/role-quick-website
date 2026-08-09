@@ -718,6 +718,27 @@ export type ApplicationProfile = {
   /** Metros, her own words, most preferred first. Doubles as the preferred-work-location answer. */
   onsite_locations?: string[] | null;
   relocation_willingness?: "yes" | "no" | null;
+
+  /* ---- when an internship could actually run ----
+   *
+   * Across all 112 stored packets this is the largest cluster of required-and-blank questions: what
+   * dates you are available, when the internship would end, the earliest you could start. The old
+   * `availability_date` above has held a value the whole time and the backend refuses to answer from
+   * it on purpose, because it carries no recruiting cycle and no expiry, so a date typed for one
+   * summer would answer the next summer's forms forever.
+   *
+   * These four are the scoped replacement, and they only work together. The backend answers a dates
+   * question ONLY when all four are stored, the expiry has not passed, and the posting's own
+   * description names the same cycle. Any one of them missing, and the question goes back to you.
+   */
+  /** ISO YYYY-MM-DD. The earliest you could begin. */
+  availability_window_start?: string | null;
+  /** ISO YYYY-MM-DD. The latest you are available through. */
+  availability_window_end?: string | null;
+  /** The recruiting cycle the window is about, e.g. "Summer 2027". This is what scopes it. */
+  availability_cycle?: string | null;
+  /** ISO YYYY-MM-DD. After this date the window answers nothing, whatever else is stored. */
+  availability_valid_through?: string | null;
 };
 
 // ---- onboarding ----
