@@ -346,7 +346,10 @@ test("a board with no `stages` still renders every column and every move option"
   }
 
   /* And all three move options on the one card, which is the harm a student would actually hit. */
-  const options = await page.locator("select option").allInnerTexts();
+  const options = await page
+    .getByLabel("Move Fixture Role sent-0 at Fixture Company sent-0 to another stage")
+    .locator("option")
+    .allInnerTexts();
   assert.deepEqual(options, ["Applied", "Interview", "Offer"], "canonical order, not card iteration order");
 
   assert.equal(await page.getByText("This page did not load.").count(), 0);

@@ -140,6 +140,12 @@ const APPLICATION_FACT_FIELDS = [
     hint: "Month and year. Your graduation date only says when you finish, so this one has to come from you.",
   },
   {
+    key: "date_of_birth",
+    label: "Date of birth",
+    placeholder: "YYYY-MM-DD",
+    hint: "Optional. Litos uses this only when an application asks for your birth date.",
+  },
+  {
     key: "military_service",
     label: "Have you served in the military?",
     placeholder: "Yes, No, Prefer not to say",
@@ -157,34 +163,6 @@ const APPLICATION_FACT_FIELDS = [
     placeholder: "Yes, No, Prefer not to say",
     hint: "",
   },
-] as const;
-
-/* ---- where you will work from, and how you found the job ----
- *
- * ADDED 2026-08-09, and not speculatively. A Redwood Materials packet was ready to send with "Are
- * you available to work from our office in San Francisco?" answered YES, for someone who lives in
- * Dubai and studies in Los Angeles. The backend had a constant where a column should have been.
- *
- * These two clear the two-posting bar by a mile - counted by replaying every question label Litos
- * has ever stored:
- *   office / onsite / in-person commitment ... 15 labels, 12 employers
- *   how did you hear about us ................ 25 labels, 20 employers
- *
- * "Prefer not to answer now" is the default on both, and it is a real option rather than a polite
- * one: unanswered leaves the employer's field blank and raises it for you, which is the whole
- * point. A default here would be the constant again, wearing a dropdown.
- */
-const ONSITE_COMMITMENT_OPTIONS = [
-  { value: "", label: "Prefer not to answer now" },
-  { value: "anywhere", label: "Yes, any office, wherever it is" },
-  { value: "listed_locations", label: "Only in certain places" },
-  { value: "no", label: "No, I need remote" },
-] as const;
-
-const RELOCATION_OPTIONS = [
-  { value: "", label: "Prefer not to answer now" },
-  { value: "yes", label: "Yes, I would move for the right role" },
-  { value: "no", label: "No" },
 ] as const;
 
 const ADVANCED_STUDY_OPTIONS = [
@@ -208,17 +186,15 @@ export function applicationFactSeed(profile: ApplicationProfile | null): Record<
  * The profile patch for one pass through this card.
  *
  * THE ONLY RULE THAT MATTERS HERE: a field the student left alone is OMITTED, never sent as null
- * and never sent as a default. Every one of these is a declaration about her or a consent given to
+ * and never sent as a default. Every one of these is a declaration about her given to
  * an employer, and writing "No" into an untouched box would put a sentence in her mouth on a real
  * application. Omission leaves the column null, which the resolver reads as "never asked" and
  * responds to by leaving the employer's question for her.
  *
- * Two deliberate exceptions, both of which are answers rather than absences:
+ * One deliberate exception is an answer rather than an absence:
  *   - `prior_application_employers: []` is "I have not applied anywhere before", which is what
  *     turns every "have you applied here before?" into a No. It is only sent when the student
  *     picked that option, not when she skipped the question.
- *   - The two attestation booleans are sent as `false` once the card has been seen, so a consent
- *     granted earlier and unticked now is actually withdrawn rather than silently kept.
  *
  * Exported so a test can pin the shape without rendering the step.
  */
@@ -228,12 +204,7 @@ export function applicationFactPatch(input: {
   offers: "" | "none" | "some";
   offerDetails: string;
   advancedStudy: string;
-  onsiteCommitment: string;
-  onsiteLocations: string;
-  relocation: string;
   referralSource: string;
-  attestTruthful: boolean;
-  acceptPrivacy: boolean;
 }): Partial<ApplicationProfile> {
   const patch: Partial<ApplicationProfile> = {};
   for (const field of APPLICATION_FACT_FIELDS) {
@@ -265,28 +236,6 @@ export function applicationFactPatch(input: {
       .filter(Boolean);
   }
 
-  /* WHERE SHE WILL WORK FROM. Same omission rule as everything above: an untouched dropdown sends
-     nothing, so the column stays null and the resolver keeps refusing. The one thing worth saying
-     out loud is that "listed_locations" with an EMPTY list is not written, because "only in certain
-     places" followed by no places is a half-answer, and half of this declaration is the half that
-     decides whether an employer hears yes or no. */
-  if (input.onsiteCommitment === "anywhere" || input.onsiteCommitment === "no") {
-    patch.onsite_commitment = input.onsiteCommitment;
-  } else if (input.onsiteCommitment === "listed_locations") {
-    const places = input.onsiteLocations
-      .split(",")
-      .map((place) => place.trim())
-      .filter(Boolean);
-    if (places.length > 0) {
-      patch.onsite_commitment = "listed_locations";
-      patch.onsite_locations = places;
-    }
-  }
-
-  if (input.relocation === "yes" || input.relocation === "no") {
-    patch.relocation_willingness = input.relocation;
-  }
-
   /* HOW SHE FOUND THE POSTING. This column used to default to "Company website" in the database,
      and every production row carried it without anyone having typed it - so the most-asked question
      on any application form was answered with a fact nobody supplied, and usually a false one. The
@@ -294,8 +243,6 @@ export function applicationFactPatch(input: {
   const referral = input.referralSource.trim();
   if (referral) patch.referral_source_default = referral;
 
-  patch.attest_truthful_information = input.attestTruthful;
-  patch.accept_privacy_notices = input.acceptPrivacy;
   return patch;
 }
 
@@ -348,22 +295,14 @@ export function BaseResumeStep({
   const [facts, setFacts] = useState<Record<string, string>>(() => applicationFactSeed(profile));
   const [priorEmployers, setPriorEmployers] = useState(() => (profile?.prior_application_employers ?? []).join(", "));
   /* Three states, not two: "not answered" is the default and must stay reachable, because a
-     checkbox that starts unticked and a student who never looked at it are the same thing, and
+     control that starts unanswered and a student who never looked at it are the same thing, and
      neither is a declaration that she has no offers. */
   const [offers, setOffers] = useState<"" | "none" | "some">(() => (
     profile?.has_outstanding_offers === true ? "some" : profile?.has_outstanding_offers === false ? "none" : ""
   ));
   const [offerDetails, setOfferDetails] = useState(() => profile?.outstanding_offer_details ?? "");
   const [advancedStudy, setAdvancedStudy] = useState<string>(() => profile?.advanced_study_plan ?? "");
-  /* Prefilled from what is stored and from nothing else. In particular NOT prefilled from
-     address_city: where she lives is not a declaration about which offices she will work from, and
-     seeding this from her address would put the guess back in, just with a human's hand on it. */
-  const [onsiteCommitment, setOnsiteCommitment] = useState<string>(() => profile?.onsite_commitment ?? "");
-  const [onsiteLocations, setOnsiteLocations] = useState(() => (profile?.onsite_locations ?? []).join(", "));
-  const [relocation, setRelocation] = useState<string>(() => profile?.relocation_willingness ?? "");
   const [referralSource, setReferralSource] = useState(() => profile?.referral_source_default ?? "");
-  const [attestTruthful, setAttestTruthful] = useState(() => profile?.attest_truthful_information === true);
-  const [acceptPrivacy, setAcceptPrivacy] = useState(() => profile?.accept_privacy_notices === true);
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
   /* Two phases, one screen. `compare` puts the upload beside the rebuild so the difference is an
      observation rather than a claim; `detail` is what they get after choosing. Local state, not a
@@ -795,12 +734,7 @@ export function BaseResumeStep({
         offers,
         offerDetails,
         advancedStudy,
-        onsiteCommitment,
-        onsiteLocations,
-        relocation,
         referralSource,
-        attestTruthful,
-        acceptPrivacy,
       }));
       if (!demo && Object.keys(profilePatch).length > 0) await putApplicationProfile(profilePatch);
       onDone();
@@ -812,7 +746,7 @@ export function BaseResumeStep({
   }, [
     editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo,
     facts, priorEmployers, offers, offerDetails, advancedStudy,
-    onsiteCommitment, onsiteLocations, relocation, referralSource, attestTruthful, acceptPrivacy,
+    referralSource,
   ]);
 
   function patchFact(key: string, value: string) {
@@ -1194,7 +1128,7 @@ export function BaseResumeStep({
             <div className="mt-5 rounded-inner border border-border px-4 py-3">
               <p className="text-[13px] text-ink">Questions employers keep asking</p>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Answer once and Litos fills them everywhere. Leave anything blank and it stays blank on the form too: we never answer these for you.
+                Save factual details here. Litos uses identity and resume facts where safe, but leaves employer-specific choices to you. Leave anything blank and it stays blank on the form too.
               </p>
 
               <div className="mt-3 grid grid-cols-1 gap-3">
@@ -1203,12 +1137,13 @@ export function BaseResumeStep({
                     <span className="text-xs font-medium text-muted">{field.label}</span>
                     <input
                       id={`base-fact-${field.key}`}
+                      aria-describedby={field.hint ? `base-fact-${field.key}-hint` : undefined}
                       value={facts[field.key] ?? ""}
                       onChange={(event) => patchFact(field.key, event.target.value)}
                       placeholder={field.placeholder}
                       className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                     />
-                    {field.hint && <span className="mt-1 block text-xs leading-5 text-muted">{field.hint}</span>}
+                    {field.hint && <span id={`base-fact-${field.key}-hint`} className="mt-1 block text-xs leading-5 text-muted">{field.hint}</span>}
                   </label>
                 ))}
 
@@ -1250,55 +1185,6 @@ export function BaseResumeStep({
                   </label>
                 )}
 
-                {/* THE REDWOOD QUESTION. Above further study because it is asked more often than
-                    everything else on this card put together. */}
-                <label htmlFor="base-fact-onsite" className="block">
-                  <span className="text-xs font-medium text-muted">Can you work from an employer&rsquo;s office?</span>
-                  <select
-                    id="base-fact-onsite"
-                    value={onsiteCommitment}
-                    onChange={(event) => setOnsiteCommitment(event.target.value)}
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
-                  >
-                    {ONSITE_COMMITMENT_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <span className="mt-1 block text-xs leading-5 text-muted">
-                    Asked as &ldquo;are you available to work from our office in San Francisco?&rdquo; on most applications.
-                  </span>
-                </label>
-
-                {onsiteCommitment === "listed_locations" && (
-                  <label htmlFor="base-fact-onsite-locations" className="block">
-                    <span className="text-xs font-medium text-muted">Which places, most preferred first</span>
-                    <input
-                      id="base-fact-onsite-locations"
-                      value={onsiteLocations}
-                      onChange={(event) => setOnsiteLocations(event.target.value)}
-                      placeholder="Los Angeles, New York, San Francisco"
-                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-                    />
-                    <span className="mt-1 block text-xs leading-5 text-muted">
-                      An employer asking about a city on this list hears yes, and one asking about a city that is not hears no. The order is also your answer to &ldquo;what is your preferred work location?&rdquo;
-                    </span>
-                  </label>
-                )}
-
-                <label htmlFor="base-fact-relocation" className="block">
-                  <span className="text-xs font-medium text-muted">Would you relocate for a role?</span>
-                  <select
-                    id="base-fact-relocation"
-                    value={relocation}
-                    onChange={(event) => setRelocation(event.target.value)}
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
-                  >
-                    {RELOCATION_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
-
                 <label htmlFor="base-fact-referral" className="block">
                   <span className="text-xs font-medium text-muted">How you usually find the jobs you apply to</span>
                   <input
@@ -1328,38 +1214,9 @@ export function BaseResumeStep({
                 </label>
               </div>
 
-              {/* THE TWO TICKBOXES LITOS IS ALLOWED TO TICK, and the copy says exactly which two.
-                  Everything else on an employer form - an exclusivity commitment, a code of
-                  conduct - is left for the applicant no matter what is stored here, so promising
-                  more than these two would be a promise the runner deliberately breaks. */}
-              <div className="mt-4 border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted">Boxes we may tick for you</p>
-                <label className="mt-2.5 flex cursor-pointer gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={attestTruthful}
-                    onChange={(event) => setAttestTruthful(event.target.checked)}
-                    className="mt-0.5 accent-brand"
-                  />
-                  <span className="min-w-0 text-xs leading-5 text-muted">
-                    Confirm that the information in my application is true, complete and accurate.
-                  </span>
-                </label>
-                <label className="mt-2 flex cursor-pointer gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={acceptPrivacy}
-                    onChange={(event) => setAcceptPrivacy(event.target.checked)}
-                    className="mt-0.5 accent-brand"
-                  />
-                  <span className="min-w-0 text-xs leading-5 text-muted">
-                    Accept an employer&rsquo;s candidate privacy notice.
-                  </span>
-                </label>
-                <p className="mt-2.5 text-xs leading-5 text-muted">
-                  Nothing else. Anything that commits you to something, like &ldquo;this role is my top preference&rdquo;, always waits for you.
-                </p>
-              </div>
+              <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted">
+                Every employer agreement stays for you to review on that application, including privacy notices, accuracy certifications, preference statements, exclusivity promises and interview codes of conduct.
+              </p>
             </div>
           )}
 
