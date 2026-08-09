@@ -128,18 +128,21 @@ export default function JobsPage() {
 
   useEffect(() => {
     if (qaMode !== true) return;
-    if (new URLSearchParams(window.location.search).get("qa") === "error") {
-      setError("We could not load your jobs.");
-      return;
-    }
-    if (new URLSearchParams(window.location.search).get("qa") === "empty") {
-      setJobs([]);
-      setRanked(false);
-      setHasMore(false);
-      setRankedPool(0);
-      setPoolExhausted(true);
-      setMinimumMatchScore(null);
-      setApplied(buildAppliedIndex([]));
+    const qaScenario = new URLSearchParams(window.location.search).get("qa");
+    if (qaScenario === "error" || qaScenario === "empty") {
+      queueMicrotask(() => {
+        if (qaScenario === "error") {
+          setError("We could not load your jobs.");
+          return;
+        }
+        setJobs([]);
+        setRanked(false);
+        setHasMore(false);
+        setRankedPool(0);
+        setPoolExhausted(true);
+        setMinimumMatchScore(null);
+        setApplied(buildAppliedIndex([]));
+      });
       return;
     }
     let cancelled = false;
@@ -381,6 +384,7 @@ export default function JobsPage() {
 
       {error && jobs === null ? (
         <DataErrorState
+          headingLevel="h2"
           title="Jobs did not load."
           body="Your filters and profile are still saved. Try loading the job board again."
           onRetry={() => window.location.reload()}

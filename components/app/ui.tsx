@@ -2,6 +2,7 @@
 
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import { userFacingError } from "@/lib/user-facing-error";
+import { Button } from "@/components/app/Button";
 
 /* Shared in-app primitives, per brand deck sections 04 (shape/surface) and 07
    (review view): quiet surfaces, pill chips, shimmer loading, match-score ring.
@@ -224,17 +225,20 @@ export function EmptyState({
   title,
   body,
   visual,
+  headingLevel = "h3",
   children,
 }: {
   title: string;
   body: string;
   visual: "applications" | "emails" | "jobs" | "profile" | "error";
+  headingLevel?: "h1" | "h2" | "h3";
   children?: React.ReactNode;
 }) {
+  const Heading = headingLevel;
   return (
     <div className="border-y border-border py-10 text-center">
       <EmptyStateVisual kind={visual} />
-      <h3 className="text-base font-medium text-ink">{title}</h3>
+      <Heading className="text-base font-medium text-ink">{title}</Heading>
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">{body}</p>
       {children && <div className="mt-6 flex justify-center">{children}</div>}
     </div>
@@ -245,20 +249,18 @@ export function DataErrorState({
   title,
   body,
   onRetry,
+  headingLevel = "h1",
 }: {
   title: string;
   body: string;
   onRetry: () => void;
+  headingLevel?: "h1" | "h2" | "h3";
 }) {
   return (
-    <EmptyState visual="error" title={title} body={body}>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="min-h-11 rounded-control bg-brand px-5 text-sm font-medium text-white"
-      >
+    <EmptyState visual="error" title={title} body={body} headingLevel={headingLevel}>
+      <Button type="button" onClick={onRetry}>
         Try again
-      </button>
+      </Button>
     </EmptyState>
   );
 }

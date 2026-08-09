@@ -16,7 +16,8 @@ import {
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Button } from "@/components/app/Button";
 import { Funnel } from "@/components/app/Funnel";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
@@ -578,16 +579,13 @@ export default function Home() {
     return (
       <EmptyState
         visual="error"
+        headingLevel="h1"
         title="Your dashboard did not load."
         body="Nothing you saved was lost. Try loading your dashboard again."
       >
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
-        >
+        <Button type="button" onClick={() => window.location.reload()}>
           Try again
-        </button>
+        </Button>
       </EmptyState>
     );
   }

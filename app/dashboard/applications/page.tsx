@@ -1447,6 +1447,7 @@ function Applications() {
     return (
       <EmptyState
         visual="error"
+        headingLevel="h1"
         title="Applications did not load."
         body="Your applications are still saved. Try loading this view again."
       >

@@ -95,15 +95,17 @@ export default function Outreach() {
     // reviewed without a live account. It was the one dashboard view with no fixture.
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
     if (window.location.hostname === "localhost" && qaScenario !== null) {
-      if (qaScenario === "error") {
-        setError("We could not load your emails.");
-        return;
-      }
-      setEvents(qaScenario === "empty" ? [] : QA_EVENTS);
+      queueMicrotask(() => {
+        if (qaScenario === "error") {
+          setError("We could not load your emails.");
+          return;
+        }
+        setEvents(qaScenario === "empty" ? [] : QA_EVENTS);
+      });
       return;
     }
     let cancelled = false;
-    setError(null);
+    queueMicrotask(() => setError(null));
     (async () => {
       try {
         const res = await api<{ events?: OutreachEvent[] } | OutreachEvent[]>(
@@ -133,6 +135,7 @@ export default function Outreach() {
     return (
       <EmptyState
         visual="error"
+        headingLevel="h1"
         title="Emails did not load."
         body="Your emails are still saved. Try loading this view again."
       >
