@@ -170,8 +170,9 @@ export function normalizeCaseId(raw: string | undefined | null, fallback: string
  * constant forever. Two different case ids produce two different codes, so the only way through is
  * to actually READ the code at run time, which is the behaviour the product side has to have.
  *
- * FNV-1a, twice with different offset bases, because it is eight lines and identical in any
- * language a trial might be written in. It is not a secret and is not protecting anything.
+ * FNV-1a, twice with different offset bases. Greenhouse's observed letter-only codes are case
+ * sensitive and mixed case, so the fixture keeps that contract instead of emitting ordinary
+ * uppercase words that the fail-closed mailbox parser must reject.
  */
 export function securityCodeFor(caseId: string): string {
   const digest = (seed: number) => {
@@ -182,8 +183,16 @@ export function securityCodeFor(caseId: string): string {
     }
     return hash >>> 0;
   };
-  const raw = `${digest(0x811c9dc5).toString(36)}${digest(0x9e3779b9).toString(36)}00000000`;
-  return raw.toUpperCase().slice(0, 8);
+  const letters: string[] = [];
+  for (const seed of [0x811c9dc5, 0x9e3779b9]) {
+    let value = digest(seed);
+    for (let index = 0; index < 4; index += 1) {
+      letters.push(String.fromCharCode(65 + (value % 26)));
+      value = Math.floor(value / 26);
+    }
+  }
+  letters[4] = letters[4].toLowerCase();
+  return letters.join('');
 }
 
 /* The literal option text planted in the job description body of the select-jd-decoy shape, and the
