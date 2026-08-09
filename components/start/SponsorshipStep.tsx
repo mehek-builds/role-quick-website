@@ -10,11 +10,28 @@
  * the answer will DO, and it has to say - before the answer is given, not after - that it is
  * permanent. A consequence disclosed afterwards is not a disclosure.
  *
- * It also states the thing this answer is NOT for. Litos never types a work-authorization answer
- * into an employer's form (R-004: those questions are location-scoped, and replaying a global
- * answer once shipped a false legal declaration on a live application). This screen is about which
- * jobs get shown. The refusal list on the resume step makes the same promise; it is repeated here
- * because this is where somebody would reasonably assume the opposite.
+ * It also states WHERE ELSE this answer goes, and that paragraph was a lie until 2026-08-09.
+ *
+ * It said "We never fill it in for you." The backend had filled a work-authorization or sponsorship
+ * answer on dozens of real applications by then, from these same two columns, and it had done it
+ * inconsistently: "are you legally authorized to work in the united states?" was answered, "are you
+ * legally authorized to work in the us?" was not, and "the country where this role is located" was
+ * not, so the Deepgram packet could not be sent at all. A promise the product breaks is worse than
+ * either coherent policy, because the person relying on it cannot predict what will happen.
+ *
+ * The rule the backend now follows, and the rule this copy states, is the same one:
+ *
+ *   - A SPONSORSHIP question is answered "yes" whenever she needs sponsorship. That discloses a
+ *     limitation rather than claiming a permission, so it can only ever narrow what a company
+ *     offers, never obtain something under false pretenses.
+ *   - An AUTHORIZATION question is answered only when the question is about the United States,
+ *     which is what these two columns are about. A question that names another country, or that
+ *     points at a posting that is not in the US or does not say where it is, is left blank.
+ *
+ * R-004's actual defect is intact: no answer here is inferred from a job description, an address or
+ * an enrolment. It comes from these columns or it does not come at all. The behaviour and this copy
+ * are pinned to each other by tests/sponsorship.test.mjs here and
+ * src/lib/workAuthorizationScope.test.ts in the backend; change one and change both.
  */
 
 import { useState } from "react";
@@ -25,7 +42,15 @@ import { PrimaryButton, StartShell } from "./ui";
 /* Written for the plain-language bar: everyday words, short sentences, and the two "yes" answers
    phrased the way people describe their own situation rather than the way an immigration form
    does. "Sponsorship" appears in the explanation, not in the choices, because the choices have to
-   be answerable by somebody who has never heard the word. */
+   be answerable by somebody who has never heard the word.
+
+   THE TWO AUTHORIZATION HINTS NAME THE COUNTRY, and they did not until 2026-08-09. They said "the
+   job's country", which reads as though one radio button could describe every country at once. It
+   cannot: being allowed to work in the UK says nothing about the US, and this answer is stored as
+   one boolean. Everything downstream of it is American anyway - the board filter it turns on is
+   built from H-1B filings, which are US petitions - so naming the country is what the screen
+   already meant. It also stops somebody authorized elsewhere from picking "Already authorized" and
+   having that repeated onto a US employer's form. */
 const OPTIONS: { value: SponsorshipAnswer; label: string; hint: string }[] = [
   {
     value: "needs_now",
@@ -40,12 +65,12 @@ const OPTIONS: { value: SponsorshipAnswer; label: string; hint: string }[] = [
   {
     value: "not_authorized",
     label: "Not authorized yet",
-    hint: "You cannot currently work in the job's country.",
+    hint: "You cannot currently work in the United States.",
   },
   {
     value: "no",
     label: "Already authorized",
-    hint: "You can already work in the job's country.",
+    hint: "You can already work in the United States.",
   },
 ];
 
@@ -110,9 +135,17 @@ export function SponsorshipStep({ onDone }: { onDone: () => void }) {
       {/* Shown before the answer is given, not after it is saved. Same reason the countdown on the
           store listing is 15 seconds and not 9: a consequence a person learns about afterwards is
           not one they agreed to. */}
-      <div className="mb-7 space-y-1 text-[13px] leading-5 text-muted">
+      <div className="mb-7 space-y-1.5 text-[13px] leading-5 text-muted">
         <p>If you need sponsorship, we only show jobs from likely sponsors.</p>
-        <p>This answer is permanent. We never fill it in for you.</p>
+        <p>This answer is permanent.</p>
+        {/* Says what happens, in the order a person meets it on a form. The sponsorship half is
+            unconditional because it is a disclosure; the authorization half carries its condition
+            because that half is a claim, and this answer is about the United States. */}
+        <p>
+          We also put it on application forms. Do you need sponsorship? gets a yes whenever you do.
+          Are you authorized to work? gets an answer only when the job is in the United States.
+          Anything else is left blank for you.
+        </p>
       </div>
 
       <PrimaryButton onClick={() => void save()} disabled={busy || answer === null}>

@@ -14,6 +14,10 @@ const browseLib = readFileSync("lib/browse-jobs.ts", "utf8");
 const dashboardJobs = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
 const settings = readFileSync("app/dashboard/settings/page.tsx", "utf8");
 const startStep = readFileSync("components/start/SponsorshipStep.tsx", "utf8");
+/* The same file with every block comment removed, so that a promise the screen no longer makes can
+   be asserted absent from the SHIPPED copy while the header comment is still free to quote it and
+   say why it went. Without this the file's own account of the bug re-creates the bug's text. */
+const startStepRendered = startStep.replace(/\/\*[\s\S]*?\*\//g, " ");
 
 describe("the public board carries the filter through every link", () => {
   test("sponsor_only is forwarded to the API", async () => {
@@ -119,10 +123,45 @@ describe("the onboarding question", () => {
     assert.ok(permanence < button, "the permanence note renders after the save button");
   });
 
-  test("repeats that Litos never fills this answer into a form", () => {
-    // R-004: work-authorization questions on real forms are location-scoped, and replaying a global
-    // answer once shipped a false legal declaration on a live application. This screen is the most
-    // likely place for somebody to assume the opposite.
-    assert.match(startStep, /never fill it in for you/i);
+  /* WHAT THIS SCREEN PROMISES ABOUT EMPLOYER FORMS, pinned to what the backend does.
+   *
+   * It used to say "We never fill it in for you." That was false: the backend had answered a work
+   * authorization or sponsorship question from these same two columns on dozens of real
+   * applications, and it had done it inconsistently, so nothing predicted which forms it would fill
+   * and which it would leave blank. The copy now states the rule, and the rule has two halves that
+   * are deliberately different from each other.
+   *
+   * These assertions are the drift alarm. The two repos deploy separately and cannot import from
+   * each other, so the pairing is held by a test on each side against the same three sentences:
+   * this one fails if the words change, and src/lib/workAuthorizationScope.test.ts in
+   * student-outreach-backend fails if the behaviour stops matching them. */
+  test("states the rule the backend actually follows on employer forms", () => {
+    // The sponsorship half is unconditional, because "yes I need sponsorship" is a disclosure.
+    assert.match(startStep, /Do you need sponsorship\? gets a yes whenever you do\./);
+    // The authorization half carries its condition, because that half is a claim.
+    assert.match(
+      startStep,
+      /Are you authorized to work\? gets an answer only when the job is in the United States\./,
+    );
+    // And the default for everything the two columns do not cover is silence.
+    assert.match(startStep, /Anything else is left blank for you\./);
+  });
+
+  test("no longer claims a blanket refusal it does not honour", () => {
+    /* The specific sentence that was untrue, plus the two other ways of writing the same absolute
+       promise. Any of them reappearing means the screen has gone back to describing a product that
+       does not exist. */
+    assert.doesNotMatch(startStepRendered, /never fill it in for you/i);
+    assert.doesNotMatch(startStepRendered, /never (?:fills?|types?)[^<]*(?:form|application)/i);
+  });
+
+  test("the authorization choices name the country this answer is about", () => {
+    /* One boolean cannot describe every country at once, and the board filter behind it is built
+       from H-1B petitions, which are American. A hint reading "the job's country" invited somebody
+       authorized in the UK to answer "Already authorized" and have that repeated onto a US
+       employer's form. */
+    assert.match(startStep, /You can already work in the United States\./);
+    assert.match(startStep, /You cannot currently work in the United States\./);
+    assert.doesNotMatch(startStepRendered, /the job's country/i);
   });
 });
