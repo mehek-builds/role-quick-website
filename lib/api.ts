@@ -2,13 +2,15 @@
 
 import { API_URL } from "./config";
 import { identifyUser, resetAnalytics } from "./analytics";
-import { userIdFromToken } from "./session-identity";
+import { SESSION_TOKEN_KEY, userIdFromToken } from "./session-identity";
 import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
 import { clearExtensionSession } from "./extension-bridge";
 
-const TOKEN_KEY = "rq_token";
+/* Re-exported from session-identity so the instrumentation entry point and this
+ * module cannot drift apart on the key name. */
+const TOKEN_KEY = SESSION_TOKEN_KEY;
 const EMAIL_KEY = "rq_email";
 const SESSION_MODE_KEY = "litos_session_mode_v1";
 const HISTORY_KEY = "litos_has_history_v1";

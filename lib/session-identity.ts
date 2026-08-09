@@ -15,6 +15,16 @@
  * almost everywhere else, hence the shouting.
  */
 
+/* The localStorage key the session token is stored under.
+ *
+ * It lives HERE rather than in lib/api because two callers need it and this
+ * module is a leaf with no imports. lib/api pulls in analytics, config,
+ * product and in-flight; importing that chain from the instrumentation entry
+ * point to read one string would risk an import cycle at boot, which is the
+ * worst possible place to have one. Duplicating the literal instead would mean
+ * a rename in lib/api silently stops identifying anyone. */
+export const SESSION_TOKEN_KEY = "rq_token";
+
 type SessionClaims = {
   userId?: unknown;
   isGuest?: unknown;
