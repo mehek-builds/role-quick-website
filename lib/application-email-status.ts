@@ -21,6 +21,7 @@ export type ApplicationEmailTracking = {
   configured: boolean;
   tracking_active?: boolean;
   tracking_blocked_reason?: string | null;
+  domain?: string | null;
 };
 
 export type ApplicationEmailBadge = {
@@ -50,6 +51,10 @@ const BLOCKED_COPY: Record<string, string> = {
   check_unavailable: "Litos could not confirm that replies to the Litos address arrive, so applications use your own email.",
 };
 
+function isMailbox(value: string | null | undefined): value is string {
+  return Boolean(value && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+}
+
 export function applicationEmailBadge(status: ApplicationEmailTracking | null): ApplicationEmailBadge {
   if (status === null) return { label: "Checking", kind: "draft", note: null };
   if (!status.configured) {
@@ -65,7 +70,16 @@ export function applicationEmailBadge(status: ApplicationEmailTracking | null): 
       note: "Litos cannot check right now whether employer replies come back through it.",
     };
   }
-  if (status.tracking_active) return { label: "Active", kind: "sent", note: null };
+  if (status.tracking_active) {
+    if (status.domain !== undefined && !isMailbox(status.domain)) {
+      return {
+        label: "Not delivering",
+        kind: "warn",
+        note: "The configured Litos address is invalid, so applications use your own email.",
+      };
+    }
+    return { label: "Active", kind: "sent", note: null };
+  }
   return {
     label: "Not delivering",
     kind: "warn",
@@ -86,6 +100,6 @@ export function applicationEmailAddressInUse(
   status: ApplicationEmailTracking & { domain?: string | null } | null,
   accountEmail: string | null | undefined,
 ): string {
-  if (status?.tracking_active && status.domain) return status.domain;
+  if (status?.tracking_active && isMailbox(status.domain)) return status.domain;
   return accountEmail ?? "Your account email";
 }
