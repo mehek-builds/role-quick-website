@@ -84,7 +84,7 @@ const SENT_REVIEW: ApplicationReview = {
       required: true,
     },
     { id: "q2", question: "Are you authorized to work in the US?", answer: "Yes", kind: "required", required: true },
-    { id: "q3", question: "How did you hear about us?", answer: "Company careers page", kind: "required", required: false },
+    { id: "q3", question: "How did you hear about us?", answer: "LinkedIn", kind: "required", required: false },
   ],
   skipped_reasons: ["Voluntary self-identification: Litos never answers demographic questions for you."],
   filled_fields: ["First name", "Last name", "Email", "Phone", "Resume", "question:Why do you want to work at Notion?"],

@@ -4,11 +4,9 @@ import { readFileSync } from "node:fs";
 
 /* THE FLUENCY DECLARATION HAS TO BE ASKED SOMEWHERE.
  *
- * It was not. GapsStep owns the question ("Which languages are you fluent in?") and is rendered
- * nowhere: onboardingStepFrom can return done/resume/impact/focus/sponsorship/base and never
- * 'gaps', and app/start/page.tsx routes `case "gaps"` straight to DoneStep alongside the deleted
- * extension detour. So the only way to declare fluency was to find the field in Settings, while
- * forms asking "Do you speak German?" got nothing and Litos correctly refused to guess.
+ * It was not. The question now lives on the base resume step so the student reaches it before the
+ * server's final gap collection. The dedicated GapsStep is also reachable for any declarations
+ * that remain unanswered, including referral source.
  *
  * The question now lives on the base resume step, prefilled from what the resume printed. These
  * pin the two properties that make that safe rather than just convenient:
@@ -32,7 +30,7 @@ describe("the languages declaration in onboarding", () => {
     assert.match(
       STEP,
       /Which languages are you fluent in\?/,
-      "the question has to be on a reachable screen; GapsStep is not one"
+      "the question has to be on the reachable base-resume screen"
     );
     assert.match(STEP, /id="base-languages"/, "the question needs a real input, not just a label");
   });

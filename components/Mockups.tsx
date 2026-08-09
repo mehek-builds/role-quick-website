@@ -416,7 +416,7 @@ export function ApplicationFormMockup() {
             filled={false}
           />
         </div>
-        <FormField label="How did you hear about us?" value="Company careers page" select />
+        <FormField label="How did you hear about us?" value="LinkedIn" select />
         <FormField
           label="Why do you want to work at Northline?"
           value="Left blank, essays are yours."

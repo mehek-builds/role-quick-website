@@ -1197,11 +1197,11 @@ export function BaseResumeStep({
                     id="base-fact-referral"
                     value={referralSource}
                     onChange={(event) => setReferralSource(event.target.value)}
-                    placeholder="LinkedIn, Job board, Company website, University career fair"
+                    placeholder="LinkedIn, university career fair, recruiter"
                     className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                   />
                   <span className="mt-1 block text-xs leading-5 text-muted">
-                    Answers &ldquo;how did you hear about this job?&rdquo;, which almost every form asks.
+                    For forms that ask how did you hear about this job. Use a source you personally choose. Litos detects job boards for each application.
                   </span>
                 </label>
 

@@ -935,7 +935,7 @@ export default function Settings() {
           {/* A figure without a unit is not an answer: replaying "80000" from a Munich posting
               onto a Toronto one states something you never said. Both or neither get filled. */}
           <Input label="Salary currency" value={profile.desired_salary_currency} onChange={(v) => patch({ desired_salary_currency: v })} placeholder="USD" />
-          <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="Company careers page" />
+          <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="LinkedIn, university career fair, recruiter" />
         </div>
 
         <div className="mt-6 border-t border-border pt-5">
