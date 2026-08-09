@@ -164,8 +164,17 @@ function resetProgress() {
   for (const key of Object.keys(progress)) progress[key] = false;
 }
 
+/* Overrides for the partial-account case below. `forceStep` reproduces the rolling-deploy path
+   app/start/page.tsx routes to DoneStep (a legacy step name arriving from an older backend), and
+   `omitSponsorshipFlag` reproduces that same backend not sending a field the TS type calls
+   non-optional. Both are the states the receipt's pending and unknown branches exist for, and
+   neither is reachable through the happy-path walk. */
+let forceStep = null;
+let omitSponsorshipFlag = false;
+
 /** Rail order, and it must stay rail order: components/start/ui.tsx STEPS is the same sequence. */
 function derivedStep() {
+  if (forceStep) return forceStep;
   if (!progress.resume) return "resume";
   if (!progress.impact) return "impact";
   if (!progress.focus) return "focus";
@@ -180,7 +189,7 @@ function onboardingState() {
     step: derivedStep(),
     completed_at: progress.completed ? "2026-08-09T00:00:00.000Z" : null,
     has_focus: progress.focus,
-    has_sponsorship_answer: progress.sponsorship,
+    ...(omitSponsorshipFlag ? {} : { has_sponsorship_answer: progress.sponsorship }),
     sponsorship_answer: progress.sponsorship ? "no" : null,
     sponsorship_required: progress.sponsorship ? false : null,
     has_resume: progress.resume,
@@ -513,9 +522,14 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
     /* ── 4. Product highlights, and its skip route ─────────────────────────*/
     const highlights = page.locator("section[aria-labelledby='how-litos-works']");
     await highlights.waitFor({ timeout: 10000 });
-    const rows = await highlights.locator("div.grid").count();
-    assert.equal(rows, 3, "the walkthrough must introduce the product's three features");
-    assert.match(await highlights.innerText(), /Chrome extension fills them in/, "the walkthrough never reaches autofill");
+    /* By content, not by `div.grid`: counting a Tailwind utility means switching a row to flex, or
+       nesting any unrelated grid, silently changes the number without changing what a student
+       reads. These three strings ARE the criterion. */
+    const walkthrough = await highlights.innerText();
+    for (const feature of ["One page", "Your matches", "The forms"]) {
+      assert.match(walkthrough, new RegExp(feature), `the walkthrough never introduces "${feature}"`);
+    }
+    assert.match(walkthrough, /you review before anything is submitted/i, "the walkthrough never reaches the review promise");
 
     const skip = highlights.locator("button", { hasText: "Skip" });
     await skip.click();
@@ -663,6 +677,50 @@ test("criteria 5-6: the last screen confirms setup is over, then names the first
   }
 });
 
+/* The case that stops the receipt being decorative.
+ *
+ * WHY IT EXISTS: without it the six receipt assertions in the previous test are satisfied by a
+ * receipt printed from constants. Measured, on this tree: replacing the row value expression with
+ * a flat `spec.done` left all five other cases green, because the happy-path walk sets every flag
+ * true and therefore never renders a single pending or unknown value. A receipt whose whole claim
+ * is "these rows are derived from your account" needs at least one case where the account says no.
+ *
+ * It drives the rolling-deploy path deliberately: a legacy step name that app/start/page.tsx routes
+ * to DoneStep, carrying a payload with one flag false, one list non-empty, and one field missing
+ * entirely. That is the exact shape the `flag()` helper and the NOT_RECORDED value were written
+ * for, and it is unreachable from the ordinary walk. */
+test("criterion 6: the receipt reports the account, not a fixed list", async () => {
+  try {
+    forceStep = "targeting";        // legacy step -> routed to DoneStep
+    omitSponsorshipFlag = true;     // older backend omits a field the type calls non-optional
+    progress.base = false;          // resume never built
+    progress.gaps = false;          // details still outstanding
+
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await screen("Done");
+    const main = await page.locator("main").innerText();
+
+    assert.match(main, /Your one page\s*\n?\s*Not built/i, "a resume that was never built reports as Built");
+    assert.match(main, /A few details\s*\n?\s*Some outstanding/i, "outstanding details report as complete");
+    /* The unknown branch. "Answered" here would be the receipt stating that a student answered a
+       work-authorization question they were never asked, which is the worst row on the screen to
+       invent. */
+    assert.match(main, /Work visa\s*\n?\s*Not recorded/i, "a missing flag is reported as answered");
+    assert.doesNotMatch(main, /Not built[\s\S]*Built(?!\w)/, "both the pending and done values rendered");
+
+    // The rows that ARE true still say so, so this is not just "everything reads pending".
+    assert.match(main, /Your resume\s*\n?\s*Read/i, "a finished step stopped reporting as finished");
+  } catch (reason) {
+    await captureFailure("partial-receipt");
+    throw reason;
+  } finally {
+    forceStep = null;
+    omitSponsorshipFlag = false;
+    progress.base = true;
+    progress.gaps = true;
+  }
+});
+
 test("the rail's arithmetic matches the flow that was actually walked", async () => {
   try {
     assert.equal(visited.length, 7, `the walk visited ${visited.length} screens`);
@@ -683,6 +741,11 @@ test("the rail's arithmetic matches the flow that was actually walked", async ()
 });
 
 test("the walk never left the fixture", () => {
+  /* Positive evidence FIRST. Two empty arrays are trivially empty on a run that never got far
+     enough to make a request, and this case reported ok while three others failed the first time
+     a regression was injected upstream. `completePosts` is the one counter that can only be 1 if
+     the flow actually finished. */
+  assert.equal(completePosts, 1, "the walk never completed, so the assertions below prove nothing");
   assert.deepEqual(blockedExternal, [], "the page reached for a third-party origin");
   assert.deepEqual([...unstubbedBackendPaths], [], "the flow called backend paths this fixture does not answer");
 });

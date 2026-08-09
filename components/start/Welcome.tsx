@@ -21,7 +21,13 @@
 
 import { useSyncExternalStore } from "react";
 
-const SKIP_KEY = "litos.start.highlights-skipped";
+/* Matches the persisted-preference convention in lib/api.ts (litos_session_mode_v1,
+   litos_has_history_v1, litos_guest_idempotency_v1) rather than inventing a third key style.
+   The _v1 suffix is what those keys use to leave a migration path open. */
+const SKIP_KEY = "litos_start_highlights_skipped_v1";
+
+/** The region both disclosure buttons control, named once so the two can never point apart. */
+const BODY_ID = "how-litos-works-body";
 
 /* The skip preference, read as what it is: an external store.
  *
@@ -38,6 +44,18 @@ const SKIP_KEY = "litos.start.highlights-skipped";
  * others rather than leaving two tabs disagreeing about a stored preference. */
 const listeners = new Set<() => void>();
 
+/* The session's answer when localStorage cannot hold one.
+ *
+ * Without it the Skip button is a DEAD CONTROL in any browser that throws on write (Safari and
+ * Firefox with all cookies blocked, a sandboxed iframe, a full quota): `skipped` is derived only
+ * from `readSkipped()`, so a swallowed write means the re-read still returns false and the panel
+ * never folds. ui.tsx states the rule this would break, about a different control, in the repo's
+ * own words: "A control that visibly does nothing is worse than no control."
+ *
+ * `null` means "storage is authoritative". Set only when a write actually fails, so the normal
+ * path keeps reading real storage and cross-tab updates still win. */
+let sessionSkip: boolean | null = null;
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
   // Fires for OTHER tabs only, which is exactly the half `writeSkipped` cannot cover itself.
@@ -50,10 +68,11 @@ function subscribe(listener: () => void) {
 
 function readSkipped() {
   try {
-    return window.localStorage.getItem(SKIP_KEY) === "1";
+    // The in-memory answer wins only where it exists, i.e. only after a write we could not persist.
+    return sessionSkip ?? window.localStorage.getItem(SKIP_KEY) === "1";
   } catch {
     // Private mode, or storage disabled. Showing the walkthrough is the right way to fail.
-    return false;
+    return sessionSkip ?? false;
   }
 }
 
@@ -65,8 +84,12 @@ function writeSkipped(next: boolean) {
   try {
     if (next) window.localStorage.setItem(SKIP_KEY, "1");
     else window.localStorage.removeItem(SKIP_KEY);
+    // Persisted, so storage is authoritative again and any stale session answer must stop winning.
+    sessionSkip = null;
   } catch {
-    // The collapse still works for this visit, which is what was actually asked for.
+    // Could not persist. Hold the answer in memory so the control still does the visible thing it
+    // promises for this visit; it simply will not survive a reload.
+    sessionSkip = next;
   }
   for (const listener of [...listeners]) listener();
 }
@@ -83,9 +106,17 @@ const HIGHLIGHTS: { what: string; how: string }[] = [
     what: "Your matches",
     how: "It watches the job boards and picks out the postings that fit the roles you pick in a moment.",
   },
+  /* Names the dashboard, NOT the Chrome extension, and that correction matters.
+   *
+   * Setup never installs, links to, or mentions the extension: InstallStep is exported from
+   * steps.tsx but imported by no route, and page.tsx says outright that the extension "is a
+   * secondary path for jobs found elsewhere, so it is not an onboarding gate". Promising here that
+   * an extension fills the forms would sell a student a mechanism this flow never hands them, and
+   * the last screen of the same flow already names the real one ("Open a match on your dashboard
+   * and Litos builds the application for you to review"). Two screens, one story. */
   {
     what: "The forms",
-    how: "The Chrome extension fills them in from what it already knows. You review before anything is submitted.",
+    how: "Open a match and Litos fills the application in from what it already knows. You review before anything is submitted.",
   },
 ];
 
@@ -104,10 +135,15 @@ export function WelcomeNote() {
 export function Highlights() {
   const skipped = useSyncExternalStore(subscribe, readSkipped, readSkippedOnServer);
 
+  /* Both states are the SAME disclosure, so both carry aria-expanded and point at the same
+     controlled region. Without that a screen reader hears two unrelated buttons and gets no signal
+     that anything appeared or disappeared, which is the one thing a collapse has to announce. */
   if (skipped) {
     return (
       <button
         type="button"
+        aria-expanded={false}
+        aria-controls={BODY_ID}
         onClick={() => writeSkipped(false)}
         className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
       >
@@ -130,6 +166,8 @@ export function Highlights() {
             two lie about what it does. */}
         <button
           type="button"
+          aria-expanded={true}
+          aria-controls={BODY_ID}
           onClick={() => writeSkipped(true)}
           title="Hide this. You can open it again from this screen."
           className="min-h-11 px-2.5 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
@@ -137,15 +175,17 @@ export function Highlights() {
           Skip
         </button>
       </div>
-      {HIGHLIGHTS.map((h) => (
-        <div
-          key={h.what}
-          className="grid grid-cols-1 gap-1 border-t border-border px-4 py-3 text-[13px] first:border-t-0 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-4"
-        >
-          <span className="text-ink">{h.what}</span>
-          <span className="leading-6 text-muted">{h.how}</span>
-        </div>
-      ))}
+      <div id={BODY_ID}>
+        {HIGHLIGHTS.map((h) => (
+          <div
+            key={h.what}
+            className="grid grid-cols-1 gap-1 border-t border-border px-4 py-3 text-[13px] first:border-t-0 sm:grid-cols-[150px_minmax(0,1fr)] sm:gap-4"
+          >
+            <span className="text-ink">{h.what}</span>
+            <span className="leading-6 text-muted">{h.how}</span>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

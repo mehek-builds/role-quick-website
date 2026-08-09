@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApplicationProfile,
   OnboardingState,
+  OnboardingStep,
   ParsedProfile,
   RoleType,
   Targeting,
@@ -20,7 +21,7 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell } from "./ui";
 import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
@@ -911,25 +912,48 @@ export function TargetStep({
  * acknowledgement, in the same register the rest of the product uses when it finishes something.
  */
 
-/* Order matches the step rail, so the receipt reads as the flow the student just walked. Labels
-   are the rail's labels for the same reason: a step called "Your impact" in the rail must not
-   become "Experience" in its own receipt. */
-const SETUP_ROWS: { label: string; done: string; pending: string; of: (s: OnboardingState) => boolean }[] = [
-  { label: "Your resume", done: "Read", pending: "Not read", of: (s) => s.has_resume },
-  { label: "Your impact", done: "Reviewed", pending: "Not reviewed", of: (s) => s.has_impact_review ?? false },
-  { label: "Your roles", done: "Saved", pending: "Not saved", of: (s) => s.has_focus },
-  /* Optional on the type, because an older backend does not send it. `undefined` is "this backend
-     cannot tell me", which is not the same as "unanswered" and must not print as a failure on a
-     student who answered it. Falling back to true is the honest read: reaching this screen at all
-     means the sponsorship gate let them past. */
-  { label: "Work visa", done: "Answered", pending: "Not answered", of: (s) => s.has_sponsorship_answer ?? true },
-  { label: "Your one page", done: "Built", pending: "Not built", of: (s) => s.has_base_resume },
-  /* `gaps` is what is STILL missing, so an empty list is the finished state. Both values are true
-     in every case this can reach: empty means nothing is outstanding, whether the student filled
-     the fields in or never had the gap; non-empty means they used the screen's own Skip, which is
-     a legitimate choice and not a failure to report as one. */
-  { label: "A few details", done: "None missing", pending: "Skipped", of: (s) => s.gaps.length === 0 },
-];
+/* What each rail step reads as once it is behind you.
+ *
+ * Keyed by step, and the LABELS are deliberately absent: they come from STEPS, so the rail and the
+ * receipt cannot drift into calling one screen two different things. It also means a step added to
+ * the flow appears in this receipt on its own, as "Not recorded" until someone gives it a row,
+ * which is visible rather than silently missing.
+ *
+ * `of` returns `boolean | undefined`, and the third case is the whole point of it. GET
+ * /onboarding/state is an unchecked cast (`api<OnboardingState>(...)`, no zod, no defaults), so
+ * every field the type calls non-optional is a compile-time fiction at runtime, and the legacy
+ * steps app/start/page.tsx routes here during a rolling deploy are the payloads most likely to be
+ * missing one. `undefined` means "this backend did not tell us", which is neither done nor
+ * pending. A receipt is the last place to guess: printing "Answered" over a work-authorization
+ * question nobody was asked would be a false statement about the student's own account, on the one
+ * screen whose entire job is to state facts. */
+type ReceiptRowSpec = { done: string; pending: string; of: (s: OnboardingState) => boolean | undefined };
+
+/** A field the type promises but the wire may not deliver. Anything not a boolean is unknown. */
+const flag = (value: unknown): boolean | undefined => (typeof value === "boolean" ? value : undefined);
+
+const RECEIPT: Partial<Record<OnboardingStep, ReceiptRowSpec>> = {
+  resume: { done: "Read", pending: "Not read", of: (s) => flag(s.has_resume) },
+  impact: { done: "Reviewed", pending: "Not reviewed", of: (s) => flag(s.has_impact_review) },
+  focus: { done: "Saved", pending: "Not saved", of: (s) => flag(s.has_focus) },
+  sponsorship: { done: "Answered", pending: "Not answered", of: (s) => flag(s.has_sponsorship_answer) },
+  base: { done: "Built", pending: "Not built", of: (s) => flag(s.has_base_resume) },
+  /* `gaps` is what is STILL outstanding, so an empty list is the finished state.
+   *
+   * The pending value states the FACT, not the motive. "Skipped" was wrong on three reachable
+   * paths: a student who filled some fields and pressed Continue, one who left through "Finish
+   * later", and one routed straight here from a legacy step who was never shown the screen at all.
+   * None of them chose to skip anything, and the receipt cannot tell which happened. */
+  gaps: {
+    done: "None missing",
+    pending: "Some outstanding",
+    of: (s) => (Array.isArray(s.gaps) ? s.gaps.length === 0 : undefined),
+  },
+};
+
+/** Printed when the backend did not say. Uniform across rows on purpose: the reason is always the
+ *  same one, and a per-row phrasing would imply we know more about the gap than we do. */
+const NOT_RECORDED = "Not recorded";
 
 export function DoneStep({
   onFinish,
@@ -943,18 +967,31 @@ export function DoneStep({
   const [busy, setBusy] = useState(false);
   const rows = useMemo(
     () =>
-      SETUP_ROWS.map((row, index) => ({
-        /* The Receipt's first column is a mono gutter, and on this screen there is no timestamp to
-           put in it: the steps happened over whatever span the student took, and inventing a
-           duration is the exact thing the receipt motif exists NOT to do. Left empty it reads as a
-           misalignment rather than as a gutter, so it carries the step number instead, in the
-           two-digit form the rail already borrows from the homepage film's act labels. */
-        t: String(index + 1).padStart(2, "0"),
-        k: row.label,
-        v: row.of(state) ? row.done : row.pending,
-        // The rule the Receipt uses for its own last line: rank it, rather than adding a variant.
-        done: index === SETUP_ROWS.length - 1,
-      })),
+      /* Driven by the rail, minus the screen the student is standing on. Deriving the order here
+         rather than restating it is also what keeps the 01..06 gutter below aligned with the
+         rail's own step numbers for free. */
+      STEPS.filter((step) => step.key !== "done").map((step, index) => {
+        const spec = RECEIPT[step.key];
+        const value = spec?.of(state);
+        return {
+          /* The Receipt's first column is a mono gutter, and on this screen there is no timestamp
+             to put in it: the steps happened over whatever span the student took, and inventing a
+             duration is the exact thing the receipt motif exists NOT to do. Left empty it reads as
+             a misalignment rather than as a gutter, so it carries the step number instead, in the
+             two-digit form the rail already borrows from the homepage film's act labels. */
+          t: String(index + 1).padStart(2, "0"),
+          k: step.label,
+          v: spec === undefined || value === undefined ? NOT_RECORDED : value ? spec.done : spec.pending,
+          /* No `done` row, deliberately.
+           *
+           * Receipt renders `done` as a separator plus a brand-ink value, and it earns that on the
+           * resume step because the last line there ("Ready in ... banked") SUMMARISES the rows
+           * above it, categorically different from them. Here every row is the same kind of fact,
+           * so marking the last one borrows an emphasis that means nothing. Blue is also the action
+           * colour and never appears on anything that is not an action (DESIGN.md colour law), so
+           * it must not land on a value like "Some outstanding". */
+        };
+      }),
     [state],
   );
 
