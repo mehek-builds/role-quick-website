@@ -63,6 +63,22 @@ export const PORTAL_SHAPES = [
          on a control carrying no required attribute at all, so a gate that ignores error text
          entirely misses it. Both mistakes have to be catchable or the gate is untested. */
   'stale-error-real',
+  /* 11. Cresta packet 8142004c-3358-4538-8778-16df5e31c5bb reached ready_for_final_approval with a
+        complete 294-word cover letter written, a live PDF in blob storage, and a Send button that
+        returned 422 because filled_fields recorded no cover-letter attachment. Across the corpus,
+        111 of the 112 packets that hold a written letter on a form with a slot for one were in that
+        state.
+
+        The control is the reason this needs its own shape rather than one more file input on an
+        existing page. Read off the live Cresta form, 2026-08-09: the cover letter sits behind an
+        "Attach / Dropbox / Enter manually" trio, its input is CLIPPED OUT OF VIEW, it carries NO
+        name attribute, and its visible caption is a div rather than a label[for]. Three of the four
+        alternatives in the production selector cannot match it, and the resume beside it is the
+        identical shape - which is exactly why "the resume attaches, so the cover letter would too"
+        was believable and wrong for a different reason entirely. A third file input, carrying no
+        cover in its name, is here so a page-wide input[type=file] sweep files the letter in the
+        wrong place instead of passing. */
+  'cover-letter-attach',
 ] as const;
 
 export type PortalShape = (typeof PORTAL_SHAPES)[number];
