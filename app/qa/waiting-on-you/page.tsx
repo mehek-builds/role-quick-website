@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireQaAccess } from "../gate";
 import { WaitingOnYou } from "@/components/app/WaitingOnYou";
 import { waitingApplications } from "@/lib/captcha-queue";
 
@@ -10,7 +11,9 @@ import { waitingApplications } from "@/lib/captcha-queue";
  * dashboard builds, through the same waitingApplications() the dashboard calls, so the fixture
  * cannot drift from the real payload without failing the typecheck.
  *
- * It is a harness, not a demo: /qa/ is robots-disallowed and nothing links here. */
+ * It is a harness, not a demo: nothing links here, and it answers 404 without the shared secret.
+ * Robots-disallowed was the previous answer to "who can see this", and a robots rule is a request
+ * made of crawlers rather than access control. See lib/qa-gate.ts. */
 export const metadata: Metadata = {
   title: "Waiting-on-you queue harness",
   robots: { index: false, follow: false },
@@ -105,7 +108,12 @@ const fixture = () => [
   },
 ];
 
-export default function WaitingOnYouHarnessPage() {
+export default async function WaitingOnYouHarnessPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  await requireQaAccess(await searchParams);
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <p className="mb-6 text-sm text-muted">

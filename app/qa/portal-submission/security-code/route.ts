@@ -1,4 +1,6 @@
+import { notFound } from "next/navigation";
 import { NextResponse } from "next/server";
+import { qaRequestAllowed } from "../../gate";
 import { normalizeCaseId, securityCodeFor } from "../shapes";
 
 /* THE HARNESS'S STAND-IN FOR THE MAILBOX.
@@ -19,13 +21,22 @@ import { normalizeCaseId, securityCodeFor } from "../shapes";
  * hardcodes a value passes one case and fails the next, so the only way through is to read the code
  * at run time, which is the behaviour the product side has to have against a real inbox.
  *
- * There is nothing to protect here. The value is derived from a string that is already in the URL,
- * it grants nothing, and the page it unlocks cannot contact an employer. It is served no-store so a
- * trial never reads a cached answer for the wrong case.
+ * THE SECRET IN THE CODE IS NOT WHAT IS BEING PROTECTED. The value is derived from a string that
+ * is already in the URL, it grants nothing, and the page it unlocks cannot contact an employer.
+ * This route is nonetheless behind the same gate as the rest of /qa/, because what is being kept
+ * off the public internet is the FIXTURE SURFACE: an anonymous caller getting a plausible employer
+ * "security code" back from trylitos.com is the same credibility problem as the fake application
+ * form it belongs to, and a directory where five of six routes are gated is a directory that will
+ * grow a sixth ungated one. It is served no-store so a trial never reads a cached answer for the
+ * wrong case.
+ *
+ * CALLERS MUST NOW APPEND litos_qa_key. In the backend repo that is securityCodeMailboxUrl() in
+ * scripts/qa-guest-submissions-lib.mjs.
  */
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  if (!qaRequestAllowed(request)) notFound();
   const url = new URL(request.url);
   const caseId = normalizeCaseId(url.searchParams.get("case"), "security-code");
   return NextResponse.json(
