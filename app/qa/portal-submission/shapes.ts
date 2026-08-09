@@ -103,7 +103,48 @@ export const PORTAL_SHAPES = [
         known open gap: a stored "Asian" fails containment against it, and this shape makes that
         visible rather than hiding it. */
   'eeo-radio-groups',
+  /* 13. THE CASE NOTHING COVERED: a form that submits cleanly, with no challenge of any kind.
+        Every other shape here is a way for a run to go wrong. This one is the way a run goes RIGHT,
+        and it is the one that broke.
+
+        Skydio packet 13bccb2d-d726-4c47-80bc-e8090ae1463e, 2026-08-09, the same packet as shape 12
+        and one stage later. The emailed-security-code work made a managed submit two-phased, and
+        because the caller cannot know in advance whether a form will demand a code, it requests a
+        continuation on EVERY managed submit. Ashby has never issued one. So phase 0 finished, no
+        challenge appeared, no phase 1 was ever coming, and both sides waited: the runner idled for
+        the continuation TTL and the caller timed out at 60 seconds and reported "Managed browser
+        continuation timed out" on a submit that involved no continuation. The packet landed at
+        needs_attention with submitted_at null, receipt null, and a message telling the applicant to
+        go and check whether her application had been sent, which nobody could answer.
+
+        Two things are measured here, and neither had a test.
+
+        FIRST, the run finishes in one phase and says so. continuationOffered must be false on a page
+        with no security-code control.
+
+        SECOND, the outcome is READ, not inferred. On success Ashby mounts its published
+        `ashby-application-form-success-container` around a role="status" live region holding the
+        org's own applicationSubmittedSuccessMessage - read out of the live Skydio posting's bundle
+        on 2026-08-09, so this fixture reproduces the container, the live region and the sentence.
+        The old instrument was a regex over the whole page body, and this shape carries a decoy that
+        defeats it: a sentence matching that regex is on the page BEFORE anything is submitted. A
+        fill run must still report the outcome as not attempted. */
+  'submit-no-challenge',
 ] as const;
+
+/* Skydio's own applicationSubmittedSuccessMessage, read from window.__appData on
+ * jobs.ashbyhq.com/skydio/1ec2fe3c-3fb2-4485-870d-764a3e5f5baf/application on 2026-08-09. Kept
+ * verbatim because the point of the shape is that the SENTENCE is the employer's and varies, while
+ * the container around it is Ashby's and does not. */
+export const ASHBY_SUCCESS_MESSAGE =
+  'Thank you for submitting your application. We are thrilled you would consider joining us. The '
+  + 'team will review your application, and we will be in touch soon if it seems like there could '
+  + 'be a good fit.';
+
+/* The trap. It matches the confirmation regex the caller used to scrape the page body with, and it
+ * is on the page from the first paint, before a single field has been filled. */
+export const SUBMIT_DECOY_PROSE =
+  'Thanks for applying to Skydio. Applications are reviewed on a rolling basis.';
 
 export type PortalShape = (typeof PORTAL_SHAPES)[number];
 
