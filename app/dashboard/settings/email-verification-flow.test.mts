@@ -4,6 +4,7 @@ import {
   hasActiveInbox,
   shouldEnableVerificationAfterCallback,
   verificationEnableDecision,
+  verificationRouteAvailability,
 } from "./email-verification-flow.ts";
 
 const disconnected = {
@@ -27,7 +28,49 @@ test("enabling verification requires a connection when no inbox is active", () =
   assert.equal(verificationEnableDecision(disconnected), "connect");
   assert.equal(verificationEnableDecision({ configured: false, connections: [] }), "unavailable");
   assert.equal(verificationEnableDecision(connected), "enable");
-  assert.equal(verificationEnableDecision({ configured: false, connections: [] }, true), "enable");
+});
+
+test("a healthy Litos alias does not grant personal-inbox consent", () => {
+  assert.equal(verificationEnableDecision(disconnected), "connect");
+  assert.equal(verificationRouteAvailability({
+    applicationEmail: { configured: true, tracking_active: true, domain: "applications@trylitos.com", aliases: [] },
+    connections: disconnected,
+    personalInboxConsent: false,
+  }), "litos_inbox");
+});
+
+test("an unhealthy alias uses a connected inbox only with explicit consent", () => {
+  const applicationEmail = {
+    configured: true,
+    tracking_active: false,
+    tracking_blocked_reason: "inbound_disabled",
+    domain: "applications@trylitos.com",
+    aliases: [],
+  };
+  assert.equal(verificationRouteAvailability({
+    applicationEmail,
+    connections: connected,
+    personalInboxConsent: false,
+  }), "none");
+  assert.equal(verificationRouteAvailability({
+    applicationEmail,
+    connections: connected,
+    personalInboxConsent: true,
+  }), "personal_inbox");
+});
+
+test("no route and a disconnected consent state stay distinguishable", () => {
+  const applicationEmail = { configured: false, tracking_active: false, domain: null, aliases: [] };
+  assert.equal(verificationRouteAvailability({
+    applicationEmail,
+    connections: disconnected,
+    personalInboxConsent: false,
+  }), "none");
+  assert.equal(verificationRouteAvailability({
+    applicationEmail,
+    connections: disconnected,
+    personalInboxConsent: true,
+  }), "personal_inbox_disconnected");
 });
 
 test("the OAuth callback enables permission only for the requested active provider", () => {

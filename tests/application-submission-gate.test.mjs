@@ -182,19 +182,24 @@ test("automation settings send field-specific updates so stale clients cannot re
   const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
   assert.match(settings, /saveAutomation\(\{ automatic_submission_enabled: event\.target\.checked \}\)/);
   assert.match(settings, /changeAutomaticVerification\(event\.target\.checked\)/);
-  assert.match(settings, /verificationEnableDecision\(emailConnections, applicationEmail\?\.tracking_active === true\)/);
-  assert.match(settings, /\(connected \? disconnectProvider\(provider\) : connectProvider\(provider, true\)\)/);
+  assert.match(settings, /verificationEnableDecision\(emailConnections\)/);
+  assert.match(settings, /\(connected \? disconnectProvider\(provider\) : connectProvider\(provider, verificationConnectionPrompt\)\)/);
   assert.match(settings, /Inbox access/);
   assert.match(settings, /getApplicationEmailStatus\(\)\.catch\(\(\) => null\)/);
+  assert.match(settings, /if \(callbackProvider && callbackStatus\)/);
   assert.match(settings, /Use a Litos application email/);
   assert.match(settings, /Employer mail forwards to your account email/);
+  assert.match(settings, /Use my connected inbox as a fallback/);
+  assert.match(settings, /Codes sent to its packet-specific address do not require access to Gmail or Outlook/);
   assert.match(api, /getApplicationEmailStatus\(\)/);
   assert.doesNotMatch(settings, /Email connections<\/p>/);
   assert.match(settings, /shouldEnableVerificationAfterCallback/);
   assert.match(settings, /setAutomationSettings\(\{ automatic_verification_enabled: true \}\)/);
   assert.match(settings, /getApplicationEmailStatus\(\)\.catch\(\(\) => null\)/);
   assert.match(settings, /setAutomaticVerification\(refreshedOnboarding\.automatic_verification_enabled\)/);
-  assert.doesNotMatch(settings, /const aliasAvailable = applicationEmail\?\.tracking_active === true/);
+  assert.match(settings, /The Litos application inbox remains active/);
+  assert.doesNotMatch(settings, /aliasAvailable \? " Email verification/);
+  assert.doesNotMatch(settings, /verificationEnableDecision\(emailConnections, applicationEmail/);
   assert.match(api, /setAutomationSettings\(settings: Partial<AutomationSettings>\)/);
 });
 
