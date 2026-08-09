@@ -7,6 +7,7 @@ import {
   type TermTone,
   EMPTY_REQUIREMENT_INDEX,
 } from "@/features/applications";
+import { decodeHtmlEntities } from "@/lib/html-entities";
 
 /**
  * Hover link between the job description and the resume.
@@ -125,9 +126,10 @@ export const RequirementText = memo(function RequirementText({
   hideMissing?: boolean;
 }) {
   const index = useContext(RequirementContext);
+  const decodedText = useMemo(() => decodeHtmlEntities(text), [text]);
   const segments = useMemo(
-    () => segmentText(text, index, editedTerms),
-    [text, index, editedTerms],
+    () => segmentText(decodedText, index, editedTerms),
+    [decodedText, index, editedTerms],
   );
   return (
     <>

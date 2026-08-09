@@ -30,19 +30,20 @@ export const CANNED_RESUME = {
 };
 
 export const CANNED_FIELDS = [
-  { label: "First name", value: "John" },
-  { label: "Last name", value: "Doe" },
-  { label: "Email", value: "john.doe@usc.edu" },
-  { label: "Phone", value: "(213) 555-0148" },
-  { label: "Location", value: "Los Angeles, CA" },
-  { label: "University", value: "University of Southern California" },
-  { label: "Work authorization", value: "Yes" },
-  { label: "LinkedIn", value: "linkedin.com/in/johndoe" },
-  { label: "How did you hear about us?", value: "Company careers page" },
-  { label: "Voluntary self-identification", value: "Decline to self-identify" },
+  { label: "First name", value: "John", filled: true },
+  { label: "Last name", value: "Doe", filled: true },
+  { label: "Email", value: "john.doe@usc.edu", filled: true },
+  { label: "Phone", value: "(213) 555-0148", filled: true },
+  { label: "Location", value: "Los Angeles, CA", filled: true },
+  { label: "University", value: "University of Southern California", filled: true },
+  { label: "LinkedIn", value: "linkedin.com/in/johndoe", filled: true },
+  { label: "How did you hear about us?", value: "Company careers page", filled: true },
+  { label: "Work authorization", value: "You answer this for each application", filled: false },
+  { label: "Voluntary self-identification", value: "You choose whether to answer", filled: false },
 ];
 
 export const CANNED_FIELDS_TOTAL = 27;
+export const CANNED_FIELDS_FILLED_TOTAL = 25;
 
 export const CANNED_OUTREACH = {
   to: "Priya Nair · USC alum · Engineering",

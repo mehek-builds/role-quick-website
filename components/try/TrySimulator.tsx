@@ -5,6 +5,7 @@ import { track } from "@/lib/analytics";
 import { extractResumeText } from "@/lib/extract-resume";
 import {
   CANNED_FIELDS,
+  CANNED_FIELDS_FILLED_TOTAL,
   CANNED_FIELDS_TOTAL,
   CANNED_OUTREACH,
   CANNED_POSTING,
@@ -1150,13 +1151,15 @@ function FormArtifact({
   }, [packet]);
   const shown = packet
     ? fields.filter((field) => field.value?.trim()).length
-    : filledCount;
+    : Math.min(filledCount, CANNED_FIELDS.filter((field) => field.filled).length);
   const total = packet ? 3 : CANNED_FIELDS_TOTAL;
+  const cannedVisibleFilled = CANNED_FIELDS.filter((field) => field.filled).length;
+  const hiddenFilled = CANNED_FIELDS_FILLED_TOTAL - cannedVisibleFilled;
 
   return (
     <ArtifactShell
       eyebrow="Application · Greenhouse"
-      chip={`${Math.min(shown + (packet ? 0 : CANNED_FIELDS_TOTAL - CANNED_FIELDS.length), total)} of ${total} filled`}
+      chip={`${Math.min(shown + (packet ? 0 : hiddenFilled), total)} of ${total} filled`}
       chipClass="bg-teal-soft text-teal-ink"
       active={active}
     >
@@ -1180,7 +1183,7 @@ function FormArtifact({
         })}
       </div>
       <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
-        {packet ? "3 example questions · nothing sent yet" : "27 questions · nothing sent yet"}
+        {packet ? "3 example questions · nothing sent yet" : "25 filled · 2 left for you · nothing sent yet"}
       </p>
     </ArtifactShell>
   );

@@ -154,7 +154,7 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
           }
           className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-faint"
         >
-          {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Sponsors visas"}
+          {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
         </p>
       )}
     </a>

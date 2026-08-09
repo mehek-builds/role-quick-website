@@ -873,7 +873,7 @@ export default function Settings() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-medium text-ink">Application details</h2>
-            <p className="mt-1 text-sm text-muted">Contact details and saved profile facts. Employer-specific choices stay on each application.</p>
+            <p className="mt-1 text-sm text-muted">Reusable profile facts. Authorization, sponsorship, and questions about race and gender stay applicant-owned.</p>
           </div>
         <div className="flex justify-end">
           <div className="flex items-center gap-3">
@@ -898,12 +898,12 @@ export default function Settings() {
           <Input label="Portfolio URL" value={profile.portfolio_url} onChange={(v) => patch({ portfolio_url: v })} placeholder="https://you.dev" />
           <Input label="Citizenship" value={profile.citizenship} onChange={(v) => patch({ citizenship: v })} placeholder="United States" />
           <Select
-            label="Authorized to work?"
+            label="Authorized to work? (saved reference only)"
             value={profile.work_authorized}
             onChange={(v) => patch({ work_authorized: v })}
           />
           <Select
-            label="Need sponsorship?"
+            label="Need sponsorship? (saved reference only)"
             value={profile.needs_sponsorship}
             onChange={(v) => patch({ needs_sponsorship: v })}
           />
@@ -933,7 +933,7 @@ export default function Settings() {
           <p className="text-xs font-medium text-muted">Personal questions</p>
           <h3 className="text-sm font-medium text-ink">Optional questions about race and gender</h3>
           <p className="mt-1 text-xs leading-5 text-muted">
-            Litos uses these exact answers for voluntary questions about race and gender. Leave any field blank and it will choose decline when the form offers it.
+            These saved values are reference only. Litos does not use them to answer a form. You decide on each application.
           </p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <StringSelect label="Gender identity" value={profile.eeo_prefs?.gender} options={SELF_ID_OPTIONS.gender} onChange={(v) => patchRaceAndGender("gender", v)} />
@@ -945,7 +945,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <p className="mt-5 text-xs leading-5 text-faint">Personal questions are answered only from values you save here, or declined when possible.</p>
+        <p className="mt-5 text-xs leading-5 text-faint">Applicant-owned questions are never inferred, automatically declined, or reused from this page.</p>
       </Card>}
 
       {/* Plan + usage */}
@@ -1082,11 +1082,12 @@ function Select({
       <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <select
         id={fieldId}
+        disabled
         value={current}
         onChange={(e) =>
           onChange(e.target.value === "" ? null : e.target.value === "yes")
         }
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
       >
         {TRI.map((o) => (
           <option key={o.value} value={o.value}>
@@ -1115,9 +1116,10 @@ function StringSelect({
       <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <select
         id={fieldId}
+        disabled
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
       >
         {options.map((option) => (
           <option key={option || "not-set"} value={option}>

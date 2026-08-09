@@ -538,7 +538,7 @@ function SponsorBadge({ evidence }: { evidence: MonitoredJob["sponsorship_eviden
           : "This company has H-1B filings on record with the US government: an approved petition, or an application it filed and the Labor Department certified. That is not a promise to sponsor you."
       }
     >
-      {evidence === "posting_offers" ? "Sponsorship offered" : "Sponsors visas"}
+      {evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
     </span>
   );
 }

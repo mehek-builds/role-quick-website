@@ -422,7 +422,11 @@ export function ApplicationFormMockup() {
           value="Left blank, essays are yours."
           filled={false}
         />
-        <FormField label="Voluntary self-identification" value="Decline to self-identify" select />
+        <FormField
+          label="Voluntary self-identification"
+          value="Left for you, this answer is personal."
+          filled={false}
+        />
       </div>
 
       <div className="mt-3.5 flex items-center justify-between rounded-lg border-2 border-dashed border-border px-3 py-2">
