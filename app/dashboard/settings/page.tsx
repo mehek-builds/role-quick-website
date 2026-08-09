@@ -343,14 +343,19 @@ export default function Settings() {
     setError(null);
     try {
       await disconnectEmailConnection(provider);
-      const connections = await getEmailConnections();
+      const [connections, refreshedApplicationEmail, refreshedOnboarding] = await Promise.all([
+        getEmailConnections(),
+        getApplicationEmailStatus().catch(() => null),
+        getOnboardingState(),
+      ]);
       setEmailConnections(connections);
-      const aliasAvailable = applicationEmail?.tracking_active === true;
-      if (!hasActiveInbox(connections) && !aliasAvailable) {
-        setAutomaticVerification(false);
+      setApplicationEmail(refreshedApplicationEmail);
+      setAutomaticVerification(refreshedOnboarding.automatic_verification_enabled);
+      const aliasAvailable = refreshedApplicationEmail?.tracking_active === true;
+      if (!refreshedOnboarding.automatic_verification_enabled) {
         setVerificationConnectionPrompt(false);
       }
-      setConnectionNotice(`${label} disconnected.${aliasAvailable ? " Email verification is still on through your Litos application inbox." : hasActiveInbox(connections) ? " Email verification is still on through your other inbox." : " Email verification is off."}`);
+      setConnectionNotice(`${label} disconnected.${refreshedOnboarding.automatic_verification_enabled && aliasAvailable ? " Email verification is still on through your Litos application inbox." : refreshedOnboarding.automatic_verification_enabled && hasActiveInbox(connections) ? " Email verification is still on through your other inbox." : " Email verification is off."}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : `Could not disconnect ${label}.`);
     } finally {

@@ -192,6 +192,9 @@ test("automation settings send field-specific updates so stale clients cannot re
   assert.doesNotMatch(settings, /Email connections<\/p>/);
   assert.match(settings, /shouldEnableVerificationAfterCallback/);
   assert.match(settings, /setAutomationSettings\(\{ automatic_verification_enabled: true \}\)/);
+  assert.match(settings, /getApplicationEmailStatus\(\)\.catch\(\(\) => null\)/);
+  assert.match(settings, /setAutomaticVerification\(refreshedOnboarding\.automatic_verification_enabled\)/);
+  assert.doesNotMatch(settings, /const aliasAvailable = applicationEmail\?\.tracking_active === true/);
   assert.match(api, /setAutomationSettings\(settings: Partial<AutomationSettings>\)/);
 });
 
