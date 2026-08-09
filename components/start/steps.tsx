@@ -642,6 +642,11 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
   desired_salary: { label: "Desired salary", note: "Optional. Left blank on every form unless you set it.", placeholder: "Leave blank" },
   desired_salary_currency: { label: "Currency", placeholder: "EUR" },
   languages: { label: "Which languages are you fluent in?", placeholder: "English, Hindi, Spanish" },
+  referral_source_default: {
+    label: "Default referral source",
+    note: "Use a source you personally choose, such as LinkedIn or a university event. Litos detects job boards for each application.",
+    placeholder: "LinkedIn or university career fair",
+  },
 };
 
 export function GapsStep({
@@ -746,6 +751,16 @@ export function GapsStep({
         <div className="mb-5">
           <label htmlFor="gap-languages" className="text-[13px] text-ink">Which languages are you fluent in?</label>
           <div className="mt-2">{field("languages")}</div>
+        </div>
+      )}
+
+      {gaps.includes("referral_source_default") && (
+        <div className="mb-5">
+          <label htmlFor="gap-referral_source_default" className="text-[13px] text-ink">
+            {GAP_LABEL.referral_source_default.label}
+          </label>
+          <div className="mt-2">{field("referral_source_default")}</div>
+          <p className="mt-1 text-xs leading-5 text-muted">{GAP_LABEL.referral_source_default.note}</p>
         </div>
       )}
 
