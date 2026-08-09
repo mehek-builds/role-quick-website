@@ -8,14 +8,30 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
+/* The two cases below keep ISSUE-044's intent and follow the copy to where it now lives.
+ *
+ * The welcome moved out of ResumeStep into components/start/Welcome.tsx, so the first case reads
+ * both files: the step must RENDER the welcome, and the welcome must still greet. Two of the
+ * original literals are deliberately gone rather than relocated. "review the one-page version"
+ * previewed the steps, which the rail above the heading already shows, and "Finish later any time"
+ * described the LaterLink control sitting a few pixels below it; DESIGN.md's say-once rule makes
+ * both a repeat. The exit assertion is unchanged, because the exit is the part that matters.
+ *
+ * The done screen's confirmation grew from one sentence into a receipt derived from
+ * OnboardingState, so the literal it used to assert no longer exists. The sr-only live region
+ * survives from this file's original version and is still asserted; what replaced the sentence is
+ * asserted too, because a receipt printed from constants would otherwise satisfy this case. */
 test("the first step welcomes the user, explains the path, and keeps the exit visible", async () => {
   const steps = await read("components/start/steps.tsx");
   const resume = steps.slice(steps.indexOf("export function ResumeStep"), steps.indexOf("export function InstallStep"));
+  const welcome = await read("components/start/Welcome.tsx");
 
   assert.match(resume, /title="Start with your resume\."/);
-  assert.match(resume, /Welcome to Litos\./);
-  assert.match(resume, /review the one-page version/);
-  assert.match(resume, /Finish later any time\./);
+  assert.match(resume, /<WelcomeNote \/>/);
+  assert.match(welcome, /Welcome to Litos\./);
+  // The path is explained by the walkthrough now, and it has to be skippable to stay on this screen.
+  assert.match(resume, /<Highlights \/>/);
+  assert.match(welcome, /aria-expanded/);
   assert.match(resume, /<LaterLink onClick=\{onLater\} \/>/);
 });
 
@@ -23,8 +39,11 @@ test("completion says setup is complete before sending the user to their jobs", 
   const steps = await read("components/start/steps.tsx");
   const done = steps.slice(steps.indexOf("export function DoneStep"));
 
-  assert.match(done, /Setup complete\. Your resume and role choices are saved\./);
+  assert.match(done, /title="Setup complete\."/);
   assert.match(done, /role="status"/);
+  assert.match(done, /<Receipt rows=\{rows\} \/>/);
+  // The rows are read off the account, not hardcoded. See the e2e case for the behavioural proof.
+  assert.match(done, /RECEIPT\[step\.key\]/);
   assert.match(done, /"See my jobs"/);
 });
 

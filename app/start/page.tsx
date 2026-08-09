@@ -76,11 +76,21 @@ export default function Start() {
           has_focus: true,
           has_resume: true,
           has_impact_review: qaStep !== "impact",
-          has_base_resume: false,
+          /* Step-aware like its siblings. Absent, this made the done screen's receipt report the
+             work-visa row as "Not recorded" in QA, which is the honest reading of a missing flag
+             but not the state a reviewer wants to see as the default. */
+          has_sponsorship_answer: qaStep !== "sponsorship",
+          // Same convention as has_impact_review above: every step except the one being reviewed
+          // reads as finished. The done screen's setup receipt is derived from these flags, so a
+          // flat `false` here would make QA of that screen show a resume it never built.
+          has_base_resume: qaStep !== "base",
           has_applied: false,
           has_targeting: false,
           learned: [],
-          gaps: ["gpa", "gpa_scale", "major", "languages", "referral_source_default"],
+          /* Step-aware for the same reason has_base_resume is, one field up: the done screen's
+             receipt reads this, so a hardcoded non-empty list made QA of that screen report details
+             outstanding on an account that has none. The gaps step itself still gets its full list. */
+          gaps: qaStep === "done" ? [] : ["gpa", "gpa_scale", "major", "languages", "referral_source_default"],
           // Populated so the base step's languages line is reviewable in QA in its prefilled
           // state, which is the state almost every real student will see.
           gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },
@@ -304,6 +314,7 @@ export default function Start() {
         <>
         {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
         <DoneStep
+          state={state}
           verificationEnabled={state.automatic_verification_enabled}
           onFinish={async (settings) => {
             try {

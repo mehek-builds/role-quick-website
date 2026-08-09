@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApplicationProfile,
+  OnboardingState,
+  OnboardingStep,
   ParsedProfile,
   RoleType,
   Targeting,
@@ -19,7 +21,8 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell } from "./ui";
+import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
@@ -417,10 +420,18 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       step="resume"
       title="Start with your resume."
     >
-      <p className="mb-6 max-w-xl text-sm leading-6 text-muted">
-        Welcome to Litos. Upload the resume you already use. You will review the one-page version
-        and target roles before Litos finds jobs. Finish later any time.
-      </p>
+{/* The welcome, then the ask, then the walkthrough. This screen used to open on the ask
+          alone, under a title ("Tell us what you want.") that described the roles step rather than
+          this one.
+
+          The walkthrough sits BELOW the drop zone rather than above it, and that ordering was
+          measured rather than guessed: at 375px the three rows are tall enough to push "Choose a
+          file" off the screen, and a setup step whose one ask is below the fold is a worse trade
+          than a walkthrough that needs a scroll. The welcome line is one sentence and stays on
+          top, so a student still learns what this is before being asked for anything. */}
+      <div className="mb-7"><WelcomeNote /></div>
+
+
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div
@@ -492,6 +503,8 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
         </PrimaryButton>
         <LaterLink onClick={onLater} />
       </div>
+
+      <div className="mt-9"><Highlights /></div>
     </StartShell>
   );
 }
@@ -883,23 +896,127 @@ export function TargetStep({
 
 /* -------------------------------------------------------------------- 06 DONE */
 
+/* Two jobs on one screen, and this screen used to do neither.
+ *
+ * It was a title ("Your job matches are ready.") and a button, which is a handoff without a
+ * receipt: nothing confirmed that setup was over, and nothing said what the student was supposed
+ * to do on the other side of the button. The last screen of a flow has to close the flow before it
+ * opens the product.
+ *
+ * So: the confirmation is the Receipt motif, which is already the product's way of stating a
+ * finished machine action as fact. Every row is read from the derived onboarding state rather than
+ * assumed from having arrived here, because the fallback cases in app/start/page.tsx route removed
+ * steps to this screen too, and a receipt that prints "Built" over an unbuilt resume is worse than
+ * no receipt. Then the first action, named in words before it is offered as a button.
+ *
+ * No celebration, per the Guardrails: no confetti, no streak, no score. The receipt IS the
+ * acknowledgement, in the same register the rest of the product uses when it finishes something.
+ */
+
+/* What each rail step reads as once it is behind you.
+ *
+ * Keyed by step, and the LABELS are deliberately absent: they come from STEPS, so the rail and the
+ * receipt cannot drift into calling one screen two different things. It also means a step added to
+ * the flow appears in this receipt on its own, as "Not recorded" until someone gives it a row,
+ * which is visible rather than silently missing.
+ *
+ * `of` returns `boolean | undefined`, and the third case is the whole point of it. GET
+ * /onboarding/state is an unchecked cast (`api<OnboardingState>(...)`, no zod, no defaults), so
+ * every field the type calls non-optional is a compile-time fiction at runtime, and the legacy
+ * steps app/start/page.tsx routes here during a rolling deploy are the payloads most likely to be
+ * missing one. `undefined` means "this backend did not tell us", which is neither done nor
+ * pending. A receipt is the last place to guess: printing "Answered" over a work-authorization
+ * question nobody was asked would be a false statement about the student's own account, on the one
+ * screen whose entire job is to state facts. */
+type ReceiptRowSpec = { done: string; pending: string; of: (s: OnboardingState) => boolean | undefined };
+
+/** A field the type promises but the wire may not deliver. Anything not a boolean is unknown. */
+const flag = (value: unknown): boolean | undefined => (typeof value === "boolean" ? value : undefined);
+
+const RECEIPT: Partial<Record<OnboardingStep, ReceiptRowSpec>> = {
+  resume: { done: "Read", pending: "Not read", of: (s) => flag(s.has_resume) },
+  impact: { done: "Reviewed", pending: "Not reviewed", of: (s) => flag(s.has_impact_review) },
+  focus: { done: "Saved", pending: "Not saved", of: (s) => flag(s.has_focus) },
+  sponsorship: { done: "Answered", pending: "Not answered", of: (s) => flag(s.has_sponsorship_answer) },
+  base: { done: "Built", pending: "Not built", of: (s) => flag(s.has_base_resume) },
+  /* `gaps` is what is STILL outstanding, so an empty list is the finished state.
+   *
+   * The pending value states the FACT, not the motive. "Skipped" was wrong on three reachable
+   * paths: a student who filled some fields and pressed Continue, one who left through "Finish
+   * later", and one routed straight here from a legacy step who was never shown the screen at all.
+   * None of them chose to skip anything, and the receipt cannot tell which happened. */
+  gaps: {
+    done: "None missing",
+    pending: "Some outstanding",
+    of: (s) => (Array.isArray(s.gaps) ? s.gaps.length === 0 : undefined),
+  },
+};
+
+/** Printed when the backend did not say. Uniform across rows on purpose: the reason is always the
+ *  same one, and a per-row phrasing would imply we know more about the gap than we do. */
+const NOT_RECORDED = "Not recorded";
+
 export function DoneStep({
   onFinish,
   verificationEnabled,
+  state,
 }: {
   onFinish: (settings: { automatic_submission_enabled?: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
   verificationEnabled: boolean;
+  state: OnboardingState;
 }) {
   const [busy, setBusy] = useState(false);
+  const rows = useMemo(
+    () =>
+      /* Driven by the rail, minus the screen the student is standing on. Deriving the order here
+         rather than restating it is also what keeps the 01..06 gutter below aligned with the
+         rail's own step numbers for free. */
+      STEPS.filter((step) => step.key !== "done").map((step, index) => {
+        const spec = RECEIPT[step.key];
+        const value = spec?.of(state);
+        return {
+          /* The Receipt's first column is a mono gutter, and on this screen there is no timestamp
+             to put in it: the steps happened over whatever span the student took, and inventing a
+             duration is the exact thing the receipt motif exists NOT to do. Left empty it reads as
+             a misalignment rather than as a gutter, so it carries the step number instead, in the
+             two-digit form the rail already borrows from the homepage film's act labels. */
+          t: String(index + 1).padStart(2, "0"),
+          k: step.label,
+          v: spec === undefined || value === undefined ? NOT_RECORDED : value ? spec.done : spec.pending,
+          /* No `done` row, deliberately.
+           *
+           * Receipt renders `done` as a separator plus a brand-ink value, and it earns that on the
+           * resume step because the last line there ("Ready in ... banked") SUMMARISES the rows
+           * above it, categorically different from them. Here every row is the same kind of fact,
+           * so marking the last one borrows an emphasis that means nothing. Blue is also the action
+           * colour and never appears on anything that is not an action (DESIGN.md colour law), so
+           * it must not land on a value like "Some outstanding". */
+        };
+      }),
+    [state],
+  );
+
   return (
     <StartShell
       step="done"
-      title="Your job matches are ready."
+      title="Setup complete."
     >
-      <div>
-        <p role="status" className="mb-6 text-sm leading-6 text-muted">
-          Setup complete. Your resume and role choices are saved.
-        </p>
+{/* Absorbed from #286. The step changes inside the same page, with no route change and no
+          focus move, so without a live region a screen reader gets no signal that setup finished
+          at all. Deliberately terse and separate from the receipt: pushing six rows of mono text
+          through a live region is noise, and the receipt is ordinary readable content once the
+          reader arrives at it. */}
+      <p role="status" className="sr-only">Setup complete.</p>
+
+      <Receipt rows={rows} />
+
+      {/* The first action, in words. The button label alone ("See my jobs") names a destination,
+          not a thing to do, and the value of the product is one step past the destination. */}
+      <p className="mt-7 text-[15px] leading-7 text-ink">
+        Open a match on your dashboard and Litos builds the application for you to review.
+      </p>
+
+      <div className="mt-5">
         <PrimaryButton
           onClick={() => {
             setBusy(true);

@@ -46,14 +46,26 @@ after(async () => {
   server.kill("SIGTERM");
 });
 
-test("all six onboarding checkpoints render with a progress indicator", async () => {
+/* SEVEN, not six, and the gaps row is the reason this list changed.
+ *
+ * The original six omitted `gaps`, which is why it passed while that screen reported itself as
+ * "Setup: step 1 of 6, Your resume": the screen was reinstated by #279 and never added to STEPS,
+ * and a checkpoint list that never visits a screen cannot catch the screen lying about where it
+ * is. It is in STEPS now, the denominator is 7, and this list walks it.
+ *
+ * The done heading moved from "Your job matches are ready." to "Setup complete." when that screen
+ * gained a confirmation: the forward-looking line is still there, below the receipt, as the
+ * first-action prompt. The status text below is the sr-only live region, kept from this file's
+ * original assertion and shortened with it. */
+test("all seven onboarding checkpoints render with a progress indicator", async () => {
   const checkpoints = [
-    ["resume", "Start with your resume.", "Setup: step 1 of 6, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 2 of 6, Your impact"],
-    ["focus", "Here's where we'd start.", "Setup: step 3 of 6, Your roles"],
-    ["sponsorship", "Do you need a work visa?", "Setup: step 4 of 6, Work visa"],
-    ["base", "One page, ready.", "Setup: step 5 of 6, Your one page"],
-    ["done", "Your job matches are ready.", "Setup: step 6 of 6, Done"],
+    ["resume", "Start with your resume.", "Setup: step 1 of 7, Your resume"],
+    ["impact", "Make your most recent work count.", "Setup: step 2 of 7, Your impact"],
+    ["focus", "Here's where we'd start.", "Setup: step 3 of 7, Your roles"],
+    ["sponsorship", "Do you need a work visa?", "Setup: step 4 of 7, Work visa"],
+    ["base", "One page, ready.", "Setup: step 5 of 7, Your one page"],
+    ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],
+    ["done", "Setup complete.", "Setup: step 7 of 7, Done"],
   ];
 
   for (const [step, heading, rail] of checkpoints) {
@@ -62,7 +74,7 @@ test("all six onboarding checkpoints render with a progress indicator", async ()
     await page.locator(`[aria-label="${rail}"]`).waitFor({ state: "visible" });
   }
 
-  await page.getByText("Setup complete. Your resume and role choices are saved.").waitFor({ state: "visible" });
+  await page.getByText("Setup complete.", { exact: true }).first().waitFor({ state: "visible" });
 });
 
 for (const state of [
