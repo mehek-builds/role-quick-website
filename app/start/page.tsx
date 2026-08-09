@@ -28,7 +28,7 @@ import {
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
 import { track } from "@/lib/analytics";
-import { DoneStep, FocusStep, ResumeStep } from "@/components/start/steps";
+import { DoneStep, FocusStep, GapsStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { StepRail } from "@/components/start/ui";
@@ -79,7 +79,7 @@ export default function Start() {
           has_applied: false,
           has_targeting: false,
           learned: [],
-          gaps: ["gpa", "gpa_scale", "major", "languages"],
+          gaps: ["gpa", "gpa_scale", "major", "languages", "referral_source_default"],
           // Populated so the base step's languages line is reviewable in QA in its prefilled
           // state, which is the state almost every real student will see.
           gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },
@@ -277,12 +277,23 @@ export default function Start() {
         />
       );
 
+    case "gaps":
+      return (
+        <GapsStep
+          gaps={state.gaps}
+          onLater={later}
+          onDone={() => {
+            stepDone("gaps");
+            void refresh();
+          }}
+        />
+      );
+
     // An older backend may briefly return one of the removed steps during a rolling deploy. Treat
     // it as ready rather than sending the student through the deleted extension and sample-form
     // detour until the next state refresh reaches the new backend.
     case "install":
     case "apply":
-    case "gaps":
     case "targeting":
     case "done":
       return (

@@ -127,6 +127,9 @@ jobs:
       - name: Base resume build spec
         run: npm run test:start-base
 
+      - name: Onboarding gaps spec
+        run: npm run test:start-gaps
+
       # The whole value of that spec is observing rendered behaviour, and nobody
       # can reproduce a runner by hand. Without this, its first CI-only failure
       # is a bare locator timeout with no picture. The spec writes a full-page
@@ -140,5 +143,6 @@ jobs:
           path: |
             test-results/click-path/
             test-results/start-base/
+            test-results/start-gaps/
           if-no-files-found: ignore
           retention-days: 7
