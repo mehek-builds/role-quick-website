@@ -79,6 +79,13 @@ if (rawBuildTime !== undefined && Number.isNaN(Date.parse(rawBuildTime))) {
 const BUILD_TIME = new Date(rawBuildTime ?? Date.now()).toISOString();
 
 const nextConfig: NextConfig = {
+  /* The controlled end-to-end harness opens the local development server through
+   * 127.0.0.1 so its API, website, portal, and disposable database all use an
+   * explicit loopback address. Next blocks development assets when that origin
+   * differs from its default localhost origin. The server HTML still arrives,
+   * but React never hydrates, so Guest mode and every other client interaction
+   * silently disappear. This is development-only and grants no remote host. */
+  allowedDevOrigins: ["127.0.0.1"],
   env: { BUILD_TIME },
   async redirects() {
     return [
