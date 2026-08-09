@@ -2501,7 +2501,11 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
      synchronously inside the effect: a different packet, or a cover letter that has since arrived,
      simply fails the comparison at render time. */
   const [coverLetterWaitedFor, setCoverLetterWaitedFor] = useState<string | null>(null);
-  const coverLetterMissing = review.cover_letter_supported === true && !submission.cover_letter;
+  /* Only a cover letter the EMPLOYER requires is worth waiting for. A form that merely offers the
+     control is not a reason to run a countdown and then colour the screen amber. */
+  const coverLetterMissing = review.cover_letter_supported === true
+    && review.cover_letter_required === true
+    && !submission.cover_letter;
   const waitedApplicationId = submission.application_id;
   useEffect(() => {
     if (!coverLetterMissing) return;
@@ -2509,7 +2513,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
     return () => window.clearTimeout(timer);
   }, [coverLetterMissing, waitedApplicationId]);
   const coverLetterWaited = coverLetterMissing && coverLetterWaitedFor === waitedApplicationId;
-  const coverLetterState = coverLetterGate({ supported: review.cover_letter_supported, coverLetter: submission.cover_letter, waited: coverLetterWaited });
+  const coverLetterState = coverLetterGate({ supported: review.cover_letter_supported, required: review.cover_letter_required, coverLetter: submission.cover_letter, waited: coverLetterWaited });
   const coverLetterPending = coverLetterBlocks(coverLetterState);
   const requiredAnswerMissing = review.questions.some((question) => question.required && !(question.answer ?? "").trim());
   const safeAttentionReason = review.attention_reason
@@ -2608,6 +2612,11 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
               </ul>
             )}
           </div>
+        )}
+        {/* Says what is true and blocks nothing. The employer's form offers a cover letter and does
+            not ask for one, so the application is complete without it and the send stays live. */}
+        {coverLetterState === "optional" && (
+          <p className="mt-6 text-sm leading-6 text-muted">This company accepts a cover letter and does not require one. Litos will send this without a cover letter. You can write one from the packet if you want it attached.</p>
         )}
         {coverLetterState === "loading" && <p className="mt-6 text-sm text-muted">Loading cover letter.</p>}
         {coverLetterState === "unavailable" && (
