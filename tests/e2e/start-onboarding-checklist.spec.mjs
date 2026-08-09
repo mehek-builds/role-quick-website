@@ -501,7 +501,9 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
        Two jobs, asserted separately, because a line that does one and not the other is the failure
        this criterion describes: say where you are, and say what the product does. */
     const body = await page.locator("main").innerText();
-    assert.match(body, /This is setup\./, "the first screen never says that this is setup");
+    // The greeting half: this is a new experience and the student is being told so.
+    assert.match(body, /Welcome to Litos\./, "the first screen never greets the student");
+    // The orientation half: what the product actually does with what it is about to be given.
     assert.match(
       body,
       /reads your resume, finds the jobs that match it, and fills in the applications/i,

@@ -120,11 +120,17 @@ const HIGHLIGHTS: { what: string; how: string }[] = [
   },
 ];
 
-/** One sentence saying where the student is and what the product does. First screen only. */
+/** The greeting and what the product does, in one line. First screen only.
+ *
+ * Reconciled with the welcome #286 shipped in parallel. Its opener is kept, because "Welcome to
+ * Litos" is the half that actually acknowledges a new experience and this line did not have it.
+ * Its other two sentences are not: one previewed the steps, which the rail above already shows,
+ * and one said "Finish later any time", which is the visible control sitting a few pixels below.
+ * Repeating either would break the say-once rule in DESIGN.md. */
 export function WelcomeNote() {
   return (
     <p className="text-[15px] leading-7 text-muted">
-      This is setup. Litos reads your resume, finds the jobs that match it, and fills in the
+      Welcome to Litos. It reads your resume, finds the jobs that match it, and fills in the
       applications for you.
     </p>
   );

@@ -420,7 +420,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       step="resume"
       title="Start with your resume."
     >
-      {/* The welcome, then the ask, then the walkthrough. This screen used to open on the ask
+{/* The welcome, then the ask, then the walkthrough. This screen used to open on the ask
           alone, under a title ("Tell us what you want.") that described the roles step rather than
           this one.
 
@@ -430,6 +430,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
           than a walkthrough that needs a scroll. The welcome line is one sentence and stays on
           top, so a student still learns what this is before being asked for anything. */}
       <div className="mb-7"><WelcomeNote /></div>
+
 
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
@@ -1000,6 +1001,13 @@ export function DoneStep({
       step="done"
       title="Setup complete."
     >
+{/* Absorbed from #286. The step changes inside the same page, with no route change and no
+          focus move, so without a live region a screen reader gets no signal that setup finished
+          at all. Deliberately terse and separate from the receipt: pushing six rows of mono text
+          through a live region is noise, and the receipt is ordinary readable content once the
+          reader arrives at it. */}
+      <p role="status" className="sr-only">Setup complete.</p>
+
       <Receipt rows={rows} />
 
       {/* The first action, in words. The button label alone ("See my jobs") names a destination,

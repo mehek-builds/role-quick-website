@@ -112,17 +112,20 @@ test.after(async () => {
 
 /* The heading this waits on is the done screen's, and it is "Setup complete." rather than the
  * old "Your job matches are ready.": that screen now confirms setup before it hands off, and the
- * forward-looking line moved into the first-action prompt below the receipt. See DoneStep. */
+ * forward-looking line moved into the first-action prompt below the receipt. See DoneStep.
+ *
+ * Matched by ROLE, not by text: the phrase appears twice on that screen now, once as the heading
+ * and once in the sr-only live region, and a bare getByText is a strict-mode violation. */
 test("the referral gap renders, saves the typed source, and advances", async (t) => {
   try {
     await page.goto(`${PAGE_ORIGIN}/start?qa=1&step=gaps`, { waitUntil: "networkidle" });
     const input = page.getByLabel("Default referral source");
     await input.waitFor({ state: "visible" });
-    assert.equal(await page.getByText("Setup complete.").count(), 0);
+    assert.equal(await page.getByRole("heading", { name: "Setup complete." }).count(), 0);
 
     await input.fill("LinkedIn");
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByText("Setup complete.").waitFor({ state: "visible" });
+    await page.getByRole("heading", { name: "Setup complete." }).waitFor({ state: "visible" });
 
     assert.deepEqual(savedBody, { referral_source_default: "LinkedIn" });
     assert.deepEqual(blockedExternal, []);

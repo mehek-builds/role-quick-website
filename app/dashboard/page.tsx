@@ -16,7 +16,8 @@ import {
   type ParsedProfile,
   type Targeting,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Button } from "@/components/app/Button";
 import { Funnel } from "@/components/app/Funnel";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
@@ -574,7 +575,20 @@ export default function Home() {
     me?.trial_ends_at && loadedAt > 0 && new Date(me.trial_ends_at).getTime() > loadedAt,
   );
 
-  if (error && !jobs) return <ErrorNote message={error} />;
+  if (error && !jobs) {
+    return (
+      <EmptyState
+        visual="error"
+        headingLevel="h1"
+        title="Your dashboard did not load."
+        body="Nothing you saved was lost. Try loading your dashboard again."
+      >
+        <Button type="button" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
+      </EmptyState>
+    );
+  }
 
   return (
     /* One rhythm down the page. The desktop step-up this replaces existed to help the stretched
@@ -708,6 +722,7 @@ export default function Home() {
           /* Reached only when the day never had a match to begin with. Sending someone to "Browse
              all jobs" here would be sending them to another empty list. */
           <EmptyState
+            visual="profile"
             title="No matches yet"
             body="Fill in your profile so Litos can pick out the best jobs from the job boards it watches."
           >
