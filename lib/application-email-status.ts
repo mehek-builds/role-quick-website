@@ -71,7 +71,14 @@ export function applicationEmailBadge(status: ApplicationEmailTracking | null): 
     };
   }
   if (status.tracking_active) {
-    if (status.domain !== undefined && !isMailbox(status.domain)) {
+    if (status.domain === undefined) {
+      return {
+        label: "Set up",
+        kind: "draft",
+        note: "Litos cannot confirm which address is on applications, so it uses your own email.",
+      };
+    }
+    if (!isMailbox(status.domain)) {
       return {
         label: "Not delivering",
         kind: "warn",

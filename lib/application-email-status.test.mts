@@ -26,10 +26,21 @@ describe("the application email badge", () => {
   });
 
   test("the badge is Active only when the live probe says replies arrive", () => {
-    const badge = applicationEmailBadge({ configured: true, tracking_active: true });
+    const badge = applicationEmailBadge({
+      configured: true,
+      tracking_active: true,
+      domain: "applications@trylitos.com",
+    });
     assert.equal(badge.label, "Active");
     assert.equal(badge.kind, "sent");
     assert.equal(badge.note, null);
+  });
+
+  test("a healthy flag without the application mailbox cannot claim Active", () => {
+    const badge = applicationEmailBadge({ configured: true, tracking_active: true });
+    assert.equal(badge.label, "Set up");
+    assert.equal(badge.kind, "draft");
+    assert.match(badge.note ?? "", /uses your own email/i);
   });
 
   test("the Active look is a Chip kind that actually resolves to the green", () => {

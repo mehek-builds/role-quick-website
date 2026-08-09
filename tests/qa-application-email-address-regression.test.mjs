@@ -33,3 +33,16 @@ test("a verified full mailbox can still be shown as active", () => {
     "applications@trylitos.com",
   );
 });
+
+test("an active flag with no mailbox cannot contradict the account address", () => {
+  const incomplete = {
+    configured: true,
+    tracking_active: true,
+  };
+
+  assert.equal(applicationEmailBadge(incomplete).label, "Set up");
+  assert.equal(
+    applicationEmailAddressInUse(incomplete, "applicant@example.com"),
+    "applicant@example.com",
+  );
+});
