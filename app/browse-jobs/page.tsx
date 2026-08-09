@@ -474,8 +474,9 @@ export default async function BrowseJobs({
           </h2>
           <p className="mt-2 max-w-[52ch] text-base leading-7 text-muted">
             Open any of these postings with the extension installed. You get a
-            resume rewritten for that job and the form filled in. Nothing is sent
-            until you read it and press send yourself.
+            resume rewritten for that job and the form filled in. By default,
+            nothing is sent until you read it and press send yourself. Auto-submit
+            runs only if you turn it on, with a cancelable countdown.
           </p>
           <div className="mt-5 flex flex-wrap items-center gap-3">
             {/* Was the store link. The install ask lives once now, in the

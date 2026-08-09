@@ -402,8 +402,8 @@ export default function Home() {
                     Autofill the reusable parts of every application.
                   </h2>
                   <p className="mt-4 text-base leading-7 text-muted">
-                    Most forms ask the same questions. We fill reusable facts,
-                    leave personal decisions for you, then wait for you to check.
+                    Most forms ask the same questions. We fill reusable facts and
+                    leave personal decisions for you. By default, we wait for you to check.
                   </p>
                   {/* SIMPLIFIED 2026-07-30, on Mehek's call: this band was a
                       lead paragraph, a five-line machine-voice list and a
