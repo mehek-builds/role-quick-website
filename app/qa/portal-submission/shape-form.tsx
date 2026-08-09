@@ -179,7 +179,7 @@ export function ShapeForm({
         setFormError(null);
         return;
       }
-      const typed = String(new FormData(form).get("security_code") ?? "").trim().toUpperCase();
+      const typed = String(new FormData(form).get("security_code") ?? "").trim();
       if (typed !== expectedCode) {
         qaRecord("security_code_wrong", typed || "(empty)");
         setFormError("That security code is not correct. Check your email and try again.");
@@ -849,7 +849,7 @@ function SecurityCodeStep({ caseId }: { caseId: string }) {
           autoComplete="one-time-code"
           maxLength={8}
           required
-          className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2 font-mono uppercase"
+          className="mt-2 block w-full rounded-lg border border-[#cfcfc6] px-3 py-2 font-mono"
         />
       </label>
       <p className="mt-2 text-xs text-[#7a5a1e]">
