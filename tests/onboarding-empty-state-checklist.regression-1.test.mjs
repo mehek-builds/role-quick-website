@@ -87,7 +87,7 @@ test("local QA can render real zero states without a live account", async () => 
 
   assert.match(applications, /qaScenario === "empty"[\s\S]*?setPackets\(\[\]\)/);
   assert.match(outreach, /qaScenario === "empty" \? \[\] : QA_EVENTS/);
-  assert.match(jobs, /get\("qa"\) === "empty"[\s\S]*?setJobs\(\[\]\)/);
+  assert.match(jobs, /qaScenario === "empty"[\s\S]*?setJobs\(\[\]\)/);
   for (const source of [applications, outreach]) {
     assert.match(source, /window\.location\.hostname === "localhost"/);
   }
@@ -100,5 +100,5 @@ test("local QA can render load failures without calling the backend", async () =
 
   assert.match(applications, /qaScenario === "error"[\s\S]*?setError\("We could not load your applications\."\)/);
   assert.match(outreach, /qaScenario === "error"[\s\S]*?setError\("We could not load your emails\."\)/);
-  assert.match(jobs, /get\("qa"\) === "error"[\s\S]*?setError\("We could not load your jobs\."\)/);
+  assert.match(jobs, /qaScenario === "error"[\s\S]*?setError\("We could not load your jobs\."\)/);
 });

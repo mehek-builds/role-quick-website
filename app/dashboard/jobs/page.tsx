@@ -1,6 +1,6 @@
 "use client";
 
-import { Button } from "@/components/app/Button";
+import { Button, ButtonLink } from "@/components/app/Button";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
@@ -396,10 +396,14 @@ export default function JobsPage() {
           {/* No breakpoint gate on this, and no collapsing toolbar to tuck it into. ISSUE-028 was
               a recovery control that only existed on large screens; the only way out of an empty
               board has to be reachable at the width the student is actually holding. */}
-          {activeFilters.length > 0 && (
+          {activeFilters.length > 0 ? (
             <Button type="button" onClick={clearFilters} variant="secondary">
               Clear filters
             </Button>
+          ) : (
+            <ButtonLink href="/dashboard/settings#job-search">
+              Change job preferences
+            </ButtonLink>
           )}
         </EmptyState>
       ) : (

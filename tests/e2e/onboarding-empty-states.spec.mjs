@@ -68,7 +68,7 @@ test("all six onboarding checkpoints render with a progress indicator", async ()
 for (const state of [
   ["applications", "No applications yet", "Start an application"],
   ["outreach", "No emails yet", "Add Litos to Chrome"],
-  ["jobs", "No matching roles", null],
+  ["jobs", "No matching roles", "Change job preferences"],
 ]) {
   const [route, heading, action] = state;
   test(`${route} has a distinct first-use state`, async () => {
@@ -77,6 +77,10 @@ for (const state of [
     await title.waitFor({ state: "visible", timeout: 20_000 });
     assert.equal(await title.locator("xpath=..").locator("svg").count(), 1);
     if (action) await page.getByRole("link", { name: action }).or(page.getByRole("button", { name: action })).waitFor({ state: "visible" });
+    if (route === "applications") {
+      await page.getByRole("button", { name: "Start an application" }).click();
+      await page.getByRole("heading", { name: "Add a job." }).waitFor({ state: "visible" });
+    }
   });
 }
 
@@ -99,6 +103,15 @@ for (const state of [
     const title = page.getByRole("heading", { name: heading });
     await title.waitFor({ state: "visible", timeout: 20_000 });
     assert.equal(await title.locator("xpath=..").locator("svg").count(), 1);
-    await page.getByRole("button", { name: "Try again" }).waitFor({ state: "visible" });
+    assert.equal(await page.locator("h1").count(), 1);
+    const retry = page.getByRole("button", { name: "Try again" });
+    await retry.waitFor({ state: "visible" });
+    if (route !== "outreach") {
+      await Promise.all([
+        page.waitForNavigation({ waitUntil: "domcontentloaded" }),
+        retry.click(),
+      ]);
+      await page.getByRole("heading", { name: heading }).waitFor({ state: "visible" });
+    }
   });
 }
