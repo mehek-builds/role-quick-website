@@ -22,7 +22,7 @@ function BooleanChoice({
         id={id}
         value={value === null ? "" : value ? "yes" : "no"}
         onChange={(event) => onChange(event.target.value === "" ? null : event.target.value === "yes")}
-        className="mt-1 min-h-11 w-full rounded-inner border border-border bg-white px-3 text-sm text-ink outline-none focus:border-brand"
+        className="mt-1 min-h-11 w-full rounded-inner border border-control-border bg-white px-3 text-sm text-ink outline-none focus:border-brand"
       >
         <option value="">Choose an answer</option>
         <option value="yes">Yes</option>
@@ -61,7 +61,7 @@ export function CountryEligibilityEditor({
                   id={`${prefix}-country`}
                   value={row.country_code}
                   onChange={(event) => patch(index, { country_code: event.target.value })}
-                  className="mt-1 min-h-11 w-full rounded-inner border border-border bg-white px-3 text-sm text-ink outline-none focus:border-brand"
+                  className="mt-1 min-h-11 w-full rounded-inner border border-control-border bg-white px-3 text-sm text-ink outline-none focus:border-brand"
                 >
                   <option value="">Choose a country</option>
                   {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
@@ -93,7 +93,7 @@ export function CountryEligibilityEditor({
                   onChange={(event) => patch(index, { authorization_type: event.target.value || null })}
                   placeholder="CPT, permanent resident, work permit"
                   maxLength={120}
-                  className="mt-1 min-h-11 w-full rounded-inner border border-border bg-white px-3 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                  className="mt-1 min-h-11 w-full rounded-inner border border-control-border bg-white px-3 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                 />
               </label>
               <label htmlFor={`${prefix}-expiry`} className="block">
@@ -103,7 +103,7 @@ export function CountryEligibilityEditor({
                   type="date"
                   value={row.authorization_expiry ?? ""}
                   onChange={(event) => patch(index, { authorization_expiry: event.target.value || null })}
-                  className="mt-1 min-h-11 w-full rounded-inner border border-border bg-white px-3 text-sm text-ink outline-none focus:border-brand"
+                  className="mt-1 min-h-11 w-full rounded-inner border border-control-border bg-white px-3 text-sm text-ink outline-none focus:border-brand"
                 />
               </label>
             </div>

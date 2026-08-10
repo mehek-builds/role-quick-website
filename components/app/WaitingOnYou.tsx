@@ -101,7 +101,7 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
             </div>
             {item.portalUrl ? (
               <a
-                className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:self-auto"
+                className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:self-auto"
                 href={item.portalUrl}
                 target="_blank"
                 /* noopener is the load-bearing half: these are third-party employer pages and an

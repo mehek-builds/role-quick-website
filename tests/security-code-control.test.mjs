@@ -21,6 +21,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8");
+const buttonSource = readFileSync(new URL("../components/app/Button.tsx", import.meta.url), "utf8");
 const card = source.slice(
   source.indexOf("function SecurityCodeCard"),
   source.indexOf("function SubmissionScreen"),
@@ -59,7 +60,8 @@ test("the code keeps its case", () => {
 
 test("the submit is a real button inside a real form", () => {
   assert.match(card, /<form\b[\s\S]*onSubmit=/, "the field must sit in a form with an onSubmit");
-  assert.match(card, /<button\s+type="submit"/, "the control must be a <button type=\"submit\">");
+  assert.match(card, /<Button\s+type="submit"/, "the control must use the shared submit Button");
+  assert.match(buttonSource, /return \(\s*<button type=\{type\}/, "the shared Button must render a native button");
   // Enter in the field has to work as well as the button. preventDefault is what stops the form
   // navigating instead of calling the handler.
   assert.match(card, /event\.preventDefault\(\)/);

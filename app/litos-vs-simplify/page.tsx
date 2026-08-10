@@ -76,7 +76,7 @@ export default function LitosVsSimplify() {
               <tbody className="divide-y divide-border text-muted">{comparison.map(([capability, litos, simplify]) => <tr key={capability}><th scope="row" className="px-4 py-4 align-top font-medium text-ink">{capability}</th><td className="px-4 py-4 align-top leading-6">{litos}</td><td className="px-4 py-4 align-top leading-6">{simplify}</td></tr>)}</tbody>
             </table>
           </div>
-          <p className="mt-3 text-machine text-faint">Source check: 27 July 2026</p>
+          <p className="mt-3 text-machine text-muted">Source check: 27 July 2026</p>
         </section>
 
         <div className="mt-12">
@@ -129,7 +129,7 @@ export default function LitosVsSimplify() {
           </Row>
         </div>
 
-        <p className="mt-12 text-xs leading-6 text-faint">
+        <p className="mt-12 text-xs leading-6 text-muted">
           Everything stated here about Simplify was read on their own website and
           Chrome Web Store listing on 27 July 2026, and may have changed since.
           Litos has no affiliation with Simplify. If something here is wrong or
@@ -146,7 +146,7 @@ export default function LitosVsSimplify() {
           <h2 id="compare-next-step" className="text-heading text-ink">See whether Litos fits your search.</h2>
           <p className="mt-2 text-body text-muted">Try the workflow with a job posting, or browse the roles Litos has already found.</p>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a href="/try" className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white hover:opacity-90">Try Litos</a>
+            <a href="/try" className="rounded-full bg-action px-6 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">Try Litos</a>
             <a href="/browse-jobs" className="rounded-full border border-border bg-white px-6 py-3 text-sm font-medium text-ink hover:bg-surface-alt">Browse jobs</a>
           </div>
         </section>

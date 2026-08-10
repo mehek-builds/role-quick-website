@@ -40,7 +40,7 @@ export default function CookiesPage() {
             <p>Litos does not currently provide an in-product analytics switch. Browser privacy controls and content blockers can prevent PostHog requests. To ask for linked analytics data to be deleted, use <a className="underline underline-offset-4 hover:text-ink" href="/contact">Contact</a> or delete your Litos account.</p>
           </div>
         </section>
-        <p className="mt-10 text-machine text-faint">Effective 10 August 2026</p>
+        <p className="mt-10 text-machine text-muted">Effective 10 August 2026</p>
       </main>
       <SiteFooter />
     </div>

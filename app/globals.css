@@ -20,6 +20,8 @@
   --color-brand: #6b84e8; /* Litos signature blue */
   --color-brand-ink: #3d51ad; /* darker, for text-on-light use */
   --color-brand-soft: #eef1fe; /* tint for badges/backgrounds */
+  --color-action: #5368ca; /* accessible solid action fill, 5.0:1 with white */
+  --color-action-ink: #ffffff;
 
   --color-coral: #dd9273; /* outreach / email pillar */
   --color-coral-ink: #a35f3f;
@@ -35,6 +37,8 @@
   --color-warn-soft: #fdf3e7;
   --color-danger: #b91c1c;
   --color-danger-soft: #fbeaea;
+
+  --color-control-border: #8a8982; /* 3.5:1 against white controls */
 
   --radius-card: 20px;
   --radius-control: 999px;
@@ -64,6 +68,8 @@
   --color-brand: var(--color-brand);
   --color-brand-ink: var(--color-brand-ink);
   --color-brand-soft: var(--color-brand-soft);
+  --color-action: var(--color-action);
+  --color-action-ink: var(--color-action-ink);
   --color-coral: var(--color-coral);
   --color-coral-ink: var(--color-coral-ink);
   --color-coral-soft: var(--color-coral-soft);
@@ -76,6 +82,7 @@
   --color-warn-soft: var(--color-warn-soft);
   --color-danger: var(--color-danger);
   --color-danger-soft: var(--color-danger-soft);
+  --color-control-border: var(--color-control-border);
   --font-sans: var(--font-hanken-grotesk);
   --font-mono: var(--font-azeret-mono);
   --radius-card: var(--radius-card);
@@ -150,12 +157,12 @@ select:focus-visible,
 /* One form-state contract. Native controls may add layout classes, but state
    meaning and focus must not be re-invented per form. */
 .rq-field {
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--color-control-border);
   background: var(--color-surface);
   color: var(--color-ink);
   transition: border-color 180ms, background-color 180ms, opacity 180ms;
 }
-.rq-field:hover:not(:disabled):not([readonly]) { border-color: var(--color-faint); }
+.rq-field:hover:not(:disabled):not([readonly]) { border-color: var(--color-muted); }
 .rq-field[aria-invalid="true"] { border-color: var(--color-danger); }
 .rq-field:disabled { cursor: not-allowed; opacity: 0.55; }
 .rq-field[readonly] { background: var(--color-surface-alt); color: var(--color-muted); }

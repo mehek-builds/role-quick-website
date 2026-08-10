@@ -69,7 +69,7 @@ const BUILD_YEAR = BUILT_AT.getFullYear();
 const LINK =
   "inline-flex min-h-[44px] items-center hover:text-ink sm:min-h-0";
 const COLUMN =
-  "font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint";
+  "font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted";
 
 export function SiteFooter({ wash = false }: { wash?: boolean }) {
   return (
@@ -152,7 +152,7 @@ export function SiteFooter({ wash = false }: { wash?: boolean }) {
             </ul>
           </div>
         </div>
-        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-faint sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted sm:flex-row">
           <span>&copy; {BUILD_YEAR} Litos</span>
           {/* Was a render-time clock read, so it always said "updated this
               month" whether or not anything had changed. Manufactured freshness

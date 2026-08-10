@@ -40,7 +40,7 @@ export default function SecurityPage() {
             Litos does not operate a bug bounty. Use the <a href="/contact" className="underline underline-offset-4 hover:text-ink">contact form</a> and choose Technical problem. Do not include secrets, passwords, or private account data in the first message.
           </p>
         </section>
-        <p className="mt-10 text-machine text-faint">Statement dated 10 August 2026</p>
+        <p className="mt-10 text-machine text-muted">Statement dated 10 August 2026</p>
       </main>
       <SiteFooter />
     </div>

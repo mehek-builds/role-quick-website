@@ -108,7 +108,7 @@ export function ComboField({
     <div ref={rootRef} className="relative flex min-w-0 flex-col gap-1.5">
       <label
         htmlFor={`${listId}-input`}
-        className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint"
+        className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted"
       >
         {label}
       </label>
@@ -135,7 +135,7 @@ export function ComboField({
         onFocus={() => setOpen(true)}
         onClick={() => setOpen(true)}
         onKeyDown={onKeyDown}
-        className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+        className="min-h-[44px] w-full rounded-inner border border-control-border bg-white px-4 text-base text-ink placeholder:text-faint focus:border-brand focus:outline-none"
       />
       {open && matches.length > 0 && (
         <ul

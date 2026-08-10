@@ -237,7 +237,7 @@ function CheckRow({ item, checked }: { item: SubmissionChecklistItem; checked: b
       </span>
       <span>
         <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
-        {item.detail && <span className="block text-[11px] text-faint">{item.detail}</span>}
+        {item.detail && <span className="block text-[11px] text-muted">{item.detail}</span>}
       </span>
     </li>
   );
@@ -391,7 +391,7 @@ export function ApplicationPacket({
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">{company}</p>
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">{company}</p>
             <h2 className="mt-1 truncate text-lg font-medium tracking-tight text-ink">{role}</h2>
             <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted">
               {/* Teal reads as done, and a packet still waiting on the person is
@@ -438,7 +438,7 @@ export function ApplicationPacket({
               onClick={() => jump(mark.id)}
               aria-current={active === mark.id}
               className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                active === mark.id ? "bg-brand-soft text-brand-ink" : "text-faint hover:bg-surface-alt hover:text-muted"
+                active === mark.id ? "bg-brand-soft text-brand-ink" : "text-muted hover:bg-surface-alt hover:text-ink"
               }`}
             >
               {mark.label}
@@ -481,7 +481,7 @@ export function ApplicationPacket({
                 />
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">
-                <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
+                <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted">
                   Written for this posting · not reused
                 </p>
                 {/* The rendered PDF is the file the employer actually gets, and
@@ -516,7 +516,7 @@ export function ApplicationPacket({
                     ))}
                   </div>
                 ) : (
-                  <p className="mt-3 rounded-inner border border-dashed border-border px-5 py-4 text-[12px] text-faint">
+                  <p className="mt-3 rounded-inner border border-dashed border-border px-5 py-4 text-[12px] text-muted">
                     The posting text was not saved with this application.
                   </p>
                 )}
@@ -564,7 +564,7 @@ export function ApplicationPacket({
                 )}
 
                 {questions.length === 0 ? (
-                  <p className="mt-3 rounded-inner border border-dashed border-border px-5 py-4 text-[12px] text-faint">
+                  <p className="mt-3 rounded-inner border border-dashed border-border px-5 py-4 text-[12px] text-muted">
                     This form asked no questions beyond the resume.
                   </p>
                 ) : (
@@ -585,7 +585,7 @@ export function ApplicationPacket({
                                 ? "border-teal/30 bg-teal-soft/60 text-teal-ink"
                                 : question.required
                                   ? "border-warn/30 bg-warn-soft text-warn"
-                                  : "border-border bg-surface-alt text-faint"
+                                  : "border-border bg-surface-alt text-muted"
                             }`}
                           >
                             {(question.answer ?? "").trim()
@@ -603,7 +603,7 @@ export function ApplicationPacket({
                              called out rather than rendered as an empty line. */
                           <p
                             className={`mt-1.5 text-[12px] leading-6 ${
-                              question.required ? "text-warn" : "text-faint"
+                              question.required ? "text-warn" : "text-muted"
                             }`}
                           >
                             {question.required ? "Left blank, and this one is required" : "Left blank"}
@@ -616,7 +616,7 @@ export function ApplicationPacket({
 
                 {filledFields.length > 0 && (
                   <div className="mt-4">
-                    <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
+                    <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-muted">
                       Fields filled on the form
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -637,12 +637,12 @@ export function ApplicationPacket({
                      EEO questions by default, and that decline is a product
                      guarantee, so it is stated on the record of the submission. */
                   <div className="mt-4">
-                    <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
+                    <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-muted">
                       Left blank on purpose
                     </p>
                     <ul className="mt-2 space-y-1">
                       {review.skipped_reasons.map((reason) => (
-                        <li key={reason} className="text-[12px] leading-6 text-faint">
+                        <li key={reason} className="text-[12px] leading-6 text-muted">
                           {reason}
                         </li>
                       ))}

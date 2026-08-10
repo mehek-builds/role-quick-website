@@ -236,7 +236,7 @@ export function Header() {
               account" and "Look around without signing up" on arrival. */}
           <SignInLink
             source="header"
-            className="inline-flex min-h-[44px] items-center rounded-full bg-brand px-3.5 py-2 text-[13px] font-medium text-white transition-opacity hover:opacity-90 sm:px-4 sm:text-sm"
+            className="inline-flex min-h-[44px] items-center rounded-full bg-action px-3.5 py-2 text-[13px] font-medium text-action-ink transition-colors hover:bg-brand-ink sm:px-4 sm:text-sm"
           >
             Get started
           </SignInLink>

@@ -926,7 +926,7 @@ export function BaseResumeStep({
               )}
             </div>
             <div className="min-w-0">
-              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+              <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
                 {finished ? "Built" : "Building"}
               </p>
               <p className="mt-1 truncate text-base text-ink">
@@ -955,7 +955,7 @@ export function BaseResumeStep({
                   />
                   <span
                     className={`text-[13px] leading-6 ${
-                      current ? "text-ink" : passed ? "text-muted" : "text-faint"
+                      current ? "text-ink" : "text-muted"
                     }`}
                   >
                     {STAGE_COPY[s].label}
@@ -974,7 +974,7 @@ export function BaseResumeStep({
                   key={`${row.t}-${i}`}
                   className="grid grid-cols-[46px_minmax(0,1fr)] items-baseline gap-3 px-3.5 py-1 font-mono text-[11px]"
                 >
-                  <span className="text-faint">{row.t}</span>
+                  <span className="text-muted">{row.t}</span>
                   <span className="text-ink">{row.text}</span>
                 </div>
               ))}
@@ -1040,7 +1040,7 @@ export function BaseResumeStep({
                     {/* The role, above the line. Two stints at one employer can carry the same duty
                         line, and two unlabelled identical prompts give the student no way to tell
                         which is which. */}
-                    <p className="text-[11px] text-faint">
+                    <p className="text-[11px] text-muted">
                       {[gap.title, gap.org, gap.date_range].filter(Boolean).join(" \u00b7 ")}
                     </p>
                     <p className="text-xs leading-5 text-muted">{gap.bullet}</p>
@@ -1051,7 +1051,7 @@ export function BaseResumeStep({
                       }
                       placeholder="e.g. 12 clients a week"
                       aria-label={`A number for: ${gap.bullet}`}
-                      className="mt-1.5 w-full rounded-full border border-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+                      className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
                     />
                   </li>
                 ))}
@@ -1118,7 +1118,7 @@ export function BaseResumeStep({
                 value={languages}
                 onChange={(event) => setLanguages(event.target.value)}
                 placeholder="English, Hindi, Spanish"
-                className="mt-2.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                className="mt-2.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
               />
             </div>
           )}
@@ -1138,7 +1138,7 @@ export function BaseResumeStep({
                       value={raceAndGenderPrefs[field.key] ?? ""}
                       onChange={(event) => patchRaceAndGenderPref(field.key, event.target.value)}
                       placeholder={field.placeholder}
-                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                      className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                     />
                   </label>
                 ))}
@@ -1166,7 +1166,7 @@ export function BaseResumeStep({
                       value={facts[field.key] ?? ""}
                       onChange={(event) => patchFact(field.key, event.target.value)}
                       placeholder={field.placeholder}
-                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                      className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                     />
                     {field.hint && <span id={`base-fact-${field.key}-hint`} className="mt-1 block text-xs leading-5 text-muted">{field.hint}</span>}
                   </label>
@@ -1179,7 +1179,7 @@ export function BaseResumeStep({
                     value={priorEmployers}
                     onChange={(event) => setPriorEmployers(event.target.value)}
                     placeholder="Akuna Capital, Jane Street. Type none if you have not applied anywhere."
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                   />
                 </label>
 
@@ -1189,7 +1189,7 @@ export function BaseResumeStep({
                     id="base-fact-offers"
                     value={offers}
                     onChange={(event) => setOffers(event.target.value as "" | "none" | "some")}
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                    className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                   >
                     <option value="">Prefer not to answer now</option>
                     <option value="none">No offers right now</option>
@@ -1205,7 +1205,7 @@ export function BaseResumeStep({
                       value={offerDetails}
                       onChange={(event) => setOfferDetails(event.target.value)}
                       placeholder="One offer from Optiver, decision due 1 December 2026"
-                      className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                      className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                     />
                   </label>
                 )}
@@ -1217,7 +1217,7 @@ export function BaseResumeStep({
                     value={referralSource}
                     onChange={(event) => setReferralSource(event.target.value)}
                     placeholder="LinkedIn, university career fair, recruiter"
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
                   />
                   <span className="mt-1 block text-xs leading-5 text-muted">
                     For forms that ask how did you hear about this job. Use a source you personally choose. Litos detects job boards for each application.
@@ -1241,7 +1241,7 @@ export function BaseResumeStep({
                         type="date"
                         value={availabilityWindow.start}
                         onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, start: event.target.value }))}
-                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                       />
                     </label>
 
@@ -1252,7 +1252,7 @@ export function BaseResumeStep({
                         type="date"
                         value={availabilityWindow.end}
                         onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, end: event.target.value }))}
-                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                       />
                     </label>
 
@@ -1262,7 +1262,7 @@ export function BaseResumeStep({
                         id="base-fact-availability-cycle"
                         value={availabilityWindow.cycle}
                         onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, cycle: event.target.value }))}
-                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                       >
                         <option value="">Prefer not to answer now</option>
                         {availabilityCycleOptions().map((cycle) => (
@@ -1279,7 +1279,7 @@ export function BaseResumeStep({
                         aria-describedby="base-fact-availability-valid-through-hint"
                         value={availabilityWindow.validThrough}
                         onChange={(event) => setAvailabilityWindow((prev) => ({ ...prev, validThrough: event.target.value }))}
-                        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                       />
                       <span id="base-fact-availability-valid-through-hint" className="mt-1 block text-xs leading-5 text-muted">
                         After this date Litos stops giving these dates and asks you again.
@@ -1313,7 +1313,7 @@ export function BaseResumeStep({
                     id="base-fact-advanced-study"
                     value={advancedStudy}
                     onChange={(event) => setAdvancedStudy(event.target.value)}
-                    className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+                    className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
                   >
                     {ADVANCED_STUDY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
@@ -1357,7 +1357,7 @@ export function BaseResumeStep({
 /** The small mono caption over each sheet in the comparison. */
 function PaneLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.08em] text-faint">{children}</p>
+    <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{children}</p>
   );
 }
 

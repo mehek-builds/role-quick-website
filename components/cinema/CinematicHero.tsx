@@ -649,7 +649,7 @@ export function CinematicHero() {
               <a
                 href="/login"
                 onClick={() => track("signin_click", { source: "hero" })}
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:w-auto"
               >
                 Get started
               </a>
@@ -696,7 +696,7 @@ export function CinematicHero() {
               <a
                 href="/login"
                 onClick={() => track("signin_click", { source: "film-card" })}
-                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:w-auto"
               >
                 Get started, it&apos;s free
               </a>

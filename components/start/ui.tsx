@@ -82,7 +82,7 @@ export function StepRail({ current }: { current?: OnboardingStep }) {
           <span className="text-[13px] text-ink">{steps[i].label}</span>
           {/* The machine counting. Same label style as every other meta string in
               the product: 11px mono, uppercase, +0.08em (audit finding 43). */}
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             Step {step} of {steps.length}
           </span>
         </div>
@@ -210,7 +210,7 @@ export function Receipt({ rows }: { rows: ReceiptRow[] }) {
             r.done ? "mt-1 border-t border-border pt-2.5" : ""
           }`}
         >
-          <span className="text-faint">{r.t ?? ""}</span>
+          <span className="text-muted">{r.t ?? ""}</span>
           <span className="text-[11px] uppercase tracking-[0.06em] text-muted">{r.k}</span>
           <span className={`truncate ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
         </div>
@@ -363,7 +363,7 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
         className="mt-0.5 h-6 w-6 shrink-0"
       />
       <div className="min-w-0">
-        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">
+        <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
           Mehek, who builds Litos
         </p>
         <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>

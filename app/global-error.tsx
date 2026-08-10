@@ -45,12 +45,12 @@ export default function GlobalError({
         <button
           type="button"
           onClick={reset}
-          className="mt-8 inline-flex min-h-11 items-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="mt-8 inline-flex min-h-11 items-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
         >
           Try again
         </button>
         {error.digest && (
-          <p className="mt-10 font-mono text-[11px] text-faint">
+          <p className="mt-10 font-mono text-[11px] text-muted">
             Reference {error.digest}
           </p>
         )}

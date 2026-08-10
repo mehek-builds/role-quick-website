@@ -307,14 +307,14 @@ export function TrySimulator({
             <span className="truncate text-[11.5px] text-ink">
               {pageJob.company} · {pageJob.title}
             </span>
-            <span className="shrink-0 text-[11px] text-faint">×</span>
+            <span className="shrink-0 text-[11px] text-muted">×</span>
           </div>
-          <span className="shrink-0 text-sm text-faint">+</span>
+          <span className="shrink-0 text-sm text-muted">+</span>
         </div>
 
         {/* Toolbar: nav + omnibox + extensions (Litos icon anchors the popup) */}
         <div className="flex items-center gap-2.5 border-b border-border bg-white px-3.5 py-2">
-          <span className="flex shrink-0 items-center gap-2.5 text-[15px] text-faint">
+          <span className="flex shrink-0 items-center gap-2.5 text-[15px] text-muted">
             <span>‹</span>
             <span>›</span>
             <span className="text-[13px]">⟳</span>
@@ -323,7 +323,7 @@ export function TrySimulator({
             <span className="text-[9px] text-positive">🔒</span>
             <span className="truncate">{pageJob.url}</span>
           </span>
-          <span className="shrink-0 text-[13px] text-faint">🧩</span>
+          <span className="shrink-0 text-[13px] text-muted">🧩</span>
           {/* The Litos toolbar icon the popup hangs off of */}
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md ring-2 ring-ink/15">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -388,7 +388,7 @@ export function TrySimulator({
                     Litos
                   </span>
                 </span>
-                <span className="flex items-center gap-1 text-faint">
+                <span className="flex items-center gap-1 text-muted">
                   <span className="flex h-7 w-7 items-center justify-center rounded-lg text-[13px]">
                     ⤢
                   </span>
@@ -432,7 +432,7 @@ export function TrySimulator({
                 {step !== "chooser" && step !== "done" && (
                   <>
                     <ReceiptRows step={step} stamps={stamps} mode={mode} />
-                    <p className="flex items-center justify-center gap-1.5 pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-faint">
+                    <p className="flex items-center justify-center gap-1.5 pt-0.5 text-center font-mono text-[10px] uppercase tracking-[0.08em] text-muted">
                       <ThinkingOrb state="working" size={20} />
                       Making your application
                     </p>
@@ -444,10 +444,10 @@ export function TrySimulator({
               {/* Submit stays visibly not ours to press. */}
               <div className="border-t border-border px-4 py-3">
                 <div className="flex w-full items-center justify-between rounded-full border-2 border-dashed border-border px-4 py-2">
-                  <span className="text-[13px] font-medium text-faint">
+                  <span className="text-[13px] font-medium text-muted">
                     Submit application
                   </span>
-                  <span className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
+                  <span className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-muted">
                     Waiting on you
                   </span>
                 </div>
@@ -466,7 +466,7 @@ function VerbButton({ onClick, children }: { onClick: () => void; children: Reac
   return (
     <button
       onClick={onClick}
-      className="w-full rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+      className="w-full rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
     >
       {children}
     </button>
@@ -527,7 +527,7 @@ function Chooser({
             Making your application
           </p>
         </div>
-        <p className="mt-2 font-mono text-[10px] text-faint">+{elapsed.toFixed(1)}s</p>
+        <p className="mt-2 font-mono text-[10px] text-muted">+{elapsed.toFixed(1)}s</p>
       </div>
     );
   }
@@ -576,14 +576,14 @@ function Chooser({
                 <span className="block text-[13px] font-medium text-ink">
                   {extracting ? <PendingLabel state="composing">Reading your resume…</PendingLabel> : "Upload your resume"}
                 </span>
-                <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
+                <span className="mt-1 block font-mono text-[10px] uppercase tracking-[0.05em] text-muted">
                   PDF · DOCX · TXT
                 </span>
               </button>
             )}
             <button
               onClick={() => setPasteMode(true)}
-              className="w-full text-center text-[11.5px] font-medium text-faint hover:text-ink"
+              className="w-full text-center text-[11.5px] font-medium text-muted hover:text-ink"
             >
               or paste the text instead
             </button>
@@ -597,7 +597,7 @@ function Chooser({
               onChange={(e) => setResume(e.target.value)}
               placeholder="Paste your resume text here"
               rows={6}
-              className="w-full rounded-xl border border-border bg-white px-3 py-2.5 text-[13px] leading-5 text-ink placeholder:text-faint focus:border-brand focus:outline-none"
+              className="w-full rounded-xl border border-control-border bg-white px-3 py-2.5 text-[13px] leading-5 text-ink placeholder:text-muted focus:border-brand focus:outline-none"
             />
             <button
               onClick={() => {
@@ -605,7 +605,7 @@ function Chooser({
                 setResume("");
                 setFileName(null);
               }}
-              className="w-full text-center text-[11.5px] font-medium text-faint hover:text-ink"
+              className="w-full text-center text-[11.5px] font-medium text-muted hover:text-ink"
             >
               ← upload a file instead
             </button>
@@ -628,7 +628,7 @@ function Chooser({
             Make my application
           </VerbButton>
         </div>
-        <p className="text-[11px] leading-4 text-faint">
+        <p className="text-[11px] leading-4 text-muted">
           Your file is read right here in your browser. Only the text is sent
           to Anthropic&apos;s API to generate this preview, and it is never
           stored.
@@ -766,7 +766,7 @@ function WorkAuthorizationDialog({
             sponsorship &&
             onConfirm(`Authorized: ${authorized} · Sponsorship: ${sponsorship}`)
           }
-          className="mt-5 min-h-11 w-full rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+          className="mt-5 min-h-11 w-full rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-45"
         >
           Continue my preview
         </button>
@@ -871,7 +871,7 @@ function KeywordClarificationDialog({
                     }))
                   }
                   placeholder="Name the project, task, or result."
-                  className="mt-2 w-full rounded-[12px] border border-border bg-white px-3 py-2.5 text-[13px] leading-5 text-ink outline-none placeholder:text-faint focus:border-brand disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-faint"
+                  className="mt-2 w-full rounded-[12px] border border-control-border bg-white px-3 py-2.5 text-[13px] leading-5 text-ink outline-none placeholder:text-muted focus:border-brand disabled:cursor-not-allowed disabled:bg-surface-alt disabled:text-muted"
                 />
                 <label className="mt-2 flex min-h-11 cursor-pointer items-center gap-3 text-[12px] text-muted">
                   <input
@@ -892,7 +892,7 @@ function KeywordClarificationDialog({
           })}
         </div>
 
-        <p className="mt-4 text-[11px] leading-5 text-faint">
+        <p className="mt-4 text-[11px] leading-5 text-muted">
           A short “yes” is not enough. Give one concrete detail, or mark that you
           have not done it.
         </p>
@@ -900,7 +900,7 @@ function KeywordClarificationDialog({
           type="button"
           disabled={!complete}
           onClick={confirm}
-          className="mt-4 min-h-11 w-full rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
+          className="mt-4 min-h-11 w-full rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink disabled:cursor-not-allowed disabled:opacity-45"
         >
           Use my answers
         </button>
@@ -937,11 +937,11 @@ function ReceiptRows({
           >
             <span className="flex items-center gap-3">
               <span className={`h-6 w-0.5 shrink-0 rounded-full ${done ? r.thread : "bg-border"}`} />
-              <span className={`text-[13px] font-medium ${done ? "text-ink" : "text-faint"}`}>
+              <span className={`text-[13px] font-medium ${done ? "text-ink" : "text-muted"}`}>
                 {r.label}
               </span>
             </span>
-            <span className="flex items-center font-mono text-[10px] text-faint">
+            <span className="flex items-center font-mono text-[10px] text-muted">
               {done ? (
                 stamps[r.key] ?? ""
               ) : active ? (
@@ -976,7 +976,7 @@ function DonePanel({ mode }: { mode: "canned" | "real" }) {
       <a
         href="/login"
         onClick={() => track("signin_click", { source: "try" })}
-        className="block w-full rounded-full bg-brand px-5 py-2.5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90"
+        className="block w-full rounded-full bg-action px-5 py-2.5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
       >
         Get started, it&apos;s free
       </a>
@@ -1018,7 +1018,7 @@ function PostingHeader({
 }) {
   return (
     <>
-      <p className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+      <p className="truncate font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
         {job.company} · {job.location}
       </p>
       <p className="mt-2 text-lg font-semibold tracking-tight text-ink">
@@ -1052,7 +1052,7 @@ function PostingBody({ jd }: { jd?: string }) {
           <div className="h-1.5 w-8/12 rounded-full bg-surface-alt" />
         </div>
       )}
-      <span className="mt-7 inline-block rounded-full border border-border px-5 py-2 text-sm font-medium text-faint">
+      <span className="mt-7 inline-block rounded-full border border-border px-5 py-2 text-sm font-medium text-muted">
         Apply for this job
       </span>
     </>
@@ -1079,7 +1079,7 @@ function ArtifactShell({
       }`}
     >
       <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1.5">
-        <p className="min-w-0 break-all font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="min-w-0 break-all font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
           {eyebrow}
         </p>
         <span className={`shrink-0 rounded-full px-2.5 py-0.5 font-mono text-[9px] font-medium uppercase tracking-[0.05em] ${chipClass}`}>
@@ -1124,7 +1124,7 @@ function ResumeArtifact({
         ))}
       </ul>
       {real && (
-        <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
+        <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-muted">
           Preview. The real one shows the whole page.
         </p>
       )}
@@ -1182,7 +1182,7 @@ function FormArtifact({
           );
         })}
       </div>
-      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
+      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-muted">
         {packet ? "3 example questions · nothing sent yet" : "25 filled · 2 left for you · nothing sent yet"}
       </p>
     </ArtifactShell>
@@ -1200,7 +1200,7 @@ function OutreachArtifact({ body, real }: { body: string; real: boolean }) {
         <p className="mt-2 text-[13px] font-medium text-ink">{CANNED_OUTREACH.subject}</p>
       )}
       <p className="mt-1.5 text-[12.5px] leading-5 text-muted">{body}</p>
-      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-faint">
+      <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.05em] text-muted">
         This is a draft. You press send.
       </p>
     </ArtifactShell>

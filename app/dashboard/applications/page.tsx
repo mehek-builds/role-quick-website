@@ -1587,21 +1587,21 @@ function Applications() {
               <h2 id="application-ledger-heading" className={selected ? "sr-only" : "text-sm font-medium text-ink"}>
                 {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
               </h2>
-              <span className="font-mono text-[11px] text-faint">{visiblePackets.length} of {reviewablePackets.length}</span>
+              <span className="font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
               {duplicatePostingNote(duplicateMarks) && (
                 <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
               )}
             </div>
             <div className="flex gap-2">
               <label className="sr-only" htmlFor="application-filter">Filter applications</label>
-              <select id="application-filter" value={applicationFilter} onChange={(event) => setApplicationFilter(event.target.value as ApplicationFilter)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
+              <select id="application-filter" value={applicationFilter} onChange={(event) => setApplicationFilter(event.target.value as ApplicationFilter)} className="min-h-11 rounded-full border border-control-border bg-surface px-3 text-xs text-ink">
                 <option value="all">Everything</option>
                 <option value="action">Needs you</option>
                 <option value="ready">Ready</option>
                 <option value="submitted">Sent</option>
               </select>
               <label className="sr-only" htmlFor="application-sort">Sort applications</label>
-              <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-border bg-surface px-3 text-xs text-ink">
+              <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-control-border bg-surface px-3 text-xs text-ink">
                 <option value="recent">Recent first</option>
                 <option value="company">Company A-Z</option>
               </select>
@@ -1639,7 +1639,7 @@ function Applications() {
                     <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
                     {duplicateBadge(duplicateMarks.get(packet.id)) && (
-                      <span className="mt-1 truncate text-[10px] uppercase tracking-[0.05em] text-faint">
+                      <span className="mt-1 truncate text-[10px] uppercase tracking-[0.05em] text-muted">
                         {duplicateBadge(duplicateMarks.get(packet.id))!.label}
                       </span>
                     )}
@@ -1666,7 +1666,7 @@ function Applications() {
               <>
                 {/* An unlabelled column of company names and bare dates left "Jul 21, 2026"
                     meaning nothing. Say what each column is. */}
-                <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-2 py-2 text-[11px] text-faint sm:grid">
+                <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-2 py-2 text-[11px] text-muted sm:grid">
                   <span>Role</span>
                   <span>Company</span>
                   <span>Last updated</span>
@@ -1677,7 +1677,7 @@ function Applications() {
                     <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
-                      <time className="hidden text-xs text-faint sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
+                      <time className="hidden text-xs text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
                       {/* A column where every cell reads the same carries no information and costs
                           a fifth of the row. It only renders when the rows actually differ. */}
                       {/* Two chips, not one, and the order is deliberate: the status is what the
@@ -1793,7 +1793,7 @@ function Applications() {
                   <p className="truncate text-sm font-medium text-ink">
                     {selected.job_context.role} · {selected.job_context.company}
                   </p>
-                  <p className="text-[11px] text-faint">
+                  <p className="text-[11px] text-muted">
                     {review.ats_name ?? "the company's application page"} · resume built {formatRelativeDate(selected.created_at)}
                   </p>
                 </div>
@@ -1910,7 +1910,7 @@ function Applications() {
                 <Button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || (!coverLetterBody.trim() && !selected.spec._cover_letter)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBusy ? "Checking..." : coverLetterBody.trim() ? "Save cover letter" : "Remove cover letter"}</Button>
               </div>
             </div>
-            <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
+            <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
             {(selected.spec._cover_letter?.warnings?.length ?? 0) > 0 && (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-warn">
                 {selected.spec._cover_letter!.warnings.map((warning) => <li key={warning}>{warning}</li>)}
@@ -1960,7 +1960,7 @@ function Applications() {
             <div className="flex gap-2">
               {selected.download_url && selected.download_url !== "#" && <a href={selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               {review.portal_supported === false
-                ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Open the company page</a>
+                ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
                 : <Button onClick={continueFromResume} disabled={saving || coverLetterBusy} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {saving || coverLetterBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : "Fill the form"}
                 </Button>}
@@ -2038,7 +2038,7 @@ function NewApplicationPanel({
           viewport while this button was at y = 554. */}
       <ComposerRefusalNote refusal={refusal} at="url" />
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-border"}`} />
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-control-border"}`} />
       {/* Beside the button that raised it, not in the page banner far above it. The button and this
           line are in the same flex row, so a student who can reach the button can read the refusal
           without scrolling: no scrollIntoView, no requestAnimationFrame, nothing that stops running
@@ -2083,7 +2083,7 @@ function ApplicationField({ label, value, onChange, placeholder, type = "text", 
       {/* aria-invalid rather than a second message per field: the one alert beside the button says
           what is wrong, and this says which boxes it meant, in both channels at once. Omitted (not
           set to "false") when valid, so nothing is announced about a field that is fine. */}
-      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-invalid={invalid || undefined} className={`mt-1.5 w-full rounded-full border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand ${invalid ? "border-danger" : "border-border"}`} />
+      <input id={id} type={type} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} aria-invalid={invalid || undefined} className={`mt-1.5 w-full rounded-full border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand ${invalid ? "border-danger" : "border-control-border"}`} />
     </div>
   );
 }
@@ -2341,7 +2341,7 @@ function EditableLine({ value, onChange, className = "" }: { value: string; onCh
 function EditableHighlight({ value, terms, onChange, className = "" }: { value: string; terms: ReadonlySet<string>; onChange: (value: string) => void; className?: string }) {
   const [editing, setEditing] = useState(false);
   return editing ? (
-    <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-inner border border-brand bg-white px-2 py-1 outline-none" />
+    <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-inner border border-control-border bg-white px-2 py-1 outline-none focus:border-brand" />
   ) : (
     <button type="button" onClick={() => setEditing(true)} className={`text-left leading-[1.35] hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30 ${className}`}>
       {/* hideMissing: an amber "asked for and NOT on your resume" mark cannot honestly appear on
@@ -2393,7 +2393,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.08em] text-teal-ink">{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
+          <p className={`mt-1 font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !question.answer.trim() ? "text-warn" : "text-muted"}`}>{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
           {/* Why this one is hers. Written by the backend so that the Apply screen and a stalled
               run's attention reason cannot describe the same refusal in two different voices. */}
           {question.explanation && (
@@ -2408,13 +2408,13 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
               id={`question-${question.id}`}
               value={question.answer}
               onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))}
-              className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
+              className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
             >
               <option value="">Choose an answer</option>
               {question.options.map((option) => <option key={option} value={option}>{option}</option>)}
             </select>
           ) : (
-            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
           )}
           {/* Said once, on the row it is true of, rather than as a promise at the top of a screen
               she cannot check. A declaration about her carries to the next posting; an answer about
@@ -2505,17 +2505,16 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
             value={code}
             onChange={(event) => setCode(event.target.value)}
             disabled={submitting}
-            className="mt-1 w-48 rounded-inner border border-border bg-surface px-3 py-2 font-mono text-sm tracking-[0.2em] text-ink disabled:opacity-50"
+            className="mt-1 w-48 rounded-inner border border-control-border bg-surface px-3 py-2 font-mono text-sm tracking-[0.2em] text-ink disabled:opacity-50"
             placeholder={digits > 0 ? "".padEnd(digits, "x") : "code"}
           />
         </div>
-        <button
+        <Button
           type="submit"
           disabled={!ready || submitting}
-          className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50"
         >
           {submitting ? "Finishing" : "Finish sending"}
-        </button>
+        </Button>
       </form>
       {error && <p role="alert" className="mt-2 text-xs leading-5 text-danger">{error}</p>}
       <p className="mt-3 text-xs leading-5 text-muted">
@@ -2624,7 +2623,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
           <div role="alert" className="mt-4 rounded-inner bg-danger-soft px-4 py-3 text-sm leading-6 text-danger">
             <p>{educationDriftWarning}</p>
-            <button type="button" onClick={onCheckResume} className="mt-3 rounded-full bg-danger px-4 py-2 text-sm font-medium text-white">Check resume</button>
+            <Button onClick={onCheckResume} size="sm" className="mt-3">Check resume</Button>
           </div>
         )}
         {review.status === "ready_for_final_approval" && educationProfilePending && (
@@ -2638,7 +2637,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
           <div className="mt-6">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-medium text-positive">Done</p>
-              <p className="font-mono text-[11px] text-faint">{completedItems.length} checked</p>
+              <p className="font-mono text-[11px] text-muted">{completedItems.length} checked</p>
             </div>
             <ul className="mt-2 grid gap-2 sm:grid-cols-2">
               {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
@@ -2666,8 +2665,8 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
           <div role="alert" className="mt-6 rounded-inner bg-warn-soft px-4 py-3 text-sm leading-6 text-warn">
             <p>This company takes a cover letter and Litos does not have one to show you, so it cannot send this yet. Fetch it again, or write it yourself and come back.</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" onClick={onReloadCoverLetter} disabled={coverLetterReloading} className="rounded-full bg-warn px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50">{coverLetterReloading ? "Fetching..." : "Fetch it again"}</button>
-              <button type="button" onClick={onWriteCoverLetter} className="rounded-full border border-warn px-4 py-2 text-sm font-medium text-warn">Write it yourself</button>
+              <Button onClick={onReloadCoverLetter} disabled={coverLetterReloading} size="sm">{coverLetterReloading ? "Fetching..." : "Fetch it again"}</Button>
+              <Button onClick={onWriteCoverLetter} variant="secondary" size="sm">Write it yourself</Button>
             </div>
           </div>
         )}
@@ -2691,7 +2690,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
               {review.questions.map((question) => (
                 <div key={question.id} className="px-3 py-3">
                   <p className="text-xs font-medium leading-5 text-ink">{question.question}</p>
-                  <p className={`mt-1 whitespace-pre-line text-xs leading-5 ${(question.answer ?? "").trim() ? "text-muted" : question.required ? "text-warn" : "text-faint"}`}>
+                  <p className={`mt-1 whitespace-pre-line text-xs leading-5 ${question.required && !(question.answer ?? "").trim() ? "text-warn" : "text-muted"}`}>
                     {(question.answer ?? "").trim() || (question.required ? "Left blank, and this one is required" : "Left blank")}
                   </p>
                 </div>
@@ -2721,7 +2720,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
-          {canFinishInDashboard && <a href="#live-company-page" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">Finish in this dashboard</a>}
+          {canFinishInDashboard && <a href="#live-company-page" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Finish in this dashboard</a>}
           {needsAttention && handoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
           {needsAttention && !handoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
           {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
@@ -2739,7 +2738,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
           {review.status === "ready_for_final_approval" && handoffExpired && (
             <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
           )}
-          {review.status === "ready_for_final_approval" && <button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked} className="rounded-full bg-positive px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-positive disabled:opacity-50">Send it</button>}
+          {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send it</Button>}
         </div>
         {/* The server's own answer to the last press, beside the button that made it. Never routed
             through the page banner: the poll clears that one, and this screen is long enough that a
@@ -2799,7 +2798,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
             A sensitive demographic, identity, or legal question is present. Leave it for the applicant before sending.
           </p>
         )}
-        <p className="mt-5 text-xs leading-5 text-faint">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
+        <p className="mt-5 text-xs leading-5 text-muted">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
         <div id="live-company-page" className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">{canFinishInDashboard ? "Finish the company page here" : "What the form looked like after we filled it in"}</p></div>
@@ -2848,10 +2847,10 @@ function CenteredState({ title, body, loading = false }: { title: string; body?:
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2>{body && <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p>}</Card>;
 }
 
-const CHECKLIST_ACTION_CLASS = "mt-1 flex w-fit rounded-full bg-warn px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-white transition-opacity hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warn";
+const CHECKLIST_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center rounded-full bg-action px-3.5 font-mono text-[10px] uppercase tracking-[0.08em] text-action-ink transition-colors hover:bg-brand-ink";
 
 /* The action pill was a <span>. Not a disabled button, not a button with a missing handler: a span
-   with pill styling, `bg-warn ... text-white`, sitting under a row that says an application is
+   with button styling, sitting under a row that says an application is
    waiting on this exact thing. Pressing REVIEW or CONFIRM fired no request, threw nothing, and
    changed nothing, because there was nothing there to fire. Reproduced on the Anduril packet on
    2026-08-08, and it is why an account with 79 prepared resumes has sent none: the panel names the
@@ -2877,7 +2876,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion }: { item: Subm
       )}
       <span>
         <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
-        {item.detail && <span className="block text-xs text-faint">{item.detail}</span>}
+        {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}
         {control?.element === "link" && (
           <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={CHECKLIST_ACTION_CLASS}>
             {control.label}

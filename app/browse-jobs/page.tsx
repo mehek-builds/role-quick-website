@@ -120,10 +120,10 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
           <p className="mt-1 text-small text-muted"><Highlight text={job.company_name} terms={terms} /></p>
         </div>
       </div>
-      <p className="mt-auto pt-4 text-small leading-snug text-faint">
+      <p className="mt-auto pt-4 text-small leading-snug text-muted">
         <Highlight text={shown.join(" · ")} terms={terms} />
         {extra > 0 && (
-          <span className="text-faint/80"> +{extra} more</span>
+          <span className="text-muted"> +{extra} more</span>
         )}
       </p>
       {/* Pay and job type, on the line under the location, the position Handshake gives them, and
@@ -161,7 +161,7 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
               ? "This job post says visa sponsorship is available"
               : "This company has H-1B filings on record with the US government: an approved petition, or an application it filed and the Labor Department certified. That is not a promise to sponsor you."
           }
-          className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-faint"
+          className="mt-1.5 font-mono text-label font-medium uppercase tracking-[0.08em] text-muted"
         >
           {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
         </p>
@@ -353,7 +353,7 @@ export default async function BrowseJobs({
           <div className="relative flex min-w-0 flex-col gap-1.5">
             <label
               htmlFor="employment_type"
-              className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint"
+              className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted"
             >
               Job type
             </label>
@@ -361,7 +361,7 @@ export default async function BrowseJobs({
               id="employment_type"
               name="employment_type"
               defaultValue={employmentType}
-              className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none"
+              className="min-h-[44px] w-full rounded-inner border border-control-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none"
             >
               {/* Empty value, so an unset filter submits nothing and simply leaves the URL. Worded
                   "Any" rather than "Other": the three comboboxes use "Other" to mean "no filter,
@@ -376,8 +376,8 @@ export default async function BrowseJobs({
           </div>
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
           <div className="relative flex min-w-0 flex-col gap-1.5">
-            <label htmlFor="sort" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">Order</label>
-            <select id="sort" name="sort" defaultValue={sort} className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none">
+            <label htmlFor="sort" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">Order</label>
+            <select id="sort" name="sort" defaultValue={sort} className="min-h-[44px] w-full rounded-inner border border-control-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none">
               <option value="board">Board order</option>
               <option value="newest">Newest on this page</option>
             </select>
@@ -400,7 +400,7 @@ export default async function BrowseJobs({
           <SearchSubmitButton />
         </form>
 
-        <p className="mt-3 text-machine text-faint" aria-live="polite">Ordered by {sort === "newest" ? "newest result on the current page" : "the job board ranking"}.</p>
+        <p className="mt-3 text-machine text-muted" aria-live="polite">Ordered by {sort === "newest" ? "newest result on the current page" : "the job board ranking"}.</p>
 
 
         {searching && ok && (
@@ -482,7 +482,7 @@ export default async function BrowseJobs({
                 Next →
               </a>
             )}
-            <span className="ml-3 text-faint">
+            <span className="ml-3 text-muted">
               page {current} of {countLabel(pages)} · {PER_PAGE} per page
             </span>
           </nav>
@@ -506,7 +506,7 @@ export default async function BrowseJobs({
                 for you whether or not the browser is open. */}
             <a
               href="/login"
-              className="inline-flex min-h-[44px] items-center rounded-control bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              className="inline-flex min-h-[44px] items-center rounded-control bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
             >
               Get started
             </a>

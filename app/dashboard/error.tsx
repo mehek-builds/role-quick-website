@@ -52,7 +52,7 @@ export default function DashboardError({
         </div>
       </EmptyState>
       {error.digest && (
-        <p className="mt-6 text-center font-mono text-[11px] text-faint">
+        <p className="mt-6 text-center font-mono text-[11px] text-muted">
           Reference {error.digest}. Quote it at{" "}
           <a href="/contact" className="underline hover:text-muted">
             contact

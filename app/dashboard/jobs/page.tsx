@@ -353,8 +353,8 @@ export default function JobsPage() {
       )}
 
       <Card className="grid gap-3 p-4 md:grid-cols-[1fr_0.7fr_auto_auto]">
-        <input aria-label="Search job titles" value={query} onChange={(event) => setQuery(event.target.value)} onBlur={commitTargetRole} onKeyDown={(event) => { if (event.key === "Enter") commitTargetRole(); }} placeholder="Search job title" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
-        <input aria-label="Filter by location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
+        <input aria-label="Search job titles" value={query} onChange={(event) => setQuery(event.target.value)} onBlur={commitTargetRole} onKeyDown={(event) => { if (event.key === "Enter") commitTargetRole(); }} placeholder="Search job title" className="rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
+        <input aria-label="Filter by location" value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Location" className="rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30" />
         {/* Same closed vocabulary as /browse-jobs, and the same reason it is a select: the title
             box above already accepts free text, and "intern" typed into it matches "Internal
             Audit" while missing every co-op. This control is the only way to ask the question
@@ -364,7 +364,7 @@ export default function JobsPage() {
           aria-label="Filter by job type"
           value={employmentType}
           onChange={(event) => setEmploymentType(event.target.value)}
-          className="rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30"
+          className="rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors hover:border-brand focus:border-brand focus-visible:ring-2 focus-visible:ring-brand/30"
         >
           <option value="">Any job type</option>
           {EMPLOYMENT_TYPES.map((type) => (
@@ -387,9 +387,9 @@ export default function JobsPage() {
 
       {!query.trim() && recentSearches.length > 0 && (
         <div className="flex flex-wrap items-center gap-2" aria-label="Recent job-title searches">
-          <span className="text-xs text-faint">Recent searches</span>
+          <span className="text-xs text-muted">Recent searches</span>
           {recentSearches.map((title) => <button key={title} type="button" onClick={() => setQuery(title)} className="min-h-9 rounded-full border border-border px-3 text-xs text-muted hover:border-ink hover:text-ink">{title}</button>)}
-          <button type="button" onClick={() => { setRecentSearches([]); try { window.localStorage.removeItem(RECENT_SEARCHES_KEY); } catch {} }} className="min-h-9 px-2 text-xs text-faint underline underline-offset-4 hover:text-ink">Clear</button>
+          <button type="button" onClick={() => { setRecentSearches([]); try { window.localStorage.removeItem(RECENT_SEARCHES_KEY); } catch {} }} className="min-h-9 px-2 text-xs text-muted underline underline-offset-4 hover:text-ink">Clear</button>
         </div>
       )}
 
@@ -476,7 +476,7 @@ export default function JobsPage() {
           {/* The end of the ranking is not the end of the board, and saying nothing here let the
               list imply it was. Only shown once there is nothing more to page through. */}
           {!hasMore && poolExhausted && (
-            <p className="text-center text-xs text-faint">
+            <p className="text-center text-xs text-muted">
               More roles exist than Litos ranks at once. Search or filter to rank a different set.
             </p>
           )}
@@ -543,7 +543,7 @@ function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; 
             saved search on every row, so it was removed. The rule it existed to keep still holds:
             one metric's score may never carry another metric's reasons, which is why the badge
             above says resume-to-JD coverage and nothing else on this row speaks for it. */}
-        <p className="mt-1.5 font-mono text-[11px] text-faint">
+        <p className="mt-1.5 font-mono text-[11px] text-muted">
           Found {formatRelativeDate(job.first_seen_at)}
           {job.department ? ` · ${job.department}` : ""}
         </p>
@@ -561,7 +561,7 @@ function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; 
       ) : (
         <Link
           href={`/dashboard/applications?job=${job.id}`}
-          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-brand px-6 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:basis-auto"
+          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-action px-6 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:basis-auto"
         >
           Apply
         </Link>

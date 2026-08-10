@@ -94,9 +94,9 @@ function PasswordField({
         autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+        className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
       />
-      {hint && <p className="mt-2 text-xs leading-5 text-faint">{hint}</p>}
+      {hint && <p className="mt-2 text-xs leading-5 text-muted">{hint}</p>}
     </>
   );
 }
@@ -464,7 +464,7 @@ export default function Login() {
                 </div>
                 <div className="my-5 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-border" />
-                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">or</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
               </>
@@ -488,7 +488,7 @@ export default function Login() {
                   setDeliveryNotice(null);
                 }}
                 placeholder="you@example.com"
-                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
               {(flow === "signin" || flow === "signup") && (
                 <PasswordField
@@ -526,7 +526,7 @@ export default function Login() {
                   clear notice, and pressing "Create account" under this sentence
                   is that act. */}
               {(flow === "signup" || claimMode) && (
-                <p className="mt-3 text-center text-xs leading-5 text-faint">
+                <p className="mt-3 text-center text-xs leading-5 text-muted">
                   By creating an account you agree to the{" "}
                   <a href="/terms" className="underline hover:text-muted">
                     Terms
@@ -542,12 +542,12 @@ export default function Login() {
             {!claimMode && (
               <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
                 {flow !== "signup" && (
-                  <button type="button" onClick={() => { setFlow("signup"); setError(null); }} className="text-brand hover:underline">
+                  <button type="button" onClick={() => { setFlow("signup"); setError(null); }} className="text-brand-ink hover:underline">
                     Create account
                   </button>
                 )}
                 {flow !== "signin" && (
-                  <button type="button" onClick={() => { setFlow("signin"); setError(null); }} className="text-brand hover:underline">
+                  <button type="button" onClick={() => { setFlow("signin"); setError(null); }} className="text-brand-ink hover:underline">
                     Sign in
                   </button>
                 )}
@@ -567,7 +567,7 @@ export default function Login() {
               <>
                 <div className="my-5 flex items-center gap-3" aria-hidden="true">
                   <span className="h-px flex-1 bg-border" />
-                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-faint">or</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">or</span>
                   <span className="h-px flex-1 bg-border" />
                 </div>
                 <Button
@@ -576,7 +576,7 @@ export default function Login() {
                   onClick={() => void continueAsGuest()} variant="secondary" block>
                   {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Guest mode"}
                 </Button>
-                <p className="mt-3 text-center text-xs leading-5 text-faint">
+                <p className="mt-3 text-center text-xs leading-5 text-muted">
                   Your first week is free. No card needed. You only see this the first time.
                 </p>
                 {/* Both controls in this block can create an account: Google on a
@@ -587,7 +587,7 @@ export default function Login() {
                     It NAMES the button, so the sentence keeps pointing at a
                     control the reader can see; it said "looking around" while
                     the button said "Look around without signing up". */}
-                <p className="mt-4 text-center text-xs leading-5 text-faint">
+                <p className="mt-4 text-center text-xs leading-5 text-muted">
                   Continuing with Google or using guest mode creates an account,
                   under the same{" "}
                   <a href="/terms" className="underline hover:text-muted">
@@ -622,7 +622,7 @@ export default function Login() {
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
               placeholder="000000"
-              className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
+              className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-center font-mono text-lg tracking-[0.4em] text-ink outline-none placeholder:text-faint focus:border-brand"
             />
             <Button
               type="submit"
@@ -706,7 +706,7 @@ export default function Login() {
           The privacy line stays. On the screen that asks for an email, the
           right to take it back is the thing worth saying, and it carries the
           only /privacy link on this page. */}
-      <p className="mt-8 max-w-sm text-center text-xs leading-5 text-faint">
+      <p className="mt-8 max-w-sm text-center text-xs leading-5 text-muted">
         Your data is yours. You can download it or delete it anytime.{" "}
         <a href="/privacy" className="underline hover:text-muted">
           Privacy

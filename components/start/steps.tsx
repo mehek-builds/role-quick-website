@@ -84,7 +84,7 @@ export function FocusStep({
             setLoadError(null);
             setAttempt((n) => n + 1);
           }}
-          className="mt-4 text-sm text-brand underline underline-offset-4"
+          className="mt-4 text-sm text-brand-ink underline underline-offset-4"
         >
           Try loading again
         </button>
@@ -205,7 +205,7 @@ function FocusForm({
             if (!event.currentTarget.contains(event.relatedTarget)) setRoleMenuOpen(false);
           }}
         >
-          <label htmlFor="additional-role" className="text-xs text-faint">Add another job</label>
+          <label htmlFor="additional-role" className="text-xs text-muted">Add another job</label>
           <div className="mt-1.5 flex gap-2">
             <input
               id="additional-role"
@@ -238,7 +238,7 @@ function FocusForm({
               aria-controls="additional-role-options"
               aria-activedescendant={roleMenuOpen && customMatches[activeMatchIndex] ? `additional-role-option-${activeMatchIndex}` : undefined}
               autoComplete="off"
-              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-control-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
             />
             <button
               type="button"
@@ -573,7 +573,7 @@ export function InstallStep({
             href={STORE_URL}
             target="_blank"
             rel="noreferrer"
-            className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
           >
             Add to Chrome
           </a>
@@ -607,7 +607,7 @@ export function InstallStep({
           <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
             Live postings
           </span>
-          <span className="font-mono text-[11px] text-faint">Refreshed daily</span>
+          <span className="font-mono text-[11px] text-muted">Refreshed daily</span>
         </div>
         {jobs === null ? (
           <div className="space-y-2 p-4">
@@ -634,7 +634,7 @@ export function InstallStep({
                   {j.company} · {j.location}
                 </span>
               </span>
-              <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.06em] text-faint">
+              <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
                 Open
               </span>
             </a>
@@ -731,7 +731,7 @@ export function GapsStep({
         onChange={(e) => setValues((v) => ({ ...v, [key]: e.target.value }))}
         placeholder={meta.placeholder}
         aria-label={meta.label}
-        className="min-h-11 w-full rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="min-h-11 w-full rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     );
   }

@@ -204,7 +204,7 @@ export function RecentExperienceStep({
                 />
                 <span className="min-w-0">
                   <span className="block text-sm text-ink">{candidate.title || candidate.type} at {candidate.org}</span>
-                  <span className="mt-0.5 block font-mono text-[11px] uppercase tracking-[0.06em] text-faint">{candidate.date_range || "Date not found"}</span>
+                  <span className="mt-0.5 block font-mono text-[11px] uppercase tracking-[0.06em] text-muted">{candidate.date_range || "Date not found"}</span>
                 </span>
               </label>
             ))}
@@ -215,7 +215,7 @@ export function RecentExperienceStep({
       {selected && (
         <div className="mb-7 rounded-inner border border-border bg-surface-alt px-4 py-3.5">
           <p className="text-sm text-ink">{selected.title || selected.type} at {selected.org}</p>
-          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.06em] text-faint">{selected.date_range || "Date not found"}</p>
+          <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">{selected.date_range || "Date not found"}</p>
           {review.impact_candidate?.draft && <p className="mt-3 text-[13px] leading-6 text-muted">{review.impact_candidate.draft}</p>}
           {/* The way back after a reload. `choosing` is component state, so a student who picked in
               an earlier session lands here with the group closed and the stored status no longer
@@ -246,13 +246,13 @@ export function RecentExperienceStep({
               <div className="space-y-4">
                 {(hasExistingBullet && index === 0 ? missing : COMPONENTS).map(({ key, label, placeholder }) => (
                   <label key={key} className="block">
-                    <span className="text-xs text-faint">{label}</span>
+                    <span className="text-xs text-muted">{label}</span>
                     <input
                       value={answers[index]?.[key] ?? ""}
                       onChange={(event) => setAnswer(index, key, event.target.value)}
                       placeholder={placeholder}
                       maxLength={key === "action" ? 40 : key === "metric_or_scope" ? 120 : 180}
-                      className="mt-1.5 min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-sm text-ink placeholder:text-faint focus:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                      className="mt-1.5 min-h-[44px] w-full rounded-inner border border-control-border bg-white px-4 text-sm text-ink placeholder:text-faint focus:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                     />
                   </label>
                 ))}

@@ -128,7 +128,7 @@ export default function ForCareerCentres() {
           </p>
           <a
             href="/contact"
-            className="mt-5 inline-flex min-h-11 items-center rounded-full bg-brand px-6 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+            className="mt-5 inline-flex min-h-11 items-center rounded-full bg-action px-6 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
           >
             Email us
           </a>
