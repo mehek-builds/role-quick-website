@@ -35,6 +35,15 @@ test("cookie inventory and policy history are linked from legal surfaces", () =>
   assert.match(read("components/SiteFooter.tsx"), /href="\/security"/);
 });
 
+test("the public footer links only to Litos-owned social accounts", () => {
+  const footer = read("components/SiteFooter.tsx");
+  assert.match(footer, /href="https:\/\/x\.com\/trylitos"[^>]*>X<\/a>/);
+  assert.match(footer, /href="https:\/\/www\.instagram\.com\/trylitos\/"[^>]*>Instagram<\/a>/);
+  assert.doesNotMatch(footer, /x\.com\/MehekBuilds/);
+  assert.doesNotMatch(footer, /github\.com\/mehek-builds/);
+  assert.doesNotMatch(footer, />GitHub<\/a>/);
+});
+
 test("not found page owns metadata and useful recovery routes", () => {
   const page = read("app/not-found.tsx");
   const title = /title:\s*\{\s*absolute:\s*"([^"]+)"\s*\}/.exec(page)?.[1];
