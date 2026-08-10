@@ -23,55 +23,59 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
      in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
   { key: "sponsorship", label: "Work visa", weight: 1 },
   { key: "base", label: "Your one page", weight: 2 },
-  /* Reinstated as a real screen by #279 ("Make referral onboarding gap reachable") and NOT added
-     here at the time, which is the whole reason this entry exists.
-     `StepRail` used to resolve an unknown key through `Math.max(0, findIndex(...))`, so a rendered
-     screen whose key was missing from this list did not fail loudly: it silently reported itself as
-     index 0. The gaps screen was therefore telling every student it was "Step 1 of 6, Your resume"
-     while sitting second from last. A wayfinding device that points backwards is worse than none.
-     That clamp is gone now, so the symptom changed: an unrecognised key leaves `i` at -1 and the
-     rail draws itself with no position at all. Quieter, still wrong, and still a reason to keep
-     every rendered screen in this list.
+  /* Added here by #285, which found it rendering without an entry: `StepRail` used to resolve an
+     unknown key through `Math.max(0, findIndex(...))`, so a rendered screen missing from this list
+     did not fail loudly, it silently reported itself as index 0. The gaps screen was therefore
+     telling every student it was "Step 1 of 6, Your resume" while sitting second from last. A
+     wayfinding device that points backwards is worse than none. That clamp is gone now, so the
+     symptom changed: an unrecognised key leaves `i` at -1 and the rail draws itself with no position
+     at all. Quieter, still wrong, and still the reason every rendered screen belongs in this list.
 
      Weight 1, alongside focus and sponsorship: it is a handful of short inputs, and the rail is a
      map of TIME.
 
-     `conditional` is the rest of that fix. This is the one screen in the list the flow does not
-     always contain, so it is the one entry that must not be counted by default: see `flowSteps`
-     below for when it is. Left in STEPS unconditionally it made the denominator a permanent
-     overcount, which was accepted in #285 as the cheaper of two errors and is what this flag
-     removes without giving back the misreporting screen that #285 was fixing. */
+     `conditional` marks the one screen the flow does not always contain, so it is the one entry
+     that must not be counted by default. Left in STEPS unconditionally it made the denominator a
+     permanent overcount, which #285 accepted as the cheaper of two errors and this flag removes. */
   { key: "gaps", label: "A few details", weight: 1, conditional: true },
   { key: "done", label: "Done", weight: 0 },
 ];
 
 /** The steps this particular student's flow contains, which is the rail's denominator.
  *
- * A CONDITIONAL step counts when the flow is ON it, and not otherwise. Two reasons it is that and
- * not "when the server reports outstanding gaps":
+ * A CONDITIONAL step counts when the SERVER says the flow contains it, or when the flow is standing
+ * on it. `includes_gaps_step` is the server's answer and is the load-bearing half.
  *
- *  1. Outstanding gaps do not put the gaps screen in anyone's flow. The step is DERIVED server-side
- *     (routes/onboarding.ts) and backend #116 removed 'gaps' from the union `onboardingStepFrom`
- *     returns, so GET /onboarding/state cannot answer with it: 'base' is followed by 'done' for
- *     every student, whether or not their profile has holes in it. Counting the screen because the
- *     gaps exist would keep telling a student with outstanding details that setup is seven screens
- *     long and then show them six, which is the miscount this is here to remove.
- *  2. `gaps` is what is STILL outstanding, so it empties as the screen is answered. A denominator
- *     read from its length would count the screen while a student stood on it and stop counting it
- *     the moment they finished, so the total would shrink under them at the last screen.
+ * WHY THE SERVER ANSWERS THIS AND THIS MODULE DOES NOT. The obvious client-side rule - count the
+ * screen while `state.gaps` is non-empty - is wrong in both directions, and the wrongness is the
+ * whole reason #285 existed:
  *
- * The step being rendered is always in the result, which is the invariant #285 needed: `StepRail`
- * locates itself with `findIndex`, and a rendered screen missing from the list cannot say where it
- * is.
+ *  1. `gaps` is what is STILL OUTSTANDING, so it empties as the screen is answered. A denominator
+ *     read from its length counts the screen while a student stands on it and stops counting it the
+ *     moment they finish, so the printed total drops from seven to six on the last screen of setup.
+ *  2. It lists fields the screen does not gate on. The server routes to this screen for a missing
+ *     gpa, gpa_scale or major only (routes/onboarding.ts SETUP_GAP_FIELDS); desired_salary is
+ *     optional and languages and referral_source_default are collected one screen earlier, on base.
+ *     Counting a screen because `desired_salary` is blank would add a seventh step to nearly every
+ *     flow and then show six.
+ *  3. Whether the screen was already SHOWN is not in the gap list at all, and it decides the
+ *     answer: a student who skipped it still has every field outstanding and must not be counted
+ *     as about to walk it again.
  *
- * `state.step` is consulted ALONGSIDE `current`, and today that disjunct catches nothing: the only
- * screen that renders with `current: "gaps"` is GapsStep, which app/start/page.tsx reaches only
- * when `state.step` is already "gaps", so the two agree wherever it matters. It is kept as the
- * cheaper half of the invariant, not because a live path needs it: the two DO diverge elsewhere in
- * this flow (a legacy step name from an older backend has `state.step: "targeting"` rendered as
- * `current: "done"`), so a future conditional screen reached the same way would be counted from
- * either side. Both branches are pinned in tests/start-rail-denominator.test.mjs so the dead one
- * cannot rot unnoticed. */
+ * So `includes_gaps_step` is read, never re-derived. An older backend omits it, which is correct
+ * for an older backend: it does not route to that screen, so the flow is six steps.
+ *
+ * `current` and `state.step` are consulted alongside it so that the step being RENDERED is always
+ * in the result. That is the invariant #285 needed - `StepRail` locates itself with `findIndex`,
+ * and a rendered screen missing from the list cannot say where it is - and it is what keeps the
+ * rail honest on the paths that reach a screen without the server deriving it: the localhost QA
+ * bypass (?qa=1&step=gaps), and a legacy step name mid-rolling-deploy. The two DO diverge in this
+ * flow (an older backend's `state.step: "targeting"` renders as `current: "done"`), so both sides
+ * are checked. All three branches are pinned in tests/start-rail-denominator.test.mjs. */
 export function flowSteps(current: OnboardingStep | undefined, state: OnboardingState | null) {
-  return STEPS.filter((s) => !s.conditional || s.key === current || s.key === state?.step);
+  // Keyed to "gaps" rather than to `conditional` in general: `includes_gaps_step` answers for that
+  // screen and no other, so a second conditional step added later must bring its own signal instead
+  // of silently inheriting this one.
+  const inFlow = (s: (typeof STEPS)[number]) => s.key === "gaps" && state?.includes_gaps_step === true;
+  return STEPS.filter((s) => !s.conditional || inFlow(s) || s.key === current || s.key === state?.step);
 }
