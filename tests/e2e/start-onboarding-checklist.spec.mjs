@@ -171,6 +171,8 @@ function resetProgress() {
    neither is reachable through the happy-path walk. */
 let forceStep = null;
 let omitSponsorshipFlag = false;
+/* Overrides the outstanding-gaps list so a walk can report gaps the GAPS SCREEN does not own. */
+let forceGaps = null;
 
 /** Rail order, and it must stay rail order: components/start/ui.tsx STEPS is the same sequence. */
 function derivedStep() {
@@ -201,7 +203,7 @@ function onboardingState() {
     /* What is STILL outstanding, so it empties as the gaps screen is answered. Languages is left
        out deliberately: that one gap turns the BASE step into a second question screen, and this
        walk is measuring the flow's shape rather than that screen's branch. */
-    gaps: progress.gaps ? [] : ["gpa", "gpa_scale", "major"],
+    gaps: forceGaps ?? (progress.gaps ? [] : ["gpa", "gpa_scale", "major"]),
     gap_suggestions: {},
     source_pages: 3,
     source_resume_url: null,
@@ -720,6 +722,31 @@ test("criterion 6: the receipt reports the account, not a fixed list", async () 
     omitSponsorshipFlag = false;
     progress.base = true;
     progress.gaps = true;
+  }
+});
+
+/* Not every outstanding gap means the gaps SCREEN is coming.
+ *
+ * `languages` and `referral_source_default` are asked on the base screen as well
+ * (BaseResumeStep writes both), so a student whose only outstanding keys are those answers them
+ * there and the server never routes to the gaps screen. Counting them into the flow promised a
+ * seventh screen that never arrives, which is the same bug this change removes for the no-gaps
+ * case, just for a narrower cohort. The rail must read six here, on a state that is NOT empty. */
+test("gaps the base screen closes do not add a step to the rail", async () => {
+  try {
+    forceGaps = ["languages", "referral_source_default"];
+    forceStep = "base";
+
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    const rail = await screen("Your one page");
+    assert.equal(rail.total, 6, `an outstanding list of only base-closed keys was counted as a step (${rail.raw})`);
+    assert.equal(rail.step, 5, `the one-page screen should be fifth of six, got ${rail.raw}`);
+  } catch (reason) {
+    await captureFailure("base-closed-gaps");
+    throw reason;
+  } finally {
+    forceGaps = null;
+    forceStep = null;
   }
 });
 

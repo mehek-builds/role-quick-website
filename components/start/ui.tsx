@@ -58,11 +58,12 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
  * the full list, so nothing that renders a StartShell outside /start can break. */
 const StepFlowContext = createContext<OnboardingStep[] | null>(null);
 
+/* `steps` must be referentially stable: it becomes the context value, so a fresh array on every
+   render re-renders every consumer. Memoising here would not help, because `useMemo(() => steps,
+   [steps])` returns the prop's own identity and recomputes exactly when that identity changes,
+   which is a no-op dressed as a guarantee. The caller memoises instead (app/start/page.tsx). */
 export function StepFlowProvider({ steps, children }: { steps: OnboardingStep[]; children: React.ReactNode }) {
-  /* Identity-stable so the provider does not re-render the whole flow on every parent render. The
-     key list is short and changes at most once per session (see the latch in app/start/page.tsx). */
-  const value = useMemo(() => steps, [steps]);
-  return <StepFlowContext.Provider value={value}>{children}</StepFlowContext.Provider>;
+  return <StepFlowContext.Provider value={steps}>{children}</StepFlowContext.Provider>;
 }
 
 /** The steps this student walks, in rail order. The rail counts them and the done screen's receipt

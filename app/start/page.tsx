@@ -44,6 +44,19 @@ import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 const qaGaps = (step: string) =>
   step === "done" ? [] : ["gpa", "gpa_scale", "major", "languages", "referral_source_default"];
 
+/* Gap keys that ONLY the gaps screen can close, which is not the same as "every gap key".
+ *
+ * `languages` and `referral_source_default` are both asked on the BASE screen too
+ * (BaseResumeStep writes profilePatch.languages and patch.referral_source_default), so a student
+ * whose only outstanding gaps are those two answers them there and the server never routes to the
+ * gaps screen at all. Latching the flow on the raw list therefore promised a seventh screen that
+ * never arrived, which is verbatim the bug this whole change exists to remove, just for a
+ * narrower cohort. Only an outstanding key from THIS list means the screen is genuinely coming. */
+const GAPS_SCREEN_ONLY_KEYS = ["gpa", "gpa_scale", "major", "desired_salary", "desired_salary_currency"];
+
+const flowNeedsGaps = (gaps: unknown, step: string) =>
+  step === "gaps" || (Array.isArray(gaps) && gaps.some((g) => GAPS_SCREEN_ONLY_KEYS.includes(g as string)));
+
 export default function Start() {
   const router = useRouter();
   const [state, setState] = useState<OnboardingState | null>(null);
@@ -67,6 +80,19 @@ export default function Start() {
    * Monotonic, so the flow's shape is decided by the first answer that mentions gaps and never
    * revised downward. A ref rather than state because it is always set immediately before a
    * setState that re-renders anyway, so it needs no render of its own and cannot tear. */
+  /* KNOWN LIMIT, and it is deliberate: this latch lives for one page load.
+   *
+   * A student who finishes the gaps screen and then RELOADS while sitting on Done gets a fresh
+   * latch, and by then the gaps are closed, so the rail reads "6 of 6" where it read "7 of 7" a
+   * moment earlier. Not fixed here on purpose. Surviving a reload means persisting the flow shape
+   * client-side, and a stored latch is per-browser rather than per-account: the next person to
+   * sign in on that tab inherits it and gets the original over-count back. Trading a wrong number
+   * on one screen after a reload for a wrong number on someone else's whole flow is a bad trade.
+   *
+   * The durable fix is for GET /onboarding/state to report the flow it derived, since the server
+   * is the only party that actually knows which screens it will route to. Until then the receipt
+   * on that screen is deliberately NOT driven by this latch (see DoneStep), so a reload costs a
+   * step count and never costs a row of what the student actually did. */
   const [flowHasGaps, setFlowHasGaps] = useState(() => {
     /* Seeded here rather than set inside the effect, for the QA bypass only. That bypass builds
        its whole state synchronously and returns, so there is no awaited call to latch from, and
@@ -77,10 +103,10 @@ export default function Start() {
     const params = new URLSearchParams(window.location.search);
     if (!params.has("qa")) return false;
     const step = params.get("step") ?? "resume";
-    return qaGaps(step).length > 0 || step === "gaps";
+    return flowNeedsGaps(qaGaps(step), step);
   });
   const noteGaps = useCallback((s: OnboardingState) => {
-    if ((Array.isArray(s.gaps) && s.gaps.length > 0) || s.step === "gaps") setFlowHasGaps(true);
+    if (flowNeedsGaps(s.gaps, s.step)) setFlowHasGaps(true);
   }, []);
 
   const refresh = useCallback(async () => {
@@ -224,6 +250,10 @@ export default function Start() {
 
   if (!state) {
     return (
+      /* Inside the provider too. Outside it, useFlowSteps falls back to the full STEPS list, so a
+         six-step student got a seven-segment rail that reflowed to six the instant state landed:
+         the same "the map moved under me" problem as a changing total, expressed as geometry. */
+      <StepFlowProvider steps={flowSteps}>
       <div className="mx-auto max-w-2xl px-6 py-16">
         {/* No `current`. This branch used to pass "resume", so every returning student mid-flow
             read "Step 1 of 7 - Your resume" for as long as the state took to arrive, and then
@@ -233,6 +263,7 @@ export default function Start() {
         <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
         <div className="rq-shimmer mt-6 h-32 rounded-inner" />
       </div>
+      </StepFlowProvider>
     );
   }
 

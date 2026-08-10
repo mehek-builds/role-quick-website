@@ -21,7 +21,7 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell, useFlowSteps } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell } from "./ui";
 import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
@@ -966,20 +966,20 @@ export function DoneStep({
   state: OnboardingState;
 }) {
   const [busy, setBusy] = useState(false);
-  /* THIS STUDENT's steps, not every step there is.
-   *
-   * Shared with the rail through useFlowSteps, which matters twice over. The flow is per-student
-   * now, so listing all of STEPS would print "A few details" on the receipt of somebody who was
-   * never shown that screen, describing a step they did not walk. And the 01.. gutter below is
-   * numbered off this array, so drawing it from a different list than the rail counts would put
-   * the receipt's numbers out of step with the rail's on exactly those accounts. */
-  const flowSteps = useFlowSteps();
   const rows = useMemo(
     () =>
-      /* Driven by the rail, minus the screen the student is standing on. Deriving the order here
-         rather than restating it is also what keeps the 01.. gutter aligned with the rail's own
-         step numbers for free. */
-      flowSteps.filter((step) => step.key !== "done").map((step, index) => {
+      /* EVERY step, deliberately, and NOT the rail's per-student flow list.
+       *
+       * Tying this to the rail's latch looked tidy and lost information. The latch is per page
+       * load, so a student who filled in their details, left, and came back opened a receipt with
+       * the "A few details" row simply gone: no confirmation that the work they did was recorded,
+       * on the screen whose only job is to confirm what was recorded. Dropping a row is a worse
+       * failure than printing one for a screen they were never shown, and the row is true either
+       * way, because its value is read from the account rather than from the walk.
+       *
+       * The cost is that the 01.. gutter no longer always lines up with the rail's step numbers
+       * for a student whose flow skipped a screen. That is cosmetic; the missing row was not. */
+      STEPS.filter((step) => step.key !== "done").map((step, index) => {
         const spec = RECEIPT[step.key];
         const value = spec?.of(state);
         return {
@@ -1001,7 +1001,7 @@ export function DoneStep({
            * it must not land on a value like "Some outstanding". */
         };
       }),
-    [state, flowSteps],
+    [state],
   );
 
   return (
