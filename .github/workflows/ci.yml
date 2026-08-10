@@ -133,6 +133,11 @@ jobs:
       - name: Onboarding and empty-state checklist spec
         run: npm run test:checklist-flow
 
+      - name: Onboarding checklist walk (browser)
+        # The seven-screen walk that pins all six Checklist Design criteria and the rail's
+        # arithmetic. It was the only /start browser spec not wired into CI.
+        run: npm run test:start-checklist
+
       - name: Narrow viewport actions spec
         run: npm run test:narrow-viewport
 

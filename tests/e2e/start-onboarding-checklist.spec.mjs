@@ -734,8 +734,16 @@ test("the rail's arithmetic matches the flow that was actually walked", async ()
     );
     visited.forEach((entry, index) => {
       assert.equal(entry.step, index + 1, `screen ${index + 1} reported itself as step ${entry.step}`);
-      assert.equal(entry.total, total, `screen ${index + 1} claims a different total (${entry.total} vs ${total})`);
+      /* THE TOTAL MUST NOT MOVE, and this is the assertion that makes the flow list monotonic.
+       *
+       * `gaps` is the outstanding list, so it empties the moment that screen is finished. Deriving
+       * the denominator from it directly would read 7 while the student stood on the gaps screen
+       * and 6 on the very next one, so the count would appear to shrink under them. The latch in
+       * app/start/page.tsx only ever turns on, and this walk crosses exactly that boundary: it
+       * fills the gaps screen in and then lands on Done. */
+      assert.equal(entry.total, total, `the step total moved mid-flow: screen ${index + 1} says ${entry.total}, the first said ${total}`);
     });
+    assert.equal(total, 7, "this fixture reports gaps, so its student walks all seven screens");
   } catch (reason) {
     await captureFailure("rail-arithmetic");
     throw reason;

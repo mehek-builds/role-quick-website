@@ -12,6 +12,7 @@
  * Guardrails ban all three, and the labels already say what remains.
  */
 
+import { createContext, useContext, useMemo } from "react";
 import { Button } from "@/components/app/Button";
 import type { OnboardingStep } from "@/lib/api";
 
@@ -38,31 +39,67 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
 
      Weight 1, alongside focus and sponsorship: it is a handful of short inputs, and the rail is a
      map of TIME. It is also the one CONDITIONAL screen in the flow, shown only when the server
-     reports outstanding gaps. That makes the denominator a slight overcount for a student who has
-     none, which is the cheaper of the two errors by a wide margin: an occasional "6 of 7" that
-     skips a number beats a screen that misreports where it is every single time it renders. */
+     reports outstanding gaps, which is why the rail takes a per-student step list rather than
+     counting this array. See StepFlowProvider. */
   { key: "gaps", label: "A few details", weight: 1 },
   { key: "done", label: "Done", weight: 0 },
 ];
 
-export function StepRail({ current }: { current: OnboardingStep }) {
-  const i = STEPS.findIndex((s) => s.key === current);
-  const activeStep = STEPS[Math.max(0, i)];
-  const step = Math.max(0, i) + 1;
+/* The steps THIS student will walk, which is not always all of them.
+ *
+ * `gaps` only renders when the server reports outstanding profile gaps, so counting STEPS made the
+ * rail promise a screen that never arrived: a student with none went "Step 5 of 7" straight to
+ * "Step 7 of 7" and never saw 6.
+ *
+ * Delivered by context rather than by a prop because StartShell sits between the rail and every
+ * screen, and threading a prop through would mean seven call sites each able to forget it. A
+ * forgotten prop would silently restore the old count, which is exactly the failure mode that let
+ * the gaps screen report itself as step 1 for two weeks. Absent a provider the rail falls back to
+ * the full list, so nothing that renders a StartShell outside /start can break. */
+const StepFlowContext = createContext<OnboardingStep[] | null>(null);
+
+export function StepFlowProvider({ steps, children }: { steps: OnboardingStep[]; children: React.ReactNode }) {
+  /* Identity-stable so the provider does not re-render the whole flow on every parent render. The
+     key list is short and changes at most once per session (see the latch in app/start/page.tsx). */
+  const value = useMemo(() => steps, [steps]);
+  return <StepFlowContext.Provider value={value}>{children}</StepFlowContext.Provider>;
+}
+
+/** The steps this student walks, in rail order. The rail counts them and the done screen's receipt
+ *  lists them, so the two can never disagree about which screens the flow contained. */
+export function useFlowSteps() {
+  const flow = useContext(StepFlowContext);
+  return useMemo(() => (flow === null ? STEPS : STEPS.filter((s) => flow.includes(s.key))), [flow]);
+}
+
+/** `current` is optional: while the onboarding state is still loading, nobody knows the position. */
+export function StepRail({ current }: { current?: OnboardingStep }) {
+  const steps = useFlowSteps();
+
+  const i = current === undefined ? -1 : steps.findIndex((s) => s.key === current);
+  /* Unknown position, which happens in two places: the shimmer before the state resolves, and any
+     screen whose key is not in this student's flow. Both render the shape of the work with nothing
+     marked current and NO count, because "Step 1 of 7" while we are still asking the server is a
+     wrong answer dressed as a confident one, and it is the first thing a returning student
+     mid-flow reads on every load. */
+  const known = i >= 0;
+  const activeStep = known ? steps[i] : undefined;
+  const step = i + 1;
+
   /* Each segment is as wide as the effort it represents. No percentage number: the written step
      count is precise enough, while the rail provides a quick visual map of the remaining work. */
   return (
-    <div aria-label={`Setup: step ${step} of ${STEPS.length}, ${activeStep.label}`}>
+    <div aria-label={known ? `Setup: step ${step} of ${steps.length}, ${activeStep!.label}` : "Setup, loading"}>
       <div className="flex items-center justify-between gap-4">
-        <span className="text-[13px] text-ink">{activeStep.label}</span>
+        <span className="text-[13px] text-ink">{activeStep?.label ?? ""}</span>
         {/* The machine counting. Same label style as every other meta string in
             the product: 11px mono, uppercase, +0.08em (audit finding 43). */}
         <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Step {step} of {STEPS.length}
+          {known ? `Step ${step} of ${steps.length}` : ""}
         </span>
       </div>
       <ol className="mt-3 flex gap-1.5">
-        {STEPS.map((s, index) => {
+        {steps.map((s, index) => {
           const done = index < step - 1;
           const here = index === step - 1;
           return (

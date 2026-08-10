@@ -12,7 +12,7 @@
  * disagree with reality.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApplicationProfile,
@@ -32,8 +32,17 @@ import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
-import { StepRail } from "@/components/start/ui";
+import { STEPS, StepFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
+
+/* The QA bypass's outstanding-gaps list, in one place.
+ *
+ * Read twice: by the canned onboarding state below, and by the flow latch's initializer, which has
+ * to know whether this QA account walks the gaps screen BEFORE that state object exists. Two
+ * copies of this decision would drift, and the drift would show up as a rail counting a screen it
+ * never renders. Empty on `done` so the completion receipt reviews in its all-clear state. */
+const qaGaps = (step: string) =>
+  step === "done" ? [] : ["gpa", "gpa_scale", "major", "languages", "referral_source_default"];
 
 export default function Start() {
   const router = useRouter();
@@ -47,11 +56,39 @@ export default function Start() {
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Set alongside the QA state stub below so the base step can replay a canned build.
   const [qaDemo, setQaDemo] = useState(false);
+  /* Whether the gaps screen belongs to THIS student's flow, and it only ever latches ON.
+   *
+   * The naive test is `state.gaps.length > 0`, and it is wrong in a way that is worse than the bug
+   * it fixes. `gaps` is what is still OUTSTANDING, so it empties the moment the student finishes
+   * that screen: the denominator would read 7 while they stood on it and 6 one click later, so the
+   * rail would go "6 of 7" then "6 of 6" and the total itself would appear to move. A step counter
+   * whose total changes underneath you is less trustworthy than one that skips a number.
+   *
+   * Monotonic, so the flow's shape is decided by the first answer that mentions gaps and never
+   * revised downward. A ref rather than state because it is always set immediately before a
+   * setState that re-renders anyway, so it needs no render of its own and cannot tear. */
+  const [flowHasGaps, setFlowHasGaps] = useState(() => {
+    /* Seeded here rather than set inside the effect, for the QA bypass only. That bypass builds
+       its whole state synchronously and returns, so there is no awaited call to latch from, and
+       setting state inside an effect body is both what react-hooks rejects and a frame of the
+       wrong count. Server-side this is false, and the first render shows the countless shimmer
+       rail either way, so there is nothing for hydration to disagree about. */
+    if (typeof window === "undefined" || window.location.hostname !== "localhost") return false;
+    const params = new URLSearchParams(window.location.search);
+    if (!params.has("qa")) return false;
+    const step = params.get("step") ?? "resume";
+    return qaGaps(step).length > 0 || step === "gaps";
+  });
+  const noteGaps = useCallback((s: OnboardingState) => {
+    if ((Array.isArray(s.gaps) && s.gaps.length > 0) || s.step === "gaps") setFlowHasGaps(true);
+  }, []);
+
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
+    noteGaps(s);
     setState(s);
     return s;
-  }, []);
+  }, [noteGaps]);
 
   const loadProfile = useCallback(async () => {
     setProfileLoadError(null);
@@ -90,7 +127,7 @@ export default function Start() {
           /* Step-aware for the same reason has_base_resume is, one field up: the done screen's
              receipt reads this, so a hardcoded non-empty list made QA of that screen report details
              outstanding on an account that has none. The gaps step itself still gets its full list. */
-          gaps: qaStep === "done" ? [] : ["gpa", "gpa_scale", "major", "languages", "referral_source_default"],
+          gaps: qaGaps(qaStep),
           // Populated so the base step's languages line is reviewable in QA in its prefilled
           // state, which is the state almost every real student will see.
           gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },
@@ -144,7 +181,7 @@ export default function Start() {
         setError(e instanceof Error ? e.message : "Could not load your setup.");
       }
     })();
-  }, [loadProfile, router, refresh]);
+  }, [loadProfile, router, refresh, noteGaps]);
 
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)
@@ -165,6 +202,15 @@ export default function Start() {
 
   const stepDone = useCallback((step: OnboardingStep) => track("onboarding_step_done", { step }), []);
 
+  /* This student's flow, decided by the latch above. STEPS is the canonical order; the only thing
+     filtered out is a conditional screen they will never be shown.
+     Memoised because StepFlowProvider holds it in a context value: a fresh array on every render
+     would change that value's identity every time and re-render the whole flow underneath it. */
+  const flowSteps = useMemo(
+    () => STEPS.filter((s) => s.key !== "gaps" || flowHasGaps).map((s) => s.key),
+    [flowHasGaps],
+  );
+
   if (error && !state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
@@ -179,13 +225,18 @@ export default function Start() {
   if (!state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
-        <StepRail current="resume" />
+        {/* No `current`. This branch used to pass "resume", so every returning student mid-flow
+            read "Step 1 of 7 - Your resume" for as long as the state took to arrive, and then
+            watched the rail snap forward. The rail now draws the shape of the work and says
+            nothing about position until it knows one. */}
+        <StepRail />
         <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
         <div className="rq-shimmer mt-6 h-32 rounded-inner" />
       </div>
     );
   }
 
+  const screen = (() => {
   switch (state.step) {
     case "focus":
       // During a rolling backend deploy an older state response can still say "focus" before a
@@ -332,4 +383,7 @@ export default function Start() {
         </>
       );
   }
+  })();
+
+  return <StepFlowProvider steps={flowSteps}>{screen}</StepFlowProvider>;
 }

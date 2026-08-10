@@ -21,7 +21,7 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell, useFlowSteps } from "./ui";
 import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
@@ -966,12 +966,20 @@ export function DoneStep({
   state: OnboardingState;
 }) {
   const [busy, setBusy] = useState(false);
+  /* THIS STUDENT's steps, not every step there is.
+   *
+   * Shared with the rail through useFlowSteps, which matters twice over. The flow is per-student
+   * now, so listing all of STEPS would print "A few details" on the receipt of somebody who was
+   * never shown that screen, describing a step they did not walk. And the 01.. gutter below is
+   * numbered off this array, so drawing it from a different list than the rail counts would put
+   * the receipt's numbers out of step with the rail's on exactly those accounts. */
+  const flowSteps = useFlowSteps();
   const rows = useMemo(
     () =>
       /* Driven by the rail, minus the screen the student is standing on. Deriving the order here
-         rather than restating it is also what keeps the 01..06 gutter below aligned with the
-         rail's own step numbers for free. */
-      STEPS.filter((step) => step.key !== "done").map((step, index) => {
+         rather than restating it is also what keeps the 01.. gutter aligned with the rail's own
+         step numbers for free. */
+      flowSteps.filter((step) => step.key !== "done").map((step, index) => {
         const spec = RECEIPT[step.key];
         const value = spec?.of(state);
         return {
@@ -993,7 +1001,7 @@ export function DoneStep({
            * it must not land on a value like "Some outstanding". */
         };
       }),
-    [state],
+    [state, flowSteps],
   );
 
   return (

@@ -65,7 +65,12 @@ test("all seven onboarding checkpoints render with a progress indicator", async 
     ["sponsorship", "Do you need a work visa?", "Setup: step 4 of 7, Work visa"],
     ["base", "One page, ready.", "Setup: step 5 of 7, Your one page"],
     ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],
-    ["done", "Setup complete.", "Setup: step 7 of 7, Done"],
+    /* SIX of six, not seven of seven, and the difference is the fixture rather than a bug.
+       Each row here is an independent page load, and the QA state reports NO outstanding gaps on
+       ?step=done (so the receipt on that screen reviews in its all-clear state). No gaps means the
+       gaps screen is not part of that student's flow, so their rail counts six. The row above is
+       the same rail for a student who does have gaps. Both are correct; see the case below. */
+    ["done", "Setup complete.", "Setup: step 6 of 6, Done"],
   ];
 
   for (const [step, heading, rail] of checkpoints) {
@@ -75,6 +80,24 @@ test("all seven onboarding checkpoints render with a progress indicator", async 
   }
 
   await page.getByText("Setup complete.", { exact: true }).first().waitFor({ state: "visible" });
+});
+
+/* The denominator is per-student, and this is the pair that proves it.
+ *
+ * `gaps` renders only when the server reports outstanding profile gaps, so a student who has none
+ * walks six screens and one who does walks seven. Counting STEPS gave everyone 7, which meant the
+ * no-gaps student jumped from "Step 5 of 7" to "Step 7 of 7" and never saw a step 6.
+ *
+ * Asserted as a contrast rather than as two separate numbers, because either figure alone looks
+ * arbitrary: what has to hold is that the SAME rail reports a different total for two accounts
+ * whose flows genuinely differ. ?step=gaps is the with-gaps fixture, ?step=done the without. */
+test("the step total follows the student's own flow, not the full step list", async () => {
+  await page.goto(`${ORIGIN}/start?qa=1&step=gaps`, { waitUntil: "domcontentloaded" });
+  await page.locator('[aria-label="Setup: step 6 of 7, A few details"]').waitFor({ state: "visible", timeout: 20_000 });
+
+  await page.goto(`${ORIGIN}/start?qa=1&step=done`, { waitUntil: "domcontentloaded" });
+  await page.locator('[aria-label="Setup: step 6 of 6, Done"]').waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await page.locator('[aria-label*="of 7"]').count(), 0, "a no-gaps account was still counted out of seven");
 });
 
 for (const state of [
