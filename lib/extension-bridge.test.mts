@@ -147,6 +147,7 @@ test("Jobvite and iCIMS require 0.5.11 while SmartRecruiters retains 0.5.10", as
   assert.equal(minimumAttendedHandoffExtensionVersion("smartrecruiters"), "0.5.10");
   assert.equal(minimumAttendedHandoffExtensionVersion("jobvite"), "0.5.11");
   assert.equal(minimumAttendedHandoffExtensionVersion("icims"), "0.5.11");
+  assert.equal(minimumAttendedHandoffExtensionVersion("oraclecloud"), "0.5.12");
   reset(() => ({ ok: true, signedIn: true, version: "0.5.10" }));
   const state = await ensureCurrentExtensionSession(
     { token: "jwt-abc", guest: false },

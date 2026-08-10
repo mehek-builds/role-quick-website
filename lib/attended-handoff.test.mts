@@ -7,6 +7,7 @@ import {
   ICIMS_SECURITY_CODE_GATE_REASON,
   JOBVITE_ATTENDED_GATE_REASON,
   MANAGED_NETWORK_ACCESS_RESTRICTION_REASON,
+  ORACLE_ATTENDED_GATE_REASON,
 } from "./attended-handoff.ts";
 
 const SEEKA_FORM = "https://jobs.smartrecruiters.com/oneclick-ui/company/SeekaTechnology/publication/a8f863ea-c116-45b9-9e49-e56ad16833f0?dcr_ci=SeekaTechnology";
@@ -126,4 +127,14 @@ test("unverified and generic account gates never become attended handoffs", () =
         : "https://jobs-express.icims.com/jobs/48173/sales-associate/login",
     })), null);
   }
+});
+
+test("Oracle remains non-armable until a measured post-gate and receipt contract exists", () => {
+  const gate = "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch/job/333913/apply/email";
+  assert.equal(exactAttendedHandoffUrl(review({
+    ats_name: "oraclecloud",
+    attention_reason: ORACLE_ATTENDED_GATE_REASON,
+    extension_handoff_url: gate,
+    portal_url: gate,
+  })), null);
 });
