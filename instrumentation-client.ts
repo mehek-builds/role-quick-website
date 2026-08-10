@@ -1,9 +1,24 @@
 import posthog from "posthog-js/dist/module.slim";
+import { identifyUser } from "@/lib/analytics";
 import { sanitizePostHogEvent } from "@/lib/posthog-privacy";
 import { SESSION_TOKEN_KEY, userIdFromToken } from "@/lib/session-identity";
 
 const token = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
 const host = process.env.NEXT_PUBLIC_POSTHOG_HOST;
+
+/* localStorage is not always reachable: Safari with storage blocked, a
+ * sandboxed iframe without allow-same-origin, and partitioned third-party
+ * embeds all throw SecurityError on access rather than returning null. Its own
+ * try/catch, because folding it into the init block below would report a
+ * storage failure under the message "PostHog initialization failed", which
+ * would send the next person debugging it to the wrong place entirely. */
+function readStoredToken(): string | null {
+  try {
+    return window.localStorage.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
 
 if (token && host) {
   try {
@@ -32,13 +47,18 @@ if (token && host) {
      * every load costs nothing and closes the gap without touching the
      * sign-in path.
      *
-     * Reading the token directly rather than importing lib/api keeps this file
-     * a leaf: lib/api imports lib/analytics, and pulling that chain into the
-     * instrumentation entry point risks an import cycle at boot, which is the
-     * worst possible place to have one. */
-    const stored = window.localStorage.getItem(SESSION_TOKEN_KEY);
-    const userId = userIdFromToken(stored);
-    if (userId) posthog.identify(userId);
+     * It goes through identifyUser rather than posthog.identify directly so
+     * there stays exactly ONE identify call site in the codebase, the one that
+     * carries the "no properties, never the email address" invariant.
+     * tests/posthog.test.mjs enforces that this file does not call
+     * posthog.identify itself.
+     *
+     * The token is read here rather than through lib/api because lib/api is a
+     * large client module and this is the boot entry point; session-identity
+     * has no imports of its own, so SESSION_TOKEN_KEY lives there and both
+     * sides read the same constant. */
+    const stored = readStoredToken();
+    identifyUser(userIdFromToken(stored));
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
       console.error("PostHog initialization failed", error);

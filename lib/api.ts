@@ -8,8 +8,8 @@ import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
 import { clearExtensionSession } from "./extension-bridge";
 
-/* Re-exported from session-identity so the instrumentation entry point and this
- * module cannot drift apart on the key name. */
+/* Defined in session-identity, not here, so this module and the instrumentation
+ * entry point read the same constant instead of two copies of the string. */
 const TOKEN_KEY = SESSION_TOKEN_KEY;
 const EMAIL_KEY = "rq_email";
 const SESSION_MODE_KEY = "litos_session_mode_v1";

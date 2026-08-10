@@ -100,8 +100,20 @@ export default function Privacy() {
             include the job URL, company or role name, resume, or form answers.
             The extension queues up to 50 sanitized events on your device while
             delivery is unavailable and removes each one after PostHog accepts it.
-            The extension identifier changes when you sign out. We do
-            not send your email address or account identity to PostHog.
+            The extension identifier changes when you sign out.
+          </p>
+          <p>
+            When you are signed in on the website, we send PostHog your Litos
+            account identifier so that the pages you visit before signing in and
+            the actions you take afterwards can be read as one journey. That
+            identifier is the random internal ID your account already has in our
+            database. We do not send your email address, your name, or anything
+            you have typed. Our backend also reports the single fact that an
+            account was created, against the same identifier, because ad and
+            privacy blockers stop that report reaching us from the browser and we
+            would otherwise be unable to count sign-ups accurately. If you delete
+            your account, we delete the linked PostHog profile as part of the same
+            request.
           </p>
           <p>
             Automatic click and form tracking, session recording, and automatic
@@ -238,8 +250,11 @@ export default function Privacy() {
           <p>
             The resume you upload is read once to build your profile and is not
             kept as a file. Account-linked product data described above is kept
-            for as long as your account is open. Anonymous product analytics is
-            retained separately and is not linked to your Litos account.
+            for as long as your account is open. Product analytics is retained
+            separately by PostHog. Events recorded before you sign in are not
+            linked to your account; events recorded while you are signed in on
+            the website carry your account identifier, and that profile is
+            deleted when you delete your account.
           </p>
         </Section>
 
@@ -267,9 +282,11 @@ export default function Privacy() {
             Deleting removes all account-linked product data. Your account. The
             facts we read from your resume. Your answers, both the ones you
             typed and the ones we watched you type. Your emails. Your form
-            history. Every resume we made, files and all. Anonymous product
-            analytics is not linked to the account deletion request. You cannot
-            undo this.
+            history. Every resume we made, files and all. Your PostHog analytics
+            profile goes too, along with the events recorded against it while you
+            were signed in. Events recorded before you ever signed in carry no
+            account identifier, so there is nothing there to find or remove. You
+            cannot undo this.
           </p>
           <p>
             People are the one thing that stays. A person at a company is a
