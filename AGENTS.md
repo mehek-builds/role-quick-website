@@ -20,6 +20,13 @@ All font choices, colors, spacing, and aesthetic direction are defined there.
 Do not deviate without explicit user approval.
 In QA mode, flag any code that doesn't match DESIGN.md.
 
+## Accessibility
+WCAG 2.2 AA is the product target. Read `ACCESSIBILITY.md` before changing an
+interactive surface. New or changed controls must preserve keyboard operation,
+the shared focus-visible treatment, programmatic names and descriptions, and
+reduced-motion behavior. The pull request checklist in that document is part of
+the definition of done.
+
 ## The scroll film
 Always read FILM.md before touching components/cinema/, public/film/,
 public/broll/, or scripts/render-*.mjs. It holds the layer model, every

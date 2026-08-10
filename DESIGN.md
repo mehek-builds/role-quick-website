@@ -144,6 +144,12 @@ Calm motion, not decoration:
 - **Hard rules:** no parallax, no marquees, no attention loops beyond the
   receipt, and everything respects `prefers-reduced-motion` (instant, static).
 
+## Accessibility contract
+
+The target is WCAG 2.2 AA. `ACCESSIBILITY.md` owns the verified contrast ledger,
+focus treatment, screen-reader smoke matrix, design annotations, and pull request
+checklist. These are product requirements, not a QA pass added after visual work.
+
 ## Voice (copy rules that are also design rules)
 - Short sentences. Periods. "You hit submit." beats "Empowering your journey."
 - **Say each point once, in its strongest spot.** Submit-ownership lives in
