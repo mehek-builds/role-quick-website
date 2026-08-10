@@ -10,6 +10,7 @@ import {
   Targeting,
   getToken,
   getTargeting,
+  patchParsedProfileCoursework,
   putApplicationProfile,
   putTargeting,
   uploadResume,
@@ -664,7 +665,26 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
     note: "Use a source you personally choose, such as LinkedIn or a university event. Litos detects job boards for each application.",
     placeholder: "LinkedIn or university career fair",
   },
+  /* Measured across 158 packets: each of these blocked 9 applications that could not be finished
+     without it. Every note says plainly why Litos is asking, because a question about a test score
+     or a transcript reads as intrusive unless the reason is on the screen with it. */
+  coursework: {
+    label: "Which courses have you taken?",
+    note: "Litos picks the ones that fit each posting. Right now it can only reuse the four your resume prints, on every application.",
+    placeholder: "Linear Algebra, Databases, Machine Learning",
+  },
+  standardized_test_type: {
+    label: "Which standardized test did you take?",
+    note: "Trading and quant firms ask for this by name. Leave it blank and Litos leaves their field blank too.",
+    placeholder: "SAT, ACT, Both or None",
+  },
+  sat_score: { label: "SAT score", placeholder: "1520" },
+  act_score: { label: "ACT score", placeholder: "34" },
 };
+
+/* The one closed list on this screen. Free text would let "sat" or "None yet" reach a column the
+   resolver reads as a literal answer, and the backend enum would 400 the whole save on it. */
+const TEST_TYPE_OPTIONS = ["SAT", "ACT", "Both", "None"] as const;
 
 export function GapsStep({
   gaps,
@@ -683,15 +703,25 @@ export function GapsStep({
 
   const showGpa = gaps.includes("gpa") || gaps.includes("gpa_scale");
   const showSalary = gaps.includes("desired_salary") || gaps.includes("desired_salary_currency");
+  // One block for all three test fields: the scores are meaningless without the type, so they are
+  // shown and hidden together rather than as three independent gaps.
+  const showTests = gaps.includes("standardized_test_type")
+    || gaps.includes("sat_score")
+    || gaps.includes("act_score");
   async function save() {
     setBusy(true);
     setError(null);
     const body: Partial<ApplicationProfile> = {};
+    // Coursework is not an application_profile column, so it is collected here and saved on its own
+    // route below. See patchParsedProfileCoursework.
+    let coursework: string[] | null = null;
     for (const [k, v] of Object.entries(values)) {
       if (!v.trim()) continue;
       if (k === "languages") {
         // The backend stores languages as a jsonb array of names, not a string.
         body.languages = v.split(",").map((s) => s.trim()).filter(Boolean);
+      } else if (k === "coursework") {
+        coursework = v.split(",").map((s) => s.trim()).filter(Boolean);
       } else {
         (body as Record<string, string>)[k] = v.trim();
       }
@@ -710,9 +740,20 @@ export function GapsStep({
       setBusy(false);
       return;
     }
+    /* A score without the test it belongs to is not an answer: the forms that ask for one ask which
+       test first, and a stored 1520 with no declared type cannot tell an ACT field to stay empty.
+       Same shape as the GPA and salary pairs above. */
+    const hasScore = !!body.sat_score || !!body.act_score;
+    if (hasScore && !body.standardized_test_type) {
+      setError("Choose which test you took, or clear the score.");
+      setBusy(false);
+      return;
+    }
+
     try {
       if (Object.keys(body).length > 0) await putApplicationProfile(body);
-      onDone(Object.keys(body).length === 0);
+      if (coursework) await patchParsedProfileCoursework(coursework);
+      onDone(Object.keys(body).length === 0 && !coursework);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
       setBusy(false);
@@ -768,6 +809,53 @@ export function GapsStep({
         <div className="mb-5">
           <label htmlFor="gap-languages" className="text-[13px] text-ink">Which languages are you fluent in?</label>
           <div className="mt-2">{field("languages")}</div>
+        </div>
+      )}
+
+      {gaps.includes("coursework") && (
+        <div className="mb-5">
+          <label htmlFor="gap-coursework" className="text-[13px] text-ink">{GAP_LABEL.coursework.label}</label>
+          <div className="mt-2">{field("coursework")}</div>
+          <p className="mt-1 text-xs leading-5 text-muted">{GAP_LABEL.coursework.note}</p>
+        </div>
+      )}
+
+      {showTests && (
+        <div className="mb-5">
+          <label htmlFor="gap-standardized_test_type" className="text-[13px] text-ink">
+            {GAP_LABEL.standardized_test_type.label}
+          </label>
+          <div className="mt-2">
+            <select
+              id="gap-standardized_test_type"
+              value={values.standardized_test_type ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, standardized_test_type: e.target.value }))}
+              aria-label={GAP_LABEL.standardized_test_type.label}
+              className="min-h-11 w-full rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+            >
+              {/* The empty option is the default and it means "not answered". Every question on this
+                  screen is skippable, and a select with no blank choice would answer for her. */}
+              <option value="">Prefer not to answer</option>
+              {TEST_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-muted">{GAP_LABEL.standardized_test_type.note}</p>
+          {/* The score inputs appear only once a test is named, so nobody is shown an SAT box they
+              have no use for, and "None" collapses them again. */}
+          {(values.standardized_test_type === "SAT" || values.standardized_test_type === "Both") && (
+            <div className="mt-3">
+              <label htmlFor="gap-sat_score" className="text-[13px] text-ink">{GAP_LABEL.sat_score.label}</label>
+              <div className="mt-2">{field("sat_score")}</div>
+            </div>
+          )}
+          {(values.standardized_test_type === "ACT" || values.standardized_test_type === "Both") && (
+            <div className="mt-3">
+              <label htmlFor="gap-act_score" className="text-[13px] text-ink">{GAP_LABEL.act_score.label}</label>
+              <div className="mt-2">{field("act_score")}</div>
+            </div>
+          )}
         </div>
       )}
 
