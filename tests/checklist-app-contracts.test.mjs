@@ -38,7 +38,7 @@ test("resume upload supports drop, file limits, progress, and retry", () => {
   const page = read("app/dashboard/resume/page.tsx");
   assert.match(page, /onDrop=/);
   assert.match(page, /Maximum 10 MB/);
-  assert.match(page, /Reading and parsing/);
+  assert.match(page, /Reading the PDF/);
   assert.match(page, />Retry</);
 });
 

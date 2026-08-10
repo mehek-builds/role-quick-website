@@ -11,7 +11,7 @@ const rows = [
   ["Litos session values", "Local storage", "Keeps you signed in and remembers whether the session is verified or a guest session.", "Until sign-out, account deletion, or browser-site data is cleared.", "Litos"],
   ["Guest and setup values", "Local or session storage", "Keeps a guest identifier, setup choices, and short-lived connection intent on this browser.", "Until the related flow ends, sign-out, or browser-site data is cleared.", "Litos"],
   ["Recent job-title searches", "Local storage", "Keeps up to five job-title searches on this browser so you can run them again. It does not store location or sponsorship filters.", "Until you clear the list or browser-site data.", "Litos"],
-  ["rq_try", "Cookie", "Keeps the public Try flow attached to one browser session.", "Up to 24 hours.", "Litos"],
+  ["rq_try", "Cookie", "Keeps the public Try flow attached to your work in that browser.", "Up to 24 hours.", "Litos"],
   ["PostHog identifiers", "Cookie or local storage", "Counts page visits and the limited product actions described in the Privacy policy. Automatic form capture and session recording are off.", "Set by PostHog according to its browser SDK defaults, or until browser-site data is cleared.", "PostHog"],
 ] as const;
 
