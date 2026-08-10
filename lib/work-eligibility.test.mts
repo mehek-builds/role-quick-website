@@ -10,7 +10,14 @@ import {
 
 describe("country work eligibility form model", () => {
   test("seeds only a scoped list or the one unambiguous old US answer", () => {
-    const scoped = [blankCountryEligibility("AE")];
+    const scoped = [{
+      country_code: "AE",
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: false,
+      authorization_type: null,
+      authorization_expiry: null,
+    }];
     assert.deepEqual(eligibilitySeed({ work_eligibility_by_country: scoped }), scoped);
     assert.deepEqual(eligibilitySeed({ work_authorized: true, needs_sponsorship: false }), [{
       country_code: "US",
@@ -90,6 +97,13 @@ describe("country work eligibility form model", () => {
       authorization_expiry: null,
     });
     assert.equal(legacySponsorshipAnswer(normalized), "needs_future");
-    assert.equal(legacySponsorshipAnswer([blankCountryEligibility("AE")]), null);
+    assert.equal(legacySponsorshipAnswer([{
+      country_code: "AE",
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: false,
+      authorization_type: null,
+      authorization_expiry: null,
+    }]), null);
   });
 });

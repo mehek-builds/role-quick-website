@@ -283,7 +283,7 @@ let completePosts = 0;
 const BACKEND_PATHS = new Set([
   "/v1/meta",
   "/onboarding/state",
-  "/onboarding/sponsorship",
+  "/onboarding/work-eligibility",
   "/onboarding/complete",
   "/profile",
   "/profile/application",
@@ -382,9 +382,11 @@ await context.route("**/*", async (route) => {
     await jsonRoute(route, RECENT_EXPERIENCE(answered));
     return;
   }
-  if (pathname === "/onboarding/sponsorship" && method === "POST") {
+  if (pathname === "/onboarding/work-eligibility" && method === "PUT") {
+    const records = route.request().postDataJSON()?.records;
+    assert.equal(records?.[0]?.country_code, "US");
     progress.sponsorship = true;
-    await jsonRoute(route, { answer: "no", required: false, filter_enabled: false });
+    await jsonRoute(route, { records });
     return;
   }
   if (pathname === "/resume/base" && method === "GET") {
@@ -591,9 +593,13 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     }
     await rolesContinue.click();
 
-    /* ── Step 4, Work visa ─────────────────────────────────────────────────*/
+    /* ── Step 4, country-scoped work eligibility ──────────────────────────*/
     visited.push(await screen("Work visa"));
-    await page.locator("input[name='sponsorship'][value='no']").check();
+    await page.getByRole("heading", { name: "Where can you work?" }).waitFor();
+    await page.getByRole("combobox", { name: "Country", exact: true }).selectOption("US");
+    await page.getByLabel("Authorized to work now?").selectOption("yes");
+    await page.getByLabel("Need sponsorship before starting?").selectOption("no");
+    await page.getByLabel("Need sponsorship later?").selectOption("no");
     await page.locator("button", { hasText: "Continue" }).click();
 
     /* ── Step 5, Your one page ─────────────────────────────────────────────*/
