@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { exactPacketAuditRanges, packetAuditIdentityMatches } from "./packet-audit-display.ts";
+import { exactPacketAuditRanges, packetAuditIdentityMatches, packetAuditResponseMatchesApplication } from "./packet-audit-display.ts";
 
 const jdText = "Build reliable APIs. Improve deployment safety.";
 const evidence = { path: "/experience/0/bullets/0", quote: "Built reliable APIs", sha256: "a".repeat(64) };
@@ -91,4 +91,35 @@ test("retains local render proof only for the exact audit and PDF identity", () 
     assert.equal(packetAuditIdentityMatches(identity, changed), false);
   }
   assert.equal(packetAuditIdentityMatches(identity, null), false);
+});
+
+test("matches one application to an exact packet envelope without trusting response JSON", () => {
+  const digest = "f".repeat(64);
+  const response = {
+    packet_audit: {
+      audit_digest: digest,
+      packet_version: digest,
+      bindings: {
+        ownerSha256: digest,
+        applicationId: "application-1",
+        jdSha256: digest,
+        specSha256: digest,
+        jobContextSha256: digest,
+        questionsSha256: digest,
+        pdf: { objectKey: "resumes/exact.pdf", sha256: digest, sizeBytes: 42 },
+      },
+    },
+    pdf: { object_key: "resumes/exact.pdf", sha256: digest, size_bytes: 42, download_url: "https://api.example/resume/download?t=token" },
+  };
+  assert.equal(packetAuditResponseMatchesApplication("application-1", response), true);
+  assert.equal(packetAuditResponseMatchesApplication("application-2", response), false);
+
+  for (const malformed of [
+    { packet_audit: null, pdf: response.pdf },
+    { packet_audit: { bindings: null }, pdf: response.pdf },
+    { packet_audit: response.packet_audit, pdf: { ...response.pdf, download_url: null } },
+  ]) {
+    assert.doesNotThrow(() => packetAuditResponseMatchesApplication("application-1", malformed));
+    assert.equal(packetAuditResponseMatchesApplication("application-1", malformed), false);
+  }
 });

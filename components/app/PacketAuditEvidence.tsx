@@ -1,28 +1,12 @@
 "use client";
 
 import { TermMark } from "@/components/app/RequirementText";
-import type { PacketAudit, PacketAuditHighlightTerm, PacketAuditResponse } from "@/lib/api";
-import { exactPacketAuditRanges, packetAuditDisplayIsExact } from "@/features/applications";
+import type { PacketAudit, PacketAuditHighlightTerm } from "@/lib/api";
+import { exactPacketAuditRanges, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/features/applications";
 
 type AuditRange = PacketAuditHighlightTerm;
 
-export function packetAuditResponseMatchesApplication(applicationId: string, response: PacketAuditResponse): boolean {
-  const audit = response.packet_audit;
-  const binding = audit.bindings.pdf;
-  return /^[a-f0-9]{64}$/i.test(audit.bindings.ownerSha256)
-    && /^[a-f0-9]{64}$/i.test(audit.audit_digest)
-    && /^[a-f0-9]{64}$/i.test(audit.packet_version)
-    && audit.bindings.applicationId === applicationId
-    && response.pdf.object_key === binding.objectKey
-    && response.pdf.sha256 === binding.sha256
-    && response.pdf.size_bytes === binding.sizeBytes
-    && /^[a-f0-9]{64}$/i.test(binding.sha256)
-    && Number.isSafeInteger(binding.sizeBytes)
-    && binding.sizeBytes > 0
-    && Boolean(response.pdf.download_url.trim());
-}
-
-export { packetAuditDisplayIsExact };
+export { packetAuditDisplayIsExact, packetAuditResponseMatchesApplication };
 
 export function AuditedJobDescription({ jdText, audit }: { jdText: string; audit: PacketAudit }) {
   if (!packetAuditDisplayIsExact(jdText, audit)) {

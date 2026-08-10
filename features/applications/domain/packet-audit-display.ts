@@ -119,3 +119,39 @@ export function packetAuditIdentityMatches(currentValue: unknown, nextValue: unk
     && (currentPdf.sizeBytes as number) > 0
     && currentPdf.sizeBytes === nextPdf.sizeBytes;
 }
+
+/** Runtime-validates the packet audit envelope before the dashboard dereferences any server JSON. */
+export function packetAuditResponseMatchesApplication(applicationId: string, responseValue: unknown): boolean {
+  if (!isRecord(responseValue)
+    || !isRecord(responseValue.packet_audit)
+    || !isRecord(responseValue.pdf)) return false;
+  const audit = responseValue.packet_audit;
+  const pdf = responseValue.pdf;
+  const bindingsValue = audit.bindings;
+  if (!isRecord(bindingsValue)) return false;
+  const bindingValue = bindingsValue.pdf;
+  if (!isRecord(bindingValue)) return false;
+  const bindings = bindingsValue;
+  const binding = bindingValue;
+  const hashFields = [
+    bindings.ownerSha256,
+    bindings.jdSha256,
+    bindings.specSha256,
+    bindings.jobContextSha256,
+    bindings.questionsSha256,
+    audit.audit_digest,
+    audit.packet_version,
+    binding.sha256,
+  ];
+  return hashFields.every((value) => typeof value === "string" && /^[a-f0-9]{64}$/i.test(value))
+    && bindings.applicationId === applicationId
+    && typeof binding.objectKey === "string"
+    && binding.objectKey.length > 0
+    && Number.isSafeInteger(binding.sizeBytes)
+    && (binding.sizeBytes as number) > 0
+    && pdf.object_key === binding.objectKey
+    && pdf.sha256 === binding.sha256
+    && pdf.size_bytes === binding.sizeBytes
+    && typeof pdf.download_url === "string"
+    && pdf.download_url.trim().length > 0;
+}

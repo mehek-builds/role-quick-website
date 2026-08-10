@@ -38,14 +38,15 @@ test("a poll invalidates local proof when the audit digest or PDF binding change
 });
 
 test("the browser binds the audit to this application and exact stored PDF", async () => {
-  const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /audit\.bindings\.applicationId === applicationId/);
-  assert.match(source, /response\.pdf\.object_key === binding\.objectKey/);
-  assert.match(source, /response\.pdf\.sha256 === binding\.sha256/);
-  assert.match(source, /response\.pdf\.size_bytes === binding\.sizeBytes/);
-  assert.match(source, /audit\.bindings\.ownerSha256/);
-  assert.match(source, /audit\.packet_version/);
-  assert.match(source, /audit\.audit_digest/);
+  const domain = await readFile(displayDomainUrl, "utf8");
+  assert.match(domain, /bindings\.applicationId === applicationId/);
+  assert.match(domain, /pdf\.object_key === binding\.objectKey/);
+  assert.match(domain, /pdf\.sha256 === binding\.sha256/);
+  assert.match(domain, /pdf\.size_bytes === binding\.sizeBytes/);
+  assert.match(domain, /bindings\.ownerSha256/);
+  assert.match(domain, /audit\.packet_version/);
+  assert.match(domain, /audit\.audit_digest/);
+  assert.match(domain, /typeof pdf\.download_url === "string"/);
 });
 
 test("the active audit owns the legend and replaces the live score and gap list", async () => {
