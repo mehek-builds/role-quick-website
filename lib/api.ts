@@ -517,6 +517,9 @@ export type PostingPrescript = {
 export type ApplicationReview = {
   jd_text: string;
   portal_url?: string;
+  /** Exact company form authorized for an attended extension retry. It is distinct from the
+   *  posting URL and from a managed-browser live-view URL. */
+  extension_handoff_url?: string;
   ats_name?: string;
   status:
     | "resume_ready"

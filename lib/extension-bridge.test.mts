@@ -23,7 +23,7 @@ let lastError: { message?: string } | undefined;
   },
 };
 
-const { armHandoffs, clearExtensionSession, ensureExtensionSession, sendToExtension } = await import(
+const { armHandoffs, clearExtensionSession, ensureCurrentExtensionSession, ensureExtensionSession, extensionVersionAtLeast, sendToExtension } = await import(
   "./extension-bridge.ts"
 );
 
@@ -40,33 +40,35 @@ function reset(next: Reply) {
 test("an extension that answers 'not signed in' is handed this session", async () => {
   reset((message) => {
     const typed = message as { type: string };
-    if (typed.type === "LITOS_PING") return { ok: true, signedIn: false };
+    if (typed.type === "LITOS_PING") return { ok: true, signedIn: false, version: "0.5.10" };
     if (typed.type === "LITOS_ADOPT_SESSION") return { ok: true, outcome: "adopted" };
     return {};
   });
 
   const state = await ensureExtensionSession({ token: "jwt-abc", guest: false });
-  assert.deepEqual(state, { installed: true, signedIn: true, otherAccount: false });
+  assert.deepEqual(state, { installed: true, signedIn: true, otherAccount: false, version: "0.5.10", updateRequired: false });
   const adopt = calls.find((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION");
   assert.deepEqual(adopt, { type: "LITOS_ADOPT_SESSION", token: "jwt-abc" });
 });
 
-test("an extension that already has a session is not handed another one", async () => {
-  reset(() => ({ ok: true, signedIn: true }));
+test("an extension that already has a session still verifies the current website account", async () => {
+  reset((message) => (message as { type: string }).type === "LITOS_PING"
+    ? { ok: true, signedIn: true, version: "0.5.10" }
+    : { ok: true, outcome: "already_signed_in" });
   const state = await ensureExtensionSession({ token: "jwt-abc", guest: false });
   assert.equal(state.signedIn, true);
-  assert.equal(
-    calls.some((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION"),
-    false,
-  );
+  assert.deepEqual(calls, [
+    { type: "LITOS_PING" },
+    { type: "LITOS_ADOPT_SESSION", token: "jwt-abc" },
+  ]);
 });
 
 /* A guest has no account to hand over. Signing the extension in as one would leave it applying as
    somebody the applicant cannot see or sign out of. */
 test("a guest session is never handed over", async () => {
-  reset(() => ({ ok: true, signedIn: false }));
+  reset(() => ({ ok: true, signedIn: false, version: "0.5.10" }));
   const state = await ensureExtensionSession({ token: "guest-jwt", guest: true });
-  assert.deepEqual(state, { installed: true, signedIn: false, otherAccount: false });
+  assert.deepEqual(state, { installed: true, signedIn: false, otherAccount: false, version: "0.5.10", updateRequired: false });
   assert.equal(
     calls.some((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION"),
     false,
@@ -81,27 +83,64 @@ test("an extension that is not installed reports absent, not signed in", async (
     return undefined;
   });
   const state = await ensureExtensionSession({ token: "jwt-abc", guest: false });
-  assert.deepEqual(state, { installed: false, signedIn: false, otherAccount: false });
+  assert.deepEqual(state, { installed: false, signedIn: false, otherAccount: false, version: null, updateRequired: false });
 });
 
 test("an extension signed in to someone else is reported rather than overridden", async () => {
   reset((message) => {
     const typed = message as { type: string };
-    if (typed.type === "LITOS_PING") return { ok: true, signedIn: false };
+    if (typed.type === "LITOS_PING") return { ok: true, signedIn: true, version: "0.5.10" };
     return { ok: false, outcome: "different_account" };
   });
   const state = await ensureExtensionSession({ token: "jwt-abc", guest: false });
-  assert.deepEqual(state, { installed: true, signedIn: false, otherAccount: true });
+  assert.deepEqual(state, { installed: true, signedIn: false, otherAccount: true, version: "0.5.10", updateRequired: false });
 });
 
 test("the handover happens once per page load however many callers ask", async () => {
-  reset(() => ({ ok: true, signedIn: true }));
+  reset((message) => (message as { type: string }).type === "LITOS_PING"
+    ? { ok: true, signedIn: true, version: "0.5.10" }
+    : { ok: true, outcome: "already_signed_in" });
   await Promise.all([
     ensureExtensionSession({ token: "jwt-abc", guest: false }),
     ensureExtensionSession({ token: "jwt-abc", guest: false }),
     ensureExtensionSession({ token: "jwt-abc", guest: false }),
   ]);
-  assert.equal(calls.length, 1);
+  assert.equal(calls.length, 2);
+});
+
+test("the attended path performs a fresh identity check", async () => {
+  let accountChecks = 0;
+  reset((message) => {
+    const type = (message as { type: string }).type;
+    if (type === "LITOS_PING") return { ok: true, signedIn: true, version: "0.5.10" };
+    if (type === "LITOS_ADOPT_SESSION") accountChecks += 1;
+    return { ok: true, outcome: "already_signed_in" };
+  });
+  await ensureExtensionSession({ token: "jwt-abc", guest: false });
+  await ensureCurrentExtensionSession({ token: "jwt-abc", guest: false });
+  assert.equal(accountChecks, 2);
+});
+
+test("extension versions compare numerically and reject missing or malformed reports", () => {
+  assert.equal(extensionVersionAtLeast("0.5.10", "0.5.10"), true);
+  assert.equal(extensionVersionAtLeast("0.5.11", "0.5.10"), true);
+  assert.equal(extensionVersionAtLeast("0.6.0", "0.5.10"), true);
+  assert.equal(extensionVersionAtLeast("0.5.9", "0.5.10"), false);
+  assert.equal(extensionVersionAtLeast("0.5.10-beta", "0.5.10"), false);
+  assert.equal(extensionVersionAtLeast(undefined, "0.5.10"), false);
+});
+
+test("the published 0.5.9 client is installed but held for an update", async () => {
+  reset(() => ({ ok: true, signedIn: true, version: "0.5.9" }));
+  const state = await ensureCurrentExtensionSession({ token: "jwt-abc", guest: false });
+  assert.deepEqual(state, {
+    installed: true,
+    signedIn: false,
+    otherAccount: false,
+    version: "0.5.9",
+    updateRequired: true,
+  });
+  assert.equal(calls.some((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION"), false);
 });
 
 test("signing out here tells the extension to sign out too", async () => {
@@ -111,19 +150,24 @@ test("signing out here tells the extension to sign out too", async () => {
   assert.deepEqual(calls[0], { type: "LITOS_CLEAR_SESSION" });
 });
 
-test("only applications with a portal url are armed, and none means no message at all", async () => {
-  reset(() => ({ ok: true }));
-  await armHandoffs([{ id: "a", portalUrl: undefined }]);
+test("only applications with a portal url are armed, and an acknowledgement is required", async () => {
+  reset(() => ({ ok: true, armed: 1 }));
+  assert.equal(await armHandoffs([{ id: "a", portalUrl: undefined }]), false);
   assert.equal(calls.length, 0);
 
-  await armHandoffs([
+  assert.equal(await armHandoffs([
     { id: "a", portalUrl: "https://jobs.lever.co/palantir/9e40/apply" },
     { id: "b", portalUrl: undefined },
-  ]);
+  ]), true);
   assert.deepEqual(calls[0], {
     type: "LITOS_ARM_HANDOFF",
     applications: [{ url: "https://jobs.lever.co/palantir/9e40/apply", applicationId: "a" }],
   });
+});
+
+test("arming fails closed when the extension does not acknowledge the binding", async () => {
+  reset(() => ({ ok: false, armed: 0 }));
+  assert.equal(await armHandoffs([{ id: "a", portalUrl: "https://jobs.lever.co/palantir/9e40/apply" }]), false);
 });
 
 /* A service worker that never wakes must not hang the caller forever: every consumer of this
