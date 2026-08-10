@@ -14,6 +14,7 @@
     "test:start-base": "node --test tests/e2e/start-base-build.spec.mjs",
     "test:start-checklist": "node --test tests/e2e/start-onboarding-checklist.spec.mjs",
     "test:start-gaps": "node --test tests/e2e/start-gaps.spec.mjs",
+    "test:country-eligibility-flow": "node --test tests/e2e/country-eligibility-flow.spec.mjs",
     "test:checklist-flow": "node --test tests/e2e/onboarding-empty-states.spec.mjs",
     "test:qa-guest-entry": "node --test tests/e2e/qa-guest-entry.spec.mjs",
     "test:qa-tunnel-hydration": "node --test tests/e2e/qa-tunnel-hydration.spec.mjs",

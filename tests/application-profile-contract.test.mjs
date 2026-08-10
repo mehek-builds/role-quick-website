@@ -58,7 +58,9 @@ const BACKEND_WRITABLE_FIELDS = [
 ];
 
 function applicationProfileBody() {
-  const match = API.match(/export type ApplicationProfile = \{([\s\S]*?)\n\};\n\n\/\/ ---- onboarding/);
+  const match = API.match(
+    /export type ApplicationProfile = \{([\s\S]*?)\n\};\n\nexport type CountryWorkEligibility/,
+  );
   assert.ok(match, "ApplicationProfile type was not found");
   return match[1];
 }

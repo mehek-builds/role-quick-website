@@ -7,6 +7,7 @@ import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
 import { clearExtensionSession } from "./extension-bridge";
+import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit";
 
 /* Defined in session-identity, not here, so this module and the instrumentation
  * entry point read the same constant instead of two copies of the string. */
@@ -392,6 +393,16 @@ export function declareSponsorship(answer: SponsorshipAnswer) {
   });
 }
 
+export function putOnboardingWorkEligibility(records: CountryWorkEligibility[]) {
+  if (records.length > MAX_COUNTRY_ELIGIBILITY_RECORDS) {
+    throw new Error(`Add no more than ${MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.`);
+  }
+  return api<{ records: CountryWorkEligibility[] }>("/onboarding/work-eligibility", {
+    method: "PUT",
+    body: JSON.stringify({ records }),
+  });
+}
+
 export function setSponsorFilter(enabled: boolean) {
   return api<SponsorshipState>("/sponsorship/filter", {
     method: "PUT",
@@ -644,6 +655,8 @@ export type ApplicationProfile = {
   citizenship?: string | null;
   work_authorized?: boolean | null;
   needs_sponsorship?: boolean | null;
+  /** One applicant declaration per ISO-3166 alpha-2 country. This is the editable authority. */
+  work_eligibility_by_country?: CountryWorkEligibility[] | null;
   availability_date?: string | null;
   /** A duration such as "14 weeks". Separate from the date availability begins. */
   availability_term?: string | null;
@@ -741,6 +754,15 @@ export type ApplicationProfile = {
   availability_cycle?: string | null;
   /** ISO YYYY-MM-DD. After this date the window answers nothing, whatever else is stored. */
   availability_valid_through?: string | null;
+};
+
+export type CountryWorkEligibility = {
+  country_code: string;
+  authorized_now: boolean;
+  needs_sponsorship_now: boolean;
+  needs_sponsorship_future: boolean;
+  authorization_type?: string | null;
+  authorization_expiry?: string | null;
 };
 
 // ---- onboarding ----

@@ -107,20 +107,15 @@ describe("the settings switch tells the truth about being locked", () => {
 });
 
 describe("the onboarding question", () => {
-  test("offers all four answers", () => {
-    for (const value of ["needs_now", "needs_future", "not_authorized", "no"]) {
-      assert.match(startStep, new RegExp(`value: "${value}"`), `missing ${value}`);
-    }
+  test("collects a complete country-scoped declaration", () => {
+    assert.match(startStep, /<CountryEligibilityEditor rows=\{records\}/);
+    assert.match(startStep, /countryEligibilityProblem\(records\)/);
+    assert.match(startStep, /putOnboardingWorkEligibility\(normalizedCountryEligibility\(records\)\)/);
   });
 
-  test("states that the answer is permanent BEFORE it is given", () => {
-    // A consequence disclosed after the fact is not a disclosure. The copy has to be on the screen
-    // that asks, above the button that saves.
-    const permanence = startStep.indexOf("This answer is permanent");
-    // The RENDERED button, not the import of the same name at the top of the file.
-    const button = startStep.indexOf("<PrimaryButton");
-    assert.ok(permanence > 0, "the screen never says the answer is permanent");
-    assert.ok(permanence < button, "the permanence note renders after the save button");
+  test("states that country records stay editable", () => {
+    assert.match(startStep, /You can edit the country records later in Settings\./);
+    assert.doesNotMatch(startStepRendered, /answer is permanent/i);
   });
 
   /* WHAT THIS SCREEN PROMISES ABOUT EMPLOYER FORMS, pinned to what the backend does.
@@ -136,15 +131,9 @@ describe("the onboarding question", () => {
    * this one fails if the words change, and src/lib/workAuthorizationScope.test.ts in
    * student-outreach-backend fails if the behaviour stops matching them. */
   test("states the rule the backend actually follows on employer forms", () => {
-    // The sponsorship half is unconditional, because "yes I need sponsorship" is a disclosure.
-    assert.match(startStep, /Do you need sponsorship\? gets a yes whenever you do\./);
-    // The authorization half carries its condition, because that half is a claim.
-    assert.match(
-      startStep,
-      /Are you authorized to work\? gets an answer only when the job is in the United States\./,
-    );
-    // And the default for everything the two columns do not cover is silence.
-    assert.match(startStep, /Anything else is left blank for you\./);
+    assert.match(startStep, /only when the question names a country or the job has one exact/);
+    assert.match(startStep, /If that country is missing here, the question stays with you\./);
+    assert.match(startStep, /never copies an answer across borders/);
   });
 
   test("no longer claims a blanket refusal it does not honour", () => {
@@ -155,13 +144,9 @@ describe("the onboarding question", () => {
     assert.doesNotMatch(startStepRendered, /never (?:fills?|types?)[^<]*(?:form|application)/i);
   });
 
-  test("the authorization choices name the country this answer is about", () => {
-    /* One boolean cannot describe every country at once, and the board filter behind it is built
-       from H-1B petitions, which are American. A hint reading "the job's country" invited somebody
-       authorized in the UK to answer "Already authorized" and have that repeated onto a US
-       employer's form. */
-    assert.match(startStep, /You can already work in the United States\./);
-    assert.match(startStep, /You cannot currently work in the United States\./);
+  test("the authorization form requires an explicit country", () => {
+    assert.match(startStep, /Add each country separately\./);
+    assert.match(startStep, /Being allowed to work in one country says nothing about/);
     assert.doesNotMatch(startStepRendered, /the job's country/i);
   });
 });

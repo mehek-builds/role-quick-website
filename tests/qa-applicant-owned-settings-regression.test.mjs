@@ -7,10 +7,16 @@ const source = readFileSync(
   "utf8",
 );
 
-test("settings presents sensitive saved values as disabled reference data", () => {
-  assert.match(source, /Authorized to work\? \(saved reference only\)/);
-  assert.match(source, /Need sponsorship\? \(saved reference only\)/);
-  assert.match(source, /function Select[\s\S]*?<select[\s\S]*?disabled/);
+test("settings edits work eligibility only as country-scoped declarations", () => {
+  assert.match(source, /Work authorization by country/);
+  assert.match(source, /<CountryEligibilityEditor/);
+  assert.match(
+    source,
+    /eligibilitySeed\(profileRes, onboardingRes\.sponsorship_answer\)/,
+  );
+  assert.doesNotMatch(source, /Authorized to work\? \(saved reference only\)/);
+  assert.doesNotMatch(source, /Need sponsorship\? \(saved reference only\)/);
+  // Self-identification preferences remain applicant-owned reference data.
   assert.match(source, /function StringSelect[\s\S]*?<select[\s\S]*?disabled/);
 });
 

@@ -73,11 +73,11 @@ test("all seven onboarding checkpoints render with a progress indicator", async 
     ["resume", "Start with your resume.", "Setup: step 1 of 6, Your resume"],
     ["impact", "Make your most recent work count.", "Setup: step 2 of 6, Your impact"],
     ["focus", "Here's where we'd start.", "Setup: step 3 of 6, Your roles"],
-    ["sponsorship", "Do you need a work visa?", "Setup: step 4 of 6, Work visa"],
+    ["sponsorship", "Where can you work?", "Setup: step 4 of 6, Work visa"],
     ["base", "One page, ready.", "Setup: step 5 of 6, Your one page"],
     /* The QA fixture reports outstanding gaps on every step but `done`, so the five rows above are
        also the assertion that outstanding gaps DO NOT inflate the denominator: a screen the flow
-       cannot route to is not part of the flow, however much the profile is missing. */
+      cannot route to is not part of the flow, however much the profile is missing. */
     ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],
     ["done", "Setup complete.", "Setup: step 6 of 6, Done"],
   ];
