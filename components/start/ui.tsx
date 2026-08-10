@@ -10,61 +10,110 @@
  * marketing page and onboarding share one wayfinding device instead of inventing a second.
  * It is wayfinding, not a progress meter: no percentage, no streak, no celebration. The
  * Guardrails ban all three, and the labels already say what remains.
+ *
+ * Its denominator is the steps THIS student's flow contains, not the length of STEPS: one entry in
+ * that list is conditional, and counting it for everybody made the printed count skip a number.
+ * See `flowSteps`. That is also why the rail reads the onboarding state from a context rather than
+ * a prop, and why it draws itself with no position at all until the state arrives.
  */
 
+import { createContext, useContext } from "react";
 import { Button } from "@/components/app/Button";
-import type { OnboardingStep } from "@/lib/api";
+import { flowSteps } from "@/features/onboarding";
+import type { OnboardingState, OnboardingStep } from "@/lib/api";
 
-/* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
-   screens, and the resume step was the only place in the product that accented the word. It is
-   "resume" everywhere we write it, in every surface, with no exceptions. */
-/* `weight` is roughly how much of the student's time the step costs. Resume upload and one-page
-   review get more space than the short choice screens, so the rail reflects effort instead of
-   pretending every click is equal. */
-export const STEPS: { key: OnboardingStep; label: string; weight: number }[] = [
-  { key: "resume", label: "Your resume", weight: 2 },
-  { key: "impact", label: "Your impact", weight: 2 },
-  { key: "focus", label: "Your roles", weight: 1 },
-  /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
-     in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
-  { key: "sponsorship", label: "Work visa", weight: 1 },
-  { key: "base", label: "Your one page", weight: 2 },
-  /* Reinstated as a real screen by #279 ("Make referral onboarding gap reachable") and NOT added
-     here at the time, which is the whole reason this entry exists.
-     `StepRail` resolves an unknown key through `Math.max(0, findIndex(...))`, so a rendered screen
-     whose key is missing from this list does not fail loudly: it silently reports itself as index
-     0. The gaps screen was therefore telling every student it was "Step 1 of 6, Your resume" while
-     sitting second from last. A wayfinding device that points backwards is worse than none.
+/* STEPS and `flowSteps` live in features/onboarding/domain/rail.ts and are re-exported here.
+   They are the rail's data and its one rule, and they are plain TypeScript with no JSX, which
+   is what lets tests/start-rail-denominator.test.mjs import them under `npm test` (node's
+   --experimental-strip-types loads .ts and not .tsx). Re-exported rather than moved outright so
+   every `from "./ui"` import site stays as it was. */
+export { STEPS, flowSteps } from "@/features/onboarding";
 
-     Weight 1, alongside focus and sponsorship: it is a handful of short inputs, and the rail is a
-     map of TIME. It is also the one CONDITIONAL screen in the flow, shown only when the server
-     reports outstanding gaps. That makes the denominator a slight overcount for a student who has
-     none, which is the cheaper of the two errors by a wide margin: an occasional "6 of 7" that
-     skips a number beats a screen that misreports where it is every single time it renders. */
-  { key: "gaps", label: "A few details", weight: 1 },
-  { key: "done", label: "Done", weight: 0 },
-];
+/* The derived onboarding state the whole flow is rendered from, shared with the rail.
+ *
+ * The rail needs to know which steps THIS student's flow contains, and it cannot be told directly:
+ * every screen renders `StartShell`, which renders the rail, and threading the state through eight
+ * step components (and through `StartShell`'s own props) to reach one string would put the same
+ * argument in eight places for one reader. app/start/page.tsx already holds the state and already
+ * wraps every branch, so it provides it once, here.
+ *
+ * `null` means NOT YET KNOWN, and it is the default rather than an error: a rail rendered before
+ * GET /onboarding/state answers must not claim a position, and one rendered outside the provider
+ * should degrade to that same silence rather than throw. */
+const StartFlowContext = createContext<OnboardingState | null>(null);
 
-export function StepRail({ current }: { current: OnboardingStep }) {
-  const i = STEPS.findIndex((s) => s.key === current);
-  const activeStep = STEPS[Math.max(0, i)];
-  const step = Math.max(0, i) + 1;
+export function StartFlowProvider({
+  state,
+  children,
+}: {
+  state: OnboardingState | null;
+  children: React.ReactNode;
+}) {
+  return <StartFlowContext.Provider value={state}>{children}</StartFlowContext.Provider>;
+}
+
+/** Omit `current` while the state is still loading: the rail then draws the shape of the flow
+ *  without claiming a position in it. */
+export function StepRail({ current }: { current?: OnboardingStep }) {
+  const state = useContext(StartFlowContext);
+  const steps = flowSteps(current, state);
+  const i = current ? steps.findIndex((s) => s.key === current) : -1;
+  /* Both halves have to be true. A position with no state behind it is the returning student
+     mid-flow reading "Step 1 of 7" for as long as the request takes, which is a wayfinding device
+     pointing at the wrong place: the one thing it must never do. */
+  const known = state !== null && i >= 0;
+  const step = i + 1;
   /* Each segment is as wide as the effort it represents. No percentage number: the written step
      count is precise enough, while the rail provides a quick visual map of the remaining work. */
   return (
-    <div aria-label={`Setup: step ${step} of ${STEPS.length}, ${activeStep.label}`}>
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-[13px] text-ink">{activeStep.label}</span>
-        {/* The machine counting. Same label style as every other meta string in
-            the product: 11px mono, uppercase, +0.08em (audit finding 43). */}
-        <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Step {step} of {STEPS.length}
-        </span>
-      </div>
+    <div
+      /* role="group", because `aria-label` on a bare div is not honoured: an element that maps to
+         the generic role has no accessible name, so the whole string below was being computed for
+         nobody. The e2e specs read the ATTRIBUTE and passed either way, which is exactly how it
+         stayed unnoticed. A named group is also the honest shape for it: a small labelled region,
+         not a landmark and not a progressbar (a progressbar reports a VALUE, which is the
+         percentage the Guardrails ban). */
+      role="group"
+      aria-label={known ? `Setup: step ${step} of ${steps.length}, ${steps[i].label}` : "Setup"}
+      aria-busy={known ? undefined : true}
+    >
+      {known ? (
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-[13px] text-ink">{steps[i].label}</span>
+          {/* The machine counting. Same label style as every other meta string in
+              the product: 11px mono, uppercase, +0.08em (audit finding 43). */}
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+            Step {step} of {steps.length}
+          </span>
+        </div>
+      ) : (
+        /* Shimmer rather than an empty row, and rather than nothing at all: the row holds the height
+           the resolved rail occupies, so the heading below does not jump when the state arrives.
+           Nothing here is readable as a claim, which is the point.
+           The bars are nested INSIDE spans carrying the two real type classes, and that nesting is
+           what makes the heights match: the line box comes from the same font metrics the resolved
+           row uses, so parity survives a change to the type scale. Measured: 19.5px either way.
+           Bars alone, sized h-3, made this row 12px and moved everything below it by 7.5px on the
+           one frame the state landed. */
+        <div className="flex items-center justify-between gap-4" aria-hidden="true">
+          <span className="text-[13px] text-ink">
+            <span className="rq-shimmer inline-block h-3 w-28 rounded-full align-middle" />
+          </span>
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+            <span className="rq-shimmer inline-block h-3 w-24 rounded-full align-middle" />
+          </span>
+        </div>
+      )}
+      {/* The shimmer is decorative and every segment below is aria-hidden, so without this a screen
+          reader gets NOTHING while the state loads: not a position, which is correct, but not the
+          reason for its absence either. `aria-busy` alone does not fill that gap, it only tells AT
+          to hold off announcing changes inside a live region, and this is not one. Sighted users
+          read "we don't know yet" off the shimmer; this is the same sentence. */}
+      {!known && <span className="sr-only">Loading your setup progress</span>}
       <ol className="mt-3 flex gap-1.5">
-        {STEPS.map((s, index) => {
-          const done = index < step - 1;
-          const here = index === step - 1;
+        {steps.map((s, index) => {
+          const done = known && index < step - 1;
+          const here = known && index === step - 1;
           return (
             <li
               key={s.key}

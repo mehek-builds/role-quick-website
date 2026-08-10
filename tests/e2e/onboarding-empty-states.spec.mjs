@@ -46,12 +46,23 @@ after(async () => {
   server.kill("SIGTERM");
 });
 
-/* SEVEN, not six, and the gaps row is the reason this list changed.
+/* SEVEN CHECKPOINTS, SIX STEPS, and the two numbers in each rail string are the point of the list.
  *
  * The original six omitted `gaps`, which is why it passed while that screen reported itself as
  * "Setup: step 1 of 6, Your resume": the screen was reinstated by #279 and never added to STEPS,
  * and a checkpoint list that never visits a screen cannot catch the screen lying about where it
- * is. It is in STEPS now, the denominator is 7, and this list walks it.
+ * is. #285 added it and made the denominator a flat 7, which fixed the lying screen and left the
+ * printed count skipping a number for everyone who never sees it.
+ *
+ * So the denominator is now the steps the student's own flow contains (components/start/ui.tsx
+ * `flowSteps`), and it is SIX on every checkpoint but one. `gaps` is the conditional screen and is
+ * counted only while the flow is standing on it, because the step is derived server-side and
+ * backend #116 removed 'gaps' from the union `onboardingStepFrom` can return: no student is routed
+ * there, so counting it for the other six screens would promise a screen that never comes.
+ *
+ * The `gaps` row is therefore "step 6 of 7", and it is the #285 regression guard rather than an
+ * inconsistency: `?qa=1&step=gaps` forces the screen to render, and a rendered screen must name its
+ * own position correctly. "Step 1 of 6, Your resume" here is the exact bug that fix existed for.
  *
  * The done heading moved from "Your job matches are ready." to "Setup complete." when that screen
  * gained a confirmation: the forward-looking line is still there, below the receipt, as the
@@ -59,13 +70,16 @@ after(async () => {
  * original assertion and shortened with it. */
 test("all seven onboarding checkpoints render with a progress indicator", async () => {
   const checkpoints = [
-    ["resume", "Start with your resume.", "Setup: step 1 of 7, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 2 of 7, Your impact"],
-    ["focus", "Here's where we'd start.", "Setup: step 3 of 7, Your roles"],
-    ["sponsorship", "Where can you work?", "Setup: step 4 of 7, Work visa"],
-    ["base", "One page, ready.", "Setup: step 5 of 7, Your one page"],
+    ["resume", "Start with your resume.", "Setup: step 1 of 6, Your resume"],
+    ["impact", "Make your most recent work count.", "Setup: step 2 of 6, Your impact"],
+    ["focus", "Here's where we'd start.", "Setup: step 3 of 6, Your roles"],
+    ["sponsorship", "Where can you work?", "Setup: step 4 of 6, Work visa"],
+    ["base", "One page, ready.", "Setup: step 5 of 6, Your one page"],
+    /* The QA fixture reports outstanding gaps on every step but `done`, so the five rows above are
+       also the assertion that outstanding gaps DO NOT inflate the denominator: a screen the flow
+      cannot route to is not part of the flow, however much the profile is missing. */
     ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],
-    ["done", "Setup complete.", "Setup: step 7 of 7, Done"],
+    ["done", "Setup complete.", "Setup: step 6 of 6, Done"],
   ];
 
   for (const [step, heading, rail] of checkpoints) {

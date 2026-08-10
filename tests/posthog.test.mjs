@@ -54,6 +54,39 @@ test("cleared or changed sessions reset anonymous analytics identity without sen
   assert.doesNotMatch(source, /email:\s*distinctId/);
 });
 
+test("identify has exactly one call site, and it is the one carrying the no-PII invariant", async () => {
+  /* This guard existed for lib/api.ts only, and a change that added an identify
+   * call to the instrumentation entry point sailed past it: the wrapper is
+   * named identifyUser, so /posthog\.identify/ never matched, and CI stayed
+   * green while a second identify path appeared. Both callers are pinned now. */
+  for (const file of ["lib/api.ts", "instrumentation-client.ts"]) {
+    const source = await read(file);
+    // Match a CALL, not the words: this file's own comment explains the rule
+    // and would otherwise trip the guard it documents.
+    assert.doesNotMatch(
+      source,
+      /posthog\.identify\s*\(/,
+      `${file} must call identifyUser from lib/analytics, not posthog.identify directly`,
+    );
+  }
+
+  const analytics = await read("lib/analytics.ts");
+  assert.match(analytics, /export function identifyUser/);
+  // identify takes an optional property bag; the obvious thing to put in it is
+  // the email address, which is exactly what must never be sent.
+  assert.match(analytics, /posthog\.identify\(userId\)/);
+  assert.doesNotMatch(analytics, /posthog\.identify\(userId,/);
+});
+
+test("an expired or malformed token never names a person", async () => {
+  const source = await read("lib/session-identity.ts");
+  // Shared-browser and forged-token protection. posthog person merges are
+  // irreversible, so these two checks are the difference between naming the
+  // right account and permanently fusing two people's profiles.
+  assert.match(source, /exp \* 1000 <= now/);
+  assert.match(source, /UUID_RE\.test\(id\)/);
+});
+
 test("completed applications are captured on submission transitions, not receipt rendering", async () => {
   const source = await read("app/dashboard/applications/page.tsx");
   assert.match(source, /captureCompletedSubmission\(result, "poll"\)/);
@@ -71,7 +104,16 @@ test("the privacy policy discloses PostHog and the disabled collection features"
   const source = await read("app/privacy/page.tsx");
   assert.match(source, /We use PostHog/);
   assert.match(source, /Automatic click and form tracking, session recording, and automatic/);
-  assert.match(source, /We do\s+not send your email address or account identity to PostHog/);
+
+  /* This assertion used to pin "We do not send your email address or account
+   * identity to PostHog". That sentence stopped being true the moment identify
+   * shipped, and the test kept passing because it only greps the policy file,
+   * never the behaviour. It now pins the disclosure that matches what the code
+   * actually does: the account id IS sent, the email is NOT, and deleting the
+   * account deletes the profile. */
+  assert.match(source, /we send PostHog your Litos\s+account identifier/);
+  assert.match(source, /We do not send your email address, your name, or anything\s+you have typed/);
+  assert.match(source, /we delete the linked PostHog profile/);
 });
 
 test("the privacy policy discloses extension analytics and its local retry queue", async () => {

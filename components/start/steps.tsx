@@ -21,7 +21,7 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell, flowSteps } from "./ui";
 import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
@@ -968,19 +968,31 @@ export function DoneStep({
   const [busy, setBusy] = useState(false);
   const rows = useMemo(
     () =>
-      /* Driven by the rail, minus the screen the student is standing on. Deriving the order here
-         rather than restating it is also what keeps the 01..06 gutter below aligned with the
-         rail's own step numbers for free. */
-      STEPS.filter((step) => step.key !== "done").map((step, index) => {
+      /* Every step in STEPS, minus the screen the student is standing on. Deliberately STEPS and
+         NOT the rail's own `flowSteps`: the rail lists the screens this student was WALKED through,
+         and the receipt reports the state of their account, which is a wider set. The details row
+         is the difference. It is worth printing whether or not a screen ever asked for them,
+         because "some outstanding" is a true and useful fact about the account either way.
+         Numbering, on the other hand, has to come from the rail, which is what the block below
+         does. */
+      STEPS.filter((step) => step.key !== "done").map((step) => {
         const spec = RECEIPT[step.key];
         const value = spec?.of(state);
+        /* Position in the RAIL, not in this list, and that distinction is the whole point of
+           computing it here. The gutter used to be this row's own index, which lined up only while
+           the rail counted all seven steps. Now that the conditional details screen is counted only
+           when the flow routes to it, an index would print "06  A few details" directly under a
+           rail reading "Step 6 of 6, Done" - two different sixes on one screen, one of them naming
+           a screen the student never saw. A row the rail does not count gets no number rather than
+           a wrong one; the gutter is a cross-reference, and a blank is honest where a digit is not. */
+        const railIndex = flowSteps("done", state).findIndex((s) => s.key === step.key);
         return {
           /* The Receipt's first column is a mono gutter, and on this screen there is no timestamp
              to put in it: the steps happened over whatever span the student took, and inventing a
              duration is the exact thing the receipt motif exists NOT to do. Left empty it reads as
              a misalignment rather than as a gutter, so it carries the step number instead, in the
              two-digit form the rail already borrows from the homepage film's act labels. */
-          t: String(index + 1).padStart(2, "0"),
+          t: railIndex >= 0 ? String(railIndex + 1).padStart(2, "0") : "",
           k: step.label,
           v: spec === undefined || value === undefined ? NOT_RECORDED : value ? spec.done : spec.pending,
           /* No `done` row, deliberately.

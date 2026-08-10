@@ -136,6 +136,14 @@ jobs:
       - name: Onboarding and empty-state checklist spec
         run: npm run test:checklist-flow
 
+      # The end-to-end walk of /start, and the only thing that watches the step rail's arithmetic
+      # against the screens a student is actually shown. It was written for #285 and then never
+      # added here, so the walk it describes ran only when somebody remembered the script: the
+      # denominator regressed to a count that skipped a number and CI stayed green through it.
+      # Reuses the build and the Chromium already installed by the steps above.
+      - name: Start onboarding checklist walk
+        run: npm run test:start-checklist
+
       - name: Narrow viewport actions spec
         run: npm run test:narrow-viewport
 
