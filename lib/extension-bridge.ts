@@ -80,9 +80,37 @@ export type ExtensionState = {
   signedIn: boolean;
   /** Set when the extension is signed in to somebody else and declined to switch. */
   otherAccount: boolean;
+  /** Installed extension version reported by its own runtime manifest. */
+  version: string | null;
+  /** True when this installed binary predates the exact attended-handoff contract. */
+  updateRequired: boolean;
 };
 
-const ABSENT: ExtensionState = { installed: false, signedIn: false, otherAccount: false };
+const ABSENT: ExtensionState = {
+  installed: false,
+  signedIn: false,
+  otherAccount: false,
+  version: null,
+  updateRequired: false,
+};
+
+export const MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION = "0.5.10";
+
+export function extensionVersionAtLeast(current: string | null | undefined, minimum: string): boolean {
+  const parse = (value: string | null | undefined): number[] | null => {
+    if (!value || !/^\d+(?:\.\d+){0,3}$/.test(value)) return null;
+    return value.split(".").map(Number);
+  };
+  const currentParts = parse(current);
+  const minimumParts = parse(minimum);
+  if (!currentParts || !minimumParts) return false;
+  const length = Math.max(currentParts.length, minimumParts.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = (currentParts[index] ?? 0) - (minimumParts[index] ?? 0);
+    if (difference !== 0) return difference > 0;
+  }
+  return true;
+}
 
 export type WebSession = { token: string | null; guest: boolean };
 
@@ -91,14 +119,23 @@ export type WebSession = { token: string | null; guest: boolean };
 let inFlight: Promise<ExtensionState> | null = null;
 
 async function handOverSession(session: WebSession): Promise<ExtensionState> {
-  const ping = await sendToExtension<{ ok?: boolean; signedIn?: boolean }>({ type: "LITOS_PING" });
+  const ping = await sendToExtension<{ ok?: boolean; signedIn?: boolean; version?: string }>({ type: "LITOS_PING" });
   if (!ping?.ok) return ABSENT;
-  if (ping.signedIn) return { installed: true, signedIn: true, otherAccount: false };
+  const version = typeof ping.version === "string" ? ping.version : null;
+  if (!extensionVersionAtLeast(version, MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION)) {
+    return { installed: true, signedIn: false, otherAccount: false, version, updateRequired: true };
+  }
 
   // A guest session is not an account yet. Handing it over would sign the extension in as a
   // stranger the applicant has no way to recognise or sign back out of.
-  if (!session.token || session.guest) return { installed: true, signedIn: false, otherAccount: false };
+  if (!session.token || session.guest) {
+    return { installed: true, signedIn: ping.signedIn === true, otherAccount: false, version, updateRequired: false };
+  }
 
+  /* Always ask the extension to adopt the current website token, even when PING says it has a
+     session. PING deliberately exposes no identity. Treating any signed-in extension as this
+     account can arm an application for a stale or different user. The extension verifies both
+     tokens against the backend and returns already_signed_in only for the same account. */
   const adopted = await sendToExtension<{ ok?: boolean; outcome?: string }>({
     type: "LITOS_ADOPT_SESSION",
     token: session.token,
@@ -107,12 +144,19 @@ async function handOverSession(session: WebSession): Promise<ExtensionState> {
     installed: true,
     signedIn: Boolean(adopted?.ok),
     otherAccount: adopted?.outcome === "different_account",
+    version,
+    updateRequired: false,
   };
 }
 
 export function ensureExtensionSession(session: WebSession): Promise<ExtensionState> {
   inFlight ??= handOverSession(session).catch(() => ABSENT);
   return inFlight;
+}
+
+/** Re-check the installed extension and account immediately before an attended handoff. */
+export function ensureCurrentExtensionSession(session: WebSession): Promise<ExtensionState> {
+  return handOverSession(session).catch(() => ABSENT);
 }
 
 /** Signing out here signs out there. Fire-and-forget: a sign-out must never wait on an extension. */
@@ -129,10 +173,14 @@ export function clearExtensionSession(): void {
  */
 export async function armHandoffs(
   applications: readonly { id: string; portalUrl?: string }[],
-): Promise<void> {
+): Promise<boolean> {
   const armable = applications
     .filter((application): application is { id: string; portalUrl: string } => Boolean(application.portalUrl))
     .map((application) => ({ url: application.portalUrl, applicationId: application.id }));
-  if (armable.length === 0) return;
-  await sendToExtension({ type: "LITOS_ARM_HANDOFF", applications: armable });
+  if (armable.length === 0) return false;
+  const result = await sendToExtension<{ ok?: boolean; armed?: number }>({
+    type: "LITOS_ARM_HANDOFF",
+    applications: armable,
+  });
+  return result?.ok === true && typeof result.armed === "number" && result.armed >= armable.length;
 }

@@ -53,10 +53,15 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // URL. Managed Stratus preview stops carry only screenshot evidence, so those must not render
   // a button-shaped promise that opens nowhere.
   assert.match(dashboard, /const handoffUrl = needsAttention \? submission\.handoff_url : undefined/);
-  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\)/);
+  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\) && !attendedHandoffUrl/);
   assert.match(dashboard, /<iframe[\s\S]{0,300}src=\{handoffUrl\}[\s\S]{0,300}Live company application page/);
   assert.match(dashboard, /No live browser to reopen/);
   assert.match(dashboard, /Open company page/);
+  assert.match(dashboard, /const attendedHandoffUrl = exactAttendedHandoffUrl\(review\)/);
+  assert.match(dashboard, /ensureCurrentExtensionSession\(\{ token: getToken\(\), guest: isGuestSession\(\) \}\)/);
+  assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
+  assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
+  assert.match(dashboard, /Open exact company form/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);

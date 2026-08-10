@@ -70,7 +70,7 @@ test("the panel hands the row everything a control needs, and the page hands the
   assert.match(list, /portalUrl=\{portalUrl\}/);
   assert.match(list, /onOpenQuestion=\{onOpenQuestion\}/);
 
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} \/>/);
+  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} \/>/);
   assert.match(page, /onOpenQuestion=\{\(questionId\) => reviewPortalQuestions\(questionId\)\}/);
 });
 

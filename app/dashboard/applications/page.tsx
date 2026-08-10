@@ -8,6 +8,8 @@ import {
   ApiError,
   getPostingQuestions,
   getStoredEmail,
+  getToken,
+  isGuestSession,
   type ApplicationQuestion,
   type ApplicationProfile,
   type ApplicationReview,
@@ -42,6 +44,8 @@ import { ResumePaper } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
+import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
+import { armHandoffs, ensureCurrentExtensionSession } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
@@ -1754,6 +1758,7 @@ function Applications() {
         />
       ) : screen === "portal" && selectedSubmission ? (
         <SubmissionScreen
+          key={selectedSubmission.application_id}
           packet={selected}
           submission={selectedSubmission}
           approving={approvingId === selected.id}
@@ -2532,7 +2537,58 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const handoffUrl = needsAttention ? submission.handoff_url : undefined;
   const portalUrl = review.portal_url?.trim();
-  const canFinishInDashboard = Boolean(handoffUrl);
+  const attendedHandoffUrl = exactAttendedHandoffUrl(review);
+  const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
+  const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
+  const [attendedHandoffError, setAttendedHandoffError] = useState<string | null>(null);
+
+  async function openAttendedHandoff() {
+    if (!attendedHandoffUrl || attendedHandoffState === "preparing") return;
+    const companyTab = window.open("about:blank", "_blank");
+    if (!companyTab) {
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
+      return;
+    }
+    try {
+      companyTab.opener = null;
+      companyTab.document.body.textContent = "Litos is verifying the exact saved application.";
+    } catch {
+      companyTab.close();
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError("Litos could not prepare a safe company tab. Nothing was opened.");
+      return;
+    }
+
+    setAttendedHandoffState("preparing");
+    setAttendedHandoffError(null);
+    const extension = await ensureCurrentExtensionSession({ token: getToken(), guest: isGuestSession() });
+    if (!extension.installed || !extension.signedIn || extension.otherAccount) {
+      companyTab.close();
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError(extension.updateRequired
+        ? "Update the Litos extension from the Chrome Web Store, then try again. This saved application needs the current version."
+        : extension.otherAccount
+          ? "The Litos extension is signed in to another account. Sign out there, then try again."
+          : "Install the current Litos extension and sign in to this account before opening the company form.");
+      return;
+    }
+    const armed = await armHandoffs([{ id: submission.application_id, portalUrl: attendedHandoffUrl }]);
+    if (!armed) {
+      companyTab.close();
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError("Litos could not bind this exact saved application to Chrome. Nothing was opened.");
+      return;
+    }
+    try {
+      companyTab.location.replace(attendedHandoffUrl);
+      setAttendedHandoffState("idle");
+    } catch {
+      companyTab.close();
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError("Chrome could not open the exact saved company form. Nothing was submitted.");
+    }
+  }
   /* A wait that ends. "Loading cover letter." used to be the ONLY thing this screen said about a
      cover letter that never arrived, and it said it forever, beside a Send button that was greyed
      out and gave no reason. The wait is now bounded: after COVER_LETTER_WAIT_MS, which is six
@@ -2600,7 +2656,7 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
             is how "CAPTCHA requires your attention ... is required required field is required ..."
             reached the screen. Each blocker is its own item, because each is its own task. */}
         {needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} />
+          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
@@ -2711,7 +2767,15 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
             </p>
           </div>
         )}
-        {needsAttention && !canFinishInDashboard && (
+        {attendedHandoffUrl && (
+          <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Continue in Chrome</p>
+            <p className="mt-1 text-xs leading-5 text-muted">
+              Litos will verify this account, bind the exact saved packet to the company&rsquo;s one-click form, and refill it before you review and submit.
+            </p>
+          </div>
+        )}
+        {needsAttention && !canFinishInDashboard && !attendedHandoffUrl && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">No live browser to reopen</p>
             <p className="mt-1 text-xs leading-5 text-muted">
@@ -2721,8 +2785,13 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
         )}
         <div className="mt-7 flex flex-wrap gap-2">
           {canFinishInDashboard && <a href="#live-company-page" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Finish in this dashboard</a>}
-          {needsAttention && handoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
-          {needsAttention && !handoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
+          {attendedHandoffUrl && (
+            <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>
+              {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
+            </Button>
+          )}
+          {needsAttention && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
+          {needsAttention && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
           {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
           {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
@@ -2740,6 +2809,14 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
           )}
           {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send it</Button>}
         </div>
+        {attendedHandoffState === "preparing" && (
+          <p role="status" aria-live="polite" className="mt-3 text-xs leading-5 text-muted">
+            Verifying the current Litos extension and saved application.
+          </p>
+        )}
+        {attendedHandoffError && (
+          <p role="alert" className="mt-3 text-xs leading-5 text-danger">{attendedHandoffError}</p>
+        )}
         {/* The server's own answer to the last press, beside the button that made it. Never routed
             through the page banner: the poll clears that one, and this screen is long enough that a
             message at the top of it is off screen from the control it is about. */}
