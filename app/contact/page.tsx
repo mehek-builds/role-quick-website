@@ -46,6 +46,12 @@ export default function Contact() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const [touched, setTouched] = useState({ name: false, email: false, message: false });
+  const fieldErrors = {
+    name: touched.name && !name.trim() ? "Enter your name." : "",
+    email: touched.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? "Enter a complete email address." : "",
+    message: touched.message && !message.trim() ? "Tell us what happened or what you need." : "",
+  };
   /* Prefills the email of whoever is signed in, so a support reply does not
      open by asking which account this is.
    *
@@ -108,6 +114,8 @@ export default function Contact() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    setTouched({ name: true, email: true, message: true });
+    if (!name.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || !message.trim()) return;
     setBusy(true);
     setError(null);
     try {
@@ -168,10 +176,14 @@ export default function Contact() {
                 id="c-name"
                 required
                 value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                onChange={(e) => { setName(e.target.value); setTouched((current) => ({ ...current, name: false })); }}
+                onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+                aria-invalid={Boolean(fieldErrors.name)}
+                aria-describedby={fieldErrors.name ? "c-name-error" : undefined}
+                className="rq-field mt-2 w-full rounded-inner px-4 py-2.5 text-sm outline-none placeholder:text-faint"
                 placeholder="John Doe"
               />
+              {fieldErrors.name && <p id="c-name-error" className="mt-1 flex gap-1 text-xs text-danger"><span aria-hidden="true">!</span>{fieldErrors.name}</p>}
 
               <label htmlFor="c-email" className="mt-6 block text-[13px] text-ink">
                 Your email
@@ -195,10 +207,14 @@ export default function Contact() {
                 type="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                onChange={(e) => { setEmail(e.target.value); setTouched((current) => ({ ...current, email: false })); }}
+                onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? "c-email-error" : undefined}
+                className="rq-field mt-2 w-full rounded-inner px-4 py-2.5 text-sm outline-none placeholder:text-faint"
                 placeholder="you@example.com"
               />
+              {fieldErrors.email && <p id="c-email-error" className="mt-1 flex gap-1 text-xs text-danger"><span aria-hidden="true">!</span>{fieldErrors.email}</p>}
 
               <label htmlFor="c-reason" className="mt-6 block text-[13px] text-ink">
                 What is this about
@@ -207,7 +223,7 @@ export default function Contact() {
                 id="c-reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                className="rq-field mt-2 w-full rounded-inner px-4 py-2.5 text-sm outline-none"
               >
                 {REASONS.map((r) => (
                   <option key={r} value={r}>
@@ -241,10 +257,14 @@ export default function Contact() {
                 required
                 rows={6}
                 value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                className="mt-2 w-full rounded-inner border border-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none placeholder:text-faint focus:border-brand"
+                onChange={(e) => { setMessage(e.target.value); setTouched((current) => ({ ...current, message: false })); }}
+                onBlur={() => setTouched((current) => ({ ...current, message: true }))}
+                aria-invalid={Boolean(fieldErrors.message)}
+                aria-describedby={fieldErrors.message ? "c-message-error" : undefined}
+                className="rq-field mt-2 w-full rounded-inner px-4 py-3 text-sm leading-6 outline-none placeholder:text-faint"
                 placeholder="Tell us what happened. If a form did not fill, paste the job link."
               />
+              {fieldErrors.message && <p id="c-message-error" className="mt-1 flex gap-1 text-xs text-danger"><span aria-hidden="true">!</span>{fieldErrors.message}</p>}
 
               {/* Honeypot. Hidden from sight and from screen readers, never
                   focusable, and autoComplete off so a password manager does not

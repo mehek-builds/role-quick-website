@@ -41,3 +41,17 @@ test("resume upload supports drop, file limits, progress, and retry", () => {
   assert.match(page, /Reading and parsing/);
   assert.match(page, />Retry</);
 });
+
+test("contact fields validate on blur and clear field errors on edit", () => {
+  const page = read("app/contact/page.tsx");
+  assert.match(page, /onBlur=\{\(\) => setTouched/);
+  assert.match(page, /aria-invalid=\{Boolean\(fieldErrors\.email\)\}/);
+  assert.match(page, /c-message-error/);
+  assert.match(page, /name: false/);
+});
+
+test("signup explicitly introduces account creation and the next step", () => {
+  const page = read("app/login/page.tsx");
+  assert.match(page, /\? "Create your account"/);
+  assert.match(page, /Free to start, no card needed\. Choose a password, then verify your email/);
+});
