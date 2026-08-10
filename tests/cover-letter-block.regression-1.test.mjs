@@ -102,6 +102,6 @@ test("the disabled Send button names the cover letter the way it names every oth
   assert.match(
     shippedCode(source),
     // `handoffExpired` and `restarting` were added on 2026-08-09; see the expired-handoff regression.
-    /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/,
+    /const finalApprovalBlocked = !packetEvidenceReviewed \|\| educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/,
   );
 });

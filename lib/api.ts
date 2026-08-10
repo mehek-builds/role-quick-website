@@ -514,12 +514,78 @@ export type PostingPrescript = {
   already_answered: number;
 };
 
+export type PacketAuditEvidence = {
+  path: string;
+  sha256: string;
+  quote: string;
+};
+
+export type PacketAuditClause = {
+  text: string;
+  start: number;
+  end: number;
+  verdict: "covered" | "missing" | "unscoreable";
+  evidence?: PacketAuditEvidence;
+  highlight_terms: PacketAuditHighlightTerm[];
+};
+
+export type PacketAuditTerm = {
+  text: string;
+  key: string;
+  start: number;
+  end: number;
+  clauseIndex: number;
+  evidence?: PacketAuditEvidence;
+};
+
+export type PacketAuditHighlightTerm = PacketAuditTerm & {
+  tone: "covered" | "missing" | "edited";
+};
+
+export type PacketAudit = {
+  version: "packet_audit_v1";
+  status: "passed";
+  complete: true;
+  degraded: false;
+  rejectedCount: 0;
+  packet_version: string;
+  audit_digest: string;
+  bindings: {
+    ownerSha256: string;
+    applicationId: string;
+    jdSha256: string;
+    specSha256: string;
+    jobContextSha256: string;
+    questionsSha256: string;
+    pdf: { objectKey: string; sha256: string; sizeBytes: number };
+  };
+  clauses: PacketAuditClause[];
+  editedTerms: string[];
+  terms: {
+    covered: PacketAuditTerm[];
+    missing: PacketAuditTerm[];
+    edited: PacketAuditTerm[];
+  };
+};
+
+export type PacketAuditResponse = {
+  packet_audit: PacketAudit;
+  pdf: {
+    object_key: string;
+    sha256: string;
+    size_bytes: number;
+    download_url: string;
+  };
+};
+
 export type ApplicationReview = {
   jd_text: string;
   portal_url?: string;
   /** Exact company form authorized for an attended extension retry. It is distinct from the
    *  posting URL and from a managed-browser live-view URL. */
   extension_handoff_url?: string;
+  /** Server-owned proof for the exact JD, saved resume, answers, and stored PDF. */
+  packet_audit?: PacketAudit;
   ats_name?: string;
   status:
     | "resume_ready"

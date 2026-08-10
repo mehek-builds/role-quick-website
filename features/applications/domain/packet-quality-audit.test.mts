@@ -105,15 +105,21 @@ describe("packet audit: the green 'edited' tone can never fire on a real edited 
    * app/dashboard/applications/qa-data.ts ships exactly such fixtures ("Product Engineering",
    * "Distributed Systems", "Voice AI"), so the QA screen demonstrates the bug rather than the tone.
    */
-  test("a dotted, slashed, hyphenated or multiword edited term is never underlined green", () => {
+  test("a dotted, slashed, hyphenated or multiword edited term is green only with posting evidence", () => {
     const edited = explicitTerms(["Node.js", "CI/CD", "Machine-Learning", "Product Engineering"]);
     const bullet = "Built Node.js services with CI/CD and Machine-Learning for Product Engineering.";
-    const tones = marks(bullet, index([]), edited);
+    const tones = marks(bullet, index(["nodejs", "ci cd", "machine learning", "product engineering"]), edited);
     assert.deepEqual(
       tones.map((mark) => mark?.text),
       ["Node.js", "CI/CD", "Machine-Learning", "Product Engineering"],
       "explicitTerms and segmentText normalize differently, so no edit is marked",
     );
+  });
+
+  test("tailoring provenance without a posting requirement stays uncoloured", () => {
+    const edited = explicitTerms(["Node.js", "CI/CD", "Machine-Learning", "Product Engineering"]);
+    const bullet = "Built Node.js services with CI/CD and Machine-Learning for Product Engineering.";
+    assert.deepEqual(marks(bullet, index([]), edited), []);
   });
 
   test("explicitTerms produces keys segmentText can never look up", () => {

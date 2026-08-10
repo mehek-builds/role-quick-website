@@ -62,7 +62,8 @@ describe("the legend only names colours the page can contain", () => {
     assert.match(legend, /<Swatch tone="missing"/);
   });
 
-  test("the review screen passes the packet's own edited-term count", () => {
-    assert.match(page, /<MatchLegend missingCount=\{[^}]*\} editedCount=\{editedTerms\.size\} \/>/);
+  test("the review screen uses the server audit count once the exact packet is active", () => {
+    assert.match(page, /authoritativeEditedCount = activePacketEvidence[\s\S]{0,300}term\.tone === "edited"/);
+    assert.match(page, /<MatchLegend missingCount=\{authoritativeMissingCount\} editedCount=\{authoritativeEditedCount\} \/>/);
   });
 });

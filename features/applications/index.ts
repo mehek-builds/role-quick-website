@@ -11,6 +11,9 @@ export * from "./domain/board-stages";
 export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
 export * from "./domain/match-model";
+export * from "./domain/packet-audit-acknowledgement";
+export * from "./domain/packet-audit-display";
+export * from "./domain/packet-pdf-verification";
 export * from "./domain/prescript";
 export {
   AUTO_SUBMIT_PREPARED_LIMIT,
