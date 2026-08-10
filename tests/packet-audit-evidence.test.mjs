@@ -44,6 +44,7 @@ test("the browser binds the audit to this application and exact stored PDF", asy
   assert.match(domain, /pdf\.sha256 === binding\.sha256/);
   assert.match(domain, /pdf\.size_bytes === binding\.sizeBytes/);
   assert.match(domain, /bindings\.ownerSha256/);
+  assert.match(domain, /bindings\.applicantSnapshotSha256/);
   assert.match(domain, /audit\.packet_version/);
   assert.match(domain, /audit\.audit_digest/);
   assert.match(domain, /typeof pdf\.download_url === "string"/);

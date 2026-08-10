@@ -557,6 +557,7 @@ export type PacketAudit = {
     specSha256: string;
     jobContextSha256: string;
     questionsSha256: string;
+    applicantSnapshotSha256: string;
     pdf: { objectKey: string; sha256: string; sizeBytes: number };
   };
   clauses: PacketAuditClause[];

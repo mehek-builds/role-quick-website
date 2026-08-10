@@ -139,6 +139,7 @@ export function packetAuditResponseMatchesApplication(applicationId: string, res
     bindings.specSha256,
     bindings.jobContextSha256,
     bindings.questionsSha256,
+    bindings.applicantSnapshotSha256,
     audit.audit_digest,
     audit.packet_version,
     binding.sha256,

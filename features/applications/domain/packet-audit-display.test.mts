@@ -106,6 +106,7 @@ test("matches one application to an exact packet envelope without trusting respo
         specSha256: digest,
         jobContextSha256: digest,
         questionsSha256: digest,
+        applicantSnapshotSha256: digest,
         pdf: { objectKey: "resumes/exact.pdf", sha256: digest, sizeBytes: 42 },
       },
     },
@@ -113,6 +114,10 @@ test("matches one application to an exact packet envelope without trusting respo
   };
   assert.equal(packetAuditResponseMatchesApplication("application-1", response), true);
   assert.equal(packetAuditResponseMatchesApplication("application-2", response), false);
+
+  const missingSnapshotBinding = structuredClone(response);
+  delete (missingSnapshotBinding.packet_audit.bindings as Partial<typeof response.packet_audit.bindings>).applicantSnapshotSha256;
+  assert.equal(packetAuditResponseMatchesApplication("application-1", missingSnapshotBinding), false);
 
   for (const malformed of [
     { packet_audit: null, pdf: response.pdf },
