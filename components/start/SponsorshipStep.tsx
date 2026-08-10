@@ -3,7 +3,7 @@
 /* Each record is an applicant declaration scoped to one country. The backend reuses it only when
  * a question names that country or the posting carries one exact structured country. */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { putOnboardingWorkEligibility, type ApplicationProfile } from "@/lib/api";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { PrimaryButton, StartShell } from "./ui";
@@ -19,6 +19,16 @@ export function SponsorshipStep({ onDone, profile }: { onDone: () => void; profi
   const [records, setRecords] = useState<CountryWorkEligibilityDraft[]>(() => eligibilitySeed(profile));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const edited = useRef(false);
+  const hydrated = useRef(false);
+
+  // /start learns its step before the application profile request finishes. Hydrate the repeater
+  // when that saved profile arrives, but never overwrite a row the applicant already touched.
+  useEffect(() => {
+    if (hydrated.current || edited.current || !profile?.work_eligibility_by_country) return;
+    setRecords(eligibilitySeed(profile));
+    hydrated.current = true;
+  }, [profile]);
 
   async function save() {
     const problem = countryEligibilityProblem(records);
@@ -49,7 +59,10 @@ export function SponsorshipStep({ onDone, profile }: { onDone: () => void; profi
           Add each country separately. Being allowed to work in one country says nothing about
           another country, so Litos never copies an answer across borders.
         </p>
-        <CountryEligibilityEditor rows={records} onChange={setRecords} />
+        <CountryEligibilityEditor rows={records} onChange={(rows) => {
+          edited.current = true;
+          setRecords(rows);
+        }} />
       </div>
 
       <div className="mb-7 space-y-1.5 text-[13px] leading-5 text-muted">
