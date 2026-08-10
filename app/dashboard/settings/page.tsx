@@ -46,6 +46,13 @@ import {
   nullableProfileList,
   nullableProfileText,
 } from "@/lib/application-profile-form";
+import { CountryEligibilityEditor } from "@/components/app/CountryEligibilityEditor";
+import {
+  countryEligibilityProblem,
+  eligibilitySeed,
+  normalizedCountryEligibility,
+  type CountryWorkEligibilityDraft,
+} from "@/lib/work-eligibility";
 
 /* Application profile: exactly the fields the backend stores, including legacy
    fields retained only so a full-profile save cannot erase them. Rendering a
@@ -87,6 +94,8 @@ export default function Settings() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
+  const [eligibilityDraft, setEligibilityDraft] = useState<CountryWorkEligibilityDraft[]>([]);
+  const [eligibilityTouched, setEligibilityTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
@@ -211,6 +220,7 @@ export default function Settings() {
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
+        setEligibilityDraft(eligibilitySeed(profileRes));
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
@@ -295,6 +305,13 @@ export default function Settings() {
 
   async function save() {
     if (!profile) return;
+    if (eligibilityTouched) {
+      const problem = countryEligibilityProblem(eligibilityDraft);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
     setSaving(true);
     setError(null);
     try {
@@ -304,11 +321,15 @@ export default function Settings() {
       delete body.user_id;
       delete body.created_at;
       delete body.updated_at;
+      if (eligibilityTouched) body.work_eligibility_by_country = normalizedCountryEligibility(eligibilityDraft);
+      else delete body.work_eligibility_by_country;
       const res = await api<ApplicationProfile>("/profile/application", {
         method: "PUT",
         body: JSON.stringify(body),
       });
       setProfile(res);
+      setEligibilityDraft(eligibilitySeed(res));
+      setEligibilityTouched(false);
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -944,16 +965,20 @@ export default function Settings() {
           <Input label="GitHub URL" value={profile.github_url} onChange={(v) => patch({ github_url: v })} placeholder="https://github.com/you" />
           <Input label="Portfolio URL" value={profile.portfolio_url} onChange={(v) => patch({ portfolio_url: v })} placeholder="https://you.dev" />
           <Input label="Citizenship" value={profile.citizenship} onChange={(v) => patch({ citizenship: v })} placeholder="United States" />
-          <Select
-            label="Authorized to work? (saved reference only)"
-            value={profile.work_authorized}
-            onChange={(v) => patch({ work_authorized: v })}
-          />
-          <Select
-            label="Need sponsorship? (saved reference only)"
-            value={profile.needs_sponsorship}
-            onChange={(v) => patch({ needs_sponsorship: v })}
-          />
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium text-ink">Work authorization by country</p>
+            <p className="mt-1 mb-3 text-xs leading-5 text-muted">
+              Litos uses a row only for a form or job that names this exact country. It never treats
+              one country as worldwide authorization.
+            </p>
+            <CountryEligibilityEditor
+              rows={eligibilityDraft}
+              onChange={(rows) => {
+                setEligibilityDraft(rows);
+                setEligibilityTouched(true);
+              }}
+            />
+          </div>
           <Input label="Major" value={profile.major} onChange={(v) => patch({ major: v })} placeholder="Computer Science" />
           <StringListInput
             label="Languages you are fluent in"

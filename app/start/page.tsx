@@ -239,6 +239,7 @@ export default function Start() {
     case "sponsorship":
       return (
         <SponsorshipStep
+          profile={appProfile}
           onDone={() => {
             stepDone("sponsorship");
             void refresh();
