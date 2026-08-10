@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  BAMBOOHR_ATTENDED_GATE_REASON,
   CAPTCHA_BLOCKER,
   exactAttendedHandoffUrl,
   ICIMS_ATTENDED_GATE_REASON,
@@ -112,6 +113,40 @@ test("accepts only measured iCIMS login and security-code handoffs", () => {
     attention_reason: ICIMS_ATTENDED_GATE_REASON,
     extension_handoff_url: url,
     portal_url: "https://jobs-express.icims.com/jobs/48173/sales-associate/job",
+    ...overrides,
+  })), null);
+});
+
+test("accepts only the exact measured BambooHR CAPTCHA handoff", () => {
+  const url = "https://acme-studio.bamboohr.com/careers/7312";
+  assert.equal(exactAttendedHandoffUrl(review({
+    ats_name: "bamboohr",
+    attention_reason: BAMBOOHR_ATTENDED_GATE_REASON,
+    extension_handoff_url: url,
+    portal_url: `${url}?source=litos#job`,
+  })), url);
+  for (const overrides of [
+    { status: "ready_to_submit" },
+    { attention_reason: CAPTCHA_BLOCKER },
+    { attention_reason: `${BAMBOOHR_ATTENDED_GATE_REASON}: continue` },
+    { ats_name: "paylocity" },
+    { extension_handoff_url: "https://acme-studio.bamboohr.com/careers/7313" },
+    { extension_handoff_url: `${url}?source=litos` },
+    { extension_handoff_url: `${url}#form` },
+    { extension_handoff_url: "https://user:pass@acme-studio.bamboohr.com/careers/7312" },
+    { extension_handoff_url: "https://acme-studio.bamboohr.com:444/careers/7312" },
+    { extension_handoff_url: "https://www.bamboohr.com/careers/7312" },
+    { extension_handoff_url: "https://evilbamboohr.com/careers/7312" },
+    { extension_handoff_url: "https://other.bamboohr.com/careers/7312" },
+    { extension_handoff_url: "https://acme-studio.bamboohr.com/careers/7312/apply" },
+    { portal_url: "https://acme-studio.bamboohr.com/careers/7313" },
+    { portal_url: "https://other.bamboohr.com/careers/7312" },
+    { portal_url: undefined },
+  ]) assert.equal(exactAttendedHandoffUrl(review({
+    ats_name: "bamboohr",
+    attention_reason: BAMBOOHR_ATTENDED_GATE_REASON,
+    extension_handoff_url: url,
+    portal_url: url,
     ...overrides,
   })), null);
 });

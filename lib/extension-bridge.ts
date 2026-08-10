@@ -98,7 +98,7 @@ export const MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION = "0.5.10";
 export const MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION = "0.5.11";
 
 export function minimumAttendedHandoffExtensionVersion(atsName: string | undefined): string {
-  return atsName === "jobvite" || atsName === "icims"
+  return atsName === "jobvite" || atsName === "icims" || atsName === "bamboohr"
     ? MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION
     : MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION;
 }

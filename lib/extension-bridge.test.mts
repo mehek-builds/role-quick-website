@@ -143,10 +143,11 @@ test("the published 0.5.9 client is installed but held for an update", async () 
   assert.equal(calls.some((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION"), false);
 });
 
-test("Jobvite and iCIMS require 0.5.11 while SmartRecruiters retains 0.5.10", async () => {
+test("Jobvite, iCIMS, and BambooHR require 0.5.11 while SmartRecruiters retains 0.5.10", async () => {
   assert.equal(minimumAttendedHandoffExtensionVersion("smartrecruiters"), "0.5.10");
   assert.equal(minimumAttendedHandoffExtensionVersion("jobvite"), "0.5.11");
   assert.equal(minimumAttendedHandoffExtensionVersion("icims"), "0.5.11");
+  assert.equal(minimumAttendedHandoffExtensionVersion("bamboohr"), "0.5.11");
   reset(() => ({ ok: true, signedIn: true, version: "0.5.10" }));
   const state = await ensureCurrentExtensionSession(
     { token: "jwt-abc", guest: false },
