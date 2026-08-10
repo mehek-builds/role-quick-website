@@ -13,6 +13,8 @@ import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/a
 import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
 import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
 
+const RECENT_SEARCHES_KEY = "litos_recent_job_title_searches";
+
 /* The filters, as one string. It is the pagination key as well as the query: a page of results
    only belongs to the list on screen if it was fetched under the same filters, and comparing this
    is how a late "load more" response is stopped from appending rows that answer a question the
@@ -85,6 +87,7 @@ export default function JobsPage() {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   /* How many postings the server actually ranked, and whether more existed that it never scored.
      Both are needed to describe the list truthfully: see the footer. */
   const [rankedPool, setRankedPool] = useState<number | null>(null);
@@ -111,6 +114,16 @@ export default function JobsPage() {
      backend declined to score, so the list the badge exists to make comparable was mostly
      unbadged. Growth is bounded by the page size the student actually asked for. */
   const matches = useJobMatchScores(jobs, qaMode === false, Math.max(SCORE_BATCH, jobs?.length ?? 0));
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(RECENT_SEARCHES_KEY) ?? "[]");
+      const next = Array.isArray(stored) ? stored.filter((item): item is string => typeof item === "string").slice(0, 5) : [];
+      queueMicrotask(() => setRecentSearches(next));
+    } catch {
+      queueMicrotask(() => setRecentSearches([]));
+    }
+  }, []);
   /* The filters a response must have been fetched under to be allowed into the list. A plain
      counter was not enough: the filter effect and loadMore both read the same counter, so neither
      could tell the other's response apart from its own, and a load-more that finished after a
@@ -279,6 +292,12 @@ export default function JobsPage() {
   }, []);
   const commitTargetRole = () => {
     if (!query.trim()) return;
+    const title = query.trim().slice(0, 80);
+    setRecentSearches((current) => {
+      const next = [title, ...current.filter((item) => item.toLowerCase() !== title.toLowerCase())].slice(0, 5);
+      try { window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
     const key = filterKey(query, location, remoteOnly, employmentType);
     zeroResultIntent.current = key;
     const completed = latestResult.current;
@@ -365,6 +384,14 @@ export default function JobsPage() {
           Remote only
         </label>
       </Card>
+
+      {!query.trim() && recentSearches.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2" aria-label="Recent job-title searches">
+          <span className="text-xs text-faint">Recent searches</span>
+          {recentSearches.map((title) => <button key={title} type="button" onClick={() => setQuery(title)} className="min-h-9 rounded-full border border-border px-3 text-xs text-muted hover:border-ink hover:text-ink">{title}</button>)}
+          <button type="button" onClick={() => { setRecentSearches([]); try { window.localStorage.removeItem(RECENT_SEARCHES_KEY); } catch {} }} className="min-h-9 px-2 text-xs text-faint underline underline-offset-4 hover:text-ink">Clear</button>
+        </div>
+      )}
 
       {/* Said once, above the list, and only when the list is actually filtered. A board that is
           quietly missing a thousand postings is the thing this feature must never be: someone who
