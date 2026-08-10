@@ -34,7 +34,10 @@ export default function Privacy() {
           What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
-          Last updated: July 31, 2026
+          Last updated: August 10, 2026
+        </p>
+        <p className="mt-3 text-sm leading-6 text-muted">
+          This update adds a separate <a href="/cookies" className="underline underline-offset-4 hover:text-ink">cookie and browser-storage inventory</a> and clarifies how those controls work. No data-use purpose changed.
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. Open a job posting
@@ -46,6 +49,13 @@ export default function Privacy() {
           servers, and the sections below say which is which. It will grow as
           the product does, and the date above changes every time it does.
         </p>
+
+        <Section title="Policy history">
+          <ul className="ml-5 list-disc space-y-1">
+            <li><strong className="font-medium text-ink">August 10, 2026:</strong> added the cookie inventory and control path.</li>
+            <li><strong className="font-medium text-ink">July 31, 2026:</strong> clarified analytics identity, deletion, and connection-code handling.</li>
+          </ul>
+        </Section>
 
         <Section title="What the extension reads">
           <p>

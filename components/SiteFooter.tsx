@@ -145,6 +145,8 @@ export function SiteFooter({ wash = false }: { wash?: boolean }) {
             <p className={COLUMN}>Legal</p>
             <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
               <li><a href="/privacy" className={LINK}>Privacy</a></li>
+              <li><a href="/cookies" className={LINK}>Cookies</a></li>
+              <li><a href="/security" className={LINK}>Security</a></li>
               <li><a href="/terms" className={LINK}>Terms</a></li>
             </ul>
           </div>

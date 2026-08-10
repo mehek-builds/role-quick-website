@@ -263,6 +263,9 @@ export default function Contact() {
               <Button type="submit" disabled={busy} className="mt-8">
                 {busy ? <PendingLabel onColor>Sending...</PendingLabel> : "Send"}
               </Button>
+              <p className="mt-6 text-xs leading-5 text-faint">
+                This form is the supported contact channel. Public social accounts are not monitored for support requests.
+              </p>
             </form>
           </>
         )}
