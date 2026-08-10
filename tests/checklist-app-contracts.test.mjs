@@ -11,6 +11,9 @@ test("account deletion uses an accessible dialog and completion state", () => {
   assert.match(page, /aria-labelledby="delete-title"/);
   assert.match(page, /Your Litos account was deleted/);
   assert.match(page, /Export data/);
+  assert.match(page, /I am willingly deleting my account and I confirm that all of my history will be erased\./);
+  assert.match(page, /deleteConfirmation === DELETE_CONFIRMATION_PHRASE/);
+  assert.doesNotMatch(page, /deleteConfirmation\.trim\(\)\.toLowerCase\(\)/);
 });
 
 test("profile and resume saves remain disabled while pristine", () => {

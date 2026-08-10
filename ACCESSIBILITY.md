@@ -13,10 +13,16 @@ Ratios are calculated from the hex tokens in `app/globals.css`.
 | --- | --- | ---: | --- |
 | Ink `#12120f` | Canvas `#ffffff` | 18.8:1 | Primary text |
 | Muted `#6b6a64` | Canvas `#ffffff` | 5.4:1 | Body and secondary text |
+| Action ink `#ffffff` | Action `#5368ca` | 5.0:1 | Primary button labels |
 | Brand ink `#3d51ad` | Brand soft `#eef1fe` | 6.4:1 | Selected and document states |
 | Teal ink `#3f7d67` | Teal soft `#eaf5f0` | 4.7:1 | Autofill states |
 | Coral ink `#a35f3f` | Coral soft `#fbefe8` | 4.6:1 | Outreach states |
 | Danger `#b91c1c` | Canvas `#ffffff` | 6.5:1 | Error text |
+| White `#ffffff` | Danger `#b91c1c` | 6.5:1 | Final destructive button label |
+
+Control borders use `#8a8982` against white at 3.5:1. The lighter `border`
+hairline remains available for card and section boundaries, but it must not be
+the only visual boundary of an input or other control.
 
 Faint text is limited to nonessential labels at supported sizes. It must not carry
 instructions, errors, or the only statement of state. Every interactive element

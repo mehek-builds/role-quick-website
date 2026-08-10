@@ -33,7 +33,7 @@ export default function Privacy() {
         <h1 className="text-section font-[450] tracking-tight text-ink">
           What we do with your data.
         </h1>
-        <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
           Last updated: August 10, 2026
         </p>
         <p className="mt-3 text-sm leading-6 text-muted">

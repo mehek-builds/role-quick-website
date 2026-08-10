@@ -24,7 +24,7 @@ export default function DashboardNotFound() {
       <div className="mt-2 flex flex-wrap gap-3">
         <Link
           href="/dashboard"
-          className="inline-flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+          className="inline-flex min-h-11 items-center rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
         >
           Go to Home
         </Link>

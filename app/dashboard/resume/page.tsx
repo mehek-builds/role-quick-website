@@ -473,7 +473,7 @@ function Field({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
     </label>
   );
@@ -510,7 +510,7 @@ function SelectField({
         id={fieldId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>{option.label}</option>
@@ -549,7 +549,7 @@ function LinesField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         rows={rows}
-        className="mt-1.5 w-full rounded-inner border border-border bg-surface px-3.5 py-2.5 text-sm leading-6 text-ink outline-none focus:border-brand"
+        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3.5 py-2.5 text-sm leading-6 text-ink outline-none focus:border-brand"
         placeholder={placeholder}
       />
     </div>
@@ -587,7 +587,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         onSaved={onProfileChange}
       />
       <details className="mt-4">
-        <summary className="cursor-pointer text-xs text-faint hover:text-muted">
+        <summary className="cursor-pointer text-xs text-muted hover:text-ink">
           View full parsed profile
         </summary>
         <pre className="mt-2 max-h-72 overflow-auto rounded-inner bg-surface-alt p-4 font-mono text-[11px] leading-5 text-muted">
@@ -601,7 +601,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
 function KV({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs text-faint">{label}</p>
+      <p className="text-xs text-muted">{label}</p>
       {/* `truncate` hid the end of every long value, which is how a wrong stored degree stayed
           invisible. Wrap instead: these cards are read to check the value is right. */}
       <p className="mt-0.5 break-words text-sm text-ink">{value}</p>
@@ -762,7 +762,7 @@ function ParsedProfileEditor({
         <Field label="Name" value={draft.full_name} onChange={(full_name) => setDraft({ ...draft, full_name })} placeholder="Your full name" />
         <Field label="Phone" value={draft.phone} onChange={(phone) => setDraft({ ...draft, phone })} placeholder="Optional" />
       </div>
-      {email && <p className="mt-2 text-xs text-faint">Login email: {email}</p>}
+      {email && <p className="mt-2 text-xs text-muted">Login email: {email}</p>}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="School" value={draft.school} onChange={(nextSchool) => setDraft({ ...draft, school: nextSchool })} placeholder="University of Southern California" />
         <Field label="Degree" value={draft.degree} onChange={(nextDegree) => setDraft({ ...draft, degree: nextDegree })} placeholder="Bachelor of Science in Computer Science" />
@@ -806,8 +806,8 @@ function TextAreaField({ label, value, onChange, rows, hint }: { label: string; 
   return (
     <label className="block">
       <span className="text-xs font-medium text-muted">{label}</span>
-      <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="mt-1.5 w-full resize-y rounded-inner border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand" />
-      <span className="mt-1 block text-[11px] text-faint">{hint}</span>
+      <textarea value={value} onChange={(event) => onChange(event.target.value)} rows={rows} className="mt-1.5 w-full resize-y rounded-inner border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand" />
+      <span className="mt-1 block text-[11px] text-muted">{hint}</span>
     </label>
   );
 }
@@ -815,7 +815,7 @@ function TextAreaField({ label, value, onChange, rows, hint }: { label: string; 
 function ProfileChips({ label, values }: { label: string; values: string[] }) {
   return (
     <div className="mt-4">
-      <p className="mb-1.5 text-xs text-faint">{label}</p>
+      <p className="mb-1.5 text-xs text-muted">{label}</p>
       <div className="flex flex-wrap gap-1.5">
         {values.map((value) => <span key={value} className="rounded-full bg-surface-alt px-2.5 py-0.5 font-mono text-[11px] text-muted">{value}</span>)}
       </div>

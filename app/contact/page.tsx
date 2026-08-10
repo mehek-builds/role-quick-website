@@ -199,7 +199,7 @@ export default function Contact() {
                   to, but it is no longer made at the field. If it ever comes
                   back, it comes back as its own short line and not appended
                   here. */}
-              <p className="mt-1 text-xs leading-5 text-faint">
+              <p className="mt-1 text-xs leading-5 text-muted">
                 The email associated with your account.
               </p>
               <input
@@ -240,7 +240,7 @@ export default function Contact() {
                    the Terms state: a refund is decided on a written reason, so
                    asking for it here saves a round trip rather than being a
                    hurdle. */
-                <p className="mt-1 text-xs leading-5 text-faint">
+                <p className="mt-1 text-xs leading-5 text-muted">
                   Include the email on the account and why you are asking. See
                   the refund section of the{" "}
                   <a
@@ -283,7 +283,7 @@ export default function Contact() {
               <Button type="submit" disabled={busy} className="mt-8">
                 {busy ? <PendingLabel onColor>Sending...</PendingLabel> : "Send"}
               </Button>
-              <p className="mt-6 text-xs leading-5 text-faint">
+              <p className="mt-6 text-xs leading-5 text-muted">
                 This form is the supported contact channel. Public social accounts are not monitored for support requests.
               </p>
             </form>

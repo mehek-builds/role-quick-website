@@ -55,7 +55,7 @@ export default async function TryPage({
               resume text is never persisted, which is the fact a visitor
               actually cares about, so say that one exactly instead of a rounder
               claim that is not quite true. */}
-          <p className="mx-auto mt-3 max-w-[460px] text-[13px] leading-6 text-faint">
+          <p className="mx-auto mt-3 max-w-[460px] text-[13px] leading-6 text-muted">
             Nothing you paste here is stored. When you do have an account, you
             can delete everything in it.{" "}
             <a

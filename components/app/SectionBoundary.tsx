@@ -86,7 +86,7 @@ export class SectionBoundary extends Component<Props, State> {
         <h2 className="text-base font-medium text-ink">{this.props.title}</h2>
         {/* No number, no zero, no "none yet". Only what is known: this panel did not load, and the
             rest of the page did. */}
-        <p className="text-small text-faint">
+        <p className="text-small text-muted">
           Could not load this just now. Everything else on this page is up to date.{" "}
           <button
             type="button"

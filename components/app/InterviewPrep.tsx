@@ -71,13 +71,13 @@ export function InterviewPrep({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="text-sm font-medium text-ink transition-colors hover:text-brand"
+        className="text-sm font-medium text-ink transition-colors hover:text-brand-ink"
       >
         {open ? "Hide interview questions" : "What they are likely to ask"}
       </button>
 
       {open && failed && (
-        <p className="mt-3 text-[13px] text-faint">Could not prepare questions just now.</p>
+        <p className="mt-3 text-[13px] text-muted">Could not prepare questions just now.</p>
       )}
 
       {open && !failed && !prep && (
@@ -104,7 +104,7 @@ export function InterviewPrep({
                     {item.answer ? (
                       <p className="mt-1.5 border-l-2 border-brand/40 pl-2.5 text-xs leading-5 text-muted">
                         {item.answer.bullet}
-                        <span className="ml-1.5 text-faint">{item.answer.org}</span>
+                        <span className="ml-1.5 text-muted">{item.answer.org}</span>
                       </p>
                     ) : (
                       <p className="mt-1.5 text-xs leading-5 text-warn">

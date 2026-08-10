@@ -55,7 +55,7 @@ export function ResumeHealth({ spec, disabled = false }: { spec: ResumeSpec; dis
   }, [disabled, key]);
 
   if (state.failed) {
-    return <p className="text-[13px] text-faint">We could not check this resume just now.</p>;
+    return <p className="text-[13px] text-muted">We could not check this resume just now.</p>;
   }
   if (!state.health) {
     return <div className="h-4 w-40 animate-pulse rounded bg-surface-alt" aria-hidden="true" />;
@@ -100,11 +100,11 @@ export function ResumeHealth({ spec, disabled = false }: { spec: ResumeSpec; dis
               <div className="min-w-0">
                 <p className="text-[13px] font-medium leading-5 text-ink">
                   {finding.title}
-                  {finding.org && <span className="ml-1.5 font-normal text-faint">{finding.org}</span>}
+                  {finding.org && <span className="ml-1.5 font-normal text-muted">{finding.org}</span>}
                 </p>
                 <p className="mt-0.5 text-[13px] leading-5 text-muted">{finding.action}</p>
                 {finding.bullet && (
-                  <p className="mt-1.5 border-l-2 border-border pl-2.5 text-xs leading-5 text-faint">
+                  <p className="mt-1.5 border-l-2 border-border pl-2.5 text-xs leading-5 text-muted">
                     {finding.bullet}
                   </p>
                 )}

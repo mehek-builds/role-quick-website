@@ -62,7 +62,7 @@ export function RequirementBreakdown({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs font-medium text-brand hover:text-brand-ink"
+        className="text-xs font-medium text-brand-ink underline-offset-2 hover:underline"
       >
         What this job asks for
       </button>
@@ -70,10 +70,10 @@ export function RequirementBreakdown({
   }
 
   if (failed) {
-    return <p className="text-[11px] leading-4 text-faint">We could not read this posting&apos;s requirements just now.</p>;
+    return <p className="text-[11px] leading-4 text-muted">We could not read this posting&apos;s requirements just now.</p>;
   }
   if (!result) {
-    return <p className="text-[11px] leading-4 text-faint">Reading what this job asks for...</p>;
+    return <p className="text-[11px] leading-4 text-muted">Reading what this job asks for...</p>;
   }
 
   const scored = result.clauses.filter((c) => c.verdict !== "unscoreable");
@@ -89,7 +89,7 @@ export function RequirementBreakdown({
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
           What this job asks for
         </p>
-        <p className="text-[11px] text-faint">
+        <p className="text-[11px] text-muted">
           {met.length} of {scored.length} met
         </p>
       </div>
@@ -113,7 +113,7 @@ export function RequirementBreakdown({
         </p>
       ) : (
         dropped > 0 && (
-          <p className="mt-3 text-[11px] leading-4 text-faint">
+          <p className="mt-3 text-[11px] leading-4 text-muted">
             {dropped} more {dropped === 1 ? "line is" : "lines are"} about attitude rather than
             experience, so {dropped === 1 ? "it is" : "they are"} not counted either way.
           </p>
@@ -144,18 +144,18 @@ function ClauseRow({ clause }: { clause: RequirementClauseView }) {
         className={`mt-1.5 size-1.5 shrink-0 rounded-full ${met ? "bg-positive" : "bg-faint"}`}
       />
       <div className="min-w-0">
-        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-faint">{priority}</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-muted">{priority}</p>
         <p className="text-xs leading-5 text-ink">
           <span className="sr-only">{met ? "Met: " : "Not met: "}</span>
           {clause.text}
         </p>
         {clause.evidence && (
-          <p className={`mt-0.5 text-[11px] leading-4 ${met ? "text-muted" : "text-faint"}`}>
+          <p className="mt-0.5 text-[11px] leading-4 text-muted">
             {clause.evidence}
           </p>
         )}
         {!met && clause.missing_terms.length > 0 && (
-          <p className="mt-0.5 text-[11px] leading-4 text-faint">
+          <p className="mt-0.5 text-[11px] leading-4 text-muted">
             missing: {clause.missing_terms.join(", ")}
           </p>
         )}

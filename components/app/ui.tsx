@@ -96,7 +96,7 @@ export function Meter({
       </div>
       {/* A meter's job is to show a quantity. The billing-cycle rule is a policy sentence and it
           lives in Account, not under every bar. */}
-      {unlimited && <p className="mt-1.5 text-[11px] text-faint">No limit on your plan</p>}
+      {unlimited && <p className="mt-1.5 text-[11px] text-muted">No limit on your plan</p>}
     </div>
   );
 }

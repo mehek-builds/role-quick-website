@@ -82,6 +82,9 @@ const ACCOUNT_TABS = [
   { id: "sign-in", label: "Sign-in & data" },
 ] as const;
 
+const DELETE_CONFIRMATION_PHRASE =
+  "I am willingly deleting my account and I confirm that all of my history will be erased.";
+
 type AccountTab = (typeof ACCOUNT_TABS)[number]["id"];
 
 function tabFromHash(hash: string): AccountTab {
@@ -136,6 +139,7 @@ export default function Settings() {
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteComplete, setDeleteComplete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteConfirmed = deleteConfirmation === DELETE_CONFIRMATION_PHRASE;
 
   useEffect(() => {
     const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
@@ -508,7 +512,7 @@ export default function Settings() {
       setError("Add your email to save this work before deleting the account.");
       return;
     }
-    if (!me || deleteConfirmation.trim().toLowerCase() !== me.email.toLowerCase()) return;
+    if (!me || !deleteConfirmed) return;
     setDataBusy("delete");
     setDeleteError(null);
     try {
@@ -642,7 +646,7 @@ export default function Settings() {
                     </span>
                   )}
                   {sponsorship.evidence && (
-                    <span className="mt-2 block text-xs leading-5 text-faint">
+                    <span className="mt-2 block text-xs leading-5 text-muted">
                       {sponsorship.evidence.confirmed_employers} of the{" "}
                       {sponsorship.evidence.checked_employers} companies Litos watches have H-1B filings
                       on record. Sources: {sponsorship.evidence.source} (FY
@@ -675,10 +679,10 @@ export default function Settings() {
                       setSponsorBusy(false);
                     }
                   }}
-                  className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+                  className="mt-1 size-4 accent-brand disabled:opacity-40"
                 />
               </label>
-              <p className="mt-4 text-xs leading-5 text-faint">
+              <p className="mt-4 text-xs leading-5 text-muted">
                 A filing record is not a promise to sponsor you. It is proof the company has sponsored
                 people before.
               </p>
@@ -706,11 +710,11 @@ export default function Settings() {
           </div>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <p className="text-xs text-faint">Email</p>
+              <p className="text-xs text-muted">Email</p>
               <p className="mt-0.5 font-mono text-sm text-ink">{me.email ?? "Not saved yet"}</p>
             </div>
             <div>
-              <p className="text-xs text-faint">Plan</p>
+              <p className="text-xs text-muted">Plan</p>
               <div className="mt-1">
                 <Chip
                   label={me.tier === "pro" ? "Pro" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
@@ -740,7 +744,7 @@ export default function Settings() {
                   onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
                   placeholder="Current password"
                   aria-label="Current password"
-                  className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                 />
                 <input
                   type="password"
@@ -750,7 +754,7 @@ export default function Settings() {
                   onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
                   placeholder="New password"
                   aria-label="New password"
-                  className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                 />
                 <input
                   type="password"
@@ -760,7 +764,7 @@ export default function Settings() {
                   onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
                   placeholder="Confirm new password"
                   aria-label="Confirm new password"
-                  className="rounded-full border border-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
                 />
               </div>
               {passwordError && (
@@ -793,7 +797,7 @@ export default function Settings() {
           <h2 className="text-base font-medium text-ink">Your data</h2>
           <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
           <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
-            <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
+            <Button variant="secondary" type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null}>{dataBusy === "export" ? "Preparing..." : "Export data"}</Button>
             <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); setDeleteError(null); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
             <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
           </div>
@@ -808,19 +812,23 @@ export default function Settings() {
             </div>
           ) : (
             <form method="dialog" className="p-6" onSubmit={(event) => { event.preventDefault(); void deleteAccount(); }}>
-              <p className="text-label text-danger">Permanent action</p>
-              <h2 id="delete-title" className="mt-2 text-heading">Delete your account?</h2>
-              <div id="delete-description" className="mt-3 space-y-3 text-sm leading-6 text-muted">
-                <p>This removes your account, saved profile and answers, resumes, application history, outreach, and linked PostHog profile. Shared public company contacts and de-identified reply-pattern notes remain. You cannot undo this.</p>
-                <p>Export first if you want a copy of your account data.</p>
+              <div className="rounded-inner border border-danger/20 bg-danger-soft p-4">
+                <p className="text-label text-danger">Permanent action</p>
+                <h2 id="delete-title" className="mt-2 text-heading">Delete your account?</h2>
+                <div id="delete-description" className="mt-3 space-y-3 text-sm leading-6 text-muted">
+                  <p>This removes all account-linked history, including your saved profile and answers, resumes, applications, outreach, and linked PostHog profile. Shared public company contacts and de-identified reply-pattern notes remain. You cannot undo this.</p>
+                  <p>Export first if you want a copy of your account data.</p>
+                </div>
               </div>
               <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="mt-4 text-sm font-medium text-brand-ink underline underline-offset-4">Export data</button>
-              <label htmlFor="delete-confirmation" className="mt-5 block text-sm font-medium">Type {me.email} to confirm</label>
-              <input id="delete-confirmation" autoComplete="off" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="rq-field mt-2 w-full rounded-inner px-4 py-3 text-sm" />
+              <label htmlFor="delete-confirmation" className="mt-5 block text-sm font-medium">Confirmation sentence</label>
+              <p id="delete-confirmation-instructions" className="mt-1 text-sm text-muted">Type this exact sentence, including capitalization and punctuation:</p>
+              <p id="delete-confirmation-phrase" className="mt-2 rounded-inner border border-border bg-surface-alt px-3 py-2 font-mono text-xs leading-5 text-ink">{DELETE_CONFIRMATION_PHRASE}</p>
+              <input id="delete-confirmation" aria-describedby="delete-confirmation-instructions delete-confirmation-phrase" autoComplete="off" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="rq-field mt-3 w-full rounded-inner px-4 py-3 text-sm" />
               {deleteError && <div className="mt-3"><ErrorNote message={deleteError} /></div>}
               <div className="mt-6 flex flex-wrap justify-end gap-3">
                 <Button variant="secondary" type="button" disabled={dataBusy === "delete"} onClick={() => deleteDialogRef.current?.close()}>Keep account</Button>
-                <button type="submit" disabled={dataBusy !== null || deleteConfirmation.trim().toLowerCase() !== me.email?.toLowerCase()} className="min-h-11 rounded-full bg-danger px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account permanently"}</button>
+                <Button variant="danger" type="submit" disabled={dataBusy !== null || !deleteConfirmed}>{dataBusy === "delete" ? "Deleting..." : "Delete account permanently"}</Button>
               </div>
             </form>
           )}
@@ -856,7 +864,7 @@ export default function Settings() {
               // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
               disabled={savingAutomation || (!automaticSubmission && consentEligibility?.eligible === false)}
               onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })}
-              className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+              className="mt-1 size-4 accent-brand disabled:opacity-40"
             />
           </label>
           <div className="rounded-inner border border-border p-4">
@@ -910,7 +918,7 @@ export default function Settings() {
                 checked={automaticVerification}
                 disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
                 onChange={(event) => changeAutomaticVerification(event.target.checked)}
-                className="mt-1 size-4 accent-[#6b84e8] disabled:opacity-40"
+                className="mt-1 size-4 accent-brand disabled:opacity-40"
               />
             </div>
             {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
@@ -930,7 +938,7 @@ export default function Settings() {
             )}
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs font-medium text-muted">Inbox access</p>
-              <p className="mt-1 text-xs leading-5 text-faint">Your provider shows exactly what Litos can access before you approve it.</p>
+              <p className="mt-1 text-xs leading-5 text-muted">Your provider shows exactly what Litos can access before you approve it.</p>
               <p className="mt-2 text-xs leading-5 text-muted">Litos requests access only to find a recent application verification code while a form is waiting. It does not use this connection to send mail or read unrelated messages. Connection time and the latest provider state appear below; Litos does not currently keep a user-visible sync activity log.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {(["gmail", "outlook"] as const).map((provider) => {
@@ -941,7 +949,7 @@ export default function Settings() {
                     <div key={provider} className="flex items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3">
                       <div>
                         <p className="text-sm font-medium text-ink">{label}</p>
-                        <p className="mt-0.5 text-xs text-faint">
+                        <p className="mt-0.5 text-xs text-muted">
                           {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
                         </p>
                         {connection?.connected_at && <p className="mt-1 text-xs text-muted">Connected {new Date(connection.connected_at).toLocaleDateString()}</p>}
@@ -963,8 +971,8 @@ export default function Settings() {
             </div>
           </div>
         </div>
-        <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
-        <p className="mt-2 text-xs leading-5 text-faint">Litos sends transactional account, application, and billing messages only. There are no marketing notification subscriptions or configurable notification channels in the current product.</p>
+        <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
+        <p className="mt-2 text-xs leading-5 text-muted">Litos sends transactional account, application, and billing messages only. There are no marketing notification subscriptions or configurable notification channels in the current product.</p>
         </div>
       </Card>}
 
@@ -1075,7 +1083,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <p className="mt-5 text-xs leading-5 text-faint">Applicant-owned questions are never inferred, automatically declined, or reused from this page.</p>
+        <p className="mt-5 text-xs leading-5 text-muted">Applicant-owned questions are never inferred, automatically declined, or reused from this page.</p>
       </Card>}
 
       {/* Plan + usage */}
@@ -1110,7 +1118,7 @@ export default function Settings() {
             {billingFailed && <ErrorNote message="Your last payment did not complete. Update the payment method in the secure billing portal to keep access active." />}
             {billingCanceled && me.billing_ends_at && <p role="status" className="rounded-inner bg-warn-soft px-4 py-3 text-warn">Subscription canceled. Pro access continues through {new Date(me.billing_ends_at).toLocaleDateString()}.</p>}
             {me.billing_renews_at && !billingCanceled && <p>Next billing date: <span className="font-mono text-ink">{new Date(me.billing_renews_at).toLocaleDateString()}</span>. The amount is confirmed in the billing portal.</p>}
-            <p>{me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Open secure billing portal</a> : <a className="font-medium text-brand hover:text-brand-ink" href="/contact">Contact support about billing</a>} {me.billing_portal_url ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
+            <p>{me.billing_portal_url ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={me.billing_portal_url}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_url ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
           </div>
         ) : null}
       </Card>}
@@ -1155,7 +1163,7 @@ function Input({
         onChange={(e) => onChange(editableProfileText(e.target.value))}
         onBlur={(e) => onChange(nullableProfileText(e.target.value))}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
@@ -1194,7 +1202,7 @@ function ChoiceSelect({
         aria-describedby={hint ? hintId : undefined}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
       >
         <option value="">Not set</option>
         {options.map((option) => (
@@ -1240,7 +1248,7 @@ function StringListInput({
           onChange(nullableProfileList(e.target.value));
         }}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
@@ -1271,7 +1279,7 @@ function Select({
         onChange={(e) =>
           onChange(e.target.value === "" ? null : e.target.value === "yes")
         }
-        className="mt-1.5 w-full rounded-full border border-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
       >
         {TRI.map((o) => (
           <option key={o.value} value={o.value}>
@@ -1303,7 +1311,7 @@ function StringSelect({
         disabled
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-full border border-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
+        className="mt-1.5 w-full rounded-full border border-control-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
       >
         {options.map((option) => (
           <option key={option || "not-set"} value={option}>

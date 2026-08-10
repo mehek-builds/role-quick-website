@@ -159,7 +159,7 @@ export function AutopilotStrip() {
 export function AppliedToday({ count }: { count: number | null }) {
   if (count === null) return null;
   return (
-    <span className="font-mono text-[11px] text-faint">
+    <span className="font-mono text-[11px] text-muted">
       <span className="text-ink">{count}</span> applied today
     </span>
   );
@@ -248,7 +248,7 @@ export function NextMatchCard({
       {autopilot ? (
         <AutopilotStrip />
       ) : (
-        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-faint">Next best match</p>
+        <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted">Next best match</p>
       )}
       <AppliedToday count={appliedToday} />
     </div>

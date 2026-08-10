@@ -155,7 +155,7 @@ export function DashboardShell({
         </Link>
 
         <nav className="flex-1 overflow-y-auto px-3 pb-4">
-          <p className="px-3 pb-1 pt-3 font-mono text-label uppercase tracking-[0.08em] text-faint">Menu</p>
+          <p className="px-3 pb-1 pt-3 font-mono text-label uppercase tracking-[0.08em] text-muted">Menu</p>
           <ul className="space-y-0.5">
             {NAV.map((item) => (
               <li key={item.href}>
@@ -248,7 +248,7 @@ function RailLink({
       {active && (
         <span aria-hidden="true" className="absolute -left-3 top-1.5 bottom-1.5 w-[3px] rounded-full bg-brand" />
       )}
-      <Icon className={active ? "text-brand" : "text-faint"} />
+      <Icon className={active ? "text-brand-ink" : "text-muted"} />
       {label}
     </Link>
   );

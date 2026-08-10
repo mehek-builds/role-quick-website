@@ -173,7 +173,7 @@ export function Board({
               <h3 id={`col-${stage}`} className="text-[13px] font-medium text-ink">
                 {STAGE_LABEL[stage]}
               </h3>
-              <span className="font-mono text-[11px] text-faint">{column.length}</span>
+              <span className="font-mono text-[11px] text-muted">{column.length}</span>
             </div>
             {/* Capped and scrollable, matching the ledger this replaced. An uncapped column grows
                 without bound and stretches every sibling to the tallest one. */}
@@ -192,7 +192,7 @@ export function Board({
                   {/* When it last moved, on every card. Without it a column is a set of names with
                       no sense of which is live and which has been sitting untouched for a month,
                       which is the question a board is looked at to answer. */}
-                  <p className="mt-1 text-[11px] text-faint">
+                  <p className="mt-1 text-[11px] text-muted">
                     {relativeTime(card.moved_at ?? card.created_at)}
                     {card.submission_status ? ` · Litos: ${submissionLabel(card.submission_status)}` : ""}
                   </p>
@@ -215,7 +215,7 @@ export function Board({
                       title="See the application again"
                       /* rounded-inner, not a one-off 7px. DESIGN.md defines exactly three radii and
                          an arbitrary fourth is how a scale stops being one. */
-                      className="after:absolute after:-inset-2 after:content-[''] absolute bottom-[15px] right-3 flex h-6 w-6 items-center justify-center rounded-inner text-faint transition-colors hover:bg-brand-soft hover:text-brand-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                      className="after:absolute after:-inset-2 after:content-[''] absolute bottom-[15px] right-3 flex h-6 w-6 items-center justify-center rounded-inner text-muted transition-colors hover:bg-brand-soft hover:text-brand-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                     >
                       <svg viewBox="0 0 12 12" className="h-3 w-3" fill="none" aria-hidden="true">
                         <path
@@ -231,7 +231,7 @@ export function Board({
                 </li>
               ))}
               {column.length === 0 && (
-                <li className="rounded-inner border border-dashed border-border px-3 py-4 text-center text-xs text-faint">
+                <li className="rounded-inner border border-dashed border-border px-3 py-4 text-center text-xs text-muted">
                   Nothing here
                 </li>
               )}
@@ -262,7 +262,7 @@ function MoveControl({
         value={card.stage}
         disabled={busy}
         onChange={(event) => onMove(card, event.target.value as Stage)}
-        className="w-full rounded-inner border border-border bg-surface px-2 py-1 text-xs text-muted outline-none focus:border-brand disabled:opacity-50"
+        className="w-full rounded-inner border border-control-border bg-surface px-2 py-1 text-xs text-muted outline-none focus:border-brand disabled:opacity-50"
       >
         {stages.map((stage) => (
           <option key={stage} value={stage}>

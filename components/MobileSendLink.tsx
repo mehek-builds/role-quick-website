@@ -66,7 +66,7 @@ export function MobileSendLink({
                 track("send_link_submit", { method: "copy", source });
               } catch {}
             }}
-            className="mt-1.5 min-h-[44px] rounded-full border border-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink"
+            className="mt-1.5 min-h-[44px] rounded-full border border-control-border bg-surface px-3.5 py-1.5 text-xs font-medium text-ink"
           >
             {copied ? "Copied" : "Copy install link"}
           </button>

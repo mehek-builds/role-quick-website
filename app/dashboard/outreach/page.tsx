@@ -181,7 +181,7 @@ export default function Outreach() {
           {filter === "all" ? (
             <a
               href={STORE_URL}
-              className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+              className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
             >
               Add Litos to Chrome
             </a>
@@ -215,7 +215,7 @@ export default function Outreach() {
                     )}
                     <Chip label={STATUS_LABELS[e.status] ?? e.status} kind={e.status} />
                     {e.sent_at && (
-                      <span className="font-mono text-xs text-faint">
+                      <span className="font-mono text-xs text-muted">
                         {formatRelativeDate(e.sent_at)}
                       </span>
                     )}
@@ -224,7 +224,7 @@ export default function Outreach() {
 
                 {e.subject && (
                   <p className="mt-3 text-sm text-ink">
-                    <span className="text-faint">Subject: </span>
+                    <span className="text-muted">Subject: </span>
                     {e.subject}
                   </p>
                 )}
@@ -246,7 +246,7 @@ export default function Outreach() {
                 )}
 
                 {(e.follow_up_count ?? 0) > 0 && (
-                  <p className="mt-3 text-xs text-faint">
+                  <p className="mt-3 text-xs text-muted">
                     {e.follow_up_count} follow-up{e.follow_up_count === 1 ? "" : "s"} sent
                   </p>
                 )}

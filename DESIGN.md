@@ -63,7 +63,9 @@ and gives each feature row a pale tinted band. The law is **consistency of
 meaning**, not scarcity. Three tonal families, each with a job:
 
 - **Blue family** `#6b84e8` / ink `#3d51ad` / soft `#eef1fe`: **action +
-  documents pillar + Pro.** Solid blue may repeat on every true CTA on a page
+  documents pillar + Pro.** Interactive text uses blue ink. Solid action blue
+  is `#5368ca` with white text, an accessibility-safe operational tone within
+  the family. It may repeat on every true CTA on a page
   (never on anything that isn't an action). Blue-soft surfaces carry the
   documents pillar, selected states, the closing band, and **Pro emphasis**
   (pricing card, dashboard upsell): the upgrade is allowed to be the
@@ -82,7 +84,12 @@ meaning**, not scarcity. Three tonal families, each with a job:
   non-pillar sections), border `#e8e6e1` hairline always 1px, ink `#12120f`,
   muted `#6b6a64`, faint `#a3a19a`.
 - **Semantic:** positive `#15803d`, warn `#b45309`, danger `#b91c1c`: status
-  facts only, never persuasion.
+  facts only, never persuasion. The one control exception is the final button
+  that irreversibly destroys user data. It uses danger with white text so the
+  consequence remains explicit without using color to manufacture urgency.
+- **Control borders:** interactive controls use `#8a8982`, which is 3.5:1
+  against the white control surface. The lighter neutral hairline remains for
+  cards and layout divisions only.
 - **Unchanged hard law:** color never encodes urgency. Emphasis states what
   something is or what you get; it never pushes how fast to decide. Meters
   stay ink (a meter is a quantity, not a pillar).

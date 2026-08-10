@@ -610,7 +610,7 @@ export default function Home() {
             </Link>
           </p>
         </div>
-        <Link href="/dashboard/applications?new=1" className="flex min-h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-white transition-opacity hover:opacity-90">
+        <Link href="/dashboard/applications?new=1" className="flex min-h-11 items-center rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
           Add job
         </Link>
       </section>
@@ -621,7 +621,7 @@ export default function Home() {
             <p className="text-sm font-medium text-ink">You have not saved this yet.</p>
             <p className="mt-1 text-xs text-muted">Add your email or you will lose everything on this page.</p>
           </div>
-          <Link href="/login?claim=1" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+          <Link href="/login?claim=1" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink">
             Save my work
           </Link>
         </Card>
@@ -635,7 +635,7 @@ export default function Home() {
           </div>
           <Link
             href="/login?claim=1&next=upgrade"
-            className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white"
+            className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink"
           >
             Get Pro
           </Link>
@@ -710,7 +710,7 @@ export default function Home() {
           <div>
             <h2 id="matches-heading" className="text-base font-medium text-ink">Your top jobs today</h2>
           </div>
-          <Link href="/dashboard/jobs" className="text-sm font-medium text-brand hover:text-brand-ink">View all</Link>
+          <Link href="/dashboard/jobs" className="text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
         </div>
 
       {jobs === null ? (
@@ -726,7 +726,7 @@ export default function Home() {
             title="No matches yet"
             body="Fill in your profile so Litos can pick out the best jobs from the job boards it watches."
           >
-            <Link href="/dashboard/profile" className="rounded-full bg-brand px-5 py-2.5 text-sm font-medium text-white">
+            <Link href="/dashboard/profile" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink">
               Complete profile
             </Link>
           </EmptyState>
@@ -927,7 +927,7 @@ function JobMatchCard({
                   label={status === "ready" ? "Ready" : status === "preparing" ? "Getting ready" : status === "failed" ? "Paused" : "Not started"}
                   kind={status === "ready" ? "ready" : "generating"}
                 />
-                <span className="text-small text-faint">Found {formatRelativeDate(job.first_seen_at)}</span>
+                <span className="text-small text-muted">Found {formatRelativeDate(job.first_seen_at)}</span>
               </div>
               <p className="mt-1 truncate text-small text-muted">{job.company_name}</p>
             </div>
@@ -946,7 +946,7 @@ function JobMatchCard({
                 score={match.score}
                 metricLabel={`of what this job asks for is on your resume (${match.matched} of the ${match.total} requirements Litos counted). ${MATCH_WEIGHTING_NOTE}`}
               />
-              <p className="mt-1 w-12 text-center text-[11px] text-faint">match</p>
+              <p className="mt-1 w-12 text-center text-[11px] text-muted">match</p>
             </div>
           )}
         </div>
@@ -983,17 +983,17 @@ function JobMatchCard({
                /dashboard/applications, and this is the way in. It navigates rather than overlaying
                so there is exactly one place the requirement highlighting, the legend, the gap
                breakdown and the send control have to be kept correct. */
-            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
               Review
             </Link>
           ) : !canPrepare ? (
             /* No name or no application profile yet. The packet cannot be built until that exists,
                so the card points at the fix instead of offering a button that would only fail. */
-            <Link href="/dashboard/profile" className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+            <Link href="/dashboard/profile" className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
               Complete profile
             </Link>
           ) : (
-            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try again for" : "Prepare an application for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-brand px-5 text-center text-sm font-medium text-white transition-opacity hover:opacity-90">
+            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try again for" : "Prepare an application for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
               {status === "failed" ? "Try again" : "Prepare"}
             </button>
           )}

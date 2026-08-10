@@ -15,6 +15,8 @@ import { chromium } from "playwright-core";
 const BACKEND = "https://student-outreach-backend.vercel.app";
 const TOKEN = "audited-state-fixture-token";
 const EMAIL = "fixture@example.invalid";
+const DELETE_CONFIRMATION =
+  "I am willingly deleting my account and I confirm that all of my history will be erased.";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -186,11 +188,18 @@ async function openDeleteDialog(context) {
   return page;
 }
 
-test("account deletion rejects an email mismatch without a request", async () => {
+test("account deletion requires the exact confirmation sentence without a request", async () => {
   const context = await fixtureContext();
   const traffic = await routeSettings(context, { status: 204 });
   const page = await openDeleteDialog(context);
-  await page.getByLabel(`Type ${EMAIL} to confirm`).fill("someone-else@example.invalid");
+  const confirmation = page.getByLabel("Confirmation sentence");
+  await confirmation.fill(DELETE_CONFIRMATION.slice(0, -1));
+  assert.equal(await page.getByRole("button", { name: "Delete account permanently" }).isDisabled(), true);
+  await confirmation.fill(DELETE_CONFIRMATION.toLowerCase());
+  assert.equal(await page.getByRole("button", { name: "Delete account permanently" }).isDisabled(), true);
+  await confirmation.fill(` ${DELETE_CONFIRMATION}`);
+  assert.equal(await page.getByRole("button", { name: "Delete account permanently" }).isDisabled(), true);
+  await confirmation.fill(`${DELETE_CONFIRMATION} `);
   assert.equal(await page.getByRole("button", { name: "Delete account permanently" }).isDisabled(), true);
   assert.equal(traffic.deleteCalls, 0);
   assert.deepEqual(traffic.unknown, []);
@@ -201,7 +210,7 @@ test("account deletion rejection leaves the dialog usable", async () => {
   const context = await fixtureContext();
   const traffic = await routeSettings(context, { status: 409, json: { error: "Deletion could not be completed. Try again." } });
   const page = await openDeleteDialog(context);
-  await page.getByLabel(`Type ${EMAIL} to confirm`).fill(EMAIL);
+  await page.getByLabel("Confirmation sentence").fill(DELETE_CONFIRMATION);
   const submit = page.getByRole("button", { name: "Delete account permanently" });
   await submit.click();
   const dialog = page.getByRole("dialog");
@@ -239,7 +248,7 @@ test("account deletion cannot be dismissed while the request is pending", async 
   });
   const page = await openDeleteDialog(context);
   const dialog = page.getByRole("dialog");
-  await page.getByLabel(`Type ${EMAIL} to confirm`).fill(EMAIL);
+  await page.getByLabel("Confirmation sentence").fill(DELETE_CONFIRMATION);
   await page.getByRole("button", { name: "Delete account permanently" }).click();
   await page.getByRole("button", { name: "Deleting..." }).waitFor();
   assert.equal(await dialog.getByRole("button", { name: "Keep account" }).isDisabled(), true);
@@ -257,7 +266,7 @@ test("successful account deletion clears the session and shows completion", asyn
   const context = await fixtureContext();
   const traffic = await routeSettings(context, { status: 204 });
   const page = await openDeleteDialog(context);
-  await page.getByLabel(`Type ${EMAIL} to confirm`).fill(EMAIL.toUpperCase());
+  await page.getByLabel("Confirmation sentence").fill(DELETE_CONFIRMATION);
   await page.getByRole("button", { name: "Delete account permanently" }).click();
   await page.getByRole("heading", { name: "Your Litos account was deleted." }).waitFor();
   const storage = await page.evaluate(() => ({

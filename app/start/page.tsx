@@ -229,7 +229,7 @@ export default function Start() {
               {profileLoadError ? (
                 <div className="mt-10">
                   <ErrorNote message={profileLoadError} />
-                  <button type="button" onClick={() => void loadProfile()} className="mt-4 text-sm text-brand underline underline-offset-4">
+                  <button type="button" onClick={() => void loadProfile()} className="mt-4 text-sm text-brand-ink underline underline-offset-4">
                     Try loading again
                   </button>
                 </div>

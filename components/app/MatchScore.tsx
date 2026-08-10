@@ -81,7 +81,7 @@ export function MatchScore({
   }, [disabled, jdText, spec, jobContext?.company, jobContext?.role, jobContext?.job_id]);
 
   if (failed) {
-    return <p className="text-[11px] leading-4 text-faint">We could not work out how well you fit this one</p>;
+    return <p className="text-[11px] leading-4 text-muted">We could not work out how well you fit this one</p>;
   }
   if (!result) {
     return <div className="h-12 w-12 shrink-0 animate-pulse rounded-full bg-surface-alt" aria-hidden="true" />;
@@ -89,7 +89,7 @@ export function MatchScore({
 
   if (!result.scorable || result.score === null) {
     return (
-      <p className="max-w-[220px] text-[11px] leading-4 text-faint">
+      <p className="max-w-[220px] text-[11px] leading-4 text-muted">
         {result.reason ?? "We could not work out how well you fit this one."}
       </p>
     );
@@ -143,7 +143,7 @@ export function MatchScore({
                  alone in a title it has no antecedent. Kept anyway rather than given a second
                  wording, because two versions of one clause is the drift this constant exists to
                  prevent, and the fraction it refers to is the line the tooltip is attached to. */}
-        <p className="text-[11px] leading-4 text-faint" title={MATCH_WEIGHTING_NOTE}>
+        <p className="text-[11px] leading-4 text-muted" title={MATCH_WEIGHTING_NOTE}>
           {result.matched.length} of {result.term_count} requirements we counted
         </p>
       </div>
@@ -343,13 +343,13 @@ function GapDetail({
       <ul className="mt-2 space-y-2">
         {answer.evidence.slice(0, 3).map((e, i) => (
           <li key={`${e.entry_id}-${i}`} className="rounded-inner border border-border bg-surface px-3 py-2">
-            <p className="text-[11px] uppercase tracking-[0.06em] text-faint">
+            <p className="text-[11px] uppercase tracking-[0.06em] text-muted">
               {e.org}
               {e.title ? ` · ${e.title}` : ""}
             </p>
             <p className="mt-1 text-[13px] leading-5 text-ink">{e.variant}</p>
             {e.already_on_resume ? (
-              <p className="mt-1.5 text-[11px] text-faint">Already on this resume.</p>
+              <p className="mt-1.5 text-[11px] text-muted">Already on this resume.</p>
             ) : (
               <button
                 type="button"

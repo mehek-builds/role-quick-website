@@ -297,7 +297,7 @@ export default function Home() {
                 here, so the old "Nine seconds, start to finish" would have
                 been measurably false. What it lists instead is what the loop
                 actually shows, in the order it shows it. */}
-            <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+            <p className="text-center font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
               Resume, application, email, tracked
             </p>
             <div className="pt-8">
@@ -598,7 +598,7 @@ export default function Home() {
               <div className="mt-10 flex justify-center">
                 <InstallLink
                   source="packet"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink"
                 >
                   Add to Chrome, it&apos;s free
                 </InstallLink>
@@ -763,7 +763,7 @@ export default function Home() {
                     who is still not ready. */}
                 <SignInLink
                   source="close"
-                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-brand px-7 py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:w-auto"
+                  className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:w-auto"
                 >
                   Get started, it&apos;s free
                 </SignInLink>

@@ -21,22 +21,23 @@ import type { ComponentPropsWithoutRef, ReactNode } from "react";
  *   differently-offset ring on top of the first.
  * - **`variant` says what the button IS, never how urgently to press it.** Colour law,
  *   DESIGN.md: `primary` is the one human action, `secondary` is the alternative,
- *   `quiet` is navigation that happens to be a button. No "danger" variant until
- *   something genuinely destructive needs one.
+ *   `quiet` is navigation that happens to be a button. `danger` is reserved for the
+ *   final control that irreversibly destroys user data.
  * - **Weight is 500.** The extension's own primary is `font-semibold`; that gap is real
  *   and still open, and belongs in a change to `src/components/ui.tsx`, not here.
  */
 
-type Variant = "primary" | "secondary" | "quiet";
+type Variant = "primary" | "secondary" | "quiet" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const BASE =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-full font-medium transition-[background-color,border-color,opacity,color] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-brand text-white hover:opacity-90",
-  secondary: "border border-border bg-surface text-ink hover:border-ink",
+  primary: "bg-action text-action-ink hover:bg-brand-ink",
+  secondary: "border border-control-border bg-surface text-ink hover:border-ink",
   quiet: "text-muted hover:bg-surface-alt hover:text-ink",
+  danger: "bg-danger text-white hover:bg-danger/90",
 };
 
 /* Horizontal presence and type only. The height floor is in BASE and does not move. */

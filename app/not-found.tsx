@@ -23,7 +23,7 @@ export default function NotFound() {
           <span className="h-px flex-1 bg-faint" /><span className="font-mono text-xs text-faint">NO MATCH</span><span className="h-px flex-1 bg-faint" />
         </div>
         <nav aria-label="Page recovery" className="mt-8 flex flex-wrap justify-center gap-3">
-          <a href="/browse-jobs" className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white hover:opacity-90">Browse jobs</a>
+          <a href="/browse-jobs" className="rounded-full bg-action px-6 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">Browse jobs</a>
           <a href="/login" className="rounded-full border border-border px-6 py-3 text-sm font-medium text-ink hover:bg-surface-alt">Sign in</a>
           <a href="/contact" className="rounded-full border border-border px-6 py-3 text-sm font-medium text-ink hover:bg-surface-alt">Contact</a>
         </nav>

@@ -85,7 +85,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
     return (
       <section className="flex flex-col gap-3 p-5">
         <h2 className="text-base font-medium text-ink">Momentum</h2>
-        <p className="text-small text-faint">
+        <p className="text-small text-muted">
           Could not load your activity just now.{" "}
           <button type="button" onClick={() => setAttempt((n) => n + 1)} className="font-medium text-ink underline underline-offset-4">
             Try again
@@ -139,7 +139,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
       {f.applications_submitted === 0 && f.resumes_tailored > 0 && (stopped?.count ?? 0) > 0 && (
         <p className="mt-3 text-label leading-5 text-muted">
           None sent yet.{" "}
-          <Link href={stopped!.href} className="font-medium text-brand hover:text-brand-ink">
+          <Link href={stopped!.href} className="font-medium text-brand-ink underline-offset-2 hover:underline">
             {stopped!.count === 1
               ? "1 is waiting on an answer from you"
               : `${stopped!.count} are waiting on an answer from you`}
@@ -167,7 +167,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
               children are adjacent siblings, and the bar row's top margin is zero, so the caption's
               8px bottom margin is the whole gap. */}
           <figure>
-            <figcaption className="mb-2 font-mono text-label uppercase tracking-[0.08em] text-faint">Last 14 days</figcaption>
+            <figcaption className="mb-2 font-mono text-label uppercase tracking-[0.08em] text-muted">Last 14 days</figcaption>
             {/* A fixed plot box. The bars used to be drawn into whatever vertical space the stretched
                 card had left over, so a 14-day history with two active days rendered as two marks
                 floating in an empty field and read as a rendering fault rather than a chart. */}
@@ -186,7 +186,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
               ))}
             </div>
           </figure>
-          {f.fields_filled > 0 && <p className="mt-2 text-label text-faint">{f.fields_filled} questions filled for you</p>}
+          {f.fields_filled > 0 && <p className="mt-2 text-label text-muted">{f.fields_filled} questions filled for you</p>}
         </div>
       )}
     </section>

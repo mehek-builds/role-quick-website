@@ -39,7 +39,7 @@ function KindChip({ kind }: { kind: PacketFieldKind }) {
      is the guardrail, and it should not read as another filled box. */
   const tone =
     kind === "declined"
-      ? "border-border bg-surface-alt text-faint"
+      ? "border-border bg-surface-alt text-muted"
       : "border-teal/30 bg-teal-soft/60 text-teal-ink";
   return (
     <span
@@ -217,7 +217,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
         {/* Header: what this packet is, and when it went out. */}
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
           <div className="min-w-0">
-            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+            <p className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-muted">
               {packet.company} · {packet.location}
             </p>
             <h2 className="mt-1 truncate text-lg font-medium tracking-tight text-ink">{packet.role}</h2>
@@ -270,7 +270,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
               onClick={() => jump(mark.id)}
               aria-current={active === mark.id}
               className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 font-mono text-[10px] font-medium uppercase tracking-[0.08em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                active === mark.id ? "bg-brand-soft text-brand-ink" : "text-faint hover:bg-surface-alt hover:text-muted"
+                active === mark.id ? "bg-brand-soft text-brand-ink" : "text-muted hover:bg-surface-alt hover:text-ink"
               }`}
             >
               {mark.label}
@@ -303,7 +303,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
               <div className="mt-3">
                 <ResumePaper resume={packet.resume} />
               </div>
-              <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
+              <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.08em] text-muted">
                 Written for this posting · not reused
               </p>
             </div>
@@ -353,7 +353,7 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
                 <div className="mt-3 space-y-5">
                   {packet.questions.map((group) => (
                     <div key={group.group}>
-                      <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-faint">
+                      <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-muted">
                         {group.group}
                       </p>
                       <div className="mt-2 divide-y divide-border overflow-hidden rounded-inner border border-border">
@@ -365,12 +365,12 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
                             </div>
                             <p
                               className={`mt-1.5 text-[12px] leading-6 ${
-                                item.kind === "declined" ? "text-faint" : "text-muted"
+                                "text-muted"
                               }`}
                             >
                               {item.a}
                             </p>
-                            <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.08em] text-faint">
+                            <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.08em] text-muted">
                               {item.source}
                             </p>
                           </div>

@@ -81,7 +81,7 @@ export default function Terms() {
             to rely on in either direction. TERMS_VERSION is the string a
             backend should store against an account when acceptance is recorded;
             see the note in the Agreement section. */}
-        <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+        <p className="mt-5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
           Version {TERMS_VERSION} &middot; In effect {TERMS_EFFECTIVE}
         </p>
 
