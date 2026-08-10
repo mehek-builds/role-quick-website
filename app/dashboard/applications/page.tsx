@@ -45,7 +45,7 @@ import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
-import { armHandoffs, ensureCurrentExtensionSession } from "@/lib/extension-bridge";
+import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
@@ -2562,7 +2562,10 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
 
     setAttendedHandoffState("preparing");
     setAttendedHandoffError(null);
-    const extension = await ensureCurrentExtensionSession({ token: getToken(), guest: isGuestSession() });
+    const extension = await ensureCurrentExtensionSession(
+      { token: getToken(), guest: isGuestSession() },
+      minimumAttendedHandoffExtensionVersion(review.ats_name),
+    );
     if (!extension.installed || !extension.signedIn || extension.otherAccount) {
       companyTab.close();
       setAttendedHandoffState("failed");
