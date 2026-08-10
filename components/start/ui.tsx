@@ -19,40 +19,15 @@
 
 import { createContext, useContext } from "react";
 import { Button } from "@/components/app/Button";
+import { flowSteps } from "@/features/onboarding";
 import type { OnboardingState, OnboardingStep } from "@/lib/api";
 
-/* Step names a student can read. "Gaps", "Target" and "Focus" were the backend's words for these
-   screens, and the resume step was the only place in the product that accented the word. It is
-   "resume" everywhere we write it, in every surface, with no exceptions. */
-/* `weight` is roughly how much of the student's time the step costs. Resume upload and one-page
-   review get more space than the short choice screens, so the rail reflects effort instead of
-   pretending every click is equal. */
-export const STEPS: { key: OnboardingStep; label: string; weight: number; conditional?: boolean }[] = [
-  { key: "resume", label: "Your resume", weight: 2 },
-  { key: "impact", label: "Your impact", weight: 2 },
-  { key: "focus", label: "Your roles", weight: 1 },
-  /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
-     in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
-  { key: "sponsorship", label: "Work visa", weight: 1 },
-  { key: "base", label: "Your one page", weight: 2 },
-  /* Reinstated as a real screen by #279 ("Make referral onboarding gap reachable") and NOT added
-     here at the time, which is the whole reason this entry exists.
-     `StepRail` resolves an unknown key through `Math.max(0, findIndex(...))`, so a rendered screen
-     whose key is missing from this list does not fail loudly: it silently reports itself as index
-     0. The gaps screen was therefore telling every student it was "Step 1 of 6, Your resume" while
-     sitting second from last. A wayfinding device that points backwards is worse than none.
-
-     Weight 1, alongside focus and sponsorship: it is a handful of short inputs, and the rail is a
-     map of TIME.
-
-     `conditional` is the rest of that fix. This is the one screen in the list the flow does not
-     always contain, so it is the one entry that must not be counted by default: see `flowSteps`
-     below for when it is. Left in STEPS unconditionally it made the denominator a permanent
-     overcount, which was accepted in #285 as the cheaper of two errors and is what this flag
-     removes without giving back the misreporting screen that #285 was fixing. */
-  { key: "gaps", label: "A few details", weight: 1, conditional: true },
-  { key: "done", label: "Done", weight: 0 },
-];
+/* STEPS and `flowSteps` live in features/onboarding/domain/rail.ts and are re-exported here.
+   They are the rail's data and its one rule, and they are plain TypeScript with no JSX, which
+   is what lets tests/start-rail-denominator.test.mjs import them under `npm test` (node's
+   --experimental-strip-types loads .ts and not .tsx). Re-exported rather than moved outright so
+   every `from "./ui"` import site stays as it was. */
+export { STEPS, flowSteps } from "@/features/onboarding";
 
 /* The derived onboarding state the whole flow is rendered from, shared with the rail.
  *
@@ -77,29 +52,6 @@ export function StartFlowProvider({
   return <StartFlowContext.Provider value={state}>{children}</StartFlowContext.Provider>;
 }
 
-/** The steps this particular student's flow contains, which is the rail's denominator.
- *
- * A CONDITIONAL step counts when the flow is ON it, and not otherwise. Two reasons it is that and
- * not "when the server reports outstanding gaps":
- *
- *  1. Outstanding gaps do not put the gaps screen in anyone's flow. The step is DERIVED server-side
- *     (routes/onboarding.ts) and backend #116 removed 'gaps' from the union `onboardingStepFrom`
- *     returns, so GET /onboarding/state cannot answer with it: 'base' is followed by 'done' for
- *     every student, whether or not their profile has holes in it. Counting the screen because the
- *     gaps exist would keep telling a student with outstanding details that setup is seven screens
- *     long and then show them six, which is the miscount this is here to remove.
- *  2. `gaps` is what is STILL outstanding, so it empties as the screen is answered. A denominator
- *     read from its length would count the screen while a student stood on it and stop counting it
- *     the moment they finished, so the total would shrink under them at the last screen.
- *
- * The step being rendered is always in the result, which is the invariant #285 needed: `StepRail`
- * locates itself with `findIndex`, and a rendered screen missing from the list is the "Step 1 of 6,
- * Your resume" bug that fix existed for. `current` and `state.step` are both consulted because they
- * legitimately differ: a legacy step name arriving from an older backend is rendered as `done`. */
-export function flowSteps(current: OnboardingStep | undefined, state: OnboardingState | null) {
-  return STEPS.filter((s) => !s.conditional || s.key === current || s.key === state?.step);
-}
-
 /** Omit `current` while the state is still loading: the rail then draws the shape of the flow
  *  without claiming a position in it. */
 export function StepRail({ current }: { current?: OnboardingStep }) {
@@ -115,6 +67,13 @@ export function StepRail({ current }: { current?: OnboardingStep }) {
      count is precise enough, while the rail provides a quick visual map of the remaining work. */
   return (
     <div
+      /* role="group", because `aria-label` on a bare div is not honoured: an element that maps to
+         the generic role has no accessible name, so the whole string below was being computed for
+         nobody. The e2e specs read the ATTRIBUTE and passed either way, which is exactly how it
+         stayed unnoticed. A named group is also the honest shape for it: a small labelled region,
+         not a landmark and not a progressbar (a progressbar reports a VALUE, which is the
+         percentage the Guardrails ban). */
+      role="group"
       aria-label={known ? `Setup: step ${step} of ${steps.length}, ${steps[i].label}` : "Setup"}
       aria-busy={known ? undefined : true}
     >
@@ -145,6 +104,12 @@ export function StepRail({ current }: { current?: OnboardingStep }) {
           </span>
         </div>
       )}
+      {/* The shimmer is decorative and every segment below is aria-hidden, so without this a screen
+          reader gets NOTHING while the state loads: not a position, which is correct, but not the
+          reason for its absence either. `aria-busy` alone does not fill that gap, it only tells AT
+          to hold off announcing changes inside a live region, and this is not one. Sighted users
+          read "we don't know yet" off the shimmer; this is the same sentence. */}
+      {!known && <span className="sr-only">Loading your setup progress</span>}
       <ol className="mt-3 flex gap-1.5">
         {steps.map((s, index) => {
           const done = known && index < step - 1;

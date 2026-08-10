@@ -195,20 +195,75 @@ export default function Start() {
 
   /* Every screen below renders StartShell, which renders the rail, and the rail's denominator is
      the steps THIS student's flow contains (components/start/ui.tsx flowSteps). Provided once here
-     rather than threaded through every step component's props to reach one string. */
-  return <StartFlowProvider state={state}>{renderStep(state)}</StartFlowProvider>;
+     rather than threaded through every step component's props to reach one string.
 
-  /* Hoisted so the provider can wrap it above without re-indenting every branch of the switch.
-     The parameter deliberately shadows the outer `state`: a hoisted declaration can be called from
-     anywhere, so TypeScript drops the non-null narrowing the guard above established, and taking it
-     as an argument restores it for every branch at once rather than a `!` per use. */
-  function renderStep(state: OnboardingState) {
-  switch (state.step) {
-    case "focus":
-      // During a rolling backend deploy an older state response can still say "focus" before a
-      // resume exists. Keeping the upload here makes the new resume-first contract resilient to
-      // that short mixed-version window.
-      if (!state.has_resume) {
+     A `const` arrow rather than a hoisted `function`: `state` is a const binding, so the non-null
+     narrowing from the guard above survives into an arrow defined after it, and a declaration is
+     the one form that loses it (a hoisted name is callable from anywhere, including above the
+     guard). The earlier fix for that took the state as a same-named parameter, which shadowed the
+     outer one to buy something the arrow gives for free. */
+  const renderStep = () => {
+    switch (state.step) {
+      case "focus":
+        // During a rolling backend deploy an older state response can still say "focus" before a
+        // resume exists. Keeping the upload here makes the new resume-first contract resilient to
+        // that short mixed-version window.
+        if (!state.has_resume) {
+          return (
+            <ResumeStep
+              onLater={later}
+              onDone={() => {
+                stepDone("resume");
+                void (async () => {
+                  const s = await refresh();
+                  if (s.has_resume) await loadProfile();
+                })();
+              }}
+            />
+          );
+        }
+        if (!profile) {
+          return (
+            <div className="mx-auto max-w-2xl px-6 py-16">
+              <StepRail current="focus" />
+              {profileLoadError ? (
+                <div className="mt-10">
+                  <ErrorNote message={profileLoadError} />
+                  <button type="button" onClick={() => void loadProfile()} className="mt-4 text-sm text-brand underline underline-offset-4">
+                    Try loading again
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+                  <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+                </>
+              )}
+            </div>
+          );
+        }
+        return (
+          <FocusStep
+            profile={profile}
+            onLater={later}
+            onDone={() => {
+              stepDone("focus");
+              void refresh();
+            }}
+          />
+        );
+
+      case "sponsorship":
+        return (
+          <SponsorshipStep
+            onDone={() => {
+              stepDone("sponsorship");
+              void refresh();
+            }}
+          />
+        );
+
+      case "resume":
         return (
           <ResumeStep
             onLater={later}
@@ -221,133 +276,80 @@ export default function Start() {
             }}
           />
         );
-      }
-      if (!profile) {
+
+      case "impact":
         return (
-          <div className="mx-auto max-w-2xl px-6 py-16">
-            <StepRail current="focus" />
-            {profileLoadError ? (
-              <div className="mt-10">
-                <ErrorNote message={profileLoadError} />
-                <button type="button" onClick={() => void loadProfile()} className="mt-4 text-sm text-brand underline underline-offset-4">
-                  Try loading again
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
-                <div className="rq-shimmer mt-6 h-32 rounded-inner" />
-              </>
-            )}
-          </div>
+          <RecentExperienceStep
+            demo={qaDemo}
+            onLater={later}
+            onDone={() => {
+              stepDone("impact");
+              void refresh();
+            }}
+          />
         );
-      }
-      return (
-        <FocusStep
-          profile={profile}
-          onLater={later}
-          onDone={() => {
-            stepDone("focus");
-            void refresh();
-          }}
-        />
-      );
 
-    case "sponsorship":
-      return (
-        <SponsorshipStep
-          onDone={() => {
-            stepDone("sponsorship");
-            void refresh();
-          }}
-        />
-      );
+      case "base":
+        return (
+          <BaseResumeStep
+            parsed={profile}
+            profile={appProfile}
+            email={getStoredEmail()}
+            sourcePages={state.source_pages}
+            sourceUrl={state.source_resume_url}
+            languageGap={state.gaps.includes("languages")}
+            languageSuggestion={state.gap_suggestions?.languages ?? []}
+            demo={qaDemo}
+            onLater={later}
+            onDone={() => {
+              stepDone("base");
+              void refresh();
+            }}
+          />
+        );
 
-    case "resume":
-      return (
-        <ResumeStep
-          onLater={later}
-          onDone={() => {
-            stepDone("resume");
-            void (async () => {
-              const s = await refresh();
-              if (s.has_resume) await loadProfile();
-            })();
-          }}
-        />
-      );
+      case "gaps":
+        return (
+          <GapsStep
+            gaps={state.gaps}
+            onLater={later}
+            onDone={() => {
+              stepDone("gaps");
+              void refresh();
+            }}
+          />
+        );
 
-    case "impact":
-      return (
-        <RecentExperienceStep
-          demo={qaDemo}
-          onLater={later}
-          onDone={() => {
-            stepDone("impact");
-            void refresh();
-          }}
-        />
-      );
+      // An older backend may briefly return one of the removed steps during a rolling deploy. Treat
+      // it as ready rather than sending the student through the deleted extension and sample-form
+      // detour until the next state refresh reaches the new backend.
+      case "install":
+      case "apply":
+      case "targeting":
+      case "done":
+        return (
+          <>
+          {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
+          <DoneStep
+            state={state}
+            verificationEnabled={state.automatic_verification_enabled}
+            onFinish={async (settings) => {
+              try {
+                await completeOnboarding(settings);
+                track("onboarding_complete", {
+                  learned: state.learned.length,
+                  applied: state.has_applied,
+                });
+                router.push("/dashboard");
+              } catch (reason) {
+                setError(reason instanceof Error ? reason.message : "Could not save your automation permissions.");
+              }
+            }}
+          />
+          </>
+        );
+    }
+  };
 
-    case "base":
-      return (
-        <BaseResumeStep
-          parsed={profile}
-          profile={appProfile}
-          email={getStoredEmail()}
-          sourcePages={state.source_pages}
-          sourceUrl={state.source_resume_url}
-          languageGap={state.gaps.includes("languages")}
-          languageSuggestion={state.gap_suggestions?.languages ?? []}
-          demo={qaDemo}
-          onLater={later}
-          onDone={() => {
-            stepDone("base");
-            void refresh();
-          }}
-        />
-      );
-
-    case "gaps":
-      return (
-        <GapsStep
-          gaps={state.gaps}
-          onLater={later}
-          onDone={() => {
-            stepDone("gaps");
-            void refresh();
-          }}
-        />
-      );
-
-    // An older backend may briefly return one of the removed steps during a rolling deploy. Treat
-    // it as ready rather than sending the student through the deleted extension and sample-form
-    // detour until the next state refresh reaches the new backend.
-    case "install":
-    case "apply":
-    case "targeting":
-    case "done":
-      return (
-        <>
-        {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
-        <DoneStep
-          state={state}
-          verificationEnabled={state.automatic_verification_enabled}
-          onFinish={async (settings) => {
-            try {
-              await completeOnboarding(settings);
-              track("onboarding_complete", {
-                learned: state.learned.length,
-                applied: state.has_applied,
-              });
-              router.push("/dashboard");
-            } catch (reason) {
-              setError(reason instanceof Error ? reason.message : "Could not save your automation permissions.");
-            }
-          }}
-        />
-        </>
-      );
-  }
-  }
+  return <StartFlowProvider state={state}>{renderStep()}</StartFlowProvider>;
 }
