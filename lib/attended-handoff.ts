@@ -11,6 +11,8 @@ export const ICIMS_SECURITY_CODE_GATE_REASON =
   "This iCIMS account page is waiting for a security code sent to the stored Litos application email. Litos did not enter the code or submit the application. Open the page and finish the account check in Chrome.";
 export const BAMBOOHR_ATTENDED_GATE_REASON =
   "This company’s application page asks you to prove you are human. Litos filled everything in, so all that is left is that check and the send button.";
+export const ORACLE_ATTENDED_GATE_REASON =
+  "This Oracle application asks for an emailed code and a legal terms choice before the application form opens. Litos did not request the code, accept the terms, or submit anything. Open the exact saved page in Chrome and complete those steps yourself.";
 
 function exactManagedAccountGateUrl(atsName: string, rawUrl: string): string | null {
   try {
@@ -66,6 +68,10 @@ export function exactAttendedHandoffUrl(review: Pick<ApplicationReview,
   if (review.status !== "needs_attention") return null;
   const reasons = review.attention_reason?.split("\n") ?? [];
   if (!review.extension_handoff_url) return null;
+
+  // Oracle's exact authentication gate is measured, but no post-gate form or terminal receipt is.
+  // Keep Tracker non-armable until both the 0.5.12 runtime and that evidence contract exist.
+  if (review.ats_name === "oraclecloud") return null;
 
   if (review.ats_name === "jobvite") {
     if (!reasons.includes(JOBVITE_ATTENDED_GATE_REASON)) return null;

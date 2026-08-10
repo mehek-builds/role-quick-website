@@ -148,6 +148,7 @@ test("Jobvite, iCIMS, and BambooHR require 0.5.11 while SmartRecruiters retains 
   assert.equal(minimumAttendedHandoffExtensionVersion("jobvite"), "0.5.11");
   assert.equal(minimumAttendedHandoffExtensionVersion("icims"), "0.5.11");
   assert.equal(minimumAttendedHandoffExtensionVersion("bamboohr"), "0.5.11");
+  assert.equal(minimumAttendedHandoffExtensionVersion("oraclecloud"), "0.5.12");
   reset(() => ({ ok: true, signedIn: true, version: "0.5.10" }));
   const state = await ensureCurrentExtensionSession(
     { token: "jwt-abc", guest: false },
