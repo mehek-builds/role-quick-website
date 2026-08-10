@@ -2776,6 +2776,20 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
             <p className="mt-1 text-xs leading-5 text-muted">
               Litos will verify this account, bind the exact saved packet to the company&rsquo;s one-click form, and refill it before you review and submit.
             </p>
+            {packet.download_url && packet.download_url !== "#" && (
+              <div className="mt-3 rounded-inner border border-border bg-surface px-3 py-3 text-xs leading-5 text-muted">
+                <p className="font-medium text-ink">Manual dashboard trial</p>
+                <p className="mt-1">Use this exact frozen resume and application email if the published extension is still waiting for store approval.</p>
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <a href={packet.download_url} target="_blank" rel="noreferrer" className="font-medium text-brand-ink underline-offset-2 hover:underline">
+                    Open exact PDF
+                  </a>
+                  {review.applicant_email?.address && (
+                    <span className="font-mono text-[11px] text-ink">{review.applicant_email.address}</span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {needsAttention && !canFinishInDashboard && !attendedHandoffUrl && (
@@ -2789,9 +2803,16 @@ function SubmissionScreen({ packet, submission, approving, securityCodeSubmittin
         <div className="mt-7 flex flex-wrap gap-2">
           {canFinishInDashboard && <a href="#live-company-page" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Finish in this dashboard</a>}
           {attendedHandoffUrl && (
-            <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>
-              {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
-            </Button>
+            <>
+              <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>
+                {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
+              </Button>
+              {packet.download_url && packet.download_url !== "#" && (
+                <ButtonLink href={attendedHandoffUrl} target="_blank" rel="noreferrer" variant="secondary">
+                  Open manually
+                </ButtonLink>
+              )}
+            </>
           )}
           {needsAttention && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
           {needsAttention && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}

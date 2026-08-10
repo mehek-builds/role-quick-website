@@ -62,6 +62,10 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
   assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
   assert.match(dashboard, /Open exact company form/);
+  assert.match(dashboard, /Manual dashboard trial/);
+  assert.match(dashboard, /Use this exact frozen resume and application email/);
+  assert.match(dashboard, /review\.applicant_email\?\.address/);
+  assert.match(dashboard, /href=\{attendedHandoffUrl\}[\s\S]{0,200}Open manually/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);
