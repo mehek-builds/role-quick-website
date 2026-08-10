@@ -848,6 +848,16 @@ export type OnboardingState = {
    *  a stored answer: it is offered only for fields still listed in `gaps`, and only the student
    *  saving it makes it a declaration. */
   gap_suggestions?: { languages?: string[] };
+  /** Whether this student's setup flow CONTAINS the gaps screen, which is the step rail's
+   *  denominator. Absent on older backends, which never route to that screen at all.
+   *
+   *  Deliberately not re-derived from `gaps` here. Two states look identical in that list and need
+   *  opposite answers: a student who has never been asked (count the screen, they are about to walk
+   *  it) and one who was asked and skipped (count it too, they already walked it) both still list
+   *  gpa. And a student who was asked and ANSWERED lists nothing, yet the screen must stay counted
+   *  or the printed total drops from seven to six on the last screen of setup. Only the server knows
+   *  whether the screen was shown, so only the server can answer this. */
+  includes_gaps_step?: boolean;
   /** Page count of the uploaded file, measured at parse time. 0 when never measured. */
   source_pages: number;
   /** The original upload, for the side-by-side. NULL is normal: storing it is best-effort. */
@@ -873,6 +883,21 @@ export type Targeting = {
 
 export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
+}
+
+/* Record that the setup gaps screen was SHOWN. Save and Skip both call it, because both mean asked.
+ *
+ * Skipping saves no fields, so without this the server would keep deriving 'gaps' from the same
+ * missing values and the student could never leave the screen - the exact defect that had the step
+ * deleted from the flow in backend #116.
+ *
+ * `recorded: false` is a success, not a failure: it means the backend deployed ahead of its
+ * migration and has nowhere to put the stamp. /start advances on its own in that case rather than
+ * re-reading a step it cannot leave. Older backends 404, which is the same situation and is caught
+ * the same way. */
+export function markGapsAsked() {
+  return api<{ recorded: boolean }>("/onboarding/gaps-asked", { method: "POST" })
+    .catch(() => ({ recorded: false }));
 }
 
 export function getRecentExperienceReview() {

@@ -25,6 +25,7 @@ import {
   getOnboardingState,
   getStoredEmail,
   getToken,
+  markGapsAsked,
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
 import { Button } from "@/components/app/Button";
@@ -47,6 +48,8 @@ export default function Start() {
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Set alongside the QA state stub below so the base step can replay a canned build.
   const [qaDemo, setQaDemo] = useState(false);
+  // The setup gaps screen has been answered or skipped in THIS session. See the "gaps" case below.
+  const [gapsHandled, setGapsHandled] = useState(false);
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
     setState(s);
@@ -91,6 +94,12 @@ export default function Start() {
              receipt reads this, so a hardcoded non-empty list made QA of that screen report details
              outstanding on an account that has none. The gaps step itself still gets its full list. */
           gaps: qaStep === "done" ? [] : ["gpa", "gpa_scale", "major", "languages", "referral_source_default"],
+          /* The rail's denominator, and in QA it has to follow the step being reviewed rather than
+             the gap list: `gaps` above is emptied on the done screen so its receipt reads honestly,
+             and a denominator re-derived from that would drop the screen out of the rail on the one
+             step where a reviewer is checking the final count. The real backend answers this from
+             whether the screen was SHOWN, which stays true across both. */
+          includes_gaps_step: true,
           // Populated so the base step's languages line is reviewable in QA in its prefilled
           // state, which is the state almost every real student will see.
           gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },
@@ -203,7 +212,13 @@ export default function Start() {
      guard). The earlier fix for that took the state as a same-named parameter, which shadowed the
      outer one to buy something the arrow gives for free. */
   const renderStep = () => {
-    switch (state.step) {
+    /* The one place the client overrides the server's derived step, and it is bounded to the screen
+       whose exit is not derivable. The stamp POST /onboarding/gaps-asked writes is what makes
+       leaving durable; this is what makes it immediate, and what keeps a student off a dead end if
+       the stamp could not be written at all (see the gaps case below). Every other step stays
+       exactly as derived - a stored cursor is the thing this flow is built to avoid. */
+    const step: OnboardingStep = state.step === "gaps" && gapsHandled ? "done" : state.step;
+    switch (step) {
       case "focus":
         // During a rolling backend deploy an older state response can still say "focus" before a
         // resume exists. Keeping the upload here makes the new resume-first contract resilient to
@@ -310,6 +325,9 @@ export default function Start() {
           />
         );
 
+      /* Reached for a student whose resume printed no GPA, GPA scale or major. Those three are the
+         only fields that route anyone here (backend SETUP_GAP_FIELDS); the screen then renders
+         every outstanding gap it is given, because they are already on it. */
       case "gaps":
         return (
           <GapsStep
@@ -317,7 +335,20 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("gaps");
-              void refresh();
+              void (async () => {
+                /* Both Save and Skip land here, and BOTH have to record that the screen was shown.
+                   Skipping saves no fields, so without this the server keeps deriving 'gaps' from
+                   the same missing values and the student can never leave - the defect that had
+                   this step deleted from the flow in backend #116.
+
+                   `gapsHandled` is set whatever the stamp did, and that is the point: on a backend
+                   that deployed ahead of its migration there is nowhere to record it, and re-reading
+                   `state.step` would put them straight back on a screen with no exit. The server
+                   suppresses the step entirely in that window, so the next load agrees. */
+                setGapsHandled(true);
+                await markGapsAsked();
+                void refresh();
+              })();
             }}
           />
         );

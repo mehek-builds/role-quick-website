@@ -52,6 +52,11 @@ const context = await browser.newContext({ viewport: { width: 1000, height: 800 
 const page = await context.newPage();
 const blockedExternal = [];
 const unstubbedBackend = [];
+/* The stamp that records the screen as SHOWN. Counted rather than ignored because it is the whole
+   reason this screen can be left at all: skipping saves no fields, so a flow that derived the step
+   from the missing fields alone would answer 'gaps' again forever - the defect that had the step
+   deleted in backend #116. */
+let gapsAskedPosts = 0;
 let savedBody = null;
 
 const doneState = {
@@ -92,6 +97,11 @@ await context.route("**/*", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(savedBody) });
     return;
   }
+  if (pathname === "/onboarding/gaps-asked" && route.request().method() === "POST") {
+    gapsAskedPosts += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ recorded: true }) });
+    return;
+  }
   if (pathname === "/onboarding/state") {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(doneState) });
     return;
@@ -128,6 +138,7 @@ test("the referral gap renders, saves the typed source, and advances", async (t)
     await page.getByRole("heading", { name: "Setup complete." }).waitFor({ state: "visible" });
 
     assert.deepEqual(savedBody, { referral_source_default: "LinkedIn" });
+    assert.equal(gapsAskedPosts, 1, "the screen advanced without recording that it had been shown");
     assert.deepEqual(blockedExternal, []);
     assert.deepEqual(unstubbedBackend, []);
   } catch (reason) {

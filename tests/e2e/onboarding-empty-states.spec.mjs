@@ -54,15 +54,18 @@ after(async () => {
  * is. #285 added it and made the denominator a flat 7, which fixed the lying screen and left the
  * printed count skipping a number for everyone who never sees it.
  *
- * So the denominator is now the steps the student's own flow contains (components/start/ui.tsx
- * `flowSteps`), and it is SIX on every checkpoint but one. `gaps` is the conditional screen and is
- * counted only while the flow is standing on it, because the step is derived server-side and
- * backend #116 removed 'gaps' from the union `onboardingStepFrom` can return: no student is routed
- * there, so counting it for the other six screens would promise a screen that never comes.
+ * So the denominator is the steps the student's own flow contains (components/start/ui.tsx
+ * `flowSteps`), and the QA fixture describes ONE flow: the seven-screen one, the account whose
+ * resume printed no GPA, scale or major and who is therefore routed through the details screen.
+ * Every row below reads "of 7" for that reason, and the run is the regression guard for the count
+ * being STABLE across the whole flow. A denominator that counted the details screen only while the
+ * student stood on it would read 6 here and 7 on that one row, which is the count growing
+ * underneath them - "Step 1 of 6, Your resume" against a flow of seven is the exact bug #285
+ * existed for, one screen further along.
  *
- * The `gaps` row is therefore "step 6 of 7", and it is the #285 regression guard rather than an
- * inconsistency: `?qa=1&step=gaps` forces the screen to render, and a rendered screen must name its
- * own position correctly. "Step 1 of 6, Your resume" here is the exact bug that fix existed for.
+ * A flow that does NOT contain the screen is the other half, and it is covered where a fixture can
+ * vary: tests/e2e/start-onboarding-checklist.spec.mjs asserts six throughout for an account with
+ * nothing outstanding, and tests/start-rail-denominator.test.mjs pins both against `flowSteps`.
  *
  * The done heading moved from "Your job matches are ready." to "Setup complete." when that screen
  * gained a confirmation: the forward-looking line is still there, below the receipt, as the
@@ -70,16 +73,16 @@ after(async () => {
  * original assertion and shortened with it. */
 test("all seven onboarding checkpoints render with a progress indicator", async () => {
   const checkpoints = [
-    ["resume", "Start with your resume.", "Setup: step 1 of 6, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 2 of 6, Your impact"],
-    ["focus", "Here's where we'd start.", "Setup: step 3 of 6, Your roles"],
-    ["sponsorship", "Where can you work?", "Setup: step 4 of 6, Work visa"],
-    ["base", "One page, ready.", "Setup: step 5 of 6, Your one page"],
-    /* The QA fixture reports outstanding gaps on every step but `done`, so the five rows above are
-       also the assertion that outstanding gaps DO NOT inflate the denominator: a screen the flow
-      cannot route to is not part of the flow, however much the profile is missing. */
+    ["resume", "Start with your resume.", "Setup: step 1 of 7, Your resume"],
+    ["impact", "Make your most recent work count.", "Setup: step 2 of 7, Your impact"],
+    ["focus", "Here's where we'd start.", "Setup: step 3 of 7, Your roles"],
+    ["sponsorship", "Where can you work?", "Setup: step 4 of 7, Work visa"],
+    ["base", "One page, ready.", "Setup: step 5 of 7, Your one page"],
     ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],
-    ["done", "Setup complete.", "Setup: step 6 of 6, Done"],
+    /* Still 7, and the `done` fixture is the row that proves it: it reports NO outstanding gaps, so
+       a denominator re-read from that list would drop to 6 here. Having been shown the screen is
+       what the count follows, and that does not stop being true once the fields are answered. */
+    ["done", "Setup complete.", "Setup: step 7 of 7, Done"],
   ];
 
   for (const [step, heading, rail] of checkpoints) {
