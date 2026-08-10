@@ -27,7 +27,7 @@ export default function ResumeWorkspace() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const uploadControllerRef = useRef<AbortController | null>(null);
-  const savedEntriesRef = useRef("");
+  const [savedEntriesJson, setSavedEntriesJson] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
 
@@ -50,7 +50,7 @@ export default function ResumeWorkspace() {
           : profileRes ?? "missing",
       );
       setEntries(bankRes.entries);
-      savedEntriesRef.current = JSON.stringify(bankRes.entries);
+      setSavedEntriesJson(JSON.stringify(bankRes.entries));
     })();
     return () => {
       cancelled = true;
@@ -143,7 +143,7 @@ export default function ResumeWorkspace() {
         { method: "PUT", body: JSON.stringify({ entries: complete }) },
       );
       setEntries(res.entries);
-      savedEntriesRef.current = JSON.stringify(res.entries);
+      setSavedEntriesJson(JSON.stringify(res.entries));
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -174,7 +174,7 @@ export default function ResumeWorkspace() {
      asserted by a comment - saveBank PUTs the whole bank in one request, and a group-local index
      would write the wrong row as soon as the two categories interleave. */
   const { work: workEntries, leadership: leadershipEntries } = splitBankByCategory(entries ?? []);
-  const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesRef.current;
+  const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesJson;
 
   function chooseUpload(file: File | undefined) {
     if (!file) return;

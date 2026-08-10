@@ -120,7 +120,7 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
-  const savedProfileRef = useRef("");
+  const [savedProfileJson, setSavedProfileJson] = useState("");
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -216,7 +216,7 @@ export default function Settings() {
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
-        savedProfileRef.current = JSON.stringify(profileRes);
+        setSavedProfileJson(JSON.stringify(profileRes));
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
@@ -315,7 +315,7 @@ export default function Settings() {
         body: JSON.stringify(body),
       });
       setProfile(res);
-      savedProfileRef.current = JSON.stringify(res);
+      setSavedProfileJson(JSON.stringify(res));
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -510,7 +510,7 @@ export default function Settings() {
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
-  const profileDirty = JSON.stringify(profile) !== savedProfileRef.current;
+  const profileDirty = JSON.stringify(profile) !== savedProfileJson;
   const billingFailed = ["past_due", "unpaid", "failed", "payment_failed"].includes((me.billing_status ?? "").toLowerCase());
   const billingCanceled = ["canceled", "cancelled"].includes((me.billing_status ?? "").toLowerCase()) || Boolean(me.billing_ends_at);
 
