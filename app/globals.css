@@ -147,6 +147,22 @@ select:focus-visible,
   outline-offset: 2px;
 }
 
+/* One form-state contract. Native controls may add layout classes, but state
+   meaning and focus must not be re-invented per form. */
+.rq-field {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-ink);
+  transition: border-color 180ms, background-color 180ms, opacity 180ms;
+}
+.rq-field:hover:not(:disabled):not([readonly]) { border-color: var(--color-faint); }
+.rq-field[aria-invalid="true"] { border-color: var(--color-danger); }
+.rq-field:disabled { cursor: not-allowed; opacity: 0.55; }
+.rq-field[readonly] { background: var(--color-surface-alt); color: var(--color-muted); }
+
+.rq-skeleton { animation: rq-content-arrive 180ms ease-out; }
+@keyframes rq-content-arrive { from { opacity: 0; } to { opacity: 1; } }
+
 /* Shimmer loading state, per brand deck section 07 (review view). Color never
    encodes urgency; loading is a neutral surface sweep. */
 @keyframes rq-shimmer {
@@ -411,6 +427,7 @@ html:has(.dashboard-shell) {
   html {
     scroll-behavior: auto;
   }
+  .rq-skeleton { animation: none; }
   /* The film collapses to one static viewport: hero card on the poster
      frame, no pin, no chapters, no grain movement, no dust. */
   .rq-cine {

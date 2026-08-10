@@ -26,6 +26,10 @@ export default function ResumeWorkspace() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadControllerRef = useRef<AbortController | null>(null);
+  const savedEntriesRef = useRef("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +50,7 @@ export default function ResumeWorkspace() {
           : profileRes ?? "missing",
       );
       setEntries(bankRes.entries);
+      savedEntriesRef.current = JSON.stringify(bankRes.entries);
     })();
     return () => {
       cancelled = true;
@@ -53,6 +58,8 @@ export default function ResumeWorkspace() {
   }, []);
 
   async function upload(file: File) {
+    const controller = new AbortController();
+    uploadControllerRef.current = controller;
     setUploading(true);
     setError(null);
     try {
@@ -64,6 +71,7 @@ export default function ResumeWorkspace() {
         method: "POST",
         headers: { Authorization: `Bearer ${getToken()}`, ...litosClientHeaders() },
         body: form,
+        signal: controller.signal,
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) {
@@ -82,9 +90,10 @@ export default function ResumeWorkspace() {
         );
         if (bank) setEntries(bank.entries);
       }
-    } catch {
-      setError("Network error during upload.");
+    } catch (reason) {
+      setError(reason instanceof DOMException && reason.name === "AbortError" ? "Upload canceled. You can retry the same file." : "Network error during upload.");
     } finally {
+      uploadControllerRef.current = null;
       setUploading(false);
     }
   }
@@ -134,6 +143,7 @@ export default function ResumeWorkspace() {
         { method: "PUT", body: JSON.stringify({ entries: complete }) },
       );
       setEntries(res.entries);
+      savedEntriesRef.current = JSON.stringify(res.entries);
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -164,6 +174,18 @@ export default function ResumeWorkspace() {
      asserted by a comment - saveBank PUTs the whole bank in one request, and a group-local index
      would write the wrong row as soon as the two categories interleave. */
   const { work: workEntries, leadership: leadershipEntries } = splitBankByCategory(entries ?? []);
+  const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesRef.current;
+
+  function chooseUpload(file: File | undefined) {
+    if (!file) return;
+    if (file.type !== "application/pdf" || file.size > 10 * 1024 * 1024) {
+      setSelectedFile(file);
+      setError("Choose one PDF no larger than 10 MB.");
+      return;
+    }
+    setSelectedFile(file);
+    void upload(file);
+  }
 
   return (
     <div className="space-y-8">
@@ -211,11 +233,23 @@ export default function ResumeWorkspace() {
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) upload(f);
+                chooseUpload(f);
                 e.target.value = "";
               }}
             />
           </div>
+        </div>
+
+        <div
+          onDragEnter={(event) => { event.preventDefault(); setDragActive(true); }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => { if (event.currentTarget === event.target) setDragActive(false); }}
+          onDrop={(event) => { event.preventDefault(); setDragActive(false); chooseUpload(event.dataTransfer.files[0]); }}
+          className={`mt-5 rounded-inner border border-dashed px-5 py-4 text-sm ${dragActive ? "border-brand bg-brand-soft text-brand-ink" : "border-border bg-surface-alt text-muted"}`}
+          aria-label="Resume PDF upload drop zone"
+        >
+          <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum 10 MB.</p>
+          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploading ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and parsing resume" className="h-1.5 w-24 accent-brand" />Reading and parsing...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} className="font-medium text-brand-ink underline underline-offset-4">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}{uploading && <button type="button" onClick={() => uploadControllerRef.current?.abort()} className="text-xs underline underline-offset-4">Cancel</button>}</div>}
         </div>
 
         {profile !== null && profile !== "missing" && (
@@ -241,7 +275,7 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={saveBank}
-              disabled={saving || entries === null} >
+              disabled={saving || entries === null || !entriesDirty} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
@@ -753,7 +787,7 @@ function ParsedProfileEditor({
       </div>
       {error && <p role="alert" className="mt-3 text-xs text-warn">{userFacingError(error)}</p>}
       <div className="mt-4 flex gap-2">
-        <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+        <Button type="submit" disabled={saving || JSON.stringify(draft) === JSON.stringify(initialDraft())}>{saving ? "Saving..." : "Save changes"}</Button>
         <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">Cancel</button>
       </div>
     </form>

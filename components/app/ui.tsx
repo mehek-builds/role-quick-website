@@ -167,18 +167,19 @@ export function LoadingOrb({
   state?: OrbState;
 }) {
   return (
-    <div className="flex items-center gap-2">
-      <ThinkingOrb state={state} size={20} />
-      {label && <span className="text-sm text-muted">{label}</span>}
+    <div className="flex items-center gap-2" role="status" aria-live="polite" aria-busy={state === "working" || state === "composing"}>
+      <span aria-hidden="true"><ThinkingOrb state={state} size={20} /></span>
+      <span className={label ? "text-sm text-muted" : "sr-only"}>{label ?? "Loading"}</span>
     </div>
   );
 }
 
 export function ShimmerRows({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="divide-y divide-border border-y border-border">
+    <div className="rq-skeleton divide-y divide-border border-y border-border" role="status" aria-live="polite" aria-busy="true">
+      <span className="sr-only">Loading</span>
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="rq-shimmer h-16" />
+        <div key={i} aria-hidden="true" className="rq-shimmer h-16" />
       ))}
     </div>
   );
@@ -375,12 +376,25 @@ export function TerminalActionBar({
   );
 }
 
-export function ErrorNote({ message }: { message: string }) {
+const NOTICE = {
+  error: { role: "alert", label: "Error", mark: "!", styles: "bg-danger-soft text-danger" },
+  warning: { role: "status", label: "Warning", mark: "!", styles: "bg-warn-soft text-warn" },
+  success: { role: "status", label: "Success", mark: "✓", styles: "bg-positive-soft text-positive" },
+  info: { role: "status", label: "Information", mark: "i", styles: "bg-brand-soft text-brand-ink" },
+} as const;
+
+export function Notice({ message, variant = "info" }: { message: string; variant?: keyof typeof NOTICE }) {
+  const notice = NOTICE[variant];
   return (
-    <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">
-      {userFacingError(message)}
+    <p role={notice.role} className={`flex items-start gap-2 rounded-inner px-4 py-3 text-sm ${notice.styles}`}>
+      <span aria-hidden="true" className="font-mono font-semibold">{notice.mark}</span>
+      <span><span className="sr-only">{notice.label}: </span>{variant === "error" ? userFacingError(message) : message}</span>
     </p>
   );
+}
+
+export function ErrorNote({ message }: { message: string }) {
+  return <Notice message={message} variant="error" />;
 }
 
 export function formatDate(value: string | null | undefined): string {

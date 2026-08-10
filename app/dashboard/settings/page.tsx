@@ -120,6 +120,11 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
+  const savedProfileRef = useRef("");
+  const deleteDialogRef = useRef<HTMLDialogElement>(null);
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deleteComplete, setDeleteComplete] = useState(false);
 
   useEffect(() => {
     const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
@@ -211,6 +216,7 @@ export default function Settings() {
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
+        savedProfileRef.current = JSON.stringify(profileRes);
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
@@ -309,6 +315,7 @@ export default function Settings() {
         body: JSON.stringify(body),
       });
       setProfile(res);
+      savedProfileRef.current = JSON.stringify(res);
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -472,19 +479,14 @@ export default function Settings() {
       setError("Add your email to save this work before deleting the account.");
       return;
     }
-    const confirmation = window.prompt(`Type ${me.email} to delete your account.`);
-    if (!me || confirmation === null) return;
-    if (confirmation.trim().toLowerCase() !== me.email.toLowerCase()) {
-      setError("Email did not match. Nothing was deleted.");
-      return;
-    }
+    if (!me || deleteConfirmation.trim().toLowerCase() !== me.email.toLowerCase()) return;
     setDataBusy("delete");
     setError(null);
     try {
       await api("/account", { method: "DELETE", body: JSON.stringify({ confirm_email: me.email }) });
       track("account_deleted");
       clearSession();
-      router.replace("/");
+      setDeleteComplete(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete your account.");
       setDataBusy(null);
@@ -508,6 +510,9 @@ export default function Settings() {
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
+  const profileDirty = JSON.stringify(profile) !== savedProfileRef.current;
+  const billingFailed = ["past_due", "unpaid", "failed", "payment_failed"].includes((me.billing_status ?? "").toLowerCase());
+  const billingCanceled = ["canceled", "cancelled"].includes((me.billing_status ?? "").toLowerCase()) || Boolean(me.billing_ends_at);
 
   return (
     <div className="space-y-8">
@@ -759,10 +764,36 @@ export default function Settings() {
           <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
           <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
             <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
-            <button type="button" onClick={() => void deleteAccount()} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account"}</button>
+            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
             <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
           </div>
         </Card>
+        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onClose={() => deleteTriggerRef.current?.focus()} className="m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
+          {deleteComplete ? (
+            <div className="p-6" role="status">
+              <p className="text-label text-positive">Complete</p>
+              <h2 id="delete-title" className="mt-2 text-heading">Your Litos account was deleted.</h2>
+              <p id="delete-description" className="mt-3 text-body text-muted">The account-linked data named in the Privacy policy was removed. This cannot be undone.</p>
+              <Button className="mt-6" onClick={() => { deleteDialogRef.current?.close(); router.replace("/"); }}>Continue to Litos</Button>
+            </div>
+          ) : (
+            <form method="dialog" className="p-6" onSubmit={(event) => { event.preventDefault(); void deleteAccount(); }}>
+              <p className="text-label text-danger">Permanent action</p>
+              <h2 id="delete-title" className="mt-2 text-heading">Delete your account?</h2>
+              <div id="delete-description" className="mt-3 space-y-3 text-sm leading-6 text-muted">
+                <p>This removes your account, saved profile and answers, resumes, application history, outreach, and linked PostHog profile. Shared public company contacts and de-identified reply-pattern notes remain. You cannot undo this.</p>
+                <p>Export first if you want a copy of your account data.</p>
+              </div>
+              <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="mt-4 text-sm font-medium text-brand-ink underline underline-offset-4">Export data</button>
+              <label htmlFor="delete-confirmation" className="mt-5 block text-sm font-medium">Type {me.email} to confirm</label>
+              <input id="delete-confirmation" autoComplete="off" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="rq-field mt-2 w-full rounded-inner px-4 py-3 text-sm" />
+              <div className="mt-6 flex flex-wrap justify-end gap-3">
+                <Button variant="secondary" type="button" onClick={() => deleteDialogRef.current?.close()}>Keep account</Button>
+                <button type="submit" disabled={dataBusy !== null || deleteConfirmation.trim().toLowerCase() !== me.email?.toLowerCase()} className="min-h-11 rounded-full bg-danger px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account permanently"}</button>
+              </div>
+            </form>
+          )}
+        </dialog>
         </section>
       )}
 
@@ -927,7 +958,7 @@ export default function Settings() {
             {savedAt && !saving && <span className="text-xs text-positive">Saved</span>}
             <Button
               onClick={save}
-              disabled={saving} >
+              disabled={saving || !profileDirty} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
@@ -1033,8 +1064,12 @@ export default function Settings() {
             </Button>}
           </div>
         ) : me.tier === "pro" ? (
-          <div className="mt-6 border-t border-border pt-5 text-sm text-muted">
-            You are on Pro. {me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Manage or cancel your subscription</a> : "Contact support to manage or cancel."}
+          <div className="mt-6 space-y-3 border-t border-border pt-5 text-sm text-muted">
+            <p>You are on Pro.</p>
+            {billingFailed && <ErrorNote message="Your last payment did not complete. Update the payment method in the secure billing portal to keep access active." />}
+            {billingCanceled && me.billing_ends_at && <p role="status" className="rounded-inner bg-warn-soft px-4 py-3 text-warn">Subscription canceled. Pro access continues through {new Date(me.billing_ends_at).toLocaleDateString()}.</p>}
+            {me.billing_renews_at && !billingCanceled && <p>Next billing date: <span className="font-mono text-ink">{new Date(me.billing_renews_at).toLocaleDateString()}</span>. The amount is confirmed in the billing portal.</p>}
+            <p>{me.billing_portal_url ? <a className="font-medium text-brand hover:text-brand-ink" href={me.billing_portal_url}>Open secure billing portal</a> : <a className="font-medium text-brand hover:text-brand-ink" href="/contact">Contact support about billing</a>} {me.billing_portal_url ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
           </div>
         ) : null}
       </Card>}
