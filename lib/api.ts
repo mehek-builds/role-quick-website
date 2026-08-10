@@ -7,6 +7,7 @@ import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
 import { clearExtensionSession } from "./extension-bridge";
+import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit";
 
 /* Defined in session-identity, not here, so this module and the instrumentation
  * entry point read the same constant instead of two copies of the string. */
@@ -393,6 +394,9 @@ export function declareSponsorship(answer: SponsorshipAnswer) {
 }
 
 export function putOnboardingWorkEligibility(records: CountryWorkEligibility[]) {
+  if (records.length > MAX_COUNTRY_ELIGIBILITY_RECORDS) {
+    throw new Error(`Add no more than ${MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.`);
+  }
   return api<{ records: CountryWorkEligibility[] }>("/onboarding/work-eligibility", {
     method: "PUT",
     body: JSON.stringify({ records }),

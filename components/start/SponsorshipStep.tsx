@@ -4,7 +4,7 @@
  * a question names that country or the posting carries one exact structured country. */
 
 import { useEffect, useRef, useState } from "react";
-import { putOnboardingWorkEligibility, type ApplicationProfile } from "@/lib/api";
+import { putOnboardingWorkEligibility, type ApplicationProfile, type SponsorshipAnswer } from "@/lib/api";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { PrimaryButton, StartShell } from "./ui";
 import { CountryEligibilityEditor } from "@/components/app/CountryEligibilityEditor";
@@ -15,8 +15,16 @@ import {
   type CountryWorkEligibilityDraft,
 } from "@/lib/work-eligibility";
 
-export function SponsorshipStep({ onDone, profile }: { onDone: () => void; profile?: ApplicationProfile | null }) {
-  const [records, setRecords] = useState<CountryWorkEligibilityDraft[]>(() => eligibilitySeed(profile));
+export function SponsorshipStep({
+  onDone,
+  profile,
+  sponsorshipAnswer,
+}: {
+  onDone: () => void;
+  profile?: ApplicationProfile | null;
+  sponsorshipAnswer?: SponsorshipAnswer | null;
+}) {
+  const [records, setRecords] = useState<CountryWorkEligibilityDraft[]>(() => eligibilitySeed(profile, sponsorshipAnswer));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const edited = useRef(false);
@@ -24,11 +32,12 @@ export function SponsorshipStep({ onDone, profile }: { onDone: () => void; profi
 
   // /start learns its step before the application profile request finishes. Hydrate the repeater
   // when that saved profile arrives, but never overwrite a row the applicant already touched.
+  // This also lets conflicting old scalars veto a conservative onboarding-answer seed.
   useEffect(() => {
-    if (hydrated.current || edited.current || !profile?.work_eligibility_by_country) return;
-    setRecords(eligibilitySeed(profile));
+    if (hydrated.current || edited.current || !profile) return;
+    setRecords(eligibilitySeed(profile, sponsorshipAnswer));
     hydrated.current = true;
-  }, [profile]);
+  }, [profile, sponsorshipAnswer]);
 
   async function save() {
     const problem = countryEligibilityProblem(records);
@@ -72,7 +81,10 @@ export function SponsorshipStep({ onDone, profile }: { onDone: () => void; profi
           Litos answers a form only when the question names a country or the job has one exact
           country on record. If that country is missing here, the question stays with you.
         </p>
-        <p>Expired or contradictory records are not saved or used to answer applications.</p>
+        <p>
+          A record whose expiry has already passed cannot be saved. If a saved record expires
+          later, it stays in your profile but Litos stops using it to answer applications.
+        </p>
       </div>
 
       <PrimaryButton onClick={() => void save()} disabled={busy || records.length === 0}>

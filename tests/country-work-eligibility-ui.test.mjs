@@ -21,15 +21,28 @@ describe("country work eligibility UI contract", () => {
     }
     assert.match(editor, /Add another country/);
     assert.match(editor, /Remove country/);
+    assert.match(editor, /rows\.length < MAX_COUNTRY_ELIGIBILITY_RECORDS/);
+    assert.match(editor, /disabled=\{!canAdd\}/);
   });
 
   test("onboarding writes the scoped endpoint and explains the exact-country boundary", () => {
     assert.match(onboarding, /putOnboardingWorkEligibility\(normalizedCountryEligibility\(records\)\)/);
     assert.match(onboarding, /never copies an answer across borders/);
     assert.match(onboarding, /question names a country or the job has one exact/);
-    assert.match(onboarding, /Expired or contradictory records are not saved or used/);
-    assert.match(settings, /Expired or contradictory records are not/);
+    assert.match(onboarding, /whose expiry has already passed cannot be saved/);
+    assert.match(onboarding, /it stays in your profile but Litos stops using it/);
+    assert.match(settings, /whose expiry has already passed/);
+    assert.match(settings, /stays in your profile but Litos/);
     assert.match(api, /"\/onboarding\/work-eligibility"/);
+    const limitGuard = api.indexOf("records.length > MAX_COUNTRY_ELIGIBILITY_RECORDS");
+    const request = api.indexOf('api<{ records: CountryWorkEligibility[] }>("/onboarding/work-eligibility"');
+    assert.ok(limitGuard >= 0 && request > limitGuard, "the API helper must reject an oversized list before PUT");
+  });
+
+  test("onboarding receives the server-owned legacy answer used by the conservative seed", () => {
+    const start = fs.readFileSync(new URL("../app/start/page.tsx", import.meta.url), "utf8");
+    assert.match(start, /sponsorshipAnswer=\{state\.sponsorship_answer\}/);
+    assert.match(onboarding, /eligibilitySeed\(profile, sponsorshipAnswer\)/);
   });
 
   test("settings edits the same list and no longer offers global scalar controls", () => {

@@ -10,7 +10,10 @@ const source = readFileSync(
 test("settings edits work eligibility only as country-scoped declarations", () => {
   assert.match(source, /Work authorization by country/);
   assert.match(source, /<CountryEligibilityEditor/);
-  assert.match(source, /eligibilitySeed\(profileRes\)/);
+  assert.match(
+    source,
+    /eligibilitySeed\(profileRes, onboardingRes\.sponsorship_answer\)/,
+  );
   assert.doesNotMatch(source, /Authorized to work\? \(saved reference only\)/);
   assert.doesNotMatch(source, /Need sponsorship\? \(saved reference only\)/);
   // Self-identification preferences remain applicant-owned reference data.

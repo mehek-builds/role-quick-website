@@ -61,6 +61,7 @@ const onboardingState = () => ({
   completed_at: null,
   has_focus: true,
   has_sponsorship_answer: step !== "sponsorship",
+  sponsorship_answer: "needs_future",
   has_resume: true,
   has_impact_review: true,
   has_base_resume: true,
@@ -134,6 +135,10 @@ test.after(async () => {
 test("country repeater saves, advances, reloads, and remains editable in Settings", async (t) => {
   try {
     await page.goto(`${ORIGIN}/start`, { waitUntil: "networkidle" });
+    assert.equal(await page.getByRole("combobox", { name: "Country", exact: true }).inputValue(), "US");
+    assert.equal(await page.getByLabel("Authorized to work now?").inputValue(), "yes");
+    assert.equal(await page.getByLabel("Need sponsorship before starting?").inputValue(), "no");
+    assert.equal(await page.getByLabel("Need sponsorship later?").inputValue(), "yes");
     await page.getByRole("combobox", { name: "Country", exact: true }).selectOption("US");
     await page.getByLabel("Authorized to work now?").selectOption("yes");
     await page.getByLabel("Need sponsorship before starting?").selectOption("no");
@@ -165,6 +170,40 @@ test("country repeater saves, advances, reloads, and remains editable in Setting
     await mkdir(artifactDir, { recursive: true });
     await page.screenshot({ path: path.join(artifactDir, "failure.png"), fullPage: true }).catch(() => {});
     await writeFile(path.join(artifactDir, "failure.html"), await page.content()).catch(() => {});
+    t.diagnostic(String(reason?.stack ?? reason));
+    throw reason;
+  }
+});
+
+test("an oversized settings edit is stopped in the browser before PUT", async (t) => {
+  try {
+    const countryCodes = "AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG".split(" ");
+    assert.equal(countryCodes.length, 65);
+    applicationProfile = {
+      work_eligibility_by_country: countryCodes.map((country_code) => ({
+        country_code,
+        authorized_now: true,
+        needs_sponsorship_now: false,
+        needs_sponsorship_future: false,
+        authorization_type: null,
+        authorization_expiry: null,
+      })),
+    };
+    const writesBefore = settingsWrites.length;
+    await page.goto(`${ORIGIN}/dashboard/settings?case=oversized#application-details`, { waitUntil: "networkidle" });
+    await page.getByText("Country 65", { exact: true }).waitFor();
+    const add = page.getByRole("button", { name: "Add another country" });
+    assert.equal(await add.isDisabled(), true);
+    await page.getByLabel("Authorization type (optional)").first().fill("Current permit");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await page.getByText("Add no more than 64 countries.", { exact: true }).waitFor();
+    assert.equal(settingsWrites.length, writesBefore);
+    assert.deepEqual(unknown, []);
+  } catch (reason) {
+    const artifactDir = path.join(process.cwd(), "test-results", "country-eligibility-flow");
+    await mkdir(artifactDir, { recursive: true });
+    await page.screenshot({ path: path.join(artifactDir, "oversized-failure.png"), fullPage: true }).catch(() => {});
+    await writeFile(path.join(artifactDir, "oversized-failure.html"), await page.content()).catch(() => {});
     t.diagnostic(String(reason?.stack ?? reason));
     throw reason;
   }

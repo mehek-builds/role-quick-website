@@ -1,6 +1,7 @@
 "use client";
 
 import { useId } from "react";
+import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "@/lib/work-eligibility-limit";
 import { blankCountryEligibility, COUNTRY_OPTIONS, type CountryWorkEligibilityDraft } from "@/lib/work-eligibility";
 
 function BooleanChoice({
@@ -39,6 +40,7 @@ export function CountryEligibilityEditor({
   onChange: (rows: CountryWorkEligibilityDraft[]) => void;
 }) {
   const rootId = useId();
+  const canAdd = rows.length < MAX_COUNTRY_ELIGIBILITY_RECORDS;
 
   function patch(index: number, next: Partial<CountryWorkEligibilityDraft>) {
     onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...next } : row));
@@ -116,11 +118,19 @@ export function CountryEligibilityEditor({
       })}
       <button
         type="button"
-        onClick={() => onChange([...rows, blankCountryEligibility()])}
-        className="min-h-11 rounded-inner border border-border bg-white px-4 text-sm text-ink hover:border-brand"
+        onClick={() => {
+          if (canAdd) onChange([...rows, blankCountryEligibility()]);
+        }}
+        disabled={!canAdd}
+        className="min-h-11 rounded-inner border border-border bg-white px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-50"
       >
         Add another country
       </button>
+      {!canAdd && (
+        <p className="text-xs leading-5 text-muted" role="status">
+          You can save up to {MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.
+        </p>
+      )}
     </div>
   );
 }

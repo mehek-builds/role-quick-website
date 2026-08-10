@@ -220,7 +220,7 @@ export default function Settings() {
         if (cancelled) return;
         setMe(meRes);
         setProfile(profileRes);
-        setEligibilityDraft(eligibilitySeed(profileRes));
+        setEligibilityDraft(eligibilitySeed(profileRes, onboardingRes.sponsorship_answer));
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
@@ -969,8 +969,9 @@ export default function Settings() {
             <p className="text-xs font-medium text-ink">Work authorization by country</p>
             <p className="mt-1 mb-3 text-xs leading-5 text-muted">
               Litos uses a row only for a form or job that names this exact country. It never treats
-              one country as worldwide authorization. Expired or contradictory records are not
-              saved or used.
+              one country as worldwide authorization. A record whose expiry has already passed
+              cannot be saved. If a saved record expires later, it stays in your profile but Litos
+              stops using it to answer applications.
             </p>
             <CountryEligibilityEditor
               rows={eligibilityDraft}

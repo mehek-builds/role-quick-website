@@ -257,6 +257,7 @@ export default function Start() {
         return (
           <SponsorshipStep
             profile={appProfile}
+            sponsorshipAnswer={state.sponsorship_answer}
             onDone={() => {
               stepDone("sponsorship");
               void refresh();

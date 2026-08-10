@@ -1,4 +1,5 @@
 import type { ApplicationProfile, CountryWorkEligibility, SponsorshipAnswer } from "@/lib/api";
+import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit.ts";
 
 export type CountryWorkEligibilityDraft = Omit<
   CountryWorkEligibility,
@@ -28,11 +29,48 @@ export function blankCountryEligibility(countryCode = ""): CountryWorkEligibilit
   };
 }
 
-/** Read only the one old US combination whose present and future meaning is complete. */
-export function eligibilitySeed(profile: ApplicationProfile | null | undefined): CountryWorkEligibilityDraft[] {
+/**
+ * Read an old US declaration only when its present and future meaning is complete.
+ *
+ * The onboarding answer can safely split the old combined sponsorship scalar for `needs_future`
+ * and `no`. Explicit country records remain authoritative, including an explicit empty list.
+ */
+export function eligibilitySeed(
+  profile: ApplicationProfile | null | undefined,
+  sponsorshipAnswer?: SponsorshipAnswer | null,
+): CountryWorkEligibilityDraft[] {
   if (Array.isArray(profile?.work_eligibility_by_country)) {
     return profile.work_eligibility_by_country.map((row) => ({ ...row }));
   }
+  if (
+    sponsorshipAnswer === "needs_future"
+    && profile?.work_authorized !== false
+    && profile?.needs_sponsorship !== false
+  ) {
+    return [{
+      country_code: "US",
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: true,
+      authorization_type: null,
+      authorization_expiry: null,
+    }];
+  }
+  if (
+    sponsorshipAnswer === "no"
+    && profile?.work_authorized !== false
+    && profile?.needs_sponsorship !== true
+  ) {
+    return [{
+      country_code: "US",
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: false,
+      authorization_type: null,
+      authorization_expiry: null,
+    }];
+  }
+  if (sponsorshipAnswer != null) return [blankCountryEligibility()];
   if (profile?.work_authorized === true && profile.needs_sponsorship === false) {
     return [{
       country_code: "US",
@@ -63,6 +101,9 @@ export function countryEligibilityProblem(
   now: Date = new Date(),
 ): string | null {
   if (rows.length === 0) return "Add at least one country.";
+  if (rows.length > MAX_COUNTRY_ELIGIBILITY_RECORDS) {
+    return `Add no more than ${MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.`;
+  }
   const seen = new Set<string>();
   for (const row of rows) {
     const code = row.country_code.trim().toUpperCase();

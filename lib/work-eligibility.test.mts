@@ -4,12 +4,13 @@ import {
   blankCountryEligibility,
   countryEligibilityProblem,
   eligibilitySeed,
+  ISO_COUNTRY_CODES,
   legacySponsorshipAnswer,
   normalizedCountryEligibility,
 } from "./work-eligibility.ts";
 
 describe("country work eligibility form model", () => {
-  test("seeds only a scoped list or the one unambiguous old US answer", () => {
+  test("explicit country records are authoritative over every legacy seed", () => {
     const scoped = [{
       country_code: "AE",
       authorized_now: true,
@@ -18,7 +19,15 @@ describe("country work eligibility form model", () => {
       authorization_type: null,
       authorization_expiry: null,
     }];
-    assert.deepEqual(eligibilitySeed({ work_eligibility_by_country: scoped }), scoped);
+    assert.deepEqual(eligibilitySeed({
+      work_eligibility_by_country: scoped,
+      work_authorized: true,
+      needs_sponsorship: false,
+    }, "needs_future"), scoped);
+    assert.deepEqual(eligibilitySeed({ work_eligibility_by_country: [] }, "no"), []);
+  });
+
+  test("matches the backend's conservative US bridge for old onboarding answers", () => {
     assert.deepEqual(eligibilitySeed({ work_authorized: true, needs_sponsorship: false }), [{
       country_code: "US",
       authorized_now: true,
@@ -27,6 +36,24 @@ describe("country work eligibility form model", () => {
       authorization_type: null,
       authorization_expiry: null,
     }]);
+    assert.deepEqual(eligibilitySeed({}, "needs_future"), [{
+      country_code: "US",
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: true,
+      authorization_type: null,
+      authorization_expiry: null,
+    }]);
+    assert.deepEqual(eligibilitySeed({ work_authorized: true }, "no"), [{
+      country_code: "US",
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: false,
+      authorization_type: null,
+      authorization_expiry: null,
+    }]);
+    assert.equal(eligibilitySeed({ work_authorized: false }, "needs_future")[0]?.country_code, "");
+    assert.equal(eligibilitySeed({ needs_sponsorship: true }, "no")[0]?.country_code, "");
     assert.equal(eligibilitySeed({ work_authorized: true, needs_sponsorship: true })[0]?.country_code, "");
     assert.equal(eligibilitySeed({ work_authorized: true, needs_sponsorship: true })[0]?.authorized_now, null);
   });
@@ -48,6 +75,19 @@ describe("country work eligibility form model", () => {
     assert.equal(countryEligibilityProblem([{
       ...completeUs,
     }]), null);
+  });
+
+  test("accepts 64 unique valid rows and rejects 65 before submission", () => {
+    const rows = ISO_COUNTRY_CODES.slice(0, 65).map((country_code) => ({
+      country_code,
+      authorized_now: true,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: false,
+      authorization_type: null,
+      authorization_expiry: null,
+    }));
+    assert.equal(countryEligibilityProblem(rows.slice(0, 64)), null);
+    assert.equal(countryEligibilityProblem(rows), "Add no more than 64 countries.");
   });
 
   test("rejects contradictory, impossible, and expired declarations", () => {
