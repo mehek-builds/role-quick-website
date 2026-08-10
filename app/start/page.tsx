@@ -10,6 +10,13 @@
  * Steps are DERIVED server-side from data that already exists (see routes/onboarding.ts), not
  * stored as a cursor, so "Finish later" and a fresh start are the same code path and neither can
  * disagree with reality.
+ *
+ * ONE bounded exception, and it is deliberate: the gaps screen's EXIT is not derivable from the
+ * profile, because skipping it saves nothing. The server records having asked
+ * (application_profile.setup_gaps_asked_at) and that is what makes leaving durable; `gapsHandled`
+ * below makes it immediate, and keeps a student off a dead end if the stamp could not be written at
+ * all. It lives in memory, for this session, for that one screen. Every other step stays exactly as
+ * derived. See the "gaps" case in renderStep.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

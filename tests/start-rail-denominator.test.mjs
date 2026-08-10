@@ -47,7 +47,14 @@ const ALWAYS = ["resume", "impact", "focus", "sponsorship", "base", "done"];
 
 test("STEPS marks exactly one step conditional, and it is the one not every flow contains", () => {
   const conditional = STEPS.filter((s) => s.conditional).map((s) => s.key);
-  assert.deepEqual(conditional, ["gaps"]);
+  assert.deepEqual(
+    conditional,
+    ["gaps"],
+    "a second conditional step needs its own server signal in features/onboarding/domain/rail.ts "
+      + "`flowSteps`: it cannot inherit `includes_gaps_step`, which answers for the gaps screen and "
+      + "no other. Inheriting it would leave the new screen counted only while standing on it, which "
+      + "is the count-grows-underneath-them defect this rule exists to remove.",
+  );
   assert.ok(
     !ALWAYS.includes("gaps"),
     "a step every flow contains must not be conditional: it would be missing from its own count",
