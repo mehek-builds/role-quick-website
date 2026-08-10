@@ -23,7 +23,7 @@ let lastError: { message?: string } | undefined;
   },
 };
 
-const { armHandoffs, clearExtensionSession, ensureCurrentExtensionSession, ensureExtensionSession, extensionVersionAtLeast, sendToExtension } = await import(
+const { armHandoffs, clearExtensionSession, ensureCurrentExtensionSession, ensureExtensionSession, extensionVersionAtLeast, minimumAttendedHandoffExtensionVersion, sendToExtension } = await import(
   "./extension-bridge.ts"
 );
 
@@ -140,6 +140,19 @@ test("the published 0.5.9 client is installed but held for an update", async () 
     version: "0.5.9",
     updateRequired: true,
   });
+  assert.equal(calls.some((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION"), false);
+});
+
+test("Jobvite and iCIMS require 0.5.11 while SmartRecruiters retains 0.5.10", async () => {
+  assert.equal(minimumAttendedHandoffExtensionVersion("smartrecruiters"), "0.5.10");
+  assert.equal(minimumAttendedHandoffExtensionVersion("jobvite"), "0.5.11");
+  assert.equal(minimumAttendedHandoffExtensionVersion("icims"), "0.5.11");
+  reset(() => ({ ok: true, signedIn: true, version: "0.5.10" }));
+  const state = await ensureCurrentExtensionSession(
+    { token: "jwt-abc", guest: false },
+    minimumAttendedHandoffExtensionVersion("jobvite"),
+  );
+  assert.equal(state.updateRequired, true);
   assert.equal(calls.some((call) => (call as { type: string }).type === "LITOS_ADOPT_SESSION"), false);
 });
 

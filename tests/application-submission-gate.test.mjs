@@ -58,7 +58,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /No live browser to reopen/);
   assert.match(dashboard, /Open company page/);
   assert.match(dashboard, /const attendedHandoffUrl = exactAttendedHandoffUrl\(review\)/);
-  assert.match(dashboard, /ensureCurrentExtensionSession\(\{ token: getToken\(\), guest: isGuestSession\(\) \}\)/);
+  assert.match(dashboard, /ensureCurrentExtensionSession\([\s\S]{0,160}minimumAttendedHandoffExtensionVersion\(review\.ats_name\)/);
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
   assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
   assert.match(dashboard, /Open exact company form/);
@@ -73,6 +73,21 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
+});
+
+test("Tracker arms only the exact attended URL returned by the backend contract", async () => {
+  const [dashboard, handoff] = await Promise.all([
+    readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/attended-handoff.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(handoff, /review\.ats_name === "jobvite"[\s\S]{0,300}JOBVITE_ATTENDED_GATE_REASON/);
+  assert.match(handoff, /review\.ats_name === "icims"[\s\S]{0,400}ICIMS_ATTENDED_GATE_REASON[\s\S]{0,200}ICIMS_SECURITY_CODE_GATE_REASON/);
+  assert.match(handoff, /return \/\^\\\/jobs\\\/\\d\+\\\/[\s\S]{0,100}\\\/login\$\/i\.test\(url\.pathname\)/);
+  assert.doesNotMatch(handoff, /atsName === "icims"[\s\S]{0,400}\\\/apply\$/);
+  assert.match(dashboard, /const attendedHandoffUrl = exactAttendedHandoffUrl\(review\)/);
+  assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
+  assert.match(dashboard, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
+  assert.doesNotMatch(dashboard, /armHandoffs\(\[\{ id: submission\.application_id, portalUrl: portalUrl/);
 });
 
 test("overview keeps three application states and sends matches to the review screen", async () => {

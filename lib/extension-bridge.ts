@@ -95,6 +95,13 @@ const ABSENT: ExtensionState = {
 };
 
 export const MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION = "0.5.10";
+export const MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION = "0.5.11";
+
+export function minimumAttendedHandoffExtensionVersion(atsName: string | undefined): string {
+  return atsName === "jobvite" || atsName === "icims"
+    ? MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION
+    : MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION;
+}
 
 export function extensionVersionAtLeast(current: string | null | undefined, minimum: string): boolean {
   const parse = (value: string | null | undefined): number[] | null => {
@@ -118,11 +125,14 @@ export type WebSession = { token: string | null; guest: boolean };
    produce two verification round trips inside the extension. */
 let inFlight: Promise<ExtensionState> | null = null;
 
-async function handOverSession(session: WebSession): Promise<ExtensionState> {
+async function handOverSession(
+  session: WebSession,
+  minimumVersion = MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION,
+): Promise<ExtensionState> {
   const ping = await sendToExtension<{ ok?: boolean; signedIn?: boolean; version?: string }>({ type: "LITOS_PING" });
   if (!ping?.ok) return ABSENT;
   const version = typeof ping.version === "string" ? ping.version : null;
-  if (!extensionVersionAtLeast(version, MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION)) {
+  if (!extensionVersionAtLeast(version, minimumVersion)) {
     return { installed: true, signedIn: false, otherAccount: false, version, updateRequired: true };
   }
 
@@ -155,8 +165,8 @@ export function ensureExtensionSession(session: WebSession): Promise<ExtensionSt
 }
 
 /** Re-check the installed extension and account immediately before an attended handoff. */
-export function ensureCurrentExtensionSession(session: WebSession): Promise<ExtensionState> {
-  return handOverSession(session).catch(() => ABSENT);
+export function ensureCurrentExtensionSession(session: WebSession, minimumVersion?: string): Promise<ExtensionState> {
+  return handOverSession(session, minimumVersion).catch(() => ABSENT);
 }
 
 /** Signing out here signs out there. Fire-and-forget: a sign-out must never wait on an extension. */
