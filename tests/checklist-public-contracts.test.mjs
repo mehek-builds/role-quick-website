@@ -34,7 +34,12 @@ test("cookie inventory and policy history are linked from legal surfaces", () =>
 
 test("not found page owns metadata and useful recovery routes", () => {
   const page = read("app/not-found.tsx");
-  assert.match(page, /title: "Page not found: Litos"/);
+  const title = /title:\s*\{\s*absolute:\s*"([^"]+)"\s*\}/.exec(page)?.[1];
+  assert.equal(
+    title,
+    "Page not found: Litos",
+    "the 404 title must be absolute so the root template does not append Litos a second time",
+  );
   for (const route of ["/browse-jobs", "/login", "/contact"]) assert.match(page, new RegExp(`href="${route}"`));
 });
 
