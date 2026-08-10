@@ -1,6 +1,9 @@
 // Extension included so the node test runner can load this module directly, the same convention
 // daily-matches.ts uses for application-filter.ts. See allowImportingTsExtensions in tsconfig.json.
 import { normalizeTerm } from "./requirement-terms.ts";
+/* Type only, so it is erased before node ever sees it and the direct load above still works. Same
+   arrangement as submission-checklist.ts, which is loaded by node:test the same way. */
+import type { ApplicationReview } from "@/lib/api";
 
 type ReviewPacket = {
   spec?: { _review?: unknown };
@@ -229,6 +232,61 @@ export function screenForStatus(status: ReviewStatus | string | undefined, fallb
   if (status === "needs_attention" || status === "ready_for_final_approval" || status === "failed" || status === "awaiting_security_code") return "portal";
   if (status && ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "submitting";
   return fallback;
+}
+
+/**
+ * A review whose list-shaped fields are lists.
+ *
+ * WHY THIS EXISTS
+ * ===============
+ * lib/api.ts declares `questions`, `skipped_reasons` and `edited_terms` as REQUIRED arrays on
+ * ApplicationReview. The wire does not agree: /resume/history serves back whatever the backend
+ * stored on the packet, an application that never reached a form has no discovered questions and no
+ * filled fields to store, and the two repos deploy independently, so the type is a statement of
+ * intent rather than a fact about the bytes. Every reader downstream is written against the type
+ * and is therefore one absent key away from a TypeError.
+ *
+ * That is not hypothetical. Reported from a real account on 2026-08-11: on the Tracker, rows
+ * reading NEEDS YOU could not be opened at all while the one SENT row opened normally. The split is
+ * screenForStatus above. `submitted` is the only reviewable status that routes to SubmissionReceipt,
+ * which never touches a list; every other one routes to SubmissionScreen, which read
+ * `review.questions.length` on its fourth line. One missing key there did not degrade the packet,
+ * it threw during render, and the route boundary replaced the WHOLE Tracker with "This page did not
+ * load." So a single sparse packet took every other application on the page down with it, and the
+ * student's only visible escape from the screen was out of the product.
+ *
+ * WHY IT IS DONE HERE AND NOT AT EACH READER
+ * ==========================================
+ * `?? []` at the call site is a guard the next reader does not inherit, and this screen has many:
+ * SubmissionScreen, humanInputItems, completedSubmissionItems, mergeDiscoveredQuestions, the
+ * prescript helpers and the answers editor all read one of these four. Fixing the four lines that
+ * happened to throw would leave the same defect latent in the rest. The submission state has one
+ * writer (see setSubmission in app/dashboard/applications/page.tsx), so normalising there is the
+ * one edit that reaches every reader at once.
+ *
+ * NOTHING IS INVENTED. This is the "secondary collection" rule that
+ * features/applications/infrastructure/response-shape.ts already states for backend payloads: a
+ * collection the screen can render without is defaulted to empty, and nothing else is. No count, no
+ * status and no answer is defaulted, because an absent list means "we have none of these", which is
+ * exactly what an empty list says, while an absent STATUS would mean inventing one.
+ *
+ * The review is returned UNCHANGED when every list is already a list, so an unchanged poll response
+ * keeps its object identity and does not re-render the screen it is confirming.
+ */
+export function reviewWithLists(review: ApplicationReview): ApplicationReview {
+  if (
+    Array.isArray(review.questions)
+    && Array.isArray(review.filled_fields)
+    && Array.isArray(review.skipped_reasons)
+    && Array.isArray(review.edited_terms)
+  ) return review;
+  return {
+    ...review,
+    questions: Array.isArray(review.questions) ? review.questions : [],
+    filled_fields: Array.isArray(review.filled_fields) ? review.filled_fields : [],
+    skipped_reasons: Array.isArray(review.skipped_reasons) ? review.skipped_reasons : [],
+    edited_terms: Array.isArray(review.edited_terms) ? review.edited_terms : [],
+  };
 }
 
 /**

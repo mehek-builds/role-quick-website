@@ -167,10 +167,31 @@ describe("page-level facts stay in the page banner", () => {
   test("failing to load the page's own data stays in the banner", () => {
     for (const message of [
       "We could not load your applications. Reload the page.",
-      "We could not load that job. Try opening it again.",
     ]) {
       assert.ok(code.includes(`setError(reason instanceof Error ? reason.message : "${message}")`), message);
     }
     assert.doesNotMatch(code, /refuseInComposer\([^)]*Reload the page/);
+  });
+
+  test("a job link that will not open stays in the banner, and says nothing the backend said", () => {
+    /* This used to be the second entry in the list above, asserting
+       `setError(reason instanceof Error ? reason.message : "We could not load that job...")`. The
+       `reason.message` half of that is what put the backend's own "Job not found" on screen, in red,
+       over a Tracker that was at that moment listing the very application the id belonged to
+       (2026-08-11). The placement finding this file is about is unchanged and still asserted: this
+       is page-level news and it belongs in the page banner, not in the composer. What is gone is
+       the backend's wording, which is a different rule from a different file
+       (lib/user-facing-error.ts) and one this path was exempt from. */
+    assert.ok(
+      code.includes('setError("We could not open that job link. Everything you have already built is listed below.")'),
+      "the ?job= failure has to reach the page banner",
+    );
+    const effect = code.slice(code.indexOf("const resolvedJobParam = useRef"));
+    assert.doesNotMatch(
+      effect.slice(0, effect.indexOf("}, [packets, qaMode, selectPacket]")),
+      /refuseInComposer/,
+      "nobody pressed a composer button to get here",
+    );
+    assert.doesNotMatch(code, /reason\.message : "We could not load that job/);
   });
 });
