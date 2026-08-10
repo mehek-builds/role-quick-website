@@ -495,8 +495,9 @@ export default function Settings() {
 
   if (error && !profile) return <ErrorNote message={error} />;
   if (!me || profile === null || automaticSubmission === null || automaticVerification === null || emailConnections === null)
-    return (
-      <div className="space-y-6">
+  return (
+    <div className="space-y-6">
+      <span id="plan" className="sr-only" aria-hidden="true" />
         <div className="rq-shimmer h-8 w-48 rounded-full" />
         <ShimmerRows rows={3} />
       </div>

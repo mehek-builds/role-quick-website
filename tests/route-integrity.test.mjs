@@ -322,6 +322,8 @@ const UNLINKED_BY_DESIGN = new Map([
      without a session is the one way to see it broken. robots.ts disallows it
      for the same reason. */
   ["/start", "post-sign-in redirect target, never a link; see app/login/page.tsx"],
+  ["/billing/return", "hosted checkout return target, reached only after the payment provider redirects"],
+  ["/maintenance", "direct preview of the deploy-flag maintenance screen, never public navigation"],
   /* Internal QA harnesses. Linking them from a public surface is the bug. */
   ["/qa/packet", "internal QA harness, must not be linked from a public surface"],
   ["/qa/packet/dashboard", "internal QA harness, must not be linked from a public surface"],
