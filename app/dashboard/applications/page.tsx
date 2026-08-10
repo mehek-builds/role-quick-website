@@ -799,7 +799,11 @@ function Applications() {
     return () => {
       cancelled = true;
     };
-  }, [selectPacket]);
+    /* openApplicationById is listed and is safe to list: it is a useCallback over ensurePacket and
+       selectPacket, both of which are themselves stable, and ensurePacket reads `packets` through a
+       ref rather than closing over it. Had it closed over the array, this effect would re-run on
+       every packet update and re-fetch the whole history each time. */
+  }, [openApplicationById, selectPacket]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
