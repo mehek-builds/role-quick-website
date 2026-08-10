@@ -27,6 +27,8 @@ describe("country work eligibility UI contract", () => {
     assert.match(onboarding, /putOnboardingWorkEligibility\(normalizedCountryEligibility\(records\)\)/);
     assert.match(onboarding, /never copies an answer across borders/);
     assert.match(onboarding, /question names a country or the job has one exact/);
+    assert.match(onboarding, /Expired or contradictory records are not saved or used/);
+    assert.match(settings, /Expired or contradictory records are not/);
     assert.match(api, /"\/onboarding\/work-eligibility"/);
   });
 

@@ -59,6 +59,7 @@ export function SponsorshipStep({ onDone, profile }: { onDone: () => void; profi
           Litos answers a form only when the question names a country or the job has one exact
           country on record. If that country is missing here, the question stays with you.
         </p>
+        <p>Expired or contradictory records are not saved or used to answer applications.</p>
       </div>
 
       <PrimaryButton onClick={() => void save()} disabled={busy || records.length === 0}>

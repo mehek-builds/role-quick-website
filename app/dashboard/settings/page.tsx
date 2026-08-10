@@ -969,7 +969,8 @@ export default function Settings() {
             <p className="text-xs font-medium text-ink">Work authorization by country</p>
             <p className="mt-1 mb-3 text-xs leading-5 text-muted">
               Litos uses a row only for a form or job that names this exact country. It never treats
-              one country as worldwide authorization.
+              one country as worldwide authorization. Expired or contradictory records are not
+              saved or used.
             </p>
             <CountryEligibilityEditor
               rows={eligibilityDraft}

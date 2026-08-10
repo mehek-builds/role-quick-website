@@ -46,7 +46,22 @@ export function eligibilitySeed(profile: ApplicationProfile | null | undefined):
   return [blankCountryEligibility()];
 }
 
-export function countryEligibilityProblem(rows: readonly CountryWorkEligibilityDraft[]): string | null {
+export function isRealIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year
+    && parsed.getUTCMonth() === month - 1
+    && parsed.getUTCDate() === day;
+}
+
+export function countryEligibilityProblem(
+  rows: readonly CountryWorkEligibilityDraft[],
+  now: Date = new Date(),
+): string | null {
   if (rows.length === 0) return "Add at least one country.";
   const seen = new Set<string>();
   for (const row of rows) {
@@ -59,8 +74,14 @@ export function countryEligibilityProblem(rows: readonly CountryWorkEligibilityD
       || typeof row.needs_sponsorship_now !== "boolean"
       || typeof row.needs_sponsorship_future !== "boolean"
     ) return "Answer all three work eligibility questions for every country.";
-    if (row.authorization_expiry && !/^\d{4}-\d{2}-\d{2}$/.test(row.authorization_expiry)) {
-      return "Use YYYY-MM-DD for an authorization expiry date.";
+    if (!row.authorized_now && !row.needs_sponsorship_now) {
+      return "If you are not authorized now, say whether you need sponsorship before starting.";
+    }
+    if (row.authorization_expiry) {
+      if (!isRealIsoDate(row.authorization_expiry)) return "Use a real YYYY-MM-DD authorization expiry date.";
+      const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(now.getUTCDate()).padStart(2, "0")}`;
+      if (row.authorization_expiry < today) return "Authorization expiry cannot be in the past.";
+      if (!row.authorized_now) return "Only an active authorization can have an expiry date.";
     }
   }
   return null;

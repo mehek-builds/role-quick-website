@@ -43,6 +43,35 @@ describe("country work eligibility form model", () => {
     }]), null);
   });
 
+  test("rejects contradictory, impossible, and expired declarations", () => {
+    const notAuthorizedWithoutSupport = {
+      ...blankCountryEligibility("US"),
+      authorized_now: false,
+      needs_sponsorship_now: false,
+      needs_sponsorship_future: true,
+    };
+    assert.equal(
+      countryEligibilityProblem([notAuthorizedWithoutSupport], new Date("2026-08-10T00:00:00Z")),
+      "If you are not authorized now, say whether you need sponsorship before starting.",
+    );
+    const active = {
+      ...notAuthorizedWithoutSupport,
+      authorized_now: true,
+    };
+    assert.equal(
+      countryEligibilityProblem([{ ...active, authorization_expiry: "2026-02-30" }], new Date("2026-08-10T00:00:00Z")),
+      "Use a real YYYY-MM-DD authorization expiry date.",
+    );
+    assert.equal(
+      countryEligibilityProblem([{ ...active, authorization_expiry: "2026-08-09" }], new Date("2026-08-10T00:00:00Z")),
+      "Authorization expiry cannot be in the past.",
+    );
+    assert.equal(
+      countryEligibilityProblem([{ ...active, authorization_expiry: "2026-08-10" }], new Date("2026-08-10T23:59:59Z")),
+      null,
+    );
+  });
+
   test("normalizes optional strings and derives the old US filter answer only from the US row", () => {
     const normalized = normalizedCountryEligibility([{
       ...blankCountryEligibility("us"),
