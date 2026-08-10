@@ -3,6 +3,7 @@ import { Azeret_Mono, Hanken_Grotesk } from "next/font/google";
 import { SITE_URL } from "@/lib/config";
 import "./globals.css";
 import { PRODUCT_NAME } from "@/lib/product";
+import { MaintenanceScreen } from "@/components/MaintenanceScreen";
 
 const hankenGrotesk = Hanken_Grotesk({
   variable: "--font-hanken-grotesk",
@@ -36,7 +37,7 @@ export default function RootLayout({
       className={`${hankenGrotesk.variable} ${azeretMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-bg font-sans text-ink">
-        {children}
+        {process.env.LITOS_MAINTENANCE_MODE === "1" ? <MaintenanceScreen /> : children}
       </body>
     </html>
   );

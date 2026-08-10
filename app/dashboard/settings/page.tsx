@@ -900,6 +900,7 @@ export default function Settings() {
             <div className="mt-4 border-t border-border pt-4">
               <p className="text-xs font-medium text-muted">Inbox access</p>
               <p className="mt-1 text-xs leading-5 text-faint">Your provider shows exactly what Litos can access before you approve it.</p>
+              <p className="mt-2 text-xs leading-5 text-muted">Litos requests access only to find a recent application verification code while a form is waiting. It does not use this connection to send mail or read unrelated messages. Connection time and the latest provider state appear below; Litos does not currently keep a user-visible sync activity log.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {(["gmail", "outlook"] as const).map((provider) => {
                   const connection = emailConnections.connections.find((item) => item.provider === provider);
@@ -912,6 +913,7 @@ export default function Settings() {
                         <p className="mt-0.5 text-xs text-faint">
                           {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
                         </p>
+                        {connection?.connected_at && <p className="mt-1 text-xs text-muted">Connected {new Date(connection.connected_at).toLocaleDateString()}</p>}
                       </div>
                       <Button
                         type="button"
@@ -926,10 +928,12 @@ export default function Settings() {
                   );
                 })}
               </div>
+              <p className="mt-3 text-xs text-muted">Need another provider? <a href="/contact" className="font-medium text-brand-ink underline underline-offset-4">Request an integration through Contact.</a></p>
             </div>
           </div>
         </div>
         <p className="mt-4 text-xs leading-5 text-faint">Litos stops when an answer is missing or the site needs you.</p>
+        <p className="mt-2 text-xs leading-5 text-faint">Litos sends transactional account, application, and billing messages only. There are no marketing notification subscriptions or configurable notification channels in the current product.</p>
         </div>
       </Card>}
 
