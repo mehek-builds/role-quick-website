@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, ButtonLink } from "@/components/app/Button";
-import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   api,
@@ -21,7 +21,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
@@ -307,7 +307,35 @@ function Applications() {
     setSendRefusal({ applicationId, message, issues });
   }, []);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
-  const [submission, setSubmission] = useState<SubmissionResponse | null>(null);
+  const [submission, setSubmissionState] = useState<SubmissionResponse | null>(null);
+  /* THE ONE WRITER, and it is a wrapper rather than the raw setter on purpose.
+   *
+   * Everything on the portal, questions and progress screens reads its review out of this state,
+   * and lib/api.ts declares that review's `questions`, `skipped_reasons` and `edited_terms` as
+   * required arrays. The wire does not: a packet that never reached a form has no discovered
+   * questions to store, and /resume/history hands back exactly what was stored. Reported on
+   * 2026-08-11 from a real account: every Tracker row reading NEEDS YOU threw on click and took the
+   * whole page into app/dashboard/error.tsx, while the single SENT row opened fine, because
+   * `submitted` is the one status that routes to SubmissionReceipt instead of to SubmissionScreen
+   * and SubmissionReceipt reads no list. One sparse packet made every application on the page
+   * unopenable.
+   *
+   * There are eight setSubmission call sites (seed on select, poll, approve, prepare, restart, the
+   * QA branch, and two cover-letter writers) and more than a dozen readers. Guarding the readers
+   * means guarding all of them forever; guarding the writer is one line that cannot be forgotten by
+   * the next reader added. reviewWithLists returns the review UNCHANGED when it is already whole,
+   * so a poll that confirms the current state still costs nothing.
+   *
+   * It defaults lists and nothing else. See features/applications/domain/application-review.ts for
+   * why that is the only safe thing to default. */
+  const setSubmission = useCallback((update: SetStateAction<SubmissionResponse | null>) => {
+    setSubmissionState((current) => {
+      const next = typeof update === "function" ? update(current) : update;
+      if (!next) return next;
+      const review = reviewWithLists(next.review);
+      return review === next.review ? next : { ...next, review };
+    });
+  }, []);
   const [coverLetterBody, setCoverLetterBody] = useState("");
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
@@ -454,10 +482,17 @@ function Applications() {
     setNotice(null);
   }, [moveToScreen]);
 
+  /* The answer is put through reviewWithLists on arrival, not only on its way into state through
+     setSubmission. Two lines in here read `result.review.questions` directly rather than through
+     state, so a backend that answered without the key would throw inside this promise instead of
+     during a render, and the poll's catch would report it as "We lost sight of the form."
+     The comment stays out here rather than beside the line: tests/submission-terminal-state.test.mjs
+     bounds the distance from the fetch to the route below, deliberately, so that span holds code. */
   const refreshSubmission = useCallback(async () => {
     if (!selectedId || qaMode) return;
     const requestedId = selectedId;
-    const result = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
+    const raw = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
+    const result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
 
     // A poll for packet A can land after the user has switched to packet B: the fetch closes over
     // the id it asked for, but the poll effect's cleanup cannot reach inside an in-flight request.
@@ -643,22 +678,64 @@ function Applications() {
   }, [selectPacket]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const jobId = params.get("job");
-    if (params.get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
-    if (!jobId) return;
-    if (qaMode !== false) return;
-    let cancelled = false;
+    if (new URLSearchParams(window.location.search).get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
+  }, []);
+
+  /* `?job=` NAMES A POSTING, and this is where a link that means something else gets sorted out.
+   *
+   * The parameter is written by the Jobs page's Apply control, so its value is a monitored job id
+   * and /jobs/<id> answers it. A link that has been sitting in a tab, a bookmark or a message can
+   * carry a PACKET id in the same slot, which that endpoint answers with a 404, and the 404's
+   * message went straight to the page-level banner. Reproduced 2026-08-11 on a real account:
+   * /dashboard/applications?job=<generated_resume_id> printed a red "Error: Job not found" across
+   * the top of a Tracker that was, in the same frame, listing that exact application. Both
+   * sentences were on screen and only one of them was true, and the one a student would act on was
+   * the wrong one, because the visible red alert outranks a row further down the page.
+   *
+   * So the id is checked against the applications this page already has BEFORE the postings
+   * endpoint is asked. A hit is not an error, it is a deep link to that packet, and it is treated
+   * as the `?application=` it meant: the packet opens and the parameter comes out of the URL, so a
+   * reload does not ask about it again. That leaves the error banner for the one case where it is
+   * honest, an id that is neither a posting nor an application, and even there the message says
+   * what is still true rather than quoting the backend at the student.
+   *
+   * `packets` is a dependency because the answer depends on them, and the poll rewrites that array
+   * every 2.5 seconds. The ref is what stops a second lookup: it records the id this effect has
+   * already acted on, and the request checks it again on the way back rather than being cancelled,
+   * so a double-invoked effect in development still lands its result exactly once. */
+  const resolvedJobParam = useRef<string | null>(null);
+  useEffect(() => {
+    if (qaMode !== false || packets === null) return;
+    const jobId = new URLSearchParams(window.location.search).get("job");
+    if (!jobId || resolvedJobParam.current === jobId) return;
+    resolvedJobParam.current = jobId;
+
+    const packet = packets.find((item) => item.id === jobId);
+    if (packet) {
+      /* queueMicrotask for the same reason the pendingJob effect below uses it: selectPacket writes
+         six pieces of state, and doing that synchronously inside an effect cascades the render. */
+      queueMicrotask(() => {
+        selectPacket(packet);
+        /* The same helper the composer's Close uses, so there is one definition of what this URL
+           looks like with the parameter gone. */
+        replaceClosedComposerUrl(
+          window.location,
+          (data, unused, url) => window.history.replaceState(data, unused, url),
+        );
+      });
+      return;
+    }
+
     api<{ job: MonitoredJob }>(`/jobs/${jobId}`)
       .then(({ job }) => {
-        if (cancelled) return;
+        if (resolvedJobParam.current !== jobId) return;
         setPendingJob(job);
       })
-      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load that job. Try opening it again."));
-    return () => {
-      cancelled = true;
-    };
-  }, [qaMode]);
+      .catch(() => {
+        if (resolvedJobParam.current !== jobId) return;
+        setError("We could not open that job link. Everything you have already built is listed below.");
+      });
+  }, [packets, qaMode, selectPacket]);
 
   useEffect(() => {
     if (!pendingJob || packets === null) return;
@@ -1676,9 +1753,15 @@ function Applications() {
                   <span>Last updated</span>
                   <span>Status</span>
                 </div>
+                {/* Each row declares type="button" rather than leaving it to the default. A bare
+                    button is a SUBMIT button, and the whole value of a ledger row is that pressing
+                    it changes what this page is showing rather than navigating. The chip strip
+                    above already declares it; this one, the desktop row and the one students on a
+                    laptop actually press, was the only control on the screen still relying on there
+                    being no form element anywhere above it. */}
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} type="button" onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
                       <time className="hidden text-xs text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>

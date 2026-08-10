@@ -12,6 +12,7 @@
     "test:click-path": "node --test tests/e2e/dashboard-click-path.spec.mjs",
     "test:narrow-viewport": "node --test tests/e2e/narrow-viewport-actions.spec.mjs",
     "test:start-base": "node --test tests/e2e/start-base-build.spec.mjs",
+    "test:tracker-row": "node --test tests/e2e/tracker-row-opens-detail.spec.mjs",
     "test:start-checklist": "node --test tests/e2e/start-onboarding-checklist.spec.mjs",
     "test:start-gaps": "node --test tests/e2e/start-gaps.spec.mjs",
     "test:country-eligibility-flow": "node --test tests/e2e/country-eligibility-flow.spec.mjs",
