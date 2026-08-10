@@ -43,7 +43,7 @@ import { ApplicationPacket, contactLine, contactName } from "@/components/app/Ap
 import { ResumePaper } from "@/components/app/ApplicationPacket";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
-import { fetchJdMatch, resumeSpecText } from "@/features/applications";
+import { fetchApplication, fetchApplicationHistory, fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
 import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
@@ -124,6 +124,24 @@ function requiresSensitiveQuestionReview(label: string, answer?: string | null):
 
 function Applications() {
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
+  /* How many reviewable applications this student has, which is NOT reviewablePackets.length.
+     /resume/history sends one page, and this ledger printed "50 of 50" over an account holding 158
+     while the board directly below it said "157 of 158 are not on the board yet". Null until the
+     first page answers, so the count is never a zero nobody measured. */
+  const [historyTotal, setHistoryTotal] = useState<number | null>(null);
+  /* The next page to ask for, or null once there is nothing left. Null is the stop condition, not
+     a short page: see the backend's historyPage. */
+  const [historyCursor, setHistoryCursor] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  /* The application being fetched on its own right now, so the control that asked for it can say
+     it is working. Held as an id rather than a boolean for the same reason approvingId is: two
+     rows pressed in quick succession must not share one flag. */
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  /* What `packets` holds right now, for ensurePacket to check before spending a request. A ref and
+     not the state value, because ensurePacket is a stable callback handed to the board and to the
+     deep-link effect: closing over `packets` would rebuild it on every packet update, and the
+     effect that owns the deep link would re-run and re-fetch on each one. */
+  const packetsRef = useRef<GeneratedResume[] | null>(null);
   const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
   /* The student's education block as GET /profile serves it today. Status is separate from the
      profile object because null is not safe: a missing comparison cannot approve a real send. */
@@ -399,6 +417,11 @@ function Applications() {
     submissionRef.current = submission;
   }, [submission]);
 
+  /* Same mirroring, for the array ensurePacket checks before it spends a request. */
+  useEffect(() => {
+    packetsRef.current = packets;
+  }, [packets]);
+
   const captureCompletedSubmission = useCallback((result: SubmissionResponse, source: string) => {
     if (result.review.status !== "submitted" || capturedSubmissionIds.current.has(result.application_id)) return;
     capturedSubmissionIds.current.add(result.application_id);
@@ -481,6 +504,95 @@ function Applications() {
     setSendRefusal(null);
     setNotice(null);
   }, [moveToScreen]);
+
+  /**
+   * The packet for this id, from what is already loaded or fetched on its own, spliced into
+   * `packets` either way. Null when it could not be had, and the caller has already been given the
+   * reason on screen.
+   *
+   * WHAT THIS REPLACES. Opening an application used to mean finding it in the array this page had
+   * already fetched, and that array is ONE PAGE of history. Everything older was unreachable twice
+   * over: its board card was rendered inert by an `openableIds` gate built from the same array, and
+   * a ?application=<id> link for it selected nothing and said nothing at all. Measured on the owner
+   * account on 2026-08-11, that was 108 of 158 applications. Fetching the single packet makes
+   * openability a property of the application rather than of the window, so no page size can put a
+   * row out of reach again.
+   *
+   * IT SPLICES BEFORE IT RETURNS, and that is not a convenience. Everything else on this screen
+   * resolves the selection out of `packets`: `selected`, the read-only viewer, and every immutable
+   * setPackets update in this file. Handing back a packet that is not in the array would leave the
+   * page rendering nothing, with no error, which is the exact silence being fixed.
+   *
+   * `stale` is the caller's cancellation check, passed rather than captured, so an effect that has
+   * been torn down cannot install a packet or a message after the fact.
+   */
+  const ensurePacket = useCallback(async (id: string, stale: () => boolean = () => false): Promise<GeneratedResume | null> => {
+    const loaded = packetsRef.current?.find((item) => item.id === id);
+    if (loaded) return loaded;
+    setOpeningId(id);
+    try {
+      const packet = await fetchApplication(id);
+      if (stale()) return null;
+      setPackets((current) => {
+        const rest = (current ?? []).filter((item) => item.id !== packet.id);
+        /* Sorted on created_at, which is the key /resume/history orders by, so a packet pulled in
+           on its own lands where it belongs instead of jumping to the top of the ledger and
+           claiming to be the most recent thing the student made. NOT packetTimestamp: that prefers
+           the review's updated_at, which is a different axis and would reorder the whole list. */
+        return [...rest, packet].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+      });
+      return packet;
+    } catch (reason) {
+      if (stale()) return null;
+      // Named, never silent. A link to an application the student does not own, or to one that has
+      // been removed, is a real answer and they are entitled to hear it.
+      setError(userFacingError(reason, "We could not open that application. It may have been removed."));
+      return null;
+    } finally {
+      if (!stale()) setOpeningId(null);
+    }
+  }, []);
+
+  /** Open an application in the review flow by id, fetching it first if it is not loaded. */
+  const openApplicationById = useCallback(async (id: string, stale: () => boolean = () => false) => {
+    const packet = await ensurePacket(id, stale);
+    if (!packet || stale()) return;
+    if (!packet.spec._review) {
+      /* A review is what the flow needs. A resume saved before it became a reviewable application
+         has nothing to open, and saying so beats selecting it into a blank screen. */
+      setNotice("That resume was saved before it became a reviewable application, so there is nothing to open yet.");
+      return;
+    }
+    selectPacket(packet);
+  }, [ensurePacket, selectPacket]);
+
+  /** Open the read-only viewer by id, fetching the packet first if it is not loaded. */
+  const revisitApplicationById = useCallback(async (id: string) => {
+    const packet = await ensurePacket(id);
+    if (packet) setRevisitingId(packet.id);
+  }, [ensurePacket]);
+
+  /** Ask for the next page of history and append it. No-op once the cursor is null. */
+  const loadMoreHistory = useCallback(async () => {
+    if (!historyCursor) return;
+    setHistoryLoading(true);
+    try {
+      const page = await fetchApplicationHistory(historyCursor);
+      setPackets((current) => {
+        const known = new Set((current ?? []).map((item) => item.id));
+        // Deduped on arrival. A packet already pulled in on its own by openApplicationById will
+        // show up again in its natural page, and two copies of one application in the ledger is a
+        // worse bug than the one being fixed.
+        return [...(current ?? []), ...page.resumes.filter((item) => !known.has(item.id))];
+      });
+      setHistoryTotal(page.reviewable_total);
+      setHistoryCursor(page.next_cursor);
+    } catch (reason) {
+      setError(userFacingError(reason, "We could not load more of your applications."));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [historyCursor]);
 
   /* The answer is put through reviewWithLists on arrival, not only on its way into state through
      setSubmission. Two lines in here read `result.review.questions` directly rather than through
@@ -635,14 +747,26 @@ function Applications() {
     queueMicrotask(() => {
       if (!cancelled) setQaMode(false);
     });
-    api<{ resumes: GeneratedResume[] }>("/resume/history")
-      .then((result) => {
+    fetchApplicationHistory()
+      .then(async (result) => {
         if (cancelled) return;
-        const reviewable = onlyReviewablePackets(result.resumes);
         setPackets(result.resumes);
+        setHistoryTotal(result.reviewable_total);
+        setHistoryCursor(result.next_cursor);
         const requestedId = new URLSearchParams(window.location.search).get("application");
-        const requested = reviewable.find((packet) => packet.id === requestedId);
-        if (requested) selectPacket(requested);
+        if (!requestedId) return;
+        const loaded = onlyReviewablePackets(result.resumes).find((packet) => packet.id === requestedId);
+        if (loaded) {
+          selectPacket(loaded);
+          return;
+        }
+        /* THE DEEP LINK IS NOT ALLOWED TO GO QUIET. This used to be `if (requested) selectPacket`
+           with no else, so a ?application=<id> for anything outside the first page of history did
+           nothing at all: no selection, no message, a tracker that looked like it had simply
+           ignored the link. Measured on the owner account on 2026-08-11 that was 108 of 158
+           applications, because history sent 50 rows and the board beside it drew all 158. The
+           packet is fetched on its own instead, and if that fails the student is told why. */
+        await openApplicationById(requestedId, () => cancelled);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
     /* The education block as it stands NOW, to check the frozen packet against. Failure is not the
@@ -1122,9 +1246,11 @@ function Applications() {
         }),
       });
 
-      const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
+      const history = await fetchApplicationHistory();
       const fallbackCreated = history.resumes.find((packet) => packet.id === generated.resume_id);
       setPackets(history.resumes);
+      setHistoryTotal(history.reviewable_total);
+      setHistoryCursor(history.next_cursor);
       if (!fallbackCreated?.spec._review) throw new Error("Your resume was made, but we could not open it. Reload the page.");
       selectPacket(fallbackCreated);
       setNewApplication(EMPTY_APPLICATION_DRAFT);
@@ -1591,10 +1717,10 @@ function Applications() {
           autopilot={Boolean(autopilot.enabled)}
           appliedToday={appliedToday}
           onSend={(id) => void sendWithoutAsking(id)}
-          onOpen={(id) => {
-            const packet = (packets ?? []).find((item) => item.id === id);
-            if (packet) selectPacket(packet);
-          }}
+          /* Same by-id path as the board. This card's match is drawn from the loaded packets today,
+             so the fetch will not fire, but "open this application" resolving differently depending
+             on which control was pressed is how one of the two ends up silent again. */
+          onOpen={(id) => void openApplicationById(id)}
         />
       )}
 
@@ -1668,7 +1794,29 @@ function Applications() {
               <h2 id="application-ledger-heading" className={selected ? "sr-only" : "text-sm font-medium text-ink"}>
                 {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
               </h2>
-              <span className="font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
+              {/* THE DENOMINATOR IS THE CORPUS, NOT THE PAGE. This read "50 of 50" on an account
+                  holding 158 applications, with the board directly below it saying "157 of 158 are
+                  not on the board yet": one screen, two counts of the same thing, and the smaller
+                  one looked like the truth because it was the one with a list under it. `total`
+                  comes from the backend and counts every row the student owns. It falls back to
+                  what is loaded when the response omits it, which is the only figure such a
+                  response measured. */}
+              <span className="font-mono text-[11px] text-muted">
+                {visiblePackets.length} of {historyTotal ?? reviewablePackets.length}
+              </span>
+              {historyCursor && (
+                <button
+                  type="button"
+                  onClick={() => void loadMoreHistory()}
+                  disabled={historyLoading}
+                  /* text-ink, not text-brand: DESIGN.md's brand blue does not carry AA at this
+                     size, and tests/color-guidelines pins that. The underline is what marks it as
+                     a control. */
+                  className="min-h-11 text-[11px] text-ink underline disabled:text-muted disabled:no-underline"
+                >
+                  {historyLoading ? "Loading..." : "Load more"}
+                </button>
+              )}
               {duplicatePostingNote(duplicateMarks) && (
                 <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
               )}
@@ -1805,22 +1953,20 @@ function Applications() {
            rather than the route boundary's full-page recovery screen. */
         <SectionBoundary band="tracker-board" title="Your applications">
         <Board
-          openableIds={new Set((packets ?? []).map((item) => item.id))}
-          onOpen={(id) => {
-            const packet = (packets ?? []).find((item) => item.id === id);
-            if (packet) selectPacket(packet);
-          }}
+          /* NO ID GATE. Both openableIds and revisitableIds were built from `packets`, which is one
+             page of /resume/history, so the board disabled every card past that page: 108 of the
+             owner's 158 on 2026-08-10. The board's own `reviewable` flag is the right predicate and
+             it always was. The backend computes it as `spec->'_review' is not null`, which is
+             character for character what `item.spec._review` tested here, except that the card
+             carries it for every application rather than for the ones that fit in the window.
+             Whether a row can be opened is now answered by the row. */
+          onOpen={(id) => void openApplicationById(id)}
           /* Revisit does NOT call selectPacket. Selecting drives the review flow and moves the
              whole page onto a screen for that packet; looking at what was already sent should
              leave the board exactly where it was, so this opens over the top and closes back to
              the same scroll position. */
-          onRevisit={setRevisitingId}
-          /* The ids the viewer can actually open, which is NOT the same set as openableIds.
-             `_review` is optional on the spec, and the mark used to render for every packet in
-             history while the handler quietly did nothing for the ones without a review: a fully
-             styled, focusable, labelled button that was inert on click and on Enter. A control
-             that cannot act should be absent, not dead. */
-          revisitableIds={new Set((packets ?? []).filter((item) => item.spec._review).map((item) => item.id))}
+          onRevisit={(id) => void revisitApplicationById(id)}
+          busyId={openingId}
         />
         </SectionBoundary>
       ) : screen === "questions" ? (
