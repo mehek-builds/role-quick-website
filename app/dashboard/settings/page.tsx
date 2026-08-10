@@ -125,6 +125,7 @@ export default function Settings() {
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteComplete, setDeleteComplete] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
@@ -411,8 +412,10 @@ export default function Settings() {
   }
 
   async function exportAccount() {
+    const inDeleteDialog = deleteDialogRef.current?.open ?? false;
     setDataBusy("export");
-    setError(null);
+    if (inDeleteDialog) setDeleteError(null);
+    else setError(null);
     try {
       const account = await api<Record<string, unknown>>("/account/export");
       const url = URL.createObjectURL(new Blob([JSON.stringify(account, null, 2)], { type: "application/json" }));
@@ -423,7 +426,9 @@ export default function Settings() {
       track("account_data_exported");
       window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not export your data.");
+      const message = err instanceof Error ? err.message : "Could not export your data.";
+      if (inDeleteDialog) setDeleteError(message);
+      else setError(message);
     } finally {
       setDataBusy(null);
     }
@@ -481,14 +486,14 @@ export default function Settings() {
     }
     if (!me || deleteConfirmation.trim().toLowerCase() !== me.email.toLowerCase()) return;
     setDataBusy("delete");
-    setError(null);
+    setDeleteError(null);
     try {
       await api("/account", { method: "DELETE", body: JSON.stringify({ confirm_email: me.email }) });
       track("account_deleted");
       clearSession();
       setDeleteComplete(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete your account.");
+      setDeleteError(err instanceof Error ? err.message : "Could not delete your account.");
       setDataBusy(null);
     }
   }
@@ -765,11 +770,11 @@ export default function Settings() {
           <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
           <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
             <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink disabled:opacity-50">{dataBusy === "export" ? "Preparing..." : "Export data"}</button>
-            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
+            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); setDeleteError(null); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
             <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
           </div>
         </Card>
-        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onClose={() => deleteTriggerRef.current?.focus()} className="m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
+        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={(event) => { if (dataBusy === "delete") event.preventDefault(); }} onClose={() => deleteTriggerRef.current?.focus()} className="m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
           {deleteComplete ? (
             <div className="p-6" role="status">
               <p className="text-label text-positive">Complete</p>
@@ -788,8 +793,9 @@ export default function Settings() {
               <button type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null} className="mt-4 text-sm font-medium text-brand-ink underline underline-offset-4">Export data</button>
               <label htmlFor="delete-confirmation" className="mt-5 block text-sm font-medium">Type {me.email} to confirm</label>
               <input id="delete-confirmation" autoComplete="off" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="rq-field mt-2 w-full rounded-inner px-4 py-3 text-sm" />
+              {deleteError && <div className="mt-3"><ErrorNote message={deleteError} /></div>}
               <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <Button variant="secondary" type="button" onClick={() => deleteDialogRef.current?.close()}>Keep account</Button>
+                <Button variant="secondary" type="button" disabled={dataBusy === "delete"} onClick={() => deleteDialogRef.current?.close()}>Keep account</Button>
                 <button type="submit" disabled={dataBusy !== null || deleteConfirmation.trim().toLowerCase() !== me.email?.toLowerCase()} className="min-h-11 rounded-full bg-danger px-5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{dataBusy === "delete" ? "Deleting..." : "Delete account permanently"}</button>
               </div>
             </form>

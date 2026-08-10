@@ -26,6 +26,9 @@ test("cookie inventory and policy history are linked from legal surfaces", () =>
   const cookies = read("app/cookies/page.tsx");
   assert.match(cookies, /rq_try/);
   assert.match(cookies, /PostHog identifiers/);
+  assert.match(cookies, /Dashboard job controls/);
+  assert.match(cookies, /date-keyed names and are ignored after that day/);
+  assert.match(cookies, /Preparation locks are ignored after 10 minutes/);
   assert.match(cookies, /Your controls/);
   assert.match(read("app/privacy/page.tsx"), /Policy history/);
   assert.match(read("components/SiteFooter.tsx"), /href="\/cookies"/);

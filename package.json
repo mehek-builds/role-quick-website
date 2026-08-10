@@ -18,6 +18,7 @@
     "test:qa-guest-entry": "node --test tests/e2e/qa-guest-entry.spec.mjs",
     "test:qa-tunnel-hydration": "node --test tests/e2e/qa-tunnel-hydration.spec.mjs",
     "test:settings-verification-sources": "node --test tests/e2e/settings-verification-sources.spec.mjs",
+    "test:audited-state-contracts": "node --test tests/e2e/audited-state-contracts.spec.mjs",
     "verify:logos": "node --experimental-strip-types scripts/verify-logo-service.mjs",
     "verify:suggestions": "node --experimental-strip-types scripts/verify-board-suggestions.mjs",
     "test:approve": "node --test tests/e2e/approve-resolves.spec.mjs"
