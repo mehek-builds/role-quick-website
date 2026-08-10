@@ -434,7 +434,7 @@ export default function Login() {
               {claimMode
                 ? "Save your work"
                 : flow === "signup"
-                  ? "Start applying in seconds"
+                  ? "Create your account"
                   : flow === "recovery"
                     ? "Reset your password"
                     : flow === "email-code"

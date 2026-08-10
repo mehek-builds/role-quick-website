@@ -103,6 +103,9 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: https://student-outreach-backend.vercel.app
 
+      - name: Audited state contracts spec
+        run: npm run test:audited-state-contracts
+
       # Drives the four Home Overview controls with real clicks against a
       # stubbed backend. Every request is intercepted; nothing reaches a real
       # service and no credential exists to reach one with.

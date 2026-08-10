@@ -1,0 +1,9 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import test from "node:test";
+const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+test("status surface is explicit about the independent-host gap", () => { const page = read("app/status/page.tsx"); assert.match(page, /NEXT_PUBLIC_STATUS_PAGE_URL/); assert.match(page, /does not claim live health or uptime/); assert.match(page, /Managed application runs/); });
+test("maintenance mode is deploy-safe and never invents an ETA", () => { assert.match(read("app/layout.tsx"), /LITOS_MAINTENANCE_MODE === "1"/); const screen = read("components/MaintenanceScreen.tsx"); assert.match(screen, /LITOS_MAINTENANCE_NEXT_UPDATE/); assert.match(screen, /Return time is not confirmed/); });
+test("billing return verifies the account record and handles cancellation and timeout", () => { const page = read("app/billing/return/page.tsx"); assert.match(page, /api<Me>\("\/me"\)/); assert.match(page, /No payment was confirmed/); assert.match(page, /Payment could not be confirmed yet/); assert.match(page, /receipt, payment method, and next billing date/); });
+test("integration permissions and notification limits are stated", () => { const page = read("app/dashboard/settings/page.tsx"); assert.match(page, /requests access only to find a recent application verification code/); assert.match(page, /Request an integration through Contact/); assert.match(page, /There are no marketing notification subscriptions/); });

@@ -3,6 +3,7 @@ import { Header } from "@/components/Header";
 import { SiteFooter } from "@/components/SiteFooter";
 import { ComboField } from "@/components/browse/ComboField";
 import { ZeroResultJobSearchMonitor } from "@/components/browse/ZeroResultJobSearchMonitor";
+import { SearchSubmitButton } from "@/components/browse/SearchSubmitButton";
 import {
   agoLabel,
   countLabel,
@@ -92,7 +93,15 @@ function CompanyMark({
   );
 }
 
-function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
+function Highlight({ text, terms }: { text: string; terms: string[] }) {
+  const matches = terms.filter(Boolean).sort((a, b) => b.length - a.length);
+  if (matches.length === 0) return text;
+  const escaped = matches.map((term) => term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const parts = text.split(new RegExp(`(${escaped.join("|")})`, "ig"));
+  return <>{parts.map((part, index) => matches.some((term) => term.toLowerCase() === part.toLowerCase()) ? <mark key={`${part}-${index}`} className="rounded-sm bg-brand-soft px-0.5 text-inherit">{part}</mark> : part)}</>;
+}
+
+function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: string[] }) {
   const ago = agoLabel(job);
   const { shown, extra } = locationSummary(job);
   const pay = formatPay(job);
@@ -107,12 +116,12 @@ function Tile({ job, eager }: { job: BrowseJob; eager?: boolean }) {
       <div className="flex min-w-0 items-start gap-3">
         <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">
-          <p className="text-[15px] font-medium leading-snug text-ink">{job.title}</p>
-          <p className="mt-1 text-small text-muted">{job.company_name}</p>
+          <p className="text-[15px] font-medium leading-snug text-ink"><Highlight text={job.title} terms={terms} /></p>
+          <p className="mt-1 text-small text-muted"><Highlight text={job.company_name} terms={terms} /></p>
         </div>
       </div>
       <p className="mt-auto pt-4 text-small leading-snug text-faint">
-        {shown.join(" · ")}
+        <Highlight text={shown.join(" · ")} terms={terms} />
         {extra > 0 && (
           <span className="text-faint/80"> +{extra} more</span>
         )}
@@ -179,7 +188,7 @@ function describeFilters(filters: Filters): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-function hrefFor(filters: Filters, page: number) {
+function hrefFor(filters: Filters, page: number, sort?: string) {
   const params = new URLSearchParams();
   /* Every filter has to survive pagination, or page 2 of a search silently
      becomes page 2 of the whole board. */
@@ -187,6 +196,7 @@ function hrefFor(filters: Filters, page: number) {
     if (value) params.set(key, value);
   }
   if (page > 1) params.set("page", String(page));
+  if (sort === "newest") params.set("sort", sort);
   const s = params.toString();
   return s ? `/browse-jobs?${s}` : "/browse-jobs";
 }
@@ -202,6 +212,7 @@ export default async function BrowseJobs({
     page?: string;
     sponsor_only?: string;
     employment_type?: string;
+    sort?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -233,14 +244,19 @@ export default async function BrowseJobs({
     sponsor_only: sponsorOnly ? "true" : "",
     employment_type: employmentType,
   };
+  const sort = params.sort === "newest" ? "newest" : "board";
   const searching = Boolean(
     filters.title || filters.company || filters.location || filters.q || employmentType,
   );
   const requested = Math.max(1, Number(params.page) || 1);
-  const [{ jobs, total, postingsTotal, ok }, facets] = await Promise.all([
+  const [{ jobs: fetchedJobs, total, postingsTotal, ok }, facets] = await Promise.all([
     fetchJobs(filters, requested),
     fetchFacets(sponsorOnly),
   ]);
+  const jobs = sort === "newest"
+    ? [...fetchedJobs].sort((left, right) => Date.parse(right.posted_at ?? right.first_seen_at) - Date.parse(left.posted_at ?? left.first_seen_at))
+    : fetchedJobs;
+  const highlightTerms = [filters.title, filters.company, filters.location, filters.q].filter((value): value is string => Boolean(value));
   const pages = pageCount(total);
   const current = Math.min(requested, pages);
   /* Only the explicitly labeled title field is unmet role demand. Legacy `q` links can contain
@@ -359,6 +375,13 @@ export default async function BrowseJobs({
             </select>
           </div>
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
+          <div className="relative flex min-w-0 flex-col gap-1.5">
+            <label htmlFor="sort" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-faint">Order</label>
+            <select id="sort" name="sort" defaultValue={sort} className="min-h-[44px] w-full rounded-inner border border-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none">
+              <option value="board">Board order</option>
+              <option value="newest">Newest on this page</option>
+            </select>
+          </div>
           {/* A fourth control, and the only one that is not a search term: it changes which jobs
               are eligible rather than which match. It sits on its own row under the three fields
               so it is not read as a fourth thing to type in.
@@ -374,13 +397,10 @@ export default async function BrowseJobs({
             />
             Only jobs where the company sponsors a work visa
           </label>
-          <button
-            type="submit"
-            className="min-h-[44px] rounded-control bg-brand px-6 text-sm font-medium text-white transition-opacity hover:opacity-90 sm:col-span-3 lg:col-span-1 lg:self-end"
-          >
-            Search
-          </button>
+          <SearchSubmitButton />
         </form>
+
+        <p className="mt-3 text-machine text-faint" aria-live="polite">Ordered by {sort === "newest" ? "newest result on the current page" : "the job board ranking"}.</p>
 
 
         {searching && ok && (
@@ -402,7 +422,7 @@ export default async function BrowseJobs({
               /* The first two rows are above the fold on a laptop; lazy-loading
                  those makes the marks pop in after the text, which reads as the
                  page half-failing. */
-              <Tile key={job.id} job={job} eager={i < 6} />
+              <Tile key={job.id} job={job} eager={i < 6} terms={highlightTerms} />
             ))}
           </div>
         ) : (
@@ -447,7 +467,7 @@ export default async function BrowseJobs({
               ) : (
                 <a
                   key={n}
-                  href={hrefFor(filters, n)}
+                  href={hrefFor(filters, n, sort)}
                   className="flex h-9 min-w-9 items-center justify-center rounded-control px-3 text-muted transition-colors hover:bg-surface-alt hover:text-ink"
                 >
                   {n}

@@ -44,6 +44,13 @@ function Row({ h, children }: { h: string; children: React.ReactNode }) {
 }
 
 export default function LitosVsSimplify() {
+  const comparison = [
+    ["Application form coverage", "Greenhouse, Lever, Ashby, Workday, and LinkedIn", "Workday, Lever, Greenhouse, and thousands of other boards"],
+    ["Tailored resume", "Rebuilds a resume for the posting", "Offers resume customization tools"],
+    ["Application sending", "Off by default; opt-in sending includes a 15-second stop window in the extension", "Designed for broad application autofill"],
+    ["Outreach", "Drafts outreach for the user to send", "Not the deciding capability documented in the sources used for this page"],
+    ["Published install base", "Not published", "Publishes extension and job-seeker counts"],
+  ] as const;
   return (
     <div className="flex min-h-svh flex-col bg-white">
       <Header />
@@ -59,6 +66,18 @@ export default function LitosVsSimplify() {
           same thing, and for a lot of people Simplify is the right answer.
           Here is how to tell which one you are.
         </p>
+
+        <section className="mt-12" aria-labelledby="comparison-table-title">
+          <h2 id="comparison-table-title" className="text-heading text-ink">The decision points.</h2>
+          <div className="mt-5 overflow-x-auto rounded-card border border-border">
+            <table className="w-full min-w-[680px] border-collapse text-left text-small">
+              <caption className="sr-only">Feature comparison between Litos and Simplify, sourced 27 July 2026</caption>
+              <thead className="bg-surface-alt text-ink"><tr><th scope="col" className="px-4 py-3 font-medium">Capability</th><th scope="col" className="px-4 py-3 font-medium">Litos</th><th scope="col" className="px-4 py-3 font-medium">Simplify</th></tr></thead>
+              <tbody className="divide-y divide-border text-muted">{comparison.map(([capability, litos, simplify]) => <tr key={capability}><th scope="row" className="px-4 py-4 align-top font-medium text-ink">{capability}</th><td className="px-4 py-4 align-top leading-6">{litos}</td><td className="px-4 py-4 align-top leading-6">{simplify}</td></tr>)}</tbody>
+            </table>
+          </div>
+          <p className="mt-3 text-machine text-faint">Source check: 27 July 2026</p>
+        </section>
 
         <div className="mt-12">
           <Row h="Where Simplify is better, and it is not close">
@@ -102,19 +121,6 @@ export default function LitosVsSimplify() {
             hundreds of roles unattended, Litos is the wrong tool and says so.
           </Row>
 
-          <Row h="What each one costs">
-            Both are free to install and free to use at ordinary volume, and both
-            have paid tiers beyond that. Litos publishes its{" "}
-            <a
-              href="/terms"
-              className="underline decoration-border underline-offset-2 hover:text-ink"
-            >
-              terms, cancellation and refund policy
-            </a>{" "}
-            in one place before you pay. Compare that with whatever you are
-            considering, whichever way it comes out.
-          </Row>
-
           <Row h="How to choose">
             Pick Simplify if you are applying broadly across many different
             company sites and you want the widest coverage available. Pick Litos
@@ -136,6 +142,14 @@ export default function LitosVsSimplify() {
           </a>{" "}
           and it gets corrected.
         </p>
+        <section className="mt-12 rounded-card bg-brand-soft px-6 py-8" aria-labelledby="compare-next-step">
+          <h2 id="compare-next-step" className="text-heading text-ink">See whether Litos fits your search.</h2>
+          <p className="mt-2 text-body text-muted">Try the workflow with a job posting, or browse the roles Litos has already found.</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <a href="/try" className="rounded-full bg-brand px-6 py-3 text-sm font-medium text-white hover:opacity-90">Try Litos</a>
+            <a href="/browse-jobs" className="rounded-full border border-border bg-white px-6 py-3 text-sm font-medium text-ink hover:bg-surface-alt">Browse jobs</a>
+          </div>
+        </section>
       </main>
       <SiteFooter />
     </div>

@@ -26,6 +26,10 @@ export default function ResumeWorkspace() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const uploadInFlightRef = useRef(false);
+  const [savedEntriesJson, setSavedEntriesJson] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +50,7 @@ export default function ResumeWorkspace() {
           : profileRes ?? "missing",
       );
       setEntries(bankRes.entries);
+      setSavedEntriesJson(JSON.stringify(bankRes.entries));
     })();
     return () => {
       cancelled = true;
@@ -53,6 +58,8 @@ export default function ResumeWorkspace() {
   }, []);
 
   async function upload(file: File) {
+    if (uploadInFlightRef.current) return;
+    uploadInFlightRef.current = true;
     setUploading(true);
     setError(null);
     try {
@@ -80,11 +87,15 @@ export default function ResumeWorkspace() {
             ? { ...(data as ParsedProfile), target_roles: targeting.titles }
             : data as ParsedProfile,
         );
-        if (bank) setEntries(bank.entries);
+        if (bank) {
+          setEntries(bank.entries);
+          setSavedEntriesJson(JSON.stringify(bank.entries));
+        }
       }
     } catch {
-      setError("Network error during upload.");
+      setError("Network error during upload. You can retry the same file.");
     } finally {
+      uploadInFlightRef.current = false;
       setUploading(false);
     }
   }
@@ -134,6 +145,7 @@ export default function ResumeWorkspace() {
         { method: "PUT", body: JSON.stringify({ entries: complete }) },
       );
       setEntries(res.entries);
+      setSavedEntriesJson(JSON.stringify(res.entries));
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -164,6 +176,21 @@ export default function ResumeWorkspace() {
      asserted by a comment - saveBank PUTs the whole bank in one request, and a group-local index
      would write the wrong row as soon as the two categories interleave. */
   const { work: workEntries, leadership: leadershipEntries } = splitBankByCategory(entries ?? []);
+  const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesJson;
+  const uploadReady = profile !== null && entries !== null;
+
+  function chooseUpload(file: File | undefined) {
+    if (!file || !uploadReady || uploadInFlightRef.current) return;
+    const pdfMime = file.type === "application/pdf";
+    const genericPdf = (file.type === "" || file.type === "application/octet-stream") && /\.pdf$/i.test(file.name);
+    if ((!pdfMime && !genericPdf) || file.size > 10 * 1024 * 1024) {
+      setSelectedFile(file);
+      setError("Choose one PDF no larger than 10 MB.");
+      return;
+    }
+    setSelectedFile(file);
+    void upload(file);
+  }
 
   return (
     <div className="space-y-8">
@@ -197,7 +224,7 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={() => fileRef.current?.click()}
-              disabled={uploading} >
+              disabled={uploading || !uploadReady} >
               {uploading
                 ? <PendingLabel state="composing" onColor>Reading...</PendingLabel>
                 : profile === "missing"
@@ -208,14 +235,29 @@ export default function ResumeWorkspace() {
               ref={fileRef}
               type="file"
               accept="application/pdf"
+              disabled={uploading || !uploadReady}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) upload(f);
+                chooseUpload(f);
                 e.target.value = "";
               }}
             />
           </div>
+        </div>
+
+        <div
+          onDragEnter={(event) => { event.preventDefault(); if (uploadReady && !uploading) setDragActive(true); }}
+          onDragOver={(event) => event.preventDefault()}
+          onDragLeave={(event) => { if (event.currentTarget === event.target) setDragActive(false); }}
+          onDrop={(event) => { event.preventDefault(); setDragActive(false); chooseUpload(event.dataTransfer.files[0]); }}
+          className={`mt-5 rounded-inner border border-dashed px-5 py-4 text-sm ${dragActive ? "border-brand bg-brand-soft text-brand-ink" : "border-border bg-surface-alt text-muted"}`}
+          aria-label="Resume PDF upload drop zone"
+          aria-disabled={!uploadReady}
+          aria-busy={uploading}
+        >
+          <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum 10 MB.</p>
+          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploading ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} className="font-medium text-brand-ink underline underline-offset-4">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
         {profile !== null && profile !== "missing" && (
@@ -241,7 +283,7 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={saveBank}
-              disabled={saving || entries === null} >
+              disabled={saving || entries === null || !entriesDirty} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
@@ -753,7 +795,7 @@ function ParsedProfileEditor({
       </div>
       {error && <p role="alert" className="mt-3 text-xs text-warn">{userFacingError(error)}</p>}
       <div className="mt-4 flex gap-2">
-        <Button type="submit" disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
+        <Button type="submit" disabled={saving || JSON.stringify(draft) === JSON.stringify(initialDraft())}>{saving ? "Saving..." : "Save changes"}</Button>
         <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">Cancel</button>
       </div>
     </form>
