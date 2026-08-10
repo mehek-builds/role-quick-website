@@ -53,6 +53,7 @@ import {
   normalizedCountryEligibility,
   type CountryWorkEligibilityDraft,
 } from "@/lib/work-eligibility";
+import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "@/lib/work-eligibility-limit";
 
 /* Application profile: exactly the fields the backend stores, including legacy
    fields retained only so a full-profile save cannot erase them. Rendering a
@@ -315,7 +316,9 @@ export default function Settings() {
     if (eligibilityTouched) {
       const problem = countryEligibilityProblem(eligibilityDraft);
       if (problem) {
-        setError(problem);
+        // An oversized server payload is already announced beside the repeater.
+        // Avoid adding a duplicate page-level alert while still blocking the PUT.
+        if (eligibilityDraft.length <= MAX_COUNTRY_ELIGIBILITY_RECORDS) setError(problem);
         return;
       }
     }

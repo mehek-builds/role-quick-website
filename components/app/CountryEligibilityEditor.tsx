@@ -41,6 +41,7 @@ export function CountryEligibilityEditor({
 }) {
   const rootId = useId();
   const canAdd = rows.length < MAX_COUNTRY_ELIGIBILITY_RECORDS;
+  const isOverLimit = rows.length > MAX_COUNTRY_ELIGIBILITY_RECORDS;
 
   function patch(index: number, next: Partial<CountryWorkEligibilityDraft>) {
     onChange(rows.map((row, rowIndex) => rowIndex === index ? { ...row, ...next } : row));
@@ -127,8 +128,13 @@ export function CountryEligibilityEditor({
         Add another country
       </button>
       {!canAdd && (
-        <p className="text-xs leading-5 text-muted" role="status">
-          You can save up to {MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.
+        <p
+          className={`text-xs leading-5 ${isOverLimit ? "text-danger" : "text-muted"}`}
+          role={isOverLimit ? "alert" : "status"}
+        >
+          {isOverLimit
+            ? `Add no more than ${MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.`
+            : `You can save up to ${MAX_COUNTRY_ELIGIBILITY_RECORDS} countries.`}
         </p>
       )}
     </div>

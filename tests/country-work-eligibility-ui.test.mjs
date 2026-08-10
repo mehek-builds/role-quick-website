@@ -23,6 +23,9 @@ describe("country work eligibility UI contract", () => {
     assert.match(editor, /Remove country/);
     assert.match(editor, /rows\.length < MAX_COUNTRY_ELIGIBILITY_RECORDS/);
     assert.match(editor, /disabled=\{!canAdd\}/);
+    assert.match(editor, /isOverLimit = rows\.length > MAX_COUNTRY_ELIGIBILITY_RECORDS/);
+    assert.match(editor, /role=\{isOverLimit \? "alert" : "status"\}/);
+    assert.match(editor, /Add no more than \$\{MAX_COUNTRY_ELIGIBILITY_RECORDS\} countries\./);
   });
 
   test("onboarding writes the scoped endpoint and explains the exact-country boundary", () => {
@@ -50,6 +53,7 @@ describe("country work eligibility UI contract", () => {
     assert.match(settings, /body\.work_eligibility_by_country = normalizedCountryEligibility\(eligibilityDraft\)/);
     assert.match(settings, /profileDirty = eligibilityTouched \|\| JSON\.stringify\(profile\) !== savedProfileJson/);
     assert.match(settings, /disabled=\{saving \|\| !profileDirty\}/);
+    assert.match(settings, /eligibilityDraft\.length <= MAX_COUNTRY_ELIGIBILITY_RECORDS\) setError\(problem\)/);
     assert.doesNotMatch(settings, /patch\(\{ work_authorized:/);
     assert.doesNotMatch(settings, /patch\(\{ needs_sponsorship:/);
   });
