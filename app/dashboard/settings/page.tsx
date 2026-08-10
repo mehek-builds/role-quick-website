@@ -537,7 +537,7 @@ export default function Settings() {
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
-  const profileDirty = JSON.stringify(profile) !== savedProfileJson;
+  const profileDirty = eligibilityTouched || JSON.stringify(profile) !== savedProfileJson;
   const billingFailed = ["past_due", "unpaid", "failed", "payment_failed"].includes((me.billing_status ?? "").toLowerCase());
   const billingCanceled = ["canceled", "cancelled"].includes((me.billing_status ?? "").toLowerCase()) || Boolean(me.billing_ends_at);
 

@@ -48,6 +48,8 @@ describe("country work eligibility UI contract", () => {
   test("settings edits the same list and no longer offers global scalar controls", () => {
     assert.match(settings, /rows=\{eligibilityDraft\}/);
     assert.match(settings, /body\.work_eligibility_by_country = normalizedCountryEligibility\(eligibilityDraft\)/);
+    assert.match(settings, /profileDirty = eligibilityTouched \|\| JSON\.stringify\(profile\) !== savedProfileJson/);
+    assert.match(settings, /disabled=\{saving \|\| !profileDirty\}/);
     assert.doesNotMatch(settings, /patch\(\{ work_authorized:/);
     assert.doesNotMatch(settings, /patch\(\{ needs_sponsorship:/);
   });
