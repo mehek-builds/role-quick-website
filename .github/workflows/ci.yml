@@ -130,6 +130,9 @@ jobs:
       - name: Onboarding gaps spec
         run: npm run test:start-gaps
 
+      - name: Country eligibility onboarding and settings spec
+        run: npm run test:country-eligibility-flow
+
       - name: Onboarding and empty-state checklist spec
         run: npm run test:checklist-flow
 
@@ -158,6 +161,7 @@ jobs:
             test-results/click-path/
             test-results/start-base/
             test-results/start-gaps/
+            test-results/country-eligibility-flow/
             test-results/narrow-viewport/
           if-no-files-found: ignore
           retention-days: 7
