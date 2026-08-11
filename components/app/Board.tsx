@@ -55,8 +55,7 @@ function submissionLabel(status: string): string {
 export function Board({
   onOpen,
   onRevisit,
-  openableIds,
-  revisitableIds,
+  busyId,
 }: {
   onOpen?: (id: string) => void;
   /** Open the packet that was built for this card: the resume, the posting and every answer.
@@ -64,15 +63,22 @@ export function Board({
    *  working on this" and "show me what already went out" are different intentions and collapsing
    *  them means one of the two is unreachable. */
   onRevisit?: (id: string) => void;
-  /** Ids the parent can actually open. The board is unbounded relative to the 50-row history the
-   *  parent holds, so past 50 applications the older cards looked clickable and did nothing. */
-  openableIds?: ReadonlySet<string>;
-  /** Ids that have a packet to show. NOT the same set as openableIds: a packet can be openable in
-   *  the review flow while having no review to revisit, and the mark must be absent for those
-   *  rather than rendered and inert. Undefined means "same as openable", for callers that pass
-   *  onRevisit without the distinction. */
-  revisitableIds?: ReadonlySet<string>;
+  /** The card the parent is fetching a packet for right now, or null. The open handler may go to
+   *  the network, and a control that has begun working must say so rather than looking unpressed. */
+  busyId?: string | null;
 }) {
+  /* THERE IS NO ID GATE HERE ANY MORE, and its removal is the fix rather than a tidy-up.
+     openableIds and revisitableIds were sets the tracker built from the page of /resume/history it
+     had loaded, so a card outside that page rendered inert: styled, focusable, labelled, and dead
+     on click and on Enter. Measured on the owner account on 2026-08-10, 108 of 158 cards were in
+     that state, because history sent 50 rows while this board drew all 158 under its own bound of
+     200. The window was never a fact about the applications; it was a fact about one request.
+
+     card.reviewable is the honest predicate and it was always available. The backend computes it
+     as `spec->'_review' is not null`, which is exactly what the parent's revisitableIds tested,
+     except the card carries it for every application rather than for the ones that fit. The parent
+     now fetches the single packet on open, so a card the student can see is a card they can open,
+     whatever page it would have landed on. */
   const [cards, setCards] = useState<BoardCard[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [stages, setStages] = useState<Stage[]>([]);
@@ -119,11 +125,9 @@ export function Board({
     }
   }
 
-  const openable = (card: BoardCard) =>
-    card.reviewable && (openableIds === undefined || openableIds.has(card.id));
+  const openable = (card: BoardCard) => card.reviewable;
 
-  const revisitable = (card: BoardCard) =>
-    Boolean(onRevisit) && (revisitableIds === undefined ? openable(card) : revisitableIds.has(card.id));
+  const revisitable = (card: BoardCard) => Boolean(onRevisit) && openable(card);
 
   const visibleStages = activeBoardStages(stages);
   /* What the columns are not drawing, in a sentence, or null when they are drawing everything.
@@ -184,10 +188,15 @@ export function Board({
                     type="button"
                     onClick={() => openable(card) && onOpen?.(card.id)}
                     disabled={!openable(card)}
+                    /* Opening may go to the network for this one packet, so the press is announced
+                       rather than left looking unregistered. aria-busy and not a disabled button:
+                       disabling on press moves focus off the control a keyboard user just used. */
+                    aria-busy={busyId === card.id || undefined}
                     className="block w-full text-left disabled:cursor-default"
                   >
                     <p className="truncate text-[13px] font-medium text-ink">{card.role}</p>
                     <p className="truncate text-xs text-muted">{card.company}</p>
+                    {busyId === card.id && <p className="mt-0.5 text-[11px] text-muted">Opening...</p>}
                   </button>
                   {/* When it last moved, on every card. Without it a column is a set of names with
                       no sense of which is live and which has been sitting untouched for a month,

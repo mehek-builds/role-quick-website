@@ -225,6 +225,50 @@ export function normalizeInterviewPrep<T>(raw: unknown): T {
 }
 
 /**
+ * GET /resume/history.
+ *
+ * SUBJECT: `resumes`. The tracker maps over it, and it is the endpoint whose windowing this
+ * normalizer exists to make legible.
+ *
+ * SECONDARY, AND THE POINT OF THE PASS: `total` and `next_cursor`. The route used to send a bare
+ * 50 rows with nothing saying a window had been applied, so the ledger printed "50 of 50" over an
+ * account holding 158 applications while the board beside it counted all 158. A backend that has
+ * not deployed the paginated route yet sends neither field: `total` then falls back to the number
+ * of rows actually received, which is the only figure that response measured, and `next_cursor`
+ * falls back to null, which correctly means "nothing more to ask for". Neither default invents a
+ * number. An old backend keeps saying "50 of 50", and it is right to, because 50 is all it knows.
+ */
+export function normalizeResumeHistory<T>(raw: unknown): T {
+  const record = required("/resume/history", raw, { resumes: Array.isArray });
+  const resumes = collection<Record<string, unknown>>(record.resumes);
+  const reviewable = resumes.filter((row) => isRecord(row.spec) && (row.spec as Record<string, unknown>)._review != null);
+  return {
+    ...record,
+    resumes,
+    total: isFiniteNumber(record.total) ? record.total : resumes.length,
+    /* The ledger is a list of reviewable applications and its heading is a fraction over that
+       list, so `total` is the wrong denominator for it on any account still holding resumes saved
+       before they became applications. The fallback counts the reviewable rows actually received,
+       for the same reason the fallback above counts the rows received: it is what that response
+       measured. */
+    reviewable_total: isFiniteNumber(record.reviewable_total) ? record.reviewable_total : reviewable.length,
+    next_cursor: typeof record.next_cursor === "string" && record.next_cursor.length > 0 ? record.next_cursor : null,
+  } as T;
+}
+
+/**
+ * GET /resume/history/:id.
+ *
+ * SUBJECT: `resume`. Nothing here is secondary. This endpoint exists so a packet can be opened
+ * without the list having included it, and a response missing the packet cannot do that. Rejecting
+ * is what lets the caller say "we could not open that application" instead of leaving a deep link
+ * selecting nothing, which is the silence this whole change is about.
+ */
+export function normalizeResumeHistoryEntry<T>(raw: unknown): T {
+  return required("/resume/history/:id", raw, { resume: isRecord }) as T;
+}
+
+/**
  * POST /jd-match/requirements.
  *
  * SUBJECT: `clauses`. Everything the breakdown prints, including "N of M met", is derived from it

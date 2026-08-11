@@ -1,5 +1,5 @@
 import { api } from "@/lib/api";
-import type { ResumeSpec } from "@/lib/api";
+import type { GeneratedResume, ResumeSpec } from "@/lib/api";
 import type { JdMatchResponse } from "../domain/match-model";
 import { ACTIVE_BOARD_STAGES } from "../domain/board-stages";
 /* Every response below that a component MAPS OVER goes through response-shape.ts on the way out.
@@ -14,6 +14,8 @@ import {
   normalizeInterviewPrep,
   normalizeRequirements,
   normalizeResumeHealth,
+  normalizeResumeHistory,
+  normalizeResumeHistoryEntry,
   setPartialPayloadReporter,
 } from "./response-shape";
 import { track } from "@/lib/analytics";
@@ -168,6 +170,47 @@ export type FunnelSummary = {
 export async function fetchFunnel(): Promise<FunnelSummary> {
   const offset = -new Date().getTimezoneOffset(); // getTimezoneOffset is minutes WEST of UTC
   return normalizeFunnel(await api<unknown>(`/metrics/funnel?tz_offset=${offset}`));
+}
+
+// ---- the student's own application history ----
+
+export type ApplicationHistoryPage = {
+  resumes: GeneratedResume[];
+  /** Every row this student has, not the length of `resumes`. See normalizeResumeHistory. */
+  total: number;
+  /** Of those, the ones that became reviewable applications, which is what the ledger lists. */
+  reviewable_total: number;
+  /** Feed it back as `cursor` for the next page. Null means this was the last one. */
+  next_cursor: string | null;
+};
+
+/**
+ * GET /resume/history, one page at a time.
+ *
+ * The page size is the backend's default and is deliberately not passed from here. The tracker
+ * does not want a bigger number, it wants to stop treating the first page as the whole corpus:
+ * `total` tells it how much there is and `next_cursor` tells it how to ask for the rest. A limit
+ * chosen on the client would just be a second place for the same cliff to be re-cut.
+ */
+export async function fetchApplicationHistory(cursor?: string | null): Promise<ApplicationHistoryPage> {
+  const path = cursor ? `/resume/history?cursor=${encodeURIComponent(cursor)}` : "/resume/history";
+  return normalizeResumeHistory(await api<unknown>(path));
+}
+
+/**
+ * GET /resume/history/:id, one packet.
+ *
+ * WHY THE TRACKER NEEDS THIS. Opening an application used to require that the last history call
+ * had happened to include it, so a board card or a ?application=<id> link for anything past the
+ * window was inert: measured on the owner account on 2026-08-11, 108 of 158 applications. Whether
+ * a student can open their own application is a fact about the application, not about how recently
+ * they made it. Throws on 404 rather than resolving to null, so the caller has to say something.
+ */
+export async function fetchApplication(id: string): Promise<GeneratedResume> {
+  const { resume } = await normalizeResumeHistoryEntry<{ resume: GeneratedResume }>(
+    await api<unknown>(`/resume/history/${encodeURIComponent(id)}`),
+  );
+  return resume;
 }
 
 // ---- F5: the pipeline board ----
