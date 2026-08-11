@@ -328,6 +328,7 @@ const UNLINKED_BY_DESIGN = new Map([
   ["/qa/packet", "internal QA harness, must not be linked from a public surface"],
   ["/qa/packet/dashboard", "internal QA harness, must not be linked from a public surface"],
   ["/qa/waiting-on-you", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/exact-packet-pdf", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission/[board]/[case]", "internal QA harness, must not be linked from a public surface"],
   /* The 404 for a mistyped /dashboard address. Nothing can link to it by definition: it is reached
