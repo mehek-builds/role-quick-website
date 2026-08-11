@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   acknowledgePacketEvidence,
   packetQuestionsSnapshot,
+  reconcilePacketPdfVerification,
   reconcileUnacknowledgedPacketPoll,
   revalidateAcknowledgedPacketEvidence,
 } from "../features/applications/domain/packet-evidence-session.ts";
@@ -138,6 +139,41 @@ test("a stale poll branch cannot erase evidence acknowledged after that branch w
 
   assert.equal(pollRef.acknowledged, true);
   assert.equal(state, acknowledged, "the queued updater must preserve the exact state ACK already committed");
+});
+
+test("portal navigation preserves verified ACK while real PDF invalidation still clears it", () => {
+  let state = packetEvidence({ pdfVerified: false });
+  state = reconcilePacketPdfVerification(state, {
+    auditDigest: digest,
+    sha256: digest,
+    sizeBytes: 42,
+  });
+  assert.ok(state?.pdfVerified);
+  const acknowledged = acknowledgePacketEvidence(state, structuredClone(state));
+  assert.ok(acknowledged?.acknowledged);
+
+  // Review-to-portal navigation unmounts the viewer but publishes no verification event.
+  const afterPortalUnmount = acknowledged;
+  assert.equal(afterPortalUnmount.pdfVerified, true);
+  assert.equal(afterPortalUnmount.acknowledged, true);
+  assert.ok(revalidateAcknowledgedPacketEvidence(
+    afterPortalUnmount,
+    applicationId,
+    structuredClone(afterPortalUnmount.response),
+    456,
+  )?.acknowledged);
+
+  const changedBinding = reconcilePacketPdfVerification(afterPortalUnmount, {
+    auditDigest: digest,
+    sha256: otherDigest,
+    sizeBytes: 42,
+  });
+  assert.equal(changedBinding?.pdfVerified, false);
+  assert.equal(changedBinding?.acknowledged, false);
+
+  const failedVerification = reconcilePacketPdfVerification(afterPortalUnmount, null);
+  assert.equal(failedVerification?.pdfVerified, false);
+  assert.equal(failedVerification?.acknowledged, false);
 });
 
 test("an unacknowledged poll retains only the exact audit", () => {
