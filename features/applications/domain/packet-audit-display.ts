@@ -8,6 +8,7 @@ function isRecord(value: unknown): value is JsonRecord {
 
 function isEvidence(value: unknown): boolean {
   return isRecord(value)
+    && (value.source === "resume_spec" || value.source === "applicant_snapshot")
     && typeof value.path === "string"
     && value.path.length > 0
     && typeof value.quote === "string"
@@ -55,7 +56,9 @@ export function exactPacketAuditRanges(jdText: string, auditValue: unknown): Pac
     const start = clause.start as number;
     const end = clause.end as number;
     if (start < 0 || end <= start || end > jdText.length || jdText.slice(start, end) !== clause.text) return null;
-    if (clause.verdict === "covered" ? !isEvidence(clause.evidence) : clause.evidence !== undefined) return null;
+    if (clause.verdict === "covered"
+      ? !Array.isArray(clause.evidence) || clause.evidence.length === 0 || !clause.evidence.every(isEvidence)
+      : clause.evidence !== undefined) return null;
     clauseBounds.push({ start, end });
 
     for (const term of clause.highlight_terms) {
@@ -109,7 +112,17 @@ export function packetAuditIdentityMatches(currentValue: unknown, nextValue: unk
     || !isRecord(currentBindings.pdf) || !isRecord(nextBindings.pdf)) return false;
   const currentPdf = currentBindings.pdf;
   const nextPdf = nextBindings.pdf;
-  return typeof currentPdf.objectKey === "string"
+  return typeof currentBindings.resumeContactEmailSha256 === "string"
+    && /^[a-f0-9]{64}$/i.test(currentBindings.resumeContactEmailSha256)
+    && currentBindings.resumeContactEmailSha256 === nextBindings.resumeContactEmailSha256
+    && typeof currentBindings.applicantEmailSha256 === "string"
+    && /^[a-f0-9]{64}$/i.test(currentBindings.applicantEmailSha256)
+    && currentBindings.applicantEmailSha256 === nextBindings.applicantEmailSha256
+    && isRecord(currentValue.identities)
+    && isRecord(nextValue.identities)
+    && currentValue.identities.resume_email === nextValue.identities.resume_email
+    && currentValue.identities.applicant_email === nextValue.identities.applicant_email
+    && typeof currentPdf.objectKey === "string"
     && currentPdf.objectKey.length > 0
     && currentPdf.objectKey === nextPdf.objectKey
     && typeof currentPdf.sha256 === "string"
@@ -133,6 +146,8 @@ export function packetAuditResponseMatchesApplication(applicationId: string, res
   if (!isRecord(bindingValue)) return false;
   const bindings = bindingsValue;
   const binding = bindingValue;
+  const identities = audit.identities;
+  if (!isRecord(identities)) return false;
   const hashFields = [
     bindings.ownerSha256,
     bindings.jdSha256,
@@ -140,12 +155,20 @@ export function packetAuditResponseMatchesApplication(applicationId: string, res
     bindings.jobContextSha256,
     bindings.questionsSha256,
     bindings.applicantSnapshotSha256,
+    bindings.resumeContactEmailSha256,
+    bindings.applicantEmailSha256,
     audit.audit_digest,
     audit.packet_version,
     binding.sha256,
   ];
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return hashFields.every((value) => typeof value === "string" && /^[a-f0-9]{64}$/i.test(value))
     && bindings.applicationId === applicationId
+    && typeof identities.resume_email === "string"
+    && emailPattern.test(identities.resume_email)
+    && typeof identities.applicant_email === "string"
+    && emailPattern.test(identities.applicant_email)
+    && identities.resume_email.toLowerCase() !== identities.applicant_email.toLowerCase()
     && typeof binding.objectKey === "string"
     && binding.objectKey.length > 0
     && Number.isSafeInteger(binding.sizeBytes)
@@ -155,4 +178,53 @@ export function packetAuditResponseMatchesApplication(applicationId: string, res
     && pdf.size_bytes === binding.sizeBytes
     && typeof pdf.download_url === "string"
     && pdf.download_url.trim().length > 0;
+}
+
+export function manualTrialPacketEvidenceIsFresh(
+  applicationId: string,
+  value: unknown,
+  now = Date.now(),
+): boolean {
+  if (!isRecord(value)
+    || value.acknowledged !== true
+    || value.pdfVerified !== true
+    || !Number.isFinite(value.serverRevalidatedAt)) return false;
+  const age = now - (value.serverRevalidatedAt as number);
+  return age >= 0
+    && age < 5_000
+    && packetAuditResponseMatchesApplication(applicationId, value.response);
+}
+
+/** Accepts only the server-returned company URL bound to the exact packet already shown. */
+export function manualHandoffMatchesPacket(
+  responseValue: unknown,
+  expectedUrl: string,
+  packetResponseValue: unknown,
+): boolean {
+  if (!isRecord(responseValue)
+    || !isRecord(responseValue.manual_handoff)
+    || !isRecord(packetResponseValue)
+    || !isRecord(packetResponseValue.packet_audit)
+    || !isRecord(packetResponseValue.pdf)) return false;
+  const handoff = responseValue.manual_handoff;
+  const audit = packetResponseValue.packet_audit;
+  const pdf = packetResponseValue.pdf;
+  try {
+    const url = new URL(String(handoff.url));
+    if (url.protocol !== "https:" || url.username || url.password || url.toString() !== expectedUrl) return false;
+  } catch {
+    return false;
+  }
+  return typeof handoff.audit_digest === "string"
+    && /^[a-f0-9]{64}$/i.test(handoff.audit_digest)
+    && handoff.audit_digest === audit.audit_digest
+    && typeof handoff.packet_version === "string"
+    && /^[a-f0-9]{64}$/i.test(handoff.packet_version)
+    && handoff.packet_version === audit.packet_version
+    && typeof handoff.pdf_sha256 === "string"
+    && /^[a-f0-9]{64}$/i.test(handoff.pdf_sha256)
+    && handoff.pdf_sha256 === pdf.sha256
+    && Number.isSafeInteger(handoff.size_bytes)
+    && (handoff.size_bytes as number) > 0
+    && handoff.size_bytes === pdf.size_bytes;
 }

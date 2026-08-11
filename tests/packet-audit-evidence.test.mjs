@@ -16,7 +16,9 @@ test("the dashboard renders only exact server-owned JD ranges and clause evidenc
   assert.match(domain, /term\.tone === "missing" \? term\.evidence !== undefined : !isEvidence\(term\.evidence\)/);
   assert.match(domain, /jdText\.slice\(start, end\) !== clause\.text/);
   assert.match(source, /<TermMark[\s\S]*tone=\{range\.tone\}/);
-  assert.match(source, /Resume evidence: \{clause\.evidence\.quote\}/);
+  assert.match(domain, /Array\.isArray\(clause\.evidence\)/);
+  assert.match(source, /clause\.evidence\.map\(\(evidence\)/);
+  assert.match(source, /evidence\.source === "resume_spec" \? "Resume evidence" : "Profile evidence"/);
   assert.match(source, /PacketAuditBreakdown\(\{ jdText, audit \}/);
   assert.match(source, /if \(!packetAuditDisplayIsExact\(jdText, audit\)\)/);
 });
@@ -45,6 +47,10 @@ test("the browser binds the audit to this application and exact stored PDF", asy
   assert.match(domain, /pdf\.size_bytes === binding\.sizeBytes/);
   assert.match(domain, /bindings\.ownerSha256/);
   assert.match(domain, /bindings\.applicantSnapshotSha256/);
+  assert.match(domain, /bindings\.resumeContactEmailSha256/);
+  assert.match(domain, /bindings\.applicantEmailSha256/);
+  assert.match(domain, /identities\.resume_email/);
+  assert.match(domain, /identities\.applicant_email/);
   assert.match(domain, /audit\.packet_version/);
   assert.match(domain, /audit\.audit_digest/);
   assert.match(domain, /typeof pdf\.download_url === "string"/);

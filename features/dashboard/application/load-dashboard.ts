@@ -14,7 +14,7 @@ export type DashboardInitialState = {
   jobs: MonitoredJob[];
   targeting: Targeting;
   profile: Partial<ParsedProfile>;
-  identity: { full_name?: string; email?: string };
+  identity: { full_name?: string; email?: string; resume_email?: string };
   applicationProfile: ApplicationProfile;
   packets: GeneratedResume[];
   outreach: OutreachEvent[];
@@ -52,6 +52,7 @@ export function dashboardStateFromBootstrap(bootstrap: DashboardBootstrap): Dash
     identity: {
       full_name: "full_name" in profile ? profile.full_name : undefined,
       email: bootstrap.me.email ?? undefined,
+      resume_email: "resume_email" in profile ? profile.resume_email : undefined,
     },
     applicationProfile: bootstrap.application_profile ?? {},
     packets: Array.isArray(bootstrap.resume_history?.resumes) ? bootstrap.resume_history.resumes : [],

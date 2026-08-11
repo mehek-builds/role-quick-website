@@ -40,6 +40,7 @@ export type RankedJob = MonitoredJob & {
 export type ProfileIdentity = {
   full_name?: string;
   email?: string;
+  resume_email?: string;
   school?: string;
   degree?: string;
   grad_date?: string;
@@ -232,8 +233,9 @@ export function resumeGenerationBody(
   job: MonitoredJob,
   identity: ProfileIdentity,
   applicationProfile: ApplicationProfile,
-  storedEmail: string | null,
 ) {
+  const resumeEmail = identity.resume_email?.trim();
+  if (!resumeEmail) throw new Error("Add the personal email that should appear on your resume before preparing an application.");
   return {
     company: job.company_name,
     role: job.title,
@@ -263,7 +265,7 @@ export function resumeGenerationBody(
     },
     contact: {
       full_name: identity.full_name?.trim(),
-      email: identity.email?.trim() || storedEmail,
+      email: resumeEmail,
       phone: applicationProfile.phone || undefined,
       linkedin_url: applicationProfile.linkedin_url || undefined,
       github_url: applicationProfile.github_url || undefined,

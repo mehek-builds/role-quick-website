@@ -575,6 +575,7 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
       <ParsedProfileEditor
         name={name ?? ""}
         email={str("email") ?? ""}
+        resumeEmail={str("resume_email") ?? ""}
         phone={str("phone") ?? ""}
         school={str("school") ?? ""}
         degree={str("degree") ?? ""}
@@ -611,6 +612,7 @@ function KV({ label, value }: { label: string; value: string }) {
 
 type ParsedProfileDraft = {
   full_name: string;
+  resume_email: string;
   phone: string;
   school: string;
   degree: string;
@@ -625,6 +627,7 @@ type ParsedProfileDraft = {
 function ParsedProfileEditor({
   name,
   email,
+  resumeEmail,
   phone,
   school,
   degree,
@@ -638,6 +641,7 @@ function ParsedProfileEditor({
 }: {
   name: string;
   email: string;
+  resumeEmail: string;
   phone: string;
   school: string;
   degree: string;
@@ -652,6 +656,7 @@ function ParsedProfileEditor({
   const [editing, setEditing] = useState(false);
   const initialDraft = (): ParsedProfileDraft => ({
     full_name: name,
+    resume_email: resumeEmail,
     phone,
     school,
     degree,
@@ -677,6 +682,10 @@ function ParsedProfileEditor({
       setError("Name cannot be empty. Autofill has no fallback for it.");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.resume_email.trim())) {
+      setError("Add the personal email that should appear on your resume.");
+      return;
+    }
     if (school && !draft.school.trim()) {
       setError("School cannot be empty. You can replace a parsed school, but not erase it.");
       return;
@@ -694,6 +703,7 @@ function ParsedProfileEditor({
         method: "PATCH",
         body: JSON.stringify({
           full_name: draft.full_name,
+          resume_email: draft.resume_email,
           phone: draft.phone,
           ...(draft.school.trim() || school ? { school: draft.school } : {}),
           degree: draft.degree,
@@ -732,7 +742,7 @@ function ParsedProfileEditor({
         </div>
         <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {name && <KV label="Name" value={name} />}
-          {email && <KV label="Email" value={email} />}
+          {resumeEmail && <KV label="Resume email" value={resumeEmail} />}
           {phone && <KV label="Phone" value={phone} />}
         </div>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -756,13 +766,14 @@ function ParsedProfileEditor({
     <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="rounded-inner border border-border bg-surface-alt p-4">
       <div>
         <p className="text-sm font-medium text-ink">Review parsed details</p>
-        <p className="mt-1 text-xs text-muted">Correct what the PDF reader got wrong. Your login email stays unchanged.</p>
+        <p className="mt-1 text-xs text-muted">Correct what the PDF reader got wrong. Your resume email is separate from the Litos address used inside application portals.</p>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Name" value={draft.full_name} onChange={(full_name) => setDraft({ ...draft, full_name })} placeholder="Your full name" />
+        <Field label="Resume email" value={draft.resume_email} onChange={(resume_email) => setDraft({ ...draft, resume_email })} placeholder="you@school.edu" />
         <Field label="Phone" value={draft.phone} onChange={(phone) => setDraft({ ...draft, phone })} placeholder="Optional" />
       </div>
-      {email && <p className="mt-2 text-xs text-muted">Login email: {email}</p>}
+      {email && <p className="mt-2 text-xs text-muted">Litos login email: {email}</p>}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="School" value={draft.school} onChange={(nextSchool) => setDraft({ ...draft, school: nextSchool })} placeholder="University of Southern California" />
         <Field label="Degree" value={draft.degree} onChange={(nextDegree) => setDraft({ ...draft, degree: nextDegree })} placeholder="Bachelor of Science in Computer Science" />

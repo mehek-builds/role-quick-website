@@ -63,9 +63,18 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
   assert.match(dashboard, /Open exact company form/);
   assert.match(dashboard, /Manual dashboard trial/);
-  assert.match(dashboard, /Use this exact frozen resume and application email/);
-  assert.match(dashboard, /review\.applicant_email\?\.address/);
-  assert.match(dashboard, /href=\{attendedHandoffUrl\}[\s\S]{0,200}Open manually/);
+  assert.match(dashboard, /Use this exact frozen resume and the separate Litos routing email/);
+  assert.match(dashboard, /Portal routing email:/);
+  assert.match(dashboard, /manualTrialPacket\.packet_audit\.identities\.applicant_email/);
+  assert.doesNotMatch(dashboard, /Portal routing email:[\s\S]{0,120}review\.applicant_email\?\.address/);
+  assert.match(dashboard, /openManualAttendedHandoff\(\)[\s\S]{0,1800}\/submission\/manual-handoff/);
+  assert.match(dashboard, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);
+  assert.match(dashboard, /companyTab\.location\.replace\(handoff\.url\)/);
+  const manualHandoff = dashboard.slice(
+    dashboard.indexOf("async function openManualAttendedHandoff()"),
+    dashboard.indexOf("/* A wait that ends.", dashboard.indexOf("async function openManualAttendedHandoff()")),
+  );
+  assert.doesNotMatch(manualHandoff, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);

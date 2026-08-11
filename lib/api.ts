@@ -515,6 +515,7 @@ export type PostingPrescript = {
 };
 
 export type PacketAuditEvidence = {
+  source: "resume_spec" | "applicant_snapshot";
   path: string;
   sha256: string;
   quote: string;
@@ -525,7 +526,7 @@ export type PacketAuditClause = {
   start: number;
   end: number;
   verdict: "covered" | "missing" | "unscoreable";
-  evidence?: PacketAuditEvidence;
+  evidence?: PacketAuditEvidence[];
   highlight_terms: PacketAuditHighlightTerm[];
 };
 
@@ -558,7 +559,13 @@ export type PacketAudit = {
     jobContextSha256: string;
     questionsSha256: string;
     applicantSnapshotSha256: string;
+    resumeContactEmailSha256: string;
+    applicantEmailSha256: string;
     pdf: { objectKey: string; sha256: string; sizeBytes: number };
+  };
+  identities: {
+    resume_email: string;
+    applicant_email: string;
   };
   clauses: PacketAuditClause[];
   editedTerms: string[];
@@ -576,6 +583,16 @@ export type PacketAuditResponse = {
     sha256: string;
     size_bytes: number;
     download_url: string;
+  };
+};
+
+export type ManualHandoffResponse = {
+  manual_handoff: {
+    url: string;
+    audit_digest: string;
+    packet_version: string;
+    pdf_sha256: string;
+    size_bytes: number;
   };
 };
 
@@ -846,6 +863,7 @@ export type CountryWorkEligibility = {
 
 export type ParsedProfile = {
   full_name: string;
+  resume_email?: string;
   experience: { company: string; title: string; start: string; end: string; description: string }[];
   skills: string[];
   /* Spoken languages the resume printed. Separate from skills because the parser used to have

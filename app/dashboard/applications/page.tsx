@@ -7,7 +7,6 @@ import {
   api,
   ApiError,
   getPostingQuestions,
-  getStoredEmail,
   getToken,
   isGuestSession,
   type ApplicationQuestion,
@@ -18,6 +17,7 @@ import {
   type JobsPage,
   type MonitoredJob,
   type PacketAuditResponse,
+  type ManualHandoffResponse,
   type ResumeSpec,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
@@ -58,7 +58,7 @@ import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
-import { AuditedJobDescription, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
+import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
 import { packetAuditAcknowledgementAccepted, packetAuditIdentityMatches } from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
@@ -77,10 +77,12 @@ type PacketEvidenceSession = {
   questionsJson: string;
   pdfVerified: boolean;
   acknowledged: boolean;
+  serverRevalidatedAt: number | null;
 };
 type ProfileIdentity = {
   full_name?: string;
   email?: string;
+  resume_email?: string;
   school?: string;
   degree?: string;
   grad_date?: string;
@@ -177,6 +179,7 @@ function Applications() {
   /* One browser proof for one immutable server audit. Application ID alone is not enough: a resume,
      answer, PDF, or JD mutation must make the proof unusable even when the row ID stays the same. */
   const [packetEvidence, setPacketEvidence] = useState<PacketEvidenceSession | null>(null);
+  const packetEvidenceRef = useRef<PacketEvidenceSession | null>(null);
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   /* Which question the answers screen should open on, set by the Your turn row that was pressed.
@@ -388,6 +391,10 @@ function Applications() {
     submissionRef.current = submission;
   }, [submission]);
 
+  useEffect(() => {
+    packetEvidenceRef.current = packetEvidence;
+  }, [packetEvidence]);
+
   const captureCompletedSubmission = useCallback((result: SubmissionResponse, source: string) => {
     if (result.review.status !== "submitted" || capturedSubmissionIds.current.has(result.application_id)) return;
     capturedSubmissionIds.current.add(result.application_id);
@@ -499,13 +506,33 @@ function Applications() {
     ) return;
 
     captureCompletedSubmission(result, "poll");
-    setPacketEvidence((current) => (
-      current
-      && current.applicationId === requestedId
-      && packetAuditIdentityMatches(current.response.packet_audit, result.review.packet_audit)
-        ? current
-        : null
-    ));
+    const currentEvidence = packetEvidenceRef.current;
+    if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged) {
+      try {
+        const currentAudit = await api<PacketAuditResponse>(`/applications/${requestedId}/packet-audit`, { method: "POST" });
+        if (selectedIdRef.current !== requestedId
+          || !packetAuditIdentityMatches(currentEvidence.response.packet_audit, currentAudit.packet_audit)
+          || !packetAuditResponseMatchesApplication(requestedId, currentAudit)) {
+          packetEvidenceRef.current = null;
+          setPacketEvidence(null);
+        } else {
+          const refreshed = { ...currentEvidence, response: currentAudit, serverRevalidatedAt: Date.now() };
+          packetEvidenceRef.current = refreshed;
+          setPacketEvidence(refreshed);
+        }
+      } catch {
+        packetEvidenceRef.current = null;
+        setPacketEvidence(null);
+      }
+    } else {
+      setPacketEvidence((current) => (
+        current
+        && current.applicationId === requestedId
+        && packetAuditIdentityMatches(current.response.packet_audit, result.review.packet_audit)
+          ? { ...current, serverRevalidatedAt: null }
+          : null
+      ));
+    }
     /* NOT a bare `review.updated_at` comparison: that versions the review alone, and this response
        also carries cover_letter, handoff_url and configured. See submission-state.ts. */
     setSubmission((current) => nextSubmissionState(current, result));
@@ -919,6 +946,11 @@ function Applications() {
     && activePacketEvidence.questionsJson === JSON.stringify(questions),
   );
   const packetEvidenceReviewed = Boolean(packetEvidenceReady && activePacketEvidence?.acknowledged);
+  const manualTrialEvidence = selected
+    && activePacketEvidence
+    && manualTrialPacketEvidenceIsFresh(selected.id, activePacketEvidence)
+    ? activePacketEvidence
+    : null;
   const authoritativeMissingCount = activePacketEvidence && auditedDisplayReady
     ? activePacketEvidence.response.packet_audit.clauses.filter((clause) => clause.verdict === "missing").length
     : !activePacketEvidence && matchResult?.scorable ? matchResult.missing.length : null;
@@ -1082,6 +1114,8 @@ function Applications() {
       ]);
       const fullName = identity.full_name?.trim();
       if (!fullName) throw new Error("Your main resume is missing your name. Replace it on the Resume page first.");
+      const resumeEmail = identity.resume_email?.trim();
+      if (!resumeEmail) throw new Error("Add the personal email that should appear on your resume before generating this application.");
 
       const generated = await api<ResumeGenerationResponse>("/resume/generate", {
         method: "POST",
@@ -1107,7 +1141,7 @@ function Applications() {
           },
           contact: {
             full_name: fullName,
-            email: identity.email?.trim() || getStoredEmail(),
+            email: resumeEmail,
             phone: applicationProfile.phone || undefined,
             linkedin_url: applicationProfile.linkedin_url || undefined,
             github_url: applicationProfile.github_url || undefined,
@@ -1310,6 +1344,7 @@ function Applications() {
         questionsJson: JSON.stringify(questions),
         pdfVerified: false,
         acknowledged: false,
+        serverRevalidatedAt: null,
       });
       setNotice("The exact saved packet passed the server audit. Read the requirement evidence while the PDF loads.");
     } catch (reason) {
@@ -1949,6 +1984,7 @@ function Applications() {
           packet={selected}
           submission={selectedSubmission}
           packetEvidenceReviewed={packetEvidenceReviewed}
+          manualTrialPacket={manualTrialEvidence?.response ?? null}
           approving={approvingId === selected.id}
           securityCodeSubmitting={securityCodeId === selected.id}
           securityCodeError={securityCodeError}
@@ -2753,7 +2789,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -2813,6 +2849,40 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, approvin
       companyTab.close();
       setAttendedHandoffState("failed");
       setAttendedHandoffError("Chrome could not open the exact saved company form. Nothing was submitted.");
+    }
+  }
+
+  async function openManualAttendedHandoff() {
+    if (!attendedHandoffUrl || !manualTrialPacket || attendedHandoffState === "preparing") return;
+    const companyTab = window.open("about:blank", "_blank");
+    if (!companyTab) {
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
+      return;
+    }
+    try {
+      companyTab.opener = null;
+      companyTab.document.body.textContent = "Litos is rechecking the exact packet and routing email.";
+    } catch {
+      companyTab.close();
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError("Litos could not prepare a safe company tab. Nothing was opened.");
+      return;
+    }
+    setAttendedHandoffState("preparing");
+    setAttendedHandoffError(null);
+    try {
+      const current = await api<ManualHandoffResponse>(`/applications/${submission.application_id}/submission/manual-handoff`, { method: "POST" });
+      const handoff = current.manual_handoff;
+      if (!manualHandoffMatchesPacket(current, attendedHandoffUrl, manualTrialPacket)) {
+        throw new Error("The saved packet, routing email, or company form changed. Review the exact packet again before opening the company form.");
+      }
+      companyTab.location.replace(handoff.url);
+      setAttendedHandoffState("idle");
+    } catch (reason) {
+      companyTab.close();
+      setAttendedHandoffState("failed");
+      setAttendedHandoffError(reason instanceof Error ? reason.message : "Litos could not revalidate this exact packet. Nothing was opened.");
     }
   }
   /* A wait that ends. "Loading cover letter." used to be the ONLY thing this screen said about a
@@ -3005,17 +3075,20 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, approvin
             <p className="mt-1 text-xs leading-5 text-muted">
               Litos will verify this account, bind the exact saved packet to the company&rsquo;s one-click form, and refill it before you review and submit.
             </p>
-            {packet.download_url && packet.download_url !== "#" && (
+            {manualTrialPacket && (
               <div className="mt-3 rounded-inner border border-border bg-surface px-3 py-3 text-xs leading-5 text-muted">
                 <p className="font-medium text-ink">Manual dashboard trial</p>
-                <p className="mt-1">Use this exact frozen resume and application email if the published extension is still waiting for store approval.</p>
+                <p className="mt-1">Use this exact frozen resume and the separate Litos routing email if the published extension is still waiting for store approval. The PDF keeps your personal resume email.</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
-                  <a href={packet.download_url} target="_blank" rel="noreferrer" className="font-medium text-brand-ink underline-offset-2 hover:underline">
+                  <a href={manualTrialPacket.pdf.download_url} target="_blank" rel="noreferrer" className="font-medium text-brand-ink underline-offset-2 hover:underline">
                     Open exact PDF
                   </a>
-                  {review.applicant_email?.address && (
-                    <span className="font-mono text-[11px] text-ink">{review.applicant_email.address}</span>
-                  )}
+                  <span className="text-[11px] text-ink">
+                    Resume email: <span className="font-mono">{manualTrialPacket.packet_audit.identities.resume_email}</span>
+                  </span>
+                  <span className="text-[11px] text-ink">
+                    Portal routing email: <span className="font-mono">{manualTrialPacket.packet_audit.identities.applicant_email}</span>
+                  </span>
                 </div>
               </div>
             )}
@@ -3036,10 +3109,10 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, approvin
               <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>
                 {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
               </Button>
-              {packet.download_url && packet.download_url !== "#" && (
-                <ButtonLink href={attendedHandoffUrl} target="_blank" rel="noreferrer" variant="secondary">
-                  Open manually
-                </ButtonLink>
+              {manualTrialPacket && (
+                <Button onClick={() => void openManualAttendedHandoff()} disabled={attendedHandoffState === "preparing"} variant="secondary">
+                  {attendedHandoffState === "preparing" ? "Rechecking packet..." : "Open manually"}
+                </Button>
               )}
             </>
           )}

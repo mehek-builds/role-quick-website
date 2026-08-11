@@ -165,7 +165,8 @@ describe("daily match preparation", () => {
 describe("resumeGenerationBody", () => {
   const identity = {
     full_name: "Alex Rivera",
-    email: "alex@example.com",
+    email: "alex-login@example.com",
+    resume_email: "alex@usc.edu",
     school: "University of Southern California, Viterbi School of Engineering",
     degree: "Bachelor of Science in Computer Science",
     grad_date: "May 2028",
@@ -181,12 +182,12 @@ describe("resumeGenerationBody", () => {
      missing almost everywhere, and the "Applied" badge falls back to company+role for nearly every
      application, which is the sibling bug this whole change exists to remove. */
   test("records the posting id, so the Applied badge can be exact", () => {
-    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile);
     assert.equal(body.job_id, jobs[0].id);
   });
 
   test("sends profile education for every generated resume path", () => {
-    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile);
     assert.deepEqual(body.profile_education, {
       school: "University of Southern California, Viterbi School of Engineering",
       degree: "Bachelor of Science in Computer Science",
@@ -199,12 +200,23 @@ describe("resumeGenerationBody", () => {
   });
 
   test("still sends everything the generate route needs", () => {
-    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, null);
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile);
     assert.equal(body.company, jobs[0].company_name);
     assert.equal(body.role, jobs[0].title);
     assert.equal(body.jd_text, jobs[0].description);
     assert.equal(body.application.portal_url, jobs[0].apply_url);
     assert.equal(body.contact.full_name, "Alex Rivera");
+    assert.equal(body.contact.email, "alex@usc.edu");
+    assert.notEqual(body.contact.email, identity.email);
+  });
+
+  test("refuses to build a request when the personal resume email is absent", () => {
+    const missing = { ...identity };
+    delete missing.resume_email;
+    assert.throws(
+      () => resumeGenerationBody(jobs[0], missing, applicationProfile),
+      /personal email that should appear on your resume/,
+    );
   });
 });
 
