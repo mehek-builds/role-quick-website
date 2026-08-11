@@ -15,6 +15,7 @@ import {
   uploadResume,
 } from "@/lib/api";
 import { STORE_URL } from "@/lib/config";
+import { TEST_TYPE_OPTIONS, chooseTestType } from "@/features/onboarding";
 import {
   ROLE_TYPES,
   defaultBackup,
@@ -680,9 +681,9 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
   act_score: { label: "ACT score", placeholder: "34" },
 };
 
-/* The one closed list on this screen. Free text would let "sat" or "None yet" reach a column the
-   resolver reads as a literal answer, and the backend enum would 400 the whole save on it. */
-const TEST_TYPE_OPTIONS = ["SAT", "ACT", "Both", "None"] as const;
+/* The closed list and the reducer that clears scores when the test changes both live in
+   features/onboarding/domain/test-scores.ts, so the state machine can be driven by a test rather
+   than described by a regex. See that file for the contradiction it exists to prevent. */
 
 export function GapsStep({
   gaps,
@@ -813,7 +814,7 @@ export function GapsStep({
             <select
               id="gap-standardized_test_type"
               value={values.standardized_test_type ?? ""}
-              onChange={(e) => setValues((v) => ({ ...v, standardized_test_type: e.target.value }))}
+              onChange={(e) => setValues((v) => chooseTestType(v, e.target.value))}
               aria-label={GAP_LABEL.standardized_test_type.label}
               className="min-h-11 w-full rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             >

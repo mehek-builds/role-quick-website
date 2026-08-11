@@ -103,8 +103,27 @@ describe("the score and the test it belongs to travel together", () => {
     assert.match(RAW, /values\.standardized_test_type === "ACT" \|\| values\.standardized_test_type === "Both"/);
   });
 
+  /* The closed list lives with the reducer in the domain module, so the screen and the state
+     machine cannot disagree about what the options are. Free text would let "sat" or "None yet"
+     reach a column the resolver reads as a literal answer. */
   test("the test type is a closed list matching the backend enum", () => {
-    assert.match(RAW, /TEST_TYPE_OPTIONS = \["SAT", "ACT", "Both", "None"\]/);
+    const domain = readFileSync("features/onboarding/domain/test-scores.ts", "utf8");
+    assert.match(domain, /TEST_TYPE_OPTIONS = \["SAT", "ACT", "Both", "None"\]/);
+    assert.match(STEP, /TEST_TYPE_OPTIONS\.map/);
+  });
+});
+
+/* The select must go through the reducer that clears stale scores, not through a bare additive
+   spread. The reducer's own behaviour is driven end to end in
+   features/onboarding/domain/test-scores.test.mts; this only pins that the screen uses it, which is
+   the wiring a regex can legitimately check. */
+describe("the test-type select clears scores that no longer apply", () => {
+  test("the select goes through chooseTestType", () => {
+    assert.match(STEP, /onChange=\{\(e\) => setValues\(\(v\) => chooseTestType\(v, e\.target\.value\)\)\}/);
+  });
+
+  test("no additive spread is left on the test-type select", () => {
+    assert.doesNotMatch(STEP, /standardized_test_type: e\.target\.value/);
   });
 });
 
