@@ -192,6 +192,12 @@ function Applications() {
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
   const selectedIdRef = useRef<string | null>(null);
+  /* A packet id cannot identify the editor state. The applicant can edit packet A while A's save
+     is in flight, or switch A -> B -> A before the response returns. In both cases the selected id
+     is A again, but installing that response would erase newer work. Increment this synchronously
+     for every selection and local resume mutation so an awaited save can prove it still owns the
+     exact editor generation it sent. */
+  const editorRevisionRef = useRef(0);
   /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
      poll callback does not have to re-subscribe on every submission update. */
   const submissionRef = useRef<SubmissionResponse | null>(null);
@@ -205,6 +211,10 @@ function Applications() {
   const [packetEvidence, setPacketEvidence] = useState<PacketEvidenceSession | null>(null);
   const packetEvidenceRef = useRef<PacketEvidenceSession | null>(null);
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
+  const editResumeSpec = useCallback((next: ResumeSpec) => {
+    editorRevisionRef.current += 1;
+    setSpec(next);
+  }, []);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   /* Which question the answers screen should open on, set by the Your turn row that was pressed.
      Null for "Check the answers", which is a request to read the whole list. The token is what
@@ -482,6 +492,7 @@ function Applications() {
    * what happened so the UI can report it and offer an undo.
    */
   const acceptBankVariant = useCallback((org: string, variant: string) => {
+    editorRevisionRef.current += 1;
     setSpec((current) => {
       if (!current) return current;
       const { spec: next, outcome } = applyBankVariant(current, { org, variant });
@@ -491,6 +502,7 @@ function Applications() {
   }, []);
 
   const undoLastApply = useCallback(() => {
+    editorRevisionRef.current += 1;
     setLastApply((last) => {
       if (last) setSpec(last.previous);
       return null;
@@ -501,6 +513,7 @@ function Applications() {
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
+    editorRevisionRef.current += 1;
     setSelectedId(packet.id);
     // Highlighting is per (resume, posting). Carrying the previous packet's result over marks the
     // new JD against a resume and a posting that are no longer on screen.
@@ -1312,11 +1325,11 @@ function Applications() {
 
   async function saveCoverLetter(): Promise<boolean> {
     if (!selected) return false;
+    const applicationId = selected.id;
     setCoverLetterBusy(true);
     setError(null);
     try {
       if (!qaMode) {
-        const applicationId = selected.id;
         if (!coverLetterBody.trim()) {
           if (selected.spec._cover_letter) {
             await api(`/applications/${applicationId}/cover-letter`, { method: "DELETE" });
@@ -1325,11 +1338,13 @@ function Applications() {
               : packet) ?? current);
             applyCoverLetterToSubmission(applicationId, null);
             if (selectedIdRef.current === applicationId) setCoverLetterDownloadUrl(null);
-            setNotice("Cover letter removed from this application.");
+            if (selectedIdRef.current === applicationId) {
+              setNotice("Cover letter removed from this application.");
+            }
           }
           return true;
         }
-        const result = await api<CoverLetterResponse>(`/applications/${selected.id}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
+        const result = await api<CoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
         applyCoverLetterToSubmission(applicationId, result.cover_letter);
         if (selectedIdRef.current === applicationId) {
@@ -1337,10 +1352,14 @@ function Applications() {
           setCoverLetterDownloadUrl(result.download_url);
         }
       }
-      setNotice("Cover letter saved. Every line checks out against your real work.");
+      if (selectedIdRef.current === applicationId) {
+        setNotice("Cover letter saved. Every line checks out against your real work.");
+      }
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
+      if (selectedIdRef.current === applicationId) {
+        setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
+      }
       return false;
     } finally {
       setCoverLetterBusy(false);
@@ -1348,6 +1367,7 @@ function Applications() {
   }
 
   function patchEntry(index: number, patch: Partial<ResumeSpec["experience"][number]>) {
+    editorRevisionRef.current += 1;
     setSpec((current) =>
       current
         ? { ...current, experience: current.experience.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)) }
@@ -1355,27 +1375,45 @@ function Applications() {
     );
   }
 
-  async function saveResume(): Promise<boolean> {
-    if (!selected || !spec) return false;
+  async function saveResume(): Promise<{ spec: ResumeSpec; review: ApplicationReview } | null> {
+    if (!selected || !spec) return null;
+    const applicationId = selected.id;
+    const editorRevision = editorRevisionRef.current;
     setSaving(true);
     setError(null);
     try {
       if (!qaMode) {
         const updated = await api<{ spec: GeneratedResume["spec"]; download_url: string }>(
-          `/applications/${selected.id}/resume`,
+          `/applications/${applicationId}/resume`,
           { method: "PATCH", body: JSON.stringify({ spec }) },
         );
         setPackets((current) =>
           current?.map((packet) =>
-            packet.id === selected.id ? { ...packet, spec: updated.spec, download_url: updated.download_url } : packet,
+            packet.id === applicationId ? { ...packet, spec: updated.spec, download_url: updated.download_url } : packet,
           ) ?? current,
         );
+        /* The server response is the saved resume, including any canonical pruning or ordering it
+           applied before regenerating the PDF. Auditing the request copy after installing the
+           response into `packets` makes the dashboard compare two different JSON shapes and report
+           its own save as an unsaved edit. Adopt the canonical editable shape only while this is
+           still the selected application. A late save for packet A may update A in the list, but
+           it must never replace the editor after the applicant has switched to packet B. */
+        const savedSpec = stripMetadata(updated.spec);
+        const savedReview = updated.spec._review ? reviewWithLists(updated.spec._review) : null;
+        if (!savedReview) throw new Error("The saved resume response is missing its canonical application review.");
+        if (selectedIdRef.current !== applicationId || editorRevisionRef.current !== editorRevision) return null;
+        setSpec(savedSpec);
+        setNotice("Resume saved and rechecked.");
+        return { spec: savedSpec, review: savedReview };
       }
+      if (!selected.spec._review) return null;
       setNotice("Resume saved and rechecked.");
-      return true;
+      return { spec, review: reviewWithLists(selected.spec._review) };
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
-      return false;
+      if (selectedIdRef.current === applicationId) {
+        setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
+      }
+      return null;
     } finally {
       setSaving(false);
     }
@@ -1387,9 +1425,18 @@ function Applications() {
       return;
     }
     if (!selected || !spec || !review) return;
-    const alreadyFilled = review.status === "ready_for_final_approval";
-    if (!alreadyFilled && !(await saveResume())) return;
+    const applicationId = selected.id;
+    /* Workflow status does not say whether the editor is dirty. A ready packet can be edited, and
+       auditing that edit without saving would ask the server to audit its older PDF forever. A
+       fresh packet with no edits needs no no-op PATCH. The exact local-vs-saved comparison is the
+       only fact that decides whether a new PDF must be generated. */
+    const savedResume = packetDraftChanged ? await saveResume() : { spec, review };
+    if (!savedResume || selectedIdRef.current !== applicationId) return;
+    const auditedSpec = savedResume.spec;
+    const canonicalReview = savedResume.review;
+    const alreadyFilled = canonicalReview.status === "ready_for_final_approval";
     if (!alreadyFilled && !qaMode && !(await saveCoverLetter())) return;
+    if (selectedIdRef.current !== applicationId) return;
     const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
     if (missingRequiredAnswers.length > 0) {
       moveToScreen("questions");
@@ -1402,36 +1449,38 @@ function Applications() {
     setPacketAuditBusy(true);
     setError(null);
     try {
-      let savedReview = review;
-      if (["resume_ready", "questions_ready", "ready_to_submit"].includes(review.status)) {
-        const portalUrl = review.portal_url?.trim();
-        const atsName = review.ats_name?.trim() || portalName(portalUrl ?? "");
+      let savedReview = canonicalReview;
+      if (["resume_ready", "questions_ready", "ready_to_submit"].includes(canonicalReview.status)) {
+        const portalUrl = canonicalReview.portal_url?.trim();
+        const atsName = canonicalReview.ats_name?.trim() || portalName(portalUrl ?? "");
         if (!portalUrl || !atsName) throw new Error("The saved employer form identity is incomplete. Reload this packet before auditing it.");
-        const saved = await api<SubmissionResponse>(`/applications/${selected.id}/review`, {
+        const saved = await api<SubmissionResponse>(`/applications/${applicationId}/review`, {
           method: "PUT",
           body: JSON.stringify({
             ats_name: atsName,
             portal_url: portalUrl,
             questions,
-            skipped_reasons: review.skipped_reasons,
+            skipped_reasons: canonicalReview.skipped_reasons,
           }),
         });
         savedReview = saved.review;
-        setSubmission((current) => current?.application_id === selected.id ? { ...current, review: saved.review } : current);
-        setPackets((current) => current?.map((packet) => packet.id === selected.id
+        if (selectedIdRef.current !== applicationId) return;
+        setSubmission((current) => current?.application_id === applicationId ? { ...current, review: saved.review } : current);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId
           ? { ...packet, spec: { ...packet.spec, _review: saved.review } }
           : packet) ?? current);
       }
-      const response = await api<PacketAuditResponse>(`/applications/${selected.id}/packet-audit`, { method: "POST" });
+      const response = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
+      if (selectedIdRef.current !== applicationId) return;
       const auditedReview = { ...savedReview, packet_audit: response.packet_audit };
-      setPackets((current) => current?.map((packet) => packet.id === selected.id
+      setPackets((current) => current?.map((packet) => packet.id === applicationId
         ? { ...packet, download_url: response.pdf.download_url, spec: { ...packet.spec, _review: auditedReview } }
         : packet) ?? current);
-      setSubmission((current) => current?.application_id === selected.id ? { ...current, review: auditedReview } : current);
+      setSubmission((current) => current?.application_id === applicationId ? { ...current, review: auditedReview } : current);
       setPacketEvidence({
-        applicationId: selected.id,
+        applicationId,
         response,
-        specJson: JSON.stringify(spec),
+        specJson: JSON.stringify(auditedSpec),
         questionsSnapshot: currentQuestionsSnapshot,
         pdfVerified: false,
         acknowledged: false,
@@ -1439,6 +1488,7 @@ function Applications() {
       });
       setNotice("The exact saved packet passed the server audit. Read the requirement evidence while the PDF loads.");
     } catch (reason) {
+      if (selectedIdRef.current !== applicationId) return;
       setPacketEvidence(null);
       setError(reason instanceof Error ? reason.message : "Litos could not audit this exact packet.");
     } finally {
@@ -2230,7 +2280,7 @@ function Applications() {
                       name={contactName(selected.spec)}
                       contact={contactLine(selected.spec)}
                       editedTerms={editedTerms}
-                      onChange={setSpec}
+                      onChange={editResumeSpec}
                       onPatchEntry={patchEntry}
                     />
                   )}
