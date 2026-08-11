@@ -7,7 +7,9 @@ import {
   coverLetterGate,
   coverLetterIdentity,
   handoffWindowExpired,
+  nextCoverLetterValue,
   nextSubmissionState,
+  submissionCoverLetterField,
   type SubmissionSnapshot,
 } from "./submission-state.ts";
 
@@ -66,6 +68,23 @@ test("a cover letter that appears after the first poll is installed without the 
   const withoutLetter: SubmissionSnapshot = { ...fromServer, cover_letter: null };
   const withLetter: SubmissionSnapshot = { ...fromServer };
   assert.equal(nextSubmissionState(withoutLetter, withLetter), withLetter);
+});
+
+test("explicit null clears a stored cover letter while an omitted partial field preserves it", () => {
+  const removed: SubmissionSnapshot = { ...fromServer, cover_letter: null };
+  const omitted = {
+    application_id: fromServer.application_id,
+    review: { ...fromServer.review, updated_at: "2026-08-08T22:11:00.000Z" },
+    configured: fromServer.configured,
+  } satisfies SubmissionSnapshot;
+  const storedLetter = fromServer.cover_letter ?? undefined;
+
+  assert.deepEqual(submissionCoverLetterField(removed), { included: true, value: null });
+  assert.deepEqual(submissionCoverLetterField(omitted), { included: false });
+  assert.equal(nextCoverLetterValue(storedLetter, removed), undefined);
+  assert.equal(nextCoverLetterValue(storedLetter, omitted), storedLetter);
+  assert.equal(nextSubmissionState(fromServer, removed), removed);
+  assert.equal(nextSubmissionState(fromServer, omitted).cover_letter, fromServer.cover_letter);
 });
 
 test("a cover letter that is regenerated in place is installed", () => {

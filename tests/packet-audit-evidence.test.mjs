@@ -189,14 +189,20 @@ test("prepare and poll responses hydrate the generated cover letter into review 
   const prepare = source.slice(prepareStart, prepareEnd);
 
   assert.match(source, /function packetWithSubmission\(packet: GeneratedResume, submission: SubmissionResponse\)/);
-  assert.match(source, /submission\.cover_letter \? \{ _cover_letter: submission\.cover_letter \} : \{\}/);
-  assert.match(poll, /if \(result\.cover_letter\) setCoverLetterBody\(result\.cover_letter\.body\)/);
+  assert.match(source, /const nextCoverLetter = nextCoverLetterValue\(packet\.spec\._cover_letter, submission\)/);
+  assert.match(source, /_cover_letter: nextCoverLetter/);
+  assert.match(source, /coverLetterField\.included && !coverLetterField\.value[\s\S]{0,100}\? undefined/);
+  assert.match(poll, /const incomingCoverLetter = submissionCoverLetterField\(result\)/);
+  assert.match(poll, /setCoverLetterBody\(incomingCoverLetter\.value\?\.body \?\? ""\)/);
+  assert.match(poll, /if \(!incomingCoverLetter\.value\) setCoverLetterDownloadUrl\(null\)/);
   assert.match(poll, /packetWithSubmission\(packet, result\)/);
   assert.match(prepare, /packetWithSubmission\(packet, result\)/);
-  assert.match(prepare, /if \(result\.cover_letter\) setCoverLetterBody\(result\.cover_letter\.body\)/);
+  assert.match(prepare, /const incomingCoverLetter = submissionCoverLetterField\(result\)/);
+  assert.match(prepare, /setCoverLetterBody\(incomingCoverLetter\.value\?\.body \?\? ""\)/);
+  assert.match(prepare, /if \(!incomingCoverLetter\.value\) setCoverLetterDownloadUrl\(null\)/);
   assert.ok(
     prepare.indexOf("if (selectedIdRef.current !== applicationId) return")
-      < prepare.indexOf("if (result.cover_letter) setCoverLetterBody(result.cover_letter.body)"),
+      < prepare.indexOf("const incomingCoverLetter = submissionCoverLetterField(result)"),
     "a response for a packet the student left must not overwrite the current review editor",
   );
 });

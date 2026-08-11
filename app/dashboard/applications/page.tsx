@@ -27,7 +27,7 @@ import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnL
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, handoffWindowExpired, nextSubmissionState } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { nextMatchScoreRequest } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -84,14 +84,21 @@ function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boo
 
 function packetWithSubmission(packet: GeneratedResume, submission: SubmissionResponse): GeneratedResume {
   const reviewUnchanged = packet.spec._review?.updated_at === submission.review.updated_at;
-  const coverLetterUnchanged = !submission.cover_letter || sameCoverLetter(packet.spec._cover_letter, submission.cover_letter);
+  const coverLetterField = submissionCoverLetterField(submission);
+  const nextCoverLetter = nextCoverLetterValue(packet.spec._cover_letter, submission);
+  const coverLetterUnchanged = nextCoverLetter === undefined
+    ? packet.spec._cover_letter === undefined
+    : sameCoverLetter(packet.spec._cover_letter, nextCoverLetter);
   if (reviewUnchanged && coverLetterUnchanged) return packet;
   return {
     ...packet,
+    cover_letter_download_url: coverLetterField.included && !coverLetterField.value
+      ? undefined
+      : packet.cover_letter_download_url,
     spec: {
       ...packet.spec,
       _review: submission.review,
-      ...(submission.cover_letter ? { _cover_letter: submission.cover_letter } : {}),
+      _cover_letter: nextCoverLetter,
     },
   };
 }
@@ -577,7 +584,11 @@ function Applications() {
     } else {
       setPacketEvidence((current) => reconcileUnacknowledgedPacketPoll(current, requestedId, result.review.packet_audit));
     }
-    if (result.cover_letter) setCoverLetterBody(result.cover_letter.body);
+    const incomingCoverLetter = submissionCoverLetterField(result);
+    if (incomingCoverLetter.included) {
+      setCoverLetterBody(incomingCoverLetter.value?.body ?? "");
+      if (!incomingCoverLetter.value) setCoverLetterDownloadUrl(null);
+    }
     /* NOT a bare `review.updated_at` comparison: that versions the review alone, and this response
        also carries cover_letter, handoff_url and configured. See submission-state.ts. */
     setSubmission((current) => nextSubmissionState(current, result));
@@ -1519,7 +1530,11 @@ function Applications() {
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithSubmission(packet, result) : packet) ?? current);
         if (selectedIdRef.current !== applicationId) return;
-        if (result.cover_letter) setCoverLetterBody(result.cover_letter.body);
+        const incomingCoverLetter = submissionCoverLetterField(result);
+        if (incomingCoverLetter.included) {
+          setCoverLetterBody(incomingCoverLetter.value?.body ?? "");
+          if (!incomingCoverLetter.value) setCoverLetterDownloadUrl(null);
+        }
         setSubmission(result);
         // This response is the END of the run, not an acknowledgement of its start, and it is
         // routinely terminal ("failed", "needs_attention", "ready_for_final_approval"). It used to
