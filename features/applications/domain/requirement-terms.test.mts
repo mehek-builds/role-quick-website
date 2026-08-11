@@ -55,12 +55,14 @@ describe("segmentText", () => {
     assert.equal(out.map((s) => s.text).join(""), "We use Docker.");
   });
 
-  test("an edited term is marked only where no requirement claims the word", () => {
+  test("an edited term is green only when the posting also claims the word", () => {
     const out = segmentText("Shipped Docker services", idx(["docker"]), new Set(["docker", "shipped"]));
-    assert.deepEqual(marks(out), [
-      ["Shipped", "edited"],
-      ["Docker", "covered"],
-    ]);
+    assert.deepEqual(marks(out), [["Docker", "edited"]]);
+  });
+
+  test("edited provenance cannot create a colour without job-description evidence", () => {
+    const out = segmentText("Shipped deployment pipeline", idx([]), new Set(["shipped", "deployment", "pipeline"]));
+    assert.deepEqual(marks(out), []);
   });
 
   // --- regressions, both found by reading the rendered page rather than the tests.

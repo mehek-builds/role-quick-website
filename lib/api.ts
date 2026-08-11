@@ -514,12 +514,96 @@ export type PostingPrescript = {
   already_answered: number;
 };
 
+export type PacketAuditEvidence = {
+  source: "resume_spec" | "applicant_snapshot";
+  path: string;
+  sha256: string;
+  quote: string;
+};
+
+export type PacketAuditClause = {
+  text: string;
+  start: number;
+  end: number;
+  verdict: "covered" | "missing" | "unscoreable";
+  evidence?: PacketAuditEvidence[];
+  highlight_terms: PacketAuditHighlightTerm[];
+};
+
+export type PacketAuditTerm = {
+  text: string;
+  key: string;
+  start: number;
+  end: number;
+  clauseIndex: number;
+  evidence?: PacketAuditEvidence;
+};
+
+export type PacketAuditHighlightTerm = PacketAuditTerm & {
+  tone: "covered" | "missing" | "edited";
+};
+
+export type PacketAudit = {
+  version: "packet_audit_v1";
+  status: "passed";
+  complete: true;
+  degraded: false;
+  rejectedCount: 0;
+  packet_version: string;
+  audit_digest: string;
+  bindings: {
+    ownerSha256: string;
+    applicationId: string;
+    jdSha256: string;
+    specSha256: string;
+    jobContextSha256: string;
+    questionsSha256: string;
+    applicantSnapshotSha256: string;
+    resumeContactEmailSha256: string;
+    applicantEmailSha256: string;
+    pdf: { objectKey: string; sha256: string; sizeBytes: number };
+  };
+  identities: {
+    resume_email: string;
+    applicant_email: string;
+  };
+  clauses: PacketAuditClause[];
+  editedTerms: string[];
+  terms: {
+    covered: PacketAuditTerm[];
+    missing: PacketAuditTerm[];
+    edited: PacketAuditTerm[];
+  };
+};
+
+export type PacketAuditResponse = {
+  packet_audit: PacketAudit;
+  pdf: {
+    object_key: string;
+    sha256: string;
+    size_bytes: number;
+    download_url: string;
+  };
+};
+
+export type ManualHandoffResponse = {
+  manual_handoff: {
+    url: string;
+    audit_digest: string;
+    packet_version: string;
+    pdf_sha256: string;
+    size_bytes: number;
+  };
+};
+
 export type ApplicationReview = {
   jd_text: string;
   portal_url?: string;
   /** Exact company form authorized for an attended extension retry. It is distinct from the
    *  posting URL and from a managed-browser live-view URL. */
   extension_handoff_url?: string;
+  /** Server-owned proof for the exact JD, saved resume, answers, and stored PDF. */
+  packet_audit?: PacketAudit;
   ats_name?: string;
   status:
     | "resume_ready"
@@ -609,6 +693,13 @@ export type ApplicationReview = {
   /** Whether Litos can fill in this posting's page at all. Derived from portal_url by the backend,
    *  so it is known before the first send rather than discovered after a multi-minute run. */
   portal_supported?: boolean;
+  applicant_email?: {
+    address: string;
+    source: "litos_alias" | "contact_email" | "account_email";
+    reason: string;
+    tracked: boolean;
+    decided_at: string;
+  };
   submission_claimed_at?: string;
   filled_fields?: string[];
   preview_screenshot_url?: string;
@@ -772,6 +863,7 @@ export type CountryWorkEligibility = {
 
 export type ParsedProfile = {
   full_name: string;
+  resume_email?: string;
   experience: { company: string; title: string; start: string; end: string; description: string }[];
   skills: string[];
   /* Spoken languages the resume printed. Separate from skills because the parser used to have

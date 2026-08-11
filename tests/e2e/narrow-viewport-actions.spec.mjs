@@ -3,7 +3,7 @@
  *
  * WHAT WENT WRONG, AND WHY IT NEEDS A BROWSER
  * ===========================================
- * "Fill the form" is the product's core action. It is the LAST element of the review screen, which
+ * "Audit exact packet" is the product's core review action. It is the LAST element of the review screen, which
  * also contains a job description, an editable resume and a cover letter, so at 744x789 that screen
  * is roughly 2,900px and the action is about 2,100px of scrolling away. Two separate things then
  * made it worse, and neither is visible in source:
@@ -59,7 +59,7 @@
  *    suspends rAF and smooth scrolling and has already produced false findings on this audit.
  *  - The screen under test must actually OVERFLOW the viewport, asserted per case. A review screen
  *    that fits on screen cannot demonstrate anything about reaching its own end.
- *  - IT NEVER CLICKS THE BUTTON. "Fill the form" starts a real run against a real employer's page.
+ *  - IT NEVER CLICKS THE BUTTON. "Audit exact packet" starts the exact packet review gate.
  *    This spec proves the control is reachable and hittable; it stops one pixel short of pressing.
  *
  * RUN IT WITH:  npm run build && npm run test:narrow-viewport
@@ -182,7 +182,7 @@ async function openAPacket(page) {
   const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
   await rows.first().waitFor({ state: "visible", timeout: 20_000 });
   await rows.first().click();
-  await page.getByRole("button", { name: "Fill the form" }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByRole("button", { name: "Audit exact packet" }).waitFor({ state: "visible", timeout: 20_000 });
   /* Any scroll the router or an anchor kicked off must SETTLE before anything is measured. See the
      smooth-scroll note in the header: measuring mid-animation is how this was mis-diagnosed. */
   await page.waitForTimeout(600);
@@ -234,7 +234,7 @@ for (const vp of VIEWPORTS) {
   const label = `${vp.width}x${vp.height}`;
   const stickyExpected = vp.width < 1024;
 
-  test(`"Fill the form" is reachable at ${label} (${vp.why})`, async () => {
+  test(`"Audit exact packet" is reachable at ${label} (${vp.why})`, async () => {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
     await context.route("**/*", async (route) => {
       const url = route.request().url();
@@ -264,8 +264,8 @@ for (const vp of VIEWPORTS) {
     try {
       await openAPacket(page);
 
-      const atRest = await page.evaluate(PROBE, { label: "no scrolling at all", action: "Fill the form" });
-      assert.equal(atRest.found, true, "the review screen did not render a Fill the form button");
+      const atRest = await page.evaluate(PROBE, { label: "no scrolling at all", action: "Audit exact packet" });
+      assert.equal(atRest.found, true, "the review screen did not render an Audit exact packet button");
       assert.equal(atRest.visibility, "visible", "a background tab suspends rAF and smooth scrolling; nothing measured here would mean anything");
 
       /* The case is only meaningful if the screen is longer than the screen. */
@@ -295,7 +295,7 @@ for (const vp of VIEWPORTS) {
       /* And at the end of the document, where the bar comes to rest, on every width. */
       await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
       await page.waitForTimeout(600);
-      const atEnd = await page.evaluate(PROBE, { label: "scrolled to the end", action: "Fill the form" });
+      const atEnd = await page.evaluate(PROBE, { label: "scrolled to the end", action: "Audit exact packet" });
       assert.ok(
         atEnd.fullyInViewport,
         `at ${label}, scrolled to the very end, the action was still not fully in the viewport: ${JSON.stringify(atEnd)}`,
@@ -449,13 +449,13 @@ test("a terminal action bar clears a software keyboard", async () => {
   const page = await context.newPage();
   try {
     await openAPacket(page);
-    const closed = await page.evaluate(PROBE, { label: "keyboard closed", action: "Fill the form" });
+    const closed = await page.evaluate(PROBE, { label: "keyboard closed", action: "Audit exact packet" });
     assert.ok(closed.fullyInViewport, JSON.stringify(closed));
 
     /* 336px is an iPhone 14 Pro portrait keyboard. */
     await page.evaluate(() => { document.documentElement.style.setProperty("--keyboard-inset", "336px"); });
     await page.waitForTimeout(300);
-    const open = await page.evaluate(PROBE, { label: "keyboard open", action: "Fill the form" });
+    const open = await page.evaluate(PROBE, { label: "keyboard open", action: "Audit exact packet" });
 
     const keyboardTop = open.viewportH - 336;
     assert.ok(
@@ -468,7 +468,7 @@ test("a terminal action bar clears a software keyboard", async () => {
        simply the padding. The tab bar is behind the keyboard too, so its height must NOT be added
        on top of the keyboard's (max(), not a sum); anything beyond the 40px gutter is dead space. */
     const barBottom = await page.evaluate(() => {
-      const btn = [...document.querySelectorAll("button")].find((b) => /Fill the form/i.test(b.textContent ?? ""));
+      const btn = [...document.querySelectorAll("button")].find((b) => /Audit exact packet/i.test(b.textContent ?? ""));
       const bar = btn.closest("[class*='sticky']");
       return Math.round(bar.getBoundingClientRect().bottom);
     });

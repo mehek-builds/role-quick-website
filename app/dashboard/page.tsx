@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ensureExtensionSession } from "@/lib/extension-bridge";
 import {
   api,
-  getStoredEmail,
   getToken,
   isGuestSession,
   type ApplicationProfile,
@@ -410,6 +409,7 @@ export default function Home() {
     if (!autoSubmitEnabled) return;
     if (qaMode || prewarmStarted.current || !me || !identity || !applicationProfile || dailyJobs.length === 0) return;
     if (!identity.full_name?.trim()) return;
+    if (!identity.resume_email?.trim()) return;
     prewarmStarted.current = true;
 
     const remainingQuota = Math.max(0, applicationLimit(me) - me.usage.resumes.used);
@@ -432,7 +432,7 @@ export default function Home() {
           const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${job.id}`);
           const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
             method: "POST",
-            body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, getStoredEmail())),
+            body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile)),
           });
           if (generated.application && !cancelled) {
             setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
@@ -512,6 +512,15 @@ export default function Home() {
       return;
     }
 
+    if (!identity.resume_email?.trim()) {
+      setPrewarmFailures((current) => [...new Set([...current, jobId])]);
+      setPreparationErrors((current) => ({
+        ...current,
+        [jobId]: "Add the personal email that should appear on your resume before preparing this application.",
+      }));
+      return;
+    }
+
     setPreparingJobs((current) => [...new Set([...current, jobId])]);
     setPrewarmFailures((current) => current.filter((id) => id !== jobId));
     /* Last attempt's reason goes with the last attempt. Leaving it up under a fresh "Getting
@@ -528,7 +537,7 @@ export default function Home() {
       const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${jobId}`);
       const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
         method: "POST",
-        body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, getStoredEmail())),
+        body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile)),
       });
       if (generated.application) {
         setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);

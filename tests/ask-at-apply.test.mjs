@@ -88,8 +88,9 @@ test("saving at Apply hands the resume back rather than starting a submission", 
   // The answers stay in `questions`, which is what continueFromResume passes to prepareApplication,
   // so they ride into the packet on the next step with nothing re-entered.
   assert.doesNotMatch(save, /setQuestions\(\[\]\)/);
-  // And the stalled-run route keeps the behaviour it has always had.
-  assert.match(PAGE, /onSubmit=\{\(\) => \(prescriptNote \? saveApplyAnswers\(\) : prepareApplication\(\)\)\}/);
+  // Every route invalidates the prior exact packet audit and returns to review. The next send can
+  // only happen after answers, PDF bytes, and requirement evidence are frozen together again.
+  assert.match(PAGE, /onSubmit=\{\(\) => \{\s*saveApplyAnswers\(\);\s*setPacketEvidence\(null\);\s*\}\}/);
 });
 
 test("nothing on the Apply screen is filled by a guess", () => {

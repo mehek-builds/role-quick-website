@@ -9,6 +9,8 @@ export const ICIMS_ATTENDED_GATE_REASON =
   "This company asks you to make an account and prove you are human before the application form opens. Litos cannot do either of those for you, so this one needs your hands.";
 export const ICIMS_SECURITY_CODE_GATE_REASON =
   "This iCIMS account page is waiting for a security code sent to the stored Litos application email. Litos did not enter the code or submit the application. Open the page and finish the account check in Chrome.";
+export const BAMBOOHR_ATTENDED_GATE_REASON =
+  "This company’s application page asks you to prove you are human. Litos filled everything in, so all that is left is that check and the send button.";
 export const ORACLE_ATTENDED_GATE_REASON =
   "This Oracle application asks for an emailed code and a legal terms choice before the application form opens. Litos did not request the code, accept the terms, or submit anything. Open the exact saved page in Chrome and complete those steps yourself.";
 
@@ -23,6 +25,10 @@ function exactManagedAccountGateUrl(atsName: string, rawUrl: string): string | n
     if (atsName === "icims") {
       if (!/^(?!(?:www|community|login|api)\.)[a-z0-9-]+\.icims\.com$/i.test(url.hostname)) return null;
       return /^\/jobs\/\d+\/[a-z0-9%._~-]+\/login$/i.test(url.pathname) ? url.toString() : null;
+    }
+    if (atsName === "bamboohr") {
+      if (!/^(?!(?:www|app|api|support)\.)[a-z0-9-]+\.bamboohr\.com$/i.test(url.hostname)) return null;
+      return /^\/careers\/\d+\/?$/.test(url.pathname) ? url.toString() : null;
     }
     return null;
   } catch {
@@ -41,6 +47,10 @@ function managedAccountGateIdentity(atsName: string, rawUrl: string): string | n
     if (atsName === "icims" && /^(?!(?:www|community|login|api)\.)[a-z0-9-]+\.icims\.com$/i.test(url.hostname)) {
       const match = /^\/jobs\/(\d+)\/[a-z0-9%._~-]+\/(?:job|login)\/?$/i.exec(url.pathname);
       return match ? `${url.origin}/jobs/${match[1]}` : null;
+    }
+    if (atsName === "bamboohr" && /^(?!(?:www|app|api|support)\.)[a-z0-9-]+\.bamboohr\.com$/i.test(url.hostname)) {
+      const match = /^\/careers\/(\d+)\/?$/.exec(url.pathname);
+      return match ? `${url.origin}/careers/${match[1]}` : null;
     }
     return null;
   } catch {
@@ -74,6 +84,15 @@ export function exactAttendedHandoffUrl(review: Pick<ApplicationReview,
   }
   if (review.ats_name === "icims") {
     if (!reasons.includes(ICIMS_ATTENDED_GATE_REASON) && !reasons.includes(ICIMS_SECURITY_CODE_GATE_REASON)) return null;
+    const handoffUrl = exactManagedAccountGateUrl(review.ats_name, review.extension_handoff_url);
+    return handoffUrl
+      && review.portal_url
+      && managedAccountGateIdentity(review.ats_name, review.portal_url) === managedAccountGateIdentity(review.ats_name, handoffUrl)
+      ? handoffUrl
+      : null;
+  }
+  if (review.ats_name === "bamboohr") {
+    if (!reasons.includes(BAMBOOHR_ATTENDED_GATE_REASON)) return null;
     const handoffUrl = exactManagedAccountGateUrl(review.ats_name, review.extension_handoff_url);
     return handoffUrl
       && review.portal_url

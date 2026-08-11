@@ -28,7 +28,7 @@ test("every path that receives a review routes the screen from it", async () => 
   // route, and it must be the ref (readable synchronously) rather than a state value.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,3400}if \(approveInFlight\.current !== null && !terminal\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,4600}if \(approveInFlight\.current !== null && !terminal\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
   );
   // The exception to the exception. A stalled approve never rejects (no AbortController in
   // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the
@@ -44,7 +44,7 @@ test("every path that receives a review routes the screen from it", async () => 
     /\/submission\/approve`[\s\S]{0,3000}moveToScreen\(screenForStatus\(result\.review\.status, "portal"\)\)/,
   );
   // Selecting a packet, which falls back to the review screen rather than the progress screen.
-  assert.match(dashboard, /moveToScreen\(screenForStatus\(status, "review"\)\)/);
+  assert.match(dashboard, /moveToScreen\(status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)\)/);
 
   // A run result must never be routed by an inline status list again. That longhand is how the
   // three copies drifted apart until one quietly lost its terminal branch.
@@ -74,7 +74,7 @@ test("an unsupported portal replaces the send control with a way to apply by han
   // The send control is behind the capability check, and the link out takes its place.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[\s\S]{0,400}Open the company page[\s\S]{0,400}"Fill the form"/,
+    /review\.portal_supported === false[\s\S]{0,900}Open the company page[\s\S]{0,900}"Fill the form"/,
   );
   // The resume itself stays reachable: this is a gate on submitting, not on the packet.
   assert.match(dashboard, /selected\.download_url[\s\S]{0,200}View PDF/);

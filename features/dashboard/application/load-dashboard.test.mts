@@ -18,7 +18,7 @@ const completeBootstrap: DashboardBootstrap = {
   },
   jobs: { jobs: [{ id: "job-1" }] as DashboardBootstrap["jobs"]["jobs"] },
   targeting: { categories: null, titles: null, role_types: null, locations: null, remote_only: false, primary_period: null, backup_period: null },
-  profile: { full_name: "Me", skills: ["TypeScript"] },
+  profile: { full_name: "Me", resume_email: "me@usc.edu", skills: ["TypeScript"] },
   resume_history: { resumes: [] },
   application_profile: {},
   outreach: [],
@@ -31,6 +31,8 @@ test("maps the complete bootstrap projection into dashboard state", () => {
   assert.equal(state.me.email, "me@example.com");
   assert.equal(state.jobs[0]?.id, "job-1");
   assert.equal(state.identity.full_name, "Me");
+  assert.equal(state.identity.resume_email, "me@usc.edu");
+  assert.equal(state.identity.email, "me@example.com");
   assert.equal(state.autoSubmitEnabled, true);
 });
 

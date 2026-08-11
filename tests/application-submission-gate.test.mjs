@@ -62,6 +62,19 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
   assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
   assert.match(dashboard, /Open exact company form/);
+  assert.match(dashboard, /Manual dashboard trial/);
+  assert.match(dashboard, /Use this exact frozen resume and the separate Litos routing email/);
+  assert.match(dashboard, /Portal routing email:/);
+  assert.match(dashboard, /manualTrialPacket\.packet_audit\.identities\.applicant_email/);
+  assert.doesNotMatch(dashboard, /Portal routing email:[\s\S]{0,120}review\.applicant_email\?\.address/);
+  assert.match(dashboard, /openManualAttendedHandoff\(\)[\s\S]{0,1800}\/submission\/manual-handoff/);
+  assert.match(dashboard, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);
+  assert.match(dashboard, /companyTab\.location\.replace\(handoff\.url\)/);
+  const manualHandoff = dashboard.slice(
+    dashboard.indexOf("async function openManualAttendedHandoff()"),
+    dashboard.indexOf("/* A wait that ends.", dashboard.indexOf("async function openManualAttendedHandoff()")),
+  );
+  assert.doesNotMatch(manualHandoff, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);
@@ -179,9 +192,26 @@ test("the review screen gates and performs the submission", async () => {
      expression rather than a substring, on purpose: this is the one gate in front of a real
      employer submission, and a term silently dropped from it is a button that offers a send the
      server refuses. See tests/expired-handoff-send.regression-1.test.mjs. */
-  assert.match(review, /const finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/);
+  assert.match(review, /const finalApprovalBlocked = !packetEvidenceReviewed \|\| educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/);
   assert.match(review, /onClick=\{approveVerifiedPreview\}/);
   assert.match(review, /disabled=\{finalApprovalBlocked\}/);
+  // A ready packet cannot jump directly from the Tracker row to Send it. It must render the exact
+  // PDF, posting and requirement evidence first, and that per-packet proof becomes a term in the
+  // final employer-send gate rather than a decorative warning.
+  assert.match(review, /status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)/);
+  assert.match(review, /const packetEvidenceReady = Boolean\([\s\S]{0,600}exactPacketPdfReady[\s\S]{0,600}auditedDisplayReady[\s\S]{0,600}activePacketEvidence\.specJson === JSON\.stringify\(spec\)[\s\S]{0,300}activePacketEvidence\.questionsJson === JSON\.stringify\(questions\)/);
+  assert.match(review, /verified\.auditDigest === expected\.packet_audit\.audit_digest/);
+  assert.match(review, /verified\.sha256 === expected\.pdf\.sha256/);
+  assert.match(review, /verified\.sizeBytes === expected\.pdf\.size_bytes/);
+  assert.match(review, /packetAuditIdentityMatches\(current\.response\.packet_audit, result\.review\.packet_audit\)/);
+  assert.match(review, /review\?\.status === "ready_for_final_approval"[\s\S]{0,120}moveToScreen\("portal"\)/);
+  assert.match(review, /<ExactPacketPdf[\s\S]{0,500}onVerified=\{recordPacketPdfVerification\}/);
+  assert.match(review, /`\/applications\/\$\{applicationId\}\/packet-audit\/acknowledge`/);
+  assert.match(review, /audit_digest: audit\.audit_digest/);
+  assert.match(review, /packet_version: audit\.packet_version/);
+  assert.match(review, /pdf_sha256: pdf\.sha256/);
+  assert.match(review, /size_bytes: pdf\.size_bytes/);
+  assert.match(review, /Review the exact resume beside the job description and its evidence colours before sending/);
   assert.match(review, /Check resume/);
   assert.match(review, />Resume<\/p>/);
   assert.match(review, />Answers<\/p>/);

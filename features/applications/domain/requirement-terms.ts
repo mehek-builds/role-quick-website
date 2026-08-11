@@ -261,9 +261,10 @@ function stripEdges(word: string): { core: string; lead: string; trail: string }
  * two words means they are separate list items, mirroring the same rule in the backend's
  * extractJdTerms: "React, PostgreSQL, and Docker" is three requirements, not one phrase.
  *
- * `editedTerms` is the tailoring-provenance set, consulted only where no requirement claimed the
- * span: a term that is both a JD requirement and a Litos edit is more useful shown as the
- * requirement, since that is the one the score depends on.
+ * `editedTerms` is the tailoring-provenance set, but it never creates a mark by itself. Green still
+ * means Litos changed the wording for this job, and every colour on this screen must begin with a
+ * requirement the frozen posting actually contains. An edited word absent from the requirement
+ * index stays plain rather than borrowing authority from the job description.
  *
  * EDITED TERMS ARE LOOKED UP THE SAME WAY REQUIREMENTS ARE, over phrases and not only over single
  * tokens. They used to be matched by a separate one-token path against a set built by a SECOND
@@ -315,11 +316,10 @@ export function segmentText(
       if (pieces.some((piece) => !piece.core)) continue;
 
       const candidate = normalizeTerm(pieces.map((piece) => piece.core).join(" "));
-      const match =
-        lookupTone(index, candidate) ??
-        (editedTerms && candidate.length > 2 && editedTerms.has(candidate)
-          ? ({ term: candidate, tone: "edited" } as const)
-          : undefined);
+      const requirementMatch = lookupTone(index, candidate);
+      const match = requirementMatch && requirementMatch.tone === "covered" && editedTerms?.has(candidate)
+        ? ({ ...requirementMatch, tone: "edited" } as const)
+        : requirementMatch;
 
       // A HYPHENATED COMPOUND CONTAINS ITS PARTS, because the scorer says it does.
       //

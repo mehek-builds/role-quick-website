@@ -94,7 +94,7 @@ describe("the review screen says so before the student presses send", () => {
   test("the final approval screen blocks drifted packets and sends the user back to the resume", () => {
     assert.match(PAGE, /educationDriftWarning = educationDriftMessage\(educationDrift\(packet\.spec, educationProfile\)\)/);
     assert.match(PAGE, /educationProfilePending = educationProfileStatus !== "ready"/);
-    assert.match(PAGE, /finalApprovalBlocked = educationProfilePending \|\| Boolean\(educationDriftWarning\)/);
+    assert.match(PAGE, /finalApprovalBlocked = !packetEvidenceReviewed \|\| educationProfilePending \|\| Boolean\(educationDriftWarning\)/);
     assert.match(PAGE, /onCheckResume=\{\(\) => moveToScreen\("review"\)\}/);
     assert.match(PAGE, /Save the resume first/);
     assert.match(PAGE, /Checking profile/);
