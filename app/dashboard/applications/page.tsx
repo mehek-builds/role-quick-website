@@ -27,7 +27,7 @@ import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnL
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, handoffWindowExpired, nextSubmissionState } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { nextMatchScoreRequest } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -59,7 +59,7 @@ import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
-import { packetAuditAcknowledgementAccepted, packetAuditIdentityMatches } from "@/features/applications";
+import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQuestionsSnapshot, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession } from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "recent" | "company";
@@ -70,15 +70,39 @@ type SubmissionResponse = { application_id: string; review: ApplicationReview; c
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type CoverLetterResponse = { cover_letter: CoverLetter; download_url: string };
-type PacketEvidenceSession = {
-  applicationId: string;
-  response: PacketAuditResponse;
-  specJson: string;
-  questionsJson: string;
-  pdfVerified: boolean;
-  acknowledged: boolean;
-  serverRevalidatedAt: number | null;
-};
+
+function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boolean {
+  return left?.body === right.body
+    && left.word_count === right.word_count
+    && left.generated_at === right.generated_at
+    && left.approved_at === right.approved_at
+    && left.object_key === right.object_key
+    && left.file_name === right.file_name
+    && left.warnings.length === right.warnings.length
+    && left.warnings.every((warning, index) => warning === right.warnings[index]);
+}
+
+function packetWithSubmission(packet: GeneratedResume, submission: SubmissionResponse): GeneratedResume {
+  const reviewUnchanged = packet.spec._review?.updated_at === submission.review.updated_at;
+  const coverLetterField = submissionCoverLetterField(submission);
+  const nextCoverLetter = nextCoverLetterValue(packet.spec._cover_letter, submission);
+  const coverLetterUnchanged = nextCoverLetter === undefined
+    ? packet.spec._cover_letter === undefined
+    : sameCoverLetter(packet.spec._cover_letter, nextCoverLetter);
+  if (reviewUnchanged && coverLetterUnchanged) return packet;
+  return {
+    ...packet,
+    cover_letter_download_url: coverLetterField.included && !coverLetterField.value
+      ? undefined
+      : packet.cover_letter_download_url,
+    spec: {
+      ...packet.spec,
+      _review: submission.review,
+      _cover_letter: nextCoverLetter,
+    },
+  };
+}
+
 type ProfileIdentity = {
   full_name?: string;
   email?: string;
@@ -545,13 +569,11 @@ function Applications() {
     if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged) {
       try {
         const currentAudit = await api<PacketAuditResponse>(`/applications/${requestedId}/packet-audit`, { method: "POST" });
-        if (selectedIdRef.current !== requestedId
-          || !packetAuditIdentityMatches(currentEvidence.response.packet_audit, currentAudit.packet_audit)
-          || !packetAuditResponseMatchesApplication(requestedId, currentAudit)) {
+        const refreshed = revalidateAcknowledgedPacketEvidence(currentEvidence, requestedId, currentAudit, Date.now());
+        if (selectedIdRef.current !== requestedId || !refreshed) {
           packetEvidenceRef.current = null;
           setPacketEvidence(null);
         } else {
-          const refreshed = { ...currentEvidence, response: currentAudit, serverRevalidatedAt: Date.now() };
           packetEvidenceRef.current = refreshed;
           setPacketEvidence(refreshed);
         }
@@ -560,13 +582,12 @@ function Applications() {
         setPacketEvidence(null);
       }
     } else {
-      setPacketEvidence((current) => (
-        current
-        && current.applicationId === requestedId
-        && packetAuditIdentityMatches(current.response.packet_audit, result.review.packet_audit)
-          ? { ...current, serverRevalidatedAt: null }
-          : null
-      ));
+      setPacketEvidence((current) => reconcileUnacknowledgedPacketPoll(current, requestedId, result.review.packet_audit));
+    }
+    const incomingCoverLetter = submissionCoverLetterField(result);
+    if (incomingCoverLetter.included) {
+      setCoverLetterBody(incomingCoverLetter.value?.body ?? "");
+      if (!incomingCoverLetter.value) setCoverLetterDownloadUrl(null);
     }
     /* NOT a bare `review.updated_at` comparison: that versions the review alone, and this response
        also carries cover_letter, handoff_url and configured. See submission-state.ts. */
@@ -575,8 +596,11 @@ function Applications() {
     setPackets((current) => {
       if (!current) return current;
       const packet = current.find((item) => item.id === requestedId);
-      if (packet?.spec._review?.updated_at === result.review.updated_at) return current;
-      return current.map((item) => item.id === requestedId ? { ...item, spec: { ...item.spec, _review: result.review } } : item);
+      if (!packet) return current;
+      const nextPacket = packetWithSubmission(packet, result);
+      return packet === nextPacket
+        ? current
+        : current.map((item) => item.id === requestedId ? nextPacket : item);
     });
     // A poll that succeeds clears a stale banner from an earlier transient failure. Without this a
     // single 502 during a multi-minute run left "Could not refresh portal status" pinned above a
@@ -998,6 +1022,7 @@ function Applications() {
     [matchResult],
   );
   const packetDraftChanged = Boolean(selected && spec && JSON.stringify(spec) !== JSON.stringify(stripMetadata(selected.spec)));
+  const currentQuestionsSnapshot = useMemo(() => packetQuestionsSnapshot(questions), [questions]);
   const activePacketEvidence = selected && packetEvidence?.applicationId === selected.id ? packetEvidence : null;
   const exactPacketPdfReady = Boolean(activePacketEvidence?.pdfVerified);
   const packetAuditBindingReady = Boolean(
@@ -1020,7 +1045,7 @@ function Applications() {
     && deferredSpec === spec
     && !packetDraftChanged
     && activePacketEvidence.specJson === JSON.stringify(spec)
-    && activePacketEvidence.questionsJson === JSON.stringify(questions),
+    && activePacketEvidence.questionsSnapshot === currentQuestionsSnapshot,
   );
   const packetEvidenceReviewed = Boolean(packetEvidenceReady && activePacketEvidence?.acknowledged);
   const manualTrialEvidence = selected
@@ -1050,7 +1075,7 @@ function Applications() {
               ? "The saved requirement evidence does not match this job description."
               : !exactPacketPdfReady
                 ? "The exact audited PDF must finish loading before continuing."
-                : activePacketEvidence.questionsJson !== JSON.stringify(questions)
+                : activePacketEvidence.questionsSnapshot !== currentQuestionsSnapshot
                   ? "The answers changed after the packet audit. Audit this packet again."
                   : null;
 
@@ -1418,7 +1443,7 @@ function Applications() {
         applicationId: selected.id,
         response,
         specJson: JSON.stringify(spec),
-        questionsJson: JSON.stringify(questions),
+        questionsSnapshot: currentQuestionsSnapshot,
         pdfVerified: false,
         acknowledged: false,
         serverRevalidatedAt: null,
@@ -1456,10 +1481,13 @@ function Applications() {
       });
       if (!packetAuditAcknowledgementAccepted(result)) throw new Error("Litos did not confirm this exact packet review.");
       if (selectedIdRef.current !== applicationId) return;
-      setPacketEvidence((current) => current?.applicationId === applicationId
-        && current.response.packet_audit.audit_digest === audit.audit_digest
-        ? { ...current, acknowledged: true }
-        : current);
+      const acknowledgedEvidence = acknowledgePacketEvidence(packetEvidenceRef.current, activePacketEvidence);
+      if (!acknowledgedEvidence) throw new Error("The resume, audit, PDF, or answers changed while Litos recorded the review. Check the exact packet again.");
+      /* The poll reads this ref before React runs effects. Writing it first closes the window where
+         a response fetched before this ACK could take the unacknowledged branch and erase the exact
+         proof that was just accepted. The state write follows so the UI renders the same snapshot. */
+      packetEvidenceRef.current = acknowledgedEvidence;
+      setPacketEvidence(acknowledgedEvidence);
       if (review?.status === "ready_for_final_approval") {
         moveToScreen("portal");
         return;
@@ -1500,8 +1528,13 @@ function Applications() {
           body: JSON.stringify({ questions: finalQuestions, ...(options.restart ? { restart: true } : {}) }),
         });
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
-        setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, spec: { ...packet.spec, _review: result.review } } : packet) ?? current);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithSubmission(packet, result) : packet) ?? current);
         if (selectedIdRef.current !== applicationId) return;
+        const incomingCoverLetter = submissionCoverLetterField(result);
+        if (incomingCoverLetter.included) {
+          setCoverLetterBody(incomingCoverLetter.value?.body ?? "");
+          if (!incomingCoverLetter.value) setCoverLetterDownloadUrl(null);
+        }
         setSubmission(result);
         // This response is the END of the run, not an acknowledgement of its start, and it is
         // routinely terminal ("failed", "needs_attention", "ready_for_final_approval"). It used to

@@ -47,6 +47,28 @@ export type SubmissionSnapshot = {
   partial?: boolean;
 };
 
+export type SubmissionCoverLetterField<T extends CoverLetterLike = CoverLetterLike> =
+  | { included: false }
+  | { included: true; value: T | null };
+
+/** Distinguishes a partial response that omitted the field from a server-confirmed removal. */
+export function submissionCoverLetterField<T extends CoverLetterLike>(
+  submission: { cover_letter?: T | null },
+): SubmissionCoverLetterField<T> {
+  return Object.prototype.hasOwnProperty.call(submission, "cover_letter")
+    ? { included: true, value: submission.cover_letter ?? null }
+    : { included: false };
+}
+
+/** Applies the field only when the response actually carried it. Explicit null removes it. */
+export function nextCoverLetterValue<T extends CoverLetterLike>(
+  current: T | undefined,
+  incoming: { cover_letter?: T | null },
+): T | undefined {
+  const field = submissionCoverLetterField(incoming);
+  return field.included ? field.value ?? undefined : current;
+}
+
 /** Stable identity for a cover letter, used only to tell two snapshots apart. */
 export function coverLetterIdentity(coverLetter: CoverLetterLike | null | undefined): string {
   if (!coverLetter) return "";
@@ -69,12 +91,17 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   if (!current) return incoming;
   // A snapshot for a different packet is not a version of this one, it is the wrong application.
   if (current.application_id !== incoming.application_id) return incoming;
+  const currentCoverLetter = submissionCoverLetterField(current);
+  const incomingCoverLetter = submissionCoverLetterField(incoming);
+  const nextIncoming = !incomingCoverLetter.included && currentCoverLetter.included
+    ? { ...incoming, cover_letter: currentCoverLetter.value }
+    : incoming;
   // Never let a board seed outrank the server.
-  if (current.partial) return incoming;
-  if (current.review.updated_at !== incoming.review.updated_at) return incoming;
-  if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(incoming.cover_letter)) return incoming;
-  if ((current.handoff_url ?? null) !== (incoming.handoff_url ?? null)) return incoming;
-  if ((current.configured ?? null) !== (incoming.configured ?? null)) return incoming;
+  if (current.partial) return nextIncoming;
+  if (current.review.updated_at !== nextIncoming.review.updated_at) return nextIncoming;
+  if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(nextIncoming.cover_letter)) return nextIncoming;
+  if ((current.handoff_url ?? null) !== (nextIncoming.handoff_url ?? null)) return nextIncoming;
+  if ((current.configured ?? null) !== (nextIncoming.configured ?? null)) return nextIncoming;
   return current;
 }
 

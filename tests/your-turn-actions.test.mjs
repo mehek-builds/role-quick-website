@@ -83,7 +83,7 @@ test("pressing a row opens the answer editor on that question, and saving there 
   // submit-request is reached through a new exact packet audit, so editing a stalled answer cannot
   // reuse the PDF, answer map, or requirement evidence that preceded it.
   assert.match(page, /onSubmit=\{\(\) => \{\s*saveApplyAnswers\(\);\s*setPacketEvidence\(null\);\s*\}\}/);
-  assert.match(page, /questionsJson: JSON\.stringify\(questions\)/);
+  assert.match(page, /questionsSnapshot: currentQuestionsSnapshot/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 
   const questions = functionBody(page, "QuestionsScreen");
