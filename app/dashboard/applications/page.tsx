@@ -1355,27 +1355,41 @@ function Applications() {
     );
   }
 
-  async function saveResume(): Promise<boolean> {
-    if (!selected || !spec) return false;
+  async function saveResume(): Promise<ResumeSpec | null> {
+    if (!selected || !spec) return null;
+    const applicationId = selected.id;
     setSaving(true);
     setError(null);
     try {
       if (!qaMode) {
         const updated = await api<{ spec: GeneratedResume["spec"]; download_url: string }>(
-          `/applications/${selected.id}/resume`,
+          `/applications/${applicationId}/resume`,
           { method: "PATCH", body: JSON.stringify({ spec }) },
         );
         setPackets((current) =>
           current?.map((packet) =>
-            packet.id === selected.id ? { ...packet, spec: updated.spec, download_url: updated.download_url } : packet,
+            packet.id === applicationId ? { ...packet, spec: updated.spec, download_url: updated.download_url } : packet,
           ) ?? current,
         );
+        /* The server response is the saved resume, including any canonical pruning or ordering it
+           applied before regenerating the PDF. Auditing the request copy after installing the
+           response into `packets` makes the dashboard compare two different JSON shapes and report
+           its own save as an unsaved edit. Adopt the canonical editable shape only while this is
+           still the selected application. A late save for packet A may update A in the list, but
+           it must never replace the editor after the applicant has switched to packet B. */
+        const savedSpec = stripMetadata(updated.spec);
+        if (selectedIdRef.current !== applicationId) return null;
+        setSpec(savedSpec);
+        setNotice("Resume saved and rechecked.");
+        return savedSpec;
       }
       setNotice("Resume saved and rechecked.");
-      return true;
+      return spec;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
-      return false;
+      if (selectedIdRef.current === applicationId) {
+        setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
+      }
+      return null;
     } finally {
       setSaving(false);
     }
@@ -1387,9 +1401,16 @@ function Applications() {
       return;
     }
     if (!selected || !spec || !review) return;
+    const applicationId = selected.id;
     const alreadyFilled = review.status === "ready_for_final_approval";
-    if (!alreadyFilled && !(await saveResume())) return;
+    /* Workflow status does not say whether the editor is dirty. A ready packet can be edited, and
+       auditing that edit without saving would ask the server to audit its older PDF forever. A
+       fresh packet with no edits needs no no-op PATCH. The exact local-vs-saved comparison is the
+       only fact that decides whether a new PDF must be generated. */
+    const auditedSpec = packetDraftChanged ? await saveResume() : spec;
+    if (!auditedSpec || selectedIdRef.current !== applicationId) return;
     if (!alreadyFilled && !qaMode && !(await saveCoverLetter())) return;
+    if (selectedIdRef.current !== applicationId) return;
     const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
     if (missingRequiredAnswers.length > 0) {
       moveToScreen("questions");
@@ -1407,7 +1428,7 @@ function Applications() {
         const portalUrl = review.portal_url?.trim();
         const atsName = review.ats_name?.trim() || portalName(portalUrl ?? "");
         if (!portalUrl || !atsName) throw new Error("The saved employer form identity is incomplete. Reload this packet before auditing it.");
-        const saved = await api<SubmissionResponse>(`/applications/${selected.id}/review`, {
+        const saved = await api<SubmissionResponse>(`/applications/${applicationId}/review`, {
           method: "PUT",
           body: JSON.stringify({
             ats_name: atsName,
@@ -1417,21 +1438,23 @@ function Applications() {
           }),
         });
         savedReview = saved.review;
-        setSubmission((current) => current?.application_id === selected.id ? { ...current, review: saved.review } : current);
-        setPackets((current) => current?.map((packet) => packet.id === selected.id
+        if (selectedIdRef.current !== applicationId) return;
+        setSubmission((current) => current?.application_id === applicationId ? { ...current, review: saved.review } : current);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId
           ? { ...packet, spec: { ...packet.spec, _review: saved.review } }
           : packet) ?? current);
       }
-      const response = await api<PacketAuditResponse>(`/applications/${selected.id}/packet-audit`, { method: "POST" });
+      const response = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
+      if (selectedIdRef.current !== applicationId) return;
       const auditedReview = { ...savedReview, packet_audit: response.packet_audit };
-      setPackets((current) => current?.map((packet) => packet.id === selected.id
+      setPackets((current) => current?.map((packet) => packet.id === applicationId
         ? { ...packet, download_url: response.pdf.download_url, spec: { ...packet.spec, _review: auditedReview } }
         : packet) ?? current);
-      setSubmission((current) => current?.application_id === selected.id ? { ...current, review: auditedReview } : current);
+      setSubmission((current) => current?.application_id === applicationId ? { ...current, review: auditedReview } : current);
       setPacketEvidence({
-        applicationId: selected.id,
+        applicationId,
         response,
-        specJson: JSON.stringify(spec),
+        specJson: JSON.stringify(auditedSpec),
         questionsSnapshot: currentQuestionsSnapshot,
         pdfVerified: false,
         acknowledged: false,
@@ -1439,6 +1462,7 @@ function Applications() {
       });
       setNotice("The exact saved packet passed the server audit. Read the requirement evidence while the PDF loads.");
     } catch (reason) {
+      if (selectedIdRef.current !== applicationId) return;
       setPacketEvidence(null);
       setError(reason instanceof Error ? reason.message : "Litos could not audit this exact packet.");
     } finally {
