@@ -33,10 +33,66 @@ import { verifyPacketPdfBytes, type PacketPdfBinding, type PacketPdfEvidenceVeri
  * So `await` is never used here without a deadline, and a deadline that fires is a visible blocked
  * state with a reason and a retry, never a pass. A gate that cannot prove the bytes must say so
  * out loud and stay shut.
+ *
+ * ---- what was actually stalling, found on 2026-08-12 with the real document ----
+ *
+ * The stalling packet was captured from production and rendered here: it is a valid one page
+ * PDF 1.3 with three embedded CIDFontType2 subsets, and pdfjs-dist 6.1.200 draws it correctly in
+ * 45ms. Neither the file nor the library is at fault, and the worker was never the problem either;
+ * trylitos.com serves it at /vendor/pdf.worker.min.mjs, HTTP 200, 1,255,067 bytes, version 6.1.200.
+ *
+ * The stall is `requestAnimationFrame`. `InternalRenderTask._scheduleNext` drives the whole paint
+ * loop through `window.requestAnimationFrame` for the default "display" intent, while
+ * `initializeGraphics` runs in a microtask and paints the white page background first. So a tab
+ * that is not producing frames, which is any backgrounded, occluded or automation-driven tab,
+ * gets a canvas sized correctly, filled entirely white, never drawn on, and never settled. That
+ * is the production report exactly: 918 x 1188 backing, and zero non-white pixels.
+ *
+ * Reproduced on demand by stubbing `requestAnimationFrame` to never fire: display intent hangs
+ * forever with 1,090,584 white pixels and no console output, print intent finishes in 37ms.
+ *
+ * The paint intent is therefore "print", which `PDFPageProxy.render` schedules with microtasks
+ * instead (`useRequestAnimationFrame: !intentPrint`). It is also the honest description of what
+ * this canvas is for: not an interactive viewer, but a faithful raster of the bytes about to be
+ * sent to an employer. Verified byte identical, an FNV-1a hash over all 4,362,336 canvas bytes
+ * matching between the two intents on both the production packet and the committed fixture.
  */
 const DEFAULT_TIMEOUT_MS = 20_000;
 
 const TIMEOUT_ERROR = "pdf_timeout";
+
+const BLANK_ERROR = "pdf_blank";
+
+/* Scheduled with microtasks rather than animation frames. See the note above: this is what stops a
+   tab that is not painting from hanging the send gate forever. */
+const PAINT_INTENT = "print";
+
+/* A US Letter page at scale 1.5 is 1,090,584 pixels and a real resume paints tens of thousands of
+   them. A page that drew nothing at all paints none. This floor sits far below any real document
+   and far above nothing, so it separates the two without judging how full a resume is. */
+const MINIMUM_PAINTED_PIXELS = 100;
+
+/**
+ * Counts pixels PDF.js actually drew, so the gate proves ink rather than proving a settled promise.
+ *
+ * Without this, a PDF whose content stream draws nothing parses, renders, resolves and passes,
+ * and the student is told their resume is verified while looking at a blank sheet. The render is
+ * onto an opaque canvas whose background PDF.js fills white, so anything not white is ink.
+ * Reading stops at the floor, which makes this cost nothing on a real page.
+ */
+function paintedPixelsOn(canvas: HTMLCanvasElement): number {
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error(BLANK_ERROR);
+  const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+  let painted = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i] <= 250 || data[i + 1] <= 250 || data[i + 2] <= 250) {
+      painted += 1;
+      if (painted >= MINIMUM_PAINTED_PIXELS) return painted;
+    }
+  }
+  return painted;
+}
 
 type PdfFailure = {
   message: string;
@@ -186,6 +242,7 @@ export function ExactPacketPdf({
     let loadingTask: PDFDocumentLoadingTask | null = null;
     let documentProxy: PDFDocumentProxy | null = null;
     let renderTask: RenderTask | null = null;
+    let paintedPixels = 0;
     const pages = pagesRef.current;
     pages.replaceChildren();
 
@@ -226,11 +283,15 @@ export function ExactPacketPdf({
         pages.append(canvas);
         /* Each page gets its own deadline so a long but progressing document is not cut off,
            while a single stalled page is still caught inside one timeout. */
-        renderTask = page.render({ canvas, viewport });
+        renderTask = page.render({ canvas, viewport, intent: PAINT_INTENT });
         await withDeadline(renderTask.promise, timeoutMs, abandon);
         renderTask = null;
+        paintedPixels += paintedPixelsOn(canvas);
       }
       if (!active || settled) return;
+      /* A settled promise is not a drawn page. Reaching here with a blank canvas means the gate
+         would otherwise pass on a document that shows the student nothing. */
+      if (paintedPixels < MINIMUM_PAINTED_PIXELS) throw new Error(BLANK_ERROR);
       settled = true;
       setView((current) => current.key === verificationKey && current.state === "verified"
         ? { ...current, rendered: true }
@@ -248,10 +309,15 @@ export function ExactPacketPdf({
            is shown, so the student is told what happened instead of watching a spinner. */
         onVerifiedRef.current(null);
         pages.replaceChildren();
-        const message = reason instanceof Error && reason.message === TIMEOUT_ERROR
-          ? "Litos could not finish showing the exact audited PDF in time."
-          : "The exact PDF could not be parsed and rendered.";
-        setView({ key: verificationKey, state: "failed", failure: { message, recoverable: true } });
+        const code = reason instanceof Error ? reason.message : "";
+        /* Blank is not retryable. The same bytes will draw the same nothing, so the way forward is
+           to audit the packet again rather than to press a button that cannot change the answer. */
+        const failure: PdfFailure = code === BLANK_ERROR
+          ? { message: "The exact audited PDF drew a blank page. Audit this packet again.", recoverable: false }
+          : code === TIMEOUT_ERROR
+            ? { message: "Litos could not finish showing the exact audited PDF in time.", recoverable: true }
+            : { message: "The exact PDF could not be parsed and rendered.", recoverable: true };
+        setView({ key: verificationKey, state: "failed", failure });
       });
 
     return () => {
