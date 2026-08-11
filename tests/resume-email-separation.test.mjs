@@ -31,7 +31,7 @@ describe("personal resume email and portal routing email stay separate", () => {
     assert.match(applications, /manualTrialPacket=\{manualTrialEvidence\?\.response \?\? null\}/);
     assert.match(applications, /manualTrialPacketEvidenceIsFresh\(selected\.id, activePacketEvidence\)/);
     assert.match(applications, /\/packet-audit`, \{ method: "POST" \}/);
-    assert.match(applications, /serverRevalidatedAt: Date\.now\(\)/);
+    assert.match(applications, /revalidateAcknowledgedPacketEvidence\(currentEvidence, requestedId, currentAudit, Date\.now\(\)\)/);
     assert.match(applications, /async function openManualAttendedHandoff\(\)/);
     assert.match(applications, /await api<ManualHandoffResponse>\(`\/applications\/\$\{submission\.application_id\}\/submission\/manual-handoff`, \{ method: "POST" \}\)/);
     assert.match(applications, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);

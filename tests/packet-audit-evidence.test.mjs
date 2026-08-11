@@ -2,9 +2,204 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+import {
+  acknowledgePacketEvidence,
+  packetQuestionsSnapshot,
+  reconcileUnacknowledgedPacketPoll,
+  revalidateAcknowledgedPacketEvidence,
+} from "../features/applications/domain/packet-evidence-session.ts";
+
 const componentUrl = new URL("../components/app/PacketAuditEvidence.tsx", import.meta.url);
 const displayDomainUrl = new URL("../features/applications/domain/packet-audit-display.ts", import.meta.url);
 const dashboardUrl = new URL("../app/dashboard/applications/page.tsx", import.meta.url);
+const evidenceSessionUrl = new URL("../features/applications/domain/packet-evidence-session.ts", import.meta.url);
+const digest = "a".repeat(64);
+const otherDigest = "b".repeat(64);
+const applicationId = "application-1";
+const haizeQuestions = [
+  { id: "start-month", question: "Start month", answer: "August", kind: "required", required: true, options: ["August", "September"] },
+  { id: "start-year", question: "Start year", answer: "2023", kind: "required", required: true },
+  { id: "end-year", question: "End year", answer: "2028", kind: "required", required: true },
+  { id: "linkedin", question: "LinkedIn", answer: "https://www.linkedin.com/in/fixture", kind: "required", required: true },
+  { id: "website", question: "Website", answer: "https://example.invalid", kind: "required", required: false },
+];
+
+function packetAuditResponse(overrides = {}) {
+  const auditDigest = overrides.digest ?? digest;
+  return {
+    packet_audit: {
+      version: "packet_audit_v1",
+      status: "passed",
+      complete: true,
+      degraded: false,
+      rejectedCount: 0,
+      clauses: [],
+      editedTerms: [],
+      terms: { covered: [], missing: [], edited: [] },
+      audit_digest: auditDigest,
+      packet_version: auditDigest,
+      bindings: {
+        ownerSha256: digest,
+        applicationId,
+        jdSha256: digest,
+        specSha256: digest,
+        jobContextSha256: digest,
+        questionsSha256: digest,
+        applicantSnapshotSha256: digest,
+        resumeContactEmailSha256: digest,
+        applicantEmailSha256: digest,
+        pdf: { objectKey: "resumes/exact.pdf", sha256: digest, sizeBytes: 42 },
+      },
+      identities: {
+        resume_email: "student@example.edu",
+        applicant_email: "route@apply.litos.example",
+      },
+    },
+    pdf: {
+      object_key: "resumes/exact.pdf",
+      sha256: digest,
+      size_bytes: 42,
+      download_url: "https://student-outreach-backend.vercel.app/resume/download?token=fixture",
+    },
+  };
+}
+
+function packetEvidence(overrides = {}) {
+  return {
+    applicationId,
+    response: packetAuditResponse(),
+    specJson: JSON.stringify({ skills: ["TypeScript"] }),
+    questionsSnapshot: packetQuestionsSnapshot(haizeQuestions),
+    pdfVerified: true,
+    acknowledged: false,
+    serverRevalidatedAt: null,
+    ...overrides,
+  };
+}
+
+test("Haize question snapshots ignore payload order and display-only metadata", () => {
+  const reordered = [...haizeQuestions].reverse().map((question) => ({
+    ...question,
+    explanation: "Display-only poll copy",
+    remembered: true,
+  }));
+  assert.equal(packetQuestionsSnapshot(reordered), packetQuestionsSnapshot(haizeQuestions));
+});
+
+test("Haize question snapshots bind id, normalized prompt, required, kind, options, and exact answer", () => {
+  const whitespaceOnly = haizeQuestions.map((question) => (
+    question.id === "start-month" ? { ...question, question: "  Start   month  ", options: ["September", "August"] } : question
+  ));
+  assert.equal(packetQuestionsSnapshot(whitespaceOnly), packetQuestionsSnapshot(haizeQuestions));
+
+  for (const mutation of [
+    (question) => ({ ...question, id: `${question.id}-changed` }),
+    (question) => ({ ...question, question: `${question.question}?` }),
+    (question) => ({ ...question, required: !question.required }),
+    (question) => ({ ...question, kind: question.kind === "required" ? "essay" : "required" }),
+    (question) => ({ ...question, options: [...(question.options ?? []), "October"] }),
+    (question) => ({ ...question, answer: `${question.answer} ` }),
+  ]) {
+    const changed = haizeQuestions.map((question) => question.id === "start-month" ? mutation(question) : question);
+    assert.notEqual(packetQuestionsSnapshot(changed), packetQuestionsSnapshot(haizeQuestions));
+  }
+});
+
+test("an exact rendered packet becomes acknowledged", () => {
+  const current = packetEvidence();
+  assert.deepEqual(acknowledgePacketEvidence(current, structuredClone(current)), { ...current, acknowledged: true });
+});
+
+test("ACK fails closed when the audit or question snapshot changed in flight", () => {
+  const expected = packetEvidence();
+  const staleAudit = packetEvidence({ response: packetAuditResponse({ digest: otherDigest }) });
+  const changedQuestions = haizeQuestions.map((question) => (
+    question.id === "end-year" ? { ...question, answer: "2027" } : question
+  ));
+  const staleQuestions = packetEvidence({ questionsSnapshot: packetQuestionsSnapshot(changedQuestions) });
+
+  assert.equal(acknowledgePacketEvidence(staleAudit, expected), null);
+  assert.equal(acknowledgePacketEvidence(staleQuestions, expected), null);
+});
+
+test("a stale poll branch cannot erase evidence acknowledged after that branch was selected", () => {
+  let state = packetEvidence();
+  let pollRef = state;
+  const expected = structuredClone(state);
+  const stalePolledAudit = packetAuditResponse({ digest: otherDigest }).packet_audit;
+  assert.equal(pollRef.acknowledged, false, "the stale poll must select the old branch before ACK commits");
+  const queuedPollUpdate = (current) => reconcileUnacknowledgedPacketPoll(current, applicationId, stalePolledAudit);
+
+  const acknowledged = acknowledgePacketEvidence(pollRef, expected);
+  assert.ok(acknowledged);
+  pollRef = acknowledged;
+  state = acknowledged;
+  state = queuedPollUpdate(state);
+
+  assert.equal(pollRef.acknowledged, true);
+  assert.equal(state, acknowledged, "the queued updater must preserve the exact state ACK already committed");
+});
+
+test("an unacknowledged poll retains only the exact audit", () => {
+  const current = packetEvidence({ serverRevalidatedAt: 123 });
+  assert.deepEqual(
+    reconcileUnacknowledgedPacketPoll(current, applicationId, structuredClone(current.response.packet_audit)),
+    { ...current, serverRevalidatedAt: null },
+  );
+  assert.equal(
+    reconcileUnacknowledgedPacketPoll(current, applicationId, packetAuditResponse({ digest: otherDigest }).packet_audit),
+    null,
+  );
+});
+
+test("the next acknowledged poll requires an exact action-time server audit", () => {
+  const acknowledged = packetEvidence({ acknowledged: true });
+  const exactServerResponse = structuredClone(acknowledged.response);
+  assert.deepEqual(
+    revalidateAcknowledgedPacketEvidence(acknowledged, applicationId, exactServerResponse, 456),
+    { ...acknowledged, response: exactServerResponse, serverRevalidatedAt: 456 },
+  );
+  assert.equal(
+    revalidateAcknowledgedPacketEvidence(acknowledged, applicationId, packetAuditResponse({ digest: otherDigest }), 456),
+    null,
+  );
+});
+
+test("the ACK continuation commits the poll ref before state and portal routing", async () => {
+  const source = await readFile(dashboardUrl, "utf8");
+  const start = source.indexOf("async function continueFromVerifiedPacket()");
+  const end = source.indexOf("async function prepareApplication(", start);
+  const continuation = source.slice(start, end);
+  const refWrite = continuation.indexOf("packetEvidenceRef.current = acknowledgedEvidence");
+  const stateWrite = continuation.indexOf("setPacketEvidence(acknowledgedEvidence)");
+  const portalMove = continuation.indexOf('moveToScreen("portal")');
+
+  assert.ok(refWrite >= 0, "the ACK continuation must synchronously update the ref read by the poll");
+  assert.ok(stateWrite > refWrite, "the ref must be updated before React queues the state commit");
+  assert.ok(portalMove > stateWrite, "the exact acknowledged evidence must be committed before opening final review");
+});
+
+test("prepare and poll responses hydrate the generated cover letter into review state", async () => {
+  const source = await readFile(dashboardUrl, "utf8");
+  const pollStart = source.indexOf("const refreshSubmission = useCallback(async () =>");
+  const pollEnd = source.indexOf("const sendWithoutAsking = useCallback", pollStart);
+  const poll = source.slice(pollStart, pollEnd);
+  const prepareStart = source.indexOf("async function prepareApplication(");
+  const prepareEnd = source.indexOf("async function saveQuestions", prepareStart);
+  const prepare = source.slice(prepareStart, prepareEnd);
+
+  assert.match(source, /function packetWithSubmission\(packet: GeneratedResume, submission: SubmissionResponse\)/);
+  assert.match(source, /submission\.cover_letter \? \{ _cover_letter: submission\.cover_letter \} : \{\}/);
+  assert.match(poll, /if \(result\.cover_letter\) setCoverLetterBody\(result\.cover_letter\.body\)/);
+  assert.match(poll, /packetWithSubmission\(packet, result\)/);
+  assert.match(prepare, /packetWithSubmission\(packet, result\)/);
+  assert.match(prepare, /if \(result\.cover_letter\) setCoverLetterBody\(result\.cover_letter\.body\)/);
+  assert.ok(
+    prepare.indexOf("if (selectedIdRef.current !== applicationId) return")
+      < prepare.indexOf("if (result.cover_letter) setCoverLetterBody(result.cover_letter.body)"),
+    "a response for a packet the student left must not overwrite the current review editor",
+  );
+});
 
 test("the dashboard renders only exact server-owned JD ranges and clause evidence", async () => {
   const source = await readFile(componentUrl, "utf8");
@@ -35,8 +230,12 @@ test("unsupported or overlapping audit colors fail closed", async () => {
 });
 
 test("a poll invalidates local proof when the audit digest or PDF binding changes", async () => {
-  const source = await readFile(dashboardUrl, "utf8");
-  assert.match(source, /packetAuditIdentityMatches\(current\.response\.packet_audit, result\.review\.packet_audit\)/);
+  const [source, evidenceSession] = await Promise.all([
+    readFile(dashboardUrl, "utf8"),
+    readFile(evidenceSessionUrl, "utf8"),
+  ]);
+  assert.match(source, /reconcileUnacknowledgedPacketPoll\(current, requestedId, result\.review\.packet_audit\)/);
+  assert.match(evidenceSession, /packetAuditIdentityMatches\(current\.response\.packet_audit, polledAudit\)/);
 });
 
 test("the browser binds the audit to this application and exact stored PDF", async () => {

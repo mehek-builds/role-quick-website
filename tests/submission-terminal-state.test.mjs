@@ -19,7 +19,7 @@ test("every path that receives a review routes the screen from it", async () => 
   // the match cannot reach across unrelated code.
   assert.match(
     dashboard,
-    /\/submit-request`[\s\S]{0,900}moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/submit-request`[\s\S]{0,1100}moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
   );
   // The poll, which now has EXACTLY ONE exception and it is spelled out here rather than being
   // absorbed by a wider span. While the student's own approve is in flight the poll is reporting

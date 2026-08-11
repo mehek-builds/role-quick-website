@@ -176,7 +176,10 @@ test("Home does not review a packet", async () => {
    against the screen that actually performs a submission, so the coverage moved rather than
    thinned. */
 test("the review screen gates and performs the submission", async () => {
-  const review = await readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8");
+  const [review, evidenceSession] = await Promise.all([
+    readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../features/applications/domain/packet-evidence-session.ts", import.meta.url), "utf8"),
+  ]);
 
   // A required question with no answer stops the send, on the screen that can also collect it.
   assert.match(review, /questions\.filter\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
@@ -199,11 +202,12 @@ test("the review screen gates and performs the submission", async () => {
   // PDF, posting and requirement evidence first, and that per-packet proof becomes a term in the
   // final employer-send gate rather than a decorative warning.
   assert.match(review, /status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)/);
-  assert.match(review, /const packetEvidenceReady = Boolean\([\s\S]{0,600}exactPacketPdfReady[\s\S]{0,600}auditedDisplayReady[\s\S]{0,600}activePacketEvidence\.specJson === JSON\.stringify\(spec\)[\s\S]{0,300}activePacketEvidence\.questionsJson === JSON\.stringify\(questions\)/);
+  assert.match(review, /const packetEvidenceReady = Boolean\([\s\S]{0,600}exactPacketPdfReady[\s\S]{0,600}auditedDisplayReady[\s\S]{0,600}activePacketEvidence\.specJson === JSON\.stringify\(spec\)[\s\S]{0,300}activePacketEvidence\.questionsSnapshot === currentQuestionsSnapshot/);
   assert.match(review, /verified\.auditDigest === expected\.packet_audit\.audit_digest/);
   assert.match(review, /verified\.sha256 === expected\.pdf\.sha256/);
   assert.match(review, /verified\.sizeBytes === expected\.pdf\.size_bytes/);
-  assert.match(review, /packetAuditIdentityMatches\(current\.response\.packet_audit, result\.review\.packet_audit\)/);
+  assert.match(review, /reconcileUnacknowledgedPacketPoll\(current, requestedId, result\.review\.packet_audit\)/);
+  assert.match(evidenceSession, /packetAuditIdentityMatches\(current\.response\.packet_audit, polledAudit\)/);
   assert.match(review, /review\?\.status === "ready_for_final_approval"[\s\S]{0,120}moveToScreen\("portal"\)/);
   assert.match(review, /<ExactPacketPdf[\s\S]{0,500}onVerified=\{recordPacketPdfVerification\}/);
   assert.match(review, /`\/applications\/\$\{applicationId\}\/packet-audit\/acknowledge`/);
