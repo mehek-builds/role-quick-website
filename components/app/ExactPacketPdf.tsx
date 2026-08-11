@@ -3,13 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 
-import { verifyPacketPdfBytes, type PacketPdfBinding } from "@/features/applications";
-
-type VerifiedPacketPdf = {
-  auditDigest: string;
-  sha256: string;
-  sizeBytes: number;
-};
+import { verifyPacketPdfBytes, type PacketPdfBinding, type PacketPdfEvidenceVerification } from "@/features/applications";
 
 type PdfView =
   | { key: string; state: "loading" }
@@ -32,7 +26,7 @@ export function ExactPacketPdf({
   auditDigest: string;
   binding: PacketPdfBinding;
   downloadUrl: string;
-  onVerified: (verified: VerifiedPacketPdf | null) => void;
+  onVerified: (verified: PacketPdfEvidenceVerification | null) => void;
 }) {
   const onVerifiedRef = useRef(onVerified);
   useEffect(() => {
@@ -91,7 +85,6 @@ export function ExactPacketPdf({
     return () => {
       active = false;
       controller.abort();
-      onVerifiedRef.current(null);
     };
   }, [auditDigest, binding.sha256, binding.size_bytes, downloadUrl, verificationKey]);
 
@@ -146,7 +139,6 @@ export function ExactPacketPdf({
       pages.replaceChildren();
       if (documentProxy) void documentProxy.cleanup();
       if (loadingTask) void loadingTask.destroy();
-      onVerifiedRef.current(null);
     };
   }, [auditDigest, renderSource, verificationKey]);
 

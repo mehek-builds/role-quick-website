@@ -59,7 +59,7 @@ import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
-import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQuestionsSnapshot, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession } from "@/features/applications";
+import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "recent" | "company";
@@ -1079,19 +1079,8 @@ function Applications() {
                   ? "The answers changed after the packet audit. Audit this packet again."
                   : null;
 
-  const recordPacketPdfVerification = useCallback((verified: { auditDigest: string; sha256: string; sizeBytes: number } | null) => {
-    setPacketEvidence((current) => {
-      if (!current) return current;
-      const expected = current.response;
-      const matches = Boolean(
-        verified
-        && verified.auditDigest === expected.packet_audit.audit_digest
-        && verified.sha256 === expected.pdf.sha256
-        && verified.sizeBytes === expected.pdf.size_bytes,
-      );
-      if (current.pdfVerified === matches && (!current.acknowledged || matches)) return current;
-      return { ...current, pdfVerified: matches, acknowledged: matches ? current.acknowledged : false };
-    });
+  const recordPacketPdfVerification = useCallback((verified: PacketPdfEvidenceVerification | null) => {
+    setPacketEvidence((current) => reconcilePacketPdfVerification(current, verified));
   }, []);
 
   /* Every edit the student makes to the draft goes through here so the posting id cannot outlive

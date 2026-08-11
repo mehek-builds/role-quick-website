@@ -11,6 +11,12 @@ export type PacketEvidenceSession = {
   serverRevalidatedAt: number | null;
 };
 
+export type PacketPdfEvidenceVerification = {
+  auditDigest: string;
+  sha256: string;
+  sizeBytes: number;
+};
+
 function normalizedQuestionText(value: string): string {
   return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
 }
@@ -35,6 +41,23 @@ export function packetQuestionsSnapshot(questions: readonly ApplicationQuestion[
   }));
   canonical.sort((left, right) => compareCanonicalText(JSON.stringify(left), JSON.stringify(right)));
   return JSON.stringify(canonical);
+}
+
+/** Applies only an actual verification result or invalidation, never a viewer lifecycle event. */
+export function reconcilePacketPdfVerification(
+  current: PacketEvidenceSession | null,
+  verified: PacketPdfEvidenceVerification | null,
+): PacketEvidenceSession | null {
+  if (!current) return current;
+  const expected = current.response;
+  const matches = Boolean(
+    verified
+    && verified.auditDigest === expected.packet_audit.audit_digest
+    && verified.sha256 === expected.pdf.sha256
+    && verified.sizeBytes === expected.pdf.size_bytes,
+  );
+  if (current.pdfVerified === matches && (!current.acknowledged || matches)) return current;
+  return { ...current, pdfVerified: matches, acknowledged: matches ? current.acknowledged : false };
 }
 
 /**

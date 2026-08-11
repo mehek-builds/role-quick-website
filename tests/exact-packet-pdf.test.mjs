@@ -18,12 +18,25 @@ test("the exact PDF viewer fetches, hashes, parses every page, and reports one a
 
 test("a changed audit or parse or render failure revokes submission readiness", async () => {
   const source = await readFile(componentUrl, "utf8");
-  assert.match(source, /onVerifiedRef\.current\(null\);/);
+  assert.match(source, /let active = true;\s*onVerifiedRef\.current\(null\);/);
+  assert.match(source, /\.catch\(\(\) => \{\s*if \(!active\) return;\s*onVerifiedRef\.current\(null\);/);
   assert.match(source, /view\.key === verificationKey \? view : \{ key: verificationKey, state: "loading" \}/);
   assert.match(source, /\[auditDigest, binding\.sha256, binding\.size_bytes, downloadUrl, verificationKey\]/);
   assert.match(source, /documentProxy\.cleanup\(\)/);
   assert.match(source, /loadingTask\.destroy\(\)/);
   assert.match(source, /The exact PDF could not be parsed and rendered/);
+});
+
+test("expected viewer cleanup releases resources without revoking a verified packet", async () => {
+  const source = await readFile(componentUrl, "utf8");
+  const cleanups = [...source.matchAll(/return \(\) => \{([\s\S]*?)\n    \};/g)].map((match) => match[1]);
+
+  assert.equal(cleanups.length, 2);
+  assert.match(cleanups[0], /controller\.abort\(\)/);
+  assert.match(cleanups[1], /pages\.replaceChildren\(\)/);
+  assert.match(cleanups[1], /documentProxy\.cleanup\(\)/);
+  assert.match(cleanups[1], /loadingTask\.destroy\(\)/);
+  for (const cleanup of cleanups) assert.doesNotMatch(cleanup, /onVerifiedRef\.current\(null\)/);
 });
 
 test("header-shaped bytes are not accepted as a rendered PDF", async () => {
