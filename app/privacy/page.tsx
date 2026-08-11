@@ -289,6 +289,25 @@ export default function Privacy() {
             the website carry your account identifier, and that profile is
             deleted when you delete your account.
           </p>
+          {/* This paragraph ships ahead of the code it describes, on purpose.
+              The page has to say we keep an attached file before the endpoint
+              can store the first byte of one, so no file is ever held under a
+              policy that did not mention it. Two clauses are load-bearing and
+              neither is decoration. "We encrypt it" is why the upload path
+              seals the bytes before writing them: a Vercel Blob object is
+              public-read forever to anyone who has its URL, so the stored
+              object is ciphertext, not a readable PDF. "until you remove it"
+              is why the attached-file card carries a remove action; with no
+              delete a user can actually reach, this line is a promise the
+              product cannot keep. The resume sentence above stays exactly as
+              it is: uploaded resumes are still read once and thrown away, and
+              this is a different kind of file with a different answer. */}
+          <p>
+            A file you attach to an application yourself, like a transcript, is
+            different. We encrypt it and keep it until you remove it or delete
+            your account, so a later application can use the same file without
+            us asking you for it again.
+          </p>
         </Section>
 
         {/* support@trylitos.com is the ONE address users are given. Mehek's
@@ -315,11 +334,11 @@ export default function Privacy() {
             Deleting removes all account-linked product data. Your account. The
             facts we read from your resume. Your answers, both the ones you
             typed and the ones we watched you type. Your emails. Your form
-            history. Every resume we made, files and all. Your PostHog analytics
-            profile goes too, along with the events recorded against it while you
-            were signed in. Events recorded before you ever signed in carry no
-            account identifier, so there is nothing there to find or remove. You
-            cannot undo this.
+            history. Every resume we made, files and all. The files you attached
+            yourself. Your PostHog analytics profile goes too, along with the
+            events recorded against it while you were signed in. Events recorded
+            before you ever signed in carry no account identifier, so there is
+            nothing there to find or remove. You cannot undo this.
           </p>
           <p>
             People are the one thing that stays. A person at a company is a

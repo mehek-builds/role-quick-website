@@ -286,7 +286,22 @@ export function ApplicationPacket({
     ? userFacingError(review.attention_reason, "Litos could not finish the company's form. Try again in a minute.")
     : undefined;
   const attentionReview = { ...review, attention_reason: safeAttentionReason };
-  const needsInput = humanInputItems(attentionReview);
+  /* The company, the role and what the packet already carries. Without the third of those, a
+     revisited application that went out WITH its transcript would still be listed here as needing
+     one, which is the same class of error as the Done column claiming a box was filled that the run
+     reported empty: a record of a finished application asserting outstanding work.
+     `_documents` is the packet's own stored record rather than the submission envelope, because this
+     viewer resolves from `packets` and deliberately never holds a submission. */
+  /* Settled rows dropped, and only here. A settled row is a confirmation that carries a control back
+     to the thing it confirms, and this viewer is read-only: it has no upload handler to hand a row,
+     and by a rule of its own it prints no action words at all. So one would arrive under a heading
+     that reads "Needs your input" as a bare line of text with nothing to press, which is the dead
+     pill wearing the opposite face. The review screen is where these rows have somewhere to go. */
+  const needsInput = humanInputItems(attentionReview, {
+    company: packet.job_context.company,
+    role: packet.job_context.role,
+    documents: packet.spec._documents,
+  }).filter((item) => !item.settled);
   const completedItems = completedSubmissionItems(review);
   const receipt = review.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);

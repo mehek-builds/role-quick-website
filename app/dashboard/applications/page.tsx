@@ -12,6 +12,7 @@ import {
   type ApplicationQuestion,
   type ApplicationProfile,
   type ApplicationReview,
+  type AttachedDocument,
   type CoverLetter,
   type GeneratedResume,
   type JobsPage,
@@ -27,7 +28,7 @@ import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnL
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
 import { nextMatchScoreRequest } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
@@ -42,6 +43,7 @@ import { SectionBoundary } from "@/components/app/SectionBoundary";
    packet pane the way it just did. */
 import { ApplicationPacket, contactLine, contactName } from "@/components/app/ApplicationPacket";
 import { ResumePaper } from "@/components/app/ApplicationPacket";
+import { TranscriptModal } from "@/components/app/TranscriptModal";
 import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "@/components/app/Autopilot";
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
@@ -51,7 +53,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionItems, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -66,7 +68,12 @@ type ApplicationSort = "recent" | "company";
 /* `partial` marks the snapshot selectPacket seeds from a board row, which carries `review` and
    nothing else. nextSubmissionState reads it so the first real server answer always replaces the
    seed. See features/applications/domain/submission-state.ts for what that fixes. */
-type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; handoff_url?: string; configured?: boolean; partial?: boolean };
+/* `documents` is keyed by document kind and is TRI-STATE the way cover_letter_required is: absent
+   means this envelope has never carried the measurement, and an unmeasured document must not block a
+   send. An empty object is a real answer, "nothing is attached"; undefined is "nobody has looked".
+   The `partial: true` seed below is exactly the second case, and so is a backend that predates the
+   documents route. */
+type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; documents?: Record<string, AttachedDocument>; handoff_url?: string; configured?: boolean; partial?: boolean };
 
 type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
 type CoverLetterResponse = { cover_letter: CoverLetter; download_url: string };
@@ -188,6 +195,23 @@ function Applications() {
      aria-modal dialog back onto the board behind it, then re-locked body scroll. A keyboard user
      reading the answers got yanked back to Close every time the autopilot ticked. */
   const closeRevisit = useCallback(() => setRevisitingId(null), []);
+  /* Which document ask the upload modal is open on, held as a KIND and resolved against the current
+     submission at render, for the same reason revisitingId holds an id rather than a packet: the
+     2.5s poll replaces `submission` wholesale, and a captured ask object would go stale under an
+     open modal within one tick.
+
+     The token is what makes a second press of the same row work. Without it, pressing "Add
+     transcript" again after closing and reopening produces an identical state value, React bails out
+     of the update, and the modal's key never changes, so a modal left on its "attached" state stays
+     there and the second press looks dead. Same defect and same fix as focusQuestion above. */
+  const [documentAsk, setDocumentAsk] = useState<{ kind: string; token: number } | null>(null);
+  /* Stable identity, like closeRevisit: the modal's focus trap runs on [] deps and reads this
+     through a ref, and an inline arrow here would rebuild the trap on every poll tick and throw
+     focus out of an open dialog. */
+  const closeDocumentAsk = useCallback(() => setDocumentAsk(null), []);
+  const askForDocument = useCallback((kind: string) => {
+    setDocumentAsk((current) => ({ kind, token: (current?.token ?? 0) + 1 }));
+  }, []);
   // Mirrors selectedId for in-flight async work to compare against. State reads inside an awaited
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
@@ -537,9 +561,20 @@ function Applications() {
     /* Seeded from the board row so the portal screen has something to draw before the first poll
        answers, and marked `partial` because that is exactly what it is. The cover letter is carried
        across too: /resume/history already sends `spec._cover_letter` on every row, and leaving it
-       out was half of why the send stayed disabled. */
+       out was half of why the send stayed disabled.
+
+       The document marks are carried for the same reason and off the same row. The first poll is
+       2.5 seconds behind this seed, and without them re-entering an application whose transcript is
+       already stored drew no manage control for that whole window: an attached file looked
+       unattached, and the one route to "Remove this file" was missing from the screen while
+       /privacy promises removal. `spec._documents` is not a guess about the envelope, it is the
+       same stored record the server reads to build it.
+
+       Absent stays absent. documentsFromSpecMarks returns undefined for a packet with no marks,
+       which is the honest answer and the one the send gate needs: an empty object would claim this
+       application had been measured and block a send on an ask the seed cannot confirm. */
     setSubmission(status
-      ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, partial: true }
+      ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
       : null);
     setError(null);
     setPollError(null);
@@ -654,6 +689,42 @@ function Applications() {
      still blocked on the letter that had just been written. Every writer goes through here. */
   const applyCoverLetterToSubmission = useCallback((applicationId: string, coverLetter: CoverLetter | null) => {
     setSubmission((current) => current && current.application_id === applicationId ? { ...current, cover_letter: coverLetter } : current);
+  }, []);
+
+  /* The same problem the cover letter has, for documents: `packets` and `submission` each hold a
+     copy of what an application carries, and the send gate reads the second one. Written here rather
+     than left to the poll because the poll only runs on the submitting and portal screens, and
+     because two and a half seconds of a Send button still greyed out after a successful upload reads
+     as a failed upload.
+
+     `documents` is set to a real object even when the attachment is cleared, so an application that
+     has been measured never falls back to the never-measured state and silently loses its gate. */
+  const applyDocumentToSubmission = useCallback((applicationId: string, kind: string, attachment: AttachedDocument | null) => {
+    setSubmission((current) => {
+      if (!current || current.application_id !== applicationId) return current;
+      const documents = { ...(current.documents ?? {}) };
+      if (attachment) documents[kind] = attachment;
+      else delete documents[kind];
+      return { ...current, documents };
+    });
+    setPackets((current) => current?.map((packet) => {
+      if (packet.id !== applicationId) return packet;
+      const marks = { ...(packet.spec._documents ?? {}) };
+      /* Named field by field rather than spread minus `kind`. The spec's record is the one the
+         server also writes `object_key` into, and a spread is how a field nobody meant to copy ends
+         up in client state and then in something this app renders. */
+      if (attachment) {
+        marks[kind] = {
+          document_id: attachment.document_id,
+          file_name: attachment.file_name,
+          attached_at: attachment.attached_at,
+          ordered_at: attachment.ordered_at,
+          employer_label: attachment.employer_label,
+          official_requested: attachment.official_requested,
+        };
+      } else delete marks[kind];
+      return { ...packet, spec: { ...packet.spec, _documents: marks } };
+    }) ?? current);
   }, []);
 
   useEffect(() => {
@@ -1632,6 +1703,50 @@ function Applications() {
     }
   }
 
+  /* THE EXIT FROM A SEND THAT CAN NEVER GO GREEN.
+   *
+   * Two states reach it and both were permanent. She presses "I've ordered it", which records the
+   * acknowledgement and deliberately attaches nothing, because Litos cannot make a registrar mail a
+   * sealed transcript; or the run measures this form and finds no control it can put the file in.
+   * Either way the eighth gate term stays true forever, "Send it" is grey for the life of the packet,
+   * and the modal that put her there has already told her "This application then finishes with you
+   * rather than with Litos" - about a screen that had nothing on it that could finish anything.
+   *
+   * Deliberately the SAME words as the control on a stalled handoff two branches below, because it
+   * is the same sentence about the same act. The server writes the same record for it too: submitted,
+   * with a receipt whose source names an attended handoff and whose text names her as the witness. It
+   * refuses outright for an application Litos could still finish itself, so this is not a way past a
+   * send gate that is doing its job.
+   */
+  async function recordSelfSubmitted() {
+    if (!selected || !submission) return;
+    if (submission.application_id !== selected.id) return;
+    setError(null);
+    try {
+      const result = qaMode
+        ? {
+          ...submission,
+          review: {
+            ...submission.review,
+            status: "submitted" as const,
+            submitted_at: new Date().toISOString(),
+            attention_reason: undefined,
+            receipt: {
+              confirmation_text: "Confirmed by you: this employer asked for a document Litos could not attach, so you sent this application yourself.",
+              final_url: submission.review.portal_url ?? "/qa/portal-submission/success",
+              captured_at: new Date().toISOString(),
+              source: "attended_handoff" as const,
+            },
+          },
+        }
+        : await api<SubmissionResponse>(`/applications/${selected.id}/submission/self-submitted`, { method: "POST" });
+      setSubmission(result);
+      moveToScreen(result.review.status === "submitted" ? "submitted" : "portal");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "We could not record that you sent this one yourself.");
+    }
+  }
+
   /* The one place an answer can be seen, edited and saved. "Check the answers" has always come
      here; the Your turn rows now come here too, carrying WHICH question was pressed so the student
      lands on it rather than at the top of a list of twelve. Save from here goes out through
@@ -2158,6 +2273,8 @@ function Applications() {
           onRetry={retryPreparation}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId) => reviewPortalQuestions(questionId)}
+          onAddDocument={askForDocument}
+          onSelfSubmitted={() => void recordSelfSubmitted()}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -2399,6 +2516,42 @@ function Applications() {
           packet={revisitingPacket}
           review={revisitingPacket.spec._review}
           onClose={closeRevisit}
+        />
+      )}
+
+      {/* OUTSIDE the screen ternary above, and that is not a tidiness preference.
+          The 2.5s poll calls moveToScreen on every tick, so a modal rendered inside a branch of that
+          ternary unmounts the moment a run's status moves, mid-upload, with the file half sent and
+          no message. Out here it lies over whichever screen the page is on and survives every
+          transition the poll can cause.
+
+          Resolved from `submission` every render rather than from an object captured when the row
+          was pressed, for the reason the packet viewer above is resolved from `packets`: the poll
+          replaces this state wholesale, so a captured ask goes stale inside one tick.
+
+          Keyed on the kind AND a token. Without the token, pressing the same row a second time
+          produces an identical state value, React bails out of the update, and a modal left on its
+          attached state stays there: the second press looks dead. */}
+      {documentAsk && selectedSubmission && selected && (
+        <TranscriptModal
+          key={`${documentAsk.kind}-${documentAsk.token}`}
+          applicationId={selectedSubmission.application_id}
+          kind={documentAsk.kind}
+          /* Folded to one ask per kind by the same function the control row uses, so the modal cannot
+             open on a different label from the button that opened it. A raw `find` takes the first
+             ask for the kind and drops the official flag off any later one, which on a form carrying
+             both "Unofficial transcript (PDF)" and "Official transcript" is the door to "I have
+             ordered it" quietly missing. */
+          ask={documentAsksByKind(selectedSubmission.review.required_documents).find((entry) => entry.kind === documentAsk.kind) ?? null}
+          attachment={selectedSubmission.documents?.[documentAsk.kind] ?? null}
+          company={selected.job_context.company || "This company"}
+          role={selected.job_context.role || ""}
+          onAttachmentChange={(kind, attachment) => applyDocumentToSubmission(selectedSubmission.application_id, kind, attachment)}
+          onReviewApplication={() => {
+            setDocumentAsk(null);
+            moveToScreen("portal");
+          }}
+          onClose={closeDocumentAsk}
         />
       )}
     </div>
@@ -2944,7 +3097,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -3069,8 +3222,77 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
     : undefined;
   const attentionReview = { ...review, attention_reason: safeAttentionReason };
-  const needsInputItems = humanInputItems(attentionReview);
+  const needsInputItems = humanInputItems(attentionReview, {
+    company: packet.job_context.company,
+    role: packet.job_context.role,
+    documents: submission.documents,
+  });
   const completedItems = completedSubmissionItems(review);
+  /* What this application already carries, as far as the snapshot on screen knows.
+   *
+   * ABSENT IS THE ORDINARY STATE OF THIS FIELD, which is the whole reason the gate below does not
+   * read it as an answer. `documents` rides on GET /applications/:id/submission and on nothing else:
+   * the board seed selectPacket builds carries it only when the row already stored a mark, and every
+   * other envelope this page installs (submit-request, submission/approve, handoff-complete,
+   * security-code) omits the key entirely. So its absence says "this envelope did not carry it", not
+   * "a run looked and found nothing". */
+  const documentMarks = submission.documents;
+  /* EVERY ask and EVERY stored file, one control each, resolved per kind by documentControls.
+   *
+   * This was a `find` for the first outstanding ask plus a whole-screen `!outstandingDocumentAsk`
+   * guard on the reopen control, which made one kind's state decide another kind's control: with a
+   * transcript attached and a second kind still outstanding, the attached transcript's control
+   * vanished. On ready_for_final_approval there is no Your turn panel, so that control row is the
+   * only place this screen can reopen the modal, and "Remove this file" lives inside it. A file
+   * Litos is storing lost its way out because a different file had not arrived yet, while /privacy
+   * publishes "we keep it until you remove it".
+   *
+   * See features/applications/domain/submission-checklist.ts for why `attached` is read off the
+   * marks rather than the asks. */
+  const {
+    outstanding: outstandingDocumentAsks,
+    ordered: orderedDocumentAsks,
+    undeliverable: undeliverableDocumentAsks,
+    attached: attachedDocumentKinds,
+  } = documentControls(review.required_documents, documentMarks, review);
+  /* THE MEASUREMENT THE BACKEND SHIPPED AND THIS SCREEN READ NOWHERE.
+   *
+   * `transcript_supported` is written on both prepare paths and rides on every submission envelope,
+   * and until it reached documentControls the only reader of it was its own type declaration. An
+   * employer's form asked for a transcript, the run found no control it could put one in, the
+   * student uploaded a file, the ask cleared, and the send went out reporting the document handled.
+   * The file had attached to nothing.
+   *
+   * These asks therefore go on blocking after a file is stored, which is the one place this term
+   * departs from the outstanding one. A settled row means Litos is holding her file; it has never
+   * meant the employer received it, and letting the row suppress the employer's own blocker is
+   * exactly the substitution that made the send dishonest. Tri-state throughout: `undefined` is
+   * every packet prepared before the measurement existed and blocks nothing. */
+  const documentsLitosCannotDeliver = orderedDocumentAsks.length > 0 || undeliverableDocumentAsks.length > 0;
+  /* THE EIGHTH TERM, CLOSED UNTIL AN ATTACHMENT OPENS IT.
+   *
+   * It read `documentMarks !== undefined && outstandingDocumentAsks.length > 0`, which handed the
+   * ABSENCE of the marks map the power to open the gate. That absence is routine, not exceptional:
+   * see the comment on documentMarks above. Re-entering an application with a measured, outstanding,
+   * unattached ask therefore left "Send it" green for the 2.5 seconds until the first poll landed,
+   * and a student who pressed inside that window sent an application the employer's own form had
+   * already recorded as missing a required file. The seeding that closed the old blind window in one
+   * direction opened this one in the other.
+   *
+   * THE TRI-STATE IS `required_documents`, not the marks, exactly as it is `cover_letter_required`
+   * for the letter and for the same reason. Undefined means no run has measured this form and
+   * nothing here can block; an empty list means a run measured it and the employer asked for
+   * nothing; only a present, non-empty ask blocks. An unmeasured form is therefore never caught by
+   * this term, so no backend that declines to write the field can strand a send. What CLEARS a
+   * measured ask is a mark with `attached_at` and nothing else: `ordered_at` deliberately does not,
+   * because Litos cannot make a registrar mail a sealed copy, and a missing marks map does not,
+   * because "the envelope did not say" is not "she has attached it".
+   *
+   * IT SHIPS WITH ITS OWN EXIT, which is what stops a closed default becoming a trap: every
+   * outstanding ask draws its own Add control in the row beside Send it, and its own sentence below.
+   * A measured ask that stays outstanding is an application the employer's form will refuse, so the
+   * grey button is the honest one. */
+  const transcriptPending = outstandingDocumentAsks.length > 0 || documentsLitosCannotDeliver;
   const educationDriftWarning = educationDriftMessage(educationDrift(packet.spec, educationProfile));
   const educationProfilePending = educationProfileStatus !== "ready";
   const sensitiveQuestionPresent = review.questions.some((question) => requiresSensitiveQuestionReview(question.question, question.answer));
@@ -3093,7 +3315,18 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     return () => { if (timer !== undefined) window.clearTimeout(timer); };
   }, []);
   const handoffExpired = handoffWindowExpired(review, nowMs);
-  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting;
+  /* `transcriptPending` is appended AFTER `restarting` rather than inserted anywhere inside. Two
+     suites read this expression as a literal, one of them requiring `|| handoffExpired ||` with a
+     term on each side, and both exist because a gate term silently dropped from here is a button
+     offering a send the server refuses. Appending is the one edit that cannot reorder a pinned
+     neighbour.
+
+     `!packetEvidenceReviewed` arrived on main from the exact-packet-audit branch the day before
+     this one, prepended at the head for the same reason in reverse. Both terms survive the merge:
+     they block on unrelated facts, neither implies the other, and a resolution that kept one end of
+     this line and dropped the other would have re-opened a real employer send. That is what the
+     whole-expression pin in tests/application-submission-gate.test.mjs is for. */
+  const finalApprovalBlocked = !packetEvidenceReviewed || educationProfilePending || Boolean(educationDriftWarning) || coverLetterPending || requiredAnswerMissing || sensitiveQuestionPresent || !previewReady || handoffExpired || approving || restarting || transcriptPending;
   function approveVerifiedPreview() {
     if (finalApprovalBlocked) return;
     onApprove();
@@ -3107,7 +3340,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             is how "CAPTCHA requires your attention ... is required required field is required ..."
             reached the screen. Each blocker is its own item, because each is its own task. */}
         {needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} />
+          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
@@ -3288,6 +3521,44 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           {review.status === "ready_for_final_approval" && handoffExpired && (
             <Button onClick={onRestart} disabled={restarting} variant="secondary">{restarting ? "Starting it again..." : "Start it again"}</Button>
           )}
+          {/* The way out of the eighth reason, one control per outstanding ask. On this status there
+              is no Your turn panel, so without these the greyed Send would name a blocker with
+              nothing on screen that resolves it, which is the shape of every defect this screen has
+              been fixed for. Mapped rather than picking the first ask: two outstanding kinds are two
+              separate pieces of work and a single button can only ever open one of them. */}
+          {review.status === "ready_for_final_approval" && outstandingDocumentAsks.map((ask) => (
+            <Button key={ask.kind} onClick={() => onAddDocument(ask.kind)} variant="secondary">Add {ask.kind}</Button>
+          ))}
+          {/* An ask she has answered with "I have ordered it" keeps a control, because plenty of
+              employers write "official" and take the downloaded PDF, and the modal's own second door
+              is the one this opens. It is worded differently from the row above so the two buttons
+              are not the same offer twice: that one is the file this form is waiting for, this one is
+              the copy she may not need to give. */}
+          {review.status === "ready_for_final_approval" && orderedDocumentAsks.map((ask) => (
+            <Button key={ask.kind} onClick={() => onAddDocument(ask.kind)} variant="secondary">Add an unofficial {ask.kind}</Button>
+          ))}
+          {/* And the way BACK to a file that is already attached, which this row had no control for
+              at all. Nothing here is blocked any more, so it is quiet rather than secondary: it
+              exists so the modal's "Remove this file" is still reachable a week later, not to
+              suggest there is something left to do.
+
+              Independent of every other kind, which it was not: gated on no ask being outstanding
+              ANYWHERE, an attached transcript lost this control the moment a second kind was asked
+              for, and a file the product cannot delete makes /privacy's promise false. */}
+          {review.status === "ready_for_final_approval" && attachedDocumentKinds.map((kind) => (
+            <Button key={kind} onClick={() => onAddDocument(kind)} variant="quiet">Your {kind}</Button>
+          ))}
+          {/* THE CONTROL THAT FINISHES AN APPLICATION LITOS CANNOT.
+              A registrar's sealed copy and a form with no upload control are the two things no
+              button on this screen can produce, and both leave the send gate shut for good. The
+              modal already told her "This application then finishes with you rather than with
+              Litos"; before this there was nothing here that finished it, so the packet sat at
+              ready_for_final_approval behind a grey Send button forever.
+              The same words as the control on a stalled handoff above, because it is the same act
+              and the server writes the same record for it. */}
+          {review.status === "ready_for_final_approval" && documentsLitosCannotDeliver && (
+            <Button onClick={onSelfSubmitted} variant="secondary">I submitted it myself</Button>
+          )}
           {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send it</Button>}
         </div>
         {attendedHandoffState === "preparing" && (
@@ -3356,6 +3627,42 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             A sensitive demographic, identity, or legal question is present. Leave it for the applicant before sending.
           </p>
         )}
+        {/* The eighth reason, named the way the other seven are. Says which document and where the
+            control is, because a blocker the student cannot act on is a wall.
+
+            It used to say "the row above", meaning a Your turn row. There is never one: BlockerList
+            renders only on needs_attention and this paragraph renders only on
+            ready_for_final_approval, so the two cannot be on screen together and the sentence sent
+            her looking for something that was not there. It names the button that IS on this screen,
+            by the words printed on it and by what it sits next to.
+
+            One sentence per outstanding ask, because each names its own button and there is one
+            button per ask. A single sentence naming the first kind would be a screen with two Add
+            controls on it explaining only one of them. */}
+        {review.status === "ready_for_final_approval" && transcriptPending && outstandingDocumentAsks.map((ask) => (
+          <p key={ask.kind} className="mt-3 text-xs leading-5 text-warn">
+            This company asks for a {ask.kind} and Litos has none attached, so their form would refuse this. Press Add {ask.kind}, next to Send it, to attach one.
+          </p>
+        ))}
+        {/* The eighth reason in its second shape: the ask is acknowledged and still unresolved.
+            Nothing Litos can do moves this one, so the sentence names the two things that can and
+            names them by the buttons beside it, rather than repeating a demand she has answered. */}
+        {review.status === "ready_for_final_approval" && orderedDocumentAsks.map((ask) => (
+          <p key={ask.kind} className="mt-3 text-xs leading-5 text-warn">
+            You said you have ordered your official {ask.kind}. Litos cannot send a sealed copy from your registrar, so it cannot finish this one. Attach an unofficial copy if this company takes one, or send it on their page and press I submitted it myself.
+          </p>
+        ))}
+        {/* THE MEASUREMENT SAID SO, AND THE SCREEN SAYS IT.
+            The run looked at this form for somewhere to put the file and found nothing it could
+            fill. Before this the student was told to press Add, she uploaded, the row cleared, and
+            Send went green over an application whose document had attached to nothing. This
+            sentence renders whether or not a file is stored, because a stored file is not a
+            delivered one and the row that confirms the storage must not answer for the employer. */}
+        {review.status === "ready_for_final_approval" && undeliverableDocumentAsks.map((ask) => (
+          <p key={ask.kind} className="mt-3 text-xs leading-5 text-warn">
+            This company asks for a {ask.kind} and their form has no upload Litos can fill, so a file added here would not reach them and Litos cannot finish this one. Add it on their page yourself, then press I submitted it myself.
+          </p>
+        ))}
         <p className="mt-5 text-xs leading-5 text-muted">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
       <Card className="overflow-hidden">
@@ -3406,6 +3713,11 @@ function CenteredState({ title, body, loading = false }: { title: string; body?:
 }
 
 const CHECKLIST_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center rounded-full bg-action px-3.5 font-mono text-[10px] uppercase tracking-[0.08em] text-action-ink transition-colors hover:bg-brand-ink";
+/* The same control on a row that is not asking for anything. Outlined rather than filled, because
+   DESIGN.md's colour law is that weight says what a control IS and not how hard to press it, and a
+   filled pill on a confirmation row puts the loudest thing on the panel next to the one item that
+   needs nothing doing. Same 44px floor, same target, quieter voice. */
+const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center rounded-full border border-control-border bg-surface px-3.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted transition-colors hover:border-ink hover:text-ink";
 
 /* The action pill was a <span>. Not a disabled button, not a button with a missing handler: a span
    with button styling, sitting under a row that says an application is
@@ -3419,11 +3731,19 @@ const CHECKLIST_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center rounded-fu
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onOpenQuestion }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string) => void }) {
+function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onAddDocument?: (kind: string) => void }) {
   const control = checked ? null : checklistRowControl(item, { portalUrl });
+  /* Two different things, kept apart deliberately.
+     `checked` means "this row came out of the Done column", and it is the only thing that suppresses
+     the control, which is safe because nothing in completedSubmissionItems carries an action word in
+     the first place. `settled` means "this row states something already handled" and it must KEEP
+     its control: on the attached-transcript row that control is the only way back to Remove.
+     `done` is what the tick and the colour read, so a settled row looks like a confirmation instead
+     of shouting in amber beside the work that is genuinely outstanding. */
+  const done = checked || item.settled === true;
   return (
     <li className="grid grid-cols-[18px_1fr] gap-2 text-sm leading-5 text-muted">
-      {checked ? (
+      {done ? (
         <span aria-hidden className="mt-0.5 flex h-[14px] w-[14px] items-center justify-center rounded-[3px] border border-teal/40 bg-teal-soft text-teal-ink">
           <svg viewBox="0 0 16 16" className="h-3 w-3">
             <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
@@ -3433,7 +3753,10 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion }: { item: Subm
         <input type="checkbox" aria-label={`Mark ${item.label} done`} className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/60 bg-surface text-warn focus:ring-warn/30" />
       )}
       <span>
-        <span className={checked ? "text-ink" : "text-warn"}>{item.label}</span>
+        <span className={done ? "text-ink" : "text-warn"}>{item.label}</span>
+        {/* The state word rides beside the label rather than inside the sentence, so the row still
+            reads as a sentence about the employer and the pill stays scannable down a column. */}
+        {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
         {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}
         {control?.element === "link" && (
           <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={CHECKLIST_ACTION_CLASS}>
@@ -3445,27 +3768,60 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion }: { item: Subm
             {control.label}
           </button>
         )}
+        {/* AFTER the question branch, deliberately. tests/your-turn-actions.test.mjs pins the FIRST
+            <button> in this component as the one bound to onOpenQuestion, because that is the pill
+            that shipped as a styled <span> with nothing behind it. Adding a second interactive
+            branch above it would move the pin onto a control the test is not about, and the
+            regression it guards would be free to come back unnoticed. */}
+        {control?.element === "attach" && onAddDocument && (
+          <button type="button" aria-label={control.name} onClick={() => onAddDocument(control.kind)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
+            {control.label}
+          </button>
+        )}
       </span>
     </li>
   );
 }
 
-function BlockerList({ items, portalUrl, onOpenQuestion }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string) => void }) {
-  if (items.length === 0) {
-    return <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>;
-  }
+function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onAddDocument?: (kind: string) => void }) {
+  /* Split before anything is drawn, because these are two different sentences and only one of them
+     is a demand. An outstanding row is work the employer is still waiting on. A settled row states
+     that something is already handled and keeps a control only so she can change it, which is why
+     the attached transcript is here at all: "Remove this file" lives one press behind that control
+     and there is nowhere else in the product to reach it.
+
+     Drawn together, a confirmation would sit inside an amber panel headed "Your turn" and be counted
+     in "N to check", and an application with nothing outstanding would go on looking blocked. The
+     count reads the outstanding rows only, for the same reason. */
+  const outstanding = items.filter((item) => !item.settled);
+  const settled = items.filter((item) => item.settled);
   return (
-    <div className="mt-4 rounded-inner border border-warn/45 bg-warn-soft px-4 py-3 shadow-rest">
-      <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Your turn</p>
-        <p className="font-mono text-[11px] text-warn">{items.length} to check</p>
-      </div>
-      <ul className="mt-2 space-y-2">
-      {items.map((item) => (
-        <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} />
-      ))}
-      </ul>
-    </div>
+    <>
+      {outstanding.length === 0 ? (
+        <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>
+      ) : (
+        <div className="mt-4 rounded-inner border border-warn/45 bg-warn-soft px-4 py-3 shadow-rest">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Your turn</p>
+            <p className="font-mono text-[11px] text-warn">{outstanding.length} to check</p>
+          </div>
+          <ul className="mt-2 space-y-2">
+          {outstanding.map((item) => (
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+          ))}
+          </ul>
+        </div>
+      )}
+      {settled.length > 0 && (
+        <div className="mt-3 rounded-inner border border-border bg-surface-alt px-4 py-3">
+          <ul className="space-y-2">
+          {settled.map((item) => (
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+          ))}
+          </ul>
+        </div>
+      )}
+    </>
   );
 }
 

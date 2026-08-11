@@ -214,6 +214,59 @@ export type DashboardBootstrap = {
   >;
 };
 
+/**
+ * One document the EMPLOYER'S OWN FORM asks for, measured off the run that filled it.
+ *
+ * The dashboard keys the transcript row on this and never on
+ * `attention_categories.includes("required_document")`, and that is not a style choice. The
+ * category is written by two things that are not documents: the classifier's pattern has no word
+ * boundaries, so `file` matches inside `profile` and "LinkedIn Profile" is required and is still
+ * empty lands in it; and a lead-experience alignment failure writes the same category outright. A
+ * screen keying on the category asks a student for a transcript because the posting wanted a
+ * LinkedIn URL.
+ *
+ * `label` is the employer's own words, captured at the 120-char clip and NOT at the 60-char one the
+ * blocker sentence goes through. It is a paraphrase-free quote of a truncated string, which is why
+ * the modal says "Their wording" rather than promising the whole sentence.
+ */
+export type RequiredDocumentAsk = {
+  /** "transcript" today. A string, not a union, so a second document type is a value not a release. */
+  kind: string;
+  /** The employer's own field label, as far as it survived truncation. */
+  label: string;
+  /** The employer asked for an OFFICIAL copy, which Litos cannot produce. Drives screen 06. */
+  official_requested: boolean;
+};
+
+/**
+ * What one application already carries for one document kind.
+ *
+ * `attached_at` and `ordered_at` are separate on purpose and only the first one unblocks a send.
+ * Litos can attach a file the student uploads; it cannot make a registrar mail a sealed transcript,
+ * so "I have ordered it" records an acknowledgement and leaves the application with her.
+ */
+export type AttachedDocument = {
+  kind: string;
+  document_id: string | null;
+  file_name: string | null;
+  attached_at: string | null;
+  ordered_at: string | null;
+  employer_label: string | null;
+  official_requested: boolean;
+};
+
+/** One file in the student's own document library, as a response is allowed to describe it. */
+export type DocumentSummary = {
+  id: string;
+  kind: string;
+  file_name: string;
+  byte_size: number;
+  reusable: boolean;
+  created_at: string;
+  last_used_at: string | null;
+  deleted_at: string | null;
+};
+
 export type GeneratedResume = {
   id: string;
   /* job_id is the monitored posting this packet was built for. Absent on everything generated
@@ -225,6 +278,15 @@ export type GeneratedResume = {
     _contact?: Record<string, string | undefined>;
     _review?: ApplicationReview;
     _cover_letter?: CoverLetter;
+    /* What this packet already carries, keyed by document kind. The read-only packet viewer reads
+       it so a revisited application does not still ask for a transcript that went out with it.
+
+       Typed WITHOUT `object_key`, which the server DOES write into this record and which
+       /resume/history therefore puts on the wire. A Vercel Blob object is public-read forever to
+       anyone holding its URL, so that key is the whole of the access control on a student's
+       transcript. Leaving it out of the type is what keeps it from being one autocomplete away from
+       a log line or a link this app builds. */
+    _documents?: Record<string, Omit<AttachedDocument, "kind">>;
   };
   resume_object_key?: string;
   download_url?: string;
@@ -690,6 +752,14 @@ export type ApplicationReview = {
   /** Whether the run that filled this form actually carried a cover letter. Only an approved letter
    *  is attached, so a generated draft she has not read is stored and deliberately not sent. */
   cover_letter_attached?: boolean;
+  /** The documents this employer's form asks for, measured off the run rather than guessed from the
+   *  attention category. Same tri-state discipline as cover_letter_required: absent means no run has
+   *  measured this form, and an unmeasured ask must never block a send. Only a present, non-empty
+   *  list does. */
+  required_documents?: RequiredDocumentAsk[];
+  /** Whether the form has a document file control Litos can attach to. A capability of the portal,
+   *  never a requirement of the employer, exactly like cover_letter_supported. */
+  transcript_supported?: boolean;
   /** Whether Litos can fill in this posting's page at all. Derived from portal_url by the backend,
    *  so it is known before the first send rather than discovered after a multi-minute run. */
   portal_supported?: boolean;
@@ -1116,6 +1186,89 @@ export async function uploadResume(file: File): Promise<ParsedProfile> {
     throw new ApiError(res.status, (data as { error?: string } | null)?.error ?? "Could not read that resume.");
   }
   return data as ParsedProfile;
+}
+
+/**
+ * THE CAP IS 4 MB, and the number in the modal's copy is this constant.
+ *
+ * The backend's global multipart limit is two and a half times that, and its number is the one a
+ * file picker would naturally promise. It is not a number this product can keep. The managed sandbox
+ * carries an upload to the browser as base64 and refuses any file over 6,000,000 characters, about
+ * 4.29 MiB decoded, per file, before a browser opens; and there is no request-body limit in front of
+ * that check, so a larger body may instead be rejected by the platform with no error envelope at
+ * all, which is indistinguishable from an outage. Promising the multipart limit would be true on
+ * direct-Playwright portals and false on managed ones, which is the worst of the three available
+ * options.
+ *
+ * The multipart figure is described rather than written out because it is the wrong number for this
+ * product to carry in any searchable form: a later grep for it, hunting stale copy, should not find
+ * a hit in the comment that exists to say it is not the cap.
+ *
+ * Checked here as well as server-side so a student who picks a 9 MB scan is told in the modal
+ * rather than after an upload she waited through.
+ */
+export const MAX_APPLICATION_DOCUMENT_BYTES = 4_000_000;
+
+/**
+ * Attach a file the student chose to one application, and keep it for the next employer that asks.
+ *
+ * Multipart, and it still goes through `api()` rather than a bare fetch the way uploadResume does.
+ * That is safe because the Content-Type header in requestApi is set only for a STRING body, so a
+ * FormData body keeps the boundary the browser generates. Going through `api()` is what buys the
+ * 401 handling and apiErrorMessage's `issues` array, both of which uploadResume does without.
+ */
+export function attachApplicationDocument(
+  applicationId: string,
+  input: { file: File; kind: string; reuse: boolean; employerLabel?: string | null },
+): Promise<{ document: DocumentSummary; attachment: AttachedDocument }> {
+  const form = new FormData();
+  // The backend multipart handler reads the part named "document" and ignores everything else.
+  form.append("document", input.file);
+  form.append("kind", input.kind);
+  form.append("reuse", input.reuse ? "true" : "false");
+  if (input.employerLabel) form.append("employer_label", input.employerLabel.slice(0, 200));
+  return api<{ document: DocumentSummary; attachment: AttachedDocument }>(
+    `/applications/${applicationId}/documents`,
+    { method: "POST", body: form },
+  );
+}
+
+/** Record that the student has ordered an official copy. This does NOT unblock the send. */
+export function recordOrderedApplicationDocument(
+  applicationId: string,
+  kind: string,
+): Promise<{ attachment: AttachedDocument }> {
+  return api<{ attachment: AttachedDocument }>(`/applications/${applicationId}/documents/ordered`, {
+    method: "POST",
+    body: JSON.stringify({ kind }),
+  });
+}
+
+/** Stop this application carrying the document. The library file itself is untouched. */
+export function detachApplicationDocument(applicationId: string, kind: string): Promise<{ attachment: null }> {
+  return api<{ attachment: null }>(`/applications/${applicationId}/documents/${kind}`, { method: "DELETE" });
+}
+
+/**
+ * Every file the student still has stored with Litos, across all of her applications.
+ *
+ * ACCOUNT LEVEL, and that is the whole reason this exists rather than the per-application reads
+ * beside it. A stored document outlives the application it was first attached to: the application
+ * reaches a terminal status and its screen stops rendering any document control at all, while the
+ * file is still stored and /privacy still says "we keep it until you remove it". Two rounds of
+ * fixes tried to keep the delete control reachable from per-application UI and both sprang leaks,
+ * because they were binding an account-level object to a screen that goes away.
+ *
+ * Tombstones are excluded server-side, so a file the student has already removed never comes back
+ * as a row she can be asked to remove again.
+ */
+export function listUserDocuments(): Promise<{ documents: DocumentSummary[] }> {
+  return api<{ documents: DocumentSummary[] }>("/documents");
+}
+
+/** Delete the stored file itself. This is the endpoint that makes "kept until you remove it" true. */
+export function deleteUserDocument(documentId: string): Promise<{ deleted: boolean }> {
+  return api<{ deleted: boolean }>(`/documents/${documentId}`, { method: "DELETE" });
 }
 
 let productMetaPromise: Promise<ProductMeta> | null = null;

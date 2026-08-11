@@ -191,11 +191,45 @@ test("the review screen gates and performs the submission", async () => {
   assert.match(review, /\/submission\/approve/);
   assert.match(review, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
   assert.match(review, /const sensitiveQuestionPresent = review\.questions\.some/);
-  /* `handoffExpired` joined the list on 2026-08-09, after the Cresta 409. Pinned as the whole
-     expression rather than a substring, on purpose: this is the one gate in front of a real
-     employer submission, and a term silently dropped from it is a button that offers a send the
-     server refuses. See tests/expired-handoff-send.regression-1.test.mjs. */
-  assert.match(review, /const finalApprovalBlocked = !packetEvidenceReviewed \|\| educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting/);
+  /* `handoffExpired` joined the list on 2026-08-09, after the Cresta 409; `!packetEvidenceReviewed`
+     on 2026-08-10 with the exact packet audit; and `transcriptPending` on 2026-08-11 when employers'
+     forms started asking for a file Litos had to be holding. Pinned as the whole expression rather
+     than a substring, on purpose: this is the one gate in front of a real employer submission, and a
+     term silently dropped from it is a button that offers a send the server refuses. Two terms
+     arrived on this line from two branches within a day of each other, one at each end of it, which
+     is exactly the collision an anchored whole-expression pin is here to make loud.
+     See tests/expired-handoff-send.regression-1.test.mjs. */
+  assert.match(review, /const finalApprovalBlocked = !packetEvidenceReviewed \|\| educationProfilePending \|\| Boolean\(educationDriftWarning\) \|\| coverLetterPending \|\| requiredAnswerMissing \|\| sensitiveQuestionPresent \|\| !previewReady \|\| handoffExpired \|\| approving \|\| restarting \|\| transcriptPending/);
+  /* CLOSED UNTIL AN ATTACHMENT OPENS IT, and never opened by a field that is merely absent.
+   *
+   * This read `documentMarks !== undefined && outstandingDocumentAsks.length > 0`, which let the
+   * ABSENCE of the marks map enable the send. `documents` rides on GET /:id/submission alone, so it
+   * is absent on the board seed for any packet whose row stored no mark and on every other envelope
+   * this page installs. Re-entering an application with a measured, outstanding, unattached ask left
+   * Send it green until the first poll landed 2.5s later, which is long enough to press.
+   *
+   * The tri-state is `required_documents`, the same discipline cover_letter_required is held to:
+   * undefined means no run has measured this form and nothing here blocks, and only a present,
+   * non-empty ask blocks. Only `attached_at` clears it, because "I have ordered it" cannot make a
+   * sealed transcript appear on the employer's form. */
+  /* THE SECOND HALF OF THE TERM, added 2026-08-11 with `transcript_supported`.
+   *
+   * An outstanding ask is not the only way this employer's form refuses. The run also measures
+   * whether the form has a control Litos could put the file in, and that measurement shipped on the
+   * wire and was read by nothing: the student uploaded, the ask cleared because a mark existed, and
+   * Send went green over an application whose document had attached to nothing. So a kind the run
+   * measured false goes on blocking after a file is stored, because a stored file is not a delivered
+   * one and a settled row must not answer for the employer's own blocker. */
+  assert.match(review, /const transcriptPending = outstandingDocumentAsks\.length > 0 \|\| documentsLitosCannotDeliver;/);
+  assert.doesNotMatch(
+    review,
+    /transcriptPending = documentMarks !== undefined/,
+    "an absent measurement is not evidence that she has attached anything",
+  );
+  /* The asks and the stored files are resolved per kind, by a domain function, and not by a `find`
+     plus a whole-screen guard. That shape made one kind's state decide another kind's control: see
+     features/applications/domain/submission-checklist.test.mts, which holds the behaviour. */
+  assert.match(review, /documentControls\(review\.required_documents, documentMarks, review\)/);
   assert.match(review, /onClick=\{approveVerifiedPreview\}/);
   assert.match(review, /disabled=\{finalApprovalBlocked\}/);
   // A ready packet cannot jump directly from the Tracker row to Send it. It must render the exact
