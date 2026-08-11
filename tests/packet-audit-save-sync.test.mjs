@@ -22,8 +22,18 @@ test("a successful save adopts the server canonical spec only for the applicatio
   assert.match(saveResume, /const applicationId = selected\.id;/);
   assert.match(saveResume, /const savedSpec = stripMetadata\(updated\.spec\);/);
   assert.match(saveResume, /const savedReview = updated\.spec\._review \? reviewWithLists\(updated\.spec\._review\) : null;/);
-  assert.match(saveResume, /if \(selectedIdRef\.current !== applicationId\) return null;\s*setSpec\(savedSpec\);/s);
+  assert.match(saveResume, /const editorRevision = editorRevisionRef\.current;/);
+  assert.match(saveResume, /if \(selectedIdRef\.current !== applicationId \|\| editorRevisionRef\.current !== editorRevision\) return null;\s*setSpec\(savedSpec\);/s);
   assert.match(saveResume, /return \{ spec: savedSpec, review: savedReview \};/);
+});
+
+test("newer same-packet edits and A to B to A switches invalidate an in-flight save", () => {
+  assert.match(source, /const editorRevisionRef = useRef\(0\);/);
+  assert.match(source, /const editResumeSpec = useCallback\(\(next: ResumeSpec\) => \{\s*editorRevisionRef\.current \+= 1;\s*setSpec\(next\);/s);
+  assert.match(source, /selectedIdRef\.current = packet\.id;\s*editorRevisionRef\.current \+= 1;/s);
+  assert.match(source, /function patchEntry[\s\S]+?editorRevisionRef\.current \+= 1;\s*setSpec/);
+  assert.match(source, /onChange=\{editResumeSpec\}/);
+  assert.doesNotMatch(source, /<ResumeEditor[\s\S]+?onChange=\{setSpec\}/);
 });
 
 test("the audit binds the exact saved spec and canonical review instead of stale request state", () => {

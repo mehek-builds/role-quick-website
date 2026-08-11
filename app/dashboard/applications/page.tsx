@@ -192,6 +192,12 @@ function Applications() {
   // callback are the value captured when the callback was created, which is exactly the stale value
   // a cross-packet race needs to go unnoticed.
   const selectedIdRef = useRef<string | null>(null);
+  /* A packet id cannot identify the editor state. The applicant can edit packet A while A's save
+     is in flight, or switch A -> B -> A before the response returns. In both cases the selected id
+     is A again, but installing that response would erase newer work. Increment this synchronously
+     for every selection and local resume mutation so an awaited save can prove it still owns the
+     exact editor generation it sent. */
+  const editorRevisionRef = useRef(0);
   /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
      poll callback does not have to re-subscribe on every submission update. */
   const submissionRef = useRef<SubmissionResponse | null>(null);
@@ -205,6 +211,10 @@ function Applications() {
   const [packetEvidence, setPacketEvidence] = useState<PacketEvidenceSession | null>(null);
   const packetEvidenceRef = useRef<PacketEvidenceSession | null>(null);
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
+  const editResumeSpec = useCallback((next: ResumeSpec) => {
+    editorRevisionRef.current += 1;
+    setSpec(next);
+  }, []);
   const [questions, setQuestions] = useState<ApplicationQuestion[]>([]);
   /* Which question the answers screen should open on, set by the Your turn row that was pressed.
      Null for "Check the answers", which is a request to read the whole list. The token is what
@@ -482,6 +492,7 @@ function Applications() {
    * what happened so the UI can report it and offer an undo.
    */
   const acceptBankVariant = useCallback((org: string, variant: string) => {
+    editorRevisionRef.current += 1;
     setSpec((current) => {
       if (!current) return current;
       const { spec: next, outcome } = applyBankVariant(current, { org, variant });
@@ -491,6 +502,7 @@ function Applications() {
   }, []);
 
   const undoLastApply = useCallback(() => {
+    editorRevisionRef.current += 1;
     setLastApply((last) => {
       if (last) setSpec(last.previous);
       return null;
@@ -501,6 +513,7 @@ function Applications() {
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
+    editorRevisionRef.current += 1;
     setSelectedId(packet.id);
     // Highlighting is per (resume, posting). Carrying the previous packet's result over marks the
     // new JD against a resume and a posting that are no longer on screen.
@@ -1354,6 +1367,7 @@ function Applications() {
   }
 
   function patchEntry(index: number, patch: Partial<ResumeSpec["experience"][number]>) {
+    editorRevisionRef.current += 1;
     setSpec((current) =>
       current
         ? { ...current, experience: current.experience.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)) }
@@ -1364,6 +1378,7 @@ function Applications() {
   async function saveResume(): Promise<{ spec: ResumeSpec; review: ApplicationReview } | null> {
     if (!selected || !spec) return null;
     const applicationId = selected.id;
+    const editorRevision = editorRevisionRef.current;
     setSaving(true);
     setError(null);
     try {
@@ -1386,7 +1401,7 @@ function Applications() {
         const savedSpec = stripMetadata(updated.spec);
         const savedReview = updated.spec._review ? reviewWithLists(updated.spec._review) : null;
         if (!savedReview) throw new Error("The saved resume response is missing its canonical application review.");
-        if (selectedIdRef.current !== applicationId) return null;
+        if (selectedIdRef.current !== applicationId || editorRevisionRef.current !== editorRevision) return null;
         setSpec(savedSpec);
         setNotice("Resume saved and rechecked.");
         return { spec: savedSpec, review: savedReview };
@@ -2265,7 +2280,7 @@ function Applications() {
                       name={contactName(selected.spec)}
                       contact={contactLine(selected.spec)}
                       editedTerms={editedTerms}
-                      onChange={setSpec}
+                      onChange={editResumeSpec}
                       onPatchEntry={patchEntry}
                     />
                   )}
