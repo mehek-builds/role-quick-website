@@ -17,6 +17,7 @@
  * Run with: npm run build -- --webpack && npm run test:exact-packet-pdf
  */
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import test from "node:test";
@@ -217,6 +218,90 @@ test("bytes that do not match the audit are refused and offer no retry", async (
 
     /* Retrying the same mismatched bytes would only fail again, so the way forward offered is to
        audit the packet, not to press a button that cannot change the answer. */
+    assert.equal(await page.getByRole("button", { name: "Try showing it again" }).count(), 0);
+  } finally {
+    await page.close();
+  }
+});
+
+/**
+ * The case that was actually happening in production.
+ *
+ * PDF.js drives its paint loop through window.requestAnimationFrame for the default "display"
+ * intent, so a tab that is not producing frames, which is any backgrounded, occluded or
+ * automation-driven tab, sizes the canvas, fills it white in a microtask and then stops. The
+ * captured production packet reproduces it exactly this way: 918 x 1188 backing, 1,090,584 white
+ * pixels, zero ink, no error and no console output, for as long as anyone cares to wait.
+ *
+ * Stubbing requestAnimationFrame to never fire is not a contrived condition. It is what the
+ * browser does to a tab it is not painting, and it is the difference between this gate working
+ * and this gate timing out on every packet.
+ */
+test("the page still renders when the tab is never painting a frame", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.addInitScript(() => {
+      window.requestAnimationFrame = () => 0;
+      window.cancelAnimationFrame = () => {};
+    });
+    await page.goto(harnessUrl());
+
+    await gateState(page).filter({ hasText: "ready" }).waitFor({ timeout: 20_000 });
+    assert.equal(await page.getByTestId("gate-sha256").textContent(), FIXTURE_SHA256);
+    assert.ok(await inkPixels(page) > 10_000, "the page was not painted without animation frames");
+  } finally {
+    await page.close();
+  }
+});
+
+/**
+ * A valid PDF that draws nothing must not pass.
+ *
+ * The gate's promise settling is not evidence. A document whose content stream paints no marks
+ * parses, renders and resolves perfectly happily, and without an ink check the student is told
+ * their resume is verified while looking at a blank sheet. This fixture is a real PDF with a real
+ * cross reference table and a real, deliberately empty content stream, built here so its emptiness
+ * is readable rather than hidden in a committed binary.
+ */
+function blankPdf() {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << >> /Contents 4 0 R >>",
+    "<< /Length 0 >>\nstream\n\nendstream",
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+  objects.forEach((body, index) => {
+    offsets.push(Buffer.byteLength(pdf, "latin1"));
+    pdf += `${index + 1} 0 obj\n${body}\nendobj\n`;
+  });
+  const startxref = Buffer.byteLength(pdf, "latin1");
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (const offset of offsets) pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${startxref}\n%%EOF\n`;
+  return Buffer.from(pdf, "latin1");
+}
+
+test("a valid PDF that paints nothing is refused instead of passing the gate", async () => {
+  const page = await browser.newPage();
+  const blank = blankPdf();
+  try {
+    await page.route("**/qa/exact-packet-fixture.pdf", (route) =>
+      route.fulfill({ status: 200, contentType: "application/pdf", body: blank }));
+    await page.goto(harnessUrl({
+      sha256: createHash("sha256").update(blank).digest("hex"),
+      size: String(blank.byteLength),
+    }));
+
+    const alert = failureAlert(page);
+    await alert.waitFor({ timeout: 20_000 });
+    /* This exact message is the discriminator. It is only reachable when PDF.js parsed the
+       document and the render promise resolved, which is what separates a blank page from a
+       document that failed to parse. */
+    assert.match(await alert.textContent(), /drew a blank page/);
+    assert.equal(await gateState(page).textContent(), "blocked");
+    assert.equal(await page.getByTestId("gate-sha256").textContent(), "");
     assert.equal(await page.getByRole("button", { name: "Try showing it again" }).count(), 0);
   } finally {
     await page.close();
