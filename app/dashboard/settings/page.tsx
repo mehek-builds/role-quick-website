@@ -41,6 +41,7 @@ import {
   verificationRouteAvailability,
 } from "./email-verification-flow";
 import TargetingCard from "@/components/app/TargetingCard";
+import DocumentsCard from "@/components/app/DocumentsCard";
 import {
   editableProfileText,
   nullableProfileList,
@@ -605,6 +606,28 @@ export default function Settings() {
             </div>
             <ButtonLink href="/dashboard/resume">Edit resume</ButtonLink>
           </Card>
+
+          {/* DOCUMENTS: the account-level home for a file the student handed Litos herself.
+              /privacy publishes "We encrypt it and keep it until you remove it or delete your
+              account", and until this card the removing half was reachable only from a control on
+              an application screen. A stored file outlives the application it was attached to: once
+              that application is sent its screen renders no document control at all, which is the
+              normal end state and not an edge case, so the promise was untrue for most of the file's
+              life. Twice it was patched by binding the control to per-application UI state, and
+              twice it leaked, because a document is an ACCOUNT object and that is where its home
+              belongs.
+
+              Filed here, beside Main resume, for two reasons. It is the first thing on the panel
+              /dashboard/profile redirects to (#job-search), so the page a student is sent to for
+              her own data holds it without a hunt; and it sits with the other card about what Litos
+              is keeping of hers rather than among the filters that decide which jobs she sees.
+
+              INSIDE the tabpanel, never a sibling of it (ISSUE-013b), and its id is not a tab id, so
+              tabFromHash falls back to job-search and the browser scrolls here. scroll-mt-24 lives
+              on the card itself: the dashboard's sticky header runs to y=73, and without it a jump
+              to #documents puts this heading behind the header while every numeric check passes. */}
+          <DocumentsCard />
+
           <TargetingCard />
 
           {/* VISA SPONSORSHIP.

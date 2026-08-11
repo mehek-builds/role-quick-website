@@ -6,10 +6,13 @@ import {
   coverLetterBlocks,
   coverLetterGate,
   coverLetterIdentity,
+  documentsFromSpecMarks,
+  documentsIdentity,
   handoffWindowExpired,
   nextCoverLetterValue,
   nextSubmissionState,
   submissionCoverLetterField,
+  type SpecDocumentMark,
   type SubmissionSnapshot,
 } from "./submission-state.ts";
 
@@ -102,6 +105,152 @@ test("handoff_url and configured are versioned by nothing, so they are compared 
   assert.equal(nextSubmissionState(withoutHandoff, withHandoff), withHandoff);
   assert.equal(nextSubmissionState(withHandoff, withoutHandoff), withoutHandoff);
   assert.equal(nextSubmissionState(fromServer, { ...fromServer, configured: false }).configured, false);
+});
+
+/* THE SAME DEFECT AS THE COVER LETTER, IN THE FIELD ADDED AFTER IT.
+ *
+ * `documents` lives outside `review`, so nothing advances `review.updated_at` when a transcript is
+ * attached to a packet already parked at ready_for_final_approval. Left out of the comparison, the
+ * poll that first carried the attachment matched on the timestamp, was discarded, and the screen
+ * went on drawing the application as carrying no file while the server handed it one every 2.5
+ * seconds. That is the exact shape of the bug this module was written to end. */
+test("a document that appears after the first poll is installed without the review moving", () => {
+  const withoutDocument = { ...fromServer, documents: {} } satisfies SubmissionSnapshot;
+  const withDocument = {
+    ...fromServer,
+    documents: {
+      transcript: {
+        document_id: "6b0f2f3a-1c4d-4a2f-9c1e-0b3a5d7e91aa",
+        file_name: "transcript.pdf",
+        attached_at: "2026-08-11T09:14:02.117Z",
+        ordered_at: null,
+      },
+    },
+  } satisfies SubmissionSnapshot;
+
+  // The rule as it stood: every other field agrees, so the response carrying the file was dropped.
+  assert.equal(
+    coverLetterIdentity(withoutDocument.cover_letter),
+    coverLetterIdentity(withDocument.cover_letter),
+    "the setup only tests the documents comparison if nothing else distinguishes the two",
+  );
+  assert.equal(withoutDocument.review.updated_at, withDocument.review.updated_at);
+
+  assert.equal(nextSubmissionState(withoutDocument, withDocument), withDocument);
+  // And removing it is news in the same way an expiring handoff URL is.
+  assert.equal(nextSubmissionState(withDocument, withoutDocument), withoutDocument);
+});
+
+test("a poll that repeats the same attachment still dedupes, so the screen does not re-render forever", () => {
+  const attached = {
+    ...fromServer,
+    documents: { transcript: { document_id: "6b0f2f3a", file_name: "transcript.pdf", attached_at: "2026-08-11T09:14:02.117Z" } },
+  } satisfies SubmissionSnapshot;
+  const nextTick = { ...attached, documents: { transcript: { ...attached.documents.transcript } } };
+  assert.equal(nextSubmissionState(attached, nextTick), attached, "same answer, new object, no re-render");
+});
+
+test("never measured and measured-but-empty are two different answers", () => {
+  /* `documents` absent means no envelope has carried the measurement, and the review screen reads
+     that as "do not block the send". An empty object means the server looked and found nothing,
+     which DOES block once the employer's form has asked for a file. A dedupe that collapsed the two
+     would drop the response that first says "we looked". */
+  assert.notEqual(documentsIdentity(undefined), documentsIdentity({}));
+  assert.equal(documentsIdentity(undefined), documentsIdentity(null));
+  /* Annotated rather than `satisfies`: `satisfies` keeps the literal type, which pins `documents`
+     to exactly `undefined` on the first argument and makes the generic refuse the second. */
+  const unmeasured: SubmissionSnapshot = { ...fromServer, documents: undefined };
+  const measuredEmpty: SubmissionSnapshot = { ...fromServer, documents: {} };
+  assert.equal(nextSubmissionState(unmeasured, measuredEmpty), measuredEmpty);
+});
+
+test("document identity ignores nothing that distinguishes two marks", () => {
+  assert.notEqual(
+    documentsIdentity({ transcript: { attached_at: "2026-08-11T09:14:02.117Z" } }),
+    documentsIdentity({ transcript: { attached_at: null } }),
+  );
+  // "I have ordered it" is a different state from a stored file, and it must survive the round trip.
+  assert.notEqual(
+    documentsIdentity({ transcript: { ordered_at: "2026-08-11T09:14:02.117Z" } }),
+    documentsIdentity({ transcript: {} }),
+  );
+  // A file swapped for another one, with the same timestamps, is still news.
+  assert.notEqual(
+    documentsIdentity({ transcript: { document_id: "a", file_name: "one.pdf" } }),
+    documentsIdentity({ transcript: { document_id: "b", file_name: "two.pdf" } }),
+  );
+  // Key order is not news. The poll's JSON gives no ordering guarantee across responses.
+  assert.equal(
+    documentsIdentity({ transcript: { file_name: "t.pdf" }, writing_sample: { file_name: "w.pdf" } }),
+    documentsIdentity({ writing_sample: { file_name: "w.pdf" }, transcript: { file_name: "t.pdf" } }),
+  );
+});
+
+/* THE 2.5 SECOND BLIND WINDOW.
+ *
+ * selectPacket seeds the first snapshot from the board row and the first poll is 2.5s behind it.
+ * With no `documents` on the seed, re-entering an application whose transcript is already stored
+ * drew no manage control for that whole window: the file looked unattached and the only route to
+ * "Remove this file" was missing from the screen while /privacy promises removal. */
+test("the seed carries the document marks the board row already holds", () => {
+  const seeded = documentsFromSpecMarks({
+    transcript: { file_name: "transcript.pdf", attached_at: "2026-08-11T09:14:02.117Z" },
+  });
+  /* Every field the envelope's own record carries, filled in rather than left off. The modal reads
+     `employer_label` and `official_requested` off this mark and a missing key there is a modal that
+     silently drops the employer's wording on the seeded render and grows it back 2.5s later. */
+  assert.deepEqual(seeded, {
+    transcript: {
+      kind: "transcript",
+      document_id: null,
+      file_name: "transcript.pdf",
+      attached_at: "2026-08-11T09:14:02.117Z",
+      ordered_at: null,
+      employer_label: null,
+      official_requested: false,
+    },
+  });
+});
+
+/* THE FIELD THE SERVER WRITES AND NO CLIENT MAY HOLD.
+ *
+ * `spec._documents` is server-written and it holds `object_key`, the Blob pathname of the student's
+ * transcript. A Vercel Blob object is public-read forever to anyone holding its URL, so that key is
+ * the whole of the access control on the file. lib/api.ts types `_documents` WITHOUT it and says
+ * why; the seed then spread the record wholesale, which is how a type that declines to name a field
+ * copies it into client state anyway.
+ *
+ * The mark is built past the type on purpose. That is exactly how it arrives in production: this
+ * record comes off the wire, and the type is a statement of intent about the bytes rather than a
+ * fact about them. */
+test("the seed copies no object_key out of the board row, whatever the row is holding", () => {
+  const fromTheWire = {
+    document_id: "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0",
+    file_name: "transcript.pdf",
+    attached_at: "2026-08-11T09:14:02.117Z",
+    object_key: "users/a18f774b/documents/2c9e0a17-5b3f-4d21-9f77-6e4b0c8a1d33.pdf",
+    blob_url: "https://blob.vercel-storage.com/users/a18f774b/documents/2c9e0a17.pdf",
+  } as SpecDocumentMark;
+
+  const seeded = documentsFromSpecMarks({ transcript: fromTheWire });
+  assert.ok(seeded, "a row with a mark seeds one");
+  assert.equal("object_key" in seeded.transcript, false, "the access control on her transcript is not client state");
+  assert.equal("blob_url" in seeded.transcript, false, "nor is the URL that needs no access control at all");
+  assert.equal(
+    JSON.stringify(seeded).includes("users/a18f774b"),
+    false,
+    "nothing that locates the stored file may survive the projection",
+  );
+  // The fields the screen actually draws still arrive.
+  assert.equal(seeded.transcript.file_name, "transcript.pdf");
+  assert.equal(seeded.transcript.attached_at, "2026-08-11T09:14:02.117Z");
+});
+
+test("a packet with no marks seeds no measurement, rather than an empty one that claims a run looked", () => {
+  /* Absent has to stay absent. An empty object is a different answer: it says a run measured this
+     application and found nothing attached. `documentsIdentity` has to be able to tell those two
+     apart, or a poll whose only news is that second answer is dropped as saying nothing new. */
+  assert.equal(documentsFromSpecMarks(undefined), undefined);
 });
 
 test("a snapshot for another packet is never a version of this one", () => {

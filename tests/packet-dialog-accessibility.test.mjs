@@ -85,6 +85,43 @@ for (const [name, source, label] of DIALOGS) {
   });
 }
 
+/* The upload modal is the third dialog on this surface and it takes the same shell,
+   so the three tests above hold for it too. What is different is the name, and the
+   part of the name that was wrong.
+
+   `job_context.role` is optional on every packet built before 2026-07-28 and on
+   anything from the extension, so it is routinely an empty string. Interpolated
+   into one template, the name came out as "transcript for  at Databricks": a
+   doubled space and a preposition with nothing after it. On a visible header that
+   is a blemish; on aria-label it is the sentence a screen reader reads aloud the
+   moment the dialog opens, and it is the ONLY name this dialog has. The header one
+   screen below already branched on the same value, which is what made the single
+   template look deliberate. */
+const transcript = await readFile(new URL("../components/app/TranscriptModal.tsx", import.meta.url), "utf8");
+
+test("TranscriptModal names its dialog without a hole where the role should be", () => {
+  assert.match(transcript, /role="dialog"/);
+  assert.match(transcript, /aria-modal="true"/);
+  assert.match(
+    transcript,
+    /const dialogName = role \? `\$\{kind\} for \$\{role\} at \$\{company\}` : `\$\{kind\} for \$\{company\}`/,
+    "a missing role has to drop the clause, not interpolate an empty string into it",
+  );
+  assert.match(transcript, /aria-label=\{dialogName\}/);
+});
+
+test("TranscriptModal keeps the trap, the Escape close and the ref that survives the poll", () => {
+  /* The 2.5s submission poll re-renders this modal's parent on every tick, which is
+     exactly the caller the onCloseRef indirection exists for. */
+  assert.match(transcript, /dialog\.current\.querySelectorAll<HTMLElement>\(/);
+  assert.match(transcript, /const first = focusable\[0\]/);
+  assert.match(transcript, /const last = focusable\[focusable\.length - 1\]/);
+  assert.match(transcript, /event\.key === "Escape"/);
+  assert.match(transcript, /previous\?\.focus\?\.\(\)/);
+  assert.match(transcript, /onCloseRef\.current\(\)/);
+  assert.match(transcript, /\}, \[\]\);/);
+});
+
 /* Was "the review drawer keeps its own naming pattern, which is the one-per-page
    case", pinning aria-labelledby="review-title" on the dashboard drawer as the
    deliberate counter-example to the packet dialog's aria-label.

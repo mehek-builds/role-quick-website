@@ -148,7 +148,19 @@ test("the greyed-out Send names this reason the way it names the other six", asy
     /A sensitive demographic, identity, or legal question is present/,
     // The seventh. Says what the 409 says, before the press rather than after it.
     /Too much time has passed for Litos to finish this filled form/,
+    /* The eighth, added when employers' forms started asking for a file. Same rule as the seventh:
+       a term in finalApprovalBlocked with no sentence here is a greyed Send that names every reason
+       except the one actually blocking it, which is what the cover letter did for a fortnight. */
+    /asks for a \{ask\.kind\} and Litos has none attached/,
   ];
   for (const line of lines) assert.match(dashboard, line);
   assert.match(dashboard, /handoffExpired && \(\s*<p className="mt-3 text-xs leading-5 text-warn">/);
+  /* And the way out of it, in the control row, because a reason with nothing on screen that
+     resolves it is a wall. Every other term here has one.
+
+     One control per outstanding ask, and one sentence per outstanding ask, because two kinds are
+     two pieces of work: a screen carrying two Add buttons and one sentence explains only one of
+     them, and a screen carrying one button for two asks cannot open the second at all. */
+  assert.match(dashboard, /outstandingDocumentAsks\.map\(\(ask\) => \(\s*<Button key=\{ask\.kind\} onClick=\{\(\) => onAddDocument\(ask\.kind\)\}/);
+  assert.match(dashboard, /transcriptPending && outstandingDocumentAsks\.map\(\(ask\) => \(/);
 });
