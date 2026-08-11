@@ -34,10 +34,10 @@ export default function Privacy() {
           What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          Last updated: August 10, 2026
+          Last updated: August 11, 2026
         </p>
         <p className="mt-3 text-sm leading-6 text-muted">
-          This update adds a separate <a href="/cookies" className="underline underline-offset-4 hover:text-ink">cookie and browser-storage inventory</a> and clarifies how those controls work. No data-use purpose changed.
+          This update says that Litos takes a picture of the filled-in form and of the confirmation page, which the policy had not spelled out before, and gives each one its own deletion window.
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. Open a job posting
@@ -52,6 +52,7 @@ export default function Privacy() {
 
         <Section title="Policy history">
           <ul className="ml-5 list-disc space-y-1">
+            <li><strong className="font-medium text-ink">August 11, 2026:</strong> disclosed the filled-form and confirmation-page pictures, and set a 7-day window for the filled-form one.</li>
             <li><strong className="font-medium text-ink">August 10, 2026:</strong> added the cookie inventory and control path.</li>
             <li><strong className="font-medium text-ink">July 31, 2026:</strong> clarified analytics identity, deletion, and connection-code handling.</li>
           </ul>
@@ -80,6 +81,16 @@ export default function Privacy() {
             form. The next part explains that. We also store the people we
             found, the emails we wrote, and the resumes we made, so your
             dashboard can show them to you.
+          </p>
+          <p>
+            We also take two pictures of the company&apos;s own page. One is of
+            the form after Litos fills it in, so you can check every answer
+            before you send it, and so you can see what happened if it stops
+            partway. The other is of the confirmation page after you send, so
+            you have proof it arrived. Both are pictures of a whole page with
+            your details already on it, so treat them as you would the
+            application itself. &ldquo;How long we keep it&rdquo;, below, says
+            how long each one lasts.
           </p>
           <p>
             Private answers are locked up: your phone, where you live, your
@@ -252,6 +263,18 @@ export default function Privacy() {
             We delete the resume files we make after 30 days. Your dashboard
             still shows which resume went to which job, but the file is gone
             and old links stop working.
+          </p>
+          <p>
+            We delete the picture of the filled-in form after 7 days. You only
+            need it while you are checking the form, or working out why it
+            stopped, and it holds everything that was on the page at once, so
+            it goes sooner than anything else.
+          </p>
+          <p>
+            We keep the picture of the confirmation page for as long as your
+            account is open. It is your proof the application arrived, and that
+            is worth having long after you sent it. Deleting your account
+            deletes it with everything else.
           </p>
           <p>
             A link to a resume file stops working after about an hour. If a
