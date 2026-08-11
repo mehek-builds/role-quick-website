@@ -1312,11 +1312,11 @@ function Applications() {
 
   async function saveCoverLetter(): Promise<boolean> {
     if (!selected) return false;
+    const applicationId = selected.id;
     setCoverLetterBusy(true);
     setError(null);
     try {
       if (!qaMode) {
-        const applicationId = selected.id;
         if (!coverLetterBody.trim()) {
           if (selected.spec._cover_letter) {
             await api(`/applications/${applicationId}/cover-letter`, { method: "DELETE" });
@@ -1325,11 +1325,13 @@ function Applications() {
               : packet) ?? current);
             applyCoverLetterToSubmission(applicationId, null);
             if (selectedIdRef.current === applicationId) setCoverLetterDownloadUrl(null);
-            setNotice("Cover letter removed from this application.");
+            if (selectedIdRef.current === applicationId) {
+              setNotice("Cover letter removed from this application.");
+            }
           }
           return true;
         }
-        const result = await api<CoverLetterResponse>(`/applications/${selected.id}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
+        const result = await api<CoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
         applyCoverLetterToSubmission(applicationId, result.cover_letter);
         if (selectedIdRef.current === applicationId) {
@@ -1337,10 +1339,14 @@ function Applications() {
           setCoverLetterDownloadUrl(result.download_url);
         }
       }
-      setNotice("Cover letter saved. Every line checks out against your real work.");
+      if (selectedIdRef.current === applicationId) {
+        setNotice("Cover letter saved. Every line checks out against your real work.");
+      }
       return true;
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
+      if (selectedIdRef.current === applicationId) {
+        setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
+      }
       return false;
     } finally {
       setCoverLetterBusy(false);
@@ -1355,7 +1361,7 @@ function Applications() {
     );
   }
 
-  async function saveResume(): Promise<ResumeSpec | null> {
+  async function saveResume(): Promise<{ spec: ResumeSpec; review: ApplicationReview } | null> {
     if (!selected || !spec) return null;
     const applicationId = selected.id;
     setSaving(true);
@@ -1378,13 +1384,16 @@ function Applications() {
            still the selected application. A late save for packet A may update A in the list, but
            it must never replace the editor after the applicant has switched to packet B. */
         const savedSpec = stripMetadata(updated.spec);
+        const savedReview = updated.spec._review ? reviewWithLists(updated.spec._review) : null;
+        if (!savedReview) throw new Error("The saved resume response is missing its canonical application review.");
         if (selectedIdRef.current !== applicationId) return null;
         setSpec(savedSpec);
         setNotice("Resume saved and rechecked.");
-        return savedSpec;
+        return { spec: savedSpec, review: savedReview };
       }
+      if (!selected.spec._review) return null;
       setNotice("Resume saved and rechecked.");
-      return spec;
+      return { spec, review: reviewWithLists(selected.spec._review) };
     } catch (reason) {
       if (selectedIdRef.current === applicationId) {
         setError(reason instanceof Error ? reason.message : "We could not save your resume. Try again.");
@@ -1402,13 +1411,15 @@ function Applications() {
     }
     if (!selected || !spec || !review) return;
     const applicationId = selected.id;
-    const alreadyFilled = review.status === "ready_for_final_approval";
     /* Workflow status does not say whether the editor is dirty. A ready packet can be edited, and
        auditing that edit without saving would ask the server to audit its older PDF forever. A
        fresh packet with no edits needs no no-op PATCH. The exact local-vs-saved comparison is the
        only fact that decides whether a new PDF must be generated. */
-    const auditedSpec = packetDraftChanged ? await saveResume() : spec;
-    if (!auditedSpec || selectedIdRef.current !== applicationId) return;
+    const savedResume = packetDraftChanged ? await saveResume() : { spec, review };
+    if (!savedResume || selectedIdRef.current !== applicationId) return;
+    const auditedSpec = savedResume.spec;
+    const canonicalReview = savedResume.review;
+    const alreadyFilled = canonicalReview.status === "ready_for_final_approval";
     if (!alreadyFilled && !qaMode && !(await saveCoverLetter())) return;
     if (selectedIdRef.current !== applicationId) return;
     const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
@@ -1423,10 +1434,10 @@ function Applications() {
     setPacketAuditBusy(true);
     setError(null);
     try {
-      let savedReview = review;
-      if (["resume_ready", "questions_ready", "ready_to_submit"].includes(review.status)) {
-        const portalUrl = review.portal_url?.trim();
-        const atsName = review.ats_name?.trim() || portalName(portalUrl ?? "");
+      let savedReview = canonicalReview;
+      if (["resume_ready", "questions_ready", "ready_to_submit"].includes(canonicalReview.status)) {
+        const portalUrl = canonicalReview.portal_url?.trim();
+        const atsName = canonicalReview.ats_name?.trim() || portalName(portalUrl ?? "");
         if (!portalUrl || !atsName) throw new Error("The saved employer form identity is incomplete. Reload this packet before auditing it.");
         const saved = await api<SubmissionResponse>(`/applications/${applicationId}/review`, {
           method: "PUT",
@@ -1434,7 +1445,7 @@ function Applications() {
             ats_name: atsName,
             portal_url: portalUrl,
             questions,
-            skipped_reasons: review.skipped_reasons,
+            skipped_reasons: canonicalReview.skipped_reasons,
           }),
         });
         savedReview = saved.review;
