@@ -10,7 +10,6 @@ import {
   Targeting,
   getToken,
   getTargeting,
-  patchParsedProfileCoursework,
   putApplicationProfile,
   putTargeting,
   uploadResume,
@@ -665,14 +664,13 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
     note: "Use a source you personally choose, such as LinkedIn or a university event. Litos detects job boards for each application.",
     placeholder: "LinkedIn or university career fair",
   },
-  /* Measured across 158 packets: each of these blocked 9 applications that could not be finished
-     without it. Every note says plainly why Litos is asking, because a question about a test score
-     or a transcript reads as intrusive unless the reason is on the screen with it. */
-  coursework: {
-    label: "Which courses have you taken?",
-    note: "Litos picks the ones that fit each posting. Right now it can only reuse the four your resume prints, on every application.",
-    placeholder: "Linear Algebra, Databases, Machine Learning",
-  },
+  /* Measured across 158 packets: each of these blocked 8 applications that could not be finished
+     without it. The note says plainly why Litos is asking, because a question about a test score
+     reads as intrusive unless the reason is on the screen with it.
+
+     A coursework question sat here on this branch and was removed before merge: it needs a column
+     on the backend's `profiles` table, and that cannot ship in the same change as its migration.
+     See the note in the backend's db/schema.ts. */
   standardized_test_type: {
     label: "Which standardized test did you take?",
     note: "Trading and quant firms ask for this by name. Leave it blank and Litos leaves their field blank too.",
@@ -712,16 +710,11 @@ export function GapsStep({
     setBusy(true);
     setError(null);
     const body: Partial<ApplicationProfile> = {};
-    // Coursework is not an application_profile column, so it is collected here and saved on its own
-    // route below. See patchParsedProfileCoursework.
-    let coursework: string[] | null = null;
     for (const [k, v] of Object.entries(values)) {
       if (!v.trim()) continue;
       if (k === "languages") {
         // The backend stores languages as a jsonb array of names, not a string.
         body.languages = v.split(",").map((s) => s.trim()).filter(Boolean);
-      } else if (k === "coursework") {
-        coursework = v.split(",").map((s) => s.trim()).filter(Boolean);
       } else {
         (body as Record<string, string>)[k] = v.trim();
       }
@@ -752,8 +745,7 @@ export function GapsStep({
 
     try {
       if (Object.keys(body).length > 0) await putApplicationProfile(body);
-      if (coursework) await patchParsedProfileCoursework(coursework);
-      onDone(Object.keys(body).length === 0 && !coursework);
+      onDone(Object.keys(body).length === 0);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
       setBusy(false);
@@ -809,14 +801,6 @@ export function GapsStep({
         <div className="mb-5">
           <label htmlFor="gap-languages" className="text-[13px] text-ink">Which languages are you fluent in?</label>
           <div className="mt-2">{field("languages")}</div>
-        </div>
-      )}
-
-      {gaps.includes("coursework") && (
-        <div className="mb-5">
-          <label htmlFor="gap-coursework" className="text-[13px] text-ink">{GAP_LABEL.coursework.label}</label>
-          <div className="mt-2">{field("coursework")}</div>
-          <p className="mt-1 text-xs leading-5 text-muted">{GAP_LABEL.coursework.note}</p>
         </div>
       )}
 

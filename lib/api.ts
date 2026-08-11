@@ -758,9 +758,10 @@ export type ApplicationProfile = {
   /** ISO YYYY-MM-DD. After this date the window answers nothing, whatever else is stored. */
   availability_valid_through?: string | null;
 
-  /* Standardized tests. Each of the three blocked 9 distinct packets across the 158-packet corpus
-   * (2026-08-11). null means never asked, and the resolver refuses on it rather than defaulting:
-   * an invented test score is a checkable false claim about an academic record. */
+  /* Standardized tests. Each blocked 8 distinct packets across the 158-packet corpus (2026-08-11),
+   * which is 2 postings at one employer. null means never asked, and the resolver refuses on it
+   * rather than defaulting: an invented test score is a checkable false claim about an academic
+   * record. */
   standardized_test_type?: "SAT" | "ACT" | "Both" | "None" | null;
   /** As earned. Free text, because "1520 (superscored)" is a real answer and a number is not. */
   sat_score?: string | null;
@@ -1011,19 +1012,6 @@ export function putApplicationProfile(body: Partial<ApplicationProfile>) {
   return api<ApplicationProfile>("/profile/application", {
     method: "PUT",
     body: JSON.stringify(body),
-  });
-}
-
-/* Coursework goes HERE and not through putApplicationProfile, because it is not on
- * application_profile. It lives on `profiles` beside `skills`, since the resume tailorer has to
- * read it and application_profile's contract is that nothing in it reaches a drafting prompt.
- *
- * The route accepts either a comma separated line or an array and normalises to a list, so the
- * onboarding input can send exactly what the student typed. */
-export function patchParsedProfileCoursework(coursework: string[]) {
-  return api<ParsedProfile>("/profile/parsed", {
-    method: "PATCH",
-    body: JSON.stringify({ coursework }),
   });
 }
 
