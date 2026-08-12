@@ -50,6 +50,7 @@ import {
 import { CountryEligibilityEditor } from "@/components/app/CountryEligibilityEditor";
 import {
   captchaConsentedAt,
+  captchaConsentedAtReported,
   captchaConsentGranted,
   captchaConsentPatch,
   captchaConsentVerdict,
@@ -118,6 +119,10 @@ export default function Settings() {
      "absent" and "off" are the same state for a permission that account cannot hold. */
   const [captchaConsent, setCaptchaConsent] = useState(false);
   const [captchaConsentGrantedAt, setCaptchaConsentGrantedAt] = useState<string | null>(null);
+  /* Its own in-flight flag, not savingAutomation. Sharing that one would re-couple through UI state
+     the two writers the payload split exists to keep apart: whichever request settled first would
+     clear the flag and re-enable both controls while the other was still in flight. */
+  const [savingCaptchaConsent, setSavingCaptchaConsent] = useState(false);
   const [savingAutomation, setSavingAutomation] = useState(false);
   // Unattended submission is earned, not offered. The server is the authority; this only explains
   // the state so the control is not an unexplained dead toggle.
@@ -343,7 +348,7 @@ export default function Settings() {
     const previous = captchaConsent;
     const previousGrantedAt = captchaConsentGrantedAt;
     setCaptchaConsent(enabled);
-    setSavingAutomation(true);
+    setSavingCaptchaConsent(true);
     setError(null);
     try {
       const result = await setAutomationSettings(captchaConsentPatch(enabled));
@@ -352,13 +357,18 @@ export default function Settings() {
          answers without the field keeps what was there rather than being read as a revocation. */
       const verdict = captchaConsentVerdict(result);
       setCaptchaConsent(verdict ?? previous);
-      setCaptchaConsentGrantedAt(captchaConsentedAt(result));
+      /* The DATE gets the same treatment as the verdict above, and for the same reason. Not sent is
+         not the same as sent-as-null: reading a missing field as null would wipe a date that
+         GET /onboarding/state still returns, so the row would lose its date on every toggle and get
+         it back on every reload. */
+      const reportedAt = captchaConsentedAtReported(result);
+      setCaptchaConsentGrantedAt(reportedAt === undefined ? previousGrantedAt : reportedAt);
     } catch (err) {
       setCaptchaConsent(previous);
       setCaptchaConsentGrantedAt(previousGrantedAt);
       setError(err instanceof Error ? err.message : "Could not save that change.");
     } finally {
-      setSavingAutomation(false);
+      setSavingCaptchaConsent(false);
     }
   }
 
@@ -949,7 +959,7 @@ export default function Settings() {
             idPrefix="settings"
             value={captchaConsent}
             grantedAt={captchaConsentGrantedAt}
-            disabled={savingAutomation}
+            disabled={savingCaptchaConsent}
             onChange={(enabled) => void changeCaptchaConsent(enabled)}
           />
           <div className="rounded-inner border border-border p-4">

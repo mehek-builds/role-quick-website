@@ -124,6 +124,7 @@ export default function Start() {
              worth reviewing: the box unticked, with the words being agreed to. */
           automatic_captcha_enabled: false,
           automatic_captcha_consented_at: null,
+          automatic_captcha_consent_version: null,
         };
         setState(state);
         setProfile({

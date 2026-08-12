@@ -6,7 +6,9 @@ import {
   CAPTCHA_CONSENT_INTRO,
   CAPTCHA_CONSENT_REVOCABLE,
   CAPTCHA_CONSENT_WHEN_OFF,
+  captchaConsentCompletion,
   captchaConsentedAt,
+  captchaConsentedAtReported,
   captchaConsentGranted,
   captchaConsentGrantedOn,
   captchaConsentPatch,
@@ -59,6 +61,53 @@ test("an API that predates the column is not a revocation", () => {
   assert.equal(captchaConsentVerdict({ automatic_captcha_enabled: false }), false);
   // Everywhere a grant is DECIDED, absent is simply not granted.
   assert.equal(captchaConsentGranted({}), false);
+});
+
+/* SETUP MUST NOT REVOKE A PERMISSION IT WAS NEVER TOLD ABOUT. The unticked box means "you do not
+ * hold this" only when the server actually said so; when the column is missing it means "this build
+ * cannot see the column", and writing false from that is a revocation decided by a screen that was
+ * never shown the real value. Reachable during a rolling deploy, where GET can land on an old
+ * instance and POST on a new one. */
+test("completion omits the field when the server never reported it", () => {
+  assert.deepEqual(captchaConsentCompletion({}, false), {});
+  assert.deepEqual(captchaConsentCompletion(undefined, false), {});
+  assert.deepEqual(captchaConsentCompletion({ automatic_captcha_enabled: null }, false), {});
+});
+
+test("completion sends a ticked box as true even when the server said nothing", () => {
+  // A tick is a grant just performed, so it is never silence.
+  assert.deepEqual(captchaConsentCompletion({}, true), { automatic_captcha_enabled: true });
+  assert.deepEqual(captchaConsentCompletion(stale, true), { automatic_captcha_enabled: true });
+});
+
+test("completion sends an explicit false only against a server that reported the column", () => {
+  // Reported as false: unticking is a real choice about a real value, so say so.
+  assert.deepEqual(captchaConsentCompletion(stale, false), { automatic_captcha_enabled: false });
+  // Reported as true and then unticked: a revocation the applicant performed.
+  assert.deepEqual(captchaConsentCompletion(granted, false), { automatic_captcha_enabled: false });
+});
+
+/* "Not sent" and "sent as null" are different answers when reconciling against a write response,
+ * exactly as they are for the verdict. */
+test("the reported date keeps absent distinct from null", () => {
+  assert.equal(captchaConsentedAtReported({}), undefined);
+  assert.equal(captchaConsentedAtReported({ automatic_captcha_consented_at: null }), null);
+  assert.equal(captchaConsentedAtReported(granted), "2026-08-12T09:14:00.000Z");
+  // The display accessor still collapses both to null, which is what a screen printing a date wants.
+  assert.equal(captchaConsentedAt({}), null);
+});
+
+/* The date names the day the RECORD names, not the day the viewer is standing in. Without the UTC
+ * zone this prints 8/11 for anyone far enough west of the stamped instant. */
+test("the grant date is rendered in UTC, not the viewer's timezone", () => {
+  /* Asserted as the calendar day itself rather than against another toLocaleDateString call, which
+     would restate the implementation instead of checking it. Run this file under TZ=Pacific/Honolulu
+     and both of these slide back a day without the UTC zone. */
+  const stamped = captchaConsentGrantedOn(true, "2026-08-12T09:14:00.000Z");
+  assert.ok(stamped?.includes("12"), `expected the 12th, printed ${stamped}`);
+  // A date-only value parses as UTC midnight, the case that slides everywhere west of UTC.
+  const dateOnly = captchaConsentGrantedOn(true, "2026-08-04");
+  assert.ok(dateOnly?.includes("4"), `expected the 4th, printed ${dateOnly}`);
 });
 
 test("the patch names one column and only its own", () => {

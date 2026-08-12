@@ -39,6 +39,14 @@ export function CaptchaConsentControl({
   onChange: (enabled: boolean) => void;
 }) {
   const id = `${idPrefix}-captcha-consent`;
+  /* THE DISCLOSURE HAS TO REACH ASSISTIVE TECH, because here the disclosure IS the consent. The
+     aria-label below wins the accessible-name computation over everything inside the <label>, so
+     without this a screen reader would announce the one-line label and none of what the permission
+     actually means, and the box could be ticked having heard none of it. */
+  const bodyId = `${id}-body`;
+  const offId = `${id}-off`;
+  const boundaryId = `${id}-boundary`;
+  const revocableId = `${id}-revocable`;
   /* Null whenever the verdict is false, even with a date on the row: that pairing is what a
      superseded consent version looks like, and it is the live state of every account stamped with
      the stale version. Printing the old date over an unticked box would claim a permission the
@@ -53,15 +61,18 @@ export function CaptchaConsentControl({
         <div className="flex items-start justify-between gap-5">
           <label htmlFor={id}>
             <span className="block text-sm font-medium text-ink">{CAPTCHA_CONSENT_COPY.label}</span>
-            <span className="mt-1 block text-xs leading-5 text-muted">{CAPTCHA_CONSENT_COPY.body}</span>
-            <span className="mt-1 block text-xs leading-5 text-muted">{CAPTCHA_CONSENT_WHEN_OFF}</span>
+            <span id={bodyId} className="mt-1 block text-xs leading-5 text-muted">{CAPTCHA_CONSENT_COPY.body}</span>
+            <span id={offId} className="mt-1 block text-xs leading-5 text-muted">{CAPTCHA_CONSENT_WHEN_OFF}</span>
             {granted && (
-              <span className="mt-1 block text-xs leading-5 text-muted">Granted {granted}.</span>
+              /* Mono, per DESIGN.md: "Every number, timestamp, filename, ATS name, status, and
+                 label. When the machine speaks, it speaks in mono." */
+              <span className="mt-1 block font-mono text-xs leading-5 text-muted">Granted {granted}.</span>
             )}
           </label>
           <input
             id={id}
             aria-label={CAPTCHA_CONSENT_COPY.label}
+            aria-describedby={`${bodyId} ${offId} ${boundaryId} ${revocableId}`}
             type="checkbox"
             checked={value}
             disabled={disabled}
@@ -70,8 +81,8 @@ export function CaptchaConsentControl({
           />
         </div>
       </div>
-      <p className="mt-4 border-t border-border pt-4 text-xs leading-5 text-muted">{CAPTCHA_CONSENT_BOUNDARY}</p>
-      <p className="mt-2 text-xs leading-5 text-muted">{CAPTCHA_CONSENT_REVOCABLE}</p>
+      <p id={boundaryId} className="mt-4 border-t border-border pt-4 text-xs leading-5 text-muted">{CAPTCHA_CONSENT_BOUNDARY}</p>
+      <p id={revocableId} className="mt-2 text-xs leading-5 text-muted">{CAPTCHA_CONSENT_REVOCABLE}</p>
     </div>
   );
 }

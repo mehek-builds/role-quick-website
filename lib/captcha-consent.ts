@@ -100,9 +100,24 @@ export function captchaConsentGranted(state: CaptchaConsentState | null | undefi
   return captchaConsentVerdict(state) === true;
 }
 
-/** The stored grant date, as sent. */
+/** The stored grant date, as sent. Absent and null collapse to null, which is what a screen wants
+ *  when it is DISPLAYING a date. Use captchaConsentedAtReported when the difference matters. */
 export function captchaConsentedAt(state: CaptchaConsentState | null | undefined): string | null {
   return state?.automatic_captcha_consented_at ?? null;
+}
+
+/**
+ * The grant date as REPORTED, keeping "not sent" distinct from "sent as null".
+ *
+ * The same distinction captchaConsentVerdict draws, and needed in the same place: reconciling a
+ * screen against a write response. An API that does not send this column must not be read as having
+ * cleared the date, or a toggle would erase a date that GET /onboarding/state still returns, and the
+ * screen would disagree with itself across a reload.
+ */
+export function captchaConsentedAtReported(
+  state: CaptchaConsentState | null | undefined,
+): string | null | undefined {
+  return state?.automatic_captcha_consented_at;
 }
 
 /**
@@ -122,7 +137,12 @@ export function captchaConsentGrantedOn(
   if (!granted || !consentedAt) return null;
   const when = new Date(consentedAt);
   if (Number.isNaN(when.getTime())) return null;
-  return when.toLocaleDateString();
+  /* Rendered in UTC, which is the instant the server stored rather than the one the viewer happens
+     to be standing in. Without the zone, a grant stamped 09:14Z prints as the previous day for
+     anyone far enough west, and a date-only value parses as UTC midnight and does it everywhere west
+     of UTC. This date is an audit statement about when permission was given, so it has to name the
+     day the record names. */
+  return when.toLocaleDateString(undefined, { timeZone: "UTC" });
 }
 
 /**
@@ -135,4 +155,28 @@ export function captchaConsentGrantedOn(
  */
 export function captchaConsentPatch(enabled: boolean): { automatic_captcha_enabled: boolean } {
   return { [CAPTCHA_CONSENT_FIELD]: enabled };
+}
+
+/**
+ * What POST /onboarding/complete should carry for this permission, which is sometimes nothing.
+ *
+ * SETUP MUST NOT REVOKE A PERMISSION IT WAS NEVER TOLD ABOUT. /start is reachable long after setup,
+ * and it seeds its box from the server, so an unticked box normally means "she is looking at a
+ * permission she does not hold" and an explicit false is the honest way to say so. There is one case
+ * where it means something else entirely: the server did not report the column at all. Absent reads
+ * as not granted for DISPLAY, but writing that back as false is a revocation of whatever is actually
+ * stored, decided by a screen that was never shown the real value.
+ *
+ * That is not hypothetical during a rolling deploy, when GET can land on an instance that predates
+ * the column while POST lands on one that does not: an account holding a real grant would walk
+ * through setup, see an unticked box it had no way to know was wrong, press the button, and lose the
+ * permission silently. So a false is sent only when the server reported the column, and a true is
+ * always sent, because a ticked box is a grant the applicant just performed either way.
+ */
+export function captchaConsentCompletion(
+  state: CaptchaConsentState | null | undefined,
+  chosen: boolean,
+): { automatic_captcha_enabled?: boolean } {
+  if (chosen) return { [CAPTCHA_CONSENT_FIELD]: true };
+  return captchaConsentVerdict(state) === undefined ? {} : { [CAPTCHA_CONSENT_FIELD]: false };
 }

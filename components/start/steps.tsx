@@ -15,7 +15,7 @@ import {
   putTargeting,
   uploadResume,
 } from "@/lib/api";
-import { captchaConsentedAt, captchaConsentGranted } from "@/lib/captcha-consent";
+import { captchaConsentedAt, captchaConsentCompletion, captchaConsentGranted } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
 import { STORE_URL } from "@/lib/config";
 import {
@@ -975,7 +975,11 @@ export function DoneStep({
      this screen assumed off. Seeded, the box shown is the permission held, and unticking it is a
      revocation performed rather than one the flow performed for them. */
   const [captchaConsent, setCaptchaConsent] = useState(() => captchaConsentGranted(state));
-  const captchaConsentGrantedAt = useMemo(() => captchaConsentedAt(state), [state]);
+  /* Seeded once, like the box beside it, and deliberately NOT recomputed from a live `state`.
+     Holding the box against re-seeding is right (a background refresh must not clobber a choice
+     being made), but a date that kept tracking `state` while the box did not could print "Granted
+     <date>." next to an unticked box, which is the one pairing this module forbids everywhere. */
+  const [captchaConsentGrantedAt] = useState(() => captchaConsentedAt(state));
   const rows = useMemo(
     () =>
       /* Every step in STEPS, minus the screen the student is standing on. Deliberately STEPS and
@@ -1059,11 +1063,10 @@ export function DoneStep({
             setBusy(true);
             void onFinish({
               automatic_verification_enabled: verificationEnabled,
-              /* Sent explicitly, and seeded from the server above, so an explicit false here is
-                 always a box that was on screen. The server reads an omitted field as "leave it
-                 alone", so omitting it when unticked would leave a stored grant standing while this
-                 screen showed it off. */
-              automatic_captcha_enabled: captchaConsent,
+              /* A ticked box always sends true; an unticked one sends false ONLY if the server
+                 reported the column, because otherwise this screen would be revoking a stored grant
+                 it was never shown. See captchaConsentCompletion. */
+              ...captchaConsentCompletion(state, captchaConsent),
             }).finally(() => setBusy(false));
           }}
           disabled={busy}

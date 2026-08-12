@@ -160,6 +160,23 @@ await context.route("**/*", async (route) => {
   if (key === "PUT /onboarding/automation") {
     const body = JSON.parse(request.postData() ?? "{}");
     scenario.automationWrites.push(body);
+    /* The write refuses, so the screen has to put itself back. Nothing is applied to the state. */
+    if (scenario.failAutomationWrite) {
+      await route.fulfill({ status: 500, json: { error: "fixture refused the write" } });
+      return;
+    }
+    /* An API deployed before this column echoes neither field. The screen must keep what it had
+       rather than read the silence as a revocation, and that applies to the date too. */
+    if (scenario.omitCaptchaFieldsOnWrite) {
+      await route.fulfill({
+        json: {
+          automatic_submission_enabled: scenario.state.automatic_submission_enabled,
+          automatic_submission_consent_version: null,
+          automatic_verification_enabled: scenario.state.automatic_verification_enabled,
+        },
+      });
+      return;
+    }
     /* The server applies each named field and echoes the VERSION-CHECKED VERDICT, exactly as
        routes/onboarding.ts does. An unnamed field is left alone. A fresh grant is stamped with the
        CURRENT version, which is what makes ticking the box the repair for a stale row. */
@@ -196,11 +213,14 @@ await context.route("**/*", async (route) => {
   await route.fulfill({ status: 200, json: {} });
 });
 
-function freshScenario(stateOverrides = {}) {
+function freshScenario(stateOverrides = {}, options = {}) {
   return {
     state: onboardingState(stateOverrides),
     automationWrites: [],
     completeWrites: [],
+    failAutomationWrite: false,
+    omitCaptchaFieldsOnWrite: false,
+    ...options,
   };
 }
 
@@ -284,6 +304,39 @@ test("revoking sends an explicit false for that column only", async () => {
 
 /* The copy is the consent, so the two claims that make it honest have to be on the screen that
  * takes the grant, not in a doc comment. */
+/* A refused write must put the screen back where it was. Without this the box would keep showing a
+ * grant the server rejected, which is the misreport the whole module exists to prevent. */
+test("a refused write rolls the box and its date back, and says so", async () => {
+  scenario = freshScenario(
+    { automatic_captcha_enabled: true, automatic_captcha_consented_at: GRANT_STAMP },
+    { failAutomationWrite: true },
+  );
+  const page = await openSettings();
+  assert.equal(await page.getByText(/^Granted /).count(), 1);
+  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).uncheck();
+  await page.getByText(/fixture refused the write/).waitFor();
+  // Back to granted, date and all: the server never accepted the revocation.
+  assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), true);
+  assert.equal(await page.getByText(/^Granted /).count(), 1);
+  await page.close();
+});
+
+/* Deploy skew, write side: the API answers without the column. Silence is not a revocation, and it
+ * is not a cleared date either. */
+test("a write response that omits the column changes nothing on screen", async () => {
+  scenario = freshScenario(
+    { automatic_captcha_enabled: true, automatic_captcha_consented_at: GRANT_STAMP },
+    { omitCaptchaFieldsOnWrite: true },
+  );
+  const page = await openSettings();
+  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).uncheck();
+  await page.waitForFunction(() => true);
+  // The optimistic uncheck is reconciled back to what the screen already held, date included.
+  assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), true);
+  assert.equal(await page.getByText(/^Granted /).count(), 1);
+  await page.close();
+});
+
 test("the boundary is on the screen that grants the permission", async () => {
   scenario = freshScenario();
   const page = await openSettings();
@@ -322,6 +375,54 @@ test("onboarding starts unticked and sends an explicit false when left alone", a
   // Explicit, not omitted: the server reads an omitted field as "leave it alone", which would let a
   // stored grant stand while this screen showed the box off.
   assert.equal(scenario.completeWrites[0].automatic_captcha_enabled, false);
+  await page.close();
+});
+
+/* THE SILENT REVOCATION, and it is why setup sends nothing rather than false here. GET lands on an
+ * instance that predates the column, so the box renders unticked for an account that may well hold
+ * the permission. Pressing the button must not write that guess back as a revocation. */
+test("setup omits the field entirely when the server never reported it", async () => {
+  scenario = freshScenario();
+  delete scenario.state.automatic_captcha_enabled;
+  delete scenario.state.automatic_captcha_consented_at;
+  delete scenario.state.automatic_captcha_consent_version;
+  const page = await context.newPage();
+  await page.goto(`${ORIGIN}/start`);
+  await page.getByRole("heading", { name: "Setup complete." }).waitFor();
+  assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), false);
+  await page.getByRole("button", { name: "See my jobs" }).click();
+  await page.waitForFunction(() => window.location.pathname !== "/start");
+  // Not false. Absent, so the server leaves whatever is stored exactly as it is.
+  assert.equal("automatic_captcha_enabled" in scenario.completeWrites[0], false);
+  await page.close();
+});
+
+test("a ticked box is still sent as true against a server that reported nothing", async () => {
+  scenario = freshScenario();
+  delete scenario.state.automatic_captcha_enabled;
+  const page = await context.newPage();
+  await page.goto(`${ORIGIN}/start`);
+  await page.getByRole("heading", { name: "Setup complete." }).waitFor();
+  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).check();
+  await page.getByRole("button", { name: "See my jobs" }).click();
+  await page.waitForFunction(() => window.location.pathname !== "/start");
+  // A tick is a grant just performed, so it is never silence.
+  assert.equal(scenario.completeWrites[0].automatic_captcha_enabled, true);
+  await page.close();
+});
+
+test("the disclosure is tied to the checkbox for assistive tech", async () => {
+  scenario = freshScenario();
+  const page = await openSettings();
+  const described = await page.evaluate(() => {
+    const box = document.getElementById("settings-captcha-consent");
+    const ids = (box?.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean);
+    return ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ");
+  });
+  // The two claims that make this consent honest have to be in what a screen reader announces.
+  assert.match(described, /never solves the check, never reads its token/);
+  assert.match(described, /separate permission/);
+  assert.match(described, /still tells you the check is there/);
   await page.close();
 });
 
