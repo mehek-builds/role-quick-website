@@ -15,7 +15,7 @@ import {
   uploadResume,
 } from "@/lib/api";
 import { STORE_URL } from "@/lib/config";
-import { TEST_TYPE_OPTIONS, chooseTestType } from "@/features/onboarding";
+import { TEST_TYPE_LABELS, TEST_TYPE_OPTIONS, TEST_TYPE_UNANSWERED_LABEL, chooseTestType } from "@/features/onboarding";
 import {
   ROLE_TYPES,
   defaultBackup,
@@ -674,8 +674,8 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
      See the note in the backend's db/schema.ts. */
   standardized_test_type: {
     label: "Which standardized test did you take?",
-    note: "Trading and quant firms ask for this by name. Leave it blank and Litos leaves their field blank too.",
-    placeholder: "SAT, ACT, Both or None",
+    note: "Trading and quant firms ask for this by name. Answer \u201cI have not taken either\u201d and Litos says so on their form where it can; leave it blank and it leaves their field blank too.",
+    placeholder: "SAT, ACT, both, or neither",
   },
   sat_score: { label: "SAT score", placeholder: "1520" },
   act_score: { label: "ACT score", placeholder: "34" },
@@ -819,10 +819,13 @@ export function GapsStep({
               className="min-h-11 w-full rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
             >
               {/* The empty option is the default and it means "not answered". Every question on this
-                  screen is skippable, and a select with no blank choice would answer for her. */}
-              <option value="">Prefer not to answer</option>
+                  screen is skippable, and a select with no blank choice would answer for her.
+                  It is worded so it cannot be confused with "I have not taken either", which is a
+                  DECLARATION and the only answer that lets Litos fill a test-score field at all.
+                  See TEST_TYPE_LABELS: the stored values are the backend enum, the words are not. */}
+              <option value="">{TEST_TYPE_UNANSWERED_LABEL}</option>
               {TEST_TYPE_OPTIONS.map((option) => (
-                <option key={option} value={option}>{option}</option>
+                <option key={option} value={option}>{TEST_TYPE_LABELS[option]}</option>
               ))}
             </select>
           </div>
