@@ -120,6 +120,10 @@ export default function Start() {
           automatic_submission_consented_at: null,
           automatic_submission_consent_version: null,
           automatic_verification_enabled: false,
+          /* Ungranted, which is the state a new account reaches this screen in and therefore the one
+             worth reviewing: the box unticked, with the words being agreed to. */
+          automatic_captcha_enabled: false,
+          automatic_captcha_consented_at: null,
         };
         setState(state);
         setProfile({

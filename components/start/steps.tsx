@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ApplicationProfile,
+  type AutomationSettings,
   OnboardingState,
   OnboardingStep,
   ParsedProfile,
@@ -14,6 +15,8 @@ import {
   putTargeting,
   uploadResume,
 } from "@/lib/api";
+import { captchaConsentedAt, captchaConsentGranted } from "@/lib/captcha-consent";
+import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
 import { STORE_URL } from "@/lib/config";
 import {
   ROLE_TYPES,
@@ -961,11 +964,18 @@ export function DoneStep({
   verificationEnabled,
   state,
 }: {
-  onFinish: (settings: { automatic_submission_enabled?: boolean; automatic_verification_enabled: boolean }) => Promise<void>;
+  onFinish: (settings: AutomationSettings) => Promise<void>;
   verificationEnabled: boolean;
   state: OnboardingState;
 }) {
   const [busy, setBusy] = useState(false);
+  /* SEEDED FROM THE SERVER'S VERDICT, not from false, and that seeding is the whole reason this is
+     safe to send as an explicit boolean below. /start is reachable long after setup, so someone who
+     granted this in Settings and then walked back through the flow would revoke it on the way out if
+     this screen assumed off. Seeded, the box shown is the permission held, and unticking it is a
+     revocation performed rather than one the flow performed for them. */
+  const [captchaConsent, setCaptchaConsent] = useState(() => captchaConsentGranted(state));
+  const captchaConsentGrantedAt = useMemo(() => captchaConsentedAt(state), [state]);
   const rows = useMemo(
     () =>
       /* Every step in STEPS, minus the screen the student is standing on. Deliberately STEPS and
@@ -1022,6 +1032,21 @@ export function DoneStep({
 
       <Receipt rows={rows} />
 
+      {/* ASKED HERE, ONCE, because this screen is what calls POST /onboarding/complete and is
+          therefore where a permission granted during setup can be recorded at all. The box starts
+          unticked for a new account: this is a standing permission, not a default. Every existing
+          account grants and revokes it from Settings, which is also the only place the accounts
+          carrying the superseded consent version can grant it again. */}
+      <div className="mt-7">
+        <CaptchaConsentControl
+          idPrefix="start"
+          value={captchaConsent}
+          grantedAt={captchaConsentGrantedAt}
+          disabled={busy}
+          onChange={setCaptchaConsent}
+        />
+      </div>
+
       {/* The first action, in words. The button label alone ("See my jobs") names a destination,
           not a thing to do, and the value of the product is one step past the destination. */}
       <p className="mt-7 text-[15px] leading-7 text-ink">
@@ -1034,6 +1059,11 @@ export function DoneStep({
             setBusy(true);
             void onFinish({
               automatic_verification_enabled: verificationEnabled,
+              /* Sent explicitly, and seeded from the server above, so an explicit false here is
+                 always a box that was on screen. The server reads an omitted field as "leave it
+                 alone", so omitting it when unticked would leave a stored grant standing while this
+                 screen showed it off. */
+              automatic_captcha_enabled: captchaConsent,
             }).finally(() => setBusy(false));
           }}
           disabled={busy}
