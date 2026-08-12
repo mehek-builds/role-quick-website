@@ -49,6 +49,14 @@ import {
 } from "@/lib/application-profile-form";
 import { CountryEligibilityEditor } from "@/components/app/CountryEligibilityEditor";
 import {
+  captchaConsentedAt,
+  captchaConsentedAtReported,
+  captchaConsentGranted,
+  captchaConsentPatch,
+  captchaConsentVerdict,
+} from "@/lib/captcha-consent";
+import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
+import {
   countryEligibilityProblem,
   eligibilitySeed,
   normalizedCountryEligibility,
@@ -106,6 +114,15 @@ export default function Settings() {
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
   const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
+  /* The human-check permission, held as the server's VERDICT rather than as anything derived here.
+     A plain boolean and not `boolean | null`: an API that predates this column omits it, and
+     "absent" and "off" are the same state for a permission that account cannot hold. */
+  const [captchaConsent, setCaptchaConsent] = useState(false);
+  const [captchaConsentGrantedAt, setCaptchaConsentGrantedAt] = useState<string | null>(null);
+  /* Its own in-flight flag, not savingAutomation. Sharing that one would re-couple through UI state
+     the two writers the payload split exists to keep apart: whichever request settled first would
+     clear the flag and re-enable both controls while the other was still in flight. */
+  const [savingCaptchaConsent, setSavingCaptchaConsent] = useState(false);
   const [savingAutomation, setSavingAutomation] = useState(false);
   // Unattended submission is earned, not offered. The server is the authority; this only explains
   // the state so the control is not an unexplained dead toggle.
@@ -237,6 +254,12 @@ export default function Settings() {
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
+        /* Straight from the verdict field. A row whose stored consent version has been superseded
+           arrives as false with its original date still attached, and the toggle must read that as
+           not granted rather than reconstructing a grant from the date. For the accounts carrying
+           the stale version this is the screen where they can grant it again. */
+        setCaptchaConsent(captchaConsentGranted(onboardingRes));
+        setCaptchaConsentGrantedAt(captchaConsentedAt(onboardingRes));
         setEmailConnections(connectionRes);
         setApplicationEmail(currentApplicationEmail);
         setSponsorship(sponsorRes);
@@ -313,6 +336,39 @@ export default function Settings() {
       setError(err instanceof Error ? err.message : "Could not save that change.");
     } finally {
       setSavingAutomation(false);
+    }
+  }
+
+  /* Its own writer rather than a branch of saveAutomation, and the payload is the reason.
+     PUT /onboarding/automation reads an omitted field as "leave it alone" and an explicit false as a
+     revocation, so a request that also named the submission or verification columns could revoke a
+     permission the applicant never touched. saveAutomation rolls that PAIR back together on failure,
+     which is exactly the coupling this permission must not have. */
+  async function changeCaptchaConsent(enabled: boolean) {
+    const previous = captchaConsent;
+    const previousGrantedAt = captchaConsentGrantedAt;
+    setCaptchaConsent(enabled);
+    setSavingCaptchaConsent(true);
+    setError(null);
+    try {
+      const result = await setAutomationSettings(captchaConsentPatch(enabled));
+      /* The server's verdict, not the checkbox's own optimism: a grant recorded against wording that
+         has since been superseded comes back false, and the box has to follow it. An API that
+         answers without the field keeps what was there rather than being read as a revocation. */
+      const verdict = captchaConsentVerdict(result);
+      setCaptchaConsent(verdict ?? previous);
+      /* The DATE gets the same treatment as the verdict above, and for the same reason. Not sent is
+         not the same as sent-as-null: reading a missing field as null would wipe a date that
+         GET /onboarding/state still returns, so the row would lose its date on every toggle and get
+         it back on every reload. */
+      const reportedAt = captchaConsentedAtReported(result);
+      setCaptchaConsentGrantedAt(reportedAt === undefined ? previousGrantedAt : reportedAt);
+    } catch (err) {
+      setCaptchaConsent(previous);
+      setCaptchaConsentGrantedAt(previousGrantedAt);
+      setError(err instanceof Error ? err.message : "Could not save that change.");
+    } finally {
+      setSavingCaptchaConsent(false);
     }
   }
 
@@ -890,6 +946,22 @@ export default function Settings() {
               className="mt-1 size-4 accent-brand disabled:opacity-40"
             />
           </label>
+          {/* Directly under the submission switch because it is the same moment on the same form,
+              and ungated unlike that switch, which is the server's rule rather than this screen's:
+              resuming a fill sends nothing to anybody. It re-reads a form that still stops at the
+              submit button, and whether anything is ever sent stays with the permission above.
+              Revoking is allowed from any state.
+
+              THIS CONTROL IS ALSO THE ONLY RE-CONSENT PATH. Accounts stamped with the superseded
+              version arrive here unticked with a real date on the row; ticking the box writes the
+              current version and makes the extension's resume path work for them again. */}
+          <CaptchaConsentControl
+            idPrefix="settings"
+            value={captchaConsent}
+            grantedAt={captchaConsentGrantedAt}
+            disabled={savingCaptchaConsent}
+            onChange={(enabled) => void changeCaptchaConsent(enabled)}
+          />
           <div className="rounded-inner border border-border p-4">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>

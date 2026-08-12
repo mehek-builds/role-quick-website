@@ -1032,6 +1032,19 @@ export type OnboardingState = {
   automatic_submission_consented_at: string | null;
   automatic_submission_consent_version: string | null;
   automatic_verification_enabled: boolean;
+  /* THE VERSION-CHECKED VERDICT, not the stored column. The API compares the version on the row
+     against AUTOMATIC_CAPTCHA_CONSENT_VERSION, the constant naming the wording the applicant was
+     shown, and sends the result under this name. Rows granted against superseded wording arrive
+     here as false with their original `consented_at` still attached - which is not a hypothetical,
+     it is the state of the accounts stamped by the unmerged branch - so nothing on the client may
+     re-derive the grant from the date. See lib/captcha-consent.ts.
+
+     Optional, like `includes_gaps_step` above and for the same reason: the two repos deploy
+     separately and in either order, and an API that predates this column simply omits it. Absent
+     reads as not granted, which is what that API does. */
+  automatic_captcha_enabled?: boolean;
+  automatic_captcha_consented_at?: string | null;
+  automatic_captcha_consent_version?: string | null;
 };
 
 export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
@@ -1085,6 +1098,19 @@ export type AutomationSettings = {
    *  that turns unattended submission on. The server refuses to enable it before it is earned. */
   automatic_submission_enabled?: boolean;
   automatic_verification_enabled: boolean;
+  /** Standing permission to pick a fill back up after the applicant has cleared a human check.
+   *  Optional on both routes: the server reads an omitted field as "leave it alone" and an explicit
+   *  false as a revocation, so a writer that has nothing to say about this permission must not name
+   *  it. It never licenses a send; see lib/captcha-consent.ts for what it does and does not buy. */
+  automatic_captcha_enabled?: boolean;
+};
+
+/** What both write routes answer with. `automatic_captcha_enabled` here is the VERSION-CHECKED
+ *  VERDICT, matching GET /onboarding/state exactly, so a screen hydrating from a write never shows a
+ *  permission the server does not honour. */
+export type AutomationSettingsResponse = AutomationSettings & {
+  automatic_submission_consent_version: string | null;
+  automatic_captcha_consented_at?: string | null;
 };
 
 export function completeOnboarding(settings: AutomationSettings) {
@@ -1095,7 +1121,7 @@ export function completeOnboarding(settings: AutomationSettings) {
 }
 
 export function setAutomationSettings(settings: Partial<AutomationSettings>) {
-  return api<AutomationSettings & { automatic_submission_consent_version: string | null }>("/onboarding/automation", {
+  return api<AutomationSettingsResponse>("/onboarding/automation", {
     method: "PUT",
     body: JSON.stringify(settings),
   });
