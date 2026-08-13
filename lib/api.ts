@@ -540,6 +540,20 @@ export type ApplicationQuestion = {
   explanation?: string;
   /** True when the answer shown is one she gave on an earlier posting. */
   remembered?: boolean;
+  /**
+   * SHE READ THIS ANSWER AND LET IT STAND. Server-written, never sent back.
+   *
+   * The only per-answer provenance this client is given, and deliberately not the one that says who
+   * wrote the answer. `answer_source` is not on this type and must not be: an approved draft was
+   * written by Litos, the server records that by leaving `answer_source` absent, and a client that
+   * could read or restate it would be one autocomplete away from re-asserting the claim the
+   * blanket-stamp regression was about.
+   *
+   * The panel reads it to decide whether a row is still Your turn or has moved to Done. The server
+   * drops it the moment the answer it describes is replaced, so it is always a statement about the
+   * text sitting beside it.
+   */
+  answer_approved_at?: string;
 };
 
 /** One question from GET /postings/:jobId/questions that needs the applicant. */

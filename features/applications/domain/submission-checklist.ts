@@ -249,6 +249,20 @@ function isHumanOnlyChecklistLabel(label: string): boolean {
   return false;
 }
 
+/**
+ * SHE HAS READ THIS ANSWER AND LET IT STAND, which is what takes the row off Your turn.
+ *
+ * Read off the packet rather than off any client state, because the panel is rebuilt from a 2.5s
+ * poll and a tick that lived anywhere else would be undone by the next tick. Written by
+ * PUT /applications/:id/review/answers/:questionId/approval, which stamps `answer_approved_at` and
+ * deliberately no `answer_source`: Litos wrote these words and the record must not start saying she
+ * did. The server drops the stamp the moment the answer it describes is replaced, so presence here
+ * is always a claim about the text currently on the row.
+ */
+function answerApproved(question: { answer_approved_at?: string }): boolean {
+  return typeof question.answer_approved_at === "string" && question.answer_approved_at.length > 0;
+}
+
 function addUnique(items: SubmissionChecklistItem[], item: SubmissionChecklistItem) {
   if (items.some((existing) => existing.id === item.id || existing.label === item.label)) return;
   if (item.subject && items.some((existing) => existing.subject === item.subject)) return;
@@ -624,7 +638,7 @@ export function humanInputItems(
       });
       continue;
     }
-    if (review.status !== "submitted" && question.kind === "essay" && answer) {
+    if (review.status !== "submitted" && question.kind === "essay" && answer && !answerApproved(question)) {
       addUnique(items, {
         id: `review-${question.id}`,
         label: displayQuestionLabel(question.question),
@@ -635,7 +649,7 @@ export function humanInputItems(
       });
       continue;
     }
-    if (review.status !== "submitted" && answer && isHumanOnlyChecklistLabel(question.question)) {
+    if (review.status !== "submitted" && answer && !answerApproved(question) && isHumanOnlyChecklistLabel(question.question)) {
       addUnique(items, {
         id: `confirm-${question.id}`,
         label: displayQuestionLabel(question.question),
@@ -684,8 +698,13 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
   for (const question of review.questions ?? []) {
     const answer = (question.answer ?? "").trim();
     if (!answer) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
-    if (isHumanOnlyChecklistLabel(question.question)) continue;
+    /* AN APPROVED ANSWER IS DONE, AND HAS TO LAND SOMEWHERE. Ticking a row and watching it vanish
+       off the panel entirely reads as a row that was deleted rather than one that was settled, which
+       is the failure the Your turn / Done split exists to avoid. So the two conditions that hold a
+       question out of Done - a draft nobody has read, and a question only she may speak to - both
+       yield once she has said the answer stands. */
+    if (question.kind === "essay" && review.status !== "submitted" && !answerApproved(question)) continue;
+    if (isHumanOnlyChecklistLabel(question.question) && !answerApproved(question)) continue;
     // The run says this box is still empty. A stored answer is not the employer having received it,
     // and Done is a claim about the employer's form.
     if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;

@@ -4,6 +4,7 @@
  * Presentation code imports from this file so internal layers can move without
  * forcing route and component changes.
  */
+export * from "./domain/answer-approval";
 export * from "./domain/application-filter";
 export * from "./domain/application-review";
 export * from "./domain/apply-variant";

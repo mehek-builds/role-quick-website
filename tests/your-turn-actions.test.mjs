@@ -87,7 +87,12 @@ test("the panel hands the row everything a control needs, and the page hands the
   assert.match(list, /onOpenQuestion=\{onOpenQuestion\}/);
   assert.match(list, /onAddDocument=\{onAddDocument\}/);
 
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} \/>/);
+  /* onApproveAnswer and approvingQuestionId joined this list when the checkbox on these rows was
+     wired - it had shipped with no handler at all, the same defect as the pill this file is about,
+     four months later. They are pinned here rather than left out, because the whole point of this
+     assertion is that a control's props reach it through every hop: a prop dropped anywhere on the
+     way down is a control that draws and does nothing. */
+  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onApproveAnswer=\{onApproveAnswer\} approvingQuestionId=\{approvingQuestionId\} onAddDocument=\{onAddDocument\} \/>/);
   assert.match(page, /onOpenQuestion=\{\(questionId\) => reviewPortalQuestions\(questionId\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
 });
@@ -136,7 +141,7 @@ test("a settled row keeps its control, and keeps it out of the panel that counts
   const amber = list.indexOf("Your turn");
   const settledStrip = list.indexOf("settled.length > 0");
   assert.ok(amber !== -1 && settledStrip > amber, "the settled strip is drawn after the panel, outside it");
-  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} \/>/);
+  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onOpenQuestion=\{onOpenQuestion\} onApproveAnswer=\{onApproveAnswer\} approvingQuestionId=\{approvingQuestionId\} onAddDocument=\{onAddDocument\} \/>/);
 
   const row = functionBody(page, "ChecklistRow");
   // `checked` still suppresses the control, because the Done column has no action words to draw.
