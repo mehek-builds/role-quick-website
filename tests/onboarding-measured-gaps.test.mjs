@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { readFileSync } from "node:fs";
+import {
+  TEST_TYPE_LABELS,
+  TEST_TYPE_OPTIONS,
+  TEST_TYPE_UNANSWERED_LABEL,
+} from "../features/onboarding/domain/test-scores.ts";
 
 /* THE GAPS MEASURED ACROSS 158 PACKETS, ASKED ONCE IN ONBOARDING.
  *
@@ -49,10 +54,13 @@ describe("the measured gaps are asked", () => {
 
   /* Property 2. The test question carries the note; the two score inputs do not need one because
      the question above them already explained the ask. */
-  test("the test question says plainly why Litos is asking", () => {
+  test("the test question says plainly why Litos is asking, and what each answer does", () => {
     assert.match(RAW, /GAP_LABEL\.standardized_test_type\.note/);
     const labels = RAW.slice(RAW.indexOf("const GAP_LABEL"), RAW.indexOf("export function GapsStep"));
-    assert.match(labels, /Leave it blank and Litos leaves their field blank too/);
+    /* BOTH outcomes, not just the blank one. The note used to describe only what happens if she
+       skips it, which left the answer that actually unblocks an application undescribed. */
+    assert.match(labels, /leaves their field blank too/);
+    assert.match(labels, /I have not taken either/);
   });
 
   /* The coursework question must not come back on its own. It needs a backend column that cannot
@@ -76,13 +84,32 @@ describe("a blank writes nothing", () => {
   });
 
   test("the test type select offers a real not-answered choice as its default", () => {
-    assert.match(RAW, /<option value="">Prefer not to answer<\/option>/);
+    assert.match(RAW, /<option value="">\{TEST_TYPE_UNANSWERED_LABEL\}<\/option>/);
     // The blank option must come first, so it is what a select shows before anyone touches it.
     const select = RAW.slice(RAW.indexOf('id="gap-standardized_test_type"'));
     assert.ok(
       select.indexOf('value=""') < select.indexOf("TEST_TYPE_OPTIONS.map"),
       "the not-answered option must be the default",
     );
+  });
+
+  /* ASSERTED ON THE VALUES, NOT ON THE SOURCE. The two tests above read the file and match a
+     pattern, which is how a screen keeps passing while the thing it renders changes underneath.
+     These read the exported constants the screen actually renders from, so they fail when the
+     rendered words change rather than when the JSX is reformatted. */
+  test("the declaration is a sentence, and it is not the refusal", () => {
+    assert.equal(TEST_TYPE_LABELS.None, "I have not taken either");
+    assert.equal(TEST_TYPE_UNANSWERED_LABEL, "Prefer not to answer");
+    assert.notEqual(TEST_TYPE_LABELS.None, TEST_TYPE_UNANSWERED_LABEL);
+  });
+
+  test("the stored values are still the backend enum, whatever the screen calls them", () => {
+    // A label leaking into the patch would post a sentence into a column typed
+    // z.enum(['SAT','ACT','Both','None']) and 400 the entire save.
+    assert.deepEqual([...TEST_TYPE_OPTIONS], ["SAT", "ACT", "Both", "None"]);
+    for (const option of TEST_TYPE_OPTIONS) {
+      assert.ok(TEST_TYPE_LABELS[option], `${option} must have a label`);
+    }
   });
 
   test("the whole screen is still skippable", () => {

@@ -62,6 +62,10 @@ let savedBody = null;
    migration, or an older one with no such route. The state stub then keeps answering 'gaps', which
    is exactly the shape of the #116 dead end. */
 let gapsAskedFails = false;
+/* WHICH GAPS THE SERVER REPORTS, mutable so a test can ask for the screen it needs. It was a
+   literal inside the /onboarding/state stub, which meant the only gap block any e2e could reach was
+   the one that literal named. */
+let stateGaps = ["gpa", "gpa_scale", "major"];
 let stateStep = "done";
 
 const doneState = {
@@ -115,7 +119,7 @@ await context.route("**/*", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ ...doneState, step: stateStep, gaps: stateStep === "gaps" ? ["gpa", "gpa_scale", "major"] : [] }),
+      body: JSON.stringify({ ...doneState, step: stateStep, gaps: stateStep === "gaps" ? stateGaps : [] }),
     });
     return;
   }
@@ -205,5 +209,64 @@ test("a stamp the backend cannot record still lets the student leave the screen"
   } finally {
     gapsAskedFails = false;
     stateStep = "done";
+  }
+});
+
+
+/* WHAT THE APPLICANT ACTUALLY SEES IN THE TEST-TYPE SELECT, rendered by the production client.
+ *
+ * THE BLIND SPOT THIS CLOSES. Every other test for this change asserts the exported constants, or
+ * matches a pattern against components/start/steps.tsx. Mutation-tested: putting `{option}` back in
+ * the JSX, so the select renders the raw enum member "None" again and the entire point of the
+ * change is reverted, left the whole website suite green, plus tsc and eslint. The constants stayed
+ * correct; the component simply did not have to use them. Nothing under `npm test` can see this,
+ * because node's type stripping cannot load a .tsx, so the assertion belongs here.
+ *
+ * "None" one row under "Prefer not to answer" is the defect. They are the two most different
+ * answers on the list, one row apart, and they were the two that looked alike. */
+test("the test-type select shows the answers in words, not as enum members", async (t) => {
+  const previousGaps = stateGaps;
+  try {
+    stateGaps = ["standardized_test_type", "sat_score", "act_score"];
+    await page.goto(`${PAGE_ORIGIN}/start?qa=1&step=gaps`, { waitUntil: "networkidle" });
+    const select = page.locator("#gap-standardized_test_type");
+    await select.waitFor({ state: "visible" });
+
+    const options = await select.locator("option").evaluateAll((nodes) => nodes.map((node) => ({
+      value: node.value,
+      text: node.textContent.trim(),
+    })));
+
+    assert.deepEqual(options, [
+      { value: "", text: "Prefer not to answer" },
+      { value: "SAT", text: "SAT" },
+      { value: "ACT", text: "ACT" },
+      { value: "Both", text: "Both the SAT and the ACT" },
+      { value: "None", text: "I have not taken either" },
+    ], "the select must offer the backend enum as values and the sentences as text");
+
+    // Stated separately so a failure names the defect rather than a whole array diff.
+    assert.ok(
+      !options.some((option) => option.text === "None"),
+      'no option may read "None": it is one row under "Prefer not to answer" and means the opposite',
+    );
+
+    // And the declaration really is selectable and really does post the enum member.
+    await select.selectOption("None");
+    await page.getByRole("button", { name: "Continue" }).click();
+    await page.getByRole("heading", { name: "Setup complete." }).waitFor({ state: "visible" });
+    assert.deepEqual(savedBody, { standardized_test_type: "None" });
+
+    assert.deepEqual(blockedExternal, []);
+    assert.deepEqual(unstubbedBackend, []);
+  } catch (reason) {
+    const artifactDir = path.join(process.cwd(), "test-results", "start-gaps");
+    await mkdir(artifactDir, { recursive: true });
+    await page.screenshot({ path: path.join(artifactDir, "test-type-select.png"), fullPage: true }).catch(() => {});
+    await writeFile(path.join(artifactDir, "test-type-select.html"), await page.content()).catch(() => {});
+    throw reason;
+  } finally {
+    stateGaps = previousGaps;
+    t.diagnostic("test-type select assertions complete");
   }
 });

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { chooseTestType } from "./test-scores.ts";
+import {
+  TEST_TYPE_LABELS,
+  TEST_TYPE_OPTIONS,
+  TEST_TYPE_UNANSWERED_LABEL,
+  chooseTestType,
+} from "./test-scores.ts";
 
 /* CHANGING THE ANSWER REMOVES THE SCORES THAT NO LONGER APPLY.
  *
@@ -109,5 +114,49 @@ describe("changing the test clears the scores that no longer apply", () => {
       { type: "None" },
     );
     assert.equal(values.gpa, "3.89");
+  });
+});
+
+/* THE TWO ANSWERS THAT LOOK ALIKE AND MEAN OPPOSITE THINGS.
+ *
+ * The blank option stores nothing: she has not answered, and Litos hands every test-score field
+ * back to her for ever. "None" stores a declaration that she took neither, which is the only
+ * answer that lets Litos put something on an employer's form. Rendered as the raw enum they read
+ * as near-synonyms on a list where they sit one row apart, and picking the wrong one is the
+ * difference between an application that can be finished and one that cannot.
+ */
+describe("naming the answers", () => {
+  test("every stored value has a label, and no label is the enum member for None", () => {
+    for (const option of TEST_TYPE_OPTIONS) {
+      const label = TEST_TYPE_LABELS[option];
+      assert.ok(label && label.trim().length > 0, `${option} needs a label`);
+    }
+    assert.notEqual(TEST_TYPE_LABELS.None, "None", "the declaration must be said in words");
+    assert.match(TEST_TYPE_LABELS.None, /not taken/);
+  });
+
+  test("the declaration and the refusal cannot be read as each other", () => {
+    // The one assertion this block exists for. If these two ever converge, the screen is asking a
+    // question whose two most important answers are indistinguishable.
+    assert.notEqual(TEST_TYPE_LABELS.None, TEST_TYPE_UNANSWERED_LABEL);
+    assert.doesNotMatch(TEST_TYPE_LABELS.None, /prefer not|decline|rather not/i);
+    assert.doesNotMatch(TEST_TYPE_UNANSWERED_LABEL, /not taken|neither|none/i);
+  });
+
+  test("the labels are for the screen only: the stored values are untouched", () => {
+    /* The wire format is the backend enum and nothing here may change it. A label leaking into the
+     * patch would post "I have not taken either" into a column typed
+     * z.enum(['SAT','ACT','Both','None']) and 400 the whole save. */
+    assert.deepEqual([...TEST_TYPE_OPTIONS], ["SAT", "ACT", "Both", "None"]);
+    assert.equal(afterClicks({ type: "None" }).standardized_test_type, "None");
+    assert.equal(body(afterClicks({ type: "None" })).standardized_test_type, "None");
+  });
+
+  test("choosing the declaration still clears the scores, as it did before", () => {
+    // The reducer is unchanged by this and the guarantee it carries must not be lost to a rename.
+    const values = afterClicks({ type: "Both" }, { sat_score: "1520" }, { act_score: "34" }, { type: "None" });
+    assert.equal(body(values).sat_score, undefined);
+    assert.equal(body(values).act_score, undefined);
+    assert.equal(body(values).standardized_test_type, "None");
   });
 });

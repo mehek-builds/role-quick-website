@@ -27,6 +27,37 @@
 export const TEST_TYPE_OPTIONS = ["SAT", "ACT", "Both", "None"] as const;
 
 /**
+ * WHAT EACH STORED VALUE IS CALLED ON SCREEN, and why "None" needed a sentence.
+ *
+ * The select used to render the enum members raw, so the list read:
+ *
+ *   Prefer not to answer      <- stores nothing. She has not answered.
+ *   SAT
+ *   ACT
+ *   Both
+ *   None                      <- stores a DECLARATION that she took neither.
+ *
+ * Those two are the most different answers on the list and they were the two that looked alike. A
+ * student skimming it reads "None" as "none of these apply to me, leave it blank", which is the
+ * option directly above, and picks whichever she reaches first. The distinction is not cosmetic:
+ * "None" is the only answer that lets Litos ANSWER an employer's test-score question rather than
+ * hand it back to her, and the whole feature turns on which of the two she chose.
+ *
+ * So the value stays `None`, because that is the backend enum and the wire format, and the LABEL
+ * says the thing in words. The refusal keeps its own wording for the same reason: neither may be
+ * read as the other.
+ */
+export const TEST_TYPE_LABELS: Record<(typeof TEST_TYPE_OPTIONS)[number], string> = {
+  SAT: "SAT",
+  ACT: "ACT",
+  Both: "Both the SAT and the ACT",
+  None: "I have not taken either",
+};
+
+/** The empty option: not an answer, and worded so it cannot be mistaken for one. */
+export const TEST_TYPE_UNANSWERED_LABEL = "Prefer not to answer";
+
+/**
  * The gaps-screen answers after the student picks a standardized test type.
  *
  * Keys are DELETED rather than blanked. The save loop skips empty strings, so either would stop the
