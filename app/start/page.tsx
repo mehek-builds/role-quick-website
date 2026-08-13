@@ -100,7 +100,13 @@ export default function Start() {
           /* Step-aware for the same reason has_base_resume is, one field up: the done screen's
              receipt reads this, so a hardcoded non-empty list made QA of that screen report details
              outstanding on an account that has none. The gaps step itself still gets its full list. */
-          gaps: qaStep === "done" ? [] : ["gpa", "gpa_scale", "major", "languages", "referral_source_default"],
+          /* The standardized test fields are in this list so the QA bypass can actually reach the
+             block that renders them. It is the only route an end-to-end test has to that select,
+             and what that select SHOWS is the whole of the change that added it: the stored value
+             "None" must never appear as the option text. */
+          gaps: qaStep === "done"
+            ? []
+            : ["gpa", "gpa_scale", "major", "languages", "referral_source_default", "standardized_test_type", "sat_score", "act_score"],
           /* The rail's denominator, and in QA it has to follow the step being reviewed rather than
              the gap list: `gaps` above is emptied on the done screen so its receipt reads honestly,
              and a denominator re-derived from that would drop the screen out of the rail on the one
