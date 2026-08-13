@@ -1,6 +1,7 @@
 "use client";
 
 import { Button, ButtonLink } from "@/components/app/Button";
+import { AvailabilityWindowTable } from "@/components/app/AvailabilityWindowTable";
 import { useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -24,7 +25,6 @@ import {
   setSession,
   setAutomationSettings,
 } from "@/lib/api";
-import { availabilityCycleOptions } from "@/lib/availability-window";
 import { isSafeCheckoutUrl } from "@/lib/billing";
 import { applicationEmailAddressInUse, applicationEmailBadge } from "@/lib/application-email-status";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
@@ -424,15 +424,20 @@ export default function Settings() {
 
   async function save() {
     if (!profile) return;
-    if (eligibilityTouched) {
-      const problem = countryEligibilityProblem(eligibilityDraft);
-      if (problem) {
-        // An oversized server payload is already announced beside the repeater.
-        // Avoid adding a duplicate page-level alert while still blocking the PUT.
-        if (eligibilityDraft.length <= MAX_COUNTRY_ELIGIBILITY_RECORDS) setError(problem);
-        return;
-      }
+    const eligibilityProblem = countryEligibilityProblem(eligibilityDraft);
+    if (eligibilityTouched && eligibilityProblem) {
+      // An oversized server payload is already announced beside the repeater.
+      // Avoid adding a duplicate page-level alert while still blocking the PUT.
+      if (eligibilityDraft.length <= MAX_COUNTRY_ELIGIBILITY_RECORDS) setError(eligibilityProblem);
+      return;
     }
+    /* A complete legacy seed is safe to migrate even when the student edited a different field.
+       Omitting it made the successful response look blank because the response carries only the
+       legacy scalars, while the first load also had the onboarding answer needed to interpret them.
+       An incomplete or expired untouched draft stays omitted so an unrelated edit is never blocked. */
+    const eligibilityPayload = eligibilityProblem
+      ? null
+      : normalizedCountryEligibility(eligibilityDraft);
     setSaving(true);
     setError(null);
     try {
@@ -442,16 +447,16 @@ export default function Settings() {
       delete body.user_id;
       delete body.created_at;
       delete body.updated_at;
-      if (eligibilityTouched) body.work_eligibility_by_country = normalizedCountryEligibility(eligibilityDraft);
+      if (eligibilityPayload) body.work_eligibility_by_country = eligibilityPayload;
       else delete body.work_eligibility_by_country;
       const res = await api<ApplicationProfile>("/profile/application", {
         method: "PUT",
         body: JSON.stringify(body),
       });
       setProfile(res);
-        setSavedProfileJson(JSON.stringify(res));
-        setEligibilityDraft(eligibilitySeed(res));
-        setEligibilityTouched(false);
+      setSavedProfileJson(JSON.stringify(res));
+      if (eligibilityPayload) setEligibilityDraft(eligibilitySeed(res));
+      setEligibilityTouched(false);
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
@@ -1203,13 +1208,24 @@ export default function Settings() {
               expiry, so a date typed for one summer would go on answering the next summer's forms.
               The four controls below it are the scoped replacement. */}
           <Input label="Available from (saved reference only)" value={profile.availability_date} onChange={(v) => patch({ availability_date: v })} placeholder="Immediately" hint="Reference only. Employer date questions are answered from the internship window below, never from this." />
-          {/* THE INTERNSHIP WINDOW. All four or none: the backend answers a dates question only when
-              the window is complete, has not expired, and the posting's own description names the
-              same cycle. Anything less and the question comes back to you. */}
-          <Input label="Internship window: earliest start" type="date" value={profile.availability_window_start} onChange={(v) => patch({ availability_window_start: v })} hint="The earliest date you could begin." />
-          <Input label="Internship window: available through" type="date" value={profile.availability_window_end} onChange={(v) => patch({ availability_window_end: v })} hint="The last date you are available." />
-          <ChoiceSelect label="Internship window: which cycle" value={profile.availability_cycle} options={availabilityCycleOptions()} onChange={(v) => patch({ availability_cycle: v })} hint="Only postings whose description names this cycle are answered with these dates." />
-          <Input label="Internship window: use until" type="date" value={profile.availability_valid_through} onChange={(v) => patch({ availability_valid_through: v })} hint="After this date Litos stops giving these dates and asks you again." />
+          {/* THE INTERNSHIP WINDOW. The same semantic date table appears during onboarding so the
+              reuse rule cannot drift between the first-run flow and Account. */}
+          <div className="sm:col-span-2">
+            <AvailabilityWindowTable
+              value={{
+                start: profile.availability_window_start ?? "",
+                end: profile.availability_window_end ?? "",
+                cycle: profile.availability_cycle ?? "",
+                validThrough: profile.availability_valid_through ?? "",
+              }}
+              onChange={(value) => patch({
+                availability_window_start: value.start || null,
+                availability_window_end: value.end || null,
+                availability_cycle: value.cycle || null,
+                availability_valid_through: value.validThrough || null,
+              })}
+            />
+          </div>
           <Input label="Date of birth" value={profile.date_of_birth} onChange={(v) => patch({ date_of_birth: v })} placeholder="YYYY-MM-DD" hint="Used when an application asks for your birth date, and to answer &quot;are you 18 or older?&quot;. Blank leaves both for you." />
           <Input label="Current degree start" value={profile.education_start_date} onChange={(v) => patch({ education_start_date: v })} placeholder="August 2024" hint="Month and year when your current degree began." />
           <Input label="Desired salary" value={profile.desired_salary} onChange={(v) => patch({ desired_salary: v })} placeholder="Open / market rate" />
@@ -1317,50 +1333,6 @@ function Input({
         placeholder={placeholder}
         className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
       />
-      {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
-    </div>
-  );
-}
-
-/* An EDITABLE select, unlike Select and StringSelect above.
- *
- * Those two are deliberately disabled: they hold work authorization and the race and gender
- * self-identifications, which are saved reference data that Litos does not answer forms from. This
- * one holds the recruiting cycle the availability window is scoped to, which is a scheduling fact
- * the student sets and changes every season. A select rather than a text box because the backend
- * accepts exactly "Season Year" and rejects the save otherwise, and a rejected save on this panel
- * loses every other field on it too.
- */
-function ChoiceSelect({
-  label,
-  value,
-  options,
-  onChange,
-  hint,
-}: {
-  label: string;
-  value: string | null | undefined;
-  options: readonly string[];
-  onChange: (v: string | null) => void;
-  hint?: string;
-}) {
-  const fieldId = useId();
-  const hintId = `${fieldId}-hint`;
-  return (
-    <div>
-      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
-      <select
-        id={fieldId}
-        aria-describedby={hint ? hintId : undefined}
-        value={value ?? ""}
-        onChange={(e) => onChange(e.target.value === "" ? null : e.target.value)}
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
-      >
-        <option value="">Not set</option>
-        {options.map((option) => (
-          <option key={option} value={option}>{option}</option>
-        ))}
-      </select>
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
   );
