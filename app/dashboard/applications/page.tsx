@@ -26,7 +26,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
-import { saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
@@ -1541,7 +1541,13 @@ function Applications() {
     setError(null);
     try {
       let savedReview = canonicalReview;
-      if (["resume_ready", "questions_ready", "ready_to_submit", "needs_attention"].includes(canonicalReview.status)) {
+      /* THE ANSWERS GO DOWN BEFORE THE AUDIT IS TAKEN, AND WHICH ROUTE CARRIES THEM IS A DECISION.
+         PR #319 added needs_attention to the list below so a stalled packet would stop auditing
+         answers it had never stored. That is right, and it is kept: what changes is that the stalled
+         packet writes through the route that leaves its status and its attention_reason alone. See
+         auditAnswerWrite. */
+      const answerWrite = auditAnswerWrite(canonicalReview.status);
+      if (answerWrite === "review_edit") {
         const portalUrl = canonicalReview.portal_url?.trim();
         const atsName = canonicalReview.ats_name?.trim() || portalName(portalUrl ?? "");
         if (!portalUrl || !atsName) throw new Error("The saved employer form identity is incomplete. Reload this packet before auditing it.");
@@ -1559,6 +1565,27 @@ function Applications() {
         setSubmission((current) => current?.application_id === applicationId ? { ...current, review: saved.review } : current);
         setPackets((current) => current?.map((packet) => packet.id === applicationId
           ? { ...packet, spec: { ...packet.spec, _review: saved.review } }
+          : packet) ?? current);
+      } else if (answerWrite === "answers_only") {
+        /* The same helper the Save button uses, so there is one definition of this request and one
+           reading of the 202 that means a run wrote to the packet under it.
+
+           A REFUSAL IS RAISED, NOT SWALLOWED. This route refuses a stopped run whose row says
+           something may already be at the employer, and the applicant needs the reason rather than
+           an audit taken over answers that were never stored. Thrown into the catch below, which is
+           where every other failure on this path already reports itself: it clears the stale packet
+           evidence and prints the server's own sentence. */
+        const result = await saveReviewAnswers<ApplicationReview>({
+          applicationId,
+          questions,
+          send: (path, init) => api<ReviewAnswerSaveResponse<ApplicationReview>>(path, init),
+        });
+        if (!result.saved) throw new Error(result.message);
+        if (selectedIdRef.current !== applicationId) return;
+        savedReview = result.review;
+        setSubmission((current) => current?.application_id === applicationId ? { ...current, review: result.review } : current);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId
+          ? { ...packet, spec: { ...packet.spec, _review: result.review } }
           : packet) ?? current);
       }
       const response = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });

@@ -88,15 +88,40 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
+/* PR #319's TEST, KEPT AS ITS INTENT AND NOT AS ITS LINE.
+ *
+ * #319 was right that continuing a stalled application audited a packet whose reviewed answers had
+ * never been stored, and it is still right. What it could not check from here is which route did the
+ * storing: it added "needs_attention" to the list gating PUT /applications/:id/review, and
+ * applyApplicationReviewEdit writes 'questions_ready' over the status unconditionally, so auditing a
+ * blocked packet relabelled it READY while it was still blocked. Measured on a real row in the
+ * backend suite, src/routes/reviewAnswerSave.test.ts, 'the edit route is not refused on an unclaimed
+ * stopped run, and relabels it'.
+ *
+ * So the intent is asserted here and the route with it, and the original pin on the literal array is
+ * gone: what the two branches DO is executable and is tested for real against the real functions in
+ * features/applications/domain/review-answer-save.test.mts. This is the half that only the
+ * component's source can answer, which is whether continueFromResume asks at all. */
 test("a stalled application persists reviewed answers before its exact packet audit", async () => {
-  const dashboard = await readFile(
+  const dashboard = shippedCode(await readFile(
     new URL("../app/dashboard/applications/page.tsx", import.meta.url),
     "utf8",
-  );
+  ));
+  const audit = dashboard.slice(dashboard.indexOf("async function continueFromResume()"));
+  assert.ok(audit.includes("packet-audit"), "continueFromResume is gone from the dashboard");
 
-  assert.match(
-    shippedCode(dashboard),
-    /\["resume_ready", "questions_ready", "ready_to_submit", "needs_attention"\]\.includes\(canonicalReview\.status\)[\s\S]{0,700}\/applications\/\$\{applicationId\}\/review/,
+  // #319's intent: the answers are written before the audit is taken, for a stalled packet too.
+  assert.match(audit, /auditAnswerWrite\(canonicalReview\.status\)/);
+  assert.match(audit, /answerWrite === "answers_only"[\s\S]{0,900}saveReviewAnswers</);
+
+  /* And the constraint it missed. The status list that reaches PUT /review must not name the
+     stalled packet, in any order, or the audit relabels what it audits. */
+  const reviewEdit = /\[((?:\s*"[a-z_]+",?)+)\]\.includes\(canonicalReview\.status\)/.exec(audit);
+  assert.equal(reviewEdit, null, "the audit-time route decision belongs to auditAnswerWrite, which has a test");
+  assert.doesNotMatch(
+    audit,
+    /"needs_attention"[\s\S]{0,700}api<SubmissionResponse>\(`\/applications\/\$\{applicationId\}\/review`/,
+    "a stalled packet must not be persisted through the route that writes over its status",
   );
 });
 

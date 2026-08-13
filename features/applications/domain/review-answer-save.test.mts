@@ -10,6 +10,7 @@ import { describe, test } from "node:test";
 import {
   REVIEW_ANSWERS_SAVED_NOTICE,
   REVIEW_ANSWERS_SAVE_RACED,
+  auditAnswerWrite,
   reviewAnswersPath,
   saveReviewAnswers,
   type ReviewAnswerSaveQuestion,
@@ -212,4 +213,160 @@ describe("saving answers from the Review-answers screen", () => {
     const body = JSON.parse(server.sent[0].init.body) as { questions: Record<string, unknown>[] };
     assert.deepEqual(Object.keys(body.questions[0]).sort(), ["answer", "id", "kind", "question", "required"]);
   });
+});
+
+/* THE SAME ANSWERS, PERSISTED FROM THE OTHER SIDE OF THE SCREEN.
+ *
+ * continueFromResume writes the reviewed answers and then asks the server to audit the exact packet,
+ * so that the answers the audit is taken over are the answers on the packet. Website PR #319
+ * (a39fe29, live) found that a stalled packet was skipping that write, and fixed it by adding
+ * "needs_attention" to the status list gating PUT /applications/:id/review. The intent is right and
+ * is kept. The route was not: that route relabels the packet.
+ *
+ * WHAT THE FAKE BELOW IS AND IS NOT. It is the two routes' answer to this one request, each behaving
+ * as the real one was MEASURED to behave against a real row in the backend suite, in
+ * src/routes/reviewAnswerSave.test.ts: 'the edit route is not refused on an unclaimed stopped run,
+ * and relabels it' for the clobber, and 'saving an answer leaves the packet at needs_attention' for
+ * the route that does not. That backend test is the authority on the server; this one is the
+ * authority on which of the two the client picks, which is where the defect is.
+ */
+
+type StoredReview = {
+  status: string;
+  attention_reason?: string;
+  questions: { id: string; answer: string }[];
+  /* The one row fact that makes the answers route refuse: reviewAnswerSaveDisposition asks
+     employerMayHoldApplication, because a stopped run is also what a run that may have pressed
+     submit leaves behind. */
+  submission_attempted_at?: string;
+};
+
+const REFUSAL = "These answers can no longer be edited from this application's current submission state";
+
+function stalledPacket(extra: Partial<StoredReview> = {}): StoredReview {
+  return {
+    status: "needs_attention",
+    attention_reason: "This form asks whether you have applied before. Litos cannot answer that for you.",
+    questions: [{ id: "prior-application", answer: "" }],
+    ...extra,
+  };
+}
+
+function backend(initial: StoredReview) {
+  const state = { review: initial };
+  const paths: string[] = [];
+  const send = async (path: string, init: { method: string; body: string }) => {
+    paths.push(path);
+    const body = JSON.parse(init.body) as { questions: { id: string; answer: string }[] };
+    const questions = state.review.questions.map((stored) => ({
+      ...stored,
+      answer: body.questions.find((sent) => sent.id === stored.id)?.answer ?? stored.answer,
+    }));
+    if (path === reviewAnswersPath(APPLICATION_ID)) {
+      // The transport raises a refusal, so this is how a 409 reaches saveReviewAnswers.
+      if (state.review.submission_attempted_at) throw new Error(REFUSAL);
+      state.review = { ...state.review, questions };
+      return { application_id: APPLICATION_ID, review: state.review };
+    }
+    // applyApplicationReviewEdit: the answers land, and the status is written over on the way past.
+    state.review = {
+      ...state.review,
+      questions,
+      status: questions.length > 0 ? "questions_ready" : "ready_to_submit",
+    };
+    return { application_id: APPLICATION_ID, review: state.review };
+  };
+  return { state, paths, send };
+}
+
+/** The audit-time write from continueFromResume, with its two branches and nothing else. */
+async function persistBeforeAudit(server: ReturnType<typeof backend>, status: string) {
+  const write = auditAnswerWrite(status);
+  if (write === "none") return { persisted: false as const, message: null };
+  if (write === "answers_only") {
+    const result = await saveReviewAnswers<StoredReview>({
+      applicationId: APPLICATION_ID,
+      questions: answered,
+      send: server.send,
+    });
+    // continueFromResume throws this into its catch, which prints the reason and voids the audit.
+    if (!result.saved) return { persisted: false as const, message: result.message };
+    return { persisted: true as const, review: result.review, message: null };
+  }
+  const saved = await server.send(`/applications/${APPLICATION_ID}/review`, {
+    method: "PUT",
+    body: JSON.stringify({ ats_name: "ashby", portal_url: "https://example.test", questions: answered, skipped_reasons: [] }),
+  });
+  return { persisted: true as const, review: saved.review, message: null };
+}
+
+describe("persisting reviewed answers before an exact-packet audit", () => {
+  /* THE WHOLE POINT. #319's intent and the fact it cost, in one assertion each: the answer is stored,
+     and the packet is still the stopped run it was. Putting "needs_attention" back into
+     REVIEW_EDIT_STATUSES fails this on the status line, which is the defect that is live today. */
+  test("a stalled packet stores its answers and stays a stalled packet", async () => {
+    const server = backend(stalledPacket());
+
+    const outcome = await persistBeforeAudit(server, "needs_attention");
+
+    assert.equal(outcome.persisted, true, "#319's intent: a stalled packet is no longer audited over unstored answers");
+    assert.equal(server.state.review.questions[0].answer, "No", "and the answer she typed is on the packet");
+    assert.equal(server.state.review.status, "needs_attention", "the run that stopped is still stopped");
+    assert.equal(
+      server.state.review.attention_reason,
+      stalledPacket().attention_reason,
+      "and still says what it is waiting for",
+    );
+  });
+
+  test("and its answers never travel the route that would relabel it", async () => {
+    const server = backend(stalledPacket());
+
+    await persistBeforeAudit(server, "needs_attention");
+
+    assert.deepEqual(server.paths, [reviewAnswersPath(APPLICATION_ID)]);
+    assert.equal(server.paths.some((path) => path.endsWith("/review")), false);
+  });
+
+  /* THE OTHER THREE ARE NOT THIS FIX'S BUSINESS. Each is a packet waiting to be prepared, an edit is
+     allowed to move it, and 'questions_ready' describes where the save leaves it. Unchanged. */
+  for (const status of ["resume_ready", "questions_ready", "ready_to_submit"]) {
+    test(`a ${status} packet still saves through the review edit`, async () => {
+      const server = backend(stalledPacket({ status, attention_reason: undefined }));
+
+      const outcome = await persistBeforeAudit(server, status);
+
+      assert.equal(outcome.persisted, true);
+      assert.deepEqual(server.paths, [`/applications/${APPLICATION_ID}/review`]);
+      assert.equal(server.state.review.questions[0].answer, "No");
+      assert.equal(server.state.review.status, "questions_ready");
+    });
+  }
+
+  /* NOT EVERY needs_attention ROW IS SAVEABLE, and the ones that are not must say why.
+     unverifiedSubmissionPatch leaves this status on a run that may have pressed submit, and the
+     answers route refuses those. The refusal is the server's own sentence, carried back rather than
+     replaced, and it is not a save. */
+  test("a stalled packet that may already be at the employer reports the refusal, not a save", async () => {
+    const server = backend(stalledPacket({ submission_attempted_at: "2026-08-13T11:00:00.000Z" }));
+
+    const outcome = await persistBeforeAudit(server, "needs_attention");
+
+    assert.equal(outcome.persisted, false, "a refused write is not a write, and the audit must not proceed over it");
+    assert.equal(outcome.message, REFUSAL, "the applicant gets the reason, not a generic apology");
+    assert.equal(server.state.review.questions[0].answer, "", "and nothing was stored");
+  });
+
+  /* Mid-run, at the employer, or waiting on approval of a form already filled. No answer is written
+     ahead of the audit for any of them, which is the behaviour that predates #319. */
+  for (const status of ["preparing", "filling", "submitting", "submitted", "ready_for_final_approval"]) {
+    test(`a ${status} packet writes nothing before the audit`, async () => {
+      const server = backend(stalledPacket({ status }));
+
+      const outcome = await persistBeforeAudit(server, status);
+
+      assert.equal(outcome.persisted, false);
+      assert.deepEqual(server.paths, []);
+    });
+  }
 });

@@ -72,6 +72,55 @@ export function reviewAnswersPath(applicationId: string): string {
   return `/applications/${applicationId}/review/answers`;
 }
 
+/**
+ * WHICH WRITE PERSISTS THE REVIEWED ANSWERS AHEAD OF AN EXACT-PACKET AUDIT.
+ *
+ * A SECOND SAVE PATH, ON THE OTHER SIDE OF THE SAME SCREEN. saveReviewAnswers above is the Save
+ * button. This is the same answers being persisted from continueFromResume, which writes them and
+ * then asks the server to audit the exact packet - so the answers the audit is taken over are the
+ * answers on the packet. Both had the same gap and PR #319 found this one first.
+ *
+ * WHAT #319 GOT RIGHT. Before it, the write was gated on three statuses and a stalled packet was not
+ * one of them, so continuing a needs_attention application audited a packet whose answers had never
+ * been stored. Adding needs_attention to that list is the correct intent and it is kept here.
+ *
+ * WHAT IT COULD NOT SEE FROM THE CLIENT. The list it added to gates PUT /applications/:id/review,
+ * and applyApplicationReviewEdit ends by writing `status: questions_ready | ready_to_submit`
+ * unconditionally. submitRequestDisposition answers 'start' for an UNCLAIMED needs_attention row, so
+ * that call is permitted rather than refused: it returns 200, and the packet comes back relabelled
+ * with a READY badge over a run that is still blocked. The attention_reason prose survives the
+ * write, which makes it worse rather than better - the row then says ready and carries the sentence
+ * explaining why it is not, and every screen that decides what to show from the status shows the
+ * ready one. Measured against a real row in the backend's
+ * src/routes/reviewAnswerSave.test.ts, "the edit route is not refused on an unclaimed stopped run,
+ * and relabels it".
+ *
+ * SO THE INTENT SURVIVES AND THE ROUTE CHANGES. needs_attention persists its answers through
+ * PUT /applications/:id/review/answers, which writes the answers, the round they are claimed
+ * against, and nothing else. The other three are untouched: an edit is allowed to move them, that
+ * status move is what the packet is asking for, and this is not the place to revisit it.
+ *
+ * KEPT OUT OF THE COMPONENT so the decision has a name and a test. The list below is the one #319
+ * edited; putting needs_attention back into it is a one-word change that this module's tests, and
+ * the source assertion in tests/application-submission-gate.test.mjs, both fail on.
+ */
+export type AuditAnswerWrite = "review_edit" | "answers_only" | "none";
+
+/* The statuses an audit-time save may rewrite the whole stored review for. Each is a packet waiting
+   to be prepared, so 'questions_ready'/'ready_to_submit' is a description of where the save leaves
+   it rather than a fact being overwritten. */
+const REVIEW_EDIT_STATUSES = ["resume_ready", "questions_ready", "ready_to_submit"];
+
+export function auditAnswerWrite(status: string): AuditAnswerWrite {
+  if (REVIEW_EDIT_STATUSES.includes(status)) return "review_edit";
+  /* The stalled packet. Its answers are persisted like any other, through the one route that leaves
+     the stall and the reason for it standing. */
+  if (status === "needs_attention") return "answers_only";
+  /* Everything else is mid-run, at the employer, or awaiting an approval of a form already filled.
+     Nothing is written ahead of the audit, exactly as before #319. */
+  return "none";
+}
+
 export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestion[]): {
   method: string;
   body: string;
