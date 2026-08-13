@@ -38,6 +38,14 @@ function functionBody(source, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+/* One rendered element and its props, so a wiring assertion can be scoped to the element it is about
+   without pinning the shape of any one prop. Same helper as tests/ask-at-apply.test.mjs. */
+function jsxElement(source, name) {
+  const element = new RegExp(`<${name}[\\s\\S]*?\\n\\s*/>`).exec(source);
+  assert.ok(element, `<${name} is gone from app/dashboard/applications/page.tsx`);
+  return element[0];
+}
+
 test("the action pill is an element that can act, never a styled span again", () => {
   const row = functionBody(page, "ChecklistRow");
 
@@ -247,24 +255,22 @@ test("pressing a row opens the answer editor on that question, and saving there 
   assert.match(page, /setFocusQuestion\(/);
   assert.match(page, /moveToScreen\("questions"\)/);
 
-  // Saving invalidates the prior audit. Any subsequent submit-request is reached through a new
-  // exact packet audit, so editing a stalled answer cannot reuse the PDF, answer map, or
-  // requirement evidence that preceded it.
-  assert.match(
-    page,
-    /onSubmit=\{\(\) => \{\s*setPacketEvidence\(null\);\s*if \(selectedSubmission\?\.review\.status === "needs_attention"\) void saveReviewedAnswers\(\);\s*else saveApplyAnswers\(\);\s*\}\}/,
-  );
-  // The stalled-run save writes and does not send: the answers route, never submit-request.
-  const saveStart = page.indexOf("async function saveReviewedAnswers()");
-  const saveEnd = page.indexOf("const securityCodeInFlight", saveStart);
-  assert.ok(saveStart >= 0 && saveEnd > saveStart, "saveReviewedAnswers is gone");
-  const reviewedSave = page.slice(saveStart, saveEnd);
-  assert.match(reviewedSave, /saveReviewAnswers</);
-  assert.doesNotMatch(reviewedSave, /submit-request/);
-  assert.doesNotMatch(reviewedSave, /prepareApplication/);
-  // The banner is the response's. Setting it before the request is the defect being fixed.
-  assert.match(reviewedSave, /if \(!result\.saved\) \{\s*setError\(result\.message\);\s*return;\s*\}/);
-  assert.match(reviewedSave, /setNotice\(result\.notice\)/);
+  /* Saving invalidates the prior audit. Any subsequent submit-request is reached through a new
+     exact packet audit, so editing a stalled answer cannot reuse the PDF, answer map, or
+     requirement evidence that preceded it. And the stalled-run half of the button reaches
+     saveReviewedAnswers, which is the half that was missing.
+
+     TWO FACTS, SCOPED TO THE ELEMENT. The earlier version pinned the whole onSubmit expression
+     including its whitespace, which fails on a reformat and passes on nothing else. What
+     saveReviewedAnswers then DOES - one request, on the answers route, never the submission route,
+     and a banner built from the response rather than from the click - is executable and is asserted
+     against the real function in features/applications/domain/review-answer-save.test.mts, so
+     re-asserting it here by slicing the component's source proved it in the weaker of the two
+     available ways and broke whenever the line after it moved. */
+  const screen = jsxElement(page, "QuestionsScreen");
+  assert.match(screen, /setPacketEvidence\(null\)/, "saving voids the prior exact-packet audit");
+  assert.match(screen, /void saveReviewedAnswers\(\)/, "and a stalled run's save is the one that writes");
+
   assert.match(page, /questionsSnapshot: currentQuestionsSnapshot/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 

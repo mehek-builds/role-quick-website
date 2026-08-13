@@ -26,7 +26,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
-import { saveReviewAnswers } from "@/features/applications";
+import { saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
@@ -1806,7 +1806,10 @@ function Applications() {
       const result = await saveReviewAnswers<SubmissionResponse["review"]>({
         applicationId,
         questions,
-        send: (path, init) => api<{ application_id: string; review: SubmissionResponse["review"] }>(path, init),
+        /* `saved` is the 202's own word for "a run wrote to this packet and your answers did not
+           land". api() resolves on any res.ok and hands back the body with the status gone, so this
+           key is the only thing that survives the transport to distinguish it from a 200. */
+        send: (path, init) => api<ReviewAnswerSaveResponse<SubmissionResponse["review"]>>(path, init),
       });
       // The switcher renders above this screen, so tapping another row mid-save is a single tap.
       // Same guard, same reason, as approveFinalSubmission.

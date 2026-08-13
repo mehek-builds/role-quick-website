@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
   REVIEW_ANSWERS_SAVED_NOTICE,
+  REVIEW_ANSWERS_SAVE_RACED,
   reviewAnswersPath,
   saveReviewAnswers,
   type ReviewAnswerSaveQuestion,
@@ -28,7 +29,9 @@ const answered: ReviewAnswerSaveQuestion[] = [
 
 type Sent = { path: string; init: { method: string; body: string } };
 
-function recorder(reply: (sent: Sent) => Promise<{ application_id: string; review: { status: string } }>) {
+function recorder(
+  reply: (sent: Sent) => Promise<{ application_id: string; review: { status: string }; saved?: boolean }>,
+) {
   const sent: Sent[] = [];
   return {
     sent,
@@ -128,6 +131,50 @@ describe("saving answers from the Review-answers screen", () => {
     assert.equal(result.saved, false);
     assert.equal(result.saved === false && result.message, "This application is already at the employer.");
     assert.equal("notice" in result, false, "there is no success banner on a save that did not happen");
+  });
+
+  /* THE 202 THAT LOOKS EXACTLY LIKE A 200.
+   *
+   * A run wrote to the packet between the route's read and its write, so nothing typed here was
+   * stored. The response is res.ok, so the transport resolves it, and it carries the same
+   * application_id and review a successful save does - which is why the route ships `saved: false`
+   * on it and why this function has to read that key rather than the status it never sees.
+   *
+   * Reported as a refusal, deliberately. `saved: false` is what keeps saveReviewedAnswers on this
+   * screen: the success branch shows the banner, calls setQuestions with the stored review that does
+   * not contain her answers, and navigates away. On a save that did not land, that destroys her
+   * typing for the second time. */
+  test("a 202 saying the save did not land is not reported as a save", async () => {
+    const raced = recorder(async () => ({
+      application_id: APPLICATION_ID,
+      review: { status: "needs_attention" },
+      saved: false,
+    }));
+
+    const result = await saveReviewAnswers({
+      applicationId: APPLICATION_ID,
+      questions: answered,
+      send: raced.send,
+    });
+
+    assert.equal(result.saved, false, "the review that came back is the run's, not this save's");
+    assert.equal("notice" in result, false, "and there is no success banner on it");
+    assert.equal(result.saved === false && result.message, REVIEW_ANSWERS_SAVE_RACED);
+  });
+
+  /* The other side of the same key: a save that DID land carries no `saved` at all, so an absent
+     field must never be read as a refusal. */
+  test("a response with no saved flag is the save that landed", async () => {
+    const server = accepts();
+
+    const result = await saveReviewAnswers({
+      applicationId: APPLICATION_ID,
+      questions: answered,
+      send: server.send,
+    });
+
+    assert.equal(result.saved, true);
+    assert.equal(result.saved && result.notice, REVIEW_ANSWERS_SAVED_NOTICE);
   });
 
   test("a failure with nothing to say still says the answers were not stored", async () => {
