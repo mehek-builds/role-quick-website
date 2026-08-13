@@ -38,6 +38,14 @@ function functionBody(source, name) {
   return source.slice(start, next === -1 ? source.length : next);
 }
 
+/* One rendered element and its props, so a wiring assertion can be scoped to the element it is about
+   without pinning the shape of any one prop. Same helper as tests/ask-at-apply.test.mjs. */
+function jsxElement(source, name) {
+  const element = new RegExp(`<${name}[\\s\\S]*?\\n\\s*/>`).exec(source);
+  assert.ok(element, `<${name} is gone from app/dashboard/applications/page.tsx`);
+  return element[0];
+}
+
 test("the action pill is an element that can act, never a styled span again", () => {
   const row = functionBody(page, "ChecklistRow");
 
@@ -232,15 +240,37 @@ test("the read-only packet viewer drops settled rows rather than listing them as
   assert.match(viewer, /\}\)\.filter\(\(item\) => !item\.settled\);/);
 });
 
-test("pressing a row opens the answer editor on that question, and saving there is the existing persistence path", () => {
+/* THE SECOND HALF OF THIS ROW'S PROMISE, which was missing for as long as the row existed.
+ *
+ * Pressing a Your turn row opens the answer editor on that question, and that half worked. Saving
+ * there did not: the button called saveApplyAnswers, which sets a banner and changes screens and
+ * issues no request, so the answer lived until the tab closed. This file used to assert that exact
+ * wiring and describe it as "the existing persistence path"; it was not a persistence path at all.
+ *
+ * The route it writes through now is deliberately neither of the two that already existed. See
+ * features/applications/domain/review-answer-save.ts, whose test holds the behaviour: one request,
+ * carrying the answers, never the submission route, and no success banner on a refusal. */
+test("pressing a row opens the answer editor on that question, and saving there writes", () => {
   assert.match(page, /function reviewPortalQuestions\(focusQuestionId\?: string\)/);
   assert.match(page, /setFocusQuestion\(/);
   assert.match(page, /moveToScreen\("questions"\)/);
 
-  // Saving returns to the review screen and invalidates the prior audit. The only subsequent
-  // submit-request is reached through a new exact packet audit, so editing a stalled answer cannot
-  // reuse the PDF, answer map, or requirement evidence that preceded it.
-  assert.match(page, /onSubmit=\{\(\) => \{\s*saveApplyAnswers\(\);\s*setPacketEvidence\(null\);\s*\}\}/);
+  /* Saving invalidates the prior audit. Any subsequent submit-request is reached through a new
+     exact packet audit, so editing a stalled answer cannot reuse the PDF, answer map, or
+     requirement evidence that preceded it. And the stalled-run half of the button reaches
+     saveReviewedAnswers, which is the half that was missing.
+
+     TWO FACTS, SCOPED TO THE ELEMENT. The earlier version pinned the whole onSubmit expression
+     including its whitespace, which fails on a reformat and passes on nothing else. What
+     saveReviewedAnswers then DOES - one request, on the answers route, never the submission route,
+     and a banner built from the response rather than from the click - is executable and is asserted
+     against the real function in features/applications/domain/review-answer-save.test.mts, so
+     re-asserting it here by slicing the component's source proved it in the weaker of the two
+     available ways and broke whenever the line after it moved. */
+  const screen = jsxElement(page, "QuestionsScreen");
+  assert.match(screen, /setPacketEvidence\(null\)/, "saving voids the prior exact-packet audit");
+  assert.match(screen, /void saveReviewedAnswers\(\)/, "and a stalled run's save is the one that writes");
+
   assert.match(page, /questionsSnapshot: currentQuestionsSnapshot/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 

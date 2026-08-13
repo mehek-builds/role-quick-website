@@ -42,7 +42,14 @@ test("the audit binds the exact saved spec and canonical review instead of stale
   assert.match(continueFromResume, /if \(!savedResume \|\| selectedIdRef\.current !== applicationId\) return;/);
   assert.match(continueFromResume, /const auditedSpec = savedResume\.spec;\s*const canonicalReview = savedResume\.review;/s);
   assert.match(continueFromResume, /let savedReview = canonicalReview;/);
-  assert.match(continueFromResume, /includes\(canonicalReview\.status\)/);
+  /* WHICH STATUS THE PRE-AUDIT WRITE IS DECIDED FROM, which is the fact this file exists to hold.
+     It has to be the canonical review the server just returned, never the component's `review`
+     state, or the audit is routed by a status the save may already have moved. The decision used to
+     be an inline `[...].includes(...)`; it is now auditAnswerWrite, because a stalled packet has to
+     write through a route that does not relabel it. Same value read, so the assertion follows the
+     value rather than the shape of the call around it. */
+  assert.match(continueFromResume, /auditAnswerWrite\(canonicalReview\.status\)/);
+  assert.doesNotMatch(continueFromResume, /auditAnswerWrite\(review\.status\)/);
   assert.doesNotMatch(continueFromResume, /let savedReview = review;/);
   assert.match(continueFromResume, /specJson: JSON\.stringify\(auditedSpec\)/);
   assert.doesNotMatch(continueFromResume, /specJson: JSON\.stringify\(spec\)/);

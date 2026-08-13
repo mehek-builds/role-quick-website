@@ -21,6 +21,14 @@ function functionBody(source, signature) {
   return source.slice(start, ends.length > 0 ? Math.min(...ends) : source.length);
 }
 
+/* One rendered element and its props, so a wiring assertion can be scoped to the element it is about
+   without pinning the shape of any one prop. */
+function jsxElement(source, name) {
+  const element = new RegExp(`<${name}[\\s\\S]*?\\n\\s*/>`).exec(source);
+  assert.ok(element, `<${name} is gone from app/dashboard/applications/page.tsx`);
+  return element[0];
+}
+
 test("the extra questions are asked at Apply, not discovered mid-run", () => {
   const ask = functionBody(PAGE, "async function askPrescriptQuestions(jobId: string)");
   assert.match(ask, /await getPostingQuestions\(jobId\)/);
@@ -88,9 +96,18 @@ test("saving at Apply hands the resume back rather than starting a submission", 
   // The answers stay in `questions`, which is what continueFromResume passes to prepareApplication,
   // so they ride into the packet on the next step with nothing re-entered.
   assert.doesNotMatch(save, /setQuestions\(\[\]\)/);
-  // Every route invalidates the prior exact packet audit and returns to review. The next send can
-  // only happen after answers, PDF bytes, and requirement evidence are frozen together again.
-  assert.match(PAGE, /onSubmit=\{\(\) => \{\s*saveApplyAnswers\(\);\s*setPacketEvidence\(null\);\s*\}\}/);
+  /* Every route invalidates the prior exact packet audit. The next send can only happen after
+     answers, PDF bytes, and requirement evidence are frozen together again.
+
+     TWO FACTS, SCOPED TO THE ELEMENT, rather than one pin on the whole onSubmit expression. The
+     Apply branch is now a branch: the same screen serves a stalled run, where a local-only save
+     saved nothing at all, so that path writes through saveReviewedAnswers instead. Pinning the
+     literal shape of that expression made every reformatting of it a failure while asserting nothing
+     these two lines do not, and what the other branch actually DOES is executable and tested for
+     real in features/applications/domain/review-answer-save.test.mts. */
+  const screen = jsxElement(PAGE, "QuestionsScreen");
+  assert.match(screen, /setPacketEvidence\(null\)/, "saving voids the prior exact-packet audit");
+  assert.match(screen, /saveApplyAnswers\(\)/, "and the Apply save is still this handler");
 });
 
 test("nothing on the Apply screen is filled by a guess", () => {
