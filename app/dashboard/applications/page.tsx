@@ -53,7 +53,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionItems, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -2247,6 +2247,7 @@ function Applications() {
           status={selectedSubmission?.review.status}
           startedAt={submittingPhase === "sending" ? approveStartedAt ?? selectedSubmission?.review.updated_at : prepareStartedAt ?? selectedSubmission?.review.updated_at}
           sending={submittingPhase === "sending"}
+          submission={selectedSubmission}
         />
       ) : screen === "portal" && selectedSubmission ? (
         <SubmissionScreen
@@ -2964,7 +2965,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
-          <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{question.question}</label>
+          <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{displayQuestionLabel(question.question)}</label>
           <p className={`mt-1 font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !question.answer.trim() ? "text-warn" : "text-muted"}`}>{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
           {/* Why this one is hers. Written by the backend so that the Apply screen and a stalled
               run's attention reason cannot describe the same refusal in two different voices. */}
@@ -3435,7 +3436,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
               {review.questions.map((question) => (
                 <div key={question.id} className="px-3 py-3">
-                  <p className="text-xs font-medium leading-5 text-ink">{question.question}</p>
+                  <p className="text-xs font-medium leading-5 text-ink">{displayQuestionLabel(question.question)}</p>
                   <p className={`mt-1 whitespace-pre-line text-xs leading-5 ${question.required && !(question.answer ?? "").trim() ? "text-warn" : "text-muted"}`}>
                     {(question.answer ?? "").trim() || (question.required ? "Left blank, and this one is required" : "Left blank")}
                   </p>
@@ -3834,9 +3835,10 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status, startedAt, sending = false }: { status?: ApplicationReview["status"]; startedAt?: string;
+function PortalProgress({ status, startedAt, sending = false, submission }: { status?: ApplicationReview["status"]; startedAt?: string;
   /** True when this screen was entered by pressing "Send it". See submittingPhase. */
-  sending?: boolean }) {
+  sending?: boolean;
+  submission?: SubmissionResponse | null }) {
   // Anchored to the server's timestamp, not to mount. A reload or a return via ?application=<id>
   // during a live run remounts this component, and a mount-anchored clock would restart at 0s and
   // report "3s elapsed" for a run four minutes old, defeating the one thing the clock is for.
@@ -3889,6 +3891,12 @@ function PortalProgress({ status, startedAt, sending = false }: { status?: Appli
   const body = submitting
     ? "Waiting for confirmation."
     : "Not sent yet.";
+  const liveViewUrl = submission?.handoff_url;
+  const progressPreviewUrl = submission?.review.progress_screenshot_url;
+  const progressStage = submitting
+    ? "Waiting for the company confirmation"
+    : submission?.review.progress_stage ?? "Opening the company form";
+  const previewModeLabel = liveViewUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
 
   const milestone =
     elapsed >= PORTAL_STUCK_AFTER_S
@@ -3898,20 +3906,48 @@ function PortalProgress({ status, startedAt, sending = false }: { status?: Appli
         : null;
 
   return (
-    <div className="space-y-3">
-      <CenteredState title={title} body={body} loading />
-      {/* aria-hidden on the ticking number: as an aria-live region it announced "1s elapsed, 2s
-          elapsed, 3s elapsed" every second for the several minutes a run takes, burying the
-          terminal state under it. The live region belongs on the milestone copy, which changes
-          twice in a run. */}
-      <p className="text-center text-xs text-muted" aria-hidden>
-        {formatElapsed(elapsed)} elapsed
-      </p>
-      {milestone && (
-        <p role="status" className="mx-auto max-w-lg text-center text-xs text-muted">
-          {milestone}
-        </p>
-      )}
+    <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[0.72fr_1.28fr]">
+      <Card className="h-fit p-7">
+        <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">Live application status</p>
+        <h2 className="mt-3 text-heading font-medium text-ink">{title}</h2>
+        <div className="mt-5 flex items-start gap-3 rounded-inner border border-brand/20 bg-brand-soft/35 px-4 py-4">
+          <span className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-brand" aria-hidden />
+          <div>
+            <p role="status" aria-live="polite" className="text-sm font-medium leading-6 text-ink">{progressStage}</p>
+            <p className="mt-1 text-xs leading-5 text-muted">{body}</p>
+          </div>
+        </div>
+        <p className="mt-4 font-mono text-[11px] text-muted" aria-hidden>{formatElapsed(elapsed)} elapsed</p>
+        {milestone && <p className="mt-2 text-xs text-muted">{milestone}</p>}
+        <p className="mt-5 text-xs leading-5 text-muted">This view refreshes as Litos moves through the company form.</p>
+      </Card>
+      <Card className="overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <p className="text-sm font-medium text-ink">Company form</p>
+          <p className="font-mono text-[10px] uppercase tracking-[0.08em] text-positive">{previewModeLabel}</p>
+        </div>
+        {liveViewUrl ? (
+          <iframe
+            src={liveViewUrl}
+            title="Live company application form while Litos fills it"
+            className="h-[72vh] min-h-[560px] w-full bg-white"
+            allow="clipboard-read; clipboard-write"
+          />
+        ) : progressPreviewUrl ? (
+          <img
+            src={progressPreviewUrl}
+            alt="Latest view of the company application form while Litos fills it"
+            className="h-auto w-full"
+          />
+        ) : (
+          <div className="grid min-h-[560px] place-items-center bg-surface-alt p-10 text-center">
+            <div>
+              <p className="text-sm font-medium text-ink">Opening the company form</p>
+              <p className="mt-2 text-xs leading-5 text-muted">The first form view will appear here as soon as the page is ready.</p>
+            </div>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

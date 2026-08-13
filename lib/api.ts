@@ -772,6 +772,9 @@ export type ApplicationReview = {
   };
   submission_claimed_at?: string;
   filled_fields?: string[];
+  progress_screenshot_url?: string;
+  progress_stage?: string;
+  progress_updated_at?: string;
   preview_screenshot_url?: string;
   verification?: {
     status: "not_needed" | "searching" | "completed" | "handoff";

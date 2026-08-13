@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
 import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { completedSubmissionItems, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { completedSubmissionItems, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 
@@ -587,7 +587,7 @@ export function ApplicationPacket({
                     {questions.map((question) => (
                       <div key={question.id} className="bg-surface px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
-                          <p className="min-w-0 text-[12px] font-medium leading-5 text-ink">{question.question}</p>
+                          <p className="min-w-0 text-[12px] font-medium leading-5 text-ink">{displayQuestionLabel(question.question)}</p>
                           {/* The chip is a claim about this answer, so it has to be derived from
                               whether there IS one. It used to render unconditionally, so a required
                               question that was left blank got a teal "Answered" badge with "Left

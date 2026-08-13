@@ -120,6 +120,29 @@ function displayField(field: string): string {
   return display ? display.charAt(0).toUpperCase() + display.slice(1) : "";
 }
 
+const DISPLAY_ACRONYMS: Record<string, string> = {
+  act: "ACT",
+  ai: "AI",
+  gpa: "GPA",
+  imc: "IMC",
+  sat: "SAT",
+  uk: "UK",
+  us: "US",
+  usa: "USA",
+  usc: "USC",
+};
+
+export function displayQuestionLabel(value: string): string {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  const sentenceCased = trimmed === trimmed.toLowerCase()
+    ? `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`
+    : trimmed;
+  return sentenceCased.replace(/\b(act|ai|gpa|imc|sat|uk|us|usa|usc)\b/gi, (token) => (
+    DISPLAY_ACRONYMS[token.toLowerCase()] ?? token
+  ));
+}
+
 function normalizedChecklistText(value: string): string {
   return value
     .toLowerCase()
@@ -593,7 +616,7 @@ export function humanInputItems(
     if (question.required && !answer) {
       addUnique(items, {
         id: `missing-${question.id}`,
-        label: question.question,
+        label: displayQuestionLabel(question.question),
         detail: "Required answer missing",
         action: "Answer",
         actionKind: "answer",
@@ -604,7 +627,7 @@ export function humanInputItems(
     if (review.status !== "submitted" && question.kind === "essay" && answer) {
       addUnique(items, {
         id: `review-${question.id}`,
-        label: question.question,
+        label: displayQuestionLabel(question.question),
         detail: "Drafted answer ready for review",
         action: "Review",
         actionKind: "review",
@@ -615,7 +638,7 @@ export function humanInputItems(
     if (review.status !== "submitted" && answer && isHumanOnlyChecklistLabel(question.question)) {
       addUnique(items, {
         id: `confirm-${question.id}`,
-        label: question.question,
+        label: displayQuestionLabel(question.question),
         detail: "Needs your confirmation",
         action: "Confirm",
         actionKind: "confirm",
@@ -632,7 +655,7 @@ export function humanInputItems(
     if (review.status !== "submitted" && answer && questionReportedEmpty(question.question, emptySubjects)) {
       addUnique(items, {
         id: `empty-${question.id}`,
-        label: question.question,
+        label: displayQuestionLabel(question.question),
         detail: "Answered here, still empty on the form",
         action: "Answer",
         actionKind: "answer",
@@ -668,7 +691,7 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
     if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
     addUnique(items, {
       id: `answer-${question.id}`,
-      label: question.question,
+      label: displayQuestionLabel(question.question),
       detail: question.kind === "essay" ? "Answer drafted" : "Answer filled",
     });
   }
