@@ -99,7 +99,7 @@ export function StepRail({ current }: { current?: OnboardingStep }) {
           <span className="text-[13px] text-ink">
             <span className="rq-shimmer inline-block h-3 w-28 rounded-full align-middle" />
           </span>
-          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-faint">
+          <span className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
             <span className="rq-shimmer inline-block h-3 w-24 rounded-full align-middle" />
           </span>
         </div>
