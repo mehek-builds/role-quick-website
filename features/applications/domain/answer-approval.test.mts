@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ANSWER_APPROVAL_RACED, answerApprovalPath, approvalRequest, approveDraftedAnswer, checklistRowApproval } from "./answer-approval.ts";
-import { completedSubmissionItems, humanInputItems } from "./submission-checklist.ts";
+import { completedSubmissionGroups, humanInputItems } from "./submission-checklist.ts";
 import type { ApplicationReview } from "@/lib/api";
 
 /**
@@ -85,15 +85,43 @@ test("an approved drafted answer leaves Your turn", () => {
 });
 
 /* AND LANDS SOMEWHERE. A row that vanishes off the panel entirely reads as deleted rather than
- * settled, which is the failure the Your turn / Done split exists to prevent. */
+ * settled, which is the failure the Your turn / Done split exists to prevent.
+ *
+ * ASSERTED ON completedSubmissionGroups, WHICH IS WHAT THE SCREEN CALLS. This test used to call
+ * completedSubmissionItems, and it passed while the applicant saw nothing: that function has no
+ * non-test callers at all, and both render sites - app/dashboard/applications/page.tsx and
+ * components/app/ApplicationPacket.tsx - build the Done column from the groups. A green test over a
+ * function nothing renders pins source rather than behaviour, which is the one thing tests in this
+ * repo may not do. */
 test("an approved drafted answer arrives in Done", () => {
-  const before = completedSubmissionItems(deepgram()).map((item) => item.id);
-  assert.equal(before.includes("answer-excites-you"), false, "an unread draft is not Done");
+  const before = completedSubmissionGroups(deepgram());
+  assert.equal(before.find((item) => item.id === "completed-group-questions"), undefined,
+    "an unread draft is not Done");
 
-  const after = completedSubmissionItems(deepgram({ answer_approved_at: "2026-08-13T16:41:02.104Z" }));
-  const settled = after.find((item) => item.id === "answer-excites-you");
+  const after = completedSubmissionGroups(deepgram({ answer_approved_at: "2026-08-13T16:41:02.104Z" }));
+  const settled = after.find((item) => item.id === "completed-group-questions");
   assert.ok(settled, "once she has said it stands, it is Done");
-  assert.equal(settled.label, "What excites you about Deepgram?");
+  assert.equal(settled.label, "Employer questions");
+  assert.equal(settled.detail, "1 item completed", "and the count the applicant reads moves with it");
+});
+
+/* THE OTHER CLAUSE, AND THE ONE WITH TEETH. A question only she may speak to - compensation here,
+ * and in production also sponsorship, work authorization and privacy consent - is held out of Done
+ * unconditionally until she says the answer stands. Approving it has to land it, by the same
+ * argument, and the groups function had no approval clause for it either. */
+test("an approved answer to a question only she may speak to arrives in Done", () => {
+  const packet = deepgram();
+  const withApprovedSalary = {
+    ...packet,
+    questions: packet.questions.map((question) => (question.id === "salary"
+      ? { ...question, answer_approved_at: "2026-08-13T16:41:02.104Z" }
+      : question)),
+  };
+
+  const settled = completedSubmissionGroups(withApprovedSalary)
+    .find((item) => item.id === "completed-group-questions");
+  assert.ok(settled, "her own confirmation is Done once she has given it");
+  assert.equal(settled.detail, "1 item completed");
 });
 
 /* THE ROWS THAT MUST NOT MOVE WITH IT. One approval names one question. This is the same property

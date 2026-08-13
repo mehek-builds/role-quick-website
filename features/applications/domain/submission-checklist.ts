@@ -777,8 +777,16 @@ export function completedSubmissionGroups(
   }
   for (const question of review.questions ?? []) {
     if (!(question.answer ?? "").trim()) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
-    if (isHumanOnlyChecklistLabel(question.question)) continue;
+    /* AN APPROVED ANSWER IS DONE, AND THIS IS THE FUNCTION THE SCREEN ACTUALLY CALLS.
+     *
+     * The same two clauses exist in completedSubmissionItems, which has no non-test callers. Both
+     * render sites - app/dashboard/applications/page.tsx and components/app/ApplicationPacket.tsx -
+     * build the Done column from THIS function, so without them the approval removed the row from
+     * Your turn and added nothing anywhere: no Done entry, no count, nothing. That is precisely the
+     * failure the split exists to prevent, a row that reads as deleted rather than settled, and it
+     * was reachable by pressing the control this feature shipped. */
+    if (question.kind === "essay" && review.status !== "submitted" && !answerApproved(question)) continue;
+    if (isHumanOnlyChecklistLabel(question.question) && !answerApproved(question)) continue;
     if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
     add("questions", question.id || normalizedChecklistText(question.question));
   }
