@@ -88,6 +88,18 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
 
+test("a stalled application persists reviewed answers before its exact packet audit", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    shippedCode(dashboard),
+    /\["resume_ready", "questions_ready", "ready_to_submit", "needs_attention"\]\.includes\(canonicalReview\.status\)[\s\S]{0,700}\/applications\/\$\{applicationId\}\/review/,
+  );
+});
+
 test("Tracker arms only the exact attended URL returned by the backend contract", async () => {
   const [dashboard, handoff] = await Promise.all([
     readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8"),
