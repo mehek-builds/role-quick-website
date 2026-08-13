@@ -39,6 +39,13 @@ export function ExactPacketPdfHarness({
 }) {
   const [verified, setVerified] = useState<PacketPdfEvidenceVerification | null>(null);
   const [revocations, setRevocations] = useState(0);
+  /* THE TOKEN REFRESH, because production performs one every 2.5 seconds and nothing here could
+     reach it. The backend mints a new `?t=` on every POST /packet-audit, the dashboard re-audits on
+     its poll while the evidence is acknowledged, and the response is installed verbatim. Same
+     object, same bytes, same digest, different credential. Same shape as production: only the
+     query string moves. */
+  const [token, setToken] = useState(0);
+  const downloadUrl = token === 0 ? FIXTURE_URL : `${FIXTURE_URL}?t=${token}`;
 
   const onVerified = useCallback((next: PacketPdfEvidenceVerification | null) => {
     setVerified(next);
@@ -53,10 +60,14 @@ export function ExactPacketPdfHarness({
       <p data-testid="gate-state">{verified ? "ready" : "blocked"}</p>
       <p data-testid="gate-sha256">{verified?.sha256 ?? ""}</p>
       <p data-testid="gate-revocations">{revocations}</p>
+      <p data-testid="gate-download-url">{downloadUrl}</p>
+      <button type="button" data-testid="refresh-download-token" onClick={() => setToken((current) => current + 1)}>
+        Refresh download token
+      </button>
       <ExactPacketPdf
         auditDigest="qa-harness-audit-digest"
         binding={{ sha256: sha256 ?? FIXTURE_SHA256, size_bytes: sizeBytes ?? FIXTURE_SIZE_BYTES }}
-        downloadUrl={FIXTURE_URL}
+        downloadUrl={downloadUrl}
         onVerified={onVerified}
         timeoutMs={timeoutMs}
       />
