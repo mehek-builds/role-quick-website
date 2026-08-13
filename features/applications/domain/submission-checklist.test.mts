@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checklistRowControl, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
+import { checklistRowControl, completedSubmissionGroups, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
 
 test("displayQuestionLabel restores sentence case and common application acronyms", () => {
   assert.equal(displayQuestionLabel("select your standardized test score type"), "Select your standardized test score type");
@@ -135,6 +135,38 @@ test("completedSubmissionItems shows safe filled fields as done", () => {
   assert.equal(items.some((item) => item.label === "Do you consent to BrightHire recording your interview?"), false);
   assert.equal(items.some((item) => item.label === "Are you legally authorized to work in Canada?"), false);
   assert.equal(items.some((item) => item.label === "Will you require immigration support in the future?"), false);
+});
+
+test("completedSubmissionGroups hides provider handles and keeps the Done section compact", () => {
+  const groups = completedSubmissionGroups({
+    status: "needs_attention",
+    attention_reason: "",
+    filled_fields: [
+      "First name",
+      "Last name input_88291004",
+      "Email field:9",
+      "Phone country combo:0",
+      "Phone",
+      "Location control-42",
+      "Education school combo:0",
+      "Education degree combo_7744",
+      "Education discipline label--0",
+      "Education end month combo",
+      "Education end year field",
+      "LinkedIn profile question_772211",
+      "Resume upload control_4",
+    ],
+    questions: [{ id: "q-1", question: "How did you hear about us?", answer: "Company website", kind: "required", required: true }],
+  });
+
+  assert.deepEqual(groups.map(({ label, detail }) => ({ label, detail })), [
+    { label: "Contact details", detail: "6 items completed" },
+    { label: "Education", detail: "5 items completed" },
+    { label: "Professional links", detail: "1 item completed" },
+    { label: "Application files", detail: "1 item completed" },
+    { label: "Employer questions", detail: "1 item completed" },
+  ]);
+  assert.equal(groups.some((group) => /\d{2,}|combo|control|field/i.test(group.label)), false);
 });
 
 /**

@@ -705,3 +705,73 @@ export function completedSubmissionItems(review: Pick<ApplicationReview, "attent
 
   return items;
 }
+
+type CompletedGroup = "contact" | "education" | "links" | "documents" | "eligibility" | "questions" | "other" | "confirmation";
+
+const COMPLETED_GROUPS: Array<{ id: CompletedGroup; label: string }> = [
+  { id: "contact", label: "Contact details" },
+  { id: "education", label: "Education" },
+  { id: "links", label: "Professional links" },
+  { id: "documents", label: "Application files" },
+  { id: "eligibility", label: "Eligibility and availability" },
+  { id: "questions", label: "Employer questions" },
+  { id: "other", label: "Other details" },
+  { id: "confirmation", label: "Company confirmation" },
+];
+
+function providerFieldKey(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b(?:combo|input|control|question|field|label)[_: -]*\d+\b/g, " ")
+    .replace(/[_: -]+\d+\b/g, " ")
+    .replace(/\b\d+\b/g, " ")
+    .replace(/[^a-z]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function completedGroupForField(value: string): CompletedGroup {
+  const field = providerFieldKey(value);
+  if (/\b(resume|cv|cover letter|transcript|attachment|upload|doc(?:ument)?)\b/.test(field)) return "documents";
+  if (/\b(school|university|college|education|degree|discipline|major|graduation|graduate|gpa|coursework)\b/.test(field)) return "education";
+  if (/\b(linkedin|github|portfolio|website|web site|url)\b/.test(field)) return "links";
+  if (/\b(authorization|authorised|authorized|sponsorship|visa|relocation|availability|available|start date|work eligible)\b/.test(field)) return "eligibility";
+  if (/\b(first name|last name|full name|preferred name|email|phone|telephone|mobile|location|address|city|country|state|postal|zip)\b/.test(field)) return "contact";
+  return "other";
+}
+
+export function completedSubmissionGroups(
+  review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "status">,
+): SubmissionChecklistItem[] {
+  const emptySubjects = emptyFieldSubjects(compactLines(review.attention_reason));
+  const grouped = new Map<CompletedGroup, Set<string>>();
+  const add = (group: CompletedGroup, key: string) => {
+    const values = grouped.get(group) ?? new Set<string>();
+    values.add(key);
+    grouped.set(group, values);
+  };
+
+  for (const field of review.filled_fields ?? []) {
+    const key = providerFieldKey(field);
+    if (!key || /^question(?: text)?\b/.test(key)) continue;
+    add(completedGroupForField(field), key);
+  }
+  for (const question of review.questions ?? []) {
+    if (!(question.answer ?? "").trim()) continue;
+    if (question.kind === "essay" && review.status !== "submitted") continue;
+    if (isHumanOnlyChecklistLabel(question.question)) continue;
+    if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
+    add("questions", question.id || normalizedChecklistText(question.question));
+  }
+  if (review.receipt || review.status === "submitted") add("confirmation", "received");
+
+  return COMPLETED_GROUPS.flatMap(({ id, label }) => {
+    const count = grouped.get(id)?.size ?? 0;
+    if (count === 0) return [];
+    return [{
+      id: `completed-group-${id}`,
+      label,
+      detail: `${count} ${count === 1 ? "item" : "items"} completed`,
+    }];
+  });
+}
