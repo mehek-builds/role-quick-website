@@ -27,6 +27,7 @@ import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets 
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { approveDraftedAnswer, type AnswerApprovalResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
@@ -54,7 +55,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowApproval, checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -1859,6 +1860,56 @@ function Applications() {
     }
   }
 
+  /* MARKING ONE "YOUR TURN" ROW DONE, which for four months issued no request of any kind.
+   *
+   * The box on that row had no handler and no state: see features/applications/domain/answer-approval.ts
+   * for the measurement and for which rows may carry one at all. What it does now is persist an
+   * approval of the ANSWER the row names, which is why it sends the text and not just the id - the
+   * server refuses if the packet no longer holds those words, so a run that rewrote the draft under
+   * her cannot collect a sign-off on something she never read.
+   *
+   * The row clears because the STORED answer now carries the approval and humanInputItems reads it,
+   * not because anything here removed a row. That is the whole difference between this and a local
+   * tick: the 2.5s poll rebuilds this list from the server on the next tick and agrees. */
+  const approvingAnswerRef = useRef<string | null>(null);
+  const [approvingQuestionId, setApprovingQuestionId] = useState<string | null>(null);
+
+  async function approveAnswer(questionId: string) {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    const applicationId = selected.id;
+    const question = submission.review.questions.find((entry) => entry.id === questionId);
+    // No answer, no approval. The server refuses this too; refusing here as well keeps a row that
+    // should never have drawn a box from spending a request to be told so.
+    if (!question || !question.answer.trim()) return;
+    if (approvingAnswerRef.current) return;
+    approvingAnswerRef.current = questionId;
+    setApprovingQuestionId(questionId);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await approveDraftedAnswer<SubmissionResponse["review"]>({
+        applicationId,
+        questionId,
+        answer: question.answer,
+        send: (path, init) => api<AnswerApprovalResponse<SubmissionResponse["review"]>>(path, init),
+      });
+      // Tapping another row mid-request is a single tap, and the switcher sits above this screen.
+      // Same guard, same reason, as saveReviewedAnswers.
+      if (selectedIdRef.current !== applicationId) return;
+      if (!result.approved) {
+        setError(result.message);
+        return;
+      }
+      const approved: SubmissionResponse = { ...submission, application_id: applicationId, review: result.review };
+      submissionRef.current = approved;
+      setSubmission(approved);
+      setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithSubmission(packet, approved) : packet) ?? current);
+    } finally {
+      if (approvingAnswerRef.current === questionId) approvingAnswerRef.current = null;
+      setApprovingQuestionId((current) => current === questionId ? null : current);
+    }
+  }
+
   /* Hand the employer's emailed code to the backend and let it finish the send.
    *
    * The guard is a ref, not state, for the same reason approveInFlight is: a second Enter or a
@@ -2373,6 +2424,8 @@ function Applications() {
           onRetry={retryPreparation}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId) => reviewPortalQuestions(questionId)}
+          onApproveAnswer={(questionId) => void approveAnswer(questionId)}
+          approvingQuestionId={approvingQuestionId}
           onAddDocument={askForDocument}
           onSelfSubmitted={() => void recordSelfSubmitted()}
         />
@@ -3200,7 +3253,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion, onApproveAnswer, approvingQuestionId, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void; onApproveAnswer: (questionId: string) => void; approvingQuestionId: string | null; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -3443,7 +3496,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             is how "CAPTCHA requires your attention ... is required required field is required ..."
             reached the screen. Each blocker is its own item, because each is its own task. */}
         {needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onApproveAnswer={onApproveAnswer} approvingQuestionId={approvingQuestionId} onAddDocument={onAddDocument} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
@@ -3834,8 +3887,24 @@ const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center ro
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onAddDocument?: (kind: string) => void }) {
+/* AND THE BOX BESIDE THE PILL WAS THE SAME DEFECT AGAIN, one column to the left.
+ *
+ * "Make application blockers checkable" (7051e6d) replaced a decorative <span> tick with
+ * `<input type="checkbox" aria-label={`Mark ${item.label} done`}>` carrying no `checked`, no
+ * `onChange` and no state, and nothing was ever added behind it. Measured on the live Deepgram
+ * packet on 2026-08-13: five presses across five boxes, no network request at all, `checked` false
+ * on all five afterwards. The panel named the work, offered a control, and the control was paint -
+ * which is the sentence written above about the pill, unchanged.
+ *
+ * So the box now follows the pill's rule. checklistRowApproval returns a question or NOTHING, and
+ * only a row with a question to approve draws an input; every other row draws the same 14px square
+ * as an inert marker, because there is nowhere honest to record "done" for a blocker the run
+ * reported and a tick that the next poll erases is worse than no tick. The input is CONTROLLED off
+ * the stored answer's approval, so what it shows is what the server holds rather than what the
+ * browser remembers. */
+function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onApproveAnswer, approvingQuestionId, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onApproveAnswer?: (questionId: string) => void; approvingQuestionId?: string | null; onAddDocument?: (kind: string) => void }) {
   const control = checked ? null : checklistRowControl(item, { portalUrl });
+  const approval = checked ? null : checklistRowApproval(item);
   /* Two different things, kept apart deliberately.
      `checked` means "this row came out of the Done column", and it is the only thing that suppresses
      the control, which is safe because nothing in completedSubmissionGroups carries an action word in
@@ -3852,8 +3921,24 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
             <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
+      ) : approval && onApproveAnswer ? (
+        <input
+          type="checkbox"
+          aria-label={`Mark ${item.label} done`}
+          /* Controlled off the row, which is built from the stored answer. `done` is false in this
+             branch by construction, so this is always an unticked box being offered; the ticked
+             state is the branch above, reached on the next render because the approval is on the
+             packet. An uncontrolled box would go on looking ticked through a refusal. */
+          checked={false}
+          disabled={approvingQuestionId === approval.questionId}
+          onChange={() => onApproveAnswer(approval.questionId)}
+          className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/60 bg-surface text-warn focus:ring-warn/30 disabled:opacity-50"
+        />
       ) : (
-        <input type="checkbox" aria-label={`Mark ${item.label} done`} className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/60 bg-surface text-warn focus:ring-warn/30" />
+        /* Nothing to approve on this row, so nothing to press. Same square, drawn as the marker it
+           always was rather than as a control that cannot act. aria-hidden because the row's own
+           text is the whole of what a screen reader needs here. */
+        <span aria-hidden className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border border-warn/60 bg-surface" />
       )}
       <span>
         <span className={done ? "text-ink" : "text-warn"}>{item.label}</span>
@@ -3886,7 +3971,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
   );
 }
 
-function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onAddDocument?: (kind: string) => void }) {
+function BlockerList({ items, portalUrl, onOpenQuestion, onApproveAnswer, approvingQuestionId, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onApproveAnswer?: (questionId: string) => void; approvingQuestionId?: string | null; onAddDocument?: (kind: string) => void }) {
   /* Split before anything is drawn, because these are two different sentences and only one of them
      is a demand. An outstanding row is work the employer is still waiting on. A settled row states
      that something is already handled and keeps a control only so she can change it, which is why
@@ -3910,7 +3995,7 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { item
           </div>
           <ul className="mt-2 space-y-2">
           {outstanding.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onApproveAnswer={onApproveAnswer} approvingQuestionId={approvingQuestionId} onAddDocument={onAddDocument} />
           ))}
           </ul>
         </div>
@@ -3919,7 +4004,7 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { item
         <div className="mt-3 rounded-inner border border-border bg-surface-alt px-4 py-3">
           <ul className="space-y-2">
           {settled.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onApproveAnswer={onApproveAnswer} approvingQuestionId={approvingQuestionId} onAddDocument={onAddDocument} />
           ))}
           </ul>
         </div>
