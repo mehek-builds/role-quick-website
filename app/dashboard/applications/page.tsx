@@ -26,6 +26,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { saveReviewAnswers } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
@@ -289,6 +290,12 @@ function Applications() {
      click-time anchor. */
   const [prepareStartedAt, setPrepareStartedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /* The Review-answers Save, per application rather than as a page-level flag, for the same reason
+     approvingId is: saving on A must not grey out the button on B. A ref beside the state because a
+     second click can land in the same tick, before any re-render, and two writes of the same answers
+     race each other's optimistic row check for no gain. */
+  const savingAnswersRef = useRef<string | null>(null);
+  const [savingAnswersId, setSavingAnswersId] = useState<string | null>(null);
   const [packetAuditBusy, setPacketAuditBusy] = useState(false);
   const packetAuditInFlight = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1235,15 +1242,28 @@ function Applications() {
    * refused, or not deployed costs her nothing: getPostingQuestions swallows every failure and this
    * falls through to the review screen, which is exactly today's behaviour.
    *
-   * The answers land in the SAME `questions` state that "Check the answers" edits and travel out
-   * through the same POST /applications/:id/submit-request. There is no second path for an answer.
+   * The answers land in the SAME `questions` state that "Check the answers" edits, and from Apply
+   * they travel out through the same POST /applications/:id/submit-request. An answer typed on a
+   * run that has ALREADY stopped has no such request ahead of it, so it is written where it is
+   * typed, through PUT /applications/:id/review/answers. Two screens, one state, and the route each
+   * one saves through is the difference between them. See saveReviewedAnswers.
    */
-  /* Save on the Apply questions screen. Keeps the answers and hands her back the resume.
+  /* Save on the APPLY questions screen, and only that screen. Keeps the answers and hands her back
+   * the resume.
    *
    * The answers stay in `questions`, which is the same state continueFromResume passes to
    * prepareApplication, so they ride into the packet on the next step with nothing re-entered and
    * no second request. "Filled in immediately" means the packet is built with her answers already
-   * in it, not that it is sent the moment she types one. */
+   * in it, not that it is sent the moment she types one.
+   *
+   * THIS IS A LOCAL SAVE AND THAT IS ONLY TRUE HERE. The submit-request she is two screens away
+   * from is what carries these answers to the server, so nothing is lost by not writing now, and
+   * starting a submission because she answered a question would take a screen away from her.
+   *
+   * The OTHER screen this component serves has no such request coming. A packet at needs_attention
+   * is a run that already stopped; there is nothing further along the path to carry an answer, so a
+   * local-only save there is not a save at all. It had this handler anyway, and every answer typed
+   * on a stalled run was discarded with the tab. See saveReviewedAnswers. */
   function saveApplyAnswers() {
     setPrescriptNote("");
     setFocusQuestion(null);
@@ -1749,9 +1769,9 @@ function Applications() {
 
   /* The one place an answer can be seen, edited and saved. "Check the answers" has always come
      here; the Your turn rows now come here too, carrying WHICH question was pressed so the student
-     lands on it rather than at the top of a list of twelve. Save from here goes out through
-     POST /applications/:id/submit-request, which is the existing persistence path for answers, so
-     nothing about how an answer reaches the employer changed. */
+     lands on it rather than at the top of a list of twelve. Save from here writes through
+     PUT /applications/:id/review/answers, which persists the answers and leaves the packet's status
+     alone. See saveReviewedAnswers. */
   function reviewPortalQuestions(focusQuestionId?: string) {
     if (!selected || !submission || submission.application_id !== selected.id) return;
     // Reading the whole list, or answering a stalled run: not the Apply-time pre-script, so its
@@ -1765,6 +1785,48 @@ function Applications() {
         : null,
     );
     moveToScreen("questions", { scrollToTop: !focusQuestionId });
+  }
+
+  /* Save on the REVIEW-ANSWERS screen, which is reached from a run that stopped and needs a real
+   * write. See features/applications/domain/review-answer-save.ts for the route and why it is
+   * neither of the two that already existed.
+   *
+   * The banner is the RESPONSE's, and a refusal leaves her on this screen with everything she typed
+   * still in the boxes: the answers exist only here until the server says otherwise, so navigating
+   * away from a failed save would destroy them a second time. */
+  async function saveReviewedAnswers() {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    const applicationId = selected.id;
+    if (savingAnswersRef.current === applicationId) return;
+    savingAnswersRef.current = applicationId;
+    setSavingAnswersId(applicationId);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = await saveReviewAnswers<SubmissionResponse["review"]>({
+        applicationId,
+        questions,
+        send: (path, init) => api<{ application_id: string; review: SubmissionResponse["review"] }>(path, init),
+      });
+      // The switcher renders above this screen, so tapping another row mid-save is a single tap.
+      // Same guard, same reason, as approveFinalSubmission.
+      if (selectedIdRef.current !== applicationId) return;
+      if (!result.saved) {
+        setError(result.message);
+        return;
+      }
+      const saved: SubmissionResponse = { ...submission, application_id: applicationId, review: result.review };
+      submissionRef.current = saved;
+      setSubmission(saved);
+      setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithSubmission(packet, saved) : packet) ?? current);
+      setQuestions(mergeDiscoveredQuestions(questions, result.review.questions));
+      setFocusQuestion(null);
+      moveToScreen(screenForStatus(result.review.status, "portal"));
+      setNotice(result.notice);
+    } finally {
+      if (savingAnswersRef.current === applicationId) savingAnswersRef.current = null;
+      setSavingAnswersId((current) => current === applicationId ? null : current);
+    }
   }
 
   /* Hand the employer's emailed code to the backend and let it finish the send.
@@ -2234,10 +2296,17 @@ function Applications() {
           questions={questions}
           onChange={setQuestions}
           onBack={() => moveToScreen(selectedSubmission?.review.status === "needs_attention" ? "portal" : "review")}
+          /* TWO SCREENS, TWO SAVES, and collapsing them is the defect. From Apply the answers ride
+             into the packet on the submit-request she is about to press, so keeping them locally IS
+             keeping them. From a stopped run there is no such request coming, so the same handler
+             kept nothing. Either way the prior exact-packet audit is void, because the answers it
+             was taken over are no longer the answers on the packet. */
           onSubmit={() => {
-            saveApplyAnswers();
             setPacketEvidence(null);
+            if (selectedSubmission?.review.status === "needs_attention") void saveReviewedAnswers();
+            else saveApplyAnswers();
           }}
+          saving={savingAnswersId === selected?.id}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}
@@ -2924,7 +2993,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; reviewDiscovered?: boolean; focusQuestion?: { id: string; token: number } | null; prescriptNote?: string }) {
+function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; saving?: boolean; reviewDiscovered?: boolean; focusQuestion?: { id: string; token: number } | null; prescriptNote?: string }) {
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
   const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
   const focusQuestionId = focusQuestion?.id ?? null;
@@ -3000,8 +3069,11 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, reviewDiscover
       {/* Same trap as the review screen, one screen later: N six-row textareas and then the button
           that ends the screen, so at 744px the action is off the bottom of a document whose every
           other element eats the keyboard. Same treatment. */}
+      {/* The label says which of the two saves this is while it is happening. From the review
+          screen this is a request to the server, and a button that reads "Save" throughout a write
+          it does not acknowledge is how the old handler got away with saving nothing. */}
       <TerminalActionBar className="justify-end">
-        <Button onClick={onSubmit} >Save</Button>
+        <Button onClick={onSubmit} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
       </TerminalActionBar>
     </div>
   );

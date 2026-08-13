@@ -88,9 +88,17 @@ test("saving at Apply hands the resume back rather than starting a submission", 
   // The answers stay in `questions`, which is what continueFromResume passes to prepareApplication,
   // so they ride into the packet on the next step with nothing re-entered.
   assert.doesNotMatch(save, /setQuestions\(\[\]\)/);
-  // Every route invalidates the prior exact packet audit and returns to review. The next send can
-  // only happen after answers, PDF bytes, and requirement evidence are frozen together again.
-  assert.match(PAGE, /onSubmit=\{\(\) => \{\s*saveApplyAnswers\(\);\s*setPacketEvidence\(null\);\s*\}\}/);
+  // Every route invalidates the prior exact packet audit. The next send can only happen after
+  // answers, PDF bytes, and requirement evidence are frozen together again.
+  //
+  // The Apply branch is the one this handler is for, and it is now a branch: the same screen serves
+  // a stalled run, where a local-only save saved nothing at all, so that path writes through
+  // saveReviewedAnswers instead. features/applications/domain/review-answer-save.test.mts holds
+  // what that one does.
+  assert.match(
+    PAGE,
+    /onSubmit=\{\(\) => \{\s*setPacketEvidence\(null\);\s*if \(selectedSubmission\?\.review\.status === "needs_attention"\) void saveReviewedAnswers\(\);\s*else saveApplyAnswers\(\);\s*\}\}/,
+  );
 });
 
 test("nothing on the Apply screen is filled by a guess", () => {

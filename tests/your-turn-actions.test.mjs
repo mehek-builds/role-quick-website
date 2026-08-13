@@ -232,15 +232,39 @@ test("the read-only packet viewer drops settled rows rather than listing them as
   assert.match(viewer, /\}\)\.filter\(\(item\) => !item\.settled\);/);
 });
 
-test("pressing a row opens the answer editor on that question, and saving there is the existing persistence path", () => {
+/* THE SECOND HALF OF THIS ROW'S PROMISE, which was missing for as long as the row existed.
+ *
+ * Pressing a Your turn row opens the answer editor on that question, and that half worked. Saving
+ * there did not: the button called saveApplyAnswers, which sets a banner and changes screens and
+ * issues no request, so the answer lived until the tab closed. This file used to assert that exact
+ * wiring and describe it as "the existing persistence path"; it was not a persistence path at all.
+ *
+ * The route it writes through now is deliberately neither of the two that already existed. See
+ * features/applications/domain/review-answer-save.ts, whose test holds the behaviour: one request,
+ * carrying the answers, never the submission route, and no success banner on a refusal. */
+test("pressing a row opens the answer editor on that question, and saving there writes", () => {
   assert.match(page, /function reviewPortalQuestions\(focusQuestionId\?: string\)/);
   assert.match(page, /setFocusQuestion\(/);
   assert.match(page, /moveToScreen\("questions"\)/);
 
-  // Saving returns to the review screen and invalidates the prior audit. The only subsequent
-  // submit-request is reached through a new exact packet audit, so editing a stalled answer cannot
-  // reuse the PDF, answer map, or requirement evidence that preceded it.
-  assert.match(page, /onSubmit=\{\(\) => \{\s*saveApplyAnswers\(\);\s*setPacketEvidence\(null\);\s*\}\}/);
+  // Saving invalidates the prior audit. Any subsequent submit-request is reached through a new
+  // exact packet audit, so editing a stalled answer cannot reuse the PDF, answer map, or
+  // requirement evidence that preceded it.
+  assert.match(
+    page,
+    /onSubmit=\{\(\) => \{\s*setPacketEvidence\(null\);\s*if \(selectedSubmission\?\.review\.status === "needs_attention"\) void saveReviewedAnswers\(\);\s*else saveApplyAnswers\(\);\s*\}\}/,
+  );
+  // The stalled-run save writes and does not send: the answers route, never submit-request.
+  const saveStart = page.indexOf("async function saveReviewedAnswers()");
+  const saveEnd = page.indexOf("const securityCodeInFlight", saveStart);
+  assert.ok(saveStart >= 0 && saveEnd > saveStart, "saveReviewedAnswers is gone");
+  const reviewedSave = page.slice(saveStart, saveEnd);
+  assert.match(reviewedSave, /saveReviewAnswers</);
+  assert.doesNotMatch(reviewedSave, /submit-request/);
+  assert.doesNotMatch(reviewedSave, /prepareApplication/);
+  // The banner is the response's. Setting it before the request is the defect being fixed.
+  assert.match(reviewedSave, /if \(!result\.saved\) \{\s*setError\(result\.message\);\s*return;\s*\}/);
+  assert.match(reviewedSave, /setNotice\(result\.notice\)/);
   assert.match(page, /questionsSnapshot: currentQuestionsSnapshot/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 
