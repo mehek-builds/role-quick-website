@@ -255,6 +255,85 @@ test("the page still renders when the tab is never painting a frame", async () =
 });
 
 /**
+ * A REFRESHED DOWNLOAD TOKEN IS NOT A NEW PACKET, and reading it as one is what disarmed the send.
+ *
+ * Production, application fc6eade3, 2026-08-13: the applicant audited the packet, watched the exact
+ * PDF render, waited for "Fill the form" to go solid, pressed it, and nothing started. The network
+ * showed a GET /resume/download and no submit. The server had already recorded her acknowledgement,
+ * and `generated_resumes.spec->'_review'->'packet_audit_acknowledgement'` still holds it.
+ *
+ * `pdf.download_url` is `/resume/download?t=<token>` and POST /applications/:id/packet-audit mints a
+ * new token on EVERY call. The dashboard re-audits on its 2.5s poll for as long as the evidence is
+ * acknowledged and installs the response verbatim, so an unchanged packet arrived at this viewer
+ * wearing a new URL every few seconds. The URL was part of the verification key, so each refresh
+ * read as a different packet: the view fell back to "loading", the effect re-ran, and its first act
+ * revoked the verification. reconcilePacketPdfVerification turns a revocation into
+ * `{ pdfVerified: false, acknowledged: false }`, which is the first term of `finalApprovalBlocked`
+ * and the term `continueFromVerifiedPacket` re-checks before it will send. The applicant's review
+ * was withdrawn underneath her while the server's copy of it stayed valid.
+ *
+ * Pre-fix, measured against this harness: pressing the refresh took `gate-state` from "ready" to
+ * "blocked", incremented `gate-revocations` from 1 to 2, and blanked `gate-sha256`.
+ *
+ * The case below is worth nothing without the one after it. Together they say the gate ignores a
+ * change to an opaque credential and still refuses a change to the bytes.
+ */
+test("a refreshed download token for the same bytes does not revoke the verified gate", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(harnessUrl());
+    await gateState(page).filter({ hasText: "ready" }).waitFor({ timeout: 20_000 });
+    const revocationsWhenReady = Number(await page.getByTestId("gate-revocations").textContent());
+
+    const urlBefore = await page.getByTestId("gate-download-url").textContent();
+    await page.getByTestId("refresh-download-token").click();
+    await page.waitForFunction(
+      (before) => document.querySelector('[data-testid="gate-download-url"]')?.textContent !== before,
+      urlBefore,
+      { timeout: 5_000 },
+    );
+
+    /* Long enough that a viewer which DID tear down would have finished a fresh download and
+       re-rendered, so this cannot pass by being read before the damage lands. */
+    await delay(TIMEOUT_MS * 2);
+
+    assert.equal(await gateState(page).textContent(), "ready", "the send gate was revoked by a token refresh");
+    assert.equal(await page.getByTestId("gate-sha256").textContent(), FIXTURE_SHA256);
+    assert.equal(
+      Number(await page.getByTestId("gate-revocations").textContent()),
+      revocationsWhenReady,
+      "a token refresh published a revocation, which is what withdraws the applicant's acknowledgement",
+    );
+    /* Still one page on screen, not a torn-down viewer that happens to report ready. */
+    assert.equal(await page.locator("canvas").count(), 1);
+    assert.ok(await inkPixels(page) > 10_000);
+  } finally {
+    await page.close();
+  }
+});
+
+test("a change to the bound bytes still revokes the gate after a token refresh", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(harnessUrl());
+    await gateState(page).filter({ hasText: "ready" }).waitFor({ timeout: 20_000 });
+    await page.getByTestId("refresh-download-token").click();
+    await delay(500);
+
+    /* The binding is what the server audited. Reloading with a different one is the same event the
+       dashboard delivers when the audit or the stored PDF really moves, and it must still shut. */
+    await page.goto(harnessUrl({ sha256: "0".repeat(64) }));
+    const alert = failureAlert(page);
+    await alert.waitFor({ timeout: 20_000 });
+    assert.match(await alert.textContent(), /does not match the audited packet/);
+    assert.equal(await gateState(page).textContent(), "blocked");
+    assert.equal(await page.getByTestId("gate-sha256").textContent(), "");
+  } finally {
+    await page.close();
+  }
+});
+
+/**
  * A valid PDF that draws nothing must not pass.
  *
  * The gate's promise settling is not evidence. A document whose content stream paints no marks

@@ -166,7 +166,36 @@ export function ExactPacketPdf({
   useEffect(() => {
     onVerifiedRef.current = onVerified;
   }, [onVerified]);
-  const verificationKey = `${auditDigest}:${binding.sha256}:${binding.size_bytes}:${downloadUrl}`;
+  /* THE SIGNED DOWNLOAD URL IS NOT PART OF THE PACKET, and keying the proof on it is what silently
+   * disarmed this gate.
+   *
+   * `download_url` is `/resume/download?t=<token>`, and the backend mints a FRESH token on every
+   * POST /applications/:id/packet-audit (routes/applications.ts). The dashboard re-audits on its
+   * 2.5s poll for as long as the evidence is acknowledged, and revalidateAcknowledgedPacketEvidence
+   * installs that response - so a packet that has not changed by a single byte arrives here wearing
+   * a different URL every few seconds.
+   *
+   * With the URL in this key, each of those was read as A DIFFERENT PACKET. The view reset to
+   * "loading", the effect below re-ran and re-issued the download, and its first act,
+   * `onVerifiedRef.current(null)`, revoked the verification. reconcilePacketPdfVerification turns a
+   * revocation into `{ pdfVerified: false, acknowledged: false }`, so the applicant's review was
+   * withdrawn in client state while the server's record of it sat valid in the database. The
+   * control then re-armed the moment the identical bytes finished re-rendering, which is a button
+   * that reads "Fill the form", reports enabled, and is refused by the handler behind it.
+   *
+   * The identity of a packet is its audit digest and the hash and length of its bytes. All three
+   * are still in this key, so a real change to any of them resets the viewer and revokes the proof
+   * exactly as before. What no longer resets it is an opaque credential that says nothing about
+   * what is in the file. Nothing is taken on trust either: the effect below still hashes whatever
+   * comes back over the wire against `binding.sha256` before a single page is drawn.
+   *
+   * The URL is still read for the fetch, from a ref, so the CURRENT token is used whenever the
+   * download actually runs - including "Try showing it again" after an expired one. */
+  const downloadUrlRef = useRef(downloadUrl);
+  useEffect(() => {
+    downloadUrlRef.current = downloadUrl;
+  }, [downloadUrl]);
+  const verificationKey = `${auditDigest}:${binding.sha256}:${binding.size_bytes}`;
   const [attempt, setAttempt] = useState(0);
   const [view, setView] = useState<PdfView>({ key: verificationKey, state: "loading" });
   const [renderSource, setRenderSource] = useState<RenderSource | null>(null);
@@ -191,7 +220,7 @@ export function ExactPacketPdf({
       controller.abort();
     }, timeoutMs);
 
-    void fetch(downloadUrl, { credentials: "same-origin", signal: controller.signal })
+    void fetch(downloadUrlRef.current, { credentials: "same-origin", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("download_failed");
         const bytes = await response.arrayBuffer();
@@ -233,7 +262,7 @@ export function ExactPacketPdf({
       clearTimeout(timer);
       controller.abort();
     };
-  }, [attempt, auditDigest, binding.sha256, binding.size_bytes, downloadUrl, timeoutMs, verificationKey]);
+  }, [attempt, auditDigest, binding.sha256, binding.size_bytes, timeoutMs, verificationKey]);
 
   useEffect(() => {
     if (!renderSource || renderSource.key !== verificationKey || !pagesRef.current) return;
