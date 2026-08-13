@@ -424,15 +424,20 @@ export default function Settings() {
 
   async function save() {
     if (!profile) return;
-    if (eligibilityTouched) {
-      const problem = countryEligibilityProblem(eligibilityDraft);
-      if (problem) {
-        // An oversized server payload is already announced beside the repeater.
-        // Avoid adding a duplicate page-level alert while still blocking the PUT.
-        if (eligibilityDraft.length <= MAX_COUNTRY_ELIGIBILITY_RECORDS) setError(problem);
-        return;
-      }
+    const eligibilityProblem = countryEligibilityProblem(eligibilityDraft);
+    if (eligibilityTouched && eligibilityProblem) {
+      // An oversized server payload is already announced beside the repeater.
+      // Avoid adding a duplicate page-level alert while still blocking the PUT.
+      if (eligibilityDraft.length <= MAX_COUNTRY_ELIGIBILITY_RECORDS) setError(eligibilityProblem);
+      return;
     }
+    /* A complete legacy seed is safe to migrate even when the student edited a different field.
+       Omitting it made the successful response look blank because the response carries only the
+       legacy scalars, while the first load also had the onboarding answer needed to interpret them.
+       An incomplete or expired untouched draft stays omitted so an unrelated edit is never blocked. */
+    const eligibilityPayload = eligibilityProblem
+      ? null
+      : normalizedCountryEligibility(eligibilityDraft);
     setSaving(true);
     setError(null);
     try {
@@ -442,16 +447,16 @@ export default function Settings() {
       delete body.user_id;
       delete body.created_at;
       delete body.updated_at;
-      if (eligibilityTouched) body.work_eligibility_by_country = normalizedCountryEligibility(eligibilityDraft);
+      if (eligibilityPayload) body.work_eligibility_by_country = eligibilityPayload;
       else delete body.work_eligibility_by_country;
       const res = await api<ApplicationProfile>("/profile/application", {
         method: "PUT",
         body: JSON.stringify(body),
       });
       setProfile(res);
-        setSavedProfileJson(JSON.stringify(res));
-        setEligibilityDraft(eligibilitySeed(res));
-        setEligibilityTouched(false);
+      setSavedProfileJson(JSON.stringify(res));
+      if (eligibilityPayload) setEligibilityDraft(eligibilitySeed(res));
+      setEligibilityTouched(false);
       setSavedAt(Date.now());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
