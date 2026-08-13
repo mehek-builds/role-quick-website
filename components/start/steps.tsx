@@ -17,6 +17,14 @@ import {
 } from "@/lib/api";
 import { captchaConsentedAt, captchaConsentCompletion, captchaConsentGranted } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
+import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
+import {
+  CONSENT_GRANTS,
+  consentAcknowledgedAt,
+  consentAcknowledgementCompletion,
+  consentAcknowledgementGranted,
+  type ConsentGrantField,
+} from "@/lib/consent-acknowledgement";
 import { STORE_URL } from "@/lib/config";
 import {
   ROLE_TYPES,
@@ -980,6 +988,21 @@ export function DoneStep({
      being made), but a date that kept tracking `state` while the box did not could print "Granted
      <date>." next to an unticked box, which is the one pairing this module forbids everywhere. */
   const [captchaConsentGrantedAt] = useState(() => captchaConsentedAt(state));
+  /* SEEDED FROM THE SERVER'S VERDICT, never from a constant, and this is the whole correction.
+     An earlier version of this screen seeded both boxes from a hardcoded "nothing granted" and then
+     sent explicit falses on finish, so an account that had granted these lost them by walking back
+     through onboarding. /start has no completed-user guard, so that is one visit. See the header of
+     lib/consent-acknowledgement.ts for the measurement. */
+  const [consentGrants, setConsentGrants] = useState<Partial<Record<ConsentGrantField, boolean>>>(
+    () => Object.fromEntries(
+      CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgementGranted(state, grant.field)]),
+    ),
+  );
+  const [consentGrantedAt] = useState<Partial<Record<ConsentGrantField, string | null>>>(
+    () => Object.fromEntries(
+      CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgedAt(state, grant.grantedAtField)]),
+    ),
+  );
   const rows = useMemo(
     () =>
       /* Every step in STEPS, minus the screen the student is standing on. Deliberately STEPS and
@@ -1042,6 +1065,14 @@ export function DoneStep({
           account grants and revokes it from Settings, which is also the only place the accounts
           carrying the superseded consent version can grant it again. */}
       <div className="mt-7">
+        <ConsentAcknowledgementControl
+          idPrefix="start"
+          values={consentGrants}
+          grantedAt={consentGrantedAt}
+          disabled={busy}
+          onChange={(field, enabled) => setConsentGrants((current) => ({ ...current, [field]: enabled }))}
+        />
+
         <CaptchaConsentControl
           idPrefix="start"
           value={captchaConsent}
@@ -1067,6 +1098,10 @@ export function DoneStep({
                  reported the column, because otherwise this screen would be revoking a stored grant
                  it was never shown. See captchaConsentCompletion. */
               ...captchaConsentCompletion(state, captchaConsent),
+              /* Sends a true always, and a false ONLY when the server reported the column. Absent
+                 reads as not granted for display and must never be written back as a revocation of
+                 something this screen was never shown. */
+              ...consentAcknowledgementCompletion(state, consentGrants),
             }).finally(() => setBusy(false));
           }}
           disabled={busy}

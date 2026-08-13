@@ -249,6 +249,9 @@ function currentGaps() {
   return noGaps || progress.gaps ? [] : ["gpa", "gpa_scale", "major"];
 }
 
+/** Every body POSTed to /onboarding/complete, so a test can assert what setup actually wrote. */
+const completeBodies = [];
+
 function onboardingState() {
   return {
     step: derivedStep(),
@@ -281,8 +284,23 @@ function onboardingState() {
     automatic_submission_consented_at: null,
     automatic_submission_consent_version: null,
     automatic_verification_enabled: false,
+    /* THE TWO CONSENT GRANTS, reported the way production reports them for the account owner:
+       granted, dated, on the current version. This fixture is the adversary for the revocation
+       test below, and it has to be a real grant or that test asserts nothing. */
+    ...consentGrantState,
   };
 }
+
+/* Spread into the state above. Default is the owner's real production shape. A test that needs an
+   API predating these columns sets it to {}. */
+let consentGrantState = {
+  automatic_consent_acceptance_enabled: true,
+  automatic_consent_acceptance_consented_at: "2026-08-12T13:15:07.000Z",
+  automatic_consent_acceptance_consent_version: "2026-08-12",
+  automatic_conduct_acceptance_enabled: true,
+  automatic_conduct_acceptance_consented_at: "2026-08-12T13:15:07.000Z",
+  automatic_conduct_acceptance_consent_version: "2026-08-12",
+};
 
 const EMPTY_TARGETING = {
   categories: null,
@@ -484,6 +502,7 @@ await context.route("**/*", async (route) => {
   }
   if (pathname === "/onboarding/complete" && method === "POST") {
     completePosts += 1;
+    completeBodies.push(route.request().postDataJSON());
     progress.completed = true;
     await jsonRoute(route, { ok: true, automatic_verification_enabled: false });
     return;
@@ -1001,4 +1020,82 @@ test.after(async () => {
   await browser.close();
   server.kill("SIGTERM");
   if (anyFailure) console.error(`\nartifacts written to ${ARTIFACT_DIR}`);
+});
+
+
+/* FINISHING SETUP MUST NOT REVOKE A LIVE GRANT, ASSERTED IN THE PRODUCTION CLIENT.
+ *
+ * THE DEFECT. The first version of this screen seeded its boxes from a hardcoded "nothing granted"
+ * and sent explicit falses on finish. Measured against the account owner's real row:
+ *
+ *   finish payload : {"automatic_consent_acceptance_enabled":false,
+ *                     "automatic_conduct_acceptance_enabled":false}
+ *   row BEFORE     : {"enabled":true,"at":"2026-08-12T13:15:07.000Z","ver":"2026-08-12"}
+ *   row AFTER      : {"enabled":false,"at":null,"ver":null}
+ *
+ * /start has no completed-user guard, so one visit was enough to destroy a dated legal permission.
+ *
+ * WHY THIS IS AN E2E AND NOT A UNIT TEST. The unit tests assert the module, and the module was not
+ * where the bug was: the component has to SEED FROM THE SERVER, and a component that ignores the
+ * module and hardcodes its own default passes every unit test in the repo. That is exactly the
+ * blind spot mutation testing found on the sibling change. This drives the real screen.
+ */
+test("finishing setup again does not revoke a consent the account already holds", async (t) => {
+  try {
+    finishedAccount({ details: "none" });
+
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Setup complete." }).waitFor({ state: "visible" });
+
+    /* SEEDED FROM THE SERVER. Both boxes must arrive ticked, because the account holds both. A
+       screen that opens them unticked is the defect, before a single click. */
+    const privacy = page.locator("#start-automatic_consent_acceptance_enabled");
+    const conduct = page.locator("#start-automatic_conduct_acceptance_enabled");
+    assert.equal(await privacy.isChecked(), true, "a held privacy grant must arrive ticked");
+    assert.equal(await conduct.isChecked(), true, "a held conduct grant must arrive ticked");
+
+    const before = completeBodies.length;
+    await page.getByRole("button", { name: "See my jobs" }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+
+    const body = completeBodies[before];
+    assert.ok(body, "setup must have posted");
+    assert.notEqual(body.automatic_consent_acceptance_enabled, false, "setup revoked the privacy grant");
+    assert.notEqual(body.automatic_conduct_acceptance_enabled, false, "setup revoked the conduct grant");
+    assert.equal(body.automatic_consent_acceptance_enabled, true);
+    assert.equal(body.automatic_conduct_acceptance_enabled, true);
+  } catch (reason) {
+    t.diagnostic(`complete bodies: ${JSON.stringify(completeBodies)}`);
+    throw reason;
+  }
+});
+
+/* THE ROLLING-DEPLOY CASE, which is the one no screenshot can show. GET lands on an instance that
+ * predates these columns while POST lands on one that does not. Absent reads as not granted for
+ * DISPLAY, and writing that back as false revokes whatever is really stored, decided by a screen
+ * that was never shown the real value. */
+test("an API that never reported the columns is never told to turn them off", async (t) => {
+  const previous = consentGrantState;
+  try {
+    consentGrantState = {};
+    finishedAccount({ details: "none" });
+
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Setup complete." }).waitFor({ state: "visible" });
+    assert.equal(await page.locator("#start-automatic_consent_acceptance_enabled").isChecked(), false);
+
+    const before = completeBodies.length;
+    await page.getByRole("button", { name: "See my jobs" }).click();
+    await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+
+    const body = completeBodies[before];
+    assert.ok(body, "setup must have posted");
+    assert.equal("automatic_consent_acceptance_enabled" in body, false, "an unreported column must not be written");
+    assert.equal("automatic_conduct_acceptance_enabled" in body, false, "an unreported column must not be written");
+  } catch (reason) {
+    t.diagnostic(`complete bodies: ${JSON.stringify(completeBodies)}`);
+    throw reason;
+  } finally {
+    consentGrantState = previous;
+  }
 });
