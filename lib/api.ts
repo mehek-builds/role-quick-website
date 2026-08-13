@@ -918,6 +918,15 @@ export type ApplicationProfile = {
   availability_cycle?: string | null;
   /** ISO YYYY-MM-DD. After this date the window answers nothing, whatever else is stored. */
   availability_valid_through?: string | null;
+
+  /* Standardized tests. Each blocked 8 distinct packets across the 158-packet corpus (2026-08-11),
+   * which is 2 postings at one employer. null means never asked, and the resolver refuses on it
+   * rather than defaulting: an invented test score is a checkable false claim about an academic
+   * record. */
+  standardized_test_type?: "SAT" | "ACT" | "Both" | "None" | null;
+  /** As earned. Free text, because "1520 (superscored)" is a real answer and a number is not. */
+  sat_score?: string | null;
+  act_score?: string | null;
 };
 
 export type CountryWorkEligibility = {
