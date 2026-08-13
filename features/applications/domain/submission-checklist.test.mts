@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checklistRowControl, completedSubmissionItems, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
+import { checklistRowControl, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
+
+test("displayQuestionLabel restores sentence case and common application acronyms", () => {
+  assert.equal(displayQuestionLabel("select your standardized test score type"), "Select your standardized test score type");
+  assert.equal(displayQuestionLabel("provide your best result on sat"), "Provide your best result on SAT");
+  assert.equal(displayQuestionLabel("provide your best result on act"), "Provide your best result on ACT");
+  assert.equal(displayQuestionLabel("What is your GPA?"), "What is your GPA?");
+});
 import type { ApplicationReview } from "@/lib/api";
 
 const review: Pick<ApplicationReview, "attention_reason" | "questions" | "status" | "filled_fields"> = {
@@ -203,7 +210,7 @@ test("REVIEW opens the drafted essay answer and CONFIRM opens the answer it want
   assert.deepEqual(reviewControl, {
     element: "button",
     label: "Review",
-    name: 'Review the drafted answer to: are you willing to work in-person for 12 weeks during the internship?',
+    name: 'Review the drafted answer to: Are you willing to work in-person for 12 weeks during the internship?',
     intent: "review",
     questionId: "q-in-person",
   });
@@ -215,7 +222,7 @@ test("REVIEW opens the drafted essay answer and CONFIRM opens the answer it want
   assert.equal(confirmControl?.element, "button");
   assert.equal(confirmControl?.element === "button" ? confirmControl.intent : null, "confirm");
   assert.equal(confirmControl?.element === "button" ? confirmControl.questionId : null, "q-sponsorship");
-  assert.match(confirmControl?.name ?? "", /^Confirm your answer to: will you require sponsorship/);
+  assert.match(confirmControl?.name ?? "", /^Confirm your answer to: Will you require sponsorship/);
 });
 
 test("OPEN PAGE is a link to the employer, and renders nothing at all when there is no page to open", () => {
@@ -259,13 +266,13 @@ test("an answer the run says never reached the form is Your turn, not Done", () 
   const items = humanInputItems(anduril);
   const done = completedSubmissionItems(anduril);
 
-  const heard = items.find((item) => item.label === "how did you hear about anduril?");
+  const heard = items.find((item) => item.label === "How did you hear about anduril?");
   assert.ok(heard, "the run reports this field still empty, so it is work the applicant still has");
   assert.equal(heard.detail, "Answered here, still empty on the form");
   assert.equal(heard.action, "Answer");
   assert.equal(heard.questionId, "q-heard");
   assert.equal(
-    done.some((item) => item.label === "how did you hear about anduril?"),
+    done.some((item) => item.label === "How did you hear about anduril?"),
     false,
     "Done said Answer filled for a box the same run reported empty",
   );

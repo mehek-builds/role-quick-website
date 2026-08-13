@@ -266,6 +266,10 @@ test("the submitting screen names the dashboard authorization", () => {
   const progress = portalProgressSource();
   assert.match(progress, /const title = submitting \? "Sending" : "Filling form"/);
   assert.match(progress, /Waiting for confirmation/);
+  assert.match(progress, /submission\?\.handoff_url/);
+  assert.match(progress, /progress_screenshot_url/);
+  assert.match(progress, /<iframe/);
+  assert.match(progress, /Live application status/);
 });
 
 // ---- Fixes from adversarial review of the first cut of this branch, 2026-07-23 ----
@@ -371,8 +375,8 @@ test('the ticking second count is not announced to screen readers', () => {
   const progress = portalProgressSource();
   // The number itself is aria-hidden; the live region sits on the milestone copy, which changes
   // twice in a run rather than every second.
-  assert.match(progress, /className="text-center text-xs text-muted" aria-hidden/);
-  assert.match(progress, /\{milestone && \(/);
+  assert.match(progress, /aria-hidden>\{formatElapsed\(elapsed\)\} elapsed<\/p>/);
+  assert.match(progress, /\{milestone && <p/);
 });
 
 test('a run that has gone on too long says so instead of claiming it is fine', () => {
