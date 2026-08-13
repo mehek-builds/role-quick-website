@@ -70,9 +70,12 @@ test("each question offers exactly three choices: the affirmative, the negative 
 
 test("the stored strings are the ones the resolver's vocabulary is keyed on", () => {
   /* THE CONTRACT WITH THE BACKEND, asserted rather than assumed. The self-identification
-   * vocabulary reads "No" as a stated negative and respells it into each board's own wording, and
-   * reads "Decline to self-identify" as a refusal. A surface that stores "no" or
-   * "Decline to Self-Identify" instead would land in neither branch and fall back to a refusal. */
+   * vocabulary reads "Yes" as a stated affirmative and "No" as a stated negative, respells each
+   * into the board's own wording for that control, and reads "Decline to self-identify" as a
+   * refusal. A surface that stores "no" or "Decline to Self-Identify" instead would land in none
+   * of those branches and fall back to a refusal, which is the exact defect this whole change
+   * exists to remove: a statement submitted as a refusal under her name. All three are asserted,
+   * because the affirmative fails the same way the negative does and the harm is symmetric. */
   for (const question of SELF_ID_CHOICE_QUESTIONS) {
     const byKind = Object.fromEntries(question.choices.map((choice) => [choice.kind, choice.value]));
     assert.equal(byKind.affirmative, "Yes", question.key);

@@ -19,11 +19,13 @@
  *
  * THE STORED VALUES ARE THE CONTRACT WITH THE BACKEND and are the reason this table is a module
  * rather than two literals in a component. `value` is what lands in application_profile.eeo_prefs,
- * and the resolver's self-identification vocabulary is keyed on exactly these strings: "No" is what
- * it reads as a stated negative and respells into each board's own wording, and
- * "Decline to self-identify" is what it reads as a refusal. Onboarding and the account settings
- * page both render from here so the two surfaces cannot drift into storing different words for the
- * same answer, which is how a refusal and a statement get confused.
+ * and the resolver's self-identification vocabulary is keyed on exactly these strings: "Yes" is
+ * what it reads as a stated affirmative and "No" as a stated negative, each respelled into the
+ * board's own wording for that control, and "Decline to self-identify" is what it reads as a
+ * refusal. A value spelled any other way lands in none of those branches and falls back to a
+ * refusal, which is the defect this whole change exists to remove. Onboarding and the account
+ * settings page both render from here so the two surfaces cannot drift into storing different
+ * words for the same answer, which is how a refusal and a statement get confused.
  */
 
 export type SelfIdChoice = {
