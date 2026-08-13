@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checklistRowControl, completedSubmissionGroups, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
+import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
 
 test("displayQuestionLabel restores sentence case and common application acronyms", () => {
   assert.equal(displayQuestionLabel("select your standardized test score type"), "Select your standardized test score type");
@@ -121,20 +121,18 @@ test("humanInputItems hides stale academic provider blockers already covered by 
   assert.deepEqual(items, []);
 });
 
-test("completedSubmissionItems shows safe filled fields as done", () => {
-  const items = completedSubmissionItems(review);
-  assert.ok(items.some((item) => item.label === "School"));
-  assert.ok(items.some((item) => item.label === "Degree"));
-  assert.ok(items.some((item) => item.label === "Discipline"));
-  assert.equal(items.some((item) => item.label === "Are you eligible to work in the U.S.?"), false);
-  assert.equal(items.some((item) => item.label.includes("Question text")), false);
-  assert.equal(items.some((item) => item.label === "Why Stripe?"), false);
-  assert.equal(items.some((item) => item.label === "What are your annualized total compensation expectations?"), false);
-  assert.equal(items.some((item) => item.label.includes("Candidate Privacy Policy")), false);
-  assert.equal(items.some((item) => item.label.includes("CAPTCHA")), false);
-  assert.equal(items.some((item) => item.label === "Do you consent to BrightHire recording your interview?"), false);
-  assert.equal(items.some((item) => item.label === "Are you legally authorized to work in Canada?"), false);
-  assert.equal(items.some((item) => item.label === "Will you require immigration support in the future?"), false);
+/* Done counts groups rather than naming every row, so "this label is absent" is now "this group did
+   not grow". The whole-shape assertion carries both halves at once: the three real fields land in
+   Education, and NOTHING the applicant still owes reaches Done. Every question in this fixture is
+   either an unreviewed essay or one only a human may answer, so Employer questions is missing
+   outright, and the `question:`-prefixed provider handles never become fields of their own. */
+test("completedSubmissionGroups counts safe filled fields as done and leaves the applicant's own work out", () => {
+  const groups = completedSubmissionGroups(review);
+  assert.deepEqual(groups.map(({ label, detail }) => ({ label, detail })), [
+    { label: "Contact details", detail: "2 items completed" },
+    { label: "Education", detail: "3 items completed" },
+    { label: "Application files", detail: "2 items completed" },
+  ]);
 });
 
 test("completedSubmissionGroups hides provider handles and keeps the Done section compact", () => {
@@ -296,22 +294,24 @@ test("one field asked about twice is one row", () => {
 
 test("an answer the run says never reached the form is Your turn, not Done", () => {
   const items = humanInputItems(anduril);
-  const done = completedSubmissionItems(anduril);
+  const done = completedSubmissionGroups(anduril);
 
   const heard = items.find((item) => item.label === "How did you hear about anduril?");
   assert.ok(heard, "the run reports this field still empty, so it is work the applicant still has");
   assert.equal(heard.detail, "Answered here, still empty on the form");
   assert.equal(heard.action, "Answer");
   assert.equal(heard.questionId, "q-heard");
-  assert.equal(
-    done.some((item) => item.label === "How did you hear about anduril?"),
-    false,
-    "Done said Answer filled for a box the same run reported empty",
-  );
 
-  // The other half of the report was a false alarm, and the fix must not sweep it up: this one IS
-  // in filled_fields, so Done is telling the truth about it.
-  assert.ok(done.some((item) => item.label.toLowerCase() === "u.s. work authorization"));
+  /* Two answered questions reach this fixture: "u.s. work authorization" and "How did you hear about
+     anduril?". The run reported only the second one empty, so exactly one belongs in Done. The count
+     pins both directions at once, which is why it is asserted rather than the group's presence: two
+     means Done claimed a box the same run called empty, and a missing group means the fix swept up
+     the answer that was a false alarm and IS on the form. */
+  assert.equal(
+    done.find((group) => group.label === "Employer questions")?.detail,
+    "1 item completed",
+    "Done counted a box the same run reported empty, or dropped the one it was telling the truth about",
+  );
 });
 
 test("the later spelling of the drafted-answer blocker is still recognised as a duplicate", () => {

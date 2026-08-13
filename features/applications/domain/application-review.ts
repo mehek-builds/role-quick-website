@@ -258,7 +258,7 @@ export function screenForStatus(status: ReviewStatus | string | undefined, fallb
  * WHY IT IS DONE HERE AND NOT AT EACH READER
  * ==========================================
  * `?? []` at the call site is a guard the next reader does not inherit, and this screen has many:
- * SubmissionScreen, humanInputItems, completedSubmissionItems, mergeDiscoveredQuestions, the
+ * SubmissionScreen, humanInputItems, completedSubmissionGroups, mergeDiscoveredQuestions, the
  * prescript helpers and the answers editor all read one of these four. Fixing the four lines that
  * happened to throw would leave the same defect latent in the rest. The submission state has one
  * writer (see setSubmission in app/dashboard/applications/page.tsx), so normalising there is the
