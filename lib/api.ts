@@ -1045,6 +1045,15 @@ export type OnboardingState = {
   automatic_captcha_enabled?: boolean;
   automatic_captcha_consented_at?: string | null;
   automatic_captcha_consent_version?: string | null;
+  /* The two consent-acceptance grants. Optional because the repos deploy separately in either
+     order, and ABSENT IS NOT FALSE: see consentAcknowledgementCompletion, which is what stops a
+     re-run of /start revoking a dated grant it was never shown. */
+  automatic_consent_acceptance_enabled?: boolean;
+  automatic_consent_acceptance_consented_at?: string | null;
+  automatic_consent_acceptance_consent_version?: string | null;
+  automatic_conduct_acceptance_enabled?: boolean;
+  automatic_conduct_acceptance_consented_at?: string | null;
+  automatic_conduct_acceptance_consent_version?: string | null;
 };
 
 export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
@@ -1103,6 +1112,10 @@ export type AutomationSettings = {
    *  false as a revocation, so a writer that has nothing to say about this permission must not name
    *  it. It never licenses a send; see lib/captcha-consent.ts for what it does and does not buy. */
   automatic_captcha_enabled?: boolean;
+  /* Omitted means "leave it alone" and an explicit false is a revocation that clears the grant date
+     and version. Never send false for a column the server did not report. */
+  automatic_consent_acceptance_enabled?: boolean;
+  automatic_conduct_acceptance_enabled?: boolean;
 };
 
 /** What both write routes answer with. `automatic_captcha_enabled` here is the VERSION-CHECKED
@@ -1111,6 +1124,10 @@ export type AutomationSettings = {
 export type AutomationSettingsResponse = AutomationSettings & {
   automatic_submission_consent_version: string | null;
   automatic_captcha_consented_at?: string | null;
+  /* The DATES only. The two verdict booleans come from AutomationSettings, version-checked by the
+     server exactly as GET /onboarding/state sends them. */
+  automatic_consent_acceptance_consented_at?: string | null;
+  automatic_conduct_acceptance_consented_at?: string | null;
 };
 
 export function completeOnboarding(settings: AutomationSettings) {

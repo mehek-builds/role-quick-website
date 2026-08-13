@@ -56,6 +56,15 @@ import {
   captchaConsentVerdict,
 } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
+import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
+import {
+  CONSENT_GRANTS,
+  consentAcknowledgedAt,
+  consentAcknowledgementGranted,
+  consentAcknowledgementPatch,
+  consentAcknowledgementVerdict,
+  type ConsentGrantField,
+} from "@/lib/consent-acknowledgement";
 import {
   countryEligibilityProblem,
   eligibilitySeed,
@@ -123,6 +132,13 @@ export default function Settings() {
      the two writers the payload split exists to keep apart: whichever request settled first would
      clear the flag and re-enable both controls while the other was still in flight. */
   const [savingCaptchaConsent, setSavingCaptchaConsent] = useState(false);
+  /* THE CONTROL /start's COPY PROMISES. That screen says "you can turn either of these off at any
+     time in Settings", and until this existed that sentence was false: this page rendered only
+     submission, verification and human checks. A revocation path that does not exist is not a
+     revocation path. */
+  const [consentGrants, setConsentGrants] = useState<Partial<Record<ConsentGrantField, boolean>>>({});
+  const [consentGrantedAt, setConsentGrantedAt] = useState<Partial<Record<ConsentGrantField, string | null>>>({});
+  const [savingConsentGrant, setSavingConsentGrant] = useState<ConsentGrantField | null>(null);
   const [savingAutomation, setSavingAutomation] = useState(false);
   // Unattended submission is earned, not offered. The server is the authority; this only explains
   // the state so the control is not an unexplained dead toggle.
@@ -260,6 +276,12 @@ export default function Settings() {
            the stale version this is the screen where they can grant it again. */
         setCaptchaConsent(captchaConsentGranted(onboardingRes));
         setCaptchaConsentGrantedAt(captchaConsentedAt(onboardingRes));
+        setConsentGrants(Object.fromEntries(
+          CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgementGranted(onboardingRes, grant.field)]),
+        ));
+        setConsentGrantedAt(Object.fromEntries(
+          CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgedAt(onboardingRes, grant.grantedAtField)]),
+        ));
         setEmailConnections(connectionRes);
         setApplicationEmail(currentApplicationEmail);
         setSponsorship(sponsorRes);
@@ -344,6 +366,34 @@ export default function Settings() {
      revocation, so a request that also named the submission or verification columns could revoke a
      permission the applicant never touched. saveAutomation rolls that PAIR back together on failure,
      which is exactly the coupling this permission must not have. */
+  /* ONE FIELD PER REQUEST, for the reason consentAcknowledgementPatch states: the API reads an
+     omitted key as "leave it alone" and an explicit false as a revocation, so a patch naming both
+     would revoke the grant she never touched. The optimistic value is rolled back per field too,
+     so a failure on one cannot disturb the other. */
+  async function changeConsentGrant(field: ConsentGrantField, enabled: boolean) {
+    const previous = consentGrants[field];
+    setConsentGrants((current) => ({ ...current, [field]: enabled }));
+    setSavingConsentGrant(field);
+    setError(null);
+    try {
+      const result = await setAutomationSettings(consentAcknowledgementPatch(field, enabled));
+      // The server's verdict, not the checkbox's optimism. An API that answers without the field
+      // keeps what was there rather than being read as a revocation.
+      const verdict = consentAcknowledgementVerdict(result, field);
+      setConsentGrants((current) => ({ ...current, [field]: verdict ?? previous }));
+      if (verdict === true) {
+        const grant = CONSENT_GRANTS.find((candidate) => candidate.field === field);
+        const reportedAt = grant ? consentAcknowledgedAt(result, grant.grantedAtField) : null;
+        if (reportedAt) setConsentGrantedAt((current) => ({ ...current, [field]: reportedAt }));
+      }
+    } catch (err) {
+      setConsentGrants((current) => ({ ...current, [field]: previous }));
+      setError(err instanceof Error ? err.message : "Could not save that change.");
+    } finally {
+      setSavingConsentGrant(null);
+    }
+  }
+
   async function changeCaptchaConsent(enabled: boolean) {
     const previous = captchaConsent;
     const previousGrantedAt = captchaConsentGrantedAt;
@@ -955,6 +1005,13 @@ export default function Settings() {
               THIS CONTROL IS ALSO THE ONLY RE-CONSENT PATH. Accounts stamped with the superseded
               version arrive here unticked with a real date on the row; ticking the box writes the
               current version and makes the extension's resume path work for them again. */}
+          <ConsentAcknowledgementControl
+            idPrefix="settings"
+            values={consentGrants}
+            grantedAt={consentGrantedAt}
+            disabled={savingConsentGrant !== null}
+            onChange={(field, enabled) => void changeConsentGrant(field, enabled)}
+          />
           <CaptchaConsentControl
             idPrefix="settings"
             value={captchaConsent}
