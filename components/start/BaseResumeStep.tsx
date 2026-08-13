@@ -21,6 +21,7 @@ import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { AvailabilityWindowTable } from "@/components/app/AvailabilityWindowTable";
 import { humanizeBuildNote } from "@/lib/buildNotes";
 import { courseworkLine } from "@/lib/profile-editor";
+import { SELF_ID_CHOICE_QUESTIONS, selectedSelfIdChoice } from "@/lib/self-id-choices";
 /* The availability window lives in lib/ rather than here because Settings edits the same four
    values, and one rule described two ways on two screens is how the pair drifts. */
 import {
@@ -80,12 +81,17 @@ const SHEET_CAP = {
 } as const;
 
 type LogRow = { t: string; text: string };
+/* FREE TEXT IS FOR THE QUESTIONS WHOSE ANSWER IS A CATEGORY. Race, gender, transgender experience
+ * and sexual orientation are asked in the applicant's own words, because no list this repo could
+ * write would hold every true answer and a list that does not hold hers is worse than a blank.
+ *
+ * Disability status and veteran status left this table on 2026-08-13. Their answer is one of three
+ * things, so they are asked as a fixed choice instead: see lib/self-id-choices.ts for why a blank
+ * on those two was not a blank at all but a recorded refusal. */
 const RACE_AND_GENDER_QUESTION_FIELDS = [
   { key: "gender", label: "Gender", placeholder: "Female, Male, Non-binary, Decline to self-identify" },
   { key: "transgender_status", label: "Transgender experience", placeholder: "Yes, No, Decline to self-identify" },
   { key: "sexual_orientation", label: "Sexual orientation", placeholder: "Heterosexual, Gay or lesbian, Bisexual, Decline to self-identify" },
-  { key: "disability_status", label: "Disability status", placeholder: "Yes, No, Decline to self-identify" },
-  { key: "veteran_status", label: "Veteran status", placeholder: "Yes, No, Decline to self-identify" },
   { key: "race", label: "Race / ethnicity", placeholder: "White, Asian, Black or African American, Hispanic or Latino, Decline to self-identify" },
 ] as const;
 
@@ -1118,6 +1124,49 @@ export function BaseResumeStep({
                 placeholder="English, Hindi, Spanish"
                 className="mt-2.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-brand"
               />
+            </div>
+          )}
+
+          {finished && (
+            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+              <p className="text-[13px] text-ink">Disability and veteran status</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Two voluntary questions on nearly every US application. Nothing is selected for you. Leave a question alone and Litos declines it on your behalf, which is a different answer from saying no.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-4">
+                {SELF_ID_CHOICE_QUESTIONS.map((question) => (
+                  <fieldset key={question.key} className="block">
+                    <legend className="text-xs font-medium text-muted">{question.label}</legend>
+                    <p className="mt-1 text-xs leading-5 text-muted">{question.help}</p>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {question.choices.map((choice) => {
+                        const id = `base-self-id-${question.key}-${choice.kind}`;
+                        const chosen = selectedSelfIdChoice(raceAndGenderPrefs, question.key) === choice.value;
+                        return (
+                          <label
+                            key={choice.value}
+                            htmlFor={id}
+                            className={`min-h-11 cursor-pointer rounded-full border px-4 py-2 text-sm transition-colors ${
+                              chosen ? "border-brand text-ink" : "border-control-border text-muted hover:border-ink"
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              id={id}
+                              name={`base-self-id-${question.key}`}
+                              value={choice.value}
+                              checked={chosen}
+                              onChange={() => patchRaceAndGenderPref(question.key, choice.value)}
+                              className="sr-only"
+                            />
+                            {choice.label}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
+                ))}
+              </div>
             </div>
           )}
 

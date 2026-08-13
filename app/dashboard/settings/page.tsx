@@ -56,6 +56,7 @@ import {
   captchaConsentVerdict,
 } from "@/lib/captcha-consent";
 import { CaptchaConsentControl } from "@/components/app/CaptchaConsentControl";
+import { selfIdSelectOptions } from "@/lib/self-id-choices";
 import { ConsentAcknowledgementControl } from "@/components/app/ConsentAcknowledgementControl";
 import {
   CONSENT_GRANTS,
@@ -87,8 +88,14 @@ const SELF_ID_OPTIONS = {
   gender: ["", "Female", "Male", "Non-binary", "Decline to self-identify"],
   transgender_status: ["", "Yes", "No", "Decline to self-identify"],
   sexual_orientation: ["", "Heterosexual", "Gay or lesbian", "Bisexual", "Decline to self-identify"],
-  disability_status: ["", "Yes", "No", "Decline to self-identify"],
-  veteran_status: ["", "Yes", "No", "Decline to self-identify"],
+  /* These two come from lib/self-id-choices.ts rather than being spelled out here, so this page
+     and onboarding cannot drift into storing different words for the same answer. The stored
+     strings are a contract with the resolver's self-identification vocabulary: it reads "No" as a
+     stated negative and respells it into each board's own wording, and it reads
+     "Decline to self-identify" as a refusal. Two surfaces spelling one of those differently is how
+     a statement and a refusal get confused. */
+  disability_status: selfIdSelectOptions("disability_status"),
+  veteran_status: selfIdSelectOptions("veteran_status"),
   race: ["", "White", "Asian", "Black or African American", "Hispanic or Latino", "Middle Eastern or North African", "Native American or Alaska Native", "Native Hawaiian or Pacific Islander", "Decline to self-identify"],
 } as const;
 
