@@ -113,13 +113,6 @@ function keyFor(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-function displayField(field: string): string {
-  if (/^question(?:\s*text)?[:_]/i.test(field)) return "";
-  const label = field.startsWith("question:") ? field.slice("question:".length).trim() : field;
-  const display = label.replaceAll("_", " ").replace(/\s+/g, " ").trim();
-  return display ? display.charAt(0).toUpperCase() + display.slice(1) : "";
-}
-
 const DISPLAY_ACRONYMS: Record<string, string> = {
   act: "ACT",
   ai: "AI",
@@ -663,44 +656,6 @@ export function humanInputItems(
         subject: normalizedChecklistText(question.question),
       });
     }
-  }
-
-  return items;
-}
-
-export function completedSubmissionItems(review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "status">): SubmissionChecklistItem[] {
-  const items: SubmissionChecklistItem[] = [];
-  const emptySubjects = emptyFieldSubjects(compactLines(review.attention_reason));
-  for (const field of review.filled_fields ?? []) {
-    const label = displayField(field);
-    if (!label) continue;
-    if (isHumanOnlyChecklistLabel(label)) continue;
-    addUnique(items, {
-      id: `field-${keyFor(label)}`,
-      label,
-    });
-  }
-
-  for (const question of review.questions ?? []) {
-    const answer = (question.answer ?? "").trim();
-    if (!answer) continue;
-    if (question.kind === "essay" && review.status !== "submitted") continue;
-    if (isHumanOnlyChecklistLabel(question.question)) continue;
-    // The run says this box is still empty. A stored answer is not the employer having received it,
-    // and Done is a claim about the employer's form.
-    if (review.status !== "submitted" && questionReportedEmpty(question.question, emptySubjects)) continue;
-    addUnique(items, {
-      id: `answer-${question.id}`,
-      label: displayQuestionLabel(question.question),
-      detail: question.kind === "essay" ? "Answer drafted" : "Answer filled",
-    });
-  }
-
-  if (review.receipt || review.status === "submitted") {
-    addUnique(items, {
-      id: "company-confirmation",
-      label: "Company confirmation received",
-    });
   }
 
   return items;
