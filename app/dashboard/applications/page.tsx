@@ -53,7 +53,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -3228,7 +3228,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     role: packet.job_context.role,
     documents: submission.documents,
   });
-  const completedItems = completedSubmissionItems(review);
+  const completedItems = completedSubmissionGroups(review);
   /* What this application already carries, as far as the snapshot on screen knows.
    *
    * ABSENT IS THE ORDINARY STATE OF THIS FIELD, which is the whole reason the gate below does not
@@ -3384,7 +3384,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           <div className="mt-6">
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs font-medium text-positive">Done</p>
-              <p className="font-mono text-[11px] text-muted">{completedItems.length} checked</p>
+              <p className="font-mono text-[11px] text-positive">Complete</p>
             </div>
             <ul className="mt-2 grid gap-2 sm:grid-cols-2">
               {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
@@ -3736,7 +3736,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
   const control = checked ? null : checklistRowControl(item, { portalUrl });
   /* Two different things, kept apart deliberately.
      `checked` means "this row came out of the Done column", and it is the only thing that suppresses
-     the control, which is safe because nothing in completedSubmissionItems carries an action word in
+     the control, which is safe because nothing in completedSubmissionGroups carries an action word in
      the first place. `settled` means "this row states something already handled" and it must KEEP
      its control: on the attached-transcript row that control is the only way back to Remove.
      `done` is what the tick and the colour read, so a settled row looks like a confirmation instead

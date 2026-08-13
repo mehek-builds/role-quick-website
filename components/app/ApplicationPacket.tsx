@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
 import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
-import { completedSubmissionItems, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 
@@ -302,7 +302,7 @@ export function ApplicationPacket({
     role: packet.job_context.role,
     documents: packet.spec._documents,
   }).filter((item) => !item.settled);
-  const completedItems = completedSubmissionItems(review);
+  const completedItems = completedSubmissionGroups(review);
   const receipt = review.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
   const builtAt = formatMoment(packet.created_at);
