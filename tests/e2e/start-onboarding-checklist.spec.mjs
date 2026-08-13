@@ -1060,10 +1060,23 @@ test("finishing setup again does not revoke a consent the account already holds"
 
     const body = completeBodies[before];
     assert.ok(body, "setup must have posted");
+    /* NOT REVOKED, and NOT RE-DATED EITHER. The first repair asserted `=== true` here, which was
+       wrong for the second reason: the backend stamps consented_at = now on any write that names
+       the column, so a redundant true moves a live grant's date to today with no deliberate act,
+       and that date is written onto every control the runner ticks. She changed nothing, so the
+       payload must say nothing about either grant. */
     assert.notEqual(body.automatic_consent_acceptance_enabled, false, "setup revoked the privacy grant");
     assert.notEqual(body.automatic_conduct_acceptance_enabled, false, "setup revoked the conduct grant");
-    assert.equal(body.automatic_consent_acceptance_enabled, true);
-    assert.equal(body.automatic_conduct_acceptance_enabled, true);
+    assert.equal(
+      "automatic_consent_acceptance_enabled" in body,
+      false,
+      "setup re-dated the privacy grant by naming a column it had no news about",
+    );
+    assert.equal(
+      "automatic_conduct_acceptance_enabled" in body,
+      false,
+      "setup re-dated the conduct grant by naming a column it had no news about",
+    );
   } catch (reason) {
     t.diagnostic(`complete bodies: ${JSON.stringify(completeBodies)}`);
     throw reason;

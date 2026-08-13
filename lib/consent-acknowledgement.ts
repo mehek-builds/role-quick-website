@@ -93,14 +93,14 @@ export const CONSENT_ACKNOWLEDGEMENT_INTRO =
 /** Never answered by Litos, whatever either box says. */
 export const NEVER_ANSWERED_CLASSES = [
   "Statements that the information you have given is true and complete",
-  "Health, disability, medical and accommodation questions",
+  "Anything about your health: medical conditions, fitness for a role, and interview or workplace accommodations",
   "Criminal history, background checks, and permission to contact your references",
   "Any document Litos cannot positively identify",
 ] as const;
 
 /** Answered, but from her own stored answers, and untouched by this permission. */
 export const ANSWERED_FROM_YOUR_OWN_ANSWERS_CLASSES = [
-  "Race, gender, veteran status and disability questions, using the answers you gave in your profile, including “prefer not to say” where that is what you chose",
+  "Equal-opportunity self-identification, which is the separate block asking your race, gender, veteran status and disability status, using the answers you gave in your profile, including “prefer not to say” where that is what you chose",
   "Work authorization and visa sponsorship, using the declaration you made yourself",
 ] as const;
 
@@ -202,8 +202,22 @@ export function consentAcknowledgementPatch(
  * through setup, see an unticked box it had no way to know was wrong, press the button, and lose a
  * dated legal permission silently.
  *
- * So a false is sent only when the server reported the column, and a true is always sent, because a
- * ticked box is a grant she just performed either way.
+ * SETUP MUST ALSO NOT RE-DATE A PERMISSION SHE ALREADY HOLDS, which is the same defect one layer
+ * down and it survived the first repair. The backend stamps `consented_at = now` on ANY write that
+ * names the column, so sending a redundant `true` moved a live grant's date to today without a
+ * deliberate act. That date is written onto every control the runner ticks, so it became a record
+ * postdating the applications it authorised.
+ *
+ * THE RULE, in one line each:
+ *
+ *   ticked, stored verdict already true    send NOTHING. Re-affirming is not an act.
+ *   ticked, stored verdict false or absent send TRUE. A new grant, or a re-grant against
+ *                                          superseded wording, and both deserve today's date.
+ *   unticked, column reported              send FALSE. A deliberate revocation, recorded.
+ *   unticked, column never reported        send NOTHING. See above.
+ *
+ * Both conditions read the VERDICT rather than a raw column, and that is load-bearing in the second
+ * row: a grant against superseded wording verdicts false, so it correctly restamps.
  */
 export function consentAcknowledgementCompletion(
   state: ConsentAcknowledgementState | null | undefined,
@@ -212,11 +226,36 @@ export function consentAcknowledgementCompletion(
   const out: Partial<Record<ConsentGrantField, boolean>> = {};
   for (const grant of CONSENT_GRANTS) {
     const value = chosen[grant.field];
+    const stored = consentAcknowledgementVerdict(state, grant.field);
     if (value === true) {
-      out[grant.field] = true;
+      /* A TICK IS ONLY NEWS IF SHE DID NOT ALREADY HOLD IT, and this half is the second defect.
+       *
+       * The first version sent `true` whenever the box was ticked, including when the box was
+       * ticked because the SERVER said she already holds the grant. The `enabled` column survived
+       * that, so the revocation was fixed, but the date did not:
+       *
+       *   ROW BEFORE    : {"enabled":true,"at":"2026-08-12T13:15:07.000Z","ver":"2026-08-12"}
+       *   payload       : {"automatic_consent_acceptance_enabled":true, ...}
+       *   consent AFTER : {"enabled":true,"at":"2026-08-13T10:00:00.000Z","ver":"2026-08-12"}
+       *
+       * The backend stamps consented_at = now on any write that names the column, by design, and
+       * it writes that date onto every control the runner ticks. So walking back through setup and
+       * touching nothing moved the audit record to a date AFTER the applications it authorised. On
+       * a revocable, dated, versioned permission that record is the whole point, and a date that
+       * post-dates its own use is worse than no date.
+       *
+       * Omitted, therefore, when the stored verdict is already true: she is re-affirming something
+       * the row already says, which is not an act and must not be recorded as one.
+       *
+       * A STALE-VERSION RE-GRANT STILL RESTAMPS, and that is why this reads the VERDICT rather than
+       * the raw column. A row enabled against superseded wording verdicts FALSE, so it takes this
+       * branch, sends true, and the backend writes today's date and the current version. That is
+       * correct: she is agreeing to different words, on a new day, and the new date is the honest
+       * record of it. Reading a raw boolean here would have broken exactly that case. */
+      if (stored !== true) out[grant.field] = true;
       continue;
     }
-    if (consentAcknowledgementVerdict(state, grant.field) !== undefined) out[grant.field] = false;
+    if (stored !== undefined) out[grant.field] = false;
   }
   return out;
 }

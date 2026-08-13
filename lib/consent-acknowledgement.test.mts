@@ -52,6 +52,38 @@ const NOTHING_GRANTED: ConsentAcknowledgementState = {
 /** An API that predates the columns. Absent, which is NOT the same as false. */
 const COLUMN_NOT_REPORTED: ConsentAcknowledgementState = {};
 
+/* THE BACKEND'S OWN WRITE RULE, modelled so a test can assert the RESULTING ROW rather than the
+ * shape of the payload. Transcribed from volley-backend src/routes/onboarding.ts:
+ *
+ *   if (parsed.data.<field> !== undefined) {
+ *     patch.<field>                 = value;
+ *     patch.<field>_consented_at    = value ? now : null;
+ *     patch.<field>_consent_version = value ? VERSION : null;
+ *   }
+ *
+ * An absent key is not written at all. A true stamps `now` UNCONDITIONALLY, which is the whole
+ * reason a redundant true is destructive: the backend has no idea the value did not change.
+ *
+ * Modelled rather than imported because the two repos do not share a package. The transcription is
+ * four lines and the shape it encodes is the documented contract of that route.
+ */
+const NOW = "2026-08-13T10:00:00.000Z";
+
+function applyToRow(
+  row: ConsentAcknowledgementState,
+  payload: Partial<Record<ConsentGrantField, boolean>>,
+  now = NOW,
+): ConsentAcknowledgementState {
+  const next: Record<string, unknown> = { ...row };
+  for (const grant of CONSENT_GRANTS) {
+    if (!(grant.field in payload)) continue;
+    const value = payload[grant.field] === true;
+    next[grant.field] = value;
+    next[grant.grantedAtField] = value ? now : null;
+  }
+  return next as ConsentAcknowledgementState;
+}
+
 /** What the screen seeds its boxes from, exactly as DoneStep does it. */
 function seededFrom(state: ConsentAcknowledgementState): Partial<Record<ConsentGrantField, boolean>> {
   return Object.fromEntries(
@@ -66,20 +98,53 @@ describe("a live grant survives a second walk through onboarding", () => {
     assert.deepEqual(seededFrom(HER_LIVE_GRANT), { [PRIVACY]: true, [CONDUCT]: true });
   });
 
-  test("finishing without touching anything sends no revocation", () => {
-    // THE ASSERTION THE WHOLE FILE IS FOR. Reverted, this reports two explicit falses.
+  test("finishing without touching anything writes nothing at all", () => {
+    /* THE ASSERTION THE WHOLE FILE IS FOR. She changed nothing, so the payload has nothing to say.
+     * Reverted to the first version this reported two explicit falses; reverted to the second it
+     * reported two redundant trues, which the backend turns into a date rewrite. */
     const payload = consentAcknowledgementCompletion(HER_LIVE_GRANT, seededFrom(HER_LIVE_GRANT));
-    assert.deepEqual(payload, { [PRIVACY]: true, [CONDUCT]: true });
-    assert.notEqual(payload[PRIVACY], false);
-    assert.notEqual(payload[CONDUCT], false);
+    assert.deepEqual(payload, {});
   });
 
-  test("and her grant date is never restamped by a screen that changed nothing", () => {
-    // The date is what the permission is defined by. It is not in the payload at all, so finishing
-    // setup cannot move it.
+  test("and her grant DATE survives, asserted on the row the backend would end up with", () => {
+    /* THE PREVIOUS VERSION OF THIS TEST COULD NOT FAIL. It asserted
+     * `"..._consented_at" in payload === false`, but consentAcknowledgementCompletion only ever
+     * writes the two `_enabled` keys, so a `_consented_at` key was impossible for every input. The
+     * date is absent from the payload because the BACKEND derives it, and the payload that was
+     * being sent is exactly what triggered the rewrite. So the assertion has to be on the ROW. */
     const payload = consentAcknowledgementCompletion(HER_LIVE_GRANT, seededFrom(HER_LIVE_GRANT));
-    assert.equal("automatic_consent_acceptance_consented_at" in payload, false);
-    assert.equal("automatic_conduct_acceptance_consented_at" in payload, false);
+    const after = applyToRow(HER_LIVE_GRANT, payload);
+
+    assert.equal(after.automatic_consent_acceptance_enabled, true, "the grant must still stand");
+    assert.equal(after.automatic_conduct_acceptance_enabled, true);
+    assert.equal(
+      after.automatic_consent_acceptance_consented_at,
+      "2026-08-12T13:15:07.000Z",
+      "the privacy grant date was rewritten by a screen that changed nothing",
+    );
+    assert.equal(
+      after.automatic_conduct_acceptance_consented_at,
+      "2026-08-12T13:15:07.000Z",
+      "the conduct grant date was rewritten by a screen that changed nothing",
+    );
+    // And the model is capable of moving a date, so the assertion above is not vacuous.
+    assert.equal(
+      applyToRow(HER_LIVE_GRANT, { [PRIVACY]: true }).automatic_consent_acceptance_consented_at,
+      NOW,
+    );
+  });
+
+  test("a stale-version re-grant DOES restamp, which is the case the fix must not break", () => {
+    /* A row enabled against superseded wording: the API version-checks it and verdicts FALSE, so
+     * the box arrives unticked and ticking it is a real act against new words. It must send true
+     * and take today's date. Reading a raw column instead of the verdict would break exactly this. */
+    const stale: ConsentAcknowledgementState = {
+      automatic_consent_acceptance_enabled: false,
+      automatic_consent_acceptance_consented_at: "2026-08-04T00:00:00.000Z",
+    };
+    const payload = consentAcknowledgementCompletion(stale, { [PRIVACY]: true });
+    assert.deepEqual(payload, { [PRIVACY]: true });
+    assert.equal(applyToRow(stale, payload).automatic_consent_acceptance_consented_at, NOW);
   });
 
   test("she can still revoke, deliberately, by unticking", () => {
@@ -87,7 +152,18 @@ describe("a live grant survives a second walk through onboarding", () => {
      * path that may produce a false, and it requires the server to have reported the column, so the
      * screen is refusing something it was actually shown. */
     const payload = consentAcknowledgementCompletion(HER_LIVE_GRANT, { [PRIVACY]: false, [CONDUCT]: true });
-    assert.deepEqual(payload, { [PRIVACY]: false, [CONDUCT]: true });
+    // The conduct grant is omitted, not re-sent: she left it exactly as it was, and naming it would
+    // move its date. The privacy revocation is the only thing that changed and the only thing sent.
+    assert.deepEqual(payload, { [PRIVACY]: false });
+    const after = applyToRow(HER_LIVE_GRANT, payload);
+    assert.equal(after.automatic_consent_acceptance_enabled, false, "the revocation must land");
+    assert.equal(after.automatic_consent_acceptance_consented_at, null, "and clear its date");
+    assert.equal(after.automatic_conduct_acceptance_enabled, true, "the other grant must stand");
+    assert.equal(
+      after.automatic_conduct_acceptance_consented_at,
+      "2026-08-12T13:15:07.000Z",
+      "and must keep its own date",
+    );
   });
 });
 
@@ -134,10 +210,14 @@ describe("the two grants stay independent", () => {
     assert.deepEqual(Object.keys(consentAcknowledgementPatch(CONDUCT, false)), [CONDUCT]);
   });
 
-  test("revoking one leaves the other standing", () => {
+  test("revoking one leaves the other standing, and untouched", () => {
     const payload = consentAcknowledgementCompletion(HER_LIVE_GRANT, { [PRIVACY]: false, [CONDUCT]: true });
     assert.equal(payload[PRIVACY], false);
-    assert.equal(payload[CONDUCT], true);
+    assert.equal(CONDUCT in payload, false, "an unchanged grant must not be named at all");
+    assert.equal(
+      applyToRow(HER_LIVE_GRANT, payload).automatic_conduct_acceptance_consented_at,
+      "2026-08-12T13:15:07.000Z",
+    );
   });
 
   test("granting one does not grant the other", () => {
@@ -181,9 +261,25 @@ describe("the scope on the screen describes what the backend actually does", () 
   const own = ANSWERED_FROM_YOUR_OWN_ANSWERS_CLASSES.join(" | ").toLowerCase();
 
   test("the never-answered list holds only classes the backend never answers", () => {
-    for (const required of ["true and complete", "health", "disability", "accommodation", "criminal", "background", "references", "cannot positively identify"]) {
+    for (const required of ["true and complete", "health", "medical", "accommodation", "criminal", "background", "references", "cannot positively identify"]) {
       assert.ok(never.includes(required), `the never-answered list must name: ${required}`);
     }
+  });
+
+  test("no subject is claimed by both lists, or the screen contradicts itself", () => {
+    /* "Disability" was in BOTH. Each line was individually true, medical disclosure in one and EEO
+     * self-identification in the other, but on a legal-permission screen the pair reads as a
+     * contradiction and the applicant has no way to tell which one governs her. The health line now
+     * names health, and the self-identification line names the EEO block it belongs to. */
+    for (const subject of ["disab", "veteran", "gender", "race", "work authorization", "sponsorship"]) {
+      assert.ok(
+        !(never.includes(subject) && own.includes(subject)),
+        `"${subject}" appears in both lists, which reads as a contradiction`,
+      );
+    }
+    // And specifically: the word that caused it lives in exactly one of them now.
+    assert.ok(!never.includes("disab"), "the never-answered list must not claim disability questions");
+    assert.ok(own.includes("disability status"), "the EEO block must still be disclosed as answered");
   });
 
   test("the classes the backend DOES answer are not claimed as never answered", () => {
