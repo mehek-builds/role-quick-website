@@ -1521,7 +1521,7 @@ function Applications() {
     setError(null);
     try {
       let savedReview = canonicalReview;
-      if (["resume_ready", "questions_ready", "ready_to_submit"].includes(canonicalReview.status)) {
+      if (["resume_ready", "questions_ready", "ready_to_submit", "needs_attention"].includes(canonicalReview.status)) {
         const portalUrl = canonicalReview.portal_url?.trim();
         const atsName = canonicalReview.ats_name?.trim() || portalName(portalUrl ?? "");
         if (!portalUrl || !atsName) throw new Error("The saved employer form identity is incomplete. Reload this packet before auditing it.");
