@@ -37,6 +37,18 @@ test("authoritative exhausted-meter denials open every metered paywall despite a
   }
 });
 
+test("explicit plan management opens even when a grandfathered allowance grants the named feature", () => {
+  const grandfatheredAccess: EntitlementSnapshot = {
+    ...trialAccess,
+    revision: "grandfathered-plan-entry",
+    access_class: "free_grandfathered",
+    product: null,
+  };
+
+  assert.equal(shouldOpenUpgrade(grandfatheredAccess, "ai_resume_tailoring"), false);
+  assert.equal(shouldOpenUpgrade(grandfatheredAccess, "ai_resume_tailoring", "plan_management"), true);
+});
+
 test("legacy quota denials without a feature remain upgrade denials", () => {
   assert.equal(isStructuredUpgradeDenial({
     status: 402,

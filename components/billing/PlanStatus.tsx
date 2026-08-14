@@ -73,7 +73,7 @@ export function PlanStatus({ compact = false, showAction = true }: { compact?: b
               placement: "plan_status",
               trigger: "account_upgrade",
               manualLabel: "Keep filling for free",
-            })}
+            }, { source: "plan_management" })}
           >
             See Litos+
           </Button>

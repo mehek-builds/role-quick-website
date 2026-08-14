@@ -1314,7 +1314,7 @@ export default function Settings() {
         ) : (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-inner border border-brand/25 bg-brand-soft px-5 py-4">
             <p className="max-w-xl text-sm text-muted"><span className="font-medium text-ink">Application filling stays free. </span>Choose Litos+ for new tailoring, outreach, network paths, insights, and sending without being asked each time.</p>
-            <Button type="button" variant="secondary" onClick={() => openUpgrade({ feature: "ai_resume_tailoring", placement: "account_plan", trigger: "choose_litos_plus", manualLabel: "Keep filling for free" })}>Choose Litos+</Button>
+            <Button type="button" variant="secondary" onClick={() => openUpgrade({ feature: "ai_resume_tailoring", placement: "account_plan", trigger: "choose_litos_plus", manualLabel: "Keep filling for free" }, { source: "plan_management" })}>Choose Litos+</Button>
           </div>
         )}
         </Card>
