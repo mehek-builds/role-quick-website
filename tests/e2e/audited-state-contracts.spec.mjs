@@ -95,6 +95,7 @@ function isLocal(url) {
 
 async function routeBilling(context, meResponse) {
   let meCalls = 0;
+  let portalCalls = 0;
   const unknown = [];
   await context.route("**/*", async (route) => {
     const request = route.request();
@@ -104,13 +105,18 @@ async function routeBilling(context, meResponse) {
       meCalls += 1;
       return route.fulfill({ json: meResponse });
     }
+    if (url.startsWith(BACKEND) && request.method() === "POST" && new URL(url).pathname === "/billing/portal") {
+      portalCalls += 1;
+      return route.fulfill({ json: { provider: "stripe", url: "https://billing.stripe.com/p/session/audited-fixture" } });
+    }
     if (url.startsWith(BACKEND) && new URL(url).pathname === "/v1/meta") {
       return route.fulfill({ json: { product: "litos" } });
     }
+    if (url.startsWith("https://billing.stripe.com/")) return route.abort();
     unknown.push(`${request.method()} ${url}`);
     return route.abort();
   });
-  return { get meCalls() { return meCalls; }, unknown };
+  return { get meCalls() { return meCalls; }, get portalCalls() { return portalCalls; }, unknown };
 }
 
 test("cancelled billing return never reads the account", async () => {
@@ -126,11 +132,13 @@ test("cancelled billing return never reads the account", async () => {
 
 test("billing return confirms an active account record", async () => {
   const context = await fixtureContext();
-  const traffic = await routeBilling(context, account({ tier: "pro", billing_status: "active", billing_portal_url: "https://billing.example.invalid/portal" }));
+  const traffic = await routeBilling(context, account({ tier: "pro", billing_status: "active", billing_portal_available: true }));
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/billing/return`);
   await page.getByRole("heading", { name: "Pro is active." }).waitFor();
-  assert.equal(await page.getByRole("link", { name: /Open the billing portal/ }).getAttribute("href"), "https://billing.example.invalid/portal");
+  await page.getByRole("button", { name: "Open billing portal" }).click();
+  for (let attempt = 0; attempt < 50 && traffic.portalCalls === 0; attempt += 1) await delay(10);
+  assert.equal(traffic.portalCalls, 1);
   assert.equal(traffic.meCalls, 1);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
