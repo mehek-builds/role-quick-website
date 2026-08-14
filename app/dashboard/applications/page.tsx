@@ -2207,14 +2207,14 @@ function Applications() {
            most real sessions were the ones missing it. */
         <section aria-labelledby="application-ledger-heading" className="border-y border-border">
           <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="flex items-baseline gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
               {/* Visible whenever this is the landing view for a filter, so the student reads what
                   they are looking at in words. Beside an open packet it goes back to being the
                   switcher's label: the heading there would compete with the packet's own. */}
               <h2 id="application-ledger-heading" className={selected ? "sr-only" : "text-sm font-medium text-ink"}>
                 {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
               </h2>
-              <span className="font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
+              <span data-testid="application-ledger-count" className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
               {duplicatePostingNote(duplicateMarks) && (
                 <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
               )}
