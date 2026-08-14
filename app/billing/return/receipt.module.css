@@ -24,7 +24,70 @@
   background: #3d51ad;
   color: white;
   box-shadow: 0 1px 2px rgba(18, 18, 15, 0.08), 0 24px 48px -22px rgba(61, 81, 173, 0.52);
-  padding: 1rem 1.1rem 1.25rem;
+  padding: 0.85rem 0.9rem 1.25rem;
+}
+
+.printerHeader {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.1rem 0.2rem 0;
+}
+
+.status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.statusSpinner,
+.statusComplete {
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  place-items: center;
+}
+
+.statusSpinner {
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  animation: litos-receipt-spin 0.75s linear infinite;
+}
+
+.statusComplete {
+  color: #3fc781;
+  animation: litos-receipt-check 0.18s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.statusComplete svg {
+  width: 100%;
+  height: 100%;
+}
+
+.statusLabel {
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: litos-receipt-status 0.18s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.screen {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.85rem;
+  background: #2f3f8e;
+  box-shadow: inset 0 12px 28px rgba(18, 18, 15, 0.2);
+  padding: 1rem;
 }
 
 .slot {
@@ -48,6 +111,19 @@
   padding: 0 0.5rem 1.5rem;
 }
 
+.paperWindow::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0.5rem;
+  left: 0.5rem;
+  height: 0.55rem;
+  content: "";
+  background: rgba(18, 18, 15, 0.28);
+  filter: blur(5px);
+  pointer-events: none;
+}
+
 .paper {
   position: relative;
   border: 1px solid #e8e6e1;
@@ -55,20 +131,19 @@
   background: #ffffff;
   color: #12120f;
   box-shadow: 0 20px 40px -26px rgba(18, 18, 15, 0.34);
-  padding: 2rem 1.35rem 2.25rem;
-  animation: litos-receipt-print 1.15s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+  padding: 2rem 1.35rem 2.45rem;
+  opacity: 0;
+  transform: translateY(calc(-100% + 2px));
+  will-change: transform, opacity;
 }
 
-.paper::after {
-  position: absolute;
-  right: -1px;
-  bottom: -0.55rem;
-  left: -1px;
-  height: 0.6rem;
-  content: "";
-  background:
-    linear-gradient(135deg, #ffffff 50%, transparent 51%) 0 0 / 0.75rem 0.75rem repeat-x,
-    linear-gradient(225deg, #ffffff 50%, transparent 51%) 0 0 / 0.75rem 0.75rem repeat-x;
+.paperPrinting {
+  animation: litos-receipt-print-stepped 1.75s linear forwards;
+}
+
+.paperComplete {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .barcode {
@@ -85,19 +160,45 @@
   opacity: 0.72;
 }
 
-@keyframes litos-receipt-print {
-  from {
-    opacity: 0.3;
-    transform: translateY(-72%);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes litos-receipt-print-stepped {
+  0% { opacity: 1; transform: translateY(calc(-100% + 2px)); }
+  7.5%, 10.5% { opacity: 1; transform: translateY(-91%); }
+  18%, 21% { opacity: 1; transform: translateY(-81%); }
+  28.5%, 31.5% { opacity: 1; transform: translateY(-70%); }
+  39%, 42% { opacity: 1; transform: translateY(-58%); }
+  49.5%, 52.5% { opacity: 1; transform: translateY(-45%); }
+  60%, 63% { opacity: 1; transform: translateY(-32%); }
+  70.5%, 73.5% { opacity: 1; transform: translateY(-20%); }
+  81%, 84% { opacity: 1; transform: translateY(-10%); }
+  91.5%, 94.5% { opacity: 1; transform: translateY(-3%); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes litos-receipt-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes litos-receipt-check {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes litos-receipt-status {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .paper {
+  .paper,
+  .paperPrinting,
+  .statusSpinner,
+  .statusComplete,
+  .statusLabel {
     animation: none;
+  }
+
+  .paper {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

@@ -19,6 +19,26 @@ type Result =
   | { kind: "cancelled" }
   | { kind: "timeout" };
 
+type ReceiptStage = "processing" | "printing" | "complete";
+
+const receiptToothCount = 40;
+const receiptToothDepth = 4;
+const receiptToothPoints = Array.from(
+  { length: receiptToothCount * 2 },
+  (_, index) => {
+    const x = 100 - ((index + 1) * 100) / (receiptToothCount * 2);
+    const y = index % 2 === 0 ? "100%" : `calc(100% - ${receiptToothDepth}px)`;
+    return `${x}% ${y}`;
+  },
+).join(", ");
+const receiptClipPath = `polygon(0 0, 100% 0, 100% calc(100% - ${receiptToothDepth}px), ${receiptToothPoints})`;
+
+const receiptStatus: Record<ReceiptStage, string> = {
+  processing: "Processing your payment",
+  printing: "Printing your receipt",
+  complete: "Payment complete",
+};
+
 function money(receipt: BillingReceipt) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -39,31 +59,71 @@ function receiptDate(value: string) {
 function PrintedReceipt({ receipt }: { receipt: BillingReceipt }) {
   const amount = money(receipt);
   const cadence = receipt.interval === "weekly" ? "Every week" : "Every month";
+  const [stage, setStage] = useState<ReceiptStage>("processing");
+
+  useEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reducedMotion) {
+      queueMicrotask(() => setStage("complete"));
+      return;
+    }
+
+    let finishPrinting: number | undefined;
+    const startPrinting = window.setTimeout(() => {
+      setStage("printing");
+      finishPrinting = window.setTimeout(() => setStage("complete"), 1750);
+    }, 650);
+    return () => {
+      window.clearTimeout(startPrinting);
+      if (finishPrinting !== undefined) window.clearTimeout(finishPrinting);
+    };
+  }, []);
+
   return (
-    <div className={styles.stage} aria-label={`Litos Pro payment receipt for ${amount}`}>
+    <div
+      className={styles.stage}
+      aria-label={`Litos Pro payment receipt for ${amount}`}
+      data-receipt-stage={stage}
+    >
       <div className={styles.halo} aria-hidden="true" />
       <div className={styles.printer}>
-        <div className="flex items-center justify-between gap-3">
+        <div className={styles.printerHeader}>
+          <div className={styles.status} role="status" aria-live="polite">
+            <span className={stage === "complete" ? styles.statusComplete : styles.statusSpinner} aria-hidden="true">
+              {stage === "complete" && (
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="10" r="8" fill="currentColor" />
+                  <path d="m6.5 10.2 2.1 2.1 4.9-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </span>
+            <span key={stage} className={styles.statusLabel}>{receiptStatus[stage]}</span>
+          </div>
           <div className="flex items-center gap-2.5">
             <span className="flex size-7 items-center justify-center rounded-full bg-white">
               <Image src="/brand/litos-mark.svg" width={18} height={18} alt="" />
             </span>
             <span className="text-sm font-medium">Litos</span>
           </div>
-          <span className="rounded-full border border-white/25 px-2.5 py-1 font-mono text-label uppercase tracking-[0.08em] text-white/85">Paid</span>
         </div>
-        <div className="mt-5 flex items-end justify-between gap-4">
-          <div>
-            <p className="font-mono text-label uppercase tracking-[0.08em] text-white/65">Pro plan</p>
-            <p className="mt-1 text-sm text-white/80">{cadence}</p>
+        <div className={styles.screen}>
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="font-mono text-label uppercase tracking-[0.08em] text-white/55">Pro plan</p>
+              <p className="mt-1 text-sm text-white/80">{cadence}</p>
+            </div>
+            <p className="font-mono text-heading tabular-nums">{amount}</p>
           </div>
-          <p className="font-mono text-heading tabular-nums">{amount}</p>
         </div>
         <div className={styles.slot} aria-hidden="true" />
       </div>
 
       <div className={styles.paperWindow}>
-        <div className={styles.paper}>
+        <article
+          className={`${styles.paper} ${stage === "printing" ? styles.paperPrinting : ""} ${stage === "complete" ? styles.paperComplete : ""}`}
+          style={{ clipPath: receiptClipPath }}
+          aria-hidden={stage !== "complete"}
+        >
           <div className="flex items-center justify-between border-b border-dashed border-border pb-5">
             <Image src="/brand/litos-logo.svg" width={76} height={24} alt="Litos" />
             <span className="font-mono text-label uppercase tracking-[0.08em] text-positive">Confirmed</span>
@@ -85,7 +145,7 @@ function PrintedReceipt({ receipt }: { receipt: BillingReceipt }) {
             <div className={styles.barcode} aria-hidden="true" />
             <p className="mt-3 font-mono text-label uppercase tracking-[0.08em] text-muted">Your job search, moving.</p>
           </div>
-        </div>
+        </article>
       </div>
     </div>
   );
