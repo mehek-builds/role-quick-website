@@ -151,23 +151,28 @@ export type Me = {
   guest_expires_at?: string | null;
   usage: { contacts: Usage; drafts: Usage; resumes: Usage };
   upgrade_url?: string;
-  billing_provider?: "litos" | "lemonsqueezy";
+  billing_provider?: "stripe" | "litos" | "lemonsqueezy";
   checkout_available?: boolean;
+  billing_portal_available?: boolean;
   billing_status?: string | null;
   billing_renews_at?: string | null;
   billing_ends_at?: string | null;
   billing_portal_url?: string | null;
 };
 
-export function createCheckout() {
+export function createCheckout(interval: "weekly" | "monthly" = "monthly") {
   return api<{
     provider: "litos" | "lemonsqueezy";
     url: string;
     checkout_intent_id?: string;
-    interval?: "monthly" | "annual";
+    interval?: "weekly" | "monthly";
     amount_cents?: number;
     currency?: string;
-  }>("/billing/checkout", { method: "POST" });
+  }>("/billing/checkout", { method: "POST", body: JSON.stringify({ interval }) });
+}
+
+export function createBillingPortal() {
+  return api<{ provider: "stripe"; url: string }>("/billing/portal", { method: "POST" });
 }
 
 export type OutreachContact = {

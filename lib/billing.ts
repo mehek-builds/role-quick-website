@@ -25,3 +25,12 @@ export function isLitosPayCheckoutUrl(value: string): boolean {
 export function isSafeCheckoutUrl(value: string): boolean {
   return isLemonSqueezyCheckoutUrl(value) || isLitosPayCheckoutUrl(value);
 }
+
+export function isStripePortalUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.hostname === "billing.stripe.com";
+  } catch {
+    return false;
+  }
+}

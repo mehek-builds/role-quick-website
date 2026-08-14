@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isLemonSqueezyCheckoutUrl, isLitosPayCheckoutUrl, isSafeCheckoutUrl } from "../lib/billing.ts";
+import { isLemonSqueezyCheckoutUrl, isLitosPayCheckoutUrl, isSafeCheckoutUrl, isStripePortalUrl } from "../lib/billing.ts";
 
 test("accepts only reusable HTTPS Lemon Squeezy checkout links", () => {
   assert.equal(isLemonSqueezyCheckoutUrl("https://litos.lemonsqueezy.com/checkout/buy/variant"), true);
@@ -31,4 +31,10 @@ test("accepts Litos Pay intents from an explicitly configured backend origin", (
     if (previous === undefined) delete process.env.NEXT_PUBLIC_API_URL;
     else process.env.NEXT_PUBLIC_API_URL = previous;
   }
+});
+
+test("accepts only Stripe-hosted customer portal sessions", () => {
+  assert.equal(isStripePortalUrl("https://billing.stripe.com/p/session/test_123"), true);
+  assert.equal(isStripePortalUrl("http://billing.stripe.com/p/session/test_123"), false);
+  assert.equal(isStripePortalUrl("https://billing.stripe.com.evil.example/p/session/test_123"), false);
 });
