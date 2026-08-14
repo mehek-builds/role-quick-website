@@ -149,6 +149,8 @@ test("billing return confirms an active account record", async () => {
   await page.goto(`${ORIGIN}/billing/return`);
   await page.getByRole("heading", { name: "You're on Litos Pro." }).waitFor();
   await page.getByLabel("Litos Pro payment receipt for $39.99").waitFor();
+  await page.getByRole("status").getByText("Payment complete").waitFor();
+  assert.equal(await page.locator("[data-receipt-stage]").getAttribute("data-receipt-stage"), "complete");
   await page.getByText("Every month", { exact: true }).first().waitFor();
   await page.getByText("$39.99", { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "Open billing portal" }).click();
