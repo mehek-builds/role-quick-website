@@ -616,8 +616,8 @@ export function CinematicHero() {
                 version narrowed it to "students and new grads", which read
                 as a product nobody else was allowed to use. Students and new
                 grads are one audience Litos serves, not the only one. */}
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-              Free Chrome extension for job seekers
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">
+                      Free Chrome extension for job seekers, with a full web dashboard.
             </p>
 
             {/* The middle band: the claim and the one line explaining it,
@@ -629,10 +629,10 @@ export function CinematicHero() {
                   preposition. Forcing the break at the phrase boundary keeps
                   "in seconds." whole, which is the half the colour marks. */}
               <h1 className="text-display font-[450] leading-[1.02] tracking-[-0.03em] text-ink">
-                Apply <span className="text-brand-ink xl:block">in seconds.</span>
+                Find the role. <span className="text-brand-ink">Build the packet.</span> Send it with confidence.
               </h1>
               <p className="mx-auto mt-6 max-w-[460px] text-base leading-[1.65] text-muted xl:mx-0">
-                Litos prepares the application. You make every personal decision and choose when to send it.
+                Litos finds relevant jobs, tailors your materials, fills applications, and helps you reach the right people. You review the work.
               </p>
             </div>
 
@@ -647,13 +647,15 @@ export function CinematicHero() {
                   every device, so this is the primary action at every width and
                   no longer needs a mobile understudy. */}
               <a
-                href="/login"
+                href="/login?intent=start"
                 onClick={() => track("signin_click", { source: "hero" })}
                 className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:w-auto"
               >
-                Get started
+                Start free
               </a>
+              <a href="#product" className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-control-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto">See how Litos works</a>
             </div>
+            <p className="font-mono text-[11px] text-muted">No card required. Application filling stays free.</p>
             {/* The mobile QR handoff (MobileSendLink) was REMOVED here
                 2026-07-28. A QR code and a copy-link button inside the hero
                 card, on the first screen, before a phone visitor knows what

@@ -3,6 +3,7 @@
 // Explicit .ts extension: the node test runner loads this module directly (see tsconfig's note on
 // allowImportingTsExtensions), and extensionless specifiers do not resolve there.
 import { EXTENSION_ID } from "./config.ts";
+import { isStripeCheckoutUrl } from "./billing.ts";
 
 /**
  * The wire between this site and the Litos extension.
@@ -175,6 +176,158 @@ export function ensureCurrentExtensionSession(session: WebSession, minimumVersio
 export function clearExtensionSession(): void {
   inFlight = null;
   void sendToExtension({ type: "LITOS_CLEAR_SESSION" });
+}
+
+export type ExtensionCheckoutRequest = {
+  planId: "litos_plus_week" | "litos_plus_month" | "litos_plus_quarter";
+  placement: string;
+  trigger: string;
+  actionNonce?: string | null;
+};
+
+type ExtensionCheckoutReply = {
+  ok?: boolean;
+  checkout_url?: string;
+  error?: string;
+  code?: string;
+};
+
+/**
+ * Start checkout with the account held by the extension.
+ *
+ * An extension paywall can open the public pricing page while the website is signed in to a
+ * different account. Passing the website token to checkout would then attach the purchase to the
+ * wrong person. The external extension handler owns this request and makes the server call with
+ * its stored token. The website only selects the term and validates the Stripe destination.
+ */
+export async function createCheckoutThroughExtension(
+  request: ExtensionCheckoutRequest,
+): Promise<string> {
+  const reply = await sendToExtension<ExtensionCheckoutReply>({
+    type: "LITOS_CREATE_CHECKOUT",
+    plan_id: request.planId,
+    surface: "extension",
+    placement: request.placement,
+    trigger: request.trigger,
+    ...(request.actionNonce ? { action_nonce: request.actionNonce } : {}),
+  });
+  if (!reply) {
+    throw new Error("The Litos extension is unavailable. Open or reinstall it, then try again.");
+  }
+  if (reply.ok !== true) {
+    const code = reply.code?.toLowerCase() ?? "";
+    if (code.includes("sign") || code.includes("auth") || code.includes("session") || code.includes("token")) {
+      throw new Error("The Litos extension is signed out. Sign in from the extension, then try again.");
+    }
+    throw new Error(reply.error || "The Litos extension could not start checkout. Nothing was charged.");
+  }
+  if (!reply.checkout_url || !isStripeCheckoutUrl(reply.checkout_url)) {
+    throw new Error("The Litos extension returned an invalid Stripe checkout link. Nothing was charged.");
+  }
+  return reply.checkout_url;
+}
+
+export type ExtensionCheckoutReturnReply = {
+  ok: true;
+  active: boolean;
+  access_class: string;
+  revision: string | number;
+  account_id: string;
+  action_ready: boolean;
+} | {
+  ok: false;
+  error: string;
+  code?: string;
+};
+
+/** Ask the extension to verify its own account after hosted checkout returns to the website. */
+export function verifyExtensionCheckoutReturn(input: {
+  status: string;
+  context: string | null;
+  actionNonce?: string | null;
+}): Promise<ExtensionCheckoutReturnReply | null> {
+  return sendToExtension<ExtensionCheckoutReturnReply>({
+    type: "LITOS_CHECKOUT_RETURN",
+    status: input.status,
+    context: input.context,
+    ...(input.actionNonce ? { action_nonce: input.actionNonce } : {}),
+  });
+}
+
+type ExtensionPremiumActionRetryReply = {
+  ok: true;
+  opened: true;
+} | {
+  ok: false;
+  error: string;
+  code?: string;
+};
+
+/** Reopen the extension-owned premium action only after the applicant presses the return-page CTA. */
+export async function retryPremiumActionThroughExtension(actionNonce: string): Promise<void> {
+  if (!actionNonce) throw new Error("The saved extension action is missing. Return to the application tab and try it again.");
+  const reply = await sendToExtension<ExtensionPremiumActionRetryReply>({
+    type: "LITOS_RETRY_PREMIUM_ACTION",
+    action_nonce: actionNonce,
+  });
+  if (!reply) {
+    throw new Error("Litos could not reach the extension. Open it in the application tab, then try again.");
+  }
+  if (reply.ok !== true || reply.opened !== true) {
+    const code = "code" in reply ? reply.code?.toLowerCase() ?? "" : "";
+    if (code.includes("auth") || code.includes("session") || code.includes("token") || code.includes("sign")) {
+      throw new Error("The Litos extension is signed out. Sign in there, then retry your action.");
+    }
+    if (code.includes("nonce") || code.includes("action") || code.includes("expired") || code.includes("mismatch")) {
+      throw new Error("That saved action is no longer available. Return to the application tab and start it again.");
+    }
+    throw new Error(("error" in reply && reply.error) || "The extension could not reopen that action. Try again from the application tab.");
+  }
+}
+
+type FreeFillHandoffReply = {
+  ok?: boolean;
+  armed?: boolean;
+  error?: string;
+  code?: string;
+};
+
+/**
+ * Arm one canonical Free application for the extension's factual fill lane.
+ *
+ * This is intentionally a different message from `LITOS_ARM_HANDOFF`. That older contract binds
+ * an immutable generated packet. Sending a canonical-only id through it makes the extension ask
+ * the backend for a generated packet that does not exist. The extension owns the fill-data fetch
+ * with its adopted account token, so the website sends no API URL or fill payload to trust.
+ */
+export async function startFreeFillThroughExtension(input: {
+  applicationId: string;
+  portalUrl: string;
+}): Promise<void> {
+  let portal: URL;
+  try {
+    portal = new URL(input.portalUrl);
+  } catch {
+    throw new Error("The saved employer form URL is invalid. Nothing was opened.");
+  }
+  if (portal.protocol !== "https:" || !input.applicationId.trim()) {
+    throw new Error("The saved employer form URL is invalid. Nothing was opened.");
+  }
+  const reply = await sendToExtension<FreeFillHandoffReply>({
+    type: "LITOS_START_FREE_FILL",
+    application_id: input.applicationId,
+    portal_url: portal.toString(),
+  });
+  if (!reply) {
+    throw new Error("Litos could not reach the extension. Install or update it, then try again.");
+  }
+  if (reply.ok !== true || reply.armed !== true) {
+    const code = reply.code?.toLowerCase() ?? "";
+    if (code.includes("auth") || code.includes("session") || code.includes("token") || code.includes("sign")) {
+      throw new Error("The Litos extension is signed out. Sign in there, then try again.");
+    }
+    throw new Error(reply.error || "Litos could not arm this application for filling. Nothing was opened.");
+  }
 }
 
 /**

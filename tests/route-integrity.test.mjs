@@ -99,6 +99,12 @@ function internalHrefs(text) {
   for (const m of text.matchAll(/href="(\/[^"#?]*)(?:[?#][^"]*)?"/g)) {
     out.push(m[1]);
   }
+  /* Navigation arrays render through .map(), so their literal destinations use `href: "/..."`
+     rather than a JSX attribute. They are every bit as clickable and must count both for broken
+     link checks and for proving a shipped route has an inbound path. */
+  for (const m of text.matchAll(/\bhref:\s*"(\/[^"#?]*)(?:[?#][^"]*)?"/g)) {
+    out.push(m[1]);
+  }
   return out;
 }
 

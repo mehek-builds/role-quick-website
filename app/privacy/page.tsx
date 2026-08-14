@@ -34,10 +34,12 @@ export default function Privacy() {
           What we do with your data.
         </h1>
         <p className="mt-3 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
-          Last updated: August 11, 2026
+          Last updated: August 14, 2026
         </p>
         <p className="mt-3 text-sm leading-6 text-muted">
-          This update says that Litos takes a picture of the filled-in form and of the confirmation page, which the policy had not spelled out before, and gives each one its own deletion window.
+          This update explains the optional LinkedIn connections import, the
+          seven-day no-card trial, and which plans may use opt-in automatic
+          submission.
         </p>
         <p className="mt-6 text-sm leading-6 text-muted">
           Litos is a Chrome extension and web dashboard. Open a job posting
@@ -52,6 +54,7 @@ export default function Privacy() {
 
         <Section title="Policy history">
           <ul className="ml-5 list-disc space-y-1">
+            <li><strong className="font-medium text-ink">August 14, 2026:</strong> added LinkedIn connections import, trial and Litos+ billing behavior, and paid automatic-submission access.</li>
             <li><strong className="font-medium text-ink">August 11, 2026:</strong> disclosed the filled-form and confirmation-page pictures, and set a 7-day window for the filled-form one.</li>
             <li><strong className="font-medium text-ink">August 10, 2026:</strong> added the cookie inventory and control path.</li>
             <li><strong className="font-medium text-ink">July 31, 2026:</strong> clarified analytics identity, deletion, and connection-code handling.</li>
@@ -198,15 +201,44 @@ export default function Privacy() {
           </p>
           <p>
             Applications are sent only when you click Submit, unless you have
-            turned on the setting that lets Litos send without asking you each
-            time. With that setting on, Litos may send an application you
-            started, once it has checked that every answer is backed up and
-            that the page puts nothing in the way. In the extension you get a
-            15-second countdown, and one click cancels it. From the dashboard
-            it can go as soon as those checks pass. Missing or
+            active trial or paid Litos+ access and have turned on the separate
+            setting that lets Litos send without asking you each time. Free filling
+            never requires this setting: Litos fills the form, then waits for
+            you to use the employer site&apos;s final submit control. With the
+            setting on, Litos may send an application you started once it has
+            checked that every answer is backed up and that the page puts
+            nothing in the way. In the extension you get a 15-second countdown,
+            and one click cancels it. From the dashboard it can go as soon as
+            those checks pass. Missing or
             conflicting facts, anything you have to swear to, a check that
             you are human, a page Litos cannot drive, and any confirmation it
             is unsure of all stop it and wait for you.
+          </p>
+        </Section>
+
+        <Section title="LinkedIn connections import">
+          <p>
+            Network import is optional and starts only after you open Network,
+            read the consent screen, and choose a LinkedIn connections CSV file
+            yourself. Uploading the file does not send a LinkedIn message,
+            change your LinkedIn account, or connect Litos to your LinkedIn
+            password.
+          </p>
+          <p>
+            Litos validates the export before importing it and shows you an
+            accepted and rejected row preview before anything is committed. We
+            use imported names, public profile links, companies, roles, and
+            connection facts to show people you already know, connected
+            companies, and possible referral paths. Premium network insights
+            require active trial or Litos+ access. Network management and
+            deletion remain available if that access ends.
+          </p>
+          <p>
+            The raw CSV is deleted after parsing and no later than 24 hours.
+            Disconnect stops future use. Imported data stays retained after
+            disconnect so you can delete it later. Delete removes imported
+            network data, including people, relationship edges, company
+            matches, and derived indexes, within 24 hours.
           </p>
         </Section>
 
@@ -252,17 +284,21 @@ export default function Privacy() {
         <Section title="Billing">
           <p>
             Stripe handles payments. We never see or keep your card
-            number.
-            Cancelling takes the same number of clicks as signing up. The link
-            is in Settings.
+            number. A new account&apos;s seven-day Litos+ trial does not require a
+            card and does not schedule a charge. Paid Litos+ renews for the
+            selected one-week, one-month, or three-month period until you
+            cancel. Cancelling takes the same number of clicks as signing up.
+            The link is in Account.
           </p>
         </Section>
 
         <Section title="How long we keep it">
           <p>
-            We delete the resume files we make after 30 days. Your dashboard
-            still shows which resume went to which job, but the file is gone
-            and old links stop working.
+            We delete each original rendered resume file after 30 days. The
+            immutable generated content stays with its application. If you
+            later choose Download, Litos creates a fresh, short-lived rendering
+            from that content. Old capability links still expire and stop
+            working.
           </p>
           <p>
             We delete the picture of the filled-in form after 7 days. You only

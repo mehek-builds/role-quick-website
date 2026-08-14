@@ -44,7 +44,8 @@ describe("an application deep link loads the exact packet", () => {
     );
     assert.match(
       historyEffect,
-      /reviewable\.find\(\(packet\) => packet\.id === requestedApplicationId\)/,
+      /const requestedPacketId = requestedCanonicalApplication\?\.id \?\? requestedApplicationId;[\s\S]*reviewable\.find\(\(packet\) => packet\.id === requestedPacketId\)/,
+      "a linked packet resolves through its canonical visible id after the histories merge",
     );
     assert.match(
       historyEffect,
@@ -66,7 +67,7 @@ describe("an application deep link loads the exact packet", () => {
 
     assert.match(
       historyEffect,
-      /requestedApplicationIntent === "detail"[\s\S]{0,180}setRevisitingId\(requested\.id\)/,
+      /requestedApplicationIntent === "detail"[\s\S]{0,520}setRevisitingId\(requested\.id\)/,
       "detail opens the read-only packet viewer",
     );
     assert.match(

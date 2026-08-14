@@ -37,6 +37,7 @@ import {
   type JobMatch,
   type ProfileIdentity,
   type RankedJob,
+  type ResumeGenerationInitiation,
 } from "@/features/applications";
 import { formatPay, jobTypeLabel, type PayFacts } from "@/features/jobs";
 import { loadDashboardInitialState } from "@/features/dashboard";
@@ -45,6 +46,10 @@ import { targetingHeadline } from "@/lib/periods";
 import { userFacingError } from "@/lib/user-facing-error";
 import { waitingApplications } from "@/lib/captcha-queue";
 import { WaitingOnYou } from "@/components/app/WaitingOnYou";
+import { PlanStatus } from "@/components/billing/PlanStatus";
+import { useBilling } from "@/components/billing/BillingProvider";
+import { isStructuredUpgradeDenial } from "@/features/billing";
+import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 
 /* SubmissionResponse and ACTIVE_SUBMISSION_STATUSES went with the review drawer. The dashboard no
    longer starts or polls a submission, so the statuses it would have watched are not its business
@@ -244,6 +249,7 @@ const QA_OUTREACH: OutreachEvent[] = [
 ];
 
 export default function Home() {
+  const { canUse, openUpgrade } = useBilling();
   const [me, setMe] = useState<Me | null>(null);
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
   const [targeting, setTargeting] = useState<Targeting | null>(null);
@@ -270,6 +276,7 @@ export default function Home() {
   const [preparationErrors, setPreparationErrors] = useState<Record<string, string>>({});
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
+  const resumeOperationIds = useRef(new Map<string, string>());
 
   /* Hand this session to the extension.
    *
@@ -321,11 +328,13 @@ export default function Home() {
   }, []);
 
   const rankedJobs = useMemo(() => rankJobs(jobs ?? []), [jobs]);
-  /* The build-ahead queue, and ONLY that: nothing renders this list. Empty unless automatic
-     submission is on, which is what stops resumes being built for students who never asked. */
+  const backgroundGenerationAllowed = canUse("hover_generation") === true;
+  const tailoringAccess = canUse("ai_resume_tailoring");
+  /* Build ahead only for an explicit automatic-submission opt-in on an active paid account.
+     Trial and Free accounts keep every generation behind a named click. */
   const dailyJobs = useMemo(
-    () => (autoSubmitEnabled ? rankedJobs.slice(0, AUTO_SUBMIT_PREPARED_LIMIT) : []),
-    [autoSubmitEnabled, rankedJobs],
+    () => (autoSubmitEnabled && backgroundGenerationAllowed ? rankedJobs.slice(0, AUTO_SUBMIT_PREPARED_LIMIT) : []),
+    [autoSubmitEnabled, backgroundGenerationAllowed, rankedJobs],
   );
   // The backend response is today's complete match set, and its size can vary. Home shows only
   // the next three unfinished matches, but completion must account for every match in this set.
@@ -399,17 +408,10 @@ export default function Home() {
 
      Rebuilding any of it here is how the two screens diverged the first time. */
 
-  /* Build resumes ahead of being asked, for automatic-submission students only.
-   *
-   * The opt-in is checked HERE as well as in dailyJobs, which is deliberate redundancy rather than
-   * an oversight. This loop spends a student's monthly resume quota and makes a model call per
-   * job, so the two things guarding it are the one gate that must not be edited away by accident.
-   * Everyone else gets a packet when they ask for one. */
   useEffect(() => {
-    if (!autoSubmitEnabled) return;
+    if (!autoSubmitEnabled || !backgroundGenerationAllowed) return;
     if (qaMode || prewarmStarted.current || !me || !identity || !applicationProfile || dailyJobs.length === 0) return;
-    if (!identity.full_name?.trim()) return;
-    if (!identity.resume_email?.trim()) return;
+    if (!identity.full_name?.trim() || !identity.resume_email?.trim()) return;
     prewarmStarted.current = true;
 
     const remainingQuota = Math.max(0, applicationLimit(me) - me.usage.resumes.used);
@@ -430,13 +432,17 @@ export default function Home() {
         setPreparingJobs((current) => [...new Set([...current, job.id])]);
         try {
           const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${job.id}`);
+          const operationId = operationIdFor(resumeOperationIds.current, job.id);
           const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
             method: "POST",
-            body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile)),
+            body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, "hover_prewarm", operationId)),
           });
-          if (generated.application && !cancelled) {
-            setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
-            setPrewarmFailures((current) => current.filter((jobId) => jobId !== job.id));
+          if (generated.application) {
+            completeOperationId(resumeOperationIds.current, job.id);
+            if (!cancelled) {
+              setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
+              setPrewarmFailures((current) => current.filter((jobId) => jobId !== job.id));
+            }
           }
         } catch (reason) {
           releasePrewarmLock(job.id);
@@ -445,25 +451,16 @@ export default function Home() {
             setPrewarmFailures((current) => [...new Set([...current, job.id])]);
             setPreparationErrors((current) => ({ ...current, [job.id]: userFacingError(reason) }));
           }
-          if (/limit|quota|slow down|temporarily unavailable/i.test(message)) {
-            halted = true;
-          }
+          if (/limit|quota|slow down|temporarily unavailable/i.test(message)) halted = true;
         } finally {
-          /* Not guarded on `cancelled`. An unmount must still clear the in-flight mark, or a job
-             stays "Getting ready" for the rest of the session with no request behind it, which is
-             the exact lie this whole change exists to remove. */
           setPreparingJobs((current) => current.filter((jobId) => jobId !== job.id));
         }
       }
     };
 
     void Promise.all(Array.from({ length: Math.min(3, missing.length) }, () => worker()));
-    return () => {
-      cancelled = true;
-    };
-    /* preparingJobs is written here but never read here, so it stays out of the deps: putting a
-       value in the list that the effect only ever sets makes the effect retrigger itself. */
-  }, [applicationProfile, autoSubmitEnabled, dailyJobs, identity, me, packets, qaMode]);
+    return () => { cancelled = true; };
+  }, [applicationProfile, autoSubmitEnabled, backgroundGenerationAllowed, dailyJobs, identity, me, packets, qaMode]);
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];
@@ -493,9 +490,23 @@ export default function Home() {
    * It takes the same two steps as a prewarm worker (fetch the complete job, then generate), and
    * it writes the same day-scoped lock first, so the prewarm loop skips any job already being
    * built here and a student on automatic submission cannot spend the quota twice for one job. */
-  async function preparePacket(jobId: string) {
+  async function preparePacket(jobId: string, initiation: ResumeGenerationInitiation) {
+    if (!qaMode && canUse("ai_resume_tailoring") !== true) {
+      if (canUse("ai_resume_tailoring") === false) {
+        openUpgrade({
+          feature: "ai_resume_tailoring",
+          placement: "home_job_card",
+          trigger: "tailor_resume",
+          manualLabel: "Fill with main resume",
+          jobId,
+          returnRoute: `/dashboard/applications?job=${encodeURIComponent(jobId)}&checkout_action=tailor`,
+          onManual: () => window.location.assign(`/dashboard/applications?job=${jobId}&intent=fill`),
+        });
+      }
+      return;
+    }
     if (!identity?.full_name?.trim() || !applicationProfile) return;
-    if (preparingJobs.includes(jobId)) return;
+    if (preparingJobs.includes(jobId) || (!qaMode && prewarmLockHeld(jobId))) return;
 
     /* A QA render has no session, and api() answers a 401 by clearing what session there is and
        sending the browser to /login. Without this the harness's own Prepare button would bounce
@@ -535,14 +546,28 @@ export default function Home() {
 
     try {
       const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${jobId}`);
+      const operationId = operationIdFor(resumeOperationIds.current, jobId);
       const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
         method: "POST",
-        body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile)),
+        body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, initiation, operationId)),
       });
       if (generated.application) {
+        completeOperationId(resumeOperationIds.current, jobId);
         setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
       }
     } catch (reason) {
+      if (isStructuredUpgradeDenial(reason, "ai_resume_tailoring")) {
+        openUpgrade({
+          feature: "ai_resume_tailoring",
+          placement: "home_job_card",
+          trigger: "server_entitlement_denial",
+          manualLabel: "Fill with main resume",
+          jobId,
+          returnRoute: `/dashboard/applications?job=${encodeURIComponent(jobId)}&checkout_action=tailor`,
+          onManual: () => window.location.assign(`/dashboard/applications?job=${jobId}&intent=fill`),
+        }, { source: "server_denial" });
+        return;
+      }
       /* The lock comes off so the next attempt is allowed to run at all. Quota and rate limits are
          the backend's call, not a rule duplicated here where it would drift: a refusal arrives as
          a failure, the card says Paused, and "Try again" is a real button.
@@ -551,10 +576,10 @@ export default function Home() {
          student something stopped without telling them whether to wait, fix something, or stop
          trying. userFacingError drops anything that reads like a stack trace or a 5xx and
          substitutes a plain sentence, so a backend fault never reaches the card as jargon. */
-      releasePrewarmLock(jobId);
       setPrewarmFailures((current) => [...new Set([...current, jobId])]);
       setPreparationErrors((current) => ({ ...current, [jobId]: userFacingError(reason) }));
     } finally {
+      releasePrewarmLock(jobId);
       setPreparingJobs((current) => current.filter((id) => id !== jobId));
     }
   }
@@ -572,7 +597,7 @@ export default function Home() {
      that effect running in the first place. */
   function retryPreparation(jobId: string) {
     releasePrewarmLock(jobId);
-    void preparePacket(jobId);
+    void preparePacket(jobId, "explicit_click");
   }
 
   /* Saved targeting only, and only the parts the "Change what you want" link below can edit. This
@@ -619,10 +644,12 @@ export default function Home() {
             </Link>
           </p>
         </div>
-        <Link href="/dashboard/applications?new=1" className="flex min-h-11 items-center rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
-          Add job
+        <Link href="/dashboard/applications?new=1&intent=fill" className="flex min-h-11 items-center rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
+          Fill application
         </Link>
       </section>
+
+      <PlanStatus compact />
 
       {me?.is_guest && trialActive && (
         <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
@@ -632,21 +659,6 @@ export default function Home() {
           </div>
           <Link href="/login?claim=1" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink">
             Save my work
-          </Link>
-        </Card>
-      )}
-
-      {me?.is_guest && !trialActive && me.checkout_available && (
-        <Card className="flex flex-wrap items-center justify-between gap-4 bg-brand-soft p-5">
-          <div>
-            <p className="text-sm font-medium text-ink">Your free week is over.</p>
-            <p className="mt-1 text-xs text-muted">Save your work here, then keep going.</p>
-          </div>
-          <Link
-            href="/login?claim=1&next=upgrade"
-            className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink"
-          >
-            Get Pro
           </Link>
         </Card>
       )}
@@ -767,8 +779,11 @@ export default function Home() {
                  rather than offering a button that cannot work. */
               canPrepare={Boolean(identity?.full_name?.trim() && applicationProfile)}
               preparationError={preparationErrors[job.id]}
+              tailoringAccess={qaMode ? true : tailoringAccess}
+              hoverGenerationEnabled={canUse("hover_generation") === true}
               onDismiss={() => dismiss(job.id)}
-              onPrepare={() => void preparePacket(job.id)}
+              onPrepare={() => void preparePacket(job.id, "explicit_click")}
+              onHoverPrepare={() => void preparePacket(job.id, "hover_prewarm")}
               onRetry={() => retryPreparation(job.id)}
             />
           ))}
@@ -904,9 +919,12 @@ function JobMatchCard({
   preparing,
   preparationFailed,
   preparationError,
+  tailoringAccess,
+  hoverGenerationEnabled,
   canPrepare,
   onDismiss,
   onPrepare,
+  onHoverPrepare,
   onRetry,
 }: {
   job: RankedJob;
@@ -915,14 +933,22 @@ function JobMatchCard({
   preparing: boolean;
   preparationFailed: boolean;
   preparationError?: string;
+  tailoringAccess: boolean | null;
+  hoverGenerationEnabled: boolean;
   canPrepare: boolean;
   onDismiss: () => void;
   onPrepare: () => void;
+  onHoverPrepare: () => void;
   onRetry: () => void;
 }) {
   const status = reviewHref ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
-    <Card className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised">
+    <Card
+      className="h-full overflow-hidden shadow-rest transition-[border-color,box-shadow] hover:border-ink/30 hover:shadow-raised"
+      onMouseEnter={() => {
+        if (hoverGenerationEnabled && canPrepare && status === "idle") onHoverPrepare();
+      }}
+    >
       {/* Lead with the employer, then put the score in the corner where it can be compared across
           cards without hiding who the role is for. The logo uses the same domain and fallback
           rules as the full Jobs list, so one company cannot show two different identities. */}
@@ -992,20 +1018,25 @@ function JobMatchCard({
                /dashboard/applications, and this is the way in. It navigates rather than overlaying
                so there is exactly one place the requirement highlighting, the legend, the gap
                breakdown and the send control have to be kept correct. */
-            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
+            <Link href={reviewHref} aria-label={`Review ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-control-border bg-surface px-4 text-center text-sm font-medium text-ink transition-colors hover:border-ink">
               Review
             </Link>
+          ) : tailoringAccess === null ? (
+            <span className="flex min-h-11 items-center px-3 text-sm text-muted">
+              <PendingLabel>Checking plan</PendingLabel>
+            </span>
           ) : !canPrepare ? (
             /* No name or no application profile yet. The packet cannot be built until that exists,
                so the card points at the fix instead of offering a button that would only fail. */
-            <Link href="/dashboard/profile" className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
+            <Link href="/dashboard/profile" className="flex min-h-11 items-center rounded-full border border-control-border bg-surface px-4 text-center text-sm font-medium text-ink transition-colors hover:border-ink">
               Complete profile
             </Link>
           ) : (
-            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try again for" : "Prepare an application for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
-              {status === "failed" ? "Try again" : "Prepare"}
+            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try tailoring again for" : "Tailor a resume for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">
+              {status === "failed" ? "Try tailoring again" : "Tailor resume"}
             </button>
           )}
+          <Link href={`/dashboard/applications?job=${job.id}&intent=fill`} aria-label={`Fill an application for ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full bg-action px-5 text-center text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">Fill application</Link>
         </div>
       </div>
     </Card>
@@ -1046,15 +1077,15 @@ function prewarmLockKey(jobId: string): string {
  *
  * Module scope, not the component body: these read the clock, and the render-purity rule cannot
  * tell an event handler from something it might call while rendering. */
-const PREWARM_LOCK_MS = 10 * 60 * 1000;
-
 function claimPrewarmLock(jobId: string): void {
   window.localStorage.setItem(prewarmLockKey(jobId), String(Date.now()));
 }
 
 function prewarmLockHeld(jobId: string): boolean {
-  const claimedAt = Number(window.localStorage.getItem(prewarmLockKey(jobId)));
-  return Boolean(claimedAt) && Date.now() - claimedAt < PREWARM_LOCK_MS;
+  const startedAt = Number(window.localStorage.getItem(prewarmLockKey(jobId)));
+  if (Number.isFinite(startedAt) && Date.now() - startedAt < 10 * 60 * 1000) return true;
+  window.localStorage.removeItem(prewarmLockKey(jobId));
+  return false;
 }
 
 function releasePrewarmLock(jobId: string): void {

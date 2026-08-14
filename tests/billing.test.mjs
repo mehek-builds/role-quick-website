@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isLemonSqueezyCheckoutUrl, isLitosPayCheckoutUrl, isSafeCheckoutUrl, isStripePortalUrl } from "../lib/billing.ts";
+import { isLemonSqueezyCheckoutUrl, isLemonSqueezyPortalUrl, isLitosPayCheckoutUrl, isSafeBillingPortalUrl, isSafeCheckoutUrl, isStripePortalUrl } from "../lib/billing.ts";
 
 test("accepts only reusable HTTPS Lemon Squeezy checkout links", () => {
   assert.equal(isLemonSqueezyCheckoutUrl("https://litos.lemonsqueezy.com/checkout/buy/variant"), true);
@@ -37,4 +37,16 @@ test("accepts only Stripe-hosted customer portal sessions", () => {
   assert.equal(isStripePortalUrl("https://billing.stripe.com/p/session/test_123"), true);
   assert.equal(isStripePortalUrl("http://billing.stripe.com/p/session/test_123"), false);
   assert.equal(isStripePortalUrl("https://billing.stripe.com.evil.example/p/session/test_123"), false);
+});
+
+test("accepts provider-matched Lemon Squeezy management links only", () => {
+  const storePortal = "https://litos.lemonsqueezy.com/billing?signature=signed";
+  const orderPortal = "https://app.lemonsqueezy.com/my-orders/abc?signature=signed";
+  assert.equal(isLemonSqueezyPortalUrl(storePortal), true);
+  assert.equal(isLemonSqueezyPortalUrl(orderPortal), true);
+  assert.equal(isSafeBillingPortalUrl(storePortal, "lemonsqueezy"), true);
+  assert.equal(isSafeBillingPortalUrl(storePortal, "stripe"), false);
+  assert.equal(isLemonSqueezyPortalUrl("https://litos.lemonsqueezy.com/checkout/buy/variant"), false);
+  assert.equal(isLemonSqueezyPortalUrl("https://lemonsqueezy.com.evil.example/billing"), false);
+  assert.equal(isLemonSqueezyPortalUrl("http://litos.lemonsqueezy.com/billing"), false);
 });

@@ -544,6 +544,83 @@ export default function Home() {
           </div>
         </section>
 
+        <section id="work-surfaces" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative mx-auto max-w-6xl px-6 py-32">
+            <Reveal>
+              <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Dashboard and Chrome extension</p>
+              <h2 className="mt-4 text-section font-[450] text-ink">One job search. Two ways to work.</h2>
+              <div className="mt-10 grid gap-5 md:grid-cols-2">
+                <article className="rq-glass flex flex-col p-7">
+                  <h3 className="text-heading font-[450] text-ink">Run your search from Litos.</h3>
+                  <p className="mt-3 flex-1 text-body text-muted">Review matched roles, prepare each application, track progress, and handle follow-up from one place.</p>
+                  <SignInLink source="product-bridge-dashboard" className="mt-6 inline-flex min-h-11 w-fit items-center rounded-full border border-brand px-5 text-small font-medium text-brand-ink">Open the dashboard</SignInLink>
+                </article>
+                <article className="rq-glass flex flex-col p-7">
+                  <h3 className="text-heading font-[450] text-ink">Bring Litos to the application.</h3>
+                  <p className="mt-3 flex-1 text-body text-muted">Fill supported forms with your saved details. Free, with no application limit.</p>
+                  <InstallLink source="product-bridge-extension" className="mt-6 inline-flex min-h-11 w-fit items-center rounded-full border border-teal px-5 text-small font-medium text-teal-ink">Add to Chrome</InstallLink>
+                </article>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        <section id="dashboard" className="relative scroll-mt-24">
+          <Wash tint="brand" soft />
+          <div className="relative mx-auto max-w-6xl px-6 py-32">
+            <Reveal>
+              <div className="grid items-center gap-10 lg:grid-cols-[0.72fr_1.28fr]">
+                <div>
+                  <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos dashboard</p>
+                  <h2 className="mt-4 text-section font-[450] text-ink">See the whole search.</h2>
+                  <p className="mt-4 text-body text-muted">Jobs, documents, applications, network paths, and replies stay connected. Nothing disappears into another spreadsheet.</p>
+                  <nav aria-label="Dashboard areas" className="mt-6 flex flex-wrap gap-2 font-mono text-label text-muted">
+                    {[
+                      ["Home", "/dashboard"], ["Jobs", "/dashboard/jobs"], ["Applications", "/dashboard/applications"], ["Documents", "/dashboard/documents"], ["Network", "/dashboard/network"], ["Outreach", "/dashboard/outreach"],
+                    ].map(([label, href]) => <a key={label} href={href} className="rounded-control border border-border bg-surface px-3 py-2 hover:border-brand hover:text-brand-ink">{label}</a>)}
+                  </nav>
+                </div>
+                <div className="overflow-hidden rounded-card border border-border bg-surface p-2 shadow-overlay">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/product/dashboard-emails.png" alt="The real Litos dashboard showing tracked outreach and replies" className="h-auto w-full rounded-inner" />
+                </div>
+              </div>
+            </Reveal>
+          </div>
+        </section>
+
+        <section id="pricing" className="relative scroll-mt-24">
+          <Wash soft />
+          <div className="relative mx-auto max-w-5xl px-6 py-32">
+            <Reveal>
+              <a href="/pricing" className="block rounded-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand">
+                <div className="text-center">
+                  <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free and Litos+</p>
+                  <h2 className="mt-4 text-section font-[450] text-ink">Application filling stays free.</h2>
+                  <p className="mx-auto mt-4 max-w-2xl text-body text-muted">Use Litos+ when you want new tailored materials, outreach, insights, and automation.</p>
+                </div>
+                <div className="mt-10 grid gap-5 sm:grid-cols-2">
+                  <div className="rounded-card border border-teal/45 bg-teal-soft/45 p-6">
+                    <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free</p>
+                    <p className="mt-5 font-mono text-section text-ink">$0</p>
+                    <h3 className="mt-5 text-heading font-[450] text-ink">Fill applications. Track every move.</h3>
+                    <span className="mt-6 inline-flex min-h-11 items-center rounded-full border border-teal px-5 text-small font-medium text-teal-ink">Start free</span>
+                  </div>
+                  <div className="rounded-card border border-brand/45 bg-brand-soft/45 p-6">
+                    <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos+</p>
+                    <p className="mt-5 font-mono text-section text-ink">From $19.99</p>
+                    <h3 className="mt-5 text-heading font-[450] text-ink">Choose one week, one month, or three months.</h3>
+                    <span className="mt-6 inline-flex min-h-11 items-center rounded-full border border-brand px-5 text-small font-medium text-brand-ink">See Litos+</span>
+                  </div>
+                </div>
+                <p className="mt-5 text-center font-mono text-machine text-muted">New accounts include 7 days of Litos+ with 5 tailored resumes, 5 cover letters, and generated answers for 5 applications.</p>
+                <p className="mt-3 text-center text-small font-medium text-brand-ink underline decoration-brand/35 underline-offset-4">Compare every feature</p>
+              </a>
+            </Reveal>
+          </div>
+        </section>
+
         {/* The packet. The three pillars above each show ONE act in
             isolation, which is the right way to explain them and the wrong
             way to convey that they are a single job. This is the recap: the
@@ -746,8 +823,9 @@ export default function Home() {
             </Reveal>
             <Reveal>
               <h2 className="mt-8 text-display font-[450] leading-[1.05] tracking-[-0.03em] text-ink">
-                Open your next application.
+                Start with the next application.
               </h2>
+              <p className="mx-auto mt-5 max-w-xl text-body text-muted">Fill it free. Use your Litos+ trial when you want the documents tailored too.</p>
               {/* "The resume, the form and the email. One place." was removed
                   2026-07-28. Its own comment recorded it as a deliberate
                   say-once override, restating the three pillars twelve
@@ -765,13 +843,13 @@ export default function Home() {
                   source="close"
                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full bg-action px-7 py-3 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:w-auto"
                 >
-                  Get started, it&apos;s free
+                  Get started
                 </SignInLink>
                 <a
                   href="/try"
                   className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto"
                 >
-                  Try it free
+                  Try Litos without signing up
                 </a>
               </div>
               {/* The "Job found -> ready to send - 9 seconds" receipt was

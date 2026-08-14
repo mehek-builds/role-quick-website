@@ -80,11 +80,17 @@ export function AutopilotToggle({
   eligibility,
   saving,
   onToggle,
+  premiumLocked = false,
+  premiumLoading = false,
+  onPremiumRequest,
 }: {
   enabled: boolean | null;
   eligibility: ConsentEligibility | null;
   saving: boolean;
   onToggle: (next: boolean) => void;
+  premiumLocked?: boolean;
+  premiumLoading?: boolean;
+  onPremiumRequest?: () => void;
 }) {
   const locked = !enabled && eligibility?.eligible === false;
   const id = "autopilot-switch";
@@ -94,6 +100,8 @@ export function AutopilotToggle({
       <div className="flex items-center gap-2.5">
         <label htmlFor={id} className={`text-sm ${enabled ? "font-medium text-brand-ink" : "text-muted"}`}>
           Send without asking
+          {premiumLocked && <span className="ml-2 rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Litos+</span>}
+          {premiumLoading && !enabled && <span className="ml-2 font-mono text-label text-muted">Checking plan</span>}
         </label>
         {/* A real checkbox under a drawn switch: the frames show a switch, and a student's
             keyboard, screen reader and browser autofill all still see the input. */}
@@ -104,8 +112,11 @@ export function AutopilotToggle({
             role="switch"
             checked={Boolean(enabled)}
             // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
-            disabled={saving || locked}
-            onChange={(event) => onToggle(event.target.checked)}
+            disabled={saving || (!enabled && premiumLoading) || (locked && !premiumLocked)}
+            onChange={(event) => {
+              if (event.target.checked && premiumLocked) onPremiumRequest?.();
+              else onToggle(event.target.checked);
+            }}
             className="peer h-6 w-10 cursor-pointer appearance-none rounded-full bg-surface-alt transition-colors checked:bg-brand disabled:cursor-not-allowed disabled:opacity-40"
           />
           <span

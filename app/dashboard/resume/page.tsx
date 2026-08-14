@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/app/Button";
 import { useEffect, useId, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { litosClientHeaders } from "@/lib/product";
@@ -19,6 +20,7 @@ import {
 type ParsedProfile = Record<string, unknown>;
 
 export default function ResumeWorkspace() {
+  const embedded = usePathname() === "/dashboard/documents";
   const [profile, setProfile] = useState<ParsedProfile | null | "missing">(null);
   const [entries, setEntries] = useState<ExperienceEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -194,14 +196,14 @@ export default function ResumeWorkspace() {
 
   return (
     <div className="space-y-8">
-      <div>
+      {!embedded && <div>
         <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Resume</h1>
         {/* The second sentence explained the system to itself. A page called
             Resume, holding the resume, does not need to justify holding it. */}
         <p className="mt-1 text-sm text-muted">
           Your resume and work history.
         </p>
-      </div>
+      </div>}
 
       {error && <ErrorNote message={error} />}
 

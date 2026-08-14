@@ -23,7 +23,7 @@ let lastError: { message?: string } | undefined;
   },
 };
 
-const { armHandoffs, clearExtensionSession, ensureCurrentExtensionSession, ensureExtensionSession, extensionVersionAtLeast, minimumAttendedHandoffExtensionVersion, sendToExtension } = await import(
+const { armHandoffs, clearExtensionSession, createCheckoutThroughExtension, ensureCurrentExtensionSession, ensureExtensionSession, extensionVersionAtLeast, minimumAttendedHandoffExtensionVersion, retryPremiumActionThroughExtension, sendToExtension, startFreeFillThroughExtension, verifyExtensionCheckoutReturn } = await import(
   "./extension-bridge.ts"
 );
 
@@ -163,6 +163,95 @@ test("signing out here tells the extension to sign out too", async () => {
   clearExtensionSession();
   await new Promise((resolve) => queueMicrotask(() => resolve(null)));
   assert.deepEqual(calls[0], { type: "LITOS_CLEAR_SESSION" });
+});
+
+test("extension checkout carries the selected paid term and trigger to the extension account", async () => {
+  reset(() => ({ ok: true, checkout_url: "https://checkout.stripe.com/c/pay/cs_test_litos" }));
+  const checkoutUrl = await createCheckoutThroughExtension({
+    planId: "litos_plus_quarter",
+    placement: "public_pricing",
+    trigger: "tailor_resume_limit",
+    actionNonce: "action-123",
+  });
+  assert.equal(checkoutUrl, "https://checkout.stripe.com/c/pay/cs_test_litos");
+  assert.deepEqual(calls[0], {
+    type: "LITOS_CREATE_CHECKOUT",
+    plan_id: "litos_plus_quarter",
+    surface: "extension",
+    placement: "public_pricing",
+    trigger: "tailor_resume_limit",
+    action_nonce: "action-123",
+  });
+});
+
+test("extension checkout explains missing sessions and rejects non-Stripe destinations", async () => {
+  reset(() => ({ ok: false, code: "missing_token", error: "Unauthorized" }));
+  await assert.rejects(
+    createCheckoutThroughExtension({ planId: "litos_plus_week", placement: "public_pricing", trigger: "pricing_plan" }),
+    /extension is signed out/i,
+  );
+
+  reset(() => ({ ok: true, checkout_url: "https://evil.example/c/pay/cs_test_litos" }));
+  await assert.rejects(
+    createCheckoutThroughExtension({ planId: "litos_plus_week", placement: "public_pricing", trigger: "pricing_plan" }),
+    /invalid Stripe checkout link/i,
+  );
+});
+
+test("billing return asks the extension to refresh its own entitlements and preserve the action", async () => {
+  reset(() => ({ ok: true, active: true, access_class: "plus_paid", revision: 8, account_id: "account-extension", action_ready: true }));
+  const result = await verifyExtensionCheckoutReturn({ status: "active", context: "tailor_resume", actionNonce: "action-123" });
+  assert.deepEqual(calls[0], {
+    type: "LITOS_CHECKOUT_RETURN",
+    status: "active",
+    context: "tailor_resume",
+    action_nonce: "action-123",
+  });
+  assert.deepEqual(result, { ok: true, active: true, access_class: "plus_paid", revision: 8, account_id: "account-extension", action_ready: true });
+});
+
+test("extension premium actions retry only through an explicit bridge call", async () => {
+  reset(() => ({ ok: true, opened: true }));
+  await retryPremiumActionThroughExtension("action-123");
+  assert.deepEqual(calls[0], {
+    type: "LITOS_RETRY_PREMIUM_ACTION",
+    action_nonce: "action-123",
+  });
+
+  reset(() => ({ ok: false, code: "action_expired", error: "Expired" }));
+  await assert.rejects(retryPremiumActionThroughExtension("action-123"), /no longer available/i);
+});
+
+test("canonical Free filling uses its own extension mode and sends no client API URL", async () => {
+  reset(() => ({ ok: true, armed: true }));
+  await startFreeFillThroughExtension({
+    applicationId: "canonical-application",
+    portalUrl: "https://jobs.lever.co/litos/role",
+  });
+  assert.deepEqual(calls[0], {
+    type: "LITOS_START_FREE_FILL",
+    application_id: "canonical-application",
+    portal_url: "https://jobs.lever.co/litos/role",
+  });
+  assert.equal("fill_data_url" in (calls[0] as Record<string, unknown>), false);
+});
+
+test("canonical Free filling fails closed when the extension does not arm it", async () => {
+  reset(() => ({ ok: false, armed: false, error: "Fill data did not match." }));
+  await assert.rejects(
+    startFreeFillThroughExtension({
+      applicationId: "canonical-application",
+      portalUrl: "https://jobs.lever.co/litos/role",
+    }),
+    /Fill data did not match/,
+  );
+
+  reset(() => ({ ok: true, armed: true }));
+  await assert.rejects(
+    startFreeFillThroughExtension({ applicationId: "canonical-application", portalUrl: "http://jobs.example/role" }),
+    /URL is invalid/,
+  );
+  assert.equal(calls.length, 0);
 });
 
 test("only applications with a portal url are armed, and an acknowledgement is required", async () => {

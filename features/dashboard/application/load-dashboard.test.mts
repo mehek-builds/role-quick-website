@@ -56,7 +56,7 @@ test("normalizes optional collection drift to safe empty values", () => {
 
 test("loads the versioned bootstrap contract with one request", async () => {
   const paths: string[] = [];
-  const state = await loadDashboardInitialState(async <T>(path: string) => {
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
     paths.push(path);
     return completeBootstrap as T;
   });
@@ -67,7 +67,7 @@ test("loads the versioned bootstrap contract with one request", async () => {
 
 test("does not reuse a pre-save bootstrap response when Home mounts again", async () => {
   let bootstrapInit: RequestInit | undefined;
-  await loadDashboardInitialState(async <T>(path: string, init?: RequestInit) => {
+  await loadDashboardInitialState(async <T,>(path: string, init?: RequestInit) => {
     if (path === "/dashboard/bootstrap") bootstrapInit = init;
     return completeBootstrap as T;
   });
@@ -87,7 +87,7 @@ test("falls back to legacy parallel resources only when the aggregate is unavail
     "/track/events": completeBootstrap.outreach,
     "/onboarding/state": completeBootstrap.onboarding,
   };
-  const state = await loadDashboardInitialState(async <T>(path: string) => {
+  const state = await loadDashboardInitialState(async <T,>(path: string) => {
     paths.push(path);
     if (path === "/dashboard/bootstrap") throw Object.assign(new Error("not found"), { status: 404 });
     return responses[path] as T;

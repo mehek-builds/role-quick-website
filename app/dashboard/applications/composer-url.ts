@@ -2,8 +2,10 @@ type ComposerLocation = Pick<Location, "hash" | "pathname" | "search">;
 
 export function closedComposerPath(location: ComposerLocation): string {
   const params = new URLSearchParams(location.search);
+  const composerIntent = params.has("job") || params.has("new");
   params.delete("job");
   params.delete("new");
+  if (composerIntent) params.delete("intent");
   const search = params.toString();
   return `${location.pathname}${search ? `?${search}` : ""}${location.hash}`;
 }

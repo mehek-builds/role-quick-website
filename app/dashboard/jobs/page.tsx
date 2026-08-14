@@ -12,6 +12,7 @@ import { Card, DataErrorState, EmptyState, ErrorNote, ShimmerRows, formatRelativ
 import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
 import { EMPLOYMENT_TYPES, formatPay, jobTypeLabel } from "@/features/jobs";
 import { trackZeroResultJobSearch } from "@/lib/job-search-demand-client";
+import { useBilling } from "@/components/billing/BillingProvider";
 
 const RECENT_SEARCHES_KEY = "litos_recent_job_title_searches";
 
@@ -78,6 +79,7 @@ function hasServerMatchScores(jobs: MonitoredJob[] | null): boolean {
 }
 
 export default function JobsPage() {
+  const { canUse, openUpgrade } = useBilling();
   const [jobs, setJobs] = useState<MonitoredJob[] | null>(null);
   const [ranked, setRanked] = useState(false);
   const [query, setQuery] = useState("");
@@ -339,12 +341,21 @@ export default function JobsPage() {
             eligibility={autopilot.eligibility}
             saving={autopilot.saving}
             onToggle={(next) => void autopilot.toggle(next)}
+            premiumLocked={canUse("automatic_submission") === false}
+            premiumLoading={canUse("automatic_submission") === null}
+            onPremiumRequest={() => openUpgrade({
+              feature: "automatic_submission",
+              placement: "jobs_header",
+              trigger: "automatic_submission_toggle",
+              manualLabel: "Keep manual submission",
+            })}
           />
         </div>
       </div>
 
       {autopilot.error && <ErrorNote message={autopilot.error} />}
-      <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />
+      {canUse("automatic_submission") !== false && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
+      {canUse("automatic_submission") === false && <p className="text-small text-muted">Application filling stays unlimited. On Free, you review the form and press the employer&apos;s final submit control.</p>}
 
       {!ranked && (
         <p className="text-sm text-muted">
@@ -557,16 +568,16 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
       ) : application ? (
         <Link
           href={jobApplicationHref(application)}
-          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-action px-6 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:basis-auto"
+          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control border border-control-border bg-surface px-6 text-sm font-medium text-ink transition-colors hover:border-ink sm:basis-auto"
         >
           {jobApplicationActionLabel(application)}
         </Link>
       ) : (
         <Link
-          href={`/dashboard/applications?job=${job.id}`}
+          href={`/dashboard/applications?job=${job.id}&intent=fill`}
           className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-action px-6 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:basis-auto"
         >
-          Apply
+          Fill application
         </Link>
       )}
     </Card>

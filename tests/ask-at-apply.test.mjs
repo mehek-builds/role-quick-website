@@ -42,7 +42,7 @@ test("it runs after the packet exists, so a slow or missing scan costs her nothi
   const asked = create.indexOf("await askPrescriptQuestions(draft.jobId)");
   assert.ok(created > 0 && asked > created, "the pre-script is fetched after the packet is built");
   // Only for a posting off the board. A hand-typed link has no posting to look ahead at.
-  assert.match(create, /if \(draft\.jobId\) await askPrescriptQuestions\(draft\.jobId\)/);
+  assert.match(create, /if \(draft\.jobId && !keepCanonicalDetail\) await askPrescriptQuestions\(draft\.jobId\)/);
   // Every failure means "nothing extra to ask", which is exactly today's behaviour.
   assert.match(API, /export function getPostingQuestions[\s\S]{0,400}?\.catch\(\(\) => null\)/);
 });

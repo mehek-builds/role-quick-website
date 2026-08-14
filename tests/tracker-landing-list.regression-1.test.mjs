@@ -50,7 +50,7 @@ describe("the route the sidebar actually links to", () => {
   test("Tracker still goes to the bare path, with no query to rescue it", () => {
     /* If this ever grows a ?state= or ?job=, the landing view has been worked around rather than
        fixed, and the next person to type the URL is back where this started. */
-    assert.match(shell, /\{ href: "\/dashboard\/applications", label: "Tracker"/);
+    assert.match(shell, /\{ href: "\/dashboard\/applications", label: "Applications"/);
   });
 
   test("the bare path renders the list of applications", () => {

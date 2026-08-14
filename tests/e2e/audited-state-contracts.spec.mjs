@@ -15,6 +15,8 @@ import { chromium } from "playwright-core";
 const BACKEND = "https://student-outreach-backend.vercel.app";
 const TOKEN = "audited-state-fixture-token";
 const EMAIL = "fixture@example.invalid";
+const ACCOUNT_ID = "audited-state-fixture-account";
+const OFFER_ID = "11111111-2222-4333-8444-555555555555";
 const DELETE_CONFIRMATION =
   "I am willingly deleting my account and I confirm that all of my history will be erased.";
 
@@ -73,6 +75,45 @@ function account(overrides = {}) {
   };
 }
 
+function billingState(accessClass = "free_new") {
+  const paid = accessClass === "plus_paid";
+  return {
+    account_id: ACCOUNT_ID,
+    entitlement: {
+      schema_version: 2,
+      policy_version: "litos-entitlements-v2",
+      revision: "audited-state-fixture",
+      evaluated_at: "2026-08-14T00:00:00.000Z",
+      access_class: accessClass,
+      product: paid ? "litos_plus" : null,
+      term: paid ? "month" : null,
+      features: {},
+      trial: null,
+      subscription: paid ? { provider: "stripe", status: "active", management_available: true } : null,
+    },
+  };
+}
+
+function dashboardReadFixture(key) {
+  if (key === "GET /billing/state") return billingState();
+  if (key === "GET /billing/plans") {
+    return {
+      checkout_available: true,
+      plans: [
+        { plan_id: "litos_plus_week", amount_cents: 1999, checkout_available: true },
+        { plan_id: "litos_plus_month", amount_cents: 3999, checkout_available: true },
+        { plan_id: "litos_plus_quarter", amount_cents: 8999, checkout_available: true },
+      ],
+    };
+  }
+  if (key === "GET /resume/history") return { resumes: [] };
+  if (key === "GET /cover-letters") return { cover_letters: [] };
+  if (key === "GET /applications") return { applications: [] };
+  if (key === "GET /documents") return { documents: [] };
+  if (key === "GET /profile/application") return {};
+  return null;
+}
+
 async function fixtureContext({ fastTimers = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await context.addInitScript(({ token, email, shortenTimers }) => {
@@ -89,12 +130,27 @@ async function fixtureContext({ fastTimers = false } = {}) {
   return context;
 }
 
+async function seedBillingReturnContext(context) {
+  await context.addInitScript(({ accountId, offerId }) => {
+    window.sessionStorage.setItem(`litos_billing_return_v2:${offerId}`, JSON.stringify({
+      accountId,
+      returnRoute: "/dashboard",
+      expiresAt: "2099-01-01T00:00:00.000Z",
+    }));
+  }, { accountId: ACCOUNT_ID, offerId: OFFER_ID });
+}
+
 function isLocal(url) {
   return url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank";
 }
 
-async function routeBilling(context, meResponse) {
+async function routeBilling(context, meResponse, {
+  offerStatus = "paid",
+  stateResponse = billingState("plus_paid"),
+} = {}) {
   let meCalls = 0;
+  let offerCalls = 0;
+  let stateCalls = 0;
   let portalCalls = 0;
   const unknown = [];
   await context.route("**/*", async (route) => {
@@ -104,6 +160,18 @@ async function routeBilling(context, meResponse) {
     if (url.startsWith(BACKEND) && new URL(url).pathname === "/me") {
       meCalls += 1;
       return route.fulfill({ json: meResponse });
+    }
+    if (url.startsWith(BACKEND) && request.method() === "GET" && new URL(url).pathname === `/billing/offers/${OFFER_ID}`) {
+      offerCalls += 1;
+      return route.fulfill({ json: {
+        offer_id: OFFER_ID,
+        status: offerStatus,
+        expires_at: "2099-01-01T00:00:00.000Z",
+      } });
+    }
+    if (url.startsWith(BACKEND) && request.method() === "GET" && new URL(url).pathname === "/billing/state") {
+      stateCalls += 1;
+      return route.fulfill({ json: stateResponse });
     }
     if (url.startsWith(BACKEND) && request.method() === "POST" && new URL(url).pathname === "/billing/portal") {
       portalCalls += 1;
@@ -128,7 +196,13 @@ async function routeBilling(context, meResponse) {
     unknown.push(`${request.method()} ${url}`);
     return route.abort();
   });
-  return { get meCalls() { return meCalls; }, get portalCalls() { return portalCalls; }, unknown };
+  return {
+    get meCalls() { return meCalls; },
+    get offerCalls() { return offerCalls; },
+    get stateCalls() { return stateCalls; },
+    get portalCalls() { return portalCalls; },
+    unknown,
+  };
 }
 
 test("cancelled billing return never reads the account", async () => {
@@ -136,19 +210,22 @@ test("cancelled billing return never reads the account", async () => {
   const traffic = await routeBilling(context, account());
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/billing/return?status=cancelled`);
-  await page.getByRole("heading", { name: "No payment was confirmed." }).waitFor();
+  await page.getByRole("heading", { name: "Nothing was charged." }).waitFor();
   assert.equal(traffic.meCalls, 0);
+  assert.equal(traffic.offerCalls, 0);
+  assert.equal(traffic.stateCalls, 0);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
 
-test("billing return confirms an active account record", async () => {
+test("billing return confirms the exact paid offer and account record", async () => {
   const context = await fixtureContext();
+  await seedBillingReturnContext(context);
   const traffic = await routeBilling(context, account({ tier: "pro", billing_status: "active", billing_portal_available: true }));
   const page = await context.newPage();
-  await page.goto(`${ORIGIN}/billing/return`);
-  await page.getByRole("heading", { name: "You're on Litos Pro." }).waitFor();
-  await page.getByLabel("Litos Pro payment receipt for $39.99").waitFor();
+  await page.goto(`${ORIGIN}/billing/return?context=${OFFER_ID}`);
+  await page.getByRole("heading", { name: "You're on Litos+." }).waitFor();
+  await page.getByLabel("Litos+ payment receipt for $39.99").waitFor();
   await page.getByRole("status").getByText("Payment complete").waitFor();
   assert.equal(await page.locator("[data-receipt-stage]").getAttribute("data-receipt-stage"), "complete");
   await page.getByText("Every month", { exact: true }).first().waitFor();
@@ -157,17 +234,26 @@ test("billing return confirms an active account record", async () => {
   for (let attempt = 0; attempt < 50 && traffic.portalCalls === 0; attempt += 1) await delay(10);
   assert.equal(traffic.portalCalls, 1);
   assert.equal(traffic.meCalls, 1);
+  assert.equal(traffic.offerCalls, 1);
+  assert.equal(traffic.stateCalls, 1);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
 
 test("billing return reaches its bounded timeout state", async () => {
   const context = await fixtureContext({ fastTimers: true });
-  const traffic = await routeBilling(context, account({ tier: "free", billing_status: "inactive" }));
+  await seedBillingReturnContext(context);
+  const traffic = await routeBilling(
+    context,
+    account({ tier: "free", billing_status: "inactive" }),
+    { offerStatus: "checkout_created", stateResponse: billingState() },
+  );
   const page = await context.newPage();
-  await page.goto(`${ORIGIN}/billing/return`);
+  await page.goto(`${ORIGIN}/billing/return?context=${OFFER_ID}`);
   await page.getByText(/Payment could not be confirmed yet/).waitFor();
   assert.equal(traffic.meCalls, 6);
+  assert.equal(traffic.offerCalls, 6);
+  assert.equal(traffic.stateCalls, 6);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
@@ -199,6 +285,8 @@ async function routeSettings(context, deleteResponse, exportResponse = { status:
       const response = typeof deleteResponse === "function" ? await deleteResponse() : deleteResponse;
       return route.fulfill(response);
     }
+    const dashboardFixture = dashboardReadFixture(key);
+    if (dashboardFixture !== null) return route.fulfill({ json: dashboardFixture });
     unknown.push(key);
     return route.fulfill({ status: 500, json: { error: `unstubbed ${key}` } });
   });
@@ -362,6 +450,8 @@ async function routeResume(context, {
       }
       return route.fulfill({ json: { name: "Fixture Student", school: "Fixture University" } });
     }
+    const dashboardFixture = dashboardReadFixture(key);
+    if (dashboardFixture !== null) return route.fulfill({ json: dashboardFixture });
     unknown.push(key);
     return route.fulfill({ status: 500, json: { error: `unstubbed ${key}` } });
   });

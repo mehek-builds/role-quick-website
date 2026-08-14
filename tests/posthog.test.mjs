@@ -131,6 +131,8 @@ test("the core conversion events remain instrumented", async () => {
     read("app/contact/page.tsx"),
     read("app/dashboard/applications/page.tsx"),
     read("app/dashboard/settings/page.tsx"),
+    read("components/billing/BillingProvider.tsx"),
+    read("components/pricing/PlanCards.tsx"),
   ]);
   const source = files.join("\n");
   for (const event of [

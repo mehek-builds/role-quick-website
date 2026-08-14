@@ -13,9 +13,8 @@ import {
   getOnboardingState,
   getOrCreateGuestKey,
   hasLitosHistory,
-  createCheckout,
 } from "@/lib/api";
-import { isSafeCheckoutUrl } from "@/lib/billing";
+import { isLitosPlusPlanId } from "@/features/billing";
 import { litosClientHeaders } from "@/lib/product";
 import { googleSignInError, requestCodeError, verifyCodeError } from "./errors";
 import { PendingLabel } from "@/components/app/ui";
@@ -137,9 +136,14 @@ export default function Login() {
   const [guestBusy, setGuestBusy] = useState(false);
 
   useEffect(() => {
-    const claiming = new URLSearchParams(window.location.search).get("claim") === "1";
-    const requestedFlow = new URLSearchParams(window.location.search).get("flow");
-    const reason = new URLSearchParams(window.location.search).get("reason");
+    const params = new URLSearchParams(window.location.search);
+    const claiming = params.get("claim") === "1";
+    const requestedFlow = params.get("flow");
+    const reason = params.get("reason");
+    const preferredPlan = params.get("plan");
+    if (params.get("intent") === "litos-plus" && isLitosPlusPlanId(preferredPlan)) {
+      window.sessionStorage.setItem("litos_plus_selected_plan_v2", preferredPlan);
+    }
     if (getToken() && !claiming) {
       void landingRoute().then((r) => router.replace(r));
       return;
@@ -356,20 +360,8 @@ export default function Login() {
         }
         setSession(data.token, email.trim().toLowerCase());
         track("authentication_completed", { method: claimMode ? "email_claim" : "email_code" });
-        const next = new URLSearchParams(window.location.search).get("next");
-        if (next === "upgrade") {
-          try {
-            const checkout = await createCheckout();
-            if (isSafeCheckoutUrl(checkout.url)) {
-              track("checkout_started", { source: "post_login_upgrade" });
-              window.location.assign(checkout.url);
-              return;
-            }
-          } catch {
-            router.replace("/dashboard/settings?billing=unavailable");
-            return;
-          }
-        }
+        /* A selected paid term is a preference only. New accounts start the no-card trial and
+           Stripe opens only after a later, explicit purchase from Pricing or Account. */
         router.replace(await landingRoute());
       } else {
         setError(verifyCodeError(res.status, data?.error));
@@ -578,7 +570,7 @@ export default function Login() {
                   {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Guest mode"}
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-muted">
-                  Your first week is free. No card needed. You only see this the first time.
+                  Your 7-day Litos+ trial starts now. No card needed. Application filling stays free after it ends.
                 </p>
                 {/* Both controls in this block can create an account: Google on a
                     first sign-in, and guest mode, which makes a guest one.

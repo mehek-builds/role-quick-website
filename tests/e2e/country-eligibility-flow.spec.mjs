@@ -95,6 +95,29 @@ await context.route("**/*", async (route) => {
   const pathname = new URL(url).pathname;
   const key = `${request.method()} ${pathname}`;
   if (key === "GET /v1/meta") return route.fulfill({ json: { product: "litos" } });
+  if (key === "GET /billing/state") return route.fulfill({ json: {
+    account_id: "country-flow-fixture-account",
+    entitlement: {
+      schema_version: 2,
+      policy_version: "litos-entitlements-v2",
+      revision: "country-flow-fixture",
+      evaluated_at: "2026-08-14T00:00:00.000Z",
+      access_class: "free_new",
+      product: null,
+      term: null,
+      features: {},
+      trial: null,
+      subscription: null,
+    },
+  } });
+  if (key === "GET /billing/plans") return route.fulfill({ json: {
+    checkout_available: true,
+    plans: [
+      { plan_id: "litos_plus_week", amount_cents: 1999, checkout_available: true },
+      { plan_id: "litos_plus_month", amount_cents: 3999, checkout_available: true },
+      { plan_id: "litos_plus_quarter", amount_cents: 8999, checkout_available: true },
+    ],
+  } });
   if (key === "GET /onboarding/state") return route.fulfill({ json: onboardingState() });
   if (key === "GET /profile") return route.fulfill({ json: {
     full_name: "Fixture Applicant", school: "Fixture University", grad_year: 2028,

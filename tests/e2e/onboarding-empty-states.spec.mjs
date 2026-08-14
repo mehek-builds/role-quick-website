@@ -95,8 +95,8 @@ test("all seven onboarding checkpoints render with a progress indicator", async 
 });
 
 for (const state of [
-  ["applications", "No applications yet", "Start an application"],
-  ["outreach", "No emails yet", "Add Litos to Chrome"],
+  ["applications", "No applications yet", "Fill application"],
+  ["outreach", "No emails yet", "Write a message"],
   ["jobs", "No matching roles", "Change job preferences"],
 ]) {
   const [route, heading, action] = state;
@@ -104,11 +104,12 @@ for (const state of [
     await page.goto(`${ORIGIN}/dashboard/${route}?qa=empty`, { waitUntil: "domcontentloaded" });
     const title = page.getByRole("heading", { name: heading });
     await title.waitFor({ state: "visible", timeout: 20_000 });
-    assert.equal(await title.locator("xpath=..").locator("svg").count(), 1);
-    if (action) await page.getByRole("link", { name: action }).or(page.getByRole("button", { name: action })).waitFor({ state: "visible" });
+    const emptyState = title.locator("xpath=..");
+    assert.equal(await emptyState.locator("svg").count(), 1);
+    if (action) await emptyState.getByRole("link", { name: action }).or(emptyState.getByRole("button", { name: action })).waitFor({ state: "visible" });
     if (route === "applications") {
-      await page.getByRole("button", { name: "Start an application" }).click();
-      await page.getByRole("heading", { name: "Add a job." }).waitFor({ state: "visible" });
+      await emptyState.getByRole("button", { name: "Fill application" }).click();
+      await page.getByRole("heading", { name: "Fill an application." }).waitFor({ state: "visible" });
     }
   });
 }
@@ -129,9 +130,16 @@ for (const state of [
   const [route, heading] = state;
   test(`${route} load failure is not presented as empty data`, async () => {
     await page.goto(`${ORIGIN}/dashboard/${route}?qa=error`, { waitUntil: "domcontentloaded" });
-    const title = page.getByRole("heading", { name: heading });
+    const title = route === "outreach"
+      ? page.getByRole("alert").getByText(heading, { exact: true })
+      : page.getByRole("heading", { name: heading });
     await title.waitFor({ state: "visible", timeout: 20_000 });
-    assert.equal(await title.locator("xpath=..").locator("svg").count(), 1);
+    if (route === "outreach") {
+      assert.equal(await page.getByRole("alert").filter({ hasText: heading }).count(), 1);
+      assert.equal(await page.getByRole("heading", { name: "Outreach", exact: true }).count(), 1);
+    } else {
+      assert.equal(await title.locator("xpath=..").locator("svg").count(), 1);
+    }
     assert.equal(await page.locator("h1").count(), 1);
     const retry = page.getByRole("button", { name: "Try again" });
     await retry.waitFor({ state: "visible" });

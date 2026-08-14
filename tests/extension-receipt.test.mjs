@@ -11,6 +11,8 @@ test("Chrome extension receipts do not require a managed-browser screenshot", ()
 });
 
 test("the new application button does not pass its click event as the draft", () => {
-  assert.match(applications, /onGenerate=\{\(\) => void createApplication\(\)\}/);
-  assert.doesNotMatch(applications, /onGenerate=\{createApplication\}/);
+  assert.match(applications, /onFill=\{\(\) => void fillApplication\(\)\}/);
+  assert.match(applications, /onTailor=\{\(\) => void createApplication\(\)\}/);
+  assert.doesNotMatch(applications, /onFill=\{fillApplication\}/);
+  assert.doesNotMatch(applications, /onTailor=\{createApplication\}/);
 });

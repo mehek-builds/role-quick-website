@@ -169,7 +169,8 @@ test("overview keeps three application states and sends matches to the review sc
   assert.match(overview, /reviewHref=\{reviewHrefFor\(job\)\}/);
   assert.match(overview, /<Link href=\{reviewHref\}[\s\S]*?Review\s*<\/Link>/);
   assert.match(overview, /\/dashboard\/applications\?application=\$\{packet\.id\}/);
-  assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
+  assert.match(overview, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
+  assert.match(overview, /intent=fill[\s\S]{0,250}>Fill application<\/Link>/);
 
   /* Home is a launcher, not an approval surface. The card may prepare a packet, but a ready packet
      must open Tracker so the student sees the exact resume, answers, PDF and filled preview before
@@ -183,7 +184,7 @@ test("overview keeps three application states and sends matches to the review sc
   assert.doesNotMatch(shipped, /\/submission\/approve/);
   assert.doesNotMatch(shipped, /\/submit-request/);
   assert.doesNotMatch(shipped, /async function submitApplication/);
-  assert.match(overview, /\{status === "failed" \? "Try again" : "Prepare"\}/);
+  assert.match(overview, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
   assert.match(overview, /<PendingLabel>Getting ready<\/PendingLabel>/);
   // Home is a three-card window over a variable daily set. Submitting the first three must reveal
   // later matches, not complete the day while a fourth match is still waiting.
@@ -309,7 +310,9 @@ test("the review screen gates and performs the submission", async () => {
 test("automation settings send field-specific updates so stale clients cannot restore another permission", async () => {
   const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
   const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
-  assert.match(settings, /saveAutomation\(\{ automatic_submission_enabled: event\.target\.checked \}\)/);
+  assert.match(settings, /changeAutomaticSubmission\(event\.target\.checked\)/);
+  assert.match(settings, /canUse\("automatic_submission"\) !== true/);
+  assert.match(settings, /saveAutomation\(\{ automatic_submission_enabled: enabled \}\)/);
   assert.match(settings, /changeAutomaticVerification\(event\.target\.checked\)/);
   assert.match(settings, /verificationEnableDecision\(emailConnections\)/);
   assert.match(settings, /\(connected \? disconnectProvider\(provider\) : connectProvider\(provider, verificationConnectionPrompt\)\)/);
@@ -350,8 +353,8 @@ test("privacy disclosure covers both standing submission and verification-code a
   // (commit 3b7e4b1) and this assertion was not moved with it, so the suite has
   // been red on a disclosure that is actually still there, in plainer words.
   // Pinned to the substance, not the jargon: the setting, and the cancel window.
-  assert.match(privacy, /send without asking you each\s+time/);
-  assert.match(privacy, /15-second countdown, and one click cancels it/);
+  assert.match(privacy, /send (?:an application )?without asking you each\s+time/);
+  assert.match(privacy, /15-second countdown,\s+and one click cancels it/);
   assert.match(privacy, /Gmail or\s+Outlook you connected/);
   // was /separate,[\s\S]*optional permissions/ before the plain-language pass
   assert.match(privacy, /separate choices\.\s+You can turn either one off/);

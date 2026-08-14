@@ -23,9 +23,11 @@ test("profile and resume saves remain disabled while pristine", () => {
 
 test("billing exposes truthful failed and canceled return states", () => {
   const page = read("app/dashboard/settings/page.tsx");
-  assert.match(page, /billingFailed/);
-  assert.match(page, /Subscription canceled/);
+  assert.match(page, /billingNotice === "success"/);
+  assert.match(page, /billingNotice === "cancelled"/);
+  assert.match(page, /Checkout was canceled\. Nothing was charged\. Your work is saved\./);
   assert.match(page, /Open secure billing portal/);
+  assert.match(page, /isSafeBillingPortalUrl/);
   assert.match(page, /Payment method, receipts, invoices, discounts, and cancellation are managed there/);
 });
 

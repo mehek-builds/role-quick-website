@@ -20,25 +20,30 @@
  * production, this file is what has to follow it.
  */
 
-/** Days of full Pro access at signup, no card. Backend: TRIAL_DAYS. */
+/** Days of Litos+ access at signup, without a card. */
 export const TRIAL_DAYS = 7;
 
-/** Backend: LIMITS.free. */
+/** New Free has no premium-generation allowance. Application filling is unlimited separately. */
 export const FREE_LIMITS = {
-  resumes: 20,
-  contacts: 30,
-  drafts: 60,
+  resumes: 0,
+  contacts: 0,
+  drafts: 0,
 } as const;
 
-/** Backend: LIMITS.pro. */
-export const PRO_LIMITS = {
-  resumes: 1000,
-  contacts: 500,
-  drafts: 1000,
+export const TRIAL_LIMITS = {
+  tailoredResumes: 5,
+  coverLetters: 5,
+  answerApplications: 5,
+  outreachCompanies: 5,
+  contactsPerCompany: 2,
+  draftsPerCompany: 2,
 } as const;
 
-/** Stripe, billed weekly. */
+/** Paid Litos+ has no user-facing generation quota. Null means unmetered in UI copy. */
+export const PLUS_LIMITS = { resumes: null, contacts: null, drafts: null } as const;
+/** Compatibility name for code deployed before the Litos+ rename. */
+export const PRO_LIMITS = PLUS_LIMITS;
+
 export const PRO_WEEKLY_PRICE = "19.99";
-
-/** Stripe, billed monthly. */
 export const PRO_MONTHLY_PRICE = "39.99";
+export const PLUS_QUARTER_PRICE = "89.99";

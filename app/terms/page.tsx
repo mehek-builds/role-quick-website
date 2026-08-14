@@ -44,8 +44,8 @@ export const metadata = {
    remaining half of this and lives in the backend repo: the clickwrap on the
    sign-in screen forms the agreement, and storing the version is what proves
    which text a given account accepted. */
-const TERMS_VERSION = "2026-07-30";
-const TERMS_EFFECTIVE = "30 July 2026";
+const TERMS_VERSION = "2026-08-14";
+const TERMS_EFFECTIVE = "14 August 2026";
 
 function Section({
   title,
@@ -139,18 +139,44 @@ export default function Terms() {
 
         <Section title="Paying">
           <p>
-            Litos is free to install and free to use at the volume most people
-            apply at. Beyond that it is a paid subscription, billed on a
-            recurring basis until you cancel.
+            Litos Free includes unlimited factual application filling on
+            supported sites and from the web dashboard. You review the filled
+            form and use the employer site&apos;s final submit control. Tailored
+            resumes, generated cover letters and answers, contact discovery,
+            outreach drafts, and sending without being asked each time require trial or
+            Litos+ access.
+          </p>
+          <p>
+            A new account receives a seven-day Litos+ trial without adding a
+            card. The trial includes five tailored resumes, five cover letters,
+            generated answers for five applications, and up to two contacts and
+            two outreach drafts per company across five companies. Trial
+            generation starts only when you choose the relevant action.
+          </p>
+          <p>
+            Litos+ costs $19.99 for one week, $39.99 for one month, or $89.99
+            for three months. Each subscription renews for the same period at
+            the same total until you cancel. The three-month option is marked
+            most popular. Current prices and the full comparison are always
+            available on the{" "}
+            <a
+              href="/pricing"
+              className="text-ink underline decoration-border underline-offset-2"
+            >
+              Pricing page
+            </a>
+            .
           </p>
           <p>
             Stripe handles payments. Litos never sees or stores your card
             number.
           </p>
           <p>
-            Prices, what each plan includes, and the renewal period are shown on
-            the checkout page before you pay, and in Settings once you have
-            subscribed.
+            The selected price, renewal period, and cancellation terms are
+            shown before you enter Stripe Checkout, again in Checkout before
+            you pay, and in Account after you subscribe. The no-card trial does
+            not start a future charge. You must return and complete Stripe
+            Checkout to begin a paid subscription.
           </p>
         </Section>
 

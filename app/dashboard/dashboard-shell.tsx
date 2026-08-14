@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getOnboardingState, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
@@ -8,12 +8,16 @@ import { onboardingDeferredForSession } from "@/lib/onboarding-flow";
 import { isQaRender } from "@/lib/qa-mode";
 import { currentKeyboardInset } from "@/lib/keyboard-inset";
 import {
+  ChatIcon,
   ClipboardIcon,
+  DocumentIcon,
   GearIcon,
   HomeIcon,
   MailIcon,
+  PersonIcon,
   SearchIcon,
 } from "@/components/app/NavIcons";
+import { BillingProvider } from "@/components/billing/BillingProvider";
 
 /* One noun per destination, and the two that a student kept confusing are now told apart by the
    word itself rather than by a subtitle they have to find: "Jobs" is everything we found, and
@@ -23,8 +27,10 @@ import {
 const NAV = [
   { href: "/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/dashboard/jobs", label: "Jobs", Icon: SearchIcon },
-  { href: "/dashboard/applications", label: "Tracker", Icon: ClipboardIcon },
-  { href: "/dashboard/outreach", label: "Emails", Icon: MailIcon },
+  { href: "/dashboard/applications", label: "Applications", Icon: ClipboardIcon },
+  { href: "/dashboard/documents", label: "Documents", Icon: DocumentIcon },
+  { href: "/dashboard/network", label: "Network", Icon: PersonIcon },
+  { href: "/dashboard/outreach", label: "Outreach", Icon: MailIcon },
 ];
 
 /* Pinned below the work destinations because Account is visited occasionally. */
@@ -32,8 +38,7 @@ const UTILITY = [
   { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
 ];
 
-/* The consolidated Account destination is the fifth mobile item. */
-const MOBILE_NAV = [...NAV, ...UTILITY];
+const MOBILE_NAV = NAV.slice(0, 4);
 
 function isActive(href: string, pathname: string): boolean {
   // /dashboard prefix-matches every child, so it alone is compared exactly.
@@ -57,6 +62,48 @@ export function DashboardShell({
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreDialogRef = useRef<HTMLElement>(null);
+
+  const closeMore = useCallback((restoreFocus = false) => {
+    setMoreOpen(false);
+    if (restoreFocus) window.setTimeout(() => moreButtonRef.current?.focus(), 0);
+  }, []);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const dialog = moreDialogRef.current;
+    if (!dialog) return;
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>("button, a[href]"));
+    focusable()[0]?.focus();
+    const priorOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMore(true);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const stops = focusable();
+      if (stops.length === 0) return;
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = priorOverflow;
+    };
+  }, [closeMore, moreOpen]);
 
   /**
    * Publish the software keyboard's height as a CSS variable.
@@ -151,9 +198,10 @@ export function DashboardShell({
   const href = (to: string) => (qaMode ? `${to}?qa=1` : to);
 
   return (
-    /* The rail is a real grid column, not a fixed overlay, so the page's own scrollbar belongs to
-       the content and the two never fight over it. Below lg the column collapses and the bottom bar
-       takes over: a 272px rail on a laptop is orientation, on a phone it is the whole screen. */
+    <BillingProvider>
+    {/* The rail is a real grid column, not a fixed overlay, so the page's own scrollbar belongs to
+        the content and the two never fight over it. Below lg the column collapses and the bottom bar
+        takes over: a 272px rail on a laptop is orientation, on a phone it is the whole screen. */}
     <div className="dashboard-shell min-h-screen lg:grid lg:grid-cols-[17rem_1fr]">
       <aside className="sticky top-0 hidden h-screen flex-col border-r border-border bg-surface lg:flex">
         <Link href="/" className="flex items-center gap-2.5 px-5 py-5">
@@ -208,7 +256,7 @@ export function DashboardShell({
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-7 pb-[var(--dashboard-action-offset)] sm:px-6 sm:pt-10">{children}</main>
       </div>
 
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
+      <nav aria-label="Dashboard" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
         {MOBILE_NAV.map((item) => (
           <Link
             key={item.href}
@@ -222,10 +270,57 @@ export function DashboardShell({
             {item.label}
           </Link>
         ))}
+        <button
+          ref={moreButtonRef}
+          type="button"
+          aria-haspopup="dialog"
+          aria-expanded={moreOpen}
+          aria-controls="dashboard-more-dialog"
+          onClick={() => setMoreOpen(true)}
+          className="min-h-11 rounded-full px-0.5 py-2 text-center text-xs text-muted"
+        >
+          More
+        </button>
       </nav>
+      {moreOpen && (
+        <div className="fixed inset-0 z-50 flex items-end bg-ink/35 lg:hidden" onClick={() => closeMore(true)}>
+          <section
+            ref={moreDialogRef}
+            id="dashboard-more-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dashboard-more-title"
+            className="w-full rounded-t-card border border-border bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 shadow-overlay"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 id="dashboard-more-title" className="text-heading font-[450] text-ink">More</h2>
+              <button type="button" onClick={() => closeMore(true)} className="min-h-11 px-3 text-small text-muted">Close</button>
+            </div>
+            <nav aria-label="More dashboard destinations" className="mt-3 grid gap-2">
+              {[
+                { href: "/dashboard/network", label: "Network", Icon: PersonIcon },
+                { href: "/dashboard/outreach", label: "Outreach", Icon: ChatIcon },
+                { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
+              ].map((item) => (
+                <Link
+                  key={item.href}
+                  href={href(item.href)}
+                  onClick={() => closeMore()}
+                  className="flex min-h-12 items-center gap-3 rounded-control border border-border px-4 text-small font-medium text-ink"
+                >
+                  <item.Icon className="text-brand-ink" />
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+          </section>
+        </div>
+      )}
       {/* No marketing footer inside the product. Linear, Notion and Stripe (the stated
           references) all drop it once you are logged in; Privacy lives in Account. */}
     </div>
+    </BillingProvider>
   );
 }
 
@@ -307,7 +402,7 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
   }, [qaMode]);
 
   const address = me?.email ?? email;
-  const tier = me ? (me.is_guest ? "Trial" : me.tier === "pro" ? "Pro" : "Free") : null;
+  const tier = me ? (me.is_guest ? "Litos+ trial" : me.tier === "pro" || me.tier === "plus" ? "Litos+" : "Free") : null;
 
   return (
     <Link

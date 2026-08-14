@@ -22,7 +22,14 @@ test("job search and account settings share one tabbed account destination", asy
   ]);
 
   assert.doesNotMatch(layout, /href: "\/dashboard\/profile"/);
-  assert.match(layout, /const MOBILE_NAV = \[\.\.\.NAV, \.\.\.UTILITY\]/);
+  assert.match(layout, /const MOBILE_NAV = NAV\.slice\(0, 4\)/);
+  assert.match(layout, /aria-controls="dashboard-more-dialog"/);
+  assert.match(layout, /role="dialog"/);
+  assert.match(layout, /href: "\/dashboard\/network", label: "Network"/);
+  assert.match(layout, /href: "\/dashboard\/outreach", label: "Outreach"/);
+  assert.match(layout, /href: "\/dashboard\/settings", label: "Account"/);
+  assert.match(layout, /event\.key === "Escape"/);
+  assert.match(layout, /moreButtonRef\.current\?\.focus\(\)/);
   assert.match(settings, /id: "job-search", label: "Job search"/);
   assert.match(settings, /id: "application-details", label: "Application details"/);
   assert.match(settings, /id: "automation", label: "Automation"/);

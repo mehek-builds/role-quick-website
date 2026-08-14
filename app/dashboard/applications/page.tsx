@@ -9,10 +9,13 @@ import {
   getPostingQuestions,
   getToken,
   isGuestSession,
+  type ApplicationFillHandoff,
   type ApplicationQuestion,
   type ApplicationProfile,
   type ApplicationReview,
   type AttachedDocument,
+  type CanonicalApplication,
+  type CanonicalCoverLetterResponse,
   type CoverLetter,
   type GeneratedResume,
   type JobsPage,
@@ -23,9 +26,9 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { canonicalApplicationFromPacket, explicitTerms, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
-import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
+import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
@@ -49,7 +52,7 @@ import { AutopilotLockNote, NextMatchCard, useAutopilot, type NextMatch } from "
 import { InterviewPrep } from "@/components/app/InterviewPrep";
 import { fetchJdMatch, resumeSpecText } from "@/features/applications";
 import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
-import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion } from "@/lib/extension-bridge";
+import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
@@ -63,6 +66,9 @@ import { replaceClosedComposerUrl } from "./composer-url";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
 import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
+import { useBilling } from "@/components/billing/BillingProvider";
+import { isStructuredUpgradeDenial } from "@/features/billing";
+import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "recent" | "company";
@@ -76,8 +82,30 @@ type ApplicationSort = "recent" | "company";
    documents route. */
 type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; documents?: Record<string, AttachedDocument>; handoff_url?: string; configured?: boolean; partial?: boolean };
 
-type ResumeGenerationResponse = { resume_id: string; application?: GeneratedResume };
-type CoverLetterResponse = { cover_letter: CoverLetter; download_url: string };
+type ResumeGenerationResponse = {
+  resume_id: string;
+  canonical_application_id?: string;
+  artifact_id?: string;
+  application?: GeneratedResume;
+};
+type CoverLetterResponse = {
+  application_id?: string;
+  packet_id?: string;
+  cover_letter: CoverLetter;
+  download_url: string;
+};
+type ApplicationFillResponse = {
+  application_id: string;
+  status: string;
+  application_fill: true;
+  automatic_submission_allowed: boolean;
+  requires_final_submit: boolean;
+  needs_user: unknown;
+  selected_resume_artifact_id: string | null;
+  handoff?: ApplicationFillHandoff;
+  application?: CanonicalApplication;
+};
+type FillReceipt = ApplicationFillResponse & { company: string; role: string; portalUrl: string };
 
 function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boolean {
   return left?.body === right.body
@@ -135,6 +163,8 @@ type NewApplicationDraft = {
      watch, and the student can edit the company and role here anyway, so the id must not survive
      that and claim a row it no longer describes, which is why nothing below carries it over. */
   jobId: string | null;
+  /** Existing Free Tracker row this paid artifact must attach to. Cleared if its identity changes. */
+  canonicalApplicationId: string | null;
 };
 
 const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
@@ -143,7 +173,48 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   portalUrl: "",
   jobDescription: "",
   jobId: null,
+  canonicalApplicationId: null,
 };
+
+const CHECKOUT_DRAFT_KEY = "litos_application_checkout_draft_v1";
+
+function rememberCheckoutDraft(draft: NewApplicationDraft): void {
+  window.sessionStorage.setItem(CHECKOUT_DRAFT_KEY, JSON.stringify(draft));
+}
+
+function readCheckoutDraft(): NewApplicationDraft | null {
+  const raw = window.sessionStorage.getItem(CHECKOUT_DRAFT_KEY);
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<NewApplicationDraft>;
+    if (typeof value.company !== "string"
+      || typeof value.role !== "string"
+      || typeof value.portalUrl !== "string"
+      || typeof value.jobDescription !== "string"
+      || (value.jobId !== null && value.jobId !== undefined && typeof value.jobId !== "string")
+      || (value.canonicalApplicationId !== null && value.canonicalApplicationId !== undefined && typeof value.canonicalApplicationId !== "string")) return null;
+    return {
+      company: value.company,
+      role: value.role,
+      portalUrl: value.portalUrl,
+      jobDescription: value.jobDescription,
+      jobId: value.jobId ?? null,
+      canonicalApplicationId: value.canonicalApplicationId ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function forgetCheckoutDraft(): void {
+  window.sessionStorage.removeItem(CHECKOUT_DRAFT_KEY);
+}
+
+function resumeGenerationActionKey(draft: NewApplicationDraft): string {
+  if (draft.canonicalApplicationId) return `canonical:${draft.canonicalApplicationId}`;
+  if (draft.jobId) return `job:${draft.jobId}`;
+  return `manual:${draft.company.trim().toLowerCase()}\u0000${draft.role.trim().toLowerCase()}\u0000${draft.portalUrl.trim()}\u0000${draft.jobDescription.trim()}`;
+}
 
 /* A Suspense boundary over the useSearchParams read. DEFENSIVE, not required: this was first
    written down as "Next fails the build without it", and that was checked afterwards and is not
@@ -169,7 +240,18 @@ function requiresSensitiveQuestionReview(label: string, answer?: string | null):
 }
 
 function Applications() {
+  const { canUse, openUpgrade } = useBilling();
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
+  const [canonicalSelected, setCanonicalSelected] = useState<CanonicalApplication | null>(null);
+  const [canonicalIdByPacketId, setCanonicalIdByPacketId] = useState<Record<string, string>>({});
+  const resumeOperationIds = useRef(new Map<string, string>());
+  const coverLetterOperationIds = useRef(new Map<string, string>());
+  const [canonicalFillError, setCanonicalFillError] = useState<string | null>(null);
+  const [canonicalCoverLetter, setCanonicalCoverLetter] = useState<CanonicalCoverLetterResponse | null>(null);
+  const [canonicalCoverLetterBody, setCanonicalCoverLetterBody] = useState("");
+  const [canonicalCoverLetterJd, setCanonicalCoverLetterJd] = useState("");
+  const [canonicalCoverLetterEditorOpen, setCanonicalCoverLetterEditorOpen] = useState(false);
+  const [canonicalCoverLetterLoading, setCanonicalCoverLetterLoading] = useState(false);
   const [currentMatches, setCurrentMatches] = useState<MonitoredJob[] | null>(null);
   /* The student's education block as GET /profile serves it today. Status is separate from the
      profile object because null is not safe: a missing comparison cannot approve a real send. */
@@ -226,10 +308,7 @@ function Applications() {
   /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
      poll callback does not have to re-subscribe on every submission update. */
   const submissionRef = useRef<SubmissionResponse | null>(null);
-  /* The posting we have already auto-generated for, so arriving from "Apply now" can never spend
-     two resumes on one job. A ref, not state: it must be readable and writable within the same
-     tick the effect runs in, before any re-render. */
-  const autoGeneratedFor = useRef<string | null>(null);
+  const actionStartedFor = useRef<string | null>(null);
   const capturedSubmissionIds = useRef(new Set<string>());
   /* One browser proof for one immutable server audit. Application ID alone is not enough: a resume,
      answer, PDF, or JD mutation must make the proof unusable even when the row ID stays the same. */
@@ -322,10 +401,11 @@ function Applications() {
      authenticated effects fire during the first render of a QA page, and a 401 redirected the
      fixture to /login before it could verify anything. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"fill" | "tailor" | null>(null);
   const [extractingJd, setExtractingJd] = useState(false);
   const [showNewApplication, setShowNewApplication] = useState(false);
   const [newApplication, setNewApplication] = useState(EMPTY_APPLICATION_DRAFT);
+  const [fillReceipt, setFillReceipt] = useState<FillReceipt | null>(null);
   /* ISSUE-040: the composer's own refusal, kept OUT of the page-level `error` on purpose.
      "Fill in all four boxes first." used to render in the banner above the composer, which on a
      723px viewport measured y = -281 while the button that raised it sat at y = 434: announced to a
@@ -547,6 +627,29 @@ function Applications() {
   }, []);
 
   const selectPacket = useCallback((packet: GeneratedResume) => {
+    const canonical = canonicalApplicationFromPacket(packet);
+    if (canonical) {
+      // Canonical Tracker envelopes must never be sent to the legacy review, audit, or submission
+      // endpoints. Their own detail keeps the real portal handoff and retry control available. An
+      // explicit packet action first restores the linked packet's legacy route id.
+      selectedIdRef.current = null;
+      editorRevisionRef.current += 1;
+      setSelectedId(null);
+      setCanonicalSelected(canonical);
+      setCanonicalFillError(null);
+      setSpec(null);
+      setQuestions([]);
+      setSubmission(null);
+      setPacketEvidence(null);
+      setMatchResult(null);
+      setError(null);
+      setPollError(null);
+      setSendRefusal(null);
+      setNotice(null);
+      return;
+    }
+    setCanonicalSelected(null);
+    setCanonicalFillError(null);
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
@@ -817,13 +920,54 @@ function Applications() {
     const historyPath = requestedApplicationId
       ? `/resume/history?application=${encodeURIComponent(requestedApplicationId)}`
       : "/resume/history";
-    api<{ resumes: GeneratedResume[] }>(historyPath)
-      .then((result) => {
+    Promise.allSettled([
+      api<{ resumes: GeneratedResume[] }>(historyPath),
+      api<{ applications: CanonicalApplication[] }>("/applications?limit=100"),
+    ])
+      .then(async ([historyResult, canonicalResult]) => {
         if (cancelled) return;
-        const reviewable = onlyReviewablePackets(result.resumes);
-        setPackets(result.resumes);
-        const requested = reviewable.find((packet) => packet.id === requestedApplicationId);
+        // During a rolling deploy, keep legacy history usable before the canonical list route is
+        // present. The inverse matters for a direct canonical link: that id has no generated
+        // resume, so an older history route may reject it even though the canonical ledger owns it.
+        const canonical = canonicalResult.status === "fulfilled"
+          ? canonicalResult.value.applications
+          : [];
+        setCanonicalIdByPacketId(Object.fromEntries(canonical
+          .filter((application): application is CanonicalApplication & { legacy_generated_resume_id: string } => Boolean(application.legacy_generated_resume_id))
+          .map((application) => [application.legacy_generated_resume_id, application.id])));
+        const requestedCanonicalApplication = requestedApplicationId
+          ? canonical.find((application) =>
+            application.id === requestedApplicationId
+            || application.legacy_generated_resume_id === requestedApplicationId) ?? null
+          : null;
+        const requestedCanonical = requestedCanonicalApplication !== null;
+        if (historyResult.status === "rejected" && !requestedCanonical) throw historyResult.reason;
+        let legacy = historyResult.status === "fulfilled" ? historyResult.value.resumes : [];
+        const linkedPacketId = requestedCanonicalApplication?.legacy_generated_resume_id ?? null;
+        if (linkedPacketId && !legacy.some((packet) => packet.id === linkedPacketId)) {
+          const linkedHistory = await api<{ resumes: GeneratedResume[] }>(`/resume/history?application=${encodeURIComponent(linkedPacketId)}`);
+          if (cancelled) return;
+          legacy = [...linkedHistory.resumes, ...legacy.filter((packet) => !linkedHistory.resumes.some((linked) => linked.id === packet.id))];
+        }
+        const merged = mergeCanonicalApplicationHistory(legacy, canonical);
+        const reviewable = onlyReviewablePackets(merged);
+        setPackets(merged);
+        const requestedPacketId = requestedCanonicalApplication?.id ?? requestedApplicationId;
+        const requested = reviewable.find((packet) => packet.id === requestedPacketId);
+        if (requestedCanonicalApplication && requestedApplicationIntent === "detail") {
+          setRevisitingId(null);
+          setResolvedActionableRequestId(null);
+          setCanonicalSelected(requestedCanonicalApplication);
+          return;
+        }
         if (requested && requestedApplicationIntent === "detail") {
+          const canonicalApplication = canonicalApplicationFromPacket(requested);
+          if (canonicalApplication) {
+            setRevisitingId(null);
+            setResolvedActionableRequestId(null);
+            selectPacket(requested);
+            return;
+          }
           /* Detail is deliberately read-only. It opens the packet viewer without selecting the
              actionable workflow, so viewing a role can never prepare or approve an application. */
           setResolvedActionableRequestId(null);
@@ -874,7 +1018,13 @@ function Applications() {
   }, [requestedApplicationId, requestedApplicationIntent, selectPacket]);
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") !== "1") return;
+    const restored = params.get("checkout_action") === "tailor" ? readCheckoutDraft() : null;
+    queueMicrotask(() => {
+      if (restored) setNewApplication(restored);
+      setShowNewApplication(true);
+    });
   }, []);
 
   /* `?job=` NAMES A POSTING, and this is where a link that means something else gets sorted out.
@@ -937,42 +1087,40 @@ function Applications() {
     if (!pendingJob || packets === null) return;
     const existing = onlyReviewablePackets(packets).find((packet) => packetMatchesJob(packet, pendingJob));
     queueMicrotask(() => {
-      if (existing) {
+      const params = new URLSearchParams(window.location.search);
+      const intent = params.get("intent");
+      const checkoutAction = params.get("checkout_action");
+      if (existing && intent !== "fill") {
         selectPacket(existing);
         setShowNewApplication(false);
         setNotice("Your resume is ready. Compare it with the job below.");
       } else {
-        /* Arriving from "Apply now" IS the request, so build it now rather than showing a filled
-           form and asking again. Nothing here came from the student's typing: company, role, link
-           and description are all read off the posting.
-
-           The draft is passed to createApplication directly, not read back from state, because
-           setNewApplication has not committed yet in this tick. The panel is still opened so the
-           work is visible and the fields stay editable if the generation fails. */
         const draft = {
           company: pendingJob.company_name,
           role: pendingJob.title,
           portalUrl: pendingJob.apply_url,
           jobDescription: pendingJob.description,
           jobId: pendingJob.id,
+          canonicalApplicationId: null,
         };
         setNewApplication(draft);
         setShowNewApplication(true);
-        if (autoGeneratedFor.current === pendingJob.id) {
-          /* Already built for this posting in this session. The effect clears pendingJob in this
-             same microtask, so a second run should not be reachable, but "should not" is the wrong
-             standard for something that spends a resume from the student's quota and leaves a
-             duplicate packet behind. This makes it structurally impossible instead. */
-          setNotice("Building your resume for this job.");
-        } else if (canGenerateFrom(draft)) {
-          autoGeneratedFor.current = pendingJob.id;
-          setNotice("Building your resume for this job.");
-          void createApplication(draft);
+        if (checkoutAction === "tailor") {
+          setNotice("Your job is ready. Choose Tailor resume when you want Litos to start.");
+          setPendingJob(null);
+          return;
+        }
+        if (intent === "tailor") {
+          const actionKey = `${pendingJob.id}:tailor`;
+          if (actionStartedFor.current !== actionKey) {
+            actionStartedFor.current = actionKey;
+            void createApplication(draft);
+          }
         } else {
-          /* Some postings arrive with a stub description or a link the generator will not accept.
-             Firing anyway would spend the attempt and answer with "Fill in all four boxes first",
-             which is nonsense to someone who filled in nothing. Say what is actually missing. */
-          setNotice("This posting did not come with enough detail. Paste the job description below, then generate.");
+          // A route effect no longer has the browser click activation that opened this page. The
+          // employer tab must be reserved by the visible Fill application button below, or Chrome
+          // will block it before the extension can arm the canonical record.
+          setNotice("Job details are ready. Choose Fill application to verify the extension and open the employer form.");
         }
       }
       setPendingJob(null);
@@ -995,6 +1143,49 @@ function Applications() {
   const review = selected?.spec._review;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
+  const canonicalEnvelopePacket = canonicalSelected
+    ? (packets ?? []).find((packet) => canonicalApplicationFromPacket(packet)?.id === canonicalSelected.id) ?? null
+    : null;
+  const canonicalGeneratedPacket = linkedLegacyPacketFromCanonicalTrackerPacket(canonicalEnvelopePacket)
+    ?? (canonicalSelected?.legacy_generated_resume_id
+      ? (packets ?? []).find((packet) => packet.id === canonicalSelected.legacy_generated_resume_id) ?? null
+      : null);
+  useEffect(() => {
+    const applicationId = canonicalSelected?.id;
+    queueMicrotask(() => setCanonicalCoverLetterJd(""));
+    if (!applicationId || qaMode !== false) {
+      queueMicrotask(() => {
+        setCanonicalCoverLetter(null);
+        setCanonicalCoverLetterBody("");
+        setCanonicalCoverLetterEditorOpen(false);
+        setCanonicalCoverLetterLoading(false);
+      });
+      return;
+    }
+    let cancelled = false;
+    queueMicrotask(() => setCanonicalCoverLetterLoading(true));
+    void api<CanonicalCoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { cache: "no-store" })
+      .then((result) => {
+        if (cancelled) return;
+        setCanonicalCoverLetter(result);
+        setCanonicalCoverLetterBody(result.cover_letter.body ?? "");
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        if (reason instanceof ApiError && reason.status === 404) {
+          setCanonicalCoverLetter(null);
+          setCanonicalCoverLetterBody(canonicalGeneratedPacket?.spec._cover_letter?.body ?? "");
+          return;
+        }
+        setCanonicalFillError(reason instanceof Error ? reason.message : "Cover letter could not load.");
+      })
+      .finally(() => {
+        if (!cancelled) setCanonicalCoverLetterLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canonicalGeneratedPacket, canonicalSelected?.id, qaMode]);
   /* Computed over EVERY reviewable packet, not over visiblePackets, and that is the whole point.
      A filter of "Needs you" hides the sent Akuna application and leaves the eleven that cannot be
      sent looking like eleven live opportunities. The mark has to know about the row the filter
@@ -1232,8 +1423,10 @@ function Applications() {
     // The refusal described the form as it was. Typing is the student answering it.
     setComposerRefusal(null);
     setNewApplication((current) => {
-      const identityChanged = next.company !== current.company || next.role !== current.role;
-      return identityChanged ? { ...next, jobId: null } : next;
+      const identityChanged = next.company !== current.company
+        || next.role !== current.role
+        || next.portalUrl !== current.portalUrl;
+      return identityChanged ? { ...next, jobId: null, canonicalApplicationId: null } : next;
     });
   }
 
@@ -1274,10 +1467,52 @@ function Applications() {
     }
   }
 
-  /* Takes the draft explicitly rather than reading state, because arriving from "Apply now" builds
-     the draft and generates from it in the same tick. React has not committed setNewApplication by
-     then, so reading state here would generate from the PREVIOUS draft, or from an empty one on
-     first load. The panel's own button passes nothing and gets the state, as before. */
+  async function tailorCanonicalApplication(application: CanonicalApplication) {
+    const draft: NewApplicationDraft = {
+      company: application.company,
+      role: application.role,
+      portalUrl: application.portal_url ?? "",
+      jobDescription: "",
+      jobId: application.job_id ?? null,
+      canonicalApplicationId: application.id,
+    };
+    // Check access before loading or extracting the posting. A locked action should open the
+    // shared continuation modal immediately, with unlimited Free filling still available.
+    if (canUse("ai_resume_tailoring") !== true) {
+      await createApplication(draft);
+      return;
+    }
+    setCreating("tailor");
+    setCanonicalFillError(null);
+    setNotice(null);
+    try {
+      const jobDescription = application.job_id
+        ? (await api<{ job: MonitoredJob }>(`/jobs/${encodeURIComponent(application.job_id)}`)).job.description
+        : (await api<{ jd_text: string }>("/jobs/extract", {
+          method: "POST",
+          body: JSON.stringify({ job_url: application.portal_url }),
+        })).jd_text;
+      if (jobDescription.trim().length < 20) throw new Error("The saved job description is incomplete.");
+      await createApplication({ ...draft, jobDescription });
+    } catch (reason) {
+      setNewApplication(draft);
+      setShowNewApplication(true);
+      setCanonicalSelected(null);
+      refuseInComposer(
+        "action",
+        reason instanceof Error
+          ? `${reason.message} Paste the exact job description below, then choose Tailor resume.`
+          : "Litos could not read this posting. Paste the exact job description below, then choose Tailor resume.",
+        ["jobDescription"],
+      );
+    } finally {
+      setCreating(null);
+    }
+  }
+
+  /* Takes the draft explicitly for Tracker retries and manual fallbacks. The panel's own button
+     passes nothing and reads the current composer state. Every real call still starts from a
+     visible click, because reserving the employer tab later in a route effect is popup-blocked. */
   /* ASK HER THE EXTRA QUESTIONS HERE, at Apply, instead of discovering them mid-run.
    *
    * Until now the first anyone heard of a question Litos cannot answer was after the packet was
@@ -1329,25 +1564,187 @@ function Applications() {
     moveToScreen("questions");
   }
 
+  async function fillApplication(
+    draft: NewApplicationDraft = newApplication,
+    errorSurface: "composer" | "tracker" = "composer",
+  ) {
+    const company = draft.company.trim();
+    const role = draft.role.trim();
+    const portalUrl = draft.portalUrl.trim();
+    const reportFailure = (message: string, fields: ApplicationDraftField[] = []) => {
+      if (errorSurface === "tracker") {
+        setCanonicalFillError(message);
+        setError(null);
+      } else {
+        refuseInComposer("action", message, fields);
+      }
+    };
+    const missing = ([
+      ["company", company],
+      ["role", role],
+      ["portalUrl", portalUrl],
+    ] as const).filter(([, value]) => !value).map(([field]) => field as ApplicationDraftField);
+    if (missing.length > 0) {
+      reportFailure("Add the company, role, and job URL first.", missing);
+      return;
+    }
+    if (!isHttpsJobUrl(portalUrl)) {
+      reportFailure("Enter a complete job URL beginning with https://.", ["portalUrl"]);
+      return;
+    }
+    setComposerRefusal(null);
+    setCanonicalFillError(null);
+    setCreating("fill");
+    setError(null);
+    setNotice(null);
+    let companyTab: Window | null = null;
+    try {
+      if (qaMode) {
+        setFillReceipt({
+          application_id: `qa-fill-${Date.now()}`,
+          status: "ready_for_review",
+          application_fill: true,
+          automatic_submission_allowed: false,
+          requires_final_submit: true,
+          needs_user: [],
+          selected_resume_artifact_id: null,
+          company,
+          role,
+          portalUrl,
+        });
+      } else {
+        // Reserve a browser-created tab synchronously while this still belongs to the click. The
+        // exact employer URL is not loaded until the extension has adopted this account and
+        // explicitly acknowledged the canonical fill-only binding.
+        companyTab = window.open("about:blank", "_blank");
+        if (!companyTab) {
+          reportFailure("Chrome blocked the company tab. Allow pop-ups for Litos, then try again.");
+          return;
+        }
+        try {
+          companyTab.opener = null;
+          companyTab.document.body.textContent = "Litos is checking the extension and preparing this application.";
+        } catch {
+          companyTab.close();
+          companyTab = null;
+          reportFailure("Litos could not prepare a safe company tab. Nothing was opened.");
+          return;
+        }
+
+        const extension = await ensureCurrentExtensionSession({ token: getToken(), guest: isGuestSession() });
+        if (!extension.installed || !extension.signedIn || extension.otherAccount || extension.updateRequired) {
+          throw new Error(extension.updateRequired
+            ? "Update the Litos extension from the Chrome Web Store, then try again."
+            : extension.otherAccount
+              ? "The Litos extension is signed in to another account. Sign out there, then try again."
+              : "Install the Litos extension and sign in to this account before filling the company form.");
+        }
+        const created = await api<{ application: CanonicalApplication; created: boolean }>("/applications", {
+          method: "POST",
+          body: JSON.stringify({
+            ...(draft.jobId ? { job_id: draft.jobId } : {}),
+            company,
+            role,
+            portal_url: portalUrl,
+            source: "dashboard",
+            source_surface: "dashboard",
+          }),
+        });
+        setPackets((current) => current
+          ? upsertCanonicalApplicationHistory(current, created.application)
+          : current);
+        const filled = await api<ApplicationFillResponse>(`/applications/${encodeURIComponent(created.application.id)}/fill`, { method: "POST" });
+        const trackedApplication = filled.application ?? created.application;
+        setPackets((current) => current
+          ? upsertCanonicalApplicationHistory(current, trackedApplication)
+          : current);
+        setCanonicalSelected((current) => current?.id === trackedApplication.id ? trackedApplication : current);
+
+        const handoff = filled.handoff;
+        const expectedPortal = created.application.portal_url;
+        const expectedFillDataUrl = `/applications/${created.application.id}/fill-data`;
+        if (
+          !handoff
+          || handoff.mode !== "extension_portal_fill"
+          || handoff.extension_required !== true
+          || handoff.application_id !== created.application.id
+          || handoff.portal_url !== expectedPortal
+          || handoff.fill_data_url !== expectedFillDataUrl
+        ) {
+          throw new Error("Litos could not verify the exact fill handoff. Nothing was opened.");
+        }
+        await startFreeFillThroughExtension({
+          applicationId: handoff.application_id,
+          portalUrl: handoff.portal_url,
+        });
+        if (companyTab.closed) throw new Error("The company tab closed before Litos could open the form. Try again.");
+        companyTab.location.replace(handoff.portal_url);
+        setFillReceipt({ ...filled, company, role, portalUrl: handoff.portal_url });
+        track("application_fill_handoff_armed", {
+          source: draft.jobId ? "monitored_job" : "manual",
+          automatic_submission: false,
+        });
+      }
+      if (errorSurface === "composer") {
+        setNewApplication(EMPTY_APPLICATION_DRAFT);
+        forgetCheckoutDraft();
+        setShowNewApplication(false);
+        replaceClosedComposerUrl(window.location, (data, unused, url) => window.history.replaceState(data, unused, url));
+      }
+    } catch (reason) {
+      companyTab?.close();
+      reportFailure(reason instanceof Error ? reason.message : "Litos could not prepare this form. Your job details are still here.");
+    } finally {
+      setCreating(null);
+    }
+  }
+
   async function createApplication(draft: NewApplicationDraft = newApplication) {
+    const canonicalReturnRoute = draft.canonicalApplicationId
+      ? `/dashboard/applications?application=${encodeURIComponent(draft.canonicalApplicationId)}&intent=detail&checkout_action=tailor`
+      : "/dashboard/applications?new=1&checkout_action=tailor";
+    const openTailoringUpgrade = (source: "proactive" | "server_denial") => openUpgrade({
+      feature: "ai_resume_tailoring",
+      placement: draft.canonicalApplicationId ? "canonical_application_detail" : "application_composer",
+      trigger: source === "server_denial" ? "server_entitlement_denial" : "tailor_resume",
+      manualLabel: "Fill with my main resume",
+      applicationId: draft.canonicalApplicationId ?? undefined,
+      returnRoute: canonicalReturnRoute,
+      onBeforeCheckout: () => rememberCheckoutDraft(draft),
+      onManual: () => void fillApplication(draft, draft.canonicalApplicationId ? "tracker" : "composer"),
+    }, source === "server_denial" ? { source: "server_denial" } : undefined);
+    if (canUse("ai_resume_tailoring") !== true) {
+      openTailoringUpgrade("proactive");
+      return;
+    }
     const company = draft.company.trim();
     const role = draft.role.trim();
     const portalUrl = draft.portalUrl.trim();
     const jobDescription = draft.jobDescription.trim();
+    const reportGenerationFailure = (message: string, fields: ApplicationDraftField[] = []) => {
+      if (draft.canonicalApplicationId && canonicalSelected?.id === draft.canonicalApplicationId) {
+        setCanonicalFillError(message);
+      } else {
+        refuseInComposer("action", message, fields);
+      }
+    };
     /* Both refusals go to composerRefusal, never to setError: they are answers to a button inside
        the composer and have to appear next to it. See the state declaration for the measurement. */
     const missing = missingApplicationFields({ company, role, portalUrl, jobDescription });
     if (missing.length > 0) {
-      refuseInComposer("generate", "Fill in all four boxes first.", missing);
+      reportGenerationFailure("Fill in all four boxes first.", missing);
       return;
     }
     if (!isHttpsJobUrl(portalUrl)) {
-      refuseInComposer("generate", "Enter a complete job URL beginning with https://.", ["portalUrl"]);
+      reportGenerationFailure("Enter a complete job URL beginning with https://.", ["portalUrl"]);
       return;
     }
     setComposerRefusal(null);
+    setCanonicalFillError(null);
+    const operationKey = resumeGenerationActionKey(draft);
+    const operationId = operationIdFor(resumeOperationIds.current, operationKey);
 
-    setCreating(true);
+    setCreating("tailor");
     setError(null);
     setNotice(null);
     try {
@@ -1363,6 +1760,8 @@ function Applications() {
       const generated = await api<ResumeGenerationResponse>("/resume/generate", {
         method: "POST",
         body: JSON.stringify({
+          operation_id: operationId,
+          initiation: "explicit_click",
           company,
           role,
           jd_text: jobDescription,
@@ -1378,6 +1777,7 @@ function Applications() {
           /* Omitted rather than sent as null when this did not come from a posting: the backend
              field is optional, and only a present id gets written into the stored job_context. */
           ...(draft.jobId ? { job_id: draft.jobId } : {}),
+          ...(draft.canonicalApplicationId ? { application_id: draft.canonicalApplicationId } : {}),
           application: {
             ats_name: portalName(portalUrl),
             portal_url: portalUrl,
@@ -1395,14 +1795,57 @@ function Applications() {
 
       const created = generated.application;
       if (created?.spec._review) {
-        setPackets((current) => [created, ...(current ?? []).filter((packet) => packet.id !== created.id)]);
-        selectPacket(created);
+        const canonicalId = generated.canonical_application_id;
+        if (draft.canonicalApplicationId && canonicalId !== draft.canonicalApplicationId) {
+          throw new Error("Litos could not attach the tailored resume to this Tracker application. Reload and try again.");
+        }
+        completeOperationId(resumeOperationIds.current, operationKey);
+        const previousPacketId = canonicalId && canonicalSelected?.id === canonicalId
+          ? canonicalSelected.legacy_generated_resume_id ?? null
+          : null;
+        if (canonicalId) {
+          setCanonicalIdByPacketId((current) => {
+            const next = { ...current, [created.id]: canonicalId };
+            if (previousPacketId && previousPacketId !== created.id) delete next[previousPacketId];
+            return next;
+          });
+        }
+        const keepCanonicalDetail = Boolean(canonicalId && canonicalSelected?.id === canonicalId);
+        const updatedCanonical = keepCanonicalDetail && canonicalId && canonicalSelected
+          ? {
+            ...canonicalSelected,
+            legacy_generated_resume_id: created.id,
+            selected_resume_artifact_id: generated.artifact_id ?? canonicalSelected.selected_resume_artifact_id,
+            updated_at: new Date().toISOString(),
+          }
+          : null;
+        setPackets((current) => {
+          const withCreated = [created, ...(current ?? []).filter((packet) =>
+            packet.id !== created.id
+            && packet.id !== previousPacketId
+            && (!canonicalId || canonicalApplicationFromPacket(packet)?.id !== canonicalId))];
+          return updatedCanonical
+            ? upsertCanonicalApplicationHistory(withCreated, updatedCanonical)
+            : withCreated;
+        });
+        if (updatedCanonical) {
+          setCanonicalSelected(updatedCanonical);
+        } else {
+          selectPacket(created);
+        }
         setNewApplication(EMPTY_APPLICATION_DRAFT);
+        forgetCheckoutDraft();
         setShowNewApplication(false);
         track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
-        setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
-        if (draft.jobId) await askPrescriptQuestions(draft.jobId);
+        setNotice(keepCanonicalDetail
+          ? "Tailored resume ready. You can write the cover letter without creating another Tracker row."
+          : "Your resume is ready. We will check whether this employer wants a cover letter.");
+        if (draft.jobId && !keepCanonicalDetail) await askPrescriptQuestions(draft.jobId);
         return;
+      }
+
+      if (draft.canonicalApplicationId) {
+        throw new Error("The tailored resume was created, but Litos could not reopen its exact Tracker packet. Reload before trying again.");
       }
 
       // Compatibility path while an older backend deployment is still serving traffic.
@@ -1420,43 +1863,167 @@ function Applications() {
       const fallbackCreated = history.resumes.find((packet) => packet.id === generated.resume_id);
       setPackets(history.resumes);
       if (!fallbackCreated?.spec._review) throw new Error("Your resume was made, but we could not open it. Reload the page.");
+      completeOperationId(resumeOperationIds.current, operationKey);
       selectPacket(fallbackCreated);
       setNewApplication(EMPTY_APPLICATION_DRAFT);
+      forgetCheckoutDraft();
       setShowNewApplication(false);
       track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
       setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
     } catch (reason) {
+      if (isStructuredUpgradeDenial(reason, "ai_resume_tailoring")) {
+        openTailoringUpgrade("server_denial");
+        return;
+      }
       /* ISSUE-043. This is the press of "Make my resume" failing, so it is answered beside "Make my
          resume". Empty fields on purpose: a 500 from /resume/generate, or a missing name on the
          main resume, says nothing about the four boxes, and marking them would send the student
          back to retype input that was already fine. */
-      refuseInComposer("generate", reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.", []);
+      reportGenerationFailure(reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.", []);
     } finally {
-      setCreating(false);
+      setCreating(null);
     }
   }
 
-  async function generateCoverLetter(applicationId = selected?.id) {
+  async function generateCoverLetter(
+    applicationId = selected?.id,
+    options: {
+      canonicalApplicationId?: string;
+      errorSurface?: "page" | "canonical";
+      jdText?: string;
+      onManual?: () => void;
+    } = {},
+  ) {
     if (!applicationId) return;
+    const targetApplicationId = options.canonicalApplicationId
+      ?? canonicalIdByPacketId[applicationId]
+      ?? applicationId;
+    const returnRoute = options.canonicalApplicationId
+      ? `/dashboard/applications?application=${encodeURIComponent(targetApplicationId)}&intent=detail&checkout_action=cover-letter`
+      : `/dashboard/applications?application=${encodeURIComponent(applicationId)}&intent=apply&checkout_action=cover-letter`;
+    const reportCoverLetterFailure = (message: string) => {
+      if (options.errorSurface === "canonical") setCanonicalFillError(message);
+      else setError(message);
+    };
+    const openCoverLetterUpgrade = (source: "proactive" | "server_denial") => openUpgrade({
+      feature: "ai_cover_letter_generation",
+      placement: options.canonicalApplicationId ? "canonical_application_detail" : "application_cover_letter",
+      trigger: source === "server_denial" ? "server_entitlement_denial" : "generate_cover_letter",
+      manualLabel: "Write it myself",
+      applicationId: targetApplicationId,
+      returnRoute,
+      onManual: options.onManual,
+    }, source === "server_denial" ? { source: "server_denial" } : undefined);
+    if (canUse("ai_cover_letter_generation") !== true) {
+      openCoverLetterUpgrade("proactive");
+      return;
+    }
     setCoverLetterBusy(true);
     setError(null);
+    setCanonicalFillError(null);
     try {
       if (qaMode) {
         const body = `I am excited to apply for the ${selected?.job_context.role ?? "role"} position at ${selected?.job_context.company ?? "your company"}. My experience building production software and working across product requirements aligns closely with this opportunity.\n\nI would bring a practical, evidence-led approach to the team, with attention to reliable implementation, clear communication, and measurable outcomes. I am especially interested in applying these strengths to the priorities described in this role.\n\nThank you for considering my application. I would welcome the opportunity to discuss how my background can support the team.`;
         setCoverLetterBody(body);
         return;
       }
-      const result = await api<CoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { method: "POST" });
-      setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
+      const operationKey = `cover-letter:${targetApplicationId}:${options.jdText?.trim() ?? "saved-packet"}`;
+      const operationId = operationIdFor(coverLetterOperationIds.current, operationKey);
+      const result = await api<CoverLetterResponse>(`/applications/${targetApplicationId}/cover-letter`, {
+        method: "POST",
+        body: JSON.stringify({
+          operation_id: operationId,
+          ...(options.jdText?.trim() ? { jd_text: options.jdText.trim() } : {}),
+        }),
+      });
+      if (options.canonicalApplicationId
+        && (result.application_id !== targetApplicationId
+          || (result.packet_id && canonicalGeneratedPacket && result.packet_id !== canonicalGeneratedPacket.id))) {
+        throw new Error("Litos wrote the cover letter for a different Tracker packet. Reload before trying again.");
+      }
+      const packetId = result.packet_id ?? applicationId;
+      completeOperationId(coverLetterOperationIds.current, operationKey);
+      setPackets((current) => current?.map((packet) =>
+        packet.id === packetId || packet.id === targetApplicationId
+          ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } }
+          : packet) ?? current);
       applyCoverLetterToSubmission(applicationId, result.cover_letter);
+      if (options.canonicalApplicationId) {
+        setCanonicalCoverLetter(result as CanonicalCoverLetterResponse);
+        setCanonicalCoverLetterBody(result.cover_letter.body);
+        setCanonicalCoverLetterEditorOpen(true);
+      }
       if (selectedIdRef.current === applicationId) {
         setCoverLetterBody(result.cover_letter.body);
         setCoverLetterDownloadUrl(result.download_url);
       }
       setNotice("Cover letter written and checked against the work you told us about.");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not generate the tailored cover letter.");
-      throw reason;
+      if (isStructuredUpgradeDenial(reason, "ai_cover_letter_generation")) {
+        openCoverLetterUpgrade("server_denial");
+        return;
+      }
+      reportCoverLetterFailure(reason instanceof Error ? reason.message : "Could not generate the tailored cover letter.");
+    } finally {
+      setCoverLetterBusy(false);
+    }
+  }
+
+  async function saveCanonicalCoverLetter(): Promise<void> {
+    const applicationId = canonicalSelected?.id;
+    if (!applicationId || !canonicalCoverLetterBody.trim()) return;
+    setCoverLetterBusy(true);
+    setCanonicalFillError(null);
+    try {
+      const result = await api<CanonicalCoverLetterResponse>(`/applications/${applicationId}/cover-letter`, {
+        method: "PATCH",
+        body: JSON.stringify({ body: canonicalCoverLetterBody }),
+      });
+      setCanonicalCoverLetter(result);
+      setCanonicalCoverLetterBody(result.cover_letter.body ?? "");
+      setNotice("Cover letter saved to this Tracker application.");
+    } catch (reason) {
+      setCanonicalFillError(reason instanceof Error ? reason.message : "We could not save this cover letter.");
+    } finally {
+      setCoverLetterBusy(false);
+    }
+  }
+
+  async function uploadCanonicalCoverLetter(file: File): Promise<void> {
+    const applicationId = canonicalSelected?.id;
+    if (!applicationId) return;
+    setCoverLetterBusy(true);
+    setCanonicalFillError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const result = await api<CanonicalCoverLetterResponse>(`/applications/${applicationId}/cover-letter/upload`, {
+        method: "POST",
+        body: form,
+      });
+      setCanonicalCoverLetter(result);
+      setCanonicalCoverLetterBody(result.cover_letter.body ?? "");
+      setCanonicalCoverLetterEditorOpen(true);
+      setNotice("Cover letter uploaded to this Tracker application.");
+    } catch (reason) {
+      setCanonicalFillError(reason instanceof Error ? reason.message : "We could not upload this cover letter.");
+    } finally {
+      setCoverLetterBusy(false);
+    }
+  }
+
+  async function deleteCanonicalCoverLetter(): Promise<void> {
+    const applicationId = canonicalSelected?.id;
+    if (!applicationId || !canonicalCoverLetter) return;
+    setCoverLetterBusy(true);
+    setCanonicalFillError(null);
+    try {
+      await api(`/applications/${applicationId}/cover-letter`, { method: "DELETE" });
+      setCanonicalCoverLetter(null);
+      setCanonicalCoverLetterBody("");
+      setNotice("Cover letter removed from this application.");
+    } catch (reason) {
+      setCanonicalFillError(reason instanceof Error ? reason.message : "We could not remove this cover letter.");
     } finally {
       setCoverLetterBusy(false);
     }
@@ -2089,7 +2656,7 @@ function Applications() {
     <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Tracker</h1>
+          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Applications</h1>
           {/* Every selected screen needs a way back to the mobile list. Desktop keeps the compact
               switcher beside the detail, so this control would only repeat it there. */}
           {selected && spec && review && (
@@ -2115,16 +2682,17 @@ function Applications() {
         <div className="flex flex-wrap items-center gap-4">
           <Button
             type="button"
+            variant={showNewApplication ? "quiet" : "primary"}
             onClick={showNewApplication ? closeNewApplication : () => setShowNewApplication(true)}
           >
-            {showNewApplication ? "Close" : "Add job"}
+            {showNewApplication ? "Close" : "Fill application"}
           </Button>
         </div>
       </div>
 
       {/* No autopilot.error row here any more. That error is only ever set by the toggle's own
           save, and the toggle is on Jobs now, so a copy on this page could never fire. */}
-      {!selected && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
+      {!selected && canUse("automatic_submission") !== false && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
       {!selected && preferenceError && <ErrorNote message={preferenceError} />}
       {!selected && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard
@@ -2165,6 +2733,7 @@ function Applications() {
         <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">{educationDriftBanner}</p>
       )}
       {notice && <p role="status" className="rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">{notice}</p>}
+      {fillReceipt && <ApplicationFillReceipt receipt={fillReceipt} onClose={() => setFillReceipt(null)} />}
       {showNewApplication && (
         <NewApplicationPanel
           value={newApplication}
@@ -2172,7 +2741,8 @@ function Applications() {
           /* React click handlers receive the click event. Passing createApplication directly made
              that event replace the optional draft argument, so the first .trim() crashed in
              production instead of generating the application. */
-          onGenerate={() => void createApplication()}
+          onFill={() => void fillApplication()}
+          onTailor={() => void createApplication()}
           creating={creating}
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
@@ -2211,8 +2781,8 @@ function Applications() {
               {/* Visible whenever this is the landing view for a filter, so the student reads what
                   they are looking at in words. Beside an open packet it goes back to being the
                   switcher's label: the heading there would compete with the packet's own. */}
-              <h2 id="application-ledger-heading" className={selected ? "sr-only" : "text-sm font-medium text-ink"}>
-                {selected ? "Your applications" : applicationFilterHeading(applicationFilter)}
+              <h2 id="application-ledger-heading" className={selected || canonicalSelected ? "sr-only" : "text-sm font-medium text-ink"}>
+                {selected || canonicalSelected ? "Your applications" : applicationFilterHeading(applicationFilter)}
               </h2>
               <span data-testid="application-ledger-count" className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
               {duplicatePostingNote(duplicateMarks) && (
@@ -2260,10 +2830,10 @@ function Applications() {
                     key={packet.id}
                     type="button"
                     onClick={() => selectPacket(packet)}
-                    aria-pressed={packet.id === selected?.id}
-                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected?.id ? "border-brand bg-brand-soft" : "border-border"}`}
+                    aria-pressed={packet.id === selected?.id || packet.id === canonicalSelected?.id}
+                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected?.id || packet.id === canonicalSelected?.id ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
-                    <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
+                    <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id || packet.id === canonicalSelected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
                     {duplicateBadge(duplicateMarks.get(packet.id)) && (
                       <span className="mt-1 truncate text-[10px] uppercase tracking-[0.05em] text-muted">
@@ -2307,7 +2877,7 @@ function Applications() {
                     being no form element anywhere above it. */}
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} type="button" onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} type="button" onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id || packet.id === canonicalSelected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id || packet.id === canonicalSelected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
                       <time className="hidden text-xs text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
@@ -2336,9 +2906,55 @@ function Applications() {
 
       {packets === null ? (
         <ShimmerRows rows={4} />
+      ) : canonicalSelected ? (
+        <CanonicalApplicationDetail
+          application={canonicalSelected}
+          fillBusy={creating === "fill"}
+          tailorBusy={creating === "tailor"}
+          coverLetterBusy={coverLetterBusy}
+          coverLetterLoading={canonicalCoverLetterLoading}
+          hasTailoredResume={canonicalGeneratedPacket !== null}
+          coverLetter={canonicalCoverLetter}
+          coverLetterBody={canonicalCoverLetterBody}
+          coverLetterJd={canonicalCoverLetterJd}
+          coverLetterEditorOpen={canonicalCoverLetterEditorOpen}
+          coverLetterDownloadUrl={canonicalCoverLetter?.download_url ?? canonicalGeneratedPacket?.cover_letter_download_url ?? null}
+          error={canonicalFillError}
+          onBack={() => {
+            setCanonicalSelected(null);
+            setCanonicalFillError(null);
+          }}
+          onFill={() => void fillApplication({
+            company: canonicalSelected.company,
+            role: canonicalSelected.role,
+            portalUrl: canonicalSelected.portal_url ?? "",
+            jobDescription: "",
+            jobId: canonicalSelected.job_id ?? null,
+            canonicalApplicationId: canonicalSelected.id,
+          }, "tracker")}
+          onTailor={() => void tailorCanonicalApplication(canonicalSelected)}
+          onOpenCoverLetterEditor={() => {
+            setCanonicalCoverLetterEditorOpen(true);
+            setCanonicalCoverLetterBody((current) => current || canonicalGeneratedPacket?.spec._cover_letter?.body || "");
+          }}
+          onGenerateCoverLetter={() => {
+            void generateCoverLetter(canonicalGeneratedPacket?.id ?? canonicalSelected.id, {
+              canonicalApplicationId: canonicalSelected.id,
+              errorSurface: "canonical",
+              jdText: canonicalCoverLetterJd,
+              onManual: () => setCanonicalCoverLetterEditorOpen(true),
+            });
+          }}
+          onCoverLetterBodyChange={setCanonicalCoverLetterBody}
+          onCoverLetterJdChange={setCanonicalCoverLetterJd}
+          onSaveCoverLetter={() => void saveCanonicalCoverLetter()}
+          onUploadCoverLetter={(file) => void uploadCanonicalCoverLetter(file)}
+          onDeleteCoverLetter={() => void deleteCanonicalCoverLetter()}
+          onOpenPacket={() => canonicalEnvelopePacket && setRevisitingId(canonicalEnvelopePacket.id)}
+        />
       ) : reviewablePackets.length === 0 ? (
-        <EmptyState visual="applications" title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to create your first reviewable application." : "Add a job URL. Litos will prepare the resume and review."}>
-          <Button type="button" onClick={() => setShowNewApplication(true)} >Start an application</Button>
+        <EmptyState visual="applications" title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to fill the form or prepare a tailored packet." : "Add a job URL. Filling is unlimited, and tailoring is available with Litos+."}>
+          <Button type="button" onClick={() => setShowNewApplication(true)}>Fill application</Button>
         </EmptyState>
       ) : !selected || !spec || !review ? (
         /* A board, not a list. Reviewers of Huntr and Teal both describe the Kanban as the thing
@@ -2366,7 +2982,9 @@ function Applications() {
              history while the handler quietly did nothing for the ones without a review: a fully
              styled, focusable, labelled button that was inert on click and on Enter. A control
              that cannot act should be absent, not dead. */
-          revisitableIds={new Set((packets ?? []).filter((item) => item.spec._review).map((item) => item.id))}
+          revisitableIds={new Set((packets ?? [])
+            .filter((item) => !canonicalApplicationFromPacket(item) && item.spec._review)
+            .map((item) => item.id))}
         />
         </SectionBoundary>
       ) : screen === "questions" ? (
@@ -2727,6 +3345,196 @@ function Applications() {
   );
 }
 
+function CanonicalApplicationDetail({
+  application,
+  fillBusy,
+  tailorBusy,
+  coverLetterBusy,
+  coverLetterLoading,
+  hasTailoredResume,
+  coverLetter,
+  coverLetterBody,
+  coverLetterJd,
+  coverLetterEditorOpen,
+  coverLetterDownloadUrl,
+  error,
+  onBack,
+  onFill,
+  onTailor,
+  onOpenCoverLetterEditor,
+  onGenerateCoverLetter,
+  onCoverLetterBodyChange,
+  onCoverLetterJdChange,
+  onSaveCoverLetter,
+  onUploadCoverLetter,
+  onDeleteCoverLetter,
+  onOpenPacket,
+}: {
+  application: CanonicalApplication;
+  fillBusy: boolean;
+  tailorBusy: boolean;
+  coverLetterBusy: boolean;
+  coverLetterLoading: boolean;
+  hasTailoredResume: boolean;
+  coverLetter: CanonicalCoverLetterResponse | null;
+  coverLetterBody: string;
+  coverLetterJd: string;
+  coverLetterEditorOpen: boolean;
+  coverLetterDownloadUrl: string | null;
+  error: string | null;
+  onBack: () => void;
+  onFill: () => void;
+  onTailor: () => void;
+  onOpenCoverLetterEditor: () => void;
+  onGenerateCoverLetter: () => void;
+  onCoverLetterBodyChange: (body: string) => void;
+  onCoverLetterJdChange: (body: string) => void;
+  onSaveCoverLetter: () => void;
+  onUploadCoverLetter: (file: File) => void;
+  onDeleteCoverLetter: () => void;
+  onOpenPacket: () => void;
+}) {
+  const submitted = application.submission_state === "submitted";
+  const updatedAt = application.updated_at ?? application.created_at;
+  return (
+    <Card className="overflow-hidden">
+      <div className="grid h-1 grid-cols-3" aria-hidden="true"><span className="bg-teal" /><span className="bg-brand" /><span className="bg-coral" /></div>
+      <div className="p-6">
+        <button type="button" onClick={onBack} className="min-h-11 text-small text-muted hover:text-ink">← All applications</button>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free application fill</p>
+            <h2 className="mt-2 text-heading font-[450] text-ink">{application.role}</h2>
+            <p className="mt-1 text-small text-muted">{application.company}{updatedAt ? ` · Updated ${formatRelativeDate(updatedAt)}` : ""}</p>
+          </div>
+          <Chip label={submitted ? "Sent" : "Needs you"} kind={submitted ? "sent" : "warn"} />
+        </div>
+        <div className="mt-5 rounded-inner border border-border bg-surface-alt p-4">
+          <p className="text-small font-medium text-ink">{submitted ? "This application is recorded as sent." : "Continue on the employer's form."}</p>
+          <p className="mt-1 text-small leading-6 text-muted">
+            {submitted
+              ? "Tracker keeps this canonical record even when no tailored resume packet was generated."
+              : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
+          </p>
+        </div>
+        <div className="mt-4 rounded-inner border border-brand/30 bg-brand-soft/35 p-4">
+          <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Application packet</p>
+          <p className="mt-2 text-small leading-6 text-muted">
+            {hasTailoredResume
+              ? "The tailored resume is attached to this same Tracker application. Add a cover letter here or open the full packet to review it."
+              : "Write or upload a cover letter now, or use Litos+ to create one from your saved facts. A tailored resume is optional."}
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button type="button" variant="secondary" disabled={tailorBusy || fillBusy || coverLetterBusy} onClick={onTailor}>
+              {tailorBusy ? "Tailoring..." : "Tailor resume"}
+            </Button>
+            <Button type="button" variant="secondary" disabled={tailorBusy || coverLetterBusy || coverLetterLoading} onClick={onOpenCoverLetterEditor}>
+              {coverLetterLoading ? "Loading..." : "Write cover letter"}
+            </Button>
+            {hasTailoredResume && <Button type="button" variant="quiet" onClick={onOpenPacket}>Open tailored packet</Button>}
+            {coverLetterDownloadUrl && <ButtonLink href={coverLetterDownloadUrl} variant="quiet">Download cover letter</ButtonLink>}
+          </div>
+          {coverLetterEditorOpen && (
+            <div className="mt-5 border-t border-border pt-5">
+              <label htmlFor="canonical-cover-letter" className="text-small font-medium text-ink">Cover letter</label>
+              <textarea
+                id="canonical-cover-letter"
+                rows={12}
+                value={coverLetterBody}
+                onChange={(event) => onCoverLetterBodyChange(event.target.value)}
+                placeholder="Write your cover letter here. Saving manual text is always free."
+                className="rq-field mt-2 w-full rounded-inner px-4 py-3 text-small leading-7 text-ink"
+              />
+              {!hasTailoredResume && (
+                <label className="mt-4 block text-small font-medium text-ink">
+                  Job description for Litos+
+                  <textarea
+                    rows={7}
+                    value={coverLetterJd}
+                    onChange={(event) => onCoverLetterJdChange(event.target.value)}
+                    placeholder="Paste the job description only if you want Litos+ to draft from it. Manual writing and upload do not need this."
+                    className="rq-field mt-2 w-full rounded-inner px-4 py-3 text-small leading-7 text-ink"
+                  />
+                </label>
+              )}
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button type="button" disabled={coverLetterBusy || !coverLetterBody.trim()} onClick={onSaveCoverLetter}>
+                  {coverLetterBusy ? "Saving..." : "Save cover letter"}
+                </Button>
+                <Button type="button" variant="secondary" disabled={coverLetterBusy || (!hasTailoredResume && !coverLetterJd.trim())} onClick={onGenerateCoverLetter}>
+                  Draft with Litos+
+                </Button>
+                <label className="inline-flex min-h-11 cursor-pointer items-center rounded-control border border-control-border px-5 text-small font-medium text-ink hover:border-ink">
+                  Upload PDF or text
+                  <input
+                    type="file"
+                    accept="application/pdf,text/plain,.pdf,.txt"
+                    className="sr-only"
+                    disabled={coverLetterBusy}
+                    onChange={(event) => {
+                      const file = event.currentTarget.files?.[0];
+                      if (file) onUploadCoverLetter(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                {coverLetter && (
+                  <Button type="button" variant="quiet" disabled={coverLetterBusy} onClick={onDeleteCoverLetter}>
+                    Remove cover letter
+                  </Button>
+                )}
+              </div>
+              <p className="mt-3 text-label text-muted">Manual writing and uploads do not use a Litos+ generation. You choose what stays attached to this application.</p>
+            </div>
+          )}
+        </div>
+        {error && <div className="mt-4"><ErrorNote message={error} /></div>}
+        <div className="mt-5 flex flex-wrap gap-3">
+          {!submitted && application.portal_url && (
+            <Button type="button" disabled={fillBusy || tailorBusy} onClick={onFill}>
+              {fillBusy ? "Checking extension..." : "Open and fill application"}
+            </Button>
+          )}
+          {!submitted && !application.portal_url && <p className="text-small text-muted">This record has no employer form URL. Add the job again with its exact HTTPS application link.</p>}
+          <ButtonLink href="/dashboard/settings#application-details" variant="quiet">Review saved details</ButtonLink>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ApplicationFillReceipt({ receipt, onClose }: { receipt: FillReceipt; onClose: () => void }) {
+  return (
+    <Card className="overflow-hidden border-teal/45" role="status">
+      <div className="grid h-1 grid-cols-3" aria-hidden="true"><span className="bg-teal" /><span className="bg-brand" /><span className="bg-coral" /></div>
+      <div className="p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Extension handoff</p>
+            <h2 className="mt-2 text-heading font-[450] text-ink">The employer form is ready to fill.</h2>
+            <p className="mt-1 text-small text-muted">{receipt.role} at {receipt.company}</p>
+          </div>
+          <button type="button" onClick={onClose} className="min-h-11 px-3 text-small text-muted hover:text-ink">Dismiss</button>
+        </div>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <ReceiptFact label="Extension" value="Handoff armed" tone="teal" />
+          <ReceiptFact label="Fill action" value="Click Fill in the Litos card" tone="brand" />
+          <ReceiptFact label="Final control" value="You review and submit" tone="coral" />
+        </div>
+        <p className="mt-5 text-small text-muted">Chrome opened the exact employer form. Click Fill in the Litos extension card there. Tracker updates only after the extension reports what it actually filled. Litos stops on unknown, sensitive, or human-verification fields, and nothing is submitted from this handoff.</p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <ButtonLink href="/dashboard/settings#application-details" variant="quiet">Review saved details</ButtonLink>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ReceiptFact({ label, value, tone }: { label: string; value: string; tone: "teal" | "brand" | "coral" }) {
+  const color = tone === "teal" ? "text-teal-ink" : tone === "coral" ? "text-coral-ink" : "text-brand-ink";
+  return <div className="rounded-inner border border-border p-4"><p className={`font-mono text-label uppercase tracking-[0.08em] ${color}`}>{label}</p><p className="mt-2 text-small font-medium text-ink">{value}</p></div>;
+}
+
 function packetTimestamp(packet: GeneratedResume): string {
   return packet.spec._review?.updated_at ?? packet.created_at ?? "";
 }
@@ -2734,7 +3542,8 @@ function packetTimestamp(packet: GeneratedResume): string {
 function NewApplicationPanel({
   value,
   onChange,
-  onGenerate,
+  onFill,
+  onTailor,
   creating,
   onFetchJobDescription,
   extractingJd,
@@ -2742,8 +3551,9 @@ function NewApplicationPanel({
 }: {
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
-  onGenerate: () => void;
-  creating: boolean;
+  onFill: () => void;
+  onTailor: () => void;
+  creating: "fill" | "tailor" | null;
   onFetchJobDescription: () => void;
   extractingJd: boolean;
   /** Why the last press of a composer button did nothing, which boxes it was about, and which of
@@ -2756,8 +3566,8 @@ function NewApplicationPanel({
     <Card className="p-6">
       <div className="max-w-2xl">
         <p className="text-xs text-muted">New application</p>
-        <h2 className="mt-2 text-xl font-medium text-ink">Add a job.</h2>
-        <p className="mt-1 text-sm leading-6 text-muted">It opens beside the job description.</p>
+        <h2 className="mt-2 text-xl font-medium text-ink">Fill an application.</h2>
+        <p className="mt-1 text-sm leading-6 text-muted">Factual filling is unlimited. Add the job description only when you want a tailored resume too.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <ApplicationField label="Company" value={value.company} onChange={(company) => patch({ company })} placeholder="Google" invalid={invalid("company")} />
@@ -2779,16 +3589,19 @@ function NewApplicationPanel({
           viewport while this button was at y = 554. */}
       <ComposerRefusalNote refusal={refusal} at="url" />
       <label className="mt-4 block text-xs font-medium text-muted" htmlFor="new-application-jd">Job description</label>
-      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Paste the complete job description, or fetch it from the URL above" aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-control-border"}`} />
+      <textarea id="new-application-jd" value={value.jobDescription} onChange={(event) => patch({ jobDescription: event.target.value })} rows={12} placeholder="Optional for filling. Paste the complete job description to tailor a resume." aria-invalid={invalid("jobDescription") || undefined} className={`mt-1.5 w-full rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand ${invalid("jobDescription") ? "border-danger" : "border-control-border"}`} />
       {/* Beside the button that raised it, not in the page banner far above it. The button and this
           line are in the same flex row, so a student who can reach the button can read the refusal
           without scrolling: no scrollIntoView, no requestAnimationFrame, nothing that stops running
           in a background tab. role="alert" is here and nowhere else for this message, so a screen
           reader still hears it exactly once. */}
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
-        <ComposerRefusalNote refusal={refusal} at="generate" />
-        <Button type="button" onClick={onGenerate} disabled={creating} >
-          {creating ? <PendingLabel state="composing" onColor>Making...</PendingLabel> : "Make my resume"}
+        <ComposerRefusalNote refusal={refusal} at="action" />
+        <Button type="button" variant="secondary" onClick={onTailor} disabled={creating !== null} className="border-brand text-brand-ink">
+          {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume"}
+        </Button>
+        <Button type="button" onClick={onFill} disabled={creating !== null}>
+          {creating === "fill" ? <PendingLabel state="composing" onColor>Preparing form</PendingLabel> : "Fill application"}
         </Button>
       </div>
     </Card>
@@ -2797,7 +3610,7 @@ function NewApplicationPanel({
 
 /** Which composer button a refusal is answering. The composer has exactly two, far enough apart
     that a message beside one is off screen from the other. */
-type ComposerSlot = "url" | "generate";
+type ComposerSlot = "url" | "action";
 
 /* The refusal is written ONCE and mounted in whichever slot matches, rather than duplicated into
    both places behind two conditions. Two copies would be two live regions the day someone changes
@@ -2813,7 +3626,7 @@ function ComposerRefusalNote({
   if (!refusal || refusal.at !== at) return null;
   /* Gated on the refusal existing, never on it naming a field: a server failure names none, and
      that is exactly the case ISSUE-043 was about. */
-  return <p className={at === "generate" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>;
+  return <p className={at === "action" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>;
 }
 
 function ApplicationField({ label, value, onChange, placeholder, type = "text", invalid = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string; invalid?: boolean }) {

@@ -8,6 +8,7 @@ export * from "./domain/application-filter";
 export * from "./domain/application-review";
 export * from "./domain/apply-variant";
 export * from "./domain/board-stages";
+export * from "./domain/canonical-tracker";
 export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
 export * from "./domain/match-model";
@@ -34,6 +35,7 @@ export {
   type ApplicationDraftField,
   type ProfileIdentity,
   type RankedJob,
+  type ResumeGenerationInitiation,
 } from "./domain/daily-matches";
 export * from "./domain/requirement-terms";
 export * from "./domain/review-answer-save";

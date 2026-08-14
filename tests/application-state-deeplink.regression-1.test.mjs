@@ -275,15 +275,15 @@ describe("the chosen view is visible on the page it lands on", () => {
     );
     const heading = ledger.body.slice(ledger.body.indexOf('id="application-ledger-heading"'));
     const className = heading.match(/className=\{([^}]+)\}/)?.[1] ?? "";
-    assert.match(className, /selected/, "the heading is only sr-only beside an open packet, not on the landing view");
+    assert.match(className, /selected/, "the heading is only sr-only beside an open application, not on the landing view");
 
     /* BOTH branches, or the ternary is decoration. `selected ? "sr-only" : "sr-only"` satisfied a
        test that only looked for the word `selected` and put the heading straight back into the
        screen reader-only layer it was moved out of, which is the whole of the visible half of this
        fix. The true branch stays sr-only on purpose: beside an open packet this heading would
        compete with the packet's own. */
-    const branches = className.match(/selected \? "([^"]*)" : "([^"]*)"/);
-    assert.ok(branches, `expected the heading className to be a two-branch ternary on selected, got: ${className}`);
+    const branches = className.match(/selected \|\| canonicalSelected \? "([^"]*)" : "([^"]*)"/);
+    assert.ok(branches, `expected the heading className to be a two-branch ternary on either selected record, got: ${className}`);
     const [, whenSelected, whenLanding] = branches;
     assert.equal(whenSelected, "sr-only", "beside an open packet the heading stays the switcher's label");
     assert.doesNotMatch(whenLanding, /\bsr-only\b/, "on the landing view the heading has to be readable, not announced only");

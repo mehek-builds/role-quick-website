@@ -89,10 +89,12 @@ export function clearSession() {
 export class ApiError extends Error {
   status: number;
   issues: string[];
-  constructor(status: number, message: string, issues: string[] = []) {
+  data: unknown;
+  constructor(status: number, message: string, issues: string[] = [], data: unknown = null) {
     super(message);
     this.status = status;
     this.issues = issues;
+    this.data = data;
   }
 }
 
@@ -134,7 +136,7 @@ async function requestApi<T>(
   }
   if (!res.ok) {
     const { message, issues } = apiErrorMessage(data, res.status);
-    throw new ApiError(res.status, message, issues);
+    throw new ApiError(res.status, message, issues, data);
   }
   return data as T;
 }
@@ -172,13 +174,13 @@ export function createCheckout(interval: "weekly" | "monthly" = "monthly") {
 }
 
 export function createBillingPortal() {
-  return api<{ provider: "stripe"; url: string }>("/billing/portal", { method: "POST" });
+  return api<{ provider: "stripe" | "lemonsqueezy"; url: string }>("/billing/portal", { method: "POST" });
 }
 
 export type BillingReceipt = {
   provider: "stripe" | "litos";
-  plan: "pro";
-  interval: "weekly" | "monthly";
+  plan: "pro" | "litos_plus";
+  interval: "weekly" | "monthly" | "week" | "month" | "quarter";
   amount_cents: number;
   currency: string;
   paid_at: string;
@@ -314,6 +316,41 @@ export type GeneratedResume = {
   created_at: string | null;
 };
 
+/**
+ * One application in the canonical Tracker ledger.
+ *
+ * This record exists independently of premium generation. `legacy_generated_resume_id` is the
+ * lossless bridge to `/resume/history` during the rolling migration, so clients can merge both
+ * lists without hiding two genuinely different applications for the same company and role.
+ */
+export type CanonicalApplication = {
+  id: string;
+  legacy_generated_resume_id?: string | null;
+  job_id?: string | null;
+  company: string;
+  company_scope_key?: string;
+  role: string;
+  portal_url?: string | null;
+  source_surface?: string;
+  tracker_state: string;
+  review_state: string;
+  submission_state: string;
+  selected_resume_artifact_id?: string | null;
+  resume_attached?: boolean;
+  resume_source?: "artifact" | "base_resume" | "none" | string;
+  resume_attached_at?: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type ApplicationFillHandoff = {
+  mode: "extension_portal_fill";
+  application_id: string;
+  portal_url: string;
+  fill_data_url: string;
+  extension_required: true;
+};
+
 export type ApplicationEmailAlias = {
   alias: string;
   forward_to: string;
@@ -346,6 +383,19 @@ export type CoverLetter = {
   approved_at?: string;
   object_key: string;
   file_name: string;
+};
+
+export type CanonicalCoverLetter = Omit<CoverLetter, "body"> & {
+  artifact_id: string;
+  source: string;
+  body: string | null;
+};
+
+export type CanonicalCoverLetterResponse = {
+  application_id: string;
+  packet_id: string | null;
+  cover_letter: CanonicalCoverLetter;
+  download_url: string;
 };
 
 export type MonitoredJob = {
