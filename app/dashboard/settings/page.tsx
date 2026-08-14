@@ -1300,10 +1300,10 @@ export default function Settings() {
               Upgrade to Pro
             </ButtonLink> : <div className="flex flex-wrap gap-2">
               <Button type="button" disabled={checkoutBusy} onClick={() => void startCheckout("weekly")}>
-                {checkoutBusy ? "Opening..." : "$20 weekly"}
+                {checkoutBusy ? "Opening..." : "$19.99 weekly"}
               </Button>
               <Button variant="secondary" type="button" disabled={checkoutBusy} onClick={() => void startCheckout("monthly")}>
-                {checkoutBusy ? "Opening..." : "$40 monthly"}
+                {checkoutBusy ? "Opening..." : "$39.99 monthly"}
               </Button>
             </div>}
           </div>

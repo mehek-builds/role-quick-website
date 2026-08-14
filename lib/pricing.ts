@@ -38,7 +38,7 @@ export const PRO_LIMITS = {
 } as const;
 
 /** Stripe, billed weekly. */
-export const PRO_WEEKLY_PRICE = "20";
+export const PRO_WEEKLY_PRICE = "19.99";
 
 /** Stripe, billed monthly. */
-export const PRO_MONTHLY_PRICE = "40";
+export const PRO_MONTHLY_PRICE = "39.99";
