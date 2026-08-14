@@ -16,8 +16,9 @@ describe("personal resume email and portal routing email stay separate", () => {
     assert.match(dailyMatches, /const resumeEmail = identity\.resume_email\?\.trim\(\)/);
     assert.match(dailyMatches, /if \(!resumeEmail\) throw new Error/);
     assert.doesNotMatch(dailyMatches, /email: identity\.email\?\.trim\(\) \|\| storedEmail/);
-    assert.match(dashboard, /resumeGenerationBody\(completeJob, identity, applicationProfile\)/);
-    assert.match(dashboard, /if \(!identity\.resume_email\?\.trim\(\)\) return/);
+    assert.match(dashboard, /resumeGenerationBody\(completeJob, identity, applicationProfile, "hover_prewarm", operationId\)/);
+    assert.match(dashboard, /resumeGenerationBody\(completeJob, identity, applicationProfile, initiation, operationId\)/);
+    assert.match(dashboard, /if \(!identity\.resume_email\?\.trim\(\)\) \{/);
   });
 
   test("the resume screen edits the personal address without relabeling the login", () => {

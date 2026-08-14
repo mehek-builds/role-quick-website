@@ -93,9 +93,10 @@ describe("the refusal renders where the button is, and is announced exactly once
     .filter((line) => !line.trim().startsWith("//"))
     .join("\n");
 
+  const createApplicationStart = code.indexOf("async function createApplication");
   const createApplication = code.slice(
-    code.indexOf("async function createApplication"),
-    code.indexOf("setCreating(true)"),
+    createApplicationStart,
+    code.indexOf('setCreating("tailor")', createApplicationStart),
   );
 
   test("the button's own refusal never goes to the page-level banner", () => {
@@ -111,10 +112,11 @@ describe("the refusal renders where the button is, and is announced exactly once
     assert.doesNotMatch(createApplication, /setError\(/, "the generate guard must not use the page banner");
     for (const message of ["Fill in all four boxes first.", "Enter a complete job URL beginning with https://."]) {
       assert.ok(
-        createApplication.includes(`refuseInComposer("generate", "${message}"`),
+        createApplication.includes(`reportGenerationFailure("${message}"`),
         `${message} must set the composer refusal`,
       );
     }
+    assert.match(createApplication, /else \{\s*refuseInComposer\("action", message, fields\);/);
   });
 
   test("it is rendered inside the composer's button row", () => {
@@ -128,8 +130,9 @@ describe("the refusal renders where the button is, and is announced exactly once
     // is the thing that carries role="alert" and refusal.message.
     const row = code.match(/<div className="mt-5 flex flex-wrap items-center justify-end gap-3">([\s\S]*?)<\/div>/);
     assert.ok(row, "the generate button must keep its own row");
-    assert.match(row[1], /<ComposerRefusalNote refusal=\{refusal\} at="generate" \/>/);
-    assert.match(row[1], /Make my resume/);
+    assert.match(row[1], /<ComposerRefusalNote refusal=\{refusal\} at="action" \/>/);
+    assert.match(row[1], /Tailor resume/);
+    assert.match(row[1], /Fill application/);
     assert.match(
       code,
       /function ComposerRefusalNote\([\s\S]*?if \(!refusal \|\| refusal\.at !== at\) return null;[\s\S]*?role="alert">\{refusal\.message\}<\/p>/,

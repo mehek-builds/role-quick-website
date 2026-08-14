@@ -105,7 +105,11 @@ test("every switcher chip is a 44px target that reports which packet is open", (
      landing view for a ?state= deep link, where nothing is open yet, so a bare `selected.id` here
      would throw on the exact arrival the deep link exists to serve. What this asserts is unchanged:
      the open packet is announced and not only coloured. */
-  assert.match(chip, /aria-pressed=\{packet\.id === selected\?\.id\}/, "which one is open has to be announced, not only coloured");
+  assert.match(
+    chip,
+    /aria-pressed=\{packet\.id === selected\?\.id \|\| packet\.id === canonicalSelected\?\.id\}/,
+    "which legacy or canonical application is open has to be announced, not only coloured",
+  );
   assert.match(chip, /onClick=\{\(\) => selectPacket\(packet\)\}/, "the chip is the in-context switch");
 });
 

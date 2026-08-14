@@ -83,9 +83,9 @@ test("explicit null clears a stored cover letter while an omitted partial field 
   const storedLetter = fromServer.cover_letter ?? undefined;
 
   assert.deepEqual(submissionCoverLetterField(removed), { included: true, value: null });
-  assert.deepEqual(submissionCoverLetterField(omitted), { included: false });
+  assert.deepEqual(submissionCoverLetterField(omitted as SubmissionSnapshot), { included: false });
   assert.equal(nextCoverLetterValue(storedLetter, removed), undefined);
-  assert.equal(nextCoverLetterValue(storedLetter, omitted), storedLetter);
+  assert.equal(nextCoverLetterValue(storedLetter, omitted as SubmissionSnapshot), storedLetter);
   assert.equal(nextSubmissionState(fromServer, removed), removed);
   assert.equal(nextSubmissionState(fromServer, omitted).cover_letter, fromServer.cover_letter);
 });

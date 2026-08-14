@@ -29,10 +29,10 @@ test("the header ships one nav list, so phone and desktop cannot drift apart", (
   /* The regression was two hardcoded copies of the nav, one of which was
      deleted. A single source rendered twice is what stops that recurring. */
   const declared = [...header.matchAll(/\{\s*href:\s*"([^"]+)",\s*label:\s*"([^"]+)"\s*\}/g)];
-  assert.equal(declared.length, 4, "expected the four marketing destinations declared once");
+  assert.equal(declared.length, 5, "expected the five marketing destinations declared once");
   assert.deepEqual(
     declared.map((m) => m[1]),
-    ["/#product", "/browse-jobs", "/try", "/#faq"],
+    ["/#product", "/browse-jobs", "/pricing", "/try", "/#faq"],
   );
   assert.equal(
     (header.match(/NAV\.map\(/g) ?? []).length,
@@ -71,13 +71,14 @@ test("the sheet manages focus, closes on Escape, and closes on a route change", 
   assert.match(header, /addEventListener\("pointerdown", onPointerDown\)/);
 });
 
-test("the sheet carries links only, and never a second copy of the CTA", () => {
+test("the sheet carries navigation and login, and never a second copy of the CTA", () => {
   /* Half the case for deleting the original hamburger was that it duplicated
      the header's install ask. The pill keeps "Get started" visible at every
      width, so the sheet must stay four quiet destinations. */
   const sheet = header.slice(header.indexOf("{menuOpen && ("));
   assert.ok(sheet.length > 0, "expected a conditionally rendered sheet");
   assert.doesNotMatch(sheet, /SignInLink|InstallLink|bg-brand/);
+  assert.match(sheet, />Log in<\/a>/);
 });
 
 test("the CTA pill is unchanged: one Get started, identical signed in or out", () => {

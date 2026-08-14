@@ -97,7 +97,7 @@ test("the server's own sentence reaches the screen, next to the button that caus
   assert.match(dashboard, /refuseSend\(\s*requestedId,\s*reason instanceof Error \? reason\.message : "Could not approve the final portal submission\.",\s*reason instanceof ApiError \? reason\.issues : \[\],\s*\)/);
   // ApiError carries the 422's `issues` array off FINAL_APPROVAL_VERIFICATION_FAILED. Dropping it
   // would reduce a list of named, fixable blockers to one folded-up sentence.
-  assert.match(await readFile(new URL("../lib/api.ts", import.meta.url), "utf8"), /throw new ApiError\(res\.status, message, issues\)/);
+  assert.match(await readFile(new URL("../lib/api.ts", import.meta.url), "utf8"), /throw new ApiError\(res\.status, message, issues, data\)/);
   assert.match(dashboard, /const \[sendRefusal, setSendRefusal\] = useState/);
   // Keyed to the packet, so a refusal about one application never sits under another's Send button.
   assert.match(dashboard, /sendRefusal=\{sendRefusal\?\.applicationId === selected\.id \? sendRefusal : null\}/);

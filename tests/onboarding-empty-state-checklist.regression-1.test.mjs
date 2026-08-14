@@ -81,13 +81,15 @@ test("load failures are separate from empty data and offer retry actions", async
   const home = await read("app/dashboard/page.tsx");
 
   assert.match(applications, /title="Applications did not load\."/);
-  assert.match(outreach, /title="Emails did not load\."/);
+  assert.match(outreach, /role="alert"[\s\S]{0,300}Emails did not load\./);
   assert.match(jobs, /<DataErrorState[\s\S]*?title="Jobs did not load\."/);
   assert.match(home, /title="Your dashboard did not load\."/);
-  for (const source of [applications, outreach, home]) {
+  for (const source of [applications, home]) {
     assert.match(source, /visual="error"/);
     assert.match(source, />\s*Try again\s*</);
   }
+  assert.match(outreach, />\s*Try again\s*</);
+  assert.match(outreach, /setEvents\(\[\]\)/);
   assert.match(jobs, /onRetry=\{\(\) => window\.location\.reload\(\)\}/);
 });
 

@@ -156,6 +156,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/dashboard/resume",
+        destination: "/dashboard/documents?tab=base-resume",
+        permanent: false,
+      },
+      {
         source: "/:path*",
         has: [{ type: "host", value: "www.trylitos.com" }],
         destination: "https://trylitos.com/:path*",

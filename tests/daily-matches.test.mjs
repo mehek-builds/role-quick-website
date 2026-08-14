@@ -182,12 +182,13 @@ describe("resumeGenerationBody", () => {
      missing almost everywhere, and the "Applied" badge falls back to company+role for nearly every
      application, which is the sibling bug this whole change exists to remove. */
   test("records the posting id, so the Applied badge can be exact", () => {
-    const body = resumeGenerationBody(jobs[0], identity, applicationProfile);
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, "explicit_click", "11111111-1111-4111-8111-111111111111");
     assert.equal(body.job_id, jobs[0].id);
+    assert.equal(body.operation_id, "11111111-1111-4111-8111-111111111111");
   });
 
   test("sends profile education for every generated resume path", () => {
-    const body = resumeGenerationBody(jobs[0], identity, applicationProfile);
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, "explicit_click", "11111111-1111-4111-8111-111111111111");
     assert.deepEqual(body.profile_education, {
       school: "University of Southern California, Viterbi School of Engineering",
       degree: "Bachelor of Science in Computer Science",
@@ -200,7 +201,7 @@ describe("resumeGenerationBody", () => {
   });
 
   test("still sends everything the generate route needs", () => {
-    const body = resumeGenerationBody(jobs[0], identity, applicationProfile);
+    const body = resumeGenerationBody(jobs[0], identity, applicationProfile, "explicit_click", "11111111-1111-4111-8111-111111111111");
     assert.equal(body.company, jobs[0].company_name);
     assert.equal(body.role, jobs[0].title);
     assert.equal(body.jd_text, jobs[0].description);
@@ -210,11 +211,18 @@ describe("resumeGenerationBody", () => {
     assert.notEqual(body.contact.email, identity.email);
   });
 
+  test("identifies explicit and background generation for server-side enforcement", () => {
+    const explicit = resumeGenerationBody(jobs[0], identity, applicationProfile, "explicit_click", "11111111-1111-4111-8111-111111111111");
+    const background = resumeGenerationBody(jobs[0], identity, applicationProfile, "hover_prewarm", "11111111-1111-4111-8111-111111111111");
+    assert.equal(explicit.initiation, "explicit_click");
+    assert.equal(background.initiation, "hover_prewarm");
+  });
+
   test("refuses to build a request when the personal resume email is absent", () => {
     const missing = { ...identity };
     delete missing.resume_email;
     assert.throws(
-      () => resumeGenerationBody(jobs[0], missing, applicationProfile),
+      () => resumeGenerationBody(jobs[0], missing, applicationProfile, "explicit_click", "11111111-1111-4111-8111-111111111111"),
       /personal email that should appear on your resume/,
     );
   });

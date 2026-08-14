@@ -1,4 +1,5 @@
 import { Wash } from "@/components/cinema/Wash";
+import Link from "next/link";
 
 /* The site footer. It lived inline in app/page.tsx until 2026-08-04, which
    meant it rendered on the homepage and nowhere else, and that single fact was
@@ -91,9 +92,9 @@ export function SiteFooter({ wash = false }: { wash?: boolean }) {
             <ul className="mt-4 space-y-2.5 text-[13px] text-muted">
               {/* Absolute, not bare "#product": on /try or /terms these have to
                   cross to the homepage before they can scroll to an id. */}
-              <li><a href="/#product" className={LINK}>Product</a></li>
-              {/* Pricing removed 2026-07-30 with the #pricing section. */}
-              <li><a href="/#faq" className={LINK}>FAQ</a></li>
+              <li><Link href="/#product" className={LINK}>Product</Link></li>
+              <li><a href="/pricing" className={LINK}>Pricing</a></li>
+              <li><Link href="/#faq" className={LINK}>FAQ</Link></li>
               {/* Footer, not header, and this is still the whole reachability
                   story for /litos-vs-simplify: it is the one link to it.
 

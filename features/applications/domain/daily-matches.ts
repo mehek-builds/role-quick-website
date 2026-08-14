@@ -229,14 +229,20 @@ export function canGenerateFrom(draft: ApplicationDraft): boolean {
   return missingApplicationFields(draft).length === 0 && isHttpsJobUrl(draft.portalUrl);
 }
 
+export type ResumeGenerationInitiation = "explicit_click" | "hover_prewarm";
+
 export function resumeGenerationBody(
   job: MonitoredJob,
   identity: ProfileIdentity,
   applicationProfile: ApplicationProfile,
+  initiation: ResumeGenerationInitiation,
+  operationId: string,
 ) {
   const resumeEmail = identity.resume_email?.trim();
   if (!resumeEmail) throw new Error("Add the personal email that should appear on your resume before preparing an application.");
   return {
+    operation_id: operationId,
+    initiation,
     company: job.company_name,
     role: job.title,
     jd_text: job.description,

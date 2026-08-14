@@ -48,7 +48,8 @@ const region = (from, to, label) => {
   return code.slice(start, end);
 };
 
-const fetchJobDescription = region("async function fetchJobDescription", "async function createApplication", "fetchJobDescription");
+const fetchJobDescription = region("async function fetchJobDescription", "async function fillApplication", "fetchJobDescription");
+const fillApplication = region("async function fillApplication", "async function createApplication", "fillApplication");
 const createApplication = region("async function createApplication", "async function generateCoverLetter", "createApplication");
 const sendWithoutAsking = region("const sendWithoutAsking", "const reviewOpen", "sendWithoutAsking");
 const panel = region("function NewApplicationPanel", "function ApplicationField", "NewApplicationPanel");
@@ -85,23 +86,37 @@ describe("every message a composer button raises lands beside that button", () =
         `${message} must not be raised in the page banner`,
       );
     }
-    assert.doesNotMatch(fetchJobDescription, /refuseInComposer\("generate"/, "Read job must not answer in the generate row");
+    assert.doesNotMatch(fetchJobDescription, /refuseInComposer\("action"/, "Read job must not answer in the action row");
     // setError(null) is the only setError allowed to survive here, and only as a clear.
     const setErrorCalls = [...fetchJobDescription.matchAll(/setError\(([^)]*)\)/g)].map((match) => match[1]);
     assert.deepEqual(setErrorCalls, ["null"], "Read job must not write to the page banner");
   });
 
-  test("Make my resume answers in the composer when the request fails", () => {
+  test("Tailor resume answers in the composer when the request fails", () => {
     // The exact expression, including the empty fields array. Swapping [] for `missing` or for the
     // four field names restores a lie about the student's input while leaving the message visible,
     // which is precisely the mutation an identifier-presence assertion cannot see.
     assert.match(
       createApplication,
-      /refuseInComposer\("generate", reason instanceof Error \? reason\.message : "We could not build this application\. Check the job description and try again\.", \[\]\);/,
-      "the generate failure must be raised beside the generate button with no fields marked",
+      /reportGenerationFailure\(reason instanceof Error \? reason\.message : "We could not build this application\. Check the job description and try again\.", \[\]\);/,
+      "the tailoring failure must be raised beside the action buttons with no fields marked",
     );
+    assert.match(createApplication, /else \{\s*refuseInComposer\("action", message, fields\);/);
     const setErrorCalls = [...createApplication.matchAll(/setError\(([^)]*)\)/g)].map((match) => match[1]);
     assert.deepEqual(setErrorCalls, ["null"], "the generate path must not write to the page banner");
+  });
+
+  test("Fill application answers in the composer without starting generation", () => {
+    assert.match(
+      fillApplication,
+      /reportFailure\(reason instanceof Error \? reason\.message : "Litos could not prepare this form\. Your job details are still here\."\);/,
+    );
+    assert.match(
+      fillApplication,
+      /if \(errorSurface === "tracker"\)[\s\S]{0,240}else \{\s*refuseInComposer\("action", message, fields\);/,
+      "a composer retry stays beside its button while a Tracker retry stays in canonical detail",
+    );
+    assert.doesNotMatch(fillApplication, /\/resume\/generate/);
   });
 
   test("a server failure marks no boxes, and the panel honours that", () => {
@@ -125,10 +140,10 @@ describe("every message a composer button raises lands beside that button", () =
   test("each button has a slot, and the note sits in both of them", () => {
     // Read job's slot is directly under the Job URL row it is about; the generate row keeps its own.
     assert.match(panel, /<ComposerRefusalNote refusal=\{refusal\} at="url" \/>/);
-    assert.match(panel, /<ComposerRefusalNote refusal=\{refusal\} at="generate" \/>/);
+    assert.match(panel, /<ComposerRefusalNote refusal=\{refusal\} at="action" \/>/);
     const urlSlot = panel.indexOf('at="url"');
     const textarea = panel.indexOf('id="new-application-jd"');
-    const generateSlot = panel.indexOf('at="generate"');
+    const generateSlot = panel.indexOf('at="action"');
     assert.ok(urlSlot > 0 && urlSlot < textarea, "the url slot must sit above the job description box, beside Read job");
     assert.ok(generateSlot > textarea, "the generate slot must sit below it, beside Make my resume");
   });

@@ -10,7 +10,6 @@ import {
   type ApplicationEmailStatusResponse,
   clearSession,
   createBillingPortal,
-  createCheckout,
   createEmailConnection,
   disconnectEmailConnection,
   type EmailConnectionsResponse,
@@ -26,9 +25,9 @@ import {
   setSession,
   setAutomationSettings,
 } from "@/lib/api";
-import { isSafeCheckoutUrl, isStripePortalUrl } from "@/lib/billing";
+import { isSafeBillingPortalUrl } from "@/lib/billing";
 import { applicationEmailAddressInUse, applicationEmailBadge } from "@/lib/application-email-status";
-import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { API_URL } from "@/lib/config";
 import { passwordFormProblem } from "@/app/login/password-form";
 import { updatePasswordSession } from "@/app/login/password-session";
@@ -73,6 +72,9 @@ import {
   type CountryWorkEligibilityDraft,
 } from "@/lib/work-eligibility";
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "@/lib/work-eligibility-limit";
+import { useBilling } from "@/components/billing/BillingProvider";
+import { PlanStatus } from "@/components/billing/PlanStatus";
+import { accessLabel } from "@/features/billing";
 
 /* Application profile: exactly the fields the backend stores, including legacy
    fields retained only so a full-profile save cannot erase them. Rendering a
@@ -115,6 +117,7 @@ function tabFromHash(hash: string): AccountTab {
 
 export default function Settings() {
   const router = useRouter();
+  const { access, canUse, openUpgrade, refresh: refreshBilling } = useBilling();
   const [me, setMe] = useState<Me | null>(null);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
   const [eligibilityDraft, setEligibilityDraft] = useState<CountryWorkEligibilityDraft[]>([]);
@@ -155,7 +158,6 @@ export default function Settings() {
   const [emailConnections, setEmailConnections] = useState<EmailConnectionsResponse | null>(null);
   const [applicationEmail, setApplicationEmail] = useState<ApplicationEmailStatusResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
-  const [checkoutBusy, setCheckoutBusy] = useState(false);
   const [portalBusy, setPortalBusy] = useState(false);
   const [billingNotice, setBillingNotice] = useState<"success" | "cancelled" | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
@@ -220,11 +222,12 @@ export default function Settings() {
         const query = new URLSearchParams(window.location.search);
         const callbackProvider = query.get("connection") as EmailProvider | null;
         const callbackStatus = query.get("status");
-        const billingReturn = query.get("billing");
-        if (billingReturn === "success" || billingReturn === "cancelled") {
-          setBillingNotice(billingReturn);
+        const billingReturn = query.get("billing") ?? query.get("checkout");
+        if (billingReturn === "success" || billingReturn === "cancelled" || billingReturn === "cancel") {
+          setBillingNotice(billingReturn === "success" ? "success" : "cancelled");
           setActiveTab("plan");
           window.history.replaceState({}, "", `${window.location.pathname}#plan`);
+          if (billingReturn === "success") void refreshBilling();
         }
         const [meRes, profileRes, onboardingRes, initialConnections, applicationEmailRes, sponsorRes] = await Promise.all([
           api<Me>("/me"),
@@ -331,7 +334,7 @@ export default function Settings() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshBilling]);
 
   function patch(p: Partial<ApplicationProfile>) {
     setProfile((prev) => ({ ...(prev ?? {}), ...p }));
@@ -369,6 +372,19 @@ export default function Settings() {
     } finally {
       setSavingAutomation(false);
     }
+  }
+
+  function changeAutomaticSubmission(enabled: boolean) {
+    if (enabled && canUse("automatic_submission") !== true) {
+      openUpgrade({
+        feature: "automatic_submission",
+        placement: "account_automation",
+        trigger: "automatic_submission_toggle",
+        manualLabel: "Keep manual submission",
+      });
+      return;
+    }
+    void saveAutomation({ automatic_submission_enabled: enabled });
   }
 
   /* Its own writer rather than a branch of saveAutomation, and the payload is the reason.
@@ -547,26 +563,12 @@ export default function Settings() {
     }
   }
 
-  async function startCheckout(interval: "weekly" | "monthly") {
-    setCheckoutBusy(true);
-    setError(null);
-    try {
-      const checkout = await createCheckout(interval);
-      if (!isSafeCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
-      track("checkout_started");
-      window.location.assign(checkout.url);
-    } catch (checkoutError) {
-      setError(checkoutError instanceof Error ? checkoutError.message : "Checkout is temporarily unavailable.");
-      setCheckoutBusy(false);
-    }
-  }
-
   async function openBillingPortal() {
     setPortalBusy(true);
     setError(null);
     try {
       const portal = await createBillingPortal();
-      if (!isStripePortalUrl(portal.url)) throw new Error("Billing portal returned an unsafe URL.");
+      if (!isSafeBillingPortalUrl(portal.url, portal.provider)) throw new Error("Billing portal returned an unsafe URL.");
       window.location.assign(portal.url);
     } catch (portalError) {
       setError(portalError instanceof Error ? portalError.message : "Billing portal is temporarily unavailable.");
@@ -676,12 +678,14 @@ export default function Settings() {
     connections: emailConnections,
     personalInboxConsent: automaticVerification,
   });
+  const storedBillingPortalUrl = me.billing_portal_url && isSafeBillingPortalUrl(
+    me.billing_portal_url,
+    me.billing_provider === "lemonsqueezy" ? "lemonsqueezy" : me.billing_provider === "stripe" ? "stripe" : null,
+  ) ? me.billing_portal_url : null;
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
   const profileDirty = eligibilityTouched || JSON.stringify(profile) !== savedProfileJson;
-  const billingFailed = ["past_due", "unpaid", "failed", "payment_failed"].includes((me.billing_status ?? "").toLowerCase());
-  const billingCanceled = ["canceled", "cancelled"].includes((me.billing_status ?? "").toLowerCase()) || Boolean(me.billing_ends_at);
 
   return (
     <div className="space-y-8">
@@ -874,8 +878,8 @@ export default function Settings() {
               <p className="text-xs text-muted">Plan</p>
               <div className="mt-1">
                 <Chip
-                  label={me.tier === "pro" ? "Pro" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
-                  kind={me.tier === "pro" ? "ready" : "draft"}
+                  label={access ? accessLabel(access) : me.tier === "pro" ? "Litos+" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
+                  kind={access?.access_class === "plus_paid" || access?.access_class === "legacy_paid" || me.tier === "pro" ? "ready" : "draft"}
                 />
                 {trialActive && (
                   <span className="ml-2 text-xs text-muted">
@@ -1005,7 +1009,9 @@ export default function Settings() {
           <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
             <span>
               <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
+              {canUse("automatic_submission") === false && <span className="ml-2 inline-flex rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Litos+</span>}
               <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
+              {canUse("automatic_submission") === false && <span className="mt-2 block text-xs leading-5 text-muted">Application filling remains unlimited. On Free, you review the form and press the employer&apos;s final submit control.</span>}
               {consentEligibility && !consentEligibility.eligible && !automaticSubmission && (
                 <span className="mt-2 block text-xs leading-5 text-warn">
                   Available after you have approved {consentEligibility.required} applications
@@ -1019,8 +1025,8 @@ export default function Settings() {
               type="checkbox"
               checked={automaticSubmission}
               // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
-              disabled={savingAutomation || (!automaticSubmission && consentEligibility?.eligible === false)}
-              onChange={(event) => void saveAutomation({ automatic_submission_enabled: event.target.checked })}
+              disabled={savingAutomation || (!automaticSubmission && canUse("automatic_submission") !== false && consentEligibility?.eligible === false)}
+              onChange={(event) => changeAutomaticSubmission(event.target.checked)}
               className="mt-1 size-4 accent-brand disabled:opacity-40"
             />
           </label>
@@ -1278,45 +1284,26 @@ export default function Settings() {
       </Card>}
 
       {/* Plan + usage */}
-      {activeTab === "plan" && <Card className="p-6" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
+      {activeTab === "plan" && <section className="space-y-4" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
+        <PlanStatus showAction={false} />
+        <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
-        {billingNotice === "success" && <p role="status" className="mt-4 rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">Payment received. Stripe is confirming your Pro access now.</p>}
-        {billingNotice === "cancelled" && <p role="status" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm text-warn">Checkout was cancelled. Nothing was charged.</p>}
-        <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-3">
-          <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} />
-          <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
-          <Meter label="Tailored resumes" used={me.usage.resumes.used} limit={me.usage.resumes.limit} />
-        </div>
-        {me.checkout_available && !trialActive ? (
-          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-inner bg-brand-soft px-5 py-4">
-            {/* No price or quota stated here. The plan is being reworked and
-                a stale number is worse than none: checkout is the one place
-                that shows the real price, and it is always current. */}
-            <p className="text-sm text-muted">
-              <span className="font-medium text-ink">Need more room? </span>
-              Cancelling takes the same number of clicks as signing up.
-            </p>
-            {me.is_guest ? <ButtonLink href="/login?claim=1&next=upgrade">
-              Upgrade to Pro
-            </ButtonLink> : <div className="flex flex-wrap gap-2">
-              <Button type="button" disabled={checkoutBusy} onClick={() => void startCheckout("weekly")}>
-                {checkoutBusy ? "Opening..." : "$19.99 weekly"}
-              </Button>
-              <Button variant="secondary" type="button" disabled={checkoutBusy} onClick={() => void startCheckout("monthly")}>
-                {checkoutBusy ? "Opening..." : "$39.99 monthly"}
-              </Button>
-            </div>}
-          </div>
-        ) : me.tier === "pro" ? (
+        {billingNotice === "success" && <p role="status" className="mt-4 rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">Payment received. Stripe is confirming your Litos+ access now.</p>}
+        {billingNotice === "cancelled" && <p role="status" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm text-warn">Checkout was canceled. Nothing was charged. Your work is saved.</p>}
+        <p className="mt-4 text-sm text-muted"><span className="font-medium text-ink">Application filling is unlimited.</span> Use it from the dashboard or on supported employer sites in every plan state.</p>
+        {access?.access_class === "plus_paid" || access?.access_class === "legacy_paid" || me.tier === "pro" ? (
           <div className="mt-6 space-y-3 border-t border-border pt-5 text-sm text-muted">
-            <p>You are on Pro.</p>
-            {billingFailed && <ErrorNote message="Your last payment did not complete. Update the payment method in the secure billing portal to keep access active." />}
-            {billingCanceled && me.billing_ends_at && <p role="status" className="rounded-inner bg-warn-soft px-4 py-3 text-warn">Subscription canceled. Pro access continues through {new Date(me.billing_ends_at).toLocaleDateString()}.</p>}
-            {me.billing_renews_at && !billingCanceled && <p>Next billing date: <span className="font-mono text-ink">{new Date(me.billing_renews_at).toLocaleDateString()}</span>. The amount is confirmed in the billing portal.</p>}
-            <p>{me.billing_portal_available ? <button type="button" disabled={portalBusy} onClick={() => void openBillingPortal()} className="font-medium text-brand-ink underline-offset-4 hover:underline disabled:opacity-50">{portalBusy ? "Opening billing portal..." : "Open secure billing portal"}</button> : me.billing_portal_url ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={me.billing_portal_url}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_available || me.billing_portal_url ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
+            <p>{access?.access_class === "legacy_paid" ? "Your original paid access is preserved." : "You are on Litos+."}</p>
+            <p>{me.billing_portal_available ? <button type="button" disabled={portalBusy} onClick={() => void openBillingPortal()} className="font-medium text-brand-ink underline-offset-4 hover:underline disabled:opacity-50">{portalBusy ? "Opening billing portal..." : "Open secure billing portal"}</button> : storedBillingPortalUrl ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={storedBillingPortalUrl}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_available || storedBillingPortalUrl ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
           </div>
-        ) : null}
-      </Card>}
+        ) : (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-inner border border-brand/25 bg-brand-soft px-5 py-4">
+            <p className="max-w-xl text-sm text-muted"><span className="font-medium text-ink">Application filling stays free. </span>Choose Litos+ for new tailoring, outreach, network paths, insights, and sending without being asked each time.</p>
+            <Button type="button" variant="secondary" onClick={() => openUpgrade({ feature: "ai_resume_tailoring", placement: "account_plan", trigger: "choose_litos_plus", manualLabel: "Keep filling for free" })}>Choose Litos+</Button>
+          </div>
+        )}
+        </Card>
+      </section>}
     </div>
   );
 }
