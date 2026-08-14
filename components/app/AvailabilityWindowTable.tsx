@@ -28,19 +28,19 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
         </p>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[32rem] table-fixed border-collapse text-left">
+      <div>
+        <table className="block w-full border-collapse text-left sm:table sm:table-fixed">
           <caption className="sr-only">Internship availability date table</caption>
           <colgroup>
             <col className="w-[38%]" />
             <col />
           </colgroup>
           <tbody>
-            <tr className="border-t border-border">
-              <th scope="row" className="px-4 py-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted">
+            <tr className="block border-t border-border sm:table-row">
+              <th scope="row" className="block px-4 pb-1 pt-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted sm:table-cell sm:py-3">
                 Cycle
               </th>
-              <td className="px-4 py-3">
+              <td className="block px-4 pb-3 sm:table-cell sm:py-3">
                 <label htmlFor={`${id}-cycle`} className="sr-only">Internship cycle</label>
                 <select
                   id={`${id}-cycle`}
@@ -55,11 +55,11 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                 </select>
               </td>
             </tr>
-            <tr className="border-t border-border">
-              <th scope="row" className="px-4 py-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted">
+            <tr className="block border-t border-border sm:table-row">
+              <th scope="row" className="block px-4 pb-1 pt-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted sm:table-cell sm:py-3">
                 Earliest start
               </th>
-              <td className="px-4 py-3">
+              <td className="block px-4 pb-3 sm:table-cell sm:py-3">
                 <label htmlFor={`${id}-start`} className="sr-only">Internship earliest start date</label>
                 <input
                   id={`${id}-start`}
@@ -70,11 +70,11 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                 />
               </td>
             </tr>
-            <tr className="border-t border-border">
-              <th scope="row" className="px-4 py-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted">
+            <tr className="block border-t border-border sm:table-row">
+              <th scope="row" className="block px-4 pb-1 pt-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted sm:table-cell sm:py-3">
                 Available through
               </th>
-              <td className="px-4 py-3">
+              <td className="block px-4 pb-3 sm:table-cell sm:py-3">
                 <label htmlFor={`${id}-end`} className="sr-only">Internship final available date</label>
                 <input
                   id={`${id}-end`}
@@ -85,11 +85,11 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                 />
               </td>
             </tr>
-            <tr className="border-y border-border">
-              <th scope="row" className="px-4 py-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted">
+            <tr className="block border-y border-border sm:table-row">
+              <th scope="row" className="block px-4 pb-1 pt-3 align-middle font-mono text-[11px] font-normal uppercase tracking-[0.08em] text-muted sm:table-cell sm:py-3">
                 Reuse through
               </th>
-              <td className="px-4 py-3">
+              <td className="block px-4 pb-3 sm:table-cell sm:py-3">
                 <label htmlFor={`${id}-valid-through`} className="sr-only">Use this internship answer through</label>
                 <input
                   id={`${id}-valid-through`}

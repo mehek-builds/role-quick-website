@@ -220,10 +220,19 @@ describe("the two grants stay independent", () => {
     );
   });
 
-  test("granting one does not grant the other", () => {
+  test("granting one leaves an omitted sibling untouched", () => {
     const payload = consentAcknowledgementCompletion(NOTHING_GRANTED, { [PRIVACY]: true });
     assert.equal(payload[PRIVACY], true);
-    assert.equal(payload[CONDUCT], false, "the untouched grant keeps the server's reported answer");
+    assert.equal(CONDUCT in payload, false, "an omitted grant must not be named or revoked");
+  });
+
+  test("changing one live grant does not revoke its omitted sibling", () => {
+    const payload = consentAcknowledgementCompletion(HER_LIVE_GRANT, { [PRIVACY]: false });
+    assert.deepEqual(payload, { [PRIVACY]: false });
+    assert.equal(
+      applyToRow(HER_LIVE_GRANT, payload).automatic_conduct_acceptance_consented_at,
+      "2026-08-12T13:15:07.000Z",
+    );
   });
 });
 

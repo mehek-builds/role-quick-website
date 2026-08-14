@@ -27,12 +27,15 @@ import {
   OnboardingStep,
   ParsedProfile,
   api,
+  acknowledgeOnboardingFlowStep,
   completeOnboarding,
+  completeOnboardingFlow,
   getApplicationProfile,
   getOnboardingState,
   getStoredEmail,
   getToken,
   markGapsAsked,
+  setAutomationSettings,
 } from "@/lib/api";
 import { ErrorNote } from "@/components/app/ui";
 import { Button } from "@/components/app/Button";
@@ -42,15 +45,19 @@ import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { StartFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
+import { deferOnboardingForSession } from "@/lib/onboarding-flow";
 
 export default function Start() {
   const router = useRouter();
   const [state, setState] = useState<OnboardingState | null>(null);
   const [profile, setProfile] = useState<ParsedProfile | null>(null);
+  const [parsedProfileStatus, setParsedProfileStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [parsedProfileLoadError, setParsedProfileLoadError] = useState<string | null>(null);
   // Only the base step needs this, and only to fill the resume's contact line. Most of it is still
   // empty at this point in the flow (harvest has not run yet), which is correct rather than a bug:
   // the contact line fills in as the first application teaches us, and the student can see that.
   const [appProfile, setAppProfile] = useState<ApplicationProfile | null>(null);
+  const [appProfileStatus, setAppProfileStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Set alongside the QA state stub below so the base step can replay a canned build.
@@ -65,11 +72,28 @@ export default function Start() {
 
   const loadProfile = useCallback(async () => {
     setProfileLoadError(null);
+    setParsedProfileLoadError(null);
+    setParsedProfileStatus("loading");
+    setAppProfileStatus("loading");
     try {
       setProfile(await api<ParsedProfile>("/profile"));
-      setAppProfile(await getApplicationProfile().catch(() => null));
+      setParsedProfileStatus("ready");
     } catch (reason) {
-      setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your resume details.");
+      const message = reason instanceof Error ? reason.message : "Could not load your resume details.";
+      setParsedProfileLoadError(message);
+      setProfileLoadError(message);
+      setParsedProfileStatus("error");
+    }
+    /* These stores fail independently. A parsed-resume failure must not stop the application
+       profile from loading: the one-page builder can still run without parsed contact details,
+       while approval must never mistake an unknown saved application profile for a blank one. */
+    try {
+      setAppProfile(await getApplicationProfile());
+      setAppProfileStatus("ready");
+    } catch (reason) {
+      setAppProfile(null);
+      setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your application details.");
+      setAppProfileStatus("error");
     }
   }, []);
 
@@ -80,9 +104,13 @@ export default function Start() {
       const params = new URLSearchParams(window.location.search);
       if (params.has("qa")) {
         const qaStep = (params.get("step") as OnboardingStep) ?? "resume";
+        const qaSaved = params.get("scenario") === "saved";
         const state: OnboardingState = {
           step: qaStep,
-          completed_at: null,
+          flow_version: qaSaved ? 2 : 0,
+          flow_completed: false,
+          requires_onboarding: true,
+          completed_at: qaSaved ? "2026-08-01T10:00:00.000Z" : null,
           has_focus: true,
           has_resume: true,
           has_impact_review: qaStep !== "impact",
@@ -145,6 +173,31 @@ export default function Start() {
             },
           ],
         } as ParsedProfile);
+        setParsedProfileStatus("ready");
+        if (qaSaved) {
+          setAppProfile({
+            phone: "+1 213 555 0100",
+            address_city: "Los Angeles",
+            address_state: "CA",
+            address_zip: "90007",
+            address_country: "United States",
+            linkedin_url: "https://linkedin.com/in/mehek",
+            github_url: "https://github.com/mehek",
+            portfolio_url: "https://mehek.dev",
+            citizenship: "United States",
+            major: "Computer Science",
+            gpa: "3.89",
+            gpa_scale: "4.0",
+            languages: ["English", "Hindi", "Spanish"],
+            availability_term: "14 weeks",
+            desired_salary: "Market rate",
+            desired_salary_currency: "USD",
+            referral_source_default: "University career fair",
+            pronouns: "she/her",
+            eeo_prefs: { gender: "Female", veteran_status: "No", disability_status: "No" },
+          });
+        }
+        setAppProfileStatus("ready");
         setQaDemo(true);
         return;
       }
@@ -156,6 +209,10 @@ export default function Start() {
     (async () => {
       try {
         const s = await refresh();
+        if (s.requires_onboarding === false && s.step === "done") {
+          router.replace("/dashboard");
+          return;
+        }
         if (s.has_resume) {
           // Needed by the targeting screen's derived defaults and by the base screen's education
           // block, which takes school/degree/grad date from the parse rather than from the model.
@@ -181,11 +238,11 @@ export default function Start() {
   // stayed and a later means they left - collapsing them would hide which is happening.
   const later = useCallback(() => {
     if (state) track("onboarding_step_later", { step: state.step });
+    deferOnboardingForSession();
     router.push("/dashboard");
   }, [router, state]);
 
   const stepDone = useCallback((step: OnboardingStep) => track("onboarding_step_done", { step }), []);
-
   if (error && !state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
@@ -230,6 +287,42 @@ export default function Start() {
        the stamp could not be written at all (see the gaps case below). Every other step stays
        exactly as derived - a stored cursor is the thing this flow is built to avoid. */
     const step: OnboardingStep = state.step === "gaps" && gapsHandled ? "done" : state.step;
+    const applicationProfileGate = (current: OnboardingStep) => (
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <StepRail current={current} />
+        {appProfileStatus === "error" ? (
+          <div className="mt-10">
+            <ErrorNote message={profileLoadError ?? "Could not load your saved application details."} />
+            <button type="button" onClick={() => void loadProfile()} className="mt-4 min-h-11 text-sm text-brand-ink underline underline-offset-4">
+              Try loading again
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+            <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+          </>
+        )}
+      </div>
+    );
+    const parsedProfileGate = () => (
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <StepRail current="resume" />
+        {parsedProfileStatus === "error" ? (
+          <div className="mt-10">
+            <ErrorNote message={parsedProfileLoadError ?? "Could not load your saved resume."} />
+            <button type="button" onClick={() => void loadProfile()} className="mt-4 min-h-11 text-sm text-brand-ink underline underline-offset-4">
+              Try loading again
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+            <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+          </>
+        )}
+      </div>
+    );
     switch (step) {
       case "focus":
         // During a rolling backend deploy an older state response can still say "focus" before a
@@ -242,9 +335,10 @@ export default function Start() {
               onDone={() => {
                 stepDone("resume");
                 void (async () => {
+                  if (state.flow_version === 2) await acknowledgeOnboardingFlowStep("resume", "continued");
                   const s = await refresh();
                   if (s.has_resume) await loadProfile();
-                })();
+                })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
               }}
             />
           );
@@ -275,33 +369,40 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("focus");
-              void refresh();
+              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("focus", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
 
       case "sponsorship":
+        if (!qaDemo && appProfileStatus !== "ready") return applicationProfileGate("sponsorship");
         return (
           <SponsorshipStep
             profile={appProfile}
             sponsorshipAnswer={state.sponsorship_answer}
+            onLater={later}
             onDone={() => {
               stepDone("sponsorship");
-              void refresh();
+              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("sponsorship", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
 
       case "resume":
+        if (state.flow_version === 2 && state.has_resume && !state.flow_completed && parsedProfileStatus !== "ready") {
+          return parsedProfileGate();
+        }
         return (
           <ResumeStep
+            savedProfile={state.flow_version === 2 && state.has_resume && state.flow_completed === false ? profile : undefined}
             onLater={later}
             onDone={() => {
               stepDone("resume");
               void (async () => {
+                if (state.flow_version === 2) await acknowledgeOnboardingFlowStep("resume", "continued");
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
-              })();
+              })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -313,12 +414,13 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("impact");
-              void refresh();
+              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("impact", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
 
       case "base":
+        if (!qaDemo && appProfileStatus !== "ready") return applicationProfileGate("base");
         return (
           <BaseResumeStep
             parsed={profile}
@@ -332,7 +434,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("base");
-              void refresh();
+              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("base", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -345,7 +447,7 @@ export default function Start() {
           <GapsStep
             gaps={state.gaps}
             onLater={later}
-            onDone={() => {
+            onDone={(skipped) => {
               stepDone("gaps");
               void (async () => {
                 /* Both Save and Skip land here, and BOTH have to record that the screen was shown.
@@ -359,8 +461,9 @@ export default function Start() {
                    suppresses the step entirely in that window, so the next load agrees. */
                 setGapsHandled(true);
                 await markGapsAsked();
+                if (state.flow_version === 2) await acknowledgeOnboardingFlowStep("gaps", skipped ? "skipped" : "continued");
                 void refresh();
-              })();
+              })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -377,17 +480,24 @@ export default function Start() {
           {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
           <DoneStep
             state={state}
-            verificationEnabled={state.automatic_verification_enabled}
             onFinish={async (settings) => {
               try {
-                await completeOnboarding(settings);
+                if (state.completed_at) {
+                  if (Object.keys(settings).length > 0) await setAutomationSettings(settings);
+                } else {
+                  await completeOnboarding({
+                    automatic_verification_enabled: state.automatic_verification_enabled,
+                    ...settings,
+                  });
+                }
+                if (state.flow_version === 2) await completeOnboardingFlow();
                 track("onboarding_complete", {
                   learned: state.learned.length,
                   applied: state.has_applied,
                 });
                 router.push("/dashboard");
               } catch (reason) {
-                setError(reason instanceof Error ? reason.message : "Could not save your automation permissions.");
+                setError(reason instanceof Error ? reason.message : "Could not finish setup.");
               }
             }}
           />

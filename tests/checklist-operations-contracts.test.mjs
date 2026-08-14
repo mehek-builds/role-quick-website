@@ -13,6 +13,8 @@ test("billing return verifies the exact offer and account record, then handles c
   assert.match(page, /api<Me>\("\/me"\)/);
   assert.match(page, /Nothing was charged/);
   assert.match(page, /Payment could not be confirmed yet/);
-  assert.match(page, /receipt, payment method, and next billing date/);
+  assert.match(page, /getBillingReceipt/);
+  assert.match(page, /exact amount Stripe confirmed/);
+  assert.match(page, /Resume your action/);
 });
 test("integration permissions and notification limits are stated", () => { const page = read("app/dashboard/settings/page.tsx"); assert.match(page, /requests access only to find a recent application verification code/); assert.match(page, /Request an integration through Contact/); assert.match(page, /There are no marketing notification subscriptions/); });

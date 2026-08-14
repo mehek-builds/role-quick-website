@@ -100,10 +100,13 @@ describe("website and backend application profile contract", () => {
     assert.match(SETTINGS, /api<ApplicationProfile>\("\/profile\/application"/);
   });
 
-  test("application-scoped availability is round-tripped but not newly collected", () => {
+  test("reusable availability duration is visible and editable in both review surfaces", () => {
     assert.match(applicationProfileBody(), /\n  availability_term\?: string \| null;/);
-    assert.doesNotMatch(SETTINGS, /profile\.availability_term|patch\(\{ availability_term:/);
-    assert.doesNotMatch(ONBOARDING, /key: "availability_term"|availability_term:\s*"/);
+    assert.match(SETTINGS, /value=\{profile\.availability_term\}/);
+    assert.match(SETTINGS, /patch\(\{ availability_term: v \}\)/);
+    assert.match(ONBOARDING, /key: "availability_term"/);
+    assert.match(ONBOARDING, /const value = profile\?\.\[field\.key\]/);
+    assert.match(ONBOARDING, /value=\{profileDetails\[field\.key\] \?\? ""\}/);
     assert.match(SETTINGS, /const body: Record<string, unknown> = \{ \.\.\.profile \}/);
   });
 
@@ -115,13 +118,17 @@ describe("website and backend application profile contract", () => {
     assert.match(SETTINGS, /const body: Record<string, unknown> = \{ \.\.\.profile \}/);
   });
 
-  test("onboarding omits blank applicant facts instead of clearing stored answers", () => {
+  test("onboarding preloads reusable details and writes only deliberate changes", () => {
     for (const field of ["education_start_date", "date_of_birth"]) {
       assert.match(ONBOARDING, new RegExp(`key: "${field}"`));
     }
     assert.match(ONBOARDING, /if \(typed\) \(patch as Record<string, unknown>\)\[field\.key\] = typed/);
-    assert.doesNotMatch(ONBOARDING, /availability_term:\s*"/);
-    assert.doesNotMatch(ONBOARDING, /key: "availability_term"/);
+    assert.match(ONBOARDING, /key: "availability_term"/);
+    assert.match(ONBOARDING, /if \(typeof value === "string" && value\.trim\(\)\) seed\[field\.key\] = value/);
+    assert.match(ONBOARDING, /const initialProfileInputs = useRef\(\{/);
+    assert.match(ONBOARDING, /const before = initial\.profileDetails\[field\.key\]\?\.trim\(\) \?\? ""/);
+    assert.match(ONBOARDING, /if \(current !== before\) \(profilePatch as Record<string, unknown>\)\[field\.key\] = current \|\| null/);
+    assert.doesNotMatch(ONBOARDING, /for \(const \[key, value\] of Object\.entries\(profileDetails\)\)/);
     assert.doesNotMatch(ONBOARDING, /date_of_birth:\s*"/);
   });
 

@@ -12,7 +12,7 @@ import {
   type BuildStage,
   type MetricGap,
 } from "@/lib/base-resume";
-import { putApplicationProfile } from "@/lib/api";
+import { getApplicationProfile, putApplicationProfile } from "@/lib/api";
 import { track } from "@/lib/analytics";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { SourceResume } from "./SourceResume";
@@ -24,7 +24,6 @@ import { courseworkLine } from "@/lib/profile-editor";
 /* The availability window lives in lib/ rather than here because Settings edits the same four
    values, and one rule described two ways on two screens is how the pair drifts. */
 import {
-  availabilityWindowPatch,
   type AvailabilityWindowInput,
 } from "@/lib/availability-window";
 
@@ -81,12 +80,12 @@ const SHEET_CAP = {
 
 type LogRow = { t: string; text: string };
 const RACE_AND_GENDER_QUESTION_FIELDS = [
-  { key: "gender", label: "Gender", placeholder: "Female, Male, Non-binary, Decline to self-identify" },
-  { key: "transgender_status", label: "Transgender experience", placeholder: "Yes, No, Decline to self-identify" },
-  { key: "sexual_orientation", label: "Sexual orientation", placeholder: "Heterosexual, Gay or lesbian, Bisexual, Decline to self-identify" },
-  { key: "disability_status", label: "Disability status", placeholder: "Yes, No, Decline to self-identify" },
-  { key: "veteran_status", label: "Veteran status", placeholder: "Yes, No, Decline to self-identify" },
-  { key: "race", label: "Race / ethnicity", placeholder: "White, Asian, Black or African American, Hispanic or Latino, Decline to self-identify" },
+  { key: "gender", label: "Gender", options: ["Female", "Male", "Non-binary", "Decline to self-identify"] },
+  { key: "transgender_status", label: "Transgender experience", options: ["Yes", "No", "Decline to self-identify"] },
+  { key: "sexual_orientation", label: "Sexual orientation", options: ["Heterosexual", "Gay or lesbian", "Bisexual", "Decline to self-identify"] },
+  { key: "disability_status", label: "Disability status", options: ["Yes", "No", "Decline to self-identify"] },
+  { key: "veteran_status", label: "Veteran status", options: ["Yes", "No", "Decline to self-identify"] },
+  { key: "race", label: "Race / ethnicity", options: ["White", "Asian", "Black or African American", "Hispanic or Latino", "Middle Eastern or North African", "Native American or Alaska Native", "Native Hawaiian or Pacific Islander", "Decline to self-identify"] },
 ] as const;
 
 /* ---- the questions employers keep asking that nothing on file could answer ----
@@ -177,6 +176,39 @@ const APPLICATION_FACT_FIELDS = [
     hint: "",
   },
 ] as const;
+
+/* Reusable profile categories that already exist in Account. Keeping them in the same optional
+ * disclosure makes the new walkthrough additive: a returning student can review every stored
+ * category without turning the one-page resume approval into a long required form. */
+const PROFILE_DETAIL_FIELDS = [
+  { key: "phone", label: "Phone", placeholder: "+1 213 555 0100" },
+  { key: "address_city", label: "City", placeholder: "Los Angeles" },
+  { key: "address_state", label: "State or region", placeholder: "CA" },
+  { key: "address_zip", label: "ZIP or postal code", placeholder: "90007" },
+  { key: "address_country", label: "Country where you are based", placeholder: "United States" },
+  { key: "linkedin_url", label: "LinkedIn URL", placeholder: "https://linkedin.com/in/you" },
+  { key: "github_url", label: "GitHub URL", placeholder: "https://github.com/you" },
+  { key: "portfolio_url", label: "Portfolio URL", placeholder: "https://you.dev" },
+  { key: "citizenship", label: "Citizenship", placeholder: "United States" },
+  { key: "major", label: "Major", placeholder: "Computer Science" },
+  { key: "gpa", label: "GPA", placeholder: "3.89" },
+  { key: "gpa_scale", label: "GPA scale", placeholder: "4.0" },
+  { key: "sat_score", label: "SAT score", placeholder: "1520" },
+  { key: "act_score", label: "ACT score", placeholder: "34" },
+  { key: "desired_salary", label: "Desired salary", placeholder: "Open or market rate" },
+  { key: "desired_salary_currency", label: "Salary currency", placeholder: "USD" },
+  { key: "availability_date", label: "Available from, saved reference", placeholder: "Immediately" },
+  { key: "availability_term", label: "Availability duration", placeholder: "14 weeks" },
+] as const;
+
+function profileDetailSeed(profile: ApplicationProfile | null): Record<string, string> {
+  const seed: Record<string, string> = {};
+  for (const field of PROFILE_DETAIL_FIELDS) {
+    const value = profile?.[field.key];
+    if (typeof value === "string" && value.trim()) seed[field.key] = value;
+  }
+  return seed;
+}
 
 const ADVANCED_STUDY_OPTIONS = [
   { value: "", label: "Prefer not to answer now" },
@@ -301,11 +333,13 @@ export function BaseResumeStep({
      Prefilled is not answered. `languageSuggestion` is what the resume PRINTED, which schema.ts is
      explicit is not a fluency claim; pressing "Looks right" is what makes it a declaration. Left
      blank, nothing is written and it stays a gap, so a skip is never mistaken for "no languages". */
-  const [languages, setLanguages] = useState(languageSuggestion.join(", "));
+  const [languages, setLanguages] = useState(() => (profile?.languages ?? languageSuggestion).join(", "));
   const [raceAndGenderPrefs, setRaceAndGenderPrefs] = useState<Record<string, string>>(() => profile?.eeo_prefs ?? {});
   /* Prefilled from whatever is already stored, so a student who comes back does not retype it, and
      so nothing here can silently overwrite an answer she gave in Settings with a blank. */
   const [facts, setFacts] = useState<Record<string, string>>(() => applicationFactSeed(profile));
+  const [profileDetails, setProfileDetails] = useState<Record<string, string>>(() => profileDetailSeed(profile));
+  const [standardizedTestType, setStandardizedTestType] = useState(() => profile?.standardized_test_type ?? "");
   const [priorEmployers, setPriorEmployers] = useState(() => (profile?.prior_application_employers ?? []).join(", "));
   /* Three states, not two: "not answered" is the default and must stay reachable, because a
      control that starts unanswered and a student who never looked at it are the same thing, and
@@ -325,6 +359,19 @@ export function BaseResumeStep({
     validThrough: profile?.availability_valid_through ?? "",
   }));
   const [referralSource, setReferralSource] = useState(() => profile?.referral_source_default ?? "");
+  const initialProfileInputs = useRef({
+    languages,
+    raceAndGenderPrefs,
+    facts,
+    profileDetails,
+    standardizedTestType,
+    priorEmployers,
+    offers,
+    offerDetails,
+    advancedStudy,
+    availabilityWindow,
+    referralSource,
+  });
   const [spec, setSpec] = useState<Partial<ResumeSpec>>({});
   /* Two phases, one screen. `compare` puts the upload beside the rebuild so the difference is an
      observation rather than a claim; `detail` is what they get after choosing. Local state, not a
@@ -733,32 +780,77 @@ export function BaseResumeStep({
          different and wrong answer to the next form that asks. Written AFTER persist so a failure
          here cannot cost them the resume edits they just made. */
       const profilePatch: Partial<ApplicationProfile> = {};
-      if (languageGap) {
-        const declared = languages
-          .split(",")
-          .map((name) => name.trim())
-          .filter(Boolean);
-        if (declared.length > 0) {
+      const initial = initialProfileInputs.current;
+      const declared = languages
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean);
+      if (languages !== initial.languages) {
           /* `!demo` for the same reason persist() has it: a QA session has no account, so an
              unguarded write here would 401 and show "Could not save your resume" on the one screen
              the harness exists to make reviewable without logging in. */
-          profilePatch.languages = declared;
+        profilePatch.languages = declared;
+        if (languageGap) {
           track("onboarding_languages_declared", {
             count: declared.length,
             prefilled: languageSuggestion.length > 0,
           });
         }
       }
-      profilePatch.eeo_prefs = Object.keys(raceAndGenderPrefs).length > 0 ? raceAndGenderPrefs : null;
-      Object.assign(profilePatch, applicationFactPatch({
-        facts,
-        priorEmployers,
-        offers,
-        offerDetails,
-        advancedStudy,
-        referralSource,
-      }));
-      Object.assign(profilePatch, availabilityWindowPatch(availabilityWindow));
+      for (const field of PROFILE_DETAIL_FIELDS) {
+        const current = profileDetails[field.key]?.trim() ?? "";
+        const before = initial.profileDetails[field.key]?.trim() ?? "";
+        if (current !== before) (profilePatch as Record<string, unknown>)[field.key] = current || null;
+      }
+      if (standardizedTestType !== initial.standardizedTestType) {
+        profilePatch.standardized_test_type = standardizedTestType
+          ? standardizedTestType as ApplicationProfile["standardized_test_type"]
+          : null;
+      }
+      if (JSON.stringify(raceAndGenderPrefs) !== JSON.stringify(initial.raceAndGenderPrefs)) {
+        const latest = demo ? profile : await getApplicationProfile();
+        const merged = { ...(latest?.eeo_prefs ?? {}) };
+        for (const field of RACE_AND_GENDER_QUESTION_FIELDS) {
+          const current = raceAndGenderPrefs[field.key]?.trim() ?? "";
+          const before = initial.raceAndGenderPrefs[field.key]?.trim() ?? "";
+          if (current === before) continue;
+          if (current) merged[field.key] = current;
+          else delete merged[field.key];
+        }
+        profilePatch.eeo_prefs = Object.keys(merged).length > 0 ? merged : null;
+      }
+      for (const field of APPLICATION_FACT_FIELDS) {
+        const current = facts[field.key]?.trim() ?? "";
+        const before = initial.facts[field.key]?.trim() ?? "";
+        if (current !== before) (profilePatch as Record<string, unknown>)[field.key] = current || null;
+      }
+      if (priorEmployers !== initial.priorEmployers) {
+        const current = priorEmployers.trim();
+        profilePatch.prior_application_employers = current.toLowerCase() === "none"
+          ? []
+          : current ? current.split(",").map((name) => name.trim()).filter(Boolean) : null;
+      }
+      if (offers !== initial.offers) {
+        profilePatch.has_outstanding_offers = offers === "" ? null : offers === "some";
+      }
+      if (offerDetails !== initial.offerDetails) profilePatch.outstanding_offer_details = offerDetails.trim() || null;
+      if (advancedStudy !== initial.advancedStudy) {
+        profilePatch.advanced_study_plan = advancedStudy
+          ? advancedStudy as ApplicationProfile["advanced_study_plan"]
+          : null;
+      }
+      if (referralSource !== initial.referralSource) profilePatch.referral_source_default = referralSource.trim() || null;
+      const availabilityKeys = [
+        ["availability_window_start", "start"],
+        ["availability_window_end", "end"],
+        ["availability_cycle", "cycle"],
+        ["availability_valid_through", "validThrough"],
+      ] as const;
+      for (const [profileKey, inputKey] of availabilityKeys) {
+        const current = availabilityWindow[inputKey].trim();
+        const before = initial.availabilityWindow[inputKey].trim();
+        if (current !== before) (profilePatch as Record<string, unknown>)[profileKey] = current || null;
+      }
       if (!demo && Object.keys(profilePatch).length > 0) await putApplicationProfile(profilePatch);
       onDone();
     } catch (e) {
@@ -768,7 +860,8 @@ export function BaseResumeStep({
     }
   }, [
     editing, persist, onDone, languageGap, languages, languageSuggestion.length, raceAndGenderPrefs, demo,
-    facts, priorEmployers, offers, offerDetails, advancedStudy,
+    facts, profileDetails, standardizedTestType,
+    priorEmployers, offers, offerDetails, advancedStudy,
     referralSource, availabilityWindow,
   ]);
 
@@ -780,6 +873,10 @@ export function BaseResumeStep({
       else delete next[key];
       return next;
     });
+  }
+
+  function patchProfileDetail(key: string, value: string) {
+    setProfileDetails((current) => ({ ...current, [key]: value }));
   }
 
   function patchRaceAndGenderPref(key: string, value: string) {
@@ -826,6 +923,7 @@ export function BaseResumeStep({
             phase === "compare" ? (hasSource ? "lg:col-span-2" : "text-center") : "lg:col-start-2 lg:row-start-1"
           }`}
         >
+          <PhaseLabel>{phase === "compare" ? "Compare" : "Review and edit"}</PhaseLabel>
           <h1 className="max-w-full text-section font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-section">
             {phase === "compare"
               ? hasSource ? "Same you. One page." : "One page, ready."
@@ -1012,9 +1110,6 @@ export function BaseResumeStep({
             <p className="mt-5 text-xs leading-5 text-muted">
               Checked: an applicant tracking system can read this, {ats.extractable_chars} characters
               on {ats.pages === 1 ? "one page" : `${ats.pages} pages`}.
-              {ats.scored_against === "target roles" && (
-                <> It matches {ats.keyword_coverage_pct}% of the words in the roles you picked.</>
-              )}
             </p>
           )}
 
@@ -1101,13 +1196,13 @@ export function BaseResumeStep({
 
           {/* Sits above the button because pressing it is what declares the answer. Below it, the
               student would be agreeing to something they had not read. */}
-          {finished && languageGap && (
+          {finished && (
             <div className="mt-5 rounded-inner border border-border px-4 py-3">
               <label htmlFor="base-languages" className="text-[13px] text-ink">
                 Which languages are you fluent in?
               </label>
               <p className="mt-1 text-xs leading-5 text-muted">
-                {languageSuggestion.length > 0
+                {languages.trim()
                   ? "Taken from your resume. Correct it if it overstates anything: employers ask, and Litos answers with exactly this."
                   : "Employers ask this on forms. Litos leaves the question blank until you answer it here."}
               </p>
@@ -1122,7 +1217,51 @@ export function BaseResumeStep({
           )}
 
           {finished && (
-            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+            <details className="mt-5 rounded-inner border border-border px-4 py-3">
+              <summary className="cursor-pointer rounded-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                <span className="block font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+                  Optional application details
+                </span>
+                <span className="mt-1 block text-[13px] leading-5 text-ink">
+                  Add answers Litos can reuse on forms
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-muted">
+                  Everything here is optional. Leave a field blank and Litos leaves it blank too.
+                </span>
+              </summary>
+
+              <div className="mt-5 border-t border-border pt-4">
+              <p className="text-[13px] text-ink">Contact, education, and application profile</p>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                These are the reusable categories already in your Litos Account. Saved answers are prefilled and stay unchanged if you leave them alone.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {PROFILE_DETAIL_FIELDS.map((field) => (
+                  <label key={field.key} htmlFor={`base-profile-${field.key}`} className="block">
+                    <span className="text-xs font-medium text-muted">{field.label}</span>
+                    <input
+                      id={`base-profile-${field.key}`}
+                      value={profileDetails[field.key] ?? ""}
+                      onChange={(event) => patchProfileDetail(field.key, event.target.value)}
+                      placeholder={field.placeholder}
+                      className="mt-1.5 min-h-11 w-full rounded-inner border border-control-border bg-surface px-3 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+                    />
+                  </label>
+                ))}
+                <label htmlFor="base-profile-standardized-test" className="block">
+                  <span className="text-xs font-medium text-muted">Standardized test record</span>
+                  <select id="base-profile-standardized-test" value={standardizedTestType} onChange={(event) => setStandardizedTestType(event.target.value as typeof standardizedTestType)} className="mt-1.5 min-h-11 w-full rounded-inner border border-control-border bg-surface px-3 text-sm text-ink outline-none focus:border-brand">
+                    <option value="">Not set</option>
+                    <option value="SAT">SAT</option>
+                    <option value="ACT">ACT</option>
+                    <option value="Both">SAT and ACT</option>
+                    <option value="None">No standardized test</option>
+                  </select>
+                </label>
+              </div>
+              </div>
+
+              <div className="mt-5 border-t border-border pt-4">
               <p className="text-[13px] text-ink">Optional questions about race and gender</p>
               <p className="mt-1 text-xs leading-5 text-muted">
                 Employers ask these on voluntary forms. Litos uses your exact wording, or chooses decline when you leave a field blank.
@@ -1131,24 +1270,24 @@ export function BaseResumeStep({
                 {RACE_AND_GENDER_QUESTION_FIELDS.map((field) => (
                   <label key={field.key} htmlFor={`base-race-gender-${field.key}`} className="block">
                     <span className="text-xs font-medium text-muted">{field.label}</span>
-                    <input
+                    <select
                       id={`base-race-gender-${field.key}`}
                       value={raceAndGenderPrefs[field.key] ?? ""}
                       onChange={(event) => patchRaceAndGenderPref(field.key, event.target.value)}
-                      placeholder={field.placeholder}
                       className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-                    />
+                    >
+                      <option value="">Prefer not to answer now</option>
+                      {raceAndGenderPrefs[field.key] && !(field.options as readonly string[]).includes(raceAndGenderPrefs[field.key]) && (
+                        <option value={raceAndGenderPrefs[field.key]}>{raceAndGenderPrefs[field.key]} (saved)</option>
+                      )}
+                      {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+                    </select>
                   </label>
                 ))}
               </div>
-            </div>
-          )}
+              </div>
 
-          {/* Sits above the button for the same reason the fluency question does: pressing it is
-              what writes these answers, and a question below the button is one you agreed to
-              without reading. */}
-          {finished && (
-            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+              <div className="mt-5 border-t border-border pt-4">
               <p className="text-[13px] text-ink">Questions employers keep asking</p>
               <p className="mt-1 text-xs leading-5 text-muted">
                 Save factual details here. Litos uses identity and resume facts where safe, but leaves employer-specific choices to you. Leave anything blank and it stays blank on the form too.
@@ -1240,24 +1379,31 @@ export function BaseResumeStep({
               </div>
 
               <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted">
-                Every employer agreement stays for you to review on that application, including privacy notices, accuracy certifications, preference statements, exclusivity promises and interview codes of conduct.
+                Every employer agreement stays for you to review on that application. That includes onsite hours, work location, relocation, privacy notices, accuracy certifications, preference statements, exclusivity promises and interview codes. Legacy privacy and truth confirmations already on your profile remain stored, but this walkthrough never turns them into standing answers.
               </p>
-            </div>
+              </div>
+            </details>
           )}
 
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <PrimaryButton onClick={() => void finish()} disabled={!finished || saving || editing}>
-              {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Looks right"}
-            </PrimaryButton>
-            <button
-              type="button"
-              onClick={() => void toggleEditing()}
-              disabled={!finished}
-              className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink disabled:opacity-40"
-            >
-              {editing ? "Done editing" : "Edit"}
-            </button>
-            <LaterLink onClick={onLater} />
+          <div className="mt-7 border-t border-border pt-5">
+            <PhaseLabel>Approval</PhaseLabel>
+            <p className="text-[13px] leading-6 text-muted">
+              Approve this resume as the starting point Litos will tailor for each job.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <PrimaryButton onClick={() => void finish()} disabled={!finished || saving || editing}>
+                {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Looks right"}
+              </PrimaryButton>
+              <button
+                type="button"
+                onClick={() => void toggleEditing()}
+                disabled={!finished}
+                className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink disabled:opacity-40"
+              >
+                {editing ? "Done editing" : "Edit"}
+              </button>
+              <LaterLink onClick={onLater} />
+            </div>
           </div>
           <p className="mt-4 text-[13px] leading-6 text-muted">
             {editing
@@ -1275,6 +1421,16 @@ export function BaseResumeStep({
 function PaneLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{children}</p>
+  );
+}
+
+/** A quiet phase marker. The flow already has the numbered rail, so these labels name the work
+ *  within the base-resume step without inventing another progress count. */
+function PhaseLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+      {children}
+    </p>
   );
 }
 

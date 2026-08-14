@@ -1,0 +1,204 @@
+.stage {
+  position: relative;
+  width: min(100%, 25rem);
+  min-height: 30rem;
+  margin-inline: auto;
+  padding-top: 3rem;
+}
+
+.halo {
+  position: absolute;
+  inset: 0.5rem 8% auto;
+  height: 18rem;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(107, 132, 232, 0.18), rgba(238, 241, 254, 0) 68%);
+  filter: blur(10px);
+  pointer-events: none;
+}
+
+.printer {
+  position: relative;
+  z-index: 2;
+  border: 1px solid rgba(61, 81, 173, 0.55);
+  border-radius: 1.25rem;
+  background: #3d51ad;
+  color: white;
+  box-shadow: 0 1px 2px rgba(18, 18, 15, 0.08), 0 24px 48px -22px rgba(61, 81, 173, 0.52);
+  padding: 0.85rem 0.9rem 1.25rem;
+}
+
+.printerHeader {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.1rem 0.2rem 0;
+}
+
+.status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.statusSpinner,
+.statusComplete {
+  display: grid;
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  place-items: center;
+}
+
+.statusSpinner {
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-top-color: #ffffff;
+  border-radius: 999px;
+  animation: litos-receipt-spin 0.75s linear infinite;
+}
+
+.statusComplete {
+  color: #3fc781;
+  animation: litos-receipt-check 0.18s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.statusComplete svg {
+  width: 100%;
+  height: 100%;
+}
+
+.statusLabel {
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: litos-receipt-status 0.18s cubic-bezier(0.23, 1, 0.32, 1) both;
+}
+
+.screen {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.85rem;
+  background: #2f3f8e;
+  box-shadow: inset 0 12px 28px rgba(18, 18, 15, 0.2);
+  padding: 1rem;
+}
+
+.slot {
+  position: absolute;
+  z-index: 3;
+  left: 12%;
+  right: 12%;
+  bottom: -0.25rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #12120f;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.14);
+}
+
+.paperWindow {
+  position: relative;
+  z-index: 1;
+  width: 76%;
+  margin: 0 auto;
+  overflow: hidden;
+  padding: 0 0.5rem 1.5rem;
+}
+
+.paperWindow::before {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  right: 0.5rem;
+  left: 0.5rem;
+  height: 0.55rem;
+  content: "";
+  background: rgba(18, 18, 15, 0.28);
+  filter: blur(5px);
+  pointer-events: none;
+}
+
+.paper {
+  position: relative;
+  border: 1px solid #e8e6e1;
+  border-top: 0;
+  background: #ffffff;
+  color: #12120f;
+  box-shadow: 0 20px 40px -26px rgba(18, 18, 15, 0.34);
+  padding: 2rem 1.35rem 2.45rem;
+  opacity: 0;
+  transform: translateY(calc(-100% + 2px));
+  will-change: transform, opacity;
+}
+
+.paperPrinting {
+  animation: litos-receipt-print-stepped 1.75s linear forwards;
+}
+
+.paperComplete {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.barcode {
+  width: 7.5rem;
+  height: 2rem;
+  margin-inline: auto;
+  background: repeating-linear-gradient(
+    90deg,
+    #12120f 0 1px,
+    transparent 1px 3px,
+    #12120f 3px 5px,
+    transparent 5px 7px
+  );
+  opacity: 0.72;
+}
+
+@keyframes litos-receipt-print-stepped {
+  0% { opacity: 1; transform: translateY(calc(-100% + 2px)); }
+  7.5%, 10.5% { opacity: 1; transform: translateY(-91%); }
+  18%, 21% { opacity: 1; transform: translateY(-81%); }
+  28.5%, 31.5% { opacity: 1; transform: translateY(-70%); }
+  39%, 42% { opacity: 1; transform: translateY(-58%); }
+  49.5%, 52.5% { opacity: 1; transform: translateY(-45%); }
+  60%, 63% { opacity: 1; transform: translateY(-32%); }
+  70.5%, 73.5% { opacity: 1; transform: translateY(-20%); }
+  81%, 84% { opacity: 1; transform: translateY(-10%); }
+  91.5%, 94.5% { opacity: 1; transform: translateY(-3%); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes litos-receipt-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes litos-receipt-check {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes litos-receipt-status {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper,
+  .paperPrinting,
+  .statusSpinner,
+  .statusComplete,
+  .statusLabel {
+    animation: none;
+  }
+
+  .paper {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

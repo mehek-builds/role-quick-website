@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { api, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
+import { api, getOnboardingState, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
+import { onboardingDeferredForSession } from "@/lib/onboarding-flow";
 import { isQaRender } from "@/lib/qa-mode";
 import { currentKeyboardInset } from "@/lib/keyboard-inset";
 import {
@@ -153,7 +154,15 @@ export function DashboardShell({
         router.replace("/login");
         return;
       }
-      setReady(true);
+      void getOnboardingState()
+        .then((state) => {
+          if (state.requires_onboarding && !onboardingDeferredForSession()) {
+            router.replace("/start");
+            return;
+          }
+          setReady(true);
+        })
+        .catch(() => setReady(true));
       void getProductMeta().catch(() => null);
     });
   }, [router]);

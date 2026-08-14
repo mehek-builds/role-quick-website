@@ -35,7 +35,8 @@ type Flow = "signin" | "signup" | "recovery" | "email-code";
 async function landingRoute(): Promise<string> {
   try {
     const s = await getOnboardingState();
-    return s.step === "done" ? "/dashboard" : "/start";
+    if (s.requires_onboarding === undefined) return s.step === "done" ? "/dashboard" : "/start";
+    return s.requires_onboarding ? "/start" : "/dashboard";
   } catch {
     return "/dashboard";
   }

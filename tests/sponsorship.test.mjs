@@ -14,6 +14,12 @@ const browseLib = readFileSync("lib/browse-jobs.ts", "utf8");
 const dashboardJobs = readFileSync("app/dashboard/jobs/page.tsx", "utf8");
 const settings = readFileSync("app/dashboard/settings/page.tsx", "utf8");
 const startStep = readFileSync("components/start/SponsorshipStep.tsx", "utf8");
+
+test("work eligibility keeps the persistent setup exit", () => {
+  assert.match(startStep, /LaterLink/);
+  assert.match(startStep, /onLater: \(\) => void/);
+  assert.match(startStep, /<LaterLink onClick=\{onLater\} \/>/);
+});
 /* The same file with every block comment removed, so that a promise the screen no longer makes can
    be asserted absent from the SHIPPED copy while the header comment is still free to quote it and
    say why it went. Without this the file's own account of the bug re-creates the bug's text. */

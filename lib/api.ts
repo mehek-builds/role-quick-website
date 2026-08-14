@@ -177,6 +177,21 @@ export function createBillingPortal() {
   return api<{ provider: "stripe" | "lemonsqueezy"; url: string }>("/billing/portal", { method: "POST" });
 }
 
+export type BillingReceipt = {
+  provider: "stripe" | "litos";
+  plan: "pro" | "litos_plus";
+  interval: "weekly" | "monthly" | "week" | "month" | "quarter";
+  amount_cents: number;
+  currency: string;
+  paid_at: string;
+  renews_at: string | null;
+  reference: string | null;
+};
+
+export function getBillingReceipt() {
+  return api<BillingReceipt>("/billing/receipt");
+}
+
 export type OutreachContact = {
   id: string;
   full_name: string | null;
@@ -889,6 +904,9 @@ export type ApplicationProfile = {
   gpa?: string | null;
   gpa_scale?: string | null;
   major?: string | null;
+  standardized_test_type?: "SAT" | "ACT" | "Both" | "None" | null;
+  sat_score?: string | null;
+  act_score?: string | null;
   /** Language names the student is fluent in, stored as a jsonb array of strings. */
   languages?: string[] | null;
   /** Optional answers for questions about race and gender, used exactly as written. */
@@ -1054,6 +1072,10 @@ export type OnboardingState = {
     remaining: number;
   };
   step: OnboardingStep;
+  /** Server-owned walkthrough version. Optional while the backend and frontend roll independently. */
+  flow_version: number;
+  flow_completed: boolean;
+  requires_onboarding: boolean;
   completed_at: string | null;
   has_focus: boolean;
   /** Whether the one-time visa-sponsorship question has been answered. Absent on older backends. */
@@ -1128,6 +1150,29 @@ export type Targeting = {
 
 export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
+}
+
+export const CURRENT_ONBOARDING_FLOW_VERSION = 2;
+
+export function acknowledgeOnboardingFlowStep(
+  step: Exclude<OnboardingStep, "install" | "apply" | "targeting" | "done">,
+  disposition: "continued" | "skipped",
+) {
+  return api<{ ok: true }>("/onboarding/flow/steps", {
+    method: "POST",
+    body: JSON.stringify({
+      flow_version: CURRENT_ONBOARDING_FLOW_VERSION,
+      step,
+      disposition,
+    }),
+  });
+}
+
+export function completeOnboardingFlow() {
+  return api<{ ok: true; flow_version: number }>("/onboarding/flow/complete", {
+    method: "POST",
+    body: JSON.stringify({ flow_version: CURRENT_ONBOARDING_FLOW_VERSION }),
+  });
 }
 
 /* Record that the setup gaps screen was SHOWN. Save and Skip both call it, because both mean asked.
