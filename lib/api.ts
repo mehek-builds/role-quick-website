@@ -175,6 +175,21 @@ export function createBillingPortal() {
   return api<{ provider: "stripe"; url: string }>("/billing/portal", { method: "POST" });
 }
 
+export type BillingReceipt = {
+  provider: "stripe" | "litos";
+  plan: "pro";
+  interval: "weekly" | "monthly";
+  amount_cents: number;
+  currency: string;
+  paid_at: string;
+  renews_at: string | null;
+  reference: string | null;
+};
+
+export function getBillingReceipt() {
+  return api<BillingReceipt>("/billing/receipt");
+}
+
 export type OutreachContact = {
   id: string;
   full_name: string | null;
