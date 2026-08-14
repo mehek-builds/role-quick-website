@@ -177,6 +177,7 @@ up. Color encodes what something is, never how urgently to act.
 ## Decisions Log
 | Date | Decision | Rationale |
 |------|----------|-----------|
+| 2026-08-14 | The verified Stripe return is a Litos receipt printer: one blue payment rail feeds one paper receipt carrying the authenticated paid offer amount, cadence, time and reference. The motion runs once and becomes static under reduced motion. | Extends the existing receipt motif from packet speed to payment confirmation without adding a new visual language. The amount comes from the backend ledger, never the URL or client memory, so the memorable interaction cannot misstate what Stripe charged. |
 | 2026-07-21 | Global typography moved to Hanken Grotesk for the human voice and Azeret Mono for the machine voice | Keeps the Swiss lab-notebook system while avoiding the default type choices that make product sites feel generated or interchangeable |
 | 2026-07-04 | Initial DESIGN.md via /design-consultation | Live research on Linear/Notion/Stripe/Vercel + independent design voice; memorable thing set to "calm + speed" by Mehek |
 | 2026-07-04 | Blue = one human action per viewport; coral/teal demoted to provenance threads | The one-accent restraint is what makes the reference brands read clean; also makes the Guardrails stance visible |

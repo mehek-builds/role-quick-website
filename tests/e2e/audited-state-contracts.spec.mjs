@@ -109,6 +109,18 @@ async function routeBilling(context, meResponse) {
       portalCalls += 1;
       return route.fulfill({ json: { provider: "stripe", url: "https://billing.stripe.com/p/session/audited-fixture" } });
     }
+    if (url.startsWith(BACKEND) && request.method() === "GET" && new URL(url).pathname === "/billing/receipt") {
+      return route.fulfill({ json: {
+        provider: "stripe",
+        plan: "pro",
+        interval: "monthly",
+        amount_cents: 3999,
+        currency: "USD",
+        paid_at: "2026-08-14T12:34:00.000Z",
+        renews_at: "2026-09-14T12:34:00.000Z",
+        reference: "123456789012",
+      } });
+    }
     if (url.startsWith(BACKEND) && new URL(url).pathname === "/v1/meta") {
       return route.fulfill({ json: { product: "litos" } });
     }
@@ -135,7 +147,10 @@ test("billing return confirms an active account record", async () => {
   const traffic = await routeBilling(context, account({ tier: "pro", billing_status: "active", billing_portal_available: true }));
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/billing/return`);
-  await page.getByRole("heading", { name: "Pro is active." }).waitFor();
+  await page.getByRole("heading", { name: "You're on Litos Pro." }).waitFor();
+  await page.getByLabel("Litos Pro payment receipt for $39.99").waitFor();
+  await page.getByText("Every month", { exact: true }).first().waitFor();
+  await page.getByText("$39.99", { exact: true }).first().waitFor();
   await page.getByRole("button", { name: "Open billing portal" }).click();
   for (let attempt = 0; attempt < 50 && traffic.portalCalls === 0; attempt += 1) await delay(10);
   assert.equal(traffic.portalCalls, 1);
