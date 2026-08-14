@@ -154,6 +154,29 @@ export const STUB = {
   "/dashboard/bootstrap": BOOTSTRAP,
   "/me": ME,
   "/v1/meta": { product: "litos" },
+  "/billing/state": {
+    account_id: "fixture-account",
+    entitlement: {
+      schema_version: 2,
+      policy_version: "litos-entitlements-v2",
+      revision: "click-path-fixture",
+      evaluated_at: "2026-08-14T00:00:00.000Z",
+      access_class: "plus_paid",
+      product: "litos_plus",
+      term: "month",
+      features: { automatic_submission: true },
+      trial: null,
+      subscription: { provider: "stripe", status: "active", management_available: true },
+    },
+  },
+  "/billing/plans": {
+    checkout_available: true,
+    plans: [
+      { plan_id: "litos_plus_week", amount_cents: 1999, checkout_available: true },
+      { plan_id: "litos_plus_month", amount_cents: 3999, checkout_available: true },
+      { plan_id: "litos_plus_quarter", amount_cents: 8999, checkout_available: true },
+    ],
+  },
   /* Momentum renders this directly and maps over `days`. An empty object here crashes the Overview
      band into its error boundary, which is how the first run of this spec failed. */
   "/metrics/funnel": {
@@ -165,6 +188,7 @@ export const STUB = {
     days: Array.from({ length: 14 }, (_, i) => ({ day: `d-${13 - i}`, submitted: 0, tailored: 0 })),
   },
   "/resume/history": { resumes: RESUMES },
+  "/applications": { applications: [] },
   "/resume/base": {},
   "/jobs": { jobs: [] },
   "/profile": PROFILE,
