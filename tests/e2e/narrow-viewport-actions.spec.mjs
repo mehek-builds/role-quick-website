@@ -293,6 +293,19 @@ for (const vp of VIEWPORTS) {
       assert.deepEqual(atRest.misses, [], `something is painted over the action at ${label}: ${JSON.stringify(atRest.misses)}`);
       assert.equal(atRest.occludedByNav, false, `the action overlaps the mobile tab bar at ${label}: ${JSON.stringify(atRest)}`);
 
+      if (!stickyExpected) {
+        const ledgerCountLines = await page.getByTestId("application-ledger-count").evaluate((node) => {
+          const range = document.createRange();
+          range.selectNodeContents(node);
+          return new Set([...range.getClientRects()].map((rect) => Math.round(rect.top))).size;
+        });
+        assert.equal(
+          ledgerCountLines,
+          1,
+          `the application count wrapped onto ${ledgerCountLines} lines at ${label}`,
+        );
+      }
+
       if (stickyExpected) {
         /* And at the end of the document, where the narrow action bar comes to rest. */
         await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
