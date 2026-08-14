@@ -26,7 +26,9 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
   // describe is unchanged, so the assertions follow the new wording.
-  assert.match(dashboard, /"Fill the form"/);
+  assert.match(dashboard, /"Review and fill"/);
+  assert.match(dashboard, /review\?\.status === "ready_for_final_approval"[\s\S]{0,100}"Review and send"/);
+  assert.match(dashboard, /"Fill company form"/);
   assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);
   assert.match(dashboard, /Check the preview, then send/);
   assert.match(dashboard, /submission_authorized_at/);
@@ -82,6 +84,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /JSON\.stringify\(\{ outcome \}\)/);
   assert.match(dashboard, /source: "attended_handoff"/);
   assert.match(dashboard, /Open the company page/);
+  assert.match(dashboard, /hidden items-center gap-2 lg:flex[\s\S]{0,900}Litos cannot fill in this company’s page[\s\S]{0,900}View PDF/);
   assert.match(dashboard, /Litos will never pretend to be you/);
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);

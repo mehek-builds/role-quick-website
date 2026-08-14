@@ -21,6 +21,31 @@ export function reviewablePackets<T extends ReviewPacket>(packets: T[]): T[] {
 }
 
 /**
+ * The packet whose actionable controls may render for the current URL.
+ *
+ * App Router query navigation can publish `?application=B` one render before B's history request
+ * resolves. During that window local selection can still be A. Returning A would leave its final
+ * Send application control live under a URL that names B, so a click could send the wrong packet.
+ * Detail intent is read-only even when its id happens to equal the prior actionable selection.
+ */
+export function selectedPacketForRequest<T extends { id: string }>(
+  packets: readonly T[] | null | undefined,
+  selectedId: string | null,
+  requestedApplicationId: string | null,
+  requestedApplicationIntent: string | null,
+  resolvedActionableRequestId: string | null,
+): T | null {
+  /* Missing intent is the historical direct-link contract. Every explicit value other than apply
+     is non-actionable, so a malformed or future intent cannot accidentally expose send controls. */
+  if (requestedApplicationIntent !== null && requestedApplicationIntent !== "apply") return null;
+  /* Mismatch means the URL changed but its new packet has not been loaded and selected yet. Once
+     the request resolves, ledger switching is local page state again and must not be pinned to the
+     original deep-link id forever. */
+  if (requestedApplicationId && requestedApplicationId !== resolvedActionableRequestId) return null;
+  return packets?.find((packet) => packet.id === selectedId) ?? null;
+}
+
+/**
  * Incorporate questions discovered by the live portal without erasing an answer the user already
  * edited in this dashboard session. The portal result is authoritative for labels, required flags,
  * and newly found controls; a non-empty local answer is authoritative for its text.

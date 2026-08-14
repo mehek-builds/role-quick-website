@@ -177,6 +177,6 @@ export function qaJobsPage(): JobsPage {
  *
  *  It carries `job_id`, matching the "qa-1" row above, because that is now the primary match. The
  *  `stage` is load-bearing too: the index only counts stages that mean an application was sent. */
-export const QA_APPLIED: Array<{ job_id: string | null; company: string; role: string; stage: string }> = [
-  { job_id: "qa-1", company: "Ramp", role: "Product Analyst", stage: "applied" },
+export const QA_APPLIED: Array<{ id: string; job_id: string | null; company: string; role: string; stage: string }> = [
+  { id: "qa-application-1", job_id: "qa-1", company: "Ramp", role: "Product Analyst", stage: "applied" },
 ];

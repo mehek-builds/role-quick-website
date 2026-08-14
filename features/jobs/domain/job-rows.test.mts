@@ -1,6 +1,6 @@
 import test, { describe } from "node:test";
 import assert from "node:assert/strict";
-import { applicationKey, buildAppliedIndex, companyDomain, companyDomainForRow, countNewToday, isAppliedStage, isJobApplied } from "./job-rows.ts";
+import { applicationKey, buildAppliedIndex, companyDomain, companyDomainForRow, countNewToday, isAppliedStage, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref } from "./job-rows.ts";
 import { isQaRenderFor } from "../../../lib/qa-mode.ts";
 
 describe("companyDomain", () => {
@@ -138,11 +138,15 @@ describe("isAppliedStage", () => {
 });
 
 describe("buildAppliedIndex / isJobApplied", () => {
-  const card = (over: Partial<{ job_id: string | null; company: string; role: string; stage: string }> = {}) => ({
+  const card = (over: Partial<{ id: string; job_id: string | null; company: string; role: string; stage: string; reviewable: boolean; submission_status: string | null; created_at: string | null }> = {}) => ({
+    id: "packet-google",
     job_id: null as string | null,
     company: "Google",
     role: "Software Engineer",
     stage: "applied",
+    reviewable: true,
+    submission_status: null as string | null,
+    created_at: "2026-08-14T10:00:00.000Z",
     ...over,
   });
   const job = (over: Partial<{ id: string; company_name: string; title: string }> = {}) => ({
@@ -172,7 +176,102 @@ describe("buildAppliedIndex / isJobApplied", () => {
   test("a card with an id contributes no company+role key", () => {
     const index = buildAppliedIndex([card({ job_id: "job-mtv" })]);
     assert.equal(index.keys.size, 0);
-    assert.deepEqual([...index.ids], ["job-mtv"]);
+    assert.deepEqual([...index.ids.keys()], ["job-mtv"]);
+  });
+
+  test("an unsent packet retains its exact id and status for a direct continuation", () => {
+    const index = buildAppliedIndex([
+      card({
+        id: "packet-ready",
+        job_id: "job-mtv",
+        stage: "applied",
+        submission_status: "ready_to_submit",
+      }),
+    ]);
+    const application = jobApplicationFor(job({ id: "job-mtv" }), index);
+
+    assert.deepEqual(application, {
+      packetId: "packet-ready",
+      submissionStatus: "ready_to_submit",
+      stage: "applied",
+      sent: false,
+      updatedAt: "2026-08-14T10:00:00.000Z",
+    });
+    assert.equal(jobApplicationActionLabel(application!), "Review and fill");
+    assert.equal(
+      jobApplicationHref(application!),
+      "/dashboard/applications?application=packet-ready&intent=apply",
+    );
+    assert.equal(
+      jobApplicationDetailHref(application!),
+      "/dashboard/applications?application=packet-ready&intent=detail",
+    );
+    assert.equal(isJobApplied(job({ id: "job-mtv" }), index), false, "an unsent packet is not Applied");
+  });
+
+  test("the unsent packet label follows the server status", () => {
+    const match = (submissionStatus: string) => ({
+      packetId: "packet-1",
+      submissionStatus,
+      stage: "saved",
+      sent: false,
+      updatedAt: null,
+    });
+    assert.equal(jobApplicationActionLabel(match("awaiting_security_code")), "Enter code");
+    assert.equal(jobApplicationActionLabel(match("needs_attention")), "Fix application");
+    assert.equal(jobApplicationActionLabel(match("resume_ready")), "Review and fill");
+    assert.equal(jobApplicationActionLabel(match("questions_ready")), "Review and fill");
+    assert.equal(jobApplicationActionLabel(match("ready_to_submit")), "Review and fill");
+    assert.equal(jobApplicationActionLabel(match("ready_for_final_approval")), "Review and send");
+    assert.equal(jobApplicationActionLabel(match("filling")), "Continue application");
+  });
+
+  test("active employer-side work outranks a newer ordinary ready packet", () => {
+    for (const status of [
+      "awaiting_security_code",
+      "ready_for_final_approval",
+      "submitting",
+      "submission_claimed",
+    ]) {
+      const index = buildAppliedIndex([
+        card({
+          id: `packet-${status}`,
+          job_id: "job-mtv",
+          stage: "saved",
+          submission_status: status,
+          created_at: "2026-08-14T08:00:00.000Z",
+        }),
+        card({
+          id: "packet-new-resume",
+          job_id: "job-mtv",
+          stage: "saved",
+          submission_status: "resume_ready",
+          created_at: "2026-08-14T12:00:00.000Z",
+        }),
+      ]);
+
+      assert.equal(
+        jobApplicationFor(job(), index)?.packetId,
+        `packet-${status}`,
+        `${status} must retain the exact continuation despite the newer duplicate`,
+      );
+    }
+  });
+
+  test("recency breaks ties only when duplicate packets are at the same workflow position", () => {
+    const index = buildAppliedIndex([
+      card({ id: "packet-old", job_id: "job-mtv", submission_status: "resume_ready", created_at: "2026-08-14T08:00:00.000Z" }),
+      card({ id: "packet-new", job_id: "job-mtv", submission_status: "resume_ready", created_at: "2026-08-14T12:00:00.000Z" }),
+    ]);
+    assert.equal(jobApplicationFor(job(), index)?.packetId, "packet-new");
+  });
+
+  test("a submission status beats a manually moved board stage", () => {
+    const index = buildAppliedIndex([
+      card({ id: "packet-sent", job_id: "job-mtv", stage: "saved", submission_status: "submitted" }),
+    ]);
+    assert.equal(jobApplicationFor(job(), index)?.sent, true);
+    assert.equal(isJobApplied(job(), index), true);
   });
 
   test("the company+role fallback still marks a card that has no job_id", () => {
@@ -182,9 +281,35 @@ describe("buildAppliedIndex / isJobApplied", () => {
     assert.equal(isJobApplied(job({ id: "job-nyc" }), index), true, "still lossy, and unfixably so");
   });
 
+  test("a single legacy company+role fallback never becomes an actionable packet link", () => {
+    const index = buildAppliedIndex([
+      card({ id: "legacy-ready", job_id: null, stage: "saved", submission_status: "ready_to_submit" }),
+    ]);
+    assert.equal(jobApplicationFor(job(), index), null);
+    assert.equal(isJobApplied(job(), index), false);
+  });
+
   test("the fallback keeps normalising company and role as it did", () => {
     const index = buildAppliedIndex([card({ job_id: null, company: "Google, Inc." })]);
     assert.equal(isJobApplied(job({ company_name: "Google" }), index), true);
+  });
+
+  test("two legacy packets with one lossy key never deep-link an arbitrary packet", () => {
+    const index = buildAppliedIndex([
+      card({ id: "legacy-one", job_id: null, stage: "saved", submission_status: "ready_to_submit" }),
+      card({ id: "legacy-two", job_id: null, stage: "saved", submission_status: "ready_to_submit" }),
+    ]);
+    assert.equal(jobApplicationFor(job(), index), null);
+    assert.equal(isJobApplied(job(), index), false);
+  });
+
+  test("an ambiguous legacy key still preserves the historical Applied fact", () => {
+    const index = buildAppliedIndex([
+      card({ id: "legacy-sent", job_id: null, submission_status: "submitted" }),
+      card({ id: "legacy-ready", job_id: null, stage: "saved", submission_status: "ready_to_submit" }),
+    ]);
+    assert.equal(jobApplicationFor(job(), index), null);
+    assert.equal(isJobApplied(job(), index), true);
   });
 
   test("old and new cards coexist, each matching its own way", () => {
@@ -197,10 +322,10 @@ describe("buildAppliedIndex / isJobApplied", () => {
     assert.equal(isJobApplied(job({ id: "x", company_name: "Stripe", title: "Data Analyst" }), index), true);
   });
 
-  test("a stage that is not an application is indexed by neither path", () => {
+  test("a non-reviewable stage is indexed by neither path", () => {
     const index = buildAppliedIndex([
-      card({ job_id: "job-mtv", stage: "saved" }),
-      card({ job_id: null, company: "Stripe", role: "Data Analyst", stage: "closed" }),
+      card({ job_id: "job-mtv", stage: "saved", reviewable: false }),
+      card({ job_id: null, company: "Stripe", role: "Data Analyst", stage: "closed", reviewable: false }),
     ]);
     assert.equal(index.ids.size, 0);
     assert.equal(index.keys.size, 0);

@@ -1,5 +1,5 @@
 /**
- * Pressing "Send it" must leave the progress screen, and must not deny what it is doing.
+ * Pressing "Send application" must leave the progress screen, and must not deny what it is doing.
  *
  * TWO DEFECTS, AND THEY ARE NOT THE SAME SHAPE
  * ============================================
@@ -104,9 +104,64 @@ test.after(async () => {
 const APPROVABLE = RESUMES.find((r) => r.spec?._review?.status === "ready_for_final_approval");
 assert.ok(APPROVABLE, "the fixture must contain a ready_for_final_approval packet");
 
+/* The approval tests used to teleport straight to the final send control. The production flow now
+   requires the exact server audit, the exact stored PDF, and an explicit acknowledgement before
+   that control exists, so this fixture must prove every one of those gates with real PDF bytes. */
+const PACKET_DIGEST = "ddcdd437d12d91b9930134d2cc5eb15437bb4bbcfbf2c166b77a4cf8ad1ff89f";
+const PACKET_SIZE_BYTES = 3256;
+const PACKET_OBJECT_KEY = "qa/exact-packet-fixture.pdf";
+const APPROVABLE_JD = APPROVABLE.spec._review.jd_text;
+const PACKET_AUDIT_RESPONSE = {
+  packet_audit: {
+    version: "packet_audit_v1",
+    status: "passed",
+    complete: true,
+    degraded: false,
+    rejectedCount: 0,
+    packet_version: PACKET_DIGEST,
+    audit_digest: PACKET_DIGEST,
+    bindings: {
+      ownerSha256: PACKET_DIGEST,
+      applicationId: APPROVABLE.id,
+      jdSha256: PACKET_DIGEST,
+      specSha256: PACKET_DIGEST,
+      jobContextSha256: PACKET_DIGEST,
+      questionsSha256: PACKET_DIGEST,
+      applicantSnapshotSha256: PACKET_DIGEST,
+      resumeContactEmailSha256: PACKET_DIGEST,
+      applicantEmailSha256: PACKET_DIGEST,
+      pdf: { objectKey: PACKET_OBJECT_KEY, sha256: PACKET_DIGEST, sizeBytes: PACKET_SIZE_BYTES },
+    },
+    identities: {
+      resume_email: "fixture@example.invalid",
+      applicant_email: "fixture-route@apply.litos.invalid",
+    },
+    clauses: [{
+      text: APPROVABLE_JD,
+      start: 0,
+      end: APPROVABLE_JD.length,
+      verdict: "missing",
+      highlight_terms: [],
+    }],
+    editedTerms: [],
+    terms: { covered: [], missing: [], edited: [] },
+  },
+  pdf: {
+    object_key: PACKET_OBJECT_KEY,
+    sha256: PACKET_DIGEST,
+    size_bytes: PACKET_SIZE_BYTES,
+    download_url: `${ORIGIN}/qa/exact-packet-fixture.pdf`,
+  },
+};
+
 const AWAITING = {
   application_id: APPROVABLE.id,
-  review: { ...APPROVABLE.spec._review, status: "ready_for_final_approval", filled_fields: ["name", "email", "resume"] },
+  review: {
+    ...APPROVABLE.spec._review,
+    status: "ready_for_final_approval",
+    filled_fields: ["name", "email", "resume"],
+    packet_audit: PACKET_AUDIT_RESPONSE.packet_audit,
+  },
   cover_letter: null,
 };
 const SENT = {
@@ -164,6 +219,14 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, 
         await json(pollAnswer);
         return;
       }
+      if (p.endsWith("/packet-audit/acknowledge")) {
+        await json({ acknowledged: true });
+        return;
+      }
+      if (p.endsWith("/packet-audit")) {
+        await json(PACKET_AUDIT_RESPONSE);
+        return;
+      }
       await json(STUB[p] ?? {});
       return;
     }
@@ -191,8 +254,16 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, 
   }
 
   const page = await context.newPage();
-  await page.goto(`${ORIGIN}/dashboard/applications?application=${APPROVABLE.id}`, { waitUntil: "domcontentloaded" });
-  const sendIt = page.getByRole("button", { name: "Send it" });
+  await page.goto(`${ORIGIN}/dashboard/applications?application=${APPROVABLE.id}&intent=apply`, { waitUntil: "domcontentloaded" });
+  const reviewAndSend = page.getByRole("button", { name: "Review and send", exact: true });
+  await reviewAndSend.waitFor({ state: "visible", timeout: 25_000 });
+  await reviewAndSend.click();
+  await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true })
+    .waitFor({ state: "visible", timeout: 25_000 });
+  const reviewFilledForm = page.getByRole("button", { name: "Review filled form", exact: true });
+  await reviewFilledForm.waitFor({ state: "visible", timeout: 25_000 });
+  await reviewFilledForm.click();
+  const sendIt = page.getByRole("button", { name: "Send application" });
   await sendIt.waitFor({ state: "visible", timeout: 25_000 });
 
   return { context, page, sendIt, approveCalls };
@@ -260,12 +331,12 @@ browserTest("a visible tab is still rescued by the submission poll", async () =>
  * The 2.5s submission poll runs while the sending screen is up, and during an approve the server
  * still reports `ready_for_final_approval`, which screenForStatus maps to "portal". So the poll
  * used to take the student OFF the sending screen and back to SubmissionScreen with a live
- * "Send it" roughly 2.5 seconds into every send slower than that, and nothing guarded a second
+ * "Send application" roughly 2.5 seconds into every send slower than that, and nothing guarded a second
  * press. This case holds the approve open for 8 seconds, which is three poll ticks, and asserts
  * both that the screen does not walk backwards and that a second click cannot fire a second POST.
  *
  * Pre-fix, measured 2026-08-04: the sending screen was replaced by "Check it over before it goes."
- * with an enabled Send it, and clicking it produced a SECOND /submission/approve.
+ * with an enabled Send application, and clicking it produced a SECOND /submission/approve.
  */
 browserTest("a slow send cannot be sent twice", async () => {
   const { context, page, sendIt, approveCalls } = await openApproval(false, { holdApproveMs: 8000, pollAnswer: AWAITING });
@@ -273,14 +344,14 @@ browserTest("a slow send cannot be sent twice", async () => {
 
   /* Past three poll ticks, the student must still be on the sending screen. */
   await page.waitForTimeout(7000);
-  const sendItVisibleMidFlight = await page.getByRole("button", { name: "Send it" }).isVisible().catch(() => false);
+  const sendItVisibleMidFlight = await page.getByRole("button", { name: "Send application" }).isVisible().catch(() => false);
   const sendItEnabledMidFlight = sendItVisibleMidFlight
-    ? await page.getByRole("button", { name: "Send it" }).isEnabled().catch(() => false)
+    ? await page.getByRole("button", { name: "Send application" }).isEnabled().catch(() => false)
     : false;
   assert.equal(
     sendItEnabledMidFlight,
     false,
-    "the poll walked the user back to a live Send it while their send was still in flight, which is a duplicate application to a real employer",
+    "the poll walked the user back to a live Send application control while their send was still in flight, which is a duplicate application to a real employer",
   );
 
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
@@ -297,7 +368,7 @@ browserTest("a slow send cannot be sent twice", async () => {
  * six minutes elapsed, and past five minutes the screen tells them to start the application again,
  * which for a send that is genuinely in flight is the worst possible instruction.
  */
-browserTest("the sending clock starts when Send it is pressed", async () => {
+browserTest("the sending clock starts when Send application is pressed", async () => {
   const STALE = {
     ...AWAITING,
     review: { ...AWAITING.review, updated_at: "2020-01-01T00:00:00.000Z" },
@@ -323,7 +394,7 @@ browserTest("the sending clock starts when Send it is pressed", async () => {
  *
  * Cresta packet 8142004c-3358-4538-8778-16df5e31c5bb, production 2026-08-09 03:06:19:
  * POST /submission/approve -> 409, "That took too long and timed out. Start the application again."
- * The screen showed nothing. No error, no toast, no change, and a Send it that stayed enabled. The
+ * The screen showed nothing. No error, no toast, no change, and a Send application control that stayed enabled. The
  * refusal was findable only by reading server logs.
  *
  * The catch was never the problem: it set the sentence exactly as the server wrote it.

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { api, type JobsPage, type MonitoredJob } from "@/lib/api";
 import { fetchBoard, useJobMatchScores, MATCH_WEIGHTING_NOTE, SCORE_BATCH, type JobMatch } from "@/features/applications";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
-import { activeJobFilters, buildAppliedIndex, countNewToday, emptyJobsBody, isJobApplied, type AppliedIndex } from "@/features/jobs";
+import { activeJobFilters, buildJobApplicationIndex, countNewToday, emptyJobsBody, isJobApplied, jobApplicationActionLabel, jobApplicationDetailHref, jobApplicationFor, jobApplicationHref, type JobApplicationIndex, type JobApplicationMatch } from "@/features/jobs";
 import { isQaRender } from "@/lib/qa-mode";
 import { Card, DataErrorState, EmptyState, ErrorNote, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { AutopilotLockNote, AutopilotToggle, useAutopilot } from "@/components/app/Autopilot";
@@ -99,7 +99,7 @@ export default function JobsPage() {
   const [sponsorOnly, setSponsorOnly] = useState(false);
   /* Null until the board answers. An empty index would mean "you have applied to nothing", which is
      a different claim from "we do not know yet". */
-  const [applied, setApplied] = useState<AppliedIndex | null>(null);
+  const [applications, setApplications] = useState<JobApplicationIndex | null>(null);
   /* Null while we work out whether this is a QA render, so neither branch fires a request first. */
   const [qaMode, setQaMode] = useState<boolean | null>(null);
   /* Send-without-asking. The setting is server-side and shared with Account and the tracker; this
@@ -154,7 +154,7 @@ export default function JobsPage() {
         setRankedPool(0);
         setPoolExhausted(true);
         setMinimumMatchScore(null);
-        setApplied(buildAppliedIndex([]));
+        setApplications(buildJobApplicationIndex([]));
       });
       return;
     }
@@ -168,7 +168,7 @@ export default function JobsPage() {
       setRankedPool(page.ranked_pool ?? null);
       setPoolExhausted(page.pool_exhausted ?? false);
       setMinimumMatchScore(page.minimum_match_score ?? null);
-      setApplied(buildAppliedIndex(QA_APPLIED));
+      setApplications(buildJobApplicationIndex(QA_APPLIED));
     });
     return () => {
       cancelled = true;
@@ -234,7 +234,7 @@ export default function JobsPage() {
     void fetchBoard()
       .then(({ cards }) => {
         if (cancelled) return;
-        setApplied(buildAppliedIndex(cards));
+        setApplications(buildJobApplicationIndex(cards));
       })
       .catch(() => null);
     return () => {
@@ -447,7 +447,7 @@ export default function JobsPage() {
           <ul className="grid grid-cols-1 gap-3">
             {jobs.map((job) => (
               <li key={job.id}>
-                <JobRow job={job} applied={isJobApplied(job, applied)} match={badgeMatchFor(job, matches[job.id])} />
+                <JobRow job={job} application={jobApplicationFor(job, applications)} applied={isJobApplied(job, applications)} match={badgeMatchFor(job, matches[job.id])} />
               </li>
             ))}
           </ul>
@@ -495,59 +495,55 @@ export default function JobsPage() {
  * obvious thing in the world to click, and giving the row two side-by-side buttons made the student
  * choose between them before they had read the role.
  */
-function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; match: BadgeMatch | null | undefined }) {
+function JobRow({ job, application, applied, match }: { job: MonitoredJob; application: JobApplicationMatch | null; applied: boolean; match: BadgeMatch | null | undefined }) {
   const place = [job.location, job.remote && !/remote/i.test(job.location ?? "") ? "Remote" : null]
     .filter(Boolean)
     .join(" · ");
   const pay = formatPay(job);
   const type = jobTypeLabel(job.employment_type);
+  const detail = (
+    <>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h2 className="min-w-0 text-lg font-medium leading-tight text-ink transition-colors group-hover:text-brand-ink">
+          {job.title}
+        </h2>
+        <MatchBadge match={match} />
+        <SponsorBadge evidence={job.sponsorship_evidence} />
+      </div>
+      <p className="mt-1 truncate text-sm text-muted">
+        {job.company_name}
+        {place ? ` · ${place}` : ""}
+      </p>
+      {(pay || type) && (
+        <p className="mt-1 truncate text-sm text-ink">
+          {pay && <span className="font-medium">{pay}</span>}
+          {pay && type && <span className="text-faint"> · </span>}
+          {type && <span className="text-muted">{type}</span>}
+        </p>
+      )}
+      <p className="mt-1.5 font-mono text-[11px] text-muted">
+        Found {formatRelativeDate(job.first_seen_at)}
+        {job.department ? ` · ${job.department}` : ""}
+      </p>
+    </>
+  );
 
   return (
     <Card className="flex flex-wrap items-center gap-4 p-4 transition-colors hover:border-faint sm:flex-nowrap sm:p-5">
       <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
 
       {/* The icon and the role stay on one line at every width. Letting the text block take a full
-          basis on mobile put the icon alone on its own row, which read as a bullet with nothing
-          after it; it is the action that wraps below instead. */}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <h2 className="min-w-0 text-lg font-medium leading-tight text-ink">
-            <a
-              href={job.posting_url}
-              target="_blank"
-              rel="noreferrer"
-              className="transition-colors hover:text-brand-ink"
-            >
-              {job.title}
-            </a>
-          </h2>
-          <MatchBadge match={match} />
-          <SponsorBadge evidence={job.sponsorship_evidence} />
-        </div>
-        <p className="mt-1 truncate text-sm text-muted">
-          {job.company_name}
-          {place ? ` · ${place}` : ""}
-        </p>
-        {/* Same rule as the public board, same formatter (lib/pay.ts), so the same job cannot read
-            one way here and another way on /browse-jobs. Absent pay and absent job type render
-            nothing at all rather than "Not listed": most postings publish neither, and a row that
-            filled that silence in would be stating something no employer stated. */}
-        {(pay || type) && (
-          <p className="mt-1 truncate text-sm text-ink">
-            {pay && <span className="font-medium">{pay}</span>}
-            {pay && type && <span className="text-faint"> · </span>}
-            {type && <span className="text-muted">{type}</span>}
-          </p>
-        )}
-        {/* The preference-fit line ("You asked for ...") used to sit here. It repeated the same
-            saved search on every row, so it was removed. The rule it existed to keep still holds:
-            one metric's score may never carry another metric's reasons, which is why the badge
-            above says resume-to-JD coverage and nothing else on this row speaks for it. */}
-        <p className="mt-1.5 font-mono text-[11px] text-muted">
-          Found {formatRelativeDate(job.first_seen_at)}
-          {job.department ? ` · ${job.department}` : ""}
-        </p>
-      </div>
+      basis on mobile put the icon alone on its own row, which read as a bullet with nothing
+      after it; it is the action that wraps below instead. */}
+      {application ? (
+        <Link href={jobApplicationDetailHref(application)} className="group min-w-0 flex-1">
+          {detail}
+        </Link>
+      ) : (
+        <a href={job.posting_url} target="_blank" rel="noreferrer" className="group min-w-0 flex-1">
+          {detail}
+        </a>
+      )}
 
       {applied ? (
         /* A statement, not a control. It is green because green means "it happened" everywhere
@@ -558,6 +554,13 @@ function JobRow({ job, applied, match }: { job: MonitoredJob; applied: boolean; 
           </svg>
           Applied
         </span>
+      ) : application ? (
+        <Link
+          href={jobApplicationHref(application)}
+          className="inline-flex min-h-11 shrink-0 basis-full items-center justify-center rounded-control bg-action px-6 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:basis-auto"
+        >
+          {jobApplicationActionLabel(application)}
+        </Link>
       ) : (
         <Link
           href={`/dashboard/applications?job=${job.id}`}

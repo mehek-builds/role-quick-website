@@ -23,7 +23,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { explicitTerms, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { canGenerateFrom, nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -452,6 +452,11 @@ function Applications() {
   const router = useRouter();
   const applicationFilter = applicationFilterFromSearch(searchParams.toString());
   const requestedApplicationId = searchParams.get("application");
+  const requestedApplicationIntent = searchParams.get("intent");
+  /* The actionable direct-link request that has actually loaded and selected. This deliberately
+     trails requestedApplicationId during a query-only navigation, which is the short window where
+     the prior packet's controls must disappear. It does not pin later ledger switching to the URL. */
+  const [resolvedActionableRequestId, setResolvedActionableRequestId] = useState<string | null>(null);
   /* Writes the choice back to the URL, so the select and the deep link move the same thing.
      Everything removes the parameter rather than writing state=all: a URL that says nothing is
      what a plain visit looks like, and this is also what closes the ledger section.
@@ -818,7 +823,22 @@ function Applications() {
         const reviewable = onlyReviewablePackets(result.resumes);
         setPackets(result.resumes);
         const requested = reviewable.find((packet) => packet.id === requestedApplicationId);
-        if (requested) selectPacket(requested);
+        if (requested && requestedApplicationIntent === "detail") {
+          /* Detail is deliberately read-only. It opens the packet viewer without selecting the
+             actionable workflow, so viewing a role can never prepare or approve an application. */
+          setResolvedActionableRequestId(null);
+          setRevisitingId(requested.id);
+        } else if (requested && (requestedApplicationIntent === null || requestedApplicationIntent === "apply")) {
+          /* `intent=apply` is the explicit continuation from Jobs. Bare application links keep
+             their historical actionable behavior, while both paths still enter through
+             selectPacket and therefore retain the exact-packet audit gate. */
+          setRevisitingId(null);
+          setResolvedActionableRequestId(requested.id);
+          selectPacket(requested);
+        } else {
+          setResolvedActionableRequestId(null);
+          if (requestedApplicationIntent !== "detail") setRevisitingId(null);
+        }
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
     /* The education block as it stands NOW, to check the frozen packet against. Failure is not the
@@ -851,7 +871,7 @@ function Applications() {
     return () => {
       cancelled = true;
     };
-  }, [requestedApplicationId, selectPacket]);
+  }, [requestedApplicationId, requestedApplicationIntent, selectPacket]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
@@ -962,7 +982,16 @@ function Applications() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [packets, pendingJob, selectPacket]);
 
-  const selected = packets?.find((packet) => packet.id === selectedId) ?? null;
+  /* Fail closed during query-only navigation. The router can publish application=B while the
+     history request for B is still resolving and selectedId still names A. No actionable control
+     for A may survive that mismatch, especially its final employer send. */
+  const selected = selectedPacketForRequest(
+    packets,
+    selectedId,
+    requestedApplicationId,
+    requestedApplicationIntent,
+    resolvedActionableRequestId,
+  );
   const review = selected?.spec._review;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
@@ -1175,6 +1204,19 @@ function Applications() {
                 : activePacketEvidence.questionsSnapshot !== currentQuestionsSnapshot
                   ? "The answers changed after the packet audit. Audit this packet again."
                   : null;
+  const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
+  const reviewPrimaryDisabled = reviewPrimaryBusy
+    || !review?.jd_text.trim()
+    || Boolean(activePacketEvidence && !packetEvidenceReady);
+  const reviewPrimaryLabel = !activePacketEvidence
+    ? review?.status === "ready_for_final_approval"
+      ? "Review and send"
+      : "Review and fill"
+    : !packetEvidenceReady
+      ? "Loading exact PDF"
+      : review?.status === "ready_for_final_approval"
+        ? "Review filled form"
+        : "Fill company form";
 
   const recordPacketPdfVerification = useCallback((verified: PacketPdfEvidenceVerification | null) => {
     setPacketEvidence((current) => reconcilePacketPdfVerification(current, verified));
@@ -2407,15 +2449,40 @@ function Applications() {
                 {/* Was <ScoreRing score={extractScore(selected.spec)} /> under the caption "match".
                     That read spec._quality.atsCoverage, which counts every non-stopword in the
                     posting and therefore sat at 12-17% for a strong resume. */}
-                {activePacketEvidence
-                  ? <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Exact packet checked</p>
-                  : <MatchScore
-                    jdText={review.jd_text}
-                    spec={deferredSpec ?? spec}
-                    jobContext={selected.job_context}
-                    onResult={setMatchResult}
-                    disabled={qaMode !== false}
-                  />}
+                <div className="flex shrink-0 items-center gap-3">
+                  {activePacketEvidence
+                    ? <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-positive">Exact packet checked</p>
+                    : <MatchScore
+                      jdText={review.jd_text}
+                      spec={deferredSpec ?? spec}
+                      jobContext={selected.job_context}
+                      onResult={setMatchResult}
+                      disabled={qaMode !== false}
+                    />}
+                  {/* On desktop the review itself scrolls inside two fixed-height panes. Keeping
+                      the primary action after those panes put it below the viewport before the
+                      student had taken any action. The same exact-packet gate is available here
+                      immediately, while narrower screens retain the sticky terminal bar. */}
+                  <div className="hidden items-center gap-2 lg:flex">
+                    {review.portal_supported === false && (
+                      <p className="max-w-xs text-right text-xs leading-5 text-muted">
+                        Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.
+                      </p>
+                    )}
+                    {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && (
+                      <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>
+                    )}
+                    {review.portal_supported === false
+                      ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
+                      : <Button
+                        onClick={packetEvidenceReady ? continueFromVerifiedPacket : continueFromResume}
+                        disabled={reviewPrimaryDisabled}
+                        className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                      >
+                        {reviewPrimaryBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : reviewPrimaryLabel}
+                      </Button>}
+                  </div>
+                </div>
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
                 <MatchLegend missingCount={authoritativeMissingCount} editedCount={authoritativeEditedCount} />
@@ -2584,7 +2651,7 @@ function Applications() {
               is not a flex item there at all, and justify-between with ONE item resolves to
               flex-start: the primary action slid to the left edge on a phone while the same bar on
               the questions screen sat right. Same bar, three alignments, depending on branch. */}
-          <TerminalActionBar className="justify-end sm:justify-between">
+          <TerminalActionBar className="justify-end sm:justify-between lg:hidden">
             {review.portal_supported === false
               ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
               : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
@@ -2592,14 +2659,10 @@ function Applications() {
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               {review.portal_supported === false
                 ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
-                : <Button onClick={packetEvidenceReady ? continueFromVerifiedPacket : continueFromResume} disabled={saving || coverLetterBusy || packetAuditBusy || !review.jd_text.trim() || Boolean(activePacketEvidence && !packetEvidenceReady)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
-                  {saving || coverLetterBusy || packetAuditBusy
+                : <Button onClick={packetEvidenceReady ? continueFromVerifiedPacket : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                  {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
-                    : !activePacketEvidence
-                      ? "Audit exact packet"
-                      : !packetEvidenceReady
-                        ? "Loading exact PDF"
-                        : review.status === "ready_for_final_approval" ? "Review filled form" : "Fill the form"}
+                    : reviewPrimaryLabel}
                 </Button>}
             </div>
           </TerminalActionBar>
@@ -3668,7 +3731,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           {review.status === "ready_for_final_approval" && documentsLitosCannotDeliver && (
             <Button onClick={onSelfSubmitted} variant="secondary">I submitted it myself</Button>
           )}
-          {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send it</Button>}
+          {review.status === "ready_for_final_approval" && <Button onClick={approveVerifiedPreview} disabled={finalApprovalBlocked}>Send application</Button>}
         </div>
         {attendedHandoffState === "preparing" && (
           <p role="status" aria-live="polite" className="mt-3 text-xs leading-5 text-muted">
@@ -3750,7 +3813,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             controls on it explaining only one of them. */}
         {review.status === "ready_for_final_approval" && transcriptPending && outstandingDocumentAsks.map((ask) => (
           <p key={ask.kind} className="mt-3 text-xs leading-5 text-warn">
-            This company asks for a {ask.kind} and Litos has none attached, so their form would refuse this. Press Add {ask.kind}, next to Send it, to attach one.
+            This company asks for a {ask.kind} and Litos has none attached, so their form would refuse this. Press Add {ask.kind}, next to Send application, to attach one.
           </p>
         ))}
         {/* The eighth reason in its second shape: the ask is acknowledged and still unresolved.

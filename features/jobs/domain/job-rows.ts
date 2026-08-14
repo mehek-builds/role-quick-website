@@ -156,10 +156,15 @@ export function isAppliedStage(stage: string): boolean {
 /** What the applied check needs off a board card. Structural on purpose, so the tests can build one
  *  without importing the whole API surface. `BoardCard` satisfies it. */
 type AppliedCard = {
+  id: string;
   job_id?: string | null;
   company: string;
   role: string;
   stage: string;
+  reviewable?: boolean;
+  submission_status?: string | null;
+  created_at?: string | null;
+  moved_at?: string | null;
 };
 
 /** What the applied check needs off a job row. `MonitoredJob` satisfies it. */
@@ -175,7 +180,78 @@ type AppliedJob = {
  * `ids` holds postings the student demonstrably applied to. `keys` is the company+role fallback
  * described on `applicationKey`, and it is lossy.
  */
-export type AppliedIndex = { ids: Set<string>; keys: Set<string> };
+export type JobApplicationMatch = {
+  packetId: string;
+  submissionStatus: string | null;
+  stage: string;
+  sent: boolean;
+  updatedAt: string | null;
+};
+
+export type JobApplicationIndex = {
+  ids: Map<string, JobApplicationMatch>;
+  /* null means more than one legacy packet shares this lossy company+role key. */
+  keys: Map<string, JobApplicationMatch | null>;
+  legacyAppliedKeys: Set<string>;
+};
+
+/** Kept as a public alias for older callers while the index now retains the packet itself. */
+export type AppliedIndex = JobApplicationIndex;
+
+function applicationMatch(card: AppliedCard): JobApplicationMatch {
+  return {
+    packetId: card.id,
+    submissionStatus: card.submission_status ?? null,
+    stage: card.stage,
+    /* A submission status is the automation's exact answer. Fall back to the board stage only for
+       legacy cards that predate submission tracking. */
+    sent: card.submission_status
+      ? card.submission_status === "submitted"
+      : isAppliedStage(card.stage),
+    updatedAt: card.moved_at ?? card.created_at ?? null,
+  };
+}
+
+function keepMoreRelevant(
+  current: JobApplicationMatch | undefined,
+  candidate: JobApplicationMatch,
+): JobApplicationMatch {
+  if (!current) return candidate;
+  if (candidate.sent !== current.sent) return candidate.sent ? candidate : current;
+  const currentPriority = applicationStatusPriority(current.submissionStatus);
+  const candidatePriority = applicationStatusPriority(candidate.submissionStatus);
+  if (candidatePriority !== currentPriority) {
+    return candidatePriority > currentPriority ? candidate : current;
+  }
+  return (candidate.updatedAt ?? "") > (current.updatedAt ?? "") ? candidate : current;
+}
+
+/**
+ * How much active employer-side work a packet already owns.
+ *
+ * Recency is only a tie-breaker within one workflow position. A new duplicate resume must never
+ * replace the packet whose employer form is filled, submitting, or waiting for a security code.
+ * Doing so would put the Jobs CTA onto an earlier packet while the live employer interaction kept
+ * running on another one.
+ */
+function applicationStatusPriority(status: string | null): number {
+  switch (status) {
+    case "submitted": return 100;
+    case "awaiting_security_code": return 95;
+    case "submission_claimed": return 92;
+    case "submitting": return 90;
+    case "ready_for_final_approval": return 85;
+    case "needs_attention": return 80;
+    case "filling": return 70;
+    case "preparing": return 65;
+    case "submit_requested": return 60;
+    case "failed": return 55;
+    case "ready_to_submit": return 40;
+    case "questions_ready": return 30;
+    case "resume_ready": return 20;
+    default: return 0;
+  }
+}
 
 /**
  * Index the applied cards so a row can ask whether it is one of them.
@@ -192,14 +268,65 @@ export type AppliedIndex = { ids: Set<string>; keys: Set<string> };
  * and every one of those applications would silently stop being marked.
  */
 export function buildAppliedIndex(cards: AppliedCard[]): AppliedIndex {
-  const ids = new Set<string>();
-  const keys = new Set<string>();
+  const ids = new Map<string, JobApplicationMatch>();
+  const keys = new Map<string, JobApplicationMatch | null>();
+  const legacyAppliedKeys = new Set<string>();
   for (const card of cards) {
-    if (!isAppliedStage(card.stage)) continue;
-    if (card.job_id) ids.add(card.job_id);
-    else keys.add(applicationKey(card.company, card.role));
+    /* An unsent reviewable packet matters just as much as a sent one: it changes Apply into a
+       continuation of that exact packet. A non-reviewable saved or closed card has no flow to
+       continue and therefore contributes nothing. */
+    if (!card.submission_status && !card.reviewable && !isAppliedStage(card.stage)) continue;
+    const candidate = applicationMatch(card);
+    if (card.job_id) ids.set(card.job_id, keepMoreRelevant(ids.get(card.job_id), candidate));
+    else {
+      const key = applicationKey(card.company, card.role);
+      if (candidate.sent) legacyAppliedKeys.add(key);
+      if (!keys.has(key)) keys.set(key, candidate);
+      else {
+        const current = keys.get(key);
+        keys.set(
+          key,
+          current && current.packetId === candidate.packetId
+            ? keepMoreRelevant(current, candidate)
+            : null,
+        );
+      }
+    }
   }
-  return { ids, keys };
+  return { ids, keys, legacyAppliedKeys };
+}
+
+export const buildJobApplicationIndex = buildAppliedIndex;
+
+/** The exact existing packet for this posting, including whether it was sent. */
+export function jobApplicationFor(
+  job: AppliedJob,
+  index: JobApplicationIndex | null,
+): JobApplicationMatch | null {
+  if (!index) return null;
+  /* Only a monitored posting id can prove which packet belongs to this row. The legacy
+     company+role key remains available to isJobApplied for its historical boolean fact, but it is
+     too lossy to choose a packet the student can review, fill, or send. */
+  return index.ids.get(job.id) ?? null;
+}
+
+/** The next honest action for an unsent packet. */
+export function jobApplicationActionLabel(application: JobApplicationMatch): string {
+  if (application.submissionStatus === "awaiting_security_code") return "Enter code";
+  if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Fix application";
+  if (application.submissionStatus === "ready_for_final_approval") return "Review and send";
+  if (["resume_ready", "questions_ready", "ready_to_submit"].includes(application.submissionStatus ?? "")) {
+    return "Review and fill";
+  }
+  return "Continue application";
+}
+
+export function jobApplicationHref(application: JobApplicationMatch): string {
+  return `/dashboard/applications?application=${encodeURIComponent(application.packetId)}&intent=apply`;
+}
+
+export function jobApplicationDetailHref(application: JobApplicationMatch): string {
+  return `/dashboard/applications?application=${encodeURIComponent(application.packetId)}&intent=detail`;
 }
 
 /**
@@ -212,8 +339,10 @@ export function buildAppliedIndex(cards: AppliedCard[]): AppliedIndex {
  */
 export function isJobApplied(job: AppliedJob, index: AppliedIndex | null): boolean {
   if (!index) return false;
-  if (index.ids.has(job.id)) return true;
-  return index.keys.has(applicationKey(job.company_name, job.title));
+  const exact = index.ids.get(job.id);
+  if (exact) return exact.sent;
+  const key = applicationKey(job.company_name, job.title);
+  return index.keys.get(key)?.sent ?? index.legacyAppliedKeys.has(key);
 }
 
 /**
