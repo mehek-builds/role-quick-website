@@ -92,3 +92,12 @@ test("onboarding never presents keyword coverage as a percentage", async () => {
     );
   }
 });
+
+test("resume approval waits for the saved application profile instead of treating a failed read as blank", async () => {
+  const page = shipped(await read("app/start/page.tsx"));
+
+  assert.doesNotMatch(page, /getApplicationProfile\(\)\.catch\(\(\) => null\)/);
+  assert.match(page, /appProfileStatus[^\n]*"loading"[^\n]*"ready"[^\n]*"error"/);
+  assert.match(page, /case "base":[\s\S]*?appProfileStatus !== "ready"[\s\S]*?applicationProfileGate\("base"\)/);
+  assert.match(page, /Try loading again/);
+});

@@ -51,6 +51,7 @@ export default function Start() {
   // empty at this point in the flow (harvest has not run yet), which is correct rather than a bug:
   // the contact line fills in as the first application teaches us, and the student can see that.
   const [appProfile, setAppProfile] = useState<ApplicationProfile | null>(null);
+  const [appProfileStatus, setAppProfileStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   // Set alongside the QA state stub below so the base step can replay a canned build.
@@ -65,11 +66,21 @@ export default function Start() {
 
   const loadProfile = useCallback(async () => {
     setProfileLoadError(null);
+    setAppProfileStatus("loading");
     try {
       setProfile(await api<ParsedProfile>("/profile"));
-      setAppProfile(await getApplicationProfile().catch(() => null));
     } catch (reason) {
       setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your resume details.");
+      setAppProfileStatus("error");
+      return;
+    }
+    try {
+      setAppProfile(await getApplicationProfile());
+      setAppProfileStatus("ready");
+    } catch (reason) {
+      setAppProfile(null);
+      setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your application details.");
+      setAppProfileStatus("error");
     }
   }, []);
 
@@ -145,6 +156,7 @@ export default function Start() {
             },
           ],
         } as ParsedProfile);
+        setAppProfileStatus("ready");
         setQaDemo(true);
         return;
       }
@@ -230,6 +242,24 @@ export default function Start() {
        the stamp could not be written at all (see the gaps case below). Every other step stays
        exactly as derived - a stored cursor is the thing this flow is built to avoid. */
     const step: OnboardingStep = state.step === "gaps" && gapsHandled ? "done" : state.step;
+    const applicationProfileGate = (current: OnboardingStep) => (
+      <div className="mx-auto max-w-2xl px-6 py-16">
+        <StepRail current={current} />
+        {appProfileStatus === "error" ? (
+          <div className="mt-10">
+            <ErrorNote message={profileLoadError ?? "Could not load your saved application details."} />
+            <button type="button" onClick={() => void loadProfile()} className="mt-4 min-h-11 text-sm text-brand-ink underline underline-offset-4">
+              Try loading again
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+            <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+          </>
+        )}
+      </div>
+    );
     switch (step) {
       case "focus":
         // During a rolling backend deploy an older state response can still say "focus" before a
@@ -281,6 +311,7 @@ export default function Start() {
         );
 
       case "sponsorship":
+        if (!qaDemo && appProfileStatus !== "ready") return applicationProfileGate("sponsorship");
         return (
           <SponsorshipStep
             profile={appProfile}
@@ -320,6 +351,7 @@ export default function Start() {
         );
 
       case "base":
+        if (!qaDemo && appProfileStatus !== "ready") return applicationProfileGate("base");
         return (
           <BaseResumeStep
             parsed={profile}
