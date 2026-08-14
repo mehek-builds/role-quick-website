@@ -451,6 +451,7 @@ function Applications() {
   const pathname = usePathname();
   const router = useRouter();
   const applicationFilter = applicationFilterFromSearch(searchParams.toString());
+  const requestedApplicationId = searchParams.get("application");
   /* Writes the choice back to the URL, so the select and the deep link move the same thing.
      Everything removes the parameter rather than writing state=all: a URL that says nothing is
      what a plain visit looks like, and this is also what closes the ledger section.
@@ -805,13 +806,18 @@ function Applications() {
     queueMicrotask(() => {
       if (!cancelled) setQaMode(false);
     });
-    api<{ resumes: GeneratedResume[] }>("/resume/history")
+    /* The ordinary history response is deliberately capped at fifty full packet specs. A direct
+       link may point to an older packet, so name that one packet explicitly instead of widening
+       every Tracker load and restoring the transfer problem that required the cap. */
+    const historyPath = requestedApplicationId
+      ? `/resume/history?application=${encodeURIComponent(requestedApplicationId)}`
+      : "/resume/history";
+    api<{ resumes: GeneratedResume[] }>(historyPath)
       .then((result) => {
         if (cancelled) return;
         const reviewable = onlyReviewablePackets(result.resumes);
         setPackets(result.resumes);
-        const requestedId = new URLSearchParams(window.location.search).get("application");
-        const requested = reviewable.find((packet) => packet.id === requestedId);
+        const requested = reviewable.find((packet) => packet.id === requestedApplicationId);
         if (requested) selectPacket(requested);
       })
       .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
@@ -845,7 +851,7 @@ function Applications() {
     return () => {
       cancelled = true;
     };
-  }, [selectPacket]);
+  }, [requestedApplicationId, selectPacket]);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") queueMicrotask(() => setShowNewApplication(true));
