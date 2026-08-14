@@ -1003,6 +1003,14 @@ export function DoneStep({
       CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgedAt(state, grant.grantedAtField)]),
     ),
   );
+  /* The disclosure starts open when the account already holds any permission. A returning student
+     must see the grants they are carrying, including their dates, without having to discover a
+     collapsed panel. A new account gets the quieter default: permissions stay one named,
+     keyboard-operable disclosure away and do not compete with the setup receipt or first action. */
+  const heldPermissionCount =
+    Number(captchaConsent) +
+    CONSENT_GRANTS.filter((grant) => consentGrants[grant.field] === true).length;
+  const [permissionsOpen, setPermissionsOpen] = useState(() => heldPermissionCount > 0);
   const rows = useMemo(
     () =>
       /* Every step in STEPS, minus the screen the student is standing on. Deliberately STEPS and
@@ -1059,37 +1067,17 @@ export function DoneStep({
 
       <Receipt rows={rows} />
 
-      {/* ASKED HERE, ONCE, because this screen is what calls POST /onboarding/complete and is
-          therefore where a permission granted during setup can be recorded at all. The box starts
-          unticked for a new account: this is a standing permission, not a default. Every existing
-          account grants and revokes it from Settings, which is also the only place the accounts
-          carrying the superseded consent version can grant it again. */}
-      <div className="mt-7">
-        <ConsentAcknowledgementControl
-          idPrefix="start"
-          values={consentGrants}
-          grantedAt={consentGrantedAt}
-          disabled={busy}
-          onChange={(field, enabled) => setConsentGrants((current) => ({ ...current, [field]: enabled }))}
-        />
-
-        <CaptchaConsentControl
-          idPrefix="start"
-          value={captchaConsent}
-          grantedAt={captchaConsentGrantedAt}
-          disabled={busy}
-          onChange={setCaptchaConsent}
-        />
-      </div>
-
-      {/* The first action, in words. The button label alone ("See my jobs") names a destination,
-          not a thing to do, and the value of the product is one step past the destination. */}
-      <p className="mt-7 text-[15px] leading-7 text-ink">
-        Open a match on your dashboard and Litos builds the application for you to review.
-      </p>
-
-      <div className="mt-5">
+      {/* The first action closes the flow immediately after the receipt. It is a blue-soft document
+          band, not a celebration: one sentence, one action, and no score or decorative motion. */}
+      <section aria-labelledby="first-action-heading" className="mt-7 rounded-card border border-brand/20 bg-brand-soft/55 p-5 sm:p-6">
+        <p id="first-action-heading" className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">
+          First action
+        </p>
+        <p className="mt-2 text-[15px] leading-7 text-ink">
+          Open a match on your dashboard and Litos builds the application for you to review.
+        </p>
         <PrimaryButton
+          className="mt-4"
           onClick={() => {
             setBusy(true);
             void onFinish({
@@ -1108,7 +1096,44 @@ export function DoneStep({
         >
           {busy ? <PendingLabel state="shaping" onColor>Saving...</PendingLabel> : "See my jobs"}
         </PrimaryButton>
-      </div>
+      </section>
+
+      {/* ASKED HERE, ONCE, because this screen is what calls POST /onboarding/complete and is
+          therefore where a permission granted during setup can be recorded at all. The disclosure
+          is progressive presentation only: the same controls remain mounted, and the completion
+          payload above still applies their exact grant, revoke and unknown-column rules. */}
+      <details
+        className="mt-5 overflow-hidden rounded-card border border-border bg-surface"
+        open={permissionsOpen}
+        onToggle={(event) => setPermissionsOpen(event.currentTarget.open)}
+      >
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 px-4 py-3 marker:text-muted sm:px-5">
+          <span>
+            <span className="block text-sm font-medium text-ink">Optional permissions</span>
+            <span className="mt-0.5 block text-xs leading-5 text-muted">Not required to see your jobs. Change them here or later in Account.</span>
+          </span>
+          <span className="shrink-0 font-mono text-[11px] uppercase tracking-[0.06em] text-muted">
+            {heldPermissionCount === 0 ? "All off" : `${heldPermissionCount} on`}
+          </span>
+        </summary>
+        <div className="space-y-3 border-t border-border p-4 sm:p-5">
+          <ConsentAcknowledgementControl
+            idPrefix="start"
+            values={consentGrants}
+            grantedAt={consentGrantedAt}
+            disabled={busy}
+            onChange={(field, enabled) => setConsentGrants((current) => ({ ...current, [field]: enabled }))}
+          />
+
+          <CaptchaConsentControl
+            idPrefix="start"
+            value={captchaConsent}
+            grantedAt={captchaConsentGrantedAt}
+            disabled={busy}
+            onChange={setCaptchaConsent}
+          />
+        </div>
+      </details>
     </StartShell>
   );
 }

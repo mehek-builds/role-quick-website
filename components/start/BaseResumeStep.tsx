@@ -826,6 +826,7 @@ export function BaseResumeStep({
             phase === "compare" ? (hasSource ? "lg:col-span-2" : "text-center") : "lg:col-start-2 lg:row-start-1"
           }`}
         >
+          <PhaseLabel>{phase === "compare" ? "Compare" : "Review and edit"}</PhaseLabel>
           <h1 className="max-w-full text-section font-normal leading-[1.12] tracking-[-0.02em] text-ink sm:text-section">
             {phase === "compare"
               ? hasSource ? "Same you. One page." : "One page, ready."
@@ -1012,9 +1013,6 @@ export function BaseResumeStep({
             <p className="mt-5 text-xs leading-5 text-muted">
               Checked: an applicant tracking system can read this, {ats.extractable_chars} characters
               on {ats.pages === 1 ? "one page" : `${ats.pages} pages`}.
-              {ats.scored_against === "target roles" && (
-                <> It matches {ats.keyword_coverage_pct}% of the words in the roles you picked.</>
-              )}
             </p>
           )}
 
@@ -1122,7 +1120,20 @@ export function BaseResumeStep({
           )}
 
           {finished && (
-            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+            <details className="mt-5 rounded-inner border border-border px-4 py-3">
+              <summary className="cursor-pointer rounded-inner focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                <span className="block font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+                  Optional application details
+                </span>
+                <span className="mt-1 block text-[13px] leading-5 text-ink">
+                  Add answers Litos can reuse on forms
+                </span>
+                <span className="mt-1 block text-xs leading-5 text-muted">
+                  Everything here is optional. Leave a field blank and Litos leaves it blank too.
+                </span>
+              </summary>
+
+              <div className="mt-5 border-t border-border pt-4">
               <p className="text-[13px] text-ink">Optional questions about race and gender</p>
               <p className="mt-1 text-xs leading-5 text-muted">
                 Employers ask these on voluntary forms. Litos uses your exact wording, or chooses decline when you leave a field blank.
@@ -1141,14 +1152,9 @@ export function BaseResumeStep({
                   </label>
                 ))}
               </div>
-            </div>
-          )}
+              </div>
 
-          {/* Sits above the button for the same reason the fluency question does: pressing it is
-              what writes these answers, and a question below the button is one you agreed to
-              without reading. */}
-          {finished && (
-            <div className="mt-5 rounded-inner border border-border px-4 py-3">
+              <div className="mt-5 border-t border-border pt-4">
               <p className="text-[13px] text-ink">Questions employers keep asking</p>
               <p className="mt-1 text-xs leading-5 text-muted">
                 Save factual details here. Litos uses identity and resume facts where safe, but leaves employer-specific choices to you. Leave anything blank and it stays blank on the form too.
@@ -1242,22 +1248,29 @@ export function BaseResumeStep({
               <p className="mt-4 border-t border-border pt-3 text-xs leading-5 text-muted">
                 Every employer agreement stays for you to review on that application, including privacy notices, accuracy certifications, preference statements, exclusivity promises and interview codes of conduct.
               </p>
-            </div>
+              </div>
+            </details>
           )}
 
-          <div className="mt-7 flex flex-wrap items-center gap-3">
-            <PrimaryButton onClick={() => void finish()} disabled={!finished || saving || editing}>
-              {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Looks right"}
-            </PrimaryButton>
-            <button
-              type="button"
-              onClick={() => void toggleEditing()}
-              disabled={!finished}
-              className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink disabled:opacity-40"
-            >
-              {editing ? "Done editing" : "Edit"}
-            </button>
-            <LaterLink onClick={onLater} />
+          <div className="mt-7 border-t border-border pt-5">
+            <PhaseLabel>Approval</PhaseLabel>
+            <p className="text-[13px] leading-6 text-muted">
+              Approve this resume as the starting point Litos will tailor for each job.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <PrimaryButton onClick={() => void finish()} disabled={!finished || saving || editing}>
+                {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Looks right"}
+              </PrimaryButton>
+              <button
+                type="button"
+                onClick={() => void toggleEditing()}
+                disabled={!finished}
+                className="min-h-11 rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink disabled:opacity-40"
+              >
+                {editing ? "Done editing" : "Edit"}
+              </button>
+              <LaterLink onClick={onLater} />
+            </div>
           </div>
           <p className="mt-4 text-[13px] leading-6 text-muted">
             {editing
@@ -1275,6 +1288,16 @@ export function BaseResumeStep({
 function PaneLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{children}</p>
+  );
+}
+
+/** A quiet phase marker. The flow already has the numbered rail, so these labels name the work
+ *  within the base-resume step without inventing another progress count. */
+function PhaseLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">
+      {children}
+    </p>
   );
 }
 

@@ -6,7 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { putOnboardingWorkEligibility, type ApplicationProfile, type SponsorshipAnswer } from "@/lib/api";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
-import { PrimaryButton, StartShell } from "./ui";
+import { LaterLink, PrimaryButton, StartShell } from "./ui";
 import { CountryEligibilityEditor } from "@/components/app/CountryEligibilityEditor";
 import {
   countryEligibilityProblem,
@@ -17,10 +17,12 @@ import {
 
 export function SponsorshipStep({
   onDone,
+  onLater,
   profile,
   sponsorshipAnswer,
 }: {
   onDone: () => void;
+  onLater: () => void;
   profile?: ApplicationProfile | null;
   sponsorshipAnswer?: SponsorshipAnswer | null;
 }) {
@@ -87,9 +89,12 @@ export function SponsorshipStep({
         </p>
       </div>
 
-      <PrimaryButton onClick={() => void save()} disabled={busy || records.length === 0}>
-        {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
-      </PrimaryButton>
+      <div className="flex flex-wrap items-center gap-4">
+        <PrimaryButton onClick={() => void save()} disabled={busy || records.length === 0}>
+          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
+        </PrimaryButton>
+        <LaterLink onClick={onLater} />
+      </div>
     </StartShell>
   );
 }

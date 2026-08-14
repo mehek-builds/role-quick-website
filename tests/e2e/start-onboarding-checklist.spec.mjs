@@ -659,6 +659,52 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
   }
 });
 
+test("the first step remains operable at 320px and its walkthrough discloses accessibly", async () => {
+  try {
+    await page.setViewportSize({ width: 320, height: 700 });
+    resetProgress();
+    savedTargeting = { ...EMPTY_TARGETING };
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await screen("Your resume");
+
+    const geometry = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    assert.ok(
+      geometry.scrollWidth <= geometry.clientWidth + 1,
+      `the 320px onboarding screen scrolls sideways: ${JSON.stringify(geometry)}`,
+    );
+
+    const later = page.getByRole("button", { name: "Finish later" });
+    await later.waitFor({ state: "visible", timeout: 20_000 });
+    const laterBox = await later.boundingBox();
+    assert.ok(laterBox, "Finish later has no rendered box at 320px");
+    assert.ok(laterBox.height >= 44, `Finish later is only ${laterBox.height}px tall at 320px`);
+    assert.ok(laterBox.x >= 0 && laterBox.x + laterBox.width <= 320, "Finish later is clipped at 320px");
+
+    const hide = page.getByRole("button", { name: "Skip" });
+    assert.equal(await hide.getAttribute("aria-expanded"), "true");
+    const controlledId = await hide.getAttribute("aria-controls");
+    assert.ok(controlledId, "the expanded walkthrough control names no region");
+    assert.equal(await page.locator(`#${controlledId}`).count(), 1, "the expanded walkthrough region is missing");
+
+    await hide.click();
+    const show = page.getByRole("button", { name: "How Litos works" });
+    await show.waitFor({ state: "visible" });
+    assert.equal(await show.getAttribute("aria-expanded"), "false");
+    assert.equal(await show.getAttribute("aria-controls"), controlledId);
+
+    await show.click();
+    const reopened = page.getByRole("button", { name: "Skip" });
+    await reopened.waitFor({ state: "visible" });
+    assert.equal(await reopened.getAttribute("aria-expanded"), "true");
+    assert.equal(await page.locator(`#${controlledId}`).count(), 1, "the walkthrough did not return");
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
 test("the walk: every step in order, each one advancing the rail by one", async () => {
   try {
     /* ── Step 1, Your resume ───────────────────────────────────────────────*/

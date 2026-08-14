@@ -355,6 +355,7 @@ test("onboarding asks once and sends the answer through onboarding complete", as
   await page.goto(`${ORIGIN}/start`);
   await page.getByRole("heading", { name: "Setup complete." }).waitFor();
   assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), false);
+  await page.getByText("Optional permissions", { exact: true }).click();
   await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).check();
   await page.getByRole("button", { name: "See my jobs" }).click();
   await page.waitForFunction(() => window.location.pathname !== "/start");
@@ -403,6 +404,7 @@ test("a ticked box is still sent as true against a server that reported nothing"
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/start`);
   await page.getByRole("heading", { name: "Setup complete." }).waitFor();
+  await page.getByText("Optional permissions", { exact: true }).click();
   await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).check();
   await page.getByRole("button", { name: "See my jobs" }).click();
   await page.waitForFunction(() => window.location.pathname !== "/start");

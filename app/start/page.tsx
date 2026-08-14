@@ -285,6 +285,7 @@ export default function Start() {
           <SponsorshipStep
             profile={appProfile}
             sponsorshipAnswer={state.sponsorship_answer}
+            onLater={later}
             onDone={() => {
               stepDone("sponsorship");
               void refresh();
