@@ -17,6 +17,11 @@ describe("an application deep link loads the exact packet", () => {
       /requestedApplicationId = new URLSearchParams\(window\.location\.search\)/,
       "window.location can still hold the previous query during an App Router transition",
     );
+    assert.match(
+      applications,
+      /const requestedApplicationIntent = searchParams\.get\("intent"\);/,
+      "the action must update when the App Router changes only the intent",
+    );
   });
 
   test("a query-only packet change cancels the old load and starts history for the new id", () => {
@@ -50,6 +55,65 @@ describe("an application deep link loads the exact packet", () => {
       historyEffect,
       /}, \[(?=[^\]]*requestedApplicationId)(?=[^\]]*selectPacket)[^\]]*\]\);/,
       "changing only ?application= must rerun this effect",
+    );
+  });
+
+  test("detail and apply remain separate, non-mutating and actionable intents", () => {
+    const historyPathAt = applications.indexOf("const historyPath = requestedApplicationId");
+    const effectStart = applications.lastIndexOf("useEffect(() => {", historyPathAt);
+    const nextEffect = applications.indexOf("\n  useEffect(() => {", historyPathAt);
+    const historyEffect = applications.slice(effectStart, nextEffect);
+
+    assert.match(
+      historyEffect,
+      /requestedApplicationIntent === "detail"[\s\S]{0,180}setRevisitingId\(requested\.id\)/,
+      "detail opens the read-only packet viewer",
+    );
+    assert.match(
+      historyEffect,
+      /else if \(requested && \(requestedApplicationIntent === null \|\| requestedApplicationIntent === "apply"\)\)[\s\S]{0,180}selectPacket\(requested\)/,
+      "only apply and historical bare links enter the actionable flow through the normal packet selection gate",
+    );
+    assert.match(
+      historyEffect,
+      /else \{\s*setResolvedActionableRequestId\(null\);/,
+      "an unknown intent must leave the requested packet non-actionable",
+    );
+    assert.match(
+      historyEffect,
+      /}, \[(?=[^\]]*requestedApplicationId)(?=[^\]]*requestedApplicationIntent)(?=[^\]]*selectPacket)[^\]]*\]\);/,
+      "changing only ?intent= must rerun this effect",
+    );
+    assert.doesNotMatch(historyEffect, /submit-request|submission\/approve/, "opening either intent must not send anything");
+  });
+
+  test("a query-only packet change hides the prior packet before the new history resolves", () => {
+    assert.match(
+      applications,
+      /const selected = selectedPacketForRequest\(\s*packets,\s*selectedId,\s*requestedApplicationId,\s*requestedApplicationIntent,\s*resolvedActionableRequestId,\s*\);/,
+      "every actionable screen must derive selection through the URL mismatch gate",
+    );
+    assert.doesNotMatch(
+      applications,
+      /const selected = packets\?\.find\(\(packet\) => packet\.id === selectedId\)/,
+      "a bare local lookup leaves packet A live while the URL and request already name packet B",
+    );
+    assert.match(
+      applications,
+      /setResolvedActionableRequestId\(requested\.id\);\s*selectPacket\(requested\);/,
+      "the gate opens only when the exact requested packet is selected",
+    );
+  });
+
+  test("a settled direct link does not permanently pin ledger selection to its URL", () => {
+    assert.match(
+      applications,
+      /const \[resolvedActionableRequestId, setResolvedActionableRequestId\] = useState<string \| null>\(null\)/,
+    );
+    assert.doesNotMatch(
+      applications,
+      /requestedApplicationId && requestedApplicationId !== selectedId/,
+      "strict permanent id equality would make every later ledger row disappear",
     );
   });
 });

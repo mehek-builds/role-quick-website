@@ -74,8 +74,9 @@ test("an unsupported portal replaces the send control with a way to apply by han
   // The send control is behind the capability check, and the link out takes its place.
   assert.match(
     dashboard,
-    /review\.portal_supported === false[\s\S]{0,900}Open the company page[\s\S]{0,900}"Fill the form"/,
+    /review\.portal_supported === false[\s\S]{0,900}Open the company page[\s\S]{0,900}: <Button/,
   );
+  assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,300}"Fill company form"/);
   // The resume itself stays reachable: this is a gate on submitting, not on the packet.
   assert.match(dashboard, /selected\.download_url[\s\S]{0,200}View PDF/);
 });

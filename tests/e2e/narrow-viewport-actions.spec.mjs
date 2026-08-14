@@ -3,7 +3,7 @@
  *
  * WHAT WENT WRONG, AND WHY IT NEEDS A BROWSER
  * ===========================================
- * "Audit exact packet" is the product's core review action. It is the LAST element of the review screen, which
+ * "Review and fill" is the product's core pre-fill review action. It used to be the last element of the review screen, which
  * also contains a job description, an editable resume and a cover letter, so at 744x789 that screen
  * is roughly 2,900px and the action is about 2,100px of scrolling away. Two separate things then
  * made it worse, and neither is visible in source:
@@ -36,8 +36,8 @@
  *     scrolling" assertion went RED at every narrow width.
  *   - scrolled to the very end it sat at top 688 / bottom 732 against a tab bar whose top edge is
  *     728, so `occludedByNav` was TRUE and the overlap assertion went RED as well.
- * With the fix both are green at 375x812, 744x789, 900x700 and 1023x800, and the desktop case
- * (1440x1000, where the bar is deliberately static) is green scrolled to the end.
+ * With the fix the sticky action is green at 375x812, 744x789, 900x700 and 1023x800. The desktop
+ * action is in the first review card and is green before any scrolling.
  *
  * A NOTE ON HOW THE ORIGINAL REPORT MIS-MEASURED THIS, so nobody repeats it
  * ========================================================================
@@ -59,7 +59,7 @@
  *    suspends rAF and smooth scrolling and has already produced false findings on this audit.
  *  - The screen under test must actually OVERFLOW the viewport, asserted per case. A review screen
  *    that fits on screen cannot demonstrate anything about reaching its own end.
- *  - IT NEVER CLICKS THE BUTTON. "Audit exact packet" starts the exact packet review gate.
+ *  - IT NEVER CLICKS THE BUTTON. "Review and fill" starts the exact packet review gate.
  *    This spec proves the control is reachable and hittable; it stops one pixel short of pressing.
  *
  * RUN IT WITH:  npm run build && npm run test:narrow-viewport
@@ -135,7 +135,13 @@ test.after(async () => {
  * the painted pill and would report a miss on a perfectly healthy button.
  */
 const PROBE = ({ label, action }) => {
-  const btn = [...document.querySelectorAll("button")].find((b) => (b.textContent ?? "").trim().startsWith(action));
+  const btn = [...document.querySelectorAll("button")].find((b) => {
+    const rect = b.getBoundingClientRect();
+    return (b.textContent ?? "").trim().startsWith(action)
+      && rect.width > 0
+      && rect.height > 0
+      && getComputedStyle(b).visibility !== "hidden";
+  });
   if (!btn) return { found: false, label, action };
   const r = btn.getBoundingClientRect();
   const nav = document.querySelector("nav.fixed");
@@ -182,7 +188,7 @@ async function openAPacket(page) {
   const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
   await rows.first().waitFor({ state: "visible", timeout: 20_000 });
   await rows.first().click();
-  await page.getByRole("button", { name: "Audit exact packet" }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByRole("button", { name: "Review and fill" }).waitFor({ state: "visible", timeout: 20_000 });
   /* Any scroll the router or an anchor kicked off must SETTLE before anything is measured. See the
      smooth-scroll note in the header: measuring mid-animation is how this was mis-diagnosed. */
   await page.waitForTimeout(600);
@@ -216,25 +222,22 @@ async function captureFailure(label, page, reason) {
 /**
  * Every viewport this runs at, and what each one is here to prove.
  *
- * `stickyExpected` is the lg breakpoint, not a preference. Below lg the bar is sticky and the
- * action must be on screen BEFORE any scrolling, because that is the whole fix. At lg and up the
- * bar is deliberately static: the desktop screen is about one and a half viewports and the
- * two-pane review has a measured height budget (`xl:max-h-[calc(100vh-15.5rem)]`) that a permanent
- * bar would eat. Asserting stickiness there would pin a behaviour the design deliberately declines.
+ * `stickyExpected` is the lg breakpoint, not a preference. Below lg the bar is sticky. At lg and
+ * up the action sits in the first review card, where it must be visible before any scrolling.
  */
 const VIEWPORTS = [
   { width: 375, height: 812, why: "phone, the common case for TikTok and Instagram traffic" },
   { width: 744, height: 789, why: "the width the defect was reported at" },
   { width: 900, height: 700, why: "mid-band: tab bar still on, sm padding rules already applied" },
   { width: 1023, height: 800, why: "one pixel below lg, the last width the tab bar is shown at" },
-  { width: 1440, height: 1000, why: "desktop, where the bar is static by design" },
+  { width: 1440, height: 1000, why: "desktop, where the action belongs in the first review card" },
 ];
 
 for (const vp of VIEWPORTS) {
   const label = `${vp.width}x${vp.height}`;
   const stickyExpected = vp.width < 1024;
 
-  test(`"Audit exact packet" is reachable at ${label} (${vp.why})`, async () => {
+  test(`"Review and fill" is reachable at ${label} (${vp.why})`, async () => {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
     await context.route("**/*", async (route) => {
       const url = route.request().url();
@@ -264,8 +267,8 @@ for (const vp of VIEWPORTS) {
     try {
       await openAPacket(page);
 
-      const atRest = await page.evaluate(PROBE, { label: "no scrolling at all", action: "Audit exact packet" });
-      assert.equal(atRest.found, true, "the review screen did not render an Audit exact packet button");
+      const atRest = await page.evaluate(PROBE, { label: "no scrolling at all", action: "Review and fill" });
+      assert.equal(atRest.found, true, "the review screen did not render a Review and fill button");
       assert.equal(atRest.visibility, "visible", "a background tab suspends rAF and smooth scrolling; nothing measured here would mean anything");
 
       /* The case is only meaningful if the screen is longer than the screen. */
@@ -283,25 +286,25 @@ for (const vp of VIEWPORTS) {
         );
       }
 
-      if (stickyExpected) {
-        assert.ok(
-          atRest.fullyInViewport,
-          `at ${label} the action must be on screen before any scrolling, and its rect was top ${atRest.top} / bottom ${atRest.bottom} in a ${atRest.viewportH}px viewport: ${JSON.stringify(atRest)}`,
-        );
-        assert.deepEqual(atRest.misses, [], `something is painted over the action at ${label}: ${JSON.stringify(atRest.misses)}`);
-        assert.equal(atRest.occludedByNav, false, `the action overlaps the mobile tab bar at ${label}: ${JSON.stringify(atRest)}`);
-      }
-
-      /* And at the end of the document, where the bar comes to rest, on every width. */
-      await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
-      await page.waitForTimeout(600);
-      const atEnd = await page.evaluate(PROBE, { label: "scrolled to the end", action: "Audit exact packet" });
       assert.ok(
-        atEnd.fullyInViewport,
-        `at ${label}, scrolled to the very end, the action was still not fully in the viewport: ${JSON.stringify(atEnd)}`,
+        atRest.fullyInViewport,
+        `at ${label} the action must be on screen before any scrolling, and its rect was top ${atRest.top} / bottom ${atRest.bottom} in a ${atRest.viewportH}px viewport: ${JSON.stringify(atRest)}`,
       );
-      assert.deepEqual(atEnd.misses, [], `something is painted over the action at ${label} at the end of the document: ${JSON.stringify(atEnd.misses)}`);
-      assert.equal(atEnd.occludedByNav, false, `the action overlaps the mobile tab bar at ${label} at the end of the document: ${JSON.stringify(atEnd)}`);
+      assert.deepEqual(atRest.misses, [], `something is painted over the action at ${label}: ${JSON.stringify(atRest.misses)}`);
+      assert.equal(atRest.occludedByNav, false, `the action overlaps the mobile tab bar at ${label}: ${JSON.stringify(atRest)}`);
+
+      if (stickyExpected) {
+        /* And at the end of the document, where the narrow action bar comes to rest. */
+        await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
+        await page.waitForTimeout(600);
+        const atEnd = await page.evaluate(PROBE, { label: "scrolled to the end", action: "Review and fill" });
+        assert.ok(
+          atEnd.fullyInViewport,
+          `at ${label}, scrolled to the very end, the action was still not fully in the viewport: ${JSON.stringify(atEnd)}`,
+        );
+        assert.deepEqual(atEnd.misses, [], `something is painted over the action at ${label} at the end of the document: ${JSON.stringify(atEnd.misses)}`);
+        assert.equal(atEnd.occludedByNav, false, `the action overlaps the mobile tab bar at ${label} at the end of the document: ${JSON.stringify(atEnd)}`);
+      }
 
       assert.deepEqual(blockedExternal, [], "a request tried to leave this machine");
       assert.deepEqual(pageErrors, [], "the page under test threw");
@@ -449,13 +452,13 @@ test("a terminal action bar clears a software keyboard", async () => {
   const page = await context.newPage();
   try {
     await openAPacket(page);
-    const closed = await page.evaluate(PROBE, { label: "keyboard closed", action: "Audit exact packet" });
+    const closed = await page.evaluate(PROBE, { label: "keyboard closed", action: "Review and fill" });
     assert.ok(closed.fullyInViewport, JSON.stringify(closed));
 
     /* 336px is an iPhone 14 Pro portrait keyboard. */
     await page.evaluate(() => { document.documentElement.style.setProperty("--keyboard-inset", "336px"); });
     await page.waitForTimeout(300);
-    const open = await page.evaluate(PROBE, { label: "keyboard open", action: "Audit exact packet" });
+    const open = await page.evaluate(PROBE, { label: "keyboard open", action: "Review and fill" });
 
     const keyboardTop = open.viewportH - 336;
     assert.ok(
@@ -468,7 +471,7 @@ test("a terminal action bar clears a software keyboard", async () => {
        simply the padding. The tab bar is behind the keyboard too, so its height must NOT be added
        on top of the keyboard's (max(), not a sum); anything beyond the 40px gutter is dead space. */
     const barBottom = await page.evaluate(() => {
-      const btn = [...document.querySelectorAll("button")].find((b) => /Audit exact packet/i.test(b.textContent ?? ""));
+      const btn = [...document.querySelectorAll("button")].find((b) => /Review and fill/i.test(b.textContent ?? "") && b.getBoundingClientRect().height > 0);
       const bar = btn.closest("[class*='sticky']");
       return Math.round(bar.getBoundingClientRect().bottom);
     });

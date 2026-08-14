@@ -232,7 +232,7 @@ test("the blocker sentence names a control that exists on the screen it is print
      paragraph renders only on ready_for_final_approval, so the two can never be on screen together
      and there was no row above to point at. */
   assert.equal(/Add the file in the row above/.test(page), false);
-  assert.match(page, /Press Add \{ask\.kind\}, next to Send it, to attach one\./);
+  assert.match(page, /Press Add \{ask\.kind\}, next to Send application, to attach one\./);
 });
 
 test("the read-only packet viewer drops settled rows rather than listing them as input it needs", () => {
