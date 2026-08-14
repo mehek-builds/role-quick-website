@@ -27,6 +27,7 @@ import {
 } from "@/lib/consent-acknowledgement";
 import { STORE_URL } from "@/lib/config";
 import {
+  CATEGORIES,
   ROLE_TYPES,
   defaultBackup,
   defaultPrimary,
@@ -118,6 +119,7 @@ export function FocusStep({
     <FocusForm
       key={attempt}
       guess={guess}
+      gradYear={profile.grad_year}
       saved={saved}
       onDone={onDone}
       onLater={onLater}
@@ -127,11 +129,13 @@ export function FocusStep({
 
 function FocusForm({
   guess,
+  gradYear,
   saved,
   onDone,
   onLater,
 }: {
   guess: ReturnType<typeof inferResumeTargeting>;
+  gradYear: number;
   saved: SavedFocus;
   onDone: () => void;
   onLater: () => void;
@@ -139,6 +143,12 @@ function FocusForm({
   const seed = useMemo(() => focusSeed(saved, guess), [saved, guess]);
   const [selectedTitles, setSelectedTitles] = useState<string[]>(() => seed.titles);
   const [roleTypes, setRoleTypes] = useState<RoleType[]>(() => seed.roleTypes);
+  const [categories, setCategories] = useState<string[]>(() => saved?.categories?.length ? saved.categories : guess.categories);
+  const [locations, setLocations] = useState(() => (saved?.locations ?? []).join(", "));
+  const [remoteOnly, setRemoteOnly] = useState(() => saved?.remote_only ?? false);
+  const availablePeriods = useMemo(() => periodsFor(gradYear), [gradYear]);
+  const [primaryPeriod, setPrimaryPeriod] = useState<string | null>(() => saved?.primary_period ?? defaultPrimary(gradYear));
+  const [backupPeriod, setBackupPeriod] = useState<string | null>(() => saved?.backup_period ?? defaultBackup(gradYear));
   const [newTitle, setNewTitle] = useState("");
   const [roleMenuOpen, setRoleMenuOpen] = useState(false);
   const [activeMatchIndex, setActiveMatchIndex] = useState(0);
@@ -181,7 +191,13 @@ function FocusForm({
     try {
       /* Partial by omission, and additive on categories. This screen shows titles and one type; it
          must not be able to remove a category the student cannot see. See lib/onboarding-role-inference.ts. */
-      await putTargeting(focusPatch(saved, { titles: selectedTitles, roleTypes }));
+      await putTargeting({
+        ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories }),
+        locations: locations.split(",").map((value) => value.trim()).filter(Boolean),
+        remote_only: remoteOnly,
+        primary_period: primaryPeriod,
+        backup_period: backupPeriod,
+      });
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save that.");
@@ -313,8 +329,63 @@ function FocusForm({
         </div>
       </div>
 
+      <details className="mb-7 overflow-hidden rounded-card border border-border bg-surface">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 px-4 py-3 marker:text-muted sm:px-5">
+          <span>
+            <span className="block text-sm font-medium text-ink">More job preferences</span>
+            <span className="mt-0.5 block text-xs leading-5 text-muted">Locations, remote work, categories, and recruiting periods.</span>
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Optional</span>
+        </summary>
+        <div className="space-y-6 border-t border-border p-4 sm:p-5">
+          <div>
+            <p className="text-sm text-ink">Categories</p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {CATEGORIES.map((category) => {
+                const on = categories.includes(category.slug);
+                const savedCategory = saved?.categories?.includes(category.slug) ?? false;
+                return <Chip key={category.slug} label={category.label} on={on} disabled={savedCategory} onClick={() => setCategories(on ? categories.filter((value) => value !== category.slug) : [...categories, category.slug])} />;
+              })}
+            </div>
+            {!!saved?.categories?.length && (
+              <p className="mt-2 text-xs leading-5 text-muted">Saved categories stay on during this review. You can remove one later in Account.</p>
+            )}
+          </div>
+          <label className="block">
+            <span className="text-sm text-ink">Preferred locations</span>
+            <span className="mt-1 block text-xs leading-5 text-muted">Separate cities, countries, or regions with commas. Leave blank for every location allowed by the remote setting below.</span>
+            <input
+              value={locations}
+              onChange={(event) => setLocations(event.target.value)}
+              placeholder="Dubai, London, New York"
+              className="mt-2 min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+            />
+          </label>
+          <label className="flex min-h-11 items-center gap-3 text-sm text-ink">
+            <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
+            Show remote jobs only
+          </label>
+          <div>
+            <p className="text-sm text-ink">Main recruiting period</p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {availablePeriods.map((period) => <Chip key={period.slug} label={period.label} on={primaryPeriod === period.slug} onClick={() => setPrimaryPeriod(period.slug)} />)}
+            </div>
+          </div>
+          <div>
+            <p className="text-sm text-ink">Backup period</p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {availablePeriods.map((period) => <Chip key={period.slug} label={period.label} on={backupPeriod === period.slug} onClick={() => setBackupPeriod(period.slug)} />)}
+            </div>
+          </div>
+        </div>
+      </details>
+
+      {categories.length === 0 && (
+        <p role="status" className="mb-4 text-xs leading-5 text-warn">Choose at least one job category to continue.</p>
+      )}
+
       <div className="flex items-center gap-3">
-        <PrimaryButton onClick={() => void save()} disabled={busy || selectedTitles.length === 0 || roleTypes.length === 0}>
+        <PrimaryButton onClick={() => void save()} disabled={busy || selectedTitles.length === 0 || roleTypes.length === 0 || categories.length === 0}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
@@ -325,7 +396,15 @@ function FocusForm({
 
 /* ------------------------------------------------------------------ 01 RÉSUMÉ */
 
-export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: () => void }) {
+export function ResumeStep({
+  onDone,
+  onLater,
+  savedProfile,
+}: {
+  onDone: () => void;
+  onLater: () => void;
+  savedProfile?: ParsedProfile | null;
+}) {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [parsed, setParsed] = useState<ParsedProfile | null>(null);
@@ -333,6 +412,7 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
   /* Measured, not decorated. See the receipt comment below. */
   const [parseSeconds, setParseSeconds] = useState<number | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showSaved, setShowSaved] = useState(() => !!savedProfile);
 
   async function upload(f: File) {
     if (busy) return;
@@ -389,6 +469,36 @@ export function ResumeStep({ onDone, onLater }: { onDone: () => void; onLater: (
       { t: elapsed, k: "Ready in", v: `${banked} ${banked === 1 ? "entry" : "entries"} banked`, done: true },
     ];
   }, [parsed, file, parseSeconds]);
+
+  if (savedProfile && showSaved && !parsed) {
+    const savedRows = [
+      { k: "Name", v: savedProfile.full_name || "not found" },
+      { k: "School", v: savedProfile.school || "not found" },
+      { k: "Graduation", v: savedProfile.grad_year ? String(savedProfile.grad_year) : "not found" },
+      { k: "Experience", v: `${savedProfile.experience?.length ?? 0} entries` },
+      { k: "Projects", v: `${savedProfile.projects?.length ?? 0} entries` },
+      { k: "Skills", v: `${savedProfile.skills?.length ?? 0} tagged` },
+    ];
+    return (
+      <StartShell step="resume" title="Your saved resume is ready.">
+        <p className="mb-5 text-sm leading-6 text-muted">
+          We kept everything already in your Litos profile. Review it here, or replace the file if it changed.
+        </p>
+        <Receipt rows={savedRows} />
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <PrimaryButton onClick={onDone}>Keep this resume</PrimaryButton>
+          <button
+            type="button"
+            onClick={() => setShowSaved(false)}
+            className="min-h-11 px-1 text-[13px] text-muted underline-offset-4 hover:text-ink hover:underline"
+          >
+            Replace resume
+          </button>
+          <LaterLink onClick={onLater} />
+        </div>
+      </StartShell>
+    );
+  }
 
   if (parsed) {
     const distinctRoles = new Set(
@@ -969,11 +1079,9 @@ const NOT_RECORDED = "Not recorded";
 
 export function DoneStep({
   onFinish,
-  verificationEnabled,
   state,
 }: {
-  onFinish: (settings: AutomationSettings) => Promise<void>;
-  verificationEnabled: boolean;
+  onFinish: (settings: Partial<AutomationSettings>) => Promise<void>;
   state: OnboardingState;
 }) {
   const [busy, setBusy] = useState(false);
@@ -983,6 +1091,7 @@ export function DoneStep({
      this screen assumed off. Seeded, the box shown is the permission held, and unticking it is a
      revocation performed rather than one the flow performed for them. */
   const [captchaConsent, setCaptchaConsent] = useState(() => captchaConsentGranted(state));
+  const initialCaptchaConsent = useRef(captchaConsentGranted(state));
   /* Seeded once, like the box beside it, and deliberately NOT recomputed from a live `state`.
      Holding the box against re-seeding is right (a background refresh must not clobber a choice
      being made), but a date that kept tracking `state` while the box did not could print "Granted
@@ -997,6 +1106,9 @@ export function DoneStep({
     () => Object.fromEntries(
       CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgementGranted(state, grant.field)]),
     ),
+  );
+  const initialConsentGrants = useRef<Partial<Record<ConsentGrantField, boolean>>>(
+    Object.fromEntries(CONSENT_GRANTS.map((grant) => [grant.field, consentAcknowledgementGranted(state, grant.field)])),
   );
   const [consentGrantedAt] = useState<Partial<Record<ConsentGrantField, string | null>>>(
     () => Object.fromEntries(
@@ -1080,16 +1192,26 @@ export function DoneStep({
           className="mt-4"
           onClick={() => {
             setBusy(true);
+            const permissionChanges: Partial<AutomationSettings> = {};
+            if (captchaConsent !== initialCaptchaConsent.current) {
+              Object.assign(permissionChanges, captchaConsentCompletion(state, captchaConsent));
+            }
+            const changedConsentGrants = Object.fromEntries(
+              CONSENT_GRANTS
+                .filter((grant) => consentGrants[grant.field] !== initialConsentGrants.current[grant.field])
+                .map((grant) => [grant.field, consentGrants[grant.field]]),
+            ) as Partial<Record<ConsentGrantField, boolean>>;
+            if (Object.keys(changedConsentGrants).length > 0) {
+              Object.assign(permissionChanges, consentAcknowledgementCompletion(state, changedConsentGrants));
+            }
             void onFinish({
-              automatic_verification_enabled: verificationEnabled,
               /* A ticked box always sends true; an unticked one sends false ONLY if the server
                  reported the column, because otherwise this screen would be revoking a stored grant
                  it was never shown. See captchaConsentCompletion. */
-              ...captchaConsentCompletion(state, captchaConsent),
               /* Sends a true always, and a false ONLY when the server reported the column. Absent
                  reads as not granted for display and must never be written back as a revocation of
                  something this screen was never shown. */
-              ...consentAcknowledgementCompletion(state, consentGrants),
+              ...permissionChanges,
             }).finally(() => setBusy(false));
           }}
           disabled={busy}
@@ -1117,6 +1239,9 @@ export function DoneStep({
           </span>
         </summary>
         <div className="space-y-3 border-t border-border p-4 sm:p-5">
+          <p className="text-xs leading-5 text-muted">
+            Your saved email-verification and automatic-submission settings remain unchanged. Manage those separately in Account under Automation.
+          </p>
           <ConsentAcknowledgementControl
             idPrefix="start"
             values={consentGrants}
