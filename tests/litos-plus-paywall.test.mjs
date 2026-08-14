@@ -72,6 +72,18 @@ test("authoritative exhausted-meter denials bypass cached trial feature grants",
   assert.match(home, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)[\s\S]*\{ source: "server_denial" \}/);
 });
 
+test("explicit plan entry points open for grandfathered accounts with preserved feature allowances", async () => {
+  const [paywall, status, settings] = await Promise.all([
+    read("features/billing/domain/paywall.ts"),
+    read("components/billing/PlanStatus.tsx"),
+    read("app/dashboard/settings/page.tsx"),
+  ]);
+
+  assert.match(paywall, /source === "plan_management"/);
+  assert.match(status, /trigger: "account_upgrade"[\s\S]*source: "plan_management"/);
+  assert.match(settings, /trigger: "choose_litos_plus"[\s\S]*source: "plan_management"/);
+});
+
 test("Free filling uses canonical application seams and never generation", async () => {
   const [applications, bridge] = await Promise.all([
     read("app/dashboard/applications/page.tsx"),

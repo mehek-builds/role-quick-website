@@ -12,7 +12,7 @@ export const METERED_UPGRADE_FEATURES = [
   "outreach_email_generation",
 ] as const satisfies readonly PremiumFeatureKey[];
 
-export type UpgradeOpenSource = "proactive" | "server_denial";
+export type UpgradeOpenSource = "proactive" | "server_denial" | "plan_management";
 
 export function shouldOpenUpgrade(
   access: EntitlementSnapshot | null,
@@ -20,6 +20,7 @@ export function shouldOpenUpgrade(
   source: UpgradeOpenSource = "proactive",
 ): boolean {
   if (source === "server_denial") return true;
+  if (source === "plan_management") return true;
   return featureAccess(access, feature) !== true;
 }
 
