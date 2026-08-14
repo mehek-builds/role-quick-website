@@ -9,6 +9,7 @@ import {
   ApplicationProfile,
   type ApplicationEmailStatusResponse,
   clearSession,
+  createBillingPortal,
   createCheckout,
   createEmailConnection,
   disconnectEmailConnection,
@@ -25,7 +26,7 @@ import {
   setSession,
   setAutomationSettings,
 } from "@/lib/api";
-import { isSafeCheckoutUrl } from "@/lib/billing";
+import { isSafeCheckoutUrl, isStripePortalUrl } from "@/lib/billing";
 import { applicationEmailAddressInUse, applicationEmailBadge } from "@/lib/application-email-status";
 import { Card, Chip, Meter, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { API_URL } from "@/lib/config";
@@ -155,6 +156,8 @@ export default function Settings() {
   const [applicationEmail, setApplicationEmail] = useState<ApplicationEmailStatusResponse | null>(null);
   const [connectionBusy, setConnectionBusy] = useState<EmailProvider | null>(null);
   const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [billingNotice, setBillingNotice] = useState<"success" | "cancelled" | null>(null);
   const [connectionNotice, setConnectionNotice] = useState<string | null>(null);
   const [verificationConnectionPrompt, setVerificationConnectionPrompt] = useState(false);
   const [mountedAt] = useState(() => Date.now());
@@ -214,8 +217,15 @@ export default function Settings() {
     let cancelled = false;
     (async () => {
       try {
-        const callbackProvider = new URLSearchParams(window.location.search).get("connection") as EmailProvider | null;
-        const callbackStatus = new URLSearchParams(window.location.search).get("status");
+        const query = new URLSearchParams(window.location.search);
+        const callbackProvider = query.get("connection") as EmailProvider | null;
+        const callbackStatus = query.get("status");
+        const billingReturn = query.get("billing");
+        if (billingReturn === "success" || billingReturn === "cancelled") {
+          setBillingNotice(billingReturn);
+          setActiveTab("plan");
+          window.history.replaceState({}, "", `${window.location.pathname}#plan`);
+        }
         const [meRes, profileRes, onboardingRes, initialConnections, applicationEmailRes, sponsorRes] = await Promise.all([
           api<Me>("/me"),
           api<ApplicationProfile>("/profile/application").catch(() => ({})),
@@ -537,17 +547,30 @@ export default function Settings() {
     }
   }
 
-  async function startCheckout() {
+  async function startCheckout(interval: "weekly" | "monthly") {
     setCheckoutBusy(true);
     setError(null);
     try {
-      const checkout = await createCheckout();
+      const checkout = await createCheckout(interval);
       if (!isSafeCheckoutUrl(checkout.url)) throw new Error("Checkout returned an unsafe URL.");
       track("checkout_started");
       window.location.assign(checkout.url);
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : "Checkout is temporarily unavailable.");
       setCheckoutBusy(false);
+    }
+  }
+
+  async function openBillingPortal() {
+    setPortalBusy(true);
+    setError(null);
+    try {
+      const portal = await createBillingPortal();
+      if (!isStripePortalUrl(portal.url)) throw new Error("Billing portal returned an unsafe URL.");
+      window.location.assign(portal.url);
+    } catch (portalError) {
+      setError(portalError instanceof Error ? portalError.message : "Billing portal is temporarily unavailable.");
+      setPortalBusy(false);
     }
   }
 
@@ -1257,6 +1280,8 @@ export default function Settings() {
       {/* Plan + usage */}
       {activeTab === "plan" && <Card className="p-6" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
+        {billingNotice === "success" && <p role="status" className="mt-4 rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">Payment received. Stripe is confirming your Pro access now.</p>}
+        {billingNotice === "cancelled" && <p role="status" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm text-warn">Checkout was cancelled. Nothing was charged.</p>}
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-3">
           <Meter label="Verified contacts" used={me.usage.contacts.used} limit={me.usage.contacts.limit} />
           <Meter label="Outreach drafts" used={me.usage.drafts.used} limit={me.usage.drafts.limit} />
@@ -1273,12 +1298,14 @@ export default function Settings() {
             </p>
             {me.is_guest ? <ButtonLink href="/login?claim=1&next=upgrade">
               Upgrade to Pro
-            </ButtonLink> : <Button
-              type="button"
-              disabled={checkoutBusy}
-              onClick={() => void startCheckout()} >
-              {checkoutBusy ? "Opening..." : "Upgrade to Pro"}
-            </Button>}
+            </ButtonLink> : <div className="flex flex-wrap gap-2">
+              <Button type="button" disabled={checkoutBusy} onClick={() => void startCheckout("weekly")}>
+                {checkoutBusy ? "Opening..." : "$20 weekly"}
+              </Button>
+              <Button variant="secondary" type="button" disabled={checkoutBusy} onClick={() => void startCheckout("monthly")}>
+                {checkoutBusy ? "Opening..." : "$40 monthly"}
+              </Button>
+            </div>}
           </div>
         ) : me.tier === "pro" ? (
           <div className="mt-6 space-y-3 border-t border-border pt-5 text-sm text-muted">
@@ -1286,7 +1313,7 @@ export default function Settings() {
             {billingFailed && <ErrorNote message="Your last payment did not complete. Update the payment method in the secure billing portal to keep access active." />}
             {billingCanceled && me.billing_ends_at && <p role="status" className="rounded-inner bg-warn-soft px-4 py-3 text-warn">Subscription canceled. Pro access continues through {new Date(me.billing_ends_at).toLocaleDateString()}.</p>}
             {me.billing_renews_at && !billingCanceled && <p>Next billing date: <span className="font-mono text-ink">{new Date(me.billing_renews_at).toLocaleDateString()}</span>. The amount is confirmed in the billing portal.</p>}
-            <p>{me.billing_portal_url ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={me.billing_portal_url}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_url ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
+            <p>{me.billing_portal_available ? <button type="button" disabled={portalBusy} onClick={() => void openBillingPortal()} className="font-medium text-brand-ink underline-offset-4 hover:underline disabled:opacity-50">{portalBusy ? "Opening billing portal..." : "Open secure billing portal"}</button> : me.billing_portal_url ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={me.billing_portal_url}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_available || me.billing_portal_url ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
           </div>
         ) : null}
       </Card>}

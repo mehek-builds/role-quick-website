@@ -37,8 +37,8 @@ export const PRO_LIMITS = {
   drafts: 1000,
 } as const;
 
-/** Lemon Squeezy, month to month. */
-export const PRO_MONTHLY_PRICE = "49.99";
+/** Stripe, billed weekly. */
+export const PRO_WEEKLY_PRICE = "20";
 
-/** Lemon Squeezy, paid yearly, expressed per month the way the buyer feels it. */
-export const PRO_YEARLY_MONTHLY_PRICE = "39.99";
+/** Stripe, billed monthly. */
+export const PRO_MONTHLY_PRICE = "40";
