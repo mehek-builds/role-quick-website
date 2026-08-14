@@ -1256,13 +1256,28 @@ export default function Settings() {
               onto a Toronto one states something you never said. Both or neither get filled. */}
           <Input label="Salary currency" value={profile.desired_salary_currency} onChange={(v) => patch({ desired_salary_currency: v })} placeholder="USD" />
           <Input label="How did you hear about us? (default answer)" value={profile.referral_source_default} onChange={(v) => patch({ referral_source_default: v })} placeholder="LinkedIn, university career fair, recruiter" />
+          <Input label="Pronouns" value={profile.pronouns} onChange={(v) => patch({ pronouns: v })} placeholder="she/her, he/him, they/them" />
+          <Input label="Legal first name" value={profile.legal_first_name} onChange={(v) => patch({ legal_first_name: v })} placeholder="Only if different from your resume" />
+          <Input label="Preferred first name" value={profile.preferred_first_name} onChange={(v) => patch({ preferred_first_name: v })} placeholder="Name you go by" />
+          <Input label="High school graduation" value={profile.high_school_grad_date} onChange={(v) => patch({ high_school_grad_date: v })} placeholder="June 2024" />
+          <StringListInput label="Employers applied to before" value={profile.prior_application_employers} onChange={(v) => patch({ prior_application_employers: v })} placeholder="Akuna Capital, Jane Street" />
+          <EditableBooleanSelect label="Outstanding offers" value={profile.has_outstanding_offers} onChange={(v) => patch({ has_outstanding_offers: v })} />
+          <Input label="Outstanding offer details" value={profile.outstanding_offer_details} onChange={(v) => patch({ outstanding_offer_details: v })} placeholder="Company and decision date" />
+          <Input label="Military service" value={profile.military_service} onChange={(v) => patch({ military_service: v })} placeholder="Yes, No, Prefer not to say" />
+          <Input label="Government or state-owned position" value={profile.politically_exposed} onChange={(v) => patch({ politically_exposed: v })} placeholder="Yes, No, Prefer not to say" />
+          <Input label="Immediate family government or state-owned position" value={profile.politically_exposed_family} onChange={(v) => patch({ politically_exposed_family: v })} placeholder="Yes, No, Prefer not to say" />
+          <StringSelect label="Further study plan" value={profile.advanced_study_plan} options={["", "no", "considering", "committed"]} onChange={(v) => patch({ advanced_study_plan: v ? v as ApplicationProfile["advanced_study_plan"] : null })} />
+          <Input label="Availability duration" value={profile.availability_term} onChange={(v) => patch({ availability_term: v })} placeholder="14 weeks" />
+          <StringSelect label="Standardized test record" value={profile.standardized_test_type} options={["", "SAT", "ACT", "Both", "None"]} onChange={(v) => patch({ standardized_test_type: v ? v as ApplicationProfile["standardized_test_type"] : null })} />
+          <Input label="SAT score" value={profile.sat_score} onChange={(v) => patch({ sat_score: v })} placeholder="1520" />
+          <Input label="ACT score" value={profile.act_score} onChange={(v) => patch({ act_score: v })} placeholder="34" />
         </div>
 
         <div className="mt-6 border-t border-border pt-5">
           <p className="text-xs font-medium text-muted">Personal questions</p>
           <h3 className="text-sm font-medium text-ink">Optional questions about race and gender</h3>
           <p className="mt-1 text-xs leading-5 text-muted">
-            These saved values are reference only. Litos does not use them to answer a form. You decide on each application.
+            Litos uses your exact saved answer when an employer asks the same voluntary question. Leave one blank and Litos chooses decline instead of guessing.
           </p>
           <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
             <StringSelect label="Gender identity" value={profile.eeo_prefs?.gender} options={SELF_ID_OPTIONS.gender} onChange={(v) => patchRaceAndGender("gender", v)} />
@@ -1274,7 +1289,7 @@ export default function Settings() {
           </div>
         </div>
 
-        <p className="mt-5 text-xs leading-5 text-muted">Applicant-owned questions are never inferred, automatically declined, or reused from this page.</p>
+        <p className="mt-5 text-xs leading-5 text-muted">These saved voluntary answers are reused exactly as written, or declined when blank. Employer agreements, health disclosures, background questions, references, onsite commitments and relocation promises always come back to you on the specific application.</p>
       </Card>}
 
       {/* Plan + usage */}
@@ -1459,16 +1474,41 @@ function StringSelect({
       <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
       <select
         id={fieldId}
-        disabled
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
+        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
       >
         {options.map((option) => (
           <option key={option || "not-set"} value={option}>
             {option || "Not set"}
           </option>
         ))}
+      </select>
+    </div>
+  );
+}
+
+function EditableBooleanSelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean | null | undefined;
+  onChange: (value: boolean | null) => void;
+}) {
+  const fieldId = useId();
+  const current = value === true ? "yes" : value === false ? "no" : "";
+  return (
+    <div>
+      <label htmlFor={fieldId} className="block text-xs font-medium text-muted">{label}</label>
+      <select
+        id={fieldId}
+        value={current}
+        onChange={(event) => onChange(event.target.value === "" ? null : event.target.value === "yes")}
+        className="mt-1.5 w-full rounded-inner border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+      >
+        {TRI.map((option) => <option key={option.value || "not-set"} value={option.value}>{option.label}</option>)}
       </select>
     </div>
   );

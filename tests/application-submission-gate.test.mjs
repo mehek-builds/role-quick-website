@@ -340,7 +340,7 @@ test("a failed onboarding permission save keeps the consent controls available f
   const steps = await readFile(new URL("../components/start/steps.tsx", import.meta.url), "utf8");
   assert.match(start, /if \(error && !state\)/);
   assert.match(start, /case "done":[\s\S]*error &&[\s\S]*<DoneStep/);
-  assert.match(start, /await completeOnboarding\(settings\)/);
+  assert.match(start, /if \(state\.completed_at\)[\s\S]*?setAutomationSettings\(settings\)[\s\S]*?completeOnboarding\(\{/);
   assert.match(steps, /\.finally\(\(\) => setBusy\(false\)\)/);
 });
 

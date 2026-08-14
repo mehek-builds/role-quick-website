@@ -251,6 +251,8 @@ function currentGaps() {
 
 /** Every body POSTed to /onboarding/complete, so a test can assert what setup actually wrote. */
 const completeBodies = [];
+let applicationProfileGetStatus = 200;
+const applicationProfilePutBodies = [];
 
 function onboardingState() {
   return {
@@ -433,6 +435,10 @@ await context.route("**/*", async (route) => {
     return;
   }
   if (pathname === "/profile/application" && method === "GET") {
+    if (applicationProfileGetStatus !== 200) {
+      await jsonRoute(route, { error: "Application profile temporarily unavailable" }, applicationProfileGetStatus);
+      return;
+    }
     await jsonRoute(route, { phone: "+1 555 0100", address_city: "Fixture City", address_country: "Fixtureland" });
     return;
   }
@@ -445,6 +451,7 @@ await context.route("**/*", async (route) => {
      * actually carries one of the fields the gaps screen asks for, which is what "the gaps are
      * closed" means. */
     const body = route.request().postDataJSON() ?? {};
+    applicationProfilePutBodies.push(body);
     if (["gpa", "gpa_scale", "major"].some((field) => field in body)) progress.gaps = true;
     await jsonRoute(route, { ok: true });
     return;
@@ -656,6 +663,73 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
   } catch (reason) {
     await captureFailure("first-screen");
     throw reason;
+  }
+});
+
+test("the first step remains operable at 320px and its walkthrough discloses accessibly", async () => {
+  try {
+    await page.setViewportSize({ width: 320, height: 700 });
+    resetProgress();
+    savedTargeting = { ...EMPTY_TARGETING };
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await screen("Your resume");
+
+    const geometry = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    assert.ok(
+      geometry.scrollWidth <= geometry.clientWidth + 1,
+      `the 320px onboarding screen scrolls sideways: ${JSON.stringify(geometry)}`,
+    );
+
+    const later = page.getByRole("button", { name: "Finish later" });
+    await later.waitFor({ state: "visible", timeout: 20_000 });
+    const laterBox = await later.boundingBox();
+    assert.ok(laterBox, "Finish later has no rendered box at 320px");
+    assert.ok(laterBox.height >= 44, `Finish later is only ${laterBox.height}px tall at 320px`);
+    assert.ok(laterBox.x >= 0 && laterBox.x + laterBox.width <= 320, "Finish later is clipped at 320px");
+
+    const hide = page.getByRole("button", { name: "Skip" });
+    assert.equal(await hide.getAttribute("aria-expanded"), "true");
+    const controlledId = await hide.getAttribute("aria-controls");
+    assert.ok(controlledId, "the expanded walkthrough control names no region");
+    assert.equal(await page.locator(`#${controlledId}`).count(), 1, "the expanded walkthrough region is missing");
+
+    await hide.click();
+    const show = page.getByRole("button", { name: "How Litos works" });
+    await show.waitFor({ state: "visible" });
+    assert.equal(await show.getAttribute("aria-expanded"), "false");
+    assert.equal(await show.getAttribute("aria-controls"), controlledId);
+
+    await show.click();
+    const reopened = page.getByRole("button", { name: "Skip" });
+    await reopened.waitFor({ state: "visible" });
+    assert.equal(await reopened.getAttribute("aria-expanded"), "true");
+    assert.equal(await page.locator(`#${controlledId}`).count(), 1, "the walkthrough did not return");
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
+test("a failed application-profile read blocks approval instead of clearing saved preferences", async () => {
+  try {
+    resetProgress();
+    Object.assign(progress, { resume: true, impact: true, focus: true, sponsorship: true });
+    applicationProfileGetStatus = 503;
+    applicationProfilePutBodies.length = 0;
+
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await page.getByText("Application profile temporarily unavailable", { exact: false }).waitFor({ timeout: 20_000 });
+
+    assert.equal(await page.getByRole("button", { name: "Looks right" }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "Try loading again" }).count(), 1);
+    assert.equal(applicationProfilePutBodies.length, 0, "the failed read still wrote an application profile");
+  } finally {
+    applicationProfileGetStatus = 200;
+    resetProgress();
+    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+    await screen("Your resume");
   }
 });
 

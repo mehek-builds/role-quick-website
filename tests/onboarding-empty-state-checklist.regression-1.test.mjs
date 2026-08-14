@@ -45,6 +45,17 @@ test("completion says setup is complete before sending the user to their jobs", 
   // The rows are read off the account, not hardcoded. See the e2e case for the behavioural proof.
   assert.match(done, /RECEIPT\[step\.key\]/);
   assert.match(done, /"See my jobs"/);
+  assert.match(done, /<details/);
+  assert.match(done, /open=\{permissionsOpen\}/);
+  assert.match(done, /onToggle=\{\(event\) => setPermissionsOpen\(event\.currentTarget\.open\)\}/);
+  assert.match(done, />Optional permissions</);
+  assert.match(done, /Not required to see your jobs/);
+
+  const receipt = done.indexOf("<Receipt rows={rows} />");
+  const firstAction = done.indexOf('aria-labelledby="first-action-heading"');
+  const permissions = done.indexOf("<details");
+  assert.ok(receipt >= 0 && receipt < firstAction, "the receipt must lead into the first action");
+  assert.ok(firstAction < permissions, "optional permissions must not precede the first action");
 });
 
 test("every shared empty state names a contextual visual", async () => {

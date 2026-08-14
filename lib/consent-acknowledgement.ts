@@ -226,6 +226,9 @@ export function consentAcknowledgementCompletion(
   const out: Partial<Record<ConsentGrantField, boolean>> = {};
   for (const grant of CONSENT_GRANTS) {
     const value = chosen[grant.field];
+    // A partial caller is naming only the controls the applicant changed. Absence is not a
+    // revocation, even when the server reported the stored column.
+    if (value === undefined) continue;
     const stored = consentAcknowledgementVerdict(state, grant.field);
     if (value === true) {
       /* A TICK IS ONLY NEWS IF SHE DID NOT ALREADY HOLD IT, and this half is the second defect.

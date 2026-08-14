@@ -334,6 +334,19 @@ async function routeResume(context, {
     const key = `${request.method()} ${new URL(url).pathname}`;
     if (key === "GET /v1/meta") return route.fulfill({ json: { product: "litos" } });
     if (key === "GET /me") return route.fulfill({ json: account() });
+    if (key === "GET /onboarding/state") {
+      return route.fulfill({
+        json: {
+          step: "done",
+          flow_version: 2,
+          flow_completed: true,
+          requires_onboarding: false,
+          automatic_submission_enabled: false,
+          automatic_verification_enabled: false,
+          standing_consent_eligibility: null,
+        },
+      });
+    }
     if (key === "GET /profile") return route.fulfill({ status: 404, json: { error: "missing" } });
     if (key === "GET /profile/experience-bank") {
       bankReads += 1;

@@ -212,12 +212,15 @@ export function inferResumeTargeting(profile: ParsedProfile, currentYear = new D
  */
 
 /** The three targeting fields this screen touches. The other four are none of its business. */
-export type SavedFocus = Pick<Targeting, "categories" | "titles" | "role_types"> | null;
+export type SavedFocus = (
+  Pick<Targeting, "categories" | "titles" | "role_types">
+  & Partial<Pick<Targeting, "locations" | "remote_only" | "primary_period" | "backup_period">>
+) | null;
 
 /** The resume inference, narrowed to what seeding actually reads. */
 export type FocusGuess = { roles: string[]; roleType: RoleType };
 
-export type FocusSelection = { titles: string[]; roleTypes: RoleType[] };
+export type FocusSelection = { titles: string[]; roleTypes: RoleType[]; categories?: string[] };
 
 function stated<T>(value: T[] | null | undefined): T[] | null {
   return Array.isArray(value) && value.length > 0 ? value : null;
@@ -259,7 +262,7 @@ export function focusPatch(saved: SavedFocus, selection: FocusSelection): Pick<T
   const savedCategories = saved?.categories ?? [];
   const derived = categoriesForRoles(selection.titles, savedCategories.length > 0 ? [] : ["other"]);
   return {
-    categories: Array.from(new Set([...savedCategories, ...derived])),
+    categories: Array.from(new Set([...savedCategories, ...(selection.categories ?? []), ...derived])),
     titles: selection.titles,
     role_types: selection.roleTypes,
   };

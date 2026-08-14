@@ -206,13 +206,13 @@ export function Receipt({ rows }: { rows: ReceiptRow[] }) {
       {rows.map((r, i) => (
         <div
           key={`${r.k}-${i}`}
-          className={`grid grid-cols-[64px_120px_minmax(0,1fr)] items-baseline gap-3 px-4 py-1.5 font-mono text-xs ${
+          className={`grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 px-4 py-1.5 font-mono text-xs sm:grid-cols-[64px_120px_minmax(0,1fr)] ${
             r.done ? "mt-1 border-t border-border pt-2.5" : ""
           }`}
         >
           <span className="text-muted">{r.t ?? ""}</span>
           <span className="text-[11px] uppercase tracking-[0.06em] text-muted">{r.k}</span>
-          <span className={`truncate ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
+          <span className={`col-span-2 break-words sm:col-span-1 sm:truncate ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
         </div>
       ))}
     </div>
@@ -224,11 +224,11 @@ export function RefusalList() {
   const rows = [
     {
       what: "Work authorization",
-      why: "Location-specific. Your Berlin answer isn't your Toronto answer, so we ask every time.",
+      why: "We reuse only the exact country declaration you saved. A country with no declaration comes back to you.",
     },
     {
       what: "Visa sponsorship",
-      why: "Same reason. We never put an answer in this field for you.",
+      why: "We reuse only your saved now and future sponsorship answers for that country. We never infer one.",
     },
     /* This row used to read: 'Race, gender, disability. Yours. We select
        "prefer not to answer" and store nothing.' Under a heading that says

@@ -45,11 +45,16 @@ describe("the languages declaration in onboarding", () => {
     );
   });
 
-  test("a blank answer writes nothing, so a skip is not recorded as no languages", () => {
+  test("unchanged languages are omitted, while a deliberate clear writes an empty list", () => {
     assert.match(
       STEP,
+      /if \(languages !== initial\.languages\) \{[\s\S]*?profilePatch\.languages = declared/,
+      "the save must distinguish an untouched seed from an edited declaration"
+    );
+    assert.doesNotMatch(
+      STEP,
       /declared\.length > 0/,
-      "an empty list is a different and wrong answer to the next form that asks"
+      "an edited blank must be able to clear a stale saved declaration"
     );
   });
 
@@ -78,11 +83,21 @@ describe("the languages declaration in onboarding", () => {
     );
   });
 
-  test("the block is gated on the build finishing, not shown mid-animation", () => {
+  test("the block remains after the build finishes, even when the server gap is closed", () => {
     assert.match(
       STEP,
+      /\{finished && \([\s\S]*?Which languages are you fluent in\?/,
+      "the saved declaration must remain reviewable after the resume finishes building"
+    );
+    assert.doesNotMatch(
+      STEP,
       /finished && languageGap/,
-      "asking while the resume is still building puts a question above an unfinished document"
+      "closing the server gap must not hide the saved profile category"
+    );
+    assert.match(
+      STEP,
+      /profile\?\.languages \?\? languageSuggestion/,
+      "a saved declaration must take precedence over a resume-derived suggestion"
     );
   });
 });
@@ -91,7 +106,13 @@ describe("optional race and gender preferences in onboarding", () => {
   test("the base step asks and stores race and gender preferences", () => {
     assert.match(STEP, /Optional questions about race and gender/);
     assert.match(STEP, /RACE_AND_GENDER_QUESTION_FIELDS/);
-    assert.match(STEP, /profilePatch\.eeo_prefs = Object\.keys\(raceAndGenderPrefs\)\.length > 0 \? raceAndGenderPrefs : null/);
+    assert.match(STEP, /JSON\.stringify\(raceAndGenderPrefs\) !== JSON\.stringify\(initial\.raceAndGenderPrefs\)/);
+    assert.match(STEP, /const latest = demo \? profile : await getApplicationProfile\(\)/);
+    assert.match(STEP, /const merged = \{ \.\.\.\(latest\?\.eeo_prefs \?\? \{\}\) \}/);
+    assert.match(STEP, /if \(current === before\) continue/);
+    assert.match(STEP, /if \(current\) merged\[field\.key\] = current/);
+    assert.match(STEP, /else delete merged\[field\.key\]/);
+    assert.match(STEP, /profilePatch\.eeo_prefs = Object\.keys\(merged\)\.length > 0 \? merged : null/);
     assert.match(STEP, /key: "transgender_status"/);
     assert.match(STEP, /key: "sexual_orientation"/);
     assert.doesNotMatch(STEP, /hispanic_ethnicity/);
