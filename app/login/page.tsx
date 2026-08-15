@@ -493,23 +493,33 @@ export default function Login() {
                   setDeliveryNotice(null);
                 }}
                 placeholder="you@example.com"
+                /* Points at the guidance below, so a screen reader announces it WITH the field
+                   rather than leaving it as a paragraph a field-by-field pass skips. Undefined when
+                   the line is not rendered: a dangling reference to a missing id is announced as
+                   nothing by some readers and as the raw id by others. */
+                aria-describedby={flow === "signup" || claimMode ? "email-hint" : undefined}
                 className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
               {/* SAID AT THE MOMENT THEY CHOOSE IT, because this address is not only a login.
                   It is seeded as the resume email, so it is printed on the document an employer
-                  reads and is the address they reply to (backend routes/profile.ts, lib/resumeEmail
-                  .ts). Until now nothing on this page said so, and a student picking whichever
-                  address they happened to be signed into had no way to know they were also choosing
-                  what employers would see.
+                  reads (backend routes/profile.ts, lib/resumeEmail.ts). Until now nothing on this
+                  page said so, and a student picking whichever address they happened to be signed
+                  into had no way to know they were also choosing what employers would see.
+
+                  THE RESUME, AND ONLY THE RESUME. An earlier draft of this line said "your resume
+                  and applications", which is not true: lib/packetApplicantEmail.ts states the
+                  boundary outright, that Litos "never puts the personal resume address into an
+                  employer form and never prints the routing alias in the PDF". The form gets a
+                  routing alias. Claiming otherwise here would be a promise the product deliberately
+                  does not keep, on the screen where it is first made.
 
                   Signup and claim only. On the sign-in flows the choice was made long ago and this
                   would be noise on a screen whose whole job is one field and a button. Changing it
-                  afterwards is a real path rather than a promise, so the second sentence names it:
-                  Documents, under Edit parsed details. */}
+                  afterwards is a real path rather than a promise, so the last sentence names it. */}
               {(flow === "signup" || claimMode) && (
-                <p className="mt-2 text-xs leading-5 text-muted">
-                  Use the address you want employers to reply to. Litos prints it on your resume and
-                  applications. You can change it later in Documents.
+                <p id="email-hint" className="mt-2 text-xs leading-5 text-muted">
+                  Use the address you want employers to see. Litos prints it on the resume it builds
+                  for you. You can change it later in Documents.
                 </p>
               )}
               {(flow === "signin" || flow === "signup") && (
