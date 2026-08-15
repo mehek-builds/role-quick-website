@@ -131,6 +131,12 @@ export default function Login() {
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [guestEligible, setGuestEligible] = useState(false);
   const [claimMode, setClaimMode] = useState(false);
+  /* Whether the Google block renders, named once because two things depend on the answer: the block
+     itself, and the top margin of the Email label below it, which is only unnecessary when that
+     block's "or" divider is there to supply the spacing. Keeping the condition in one place is what
+     stops those two drifting, which is exactly how the label ended up flush against the paragraph
+     above it on the signup and claim screens. */
+  const showGoogle = Boolean(googleClientId) && !claimMode && flow === "signin";
   /* Its own flag: sharing `busy` made the submit button announce "Working..."
      for an action nobody pressed, in a second pending verb (finding 34). */
   const [guestBusy, setGuestBusy] = useState(false);
@@ -445,7 +451,7 @@ export default function Login() {
                       ? "We will email you a six-digit code."
                       : "Use your Litos password or continue with Google."}
             </p>
-            {googleClientId && !claimMode && flow === "signin" && (
+            {showGoogle && (
               <>
                 <div className="mt-6">
                   <GoogleSignInButton
@@ -463,8 +469,14 @@ export default function Login() {
               </>
             )}
             <form onSubmit={submitCredentials}>
+              {/* Keyed to whether the Google block ABOVE actually rendered, not to whether a client
+                  id exists. The two are different: that block is `googleClientId && !claimMode &&
+                  flow === "signin"`, so with a client id configured (which is every deployment)
+                  this label lost its top margin on the signup and claim screens, where no Google
+                  button and no "or" divider precede it, and collided with the paragraph above. The
+                  divider was supplying the spacing; without it there was none. */}
               <label
-                className={googleClientId ? "block text-xs font-medium text-muted" : "mt-6 block text-xs font-medium text-muted"}
+                className={`${showGoogle ? "" : "mt-6 "}block text-xs font-medium text-muted`}
                 htmlFor="email"
               >
                 Email
@@ -483,6 +495,23 @@ export default function Login() {
                 placeholder="you@example.com"
                 className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
+              {/* SAID AT THE MOMENT THEY CHOOSE IT, because this address is not only a login.
+                  It is seeded as the resume email, so it is printed on the document an employer
+                  reads and is the address they reply to (backend routes/profile.ts, lib/resumeEmail
+                  .ts). Until now nothing on this page said so, and a student picking whichever
+                  address they happened to be signed into had no way to know they were also choosing
+                  what employers would see.
+
+                  Signup and claim only. On the sign-in flows the choice was made long ago and this
+                  would be noise on a screen whose whole job is one field and a button. Changing it
+                  afterwards is a real path rather than a promise, so the second sentence names it:
+                  Documents, under Edit parsed details. */}
+              {(flow === "signup" || claimMode) && (
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  Use the address you want employers to reply to. Litos prints it on your resume and
+                  applications. You can change it later in Documents.
+                </p>
+              )}
               {(flow === "signin" || flow === "signup") && (
                 <PasswordField
                   id="password"
