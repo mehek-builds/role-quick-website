@@ -131,6 +131,12 @@ export default function Login() {
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [guestEligible, setGuestEligible] = useState(false);
   const [claimMode, setClaimMode] = useState(false);
+  /* Whether the Google block renders, named once because two things depend on the answer: the block
+     itself, and the top margin of the Email label below it, which is only unnecessary when that
+     block's "or" divider is there to supply the spacing. Keeping the condition in one place is what
+     stops those two drifting, which is exactly how the label ended up flush against the paragraph
+     above it on the signup and claim screens. */
+  const showGoogle = Boolean(googleClientId) && !claimMode && flow === "signin";
   /* Its own flag: sharing `busy` made the submit button announce "Working..."
      for an action nobody pressed, in a second pending verb (finding 34). */
   const [guestBusy, setGuestBusy] = useState(false);
@@ -445,7 +451,7 @@ export default function Login() {
                       ? "We will email you a six-digit code."
                       : "Use your Litos password or continue with Google."}
             </p>
-            {googleClientId && !claimMode && flow === "signin" && (
+            {showGoogle && (
               <>
                 <div className="mt-6">
                   <GoogleSignInButton
@@ -463,8 +469,14 @@ export default function Login() {
               </>
             )}
             <form onSubmit={submitCredentials}>
+              {/* Keyed to whether the Google block ABOVE actually rendered, not to whether a client
+                  id exists. The two are different: that block is `googleClientId && !claimMode &&
+                  flow === "signin"`, so with a client id configured (which is every deployment)
+                  this label lost its top margin on the signup and claim screens, where no Google
+                  button and no "or" divider precede it, and collided with the paragraph above. The
+                  divider was supplying the spacing; without it there was none. */}
               <label
-                className={googleClientId ? "block text-xs font-medium text-muted" : "mt-6 block text-xs font-medium text-muted"}
+                className={`${showGoogle ? "" : "mt-6 "}block text-xs font-medium text-muted`}
                 htmlFor="email"
               >
                 Email
@@ -481,8 +493,35 @@ export default function Login() {
                   setDeliveryNotice(null);
                 }}
                 placeholder="you@example.com"
+                /* Points at the guidance below, so a screen reader announces it WITH the field
+                   rather than leaving it as a paragraph a field-by-field pass skips. Undefined when
+                   the line is not rendered: a dangling reference to a missing id is announced as
+                   nothing by some readers and as the raw id by others. */
+                aria-describedby={flow === "signup" || claimMode ? "email-hint" : undefined}
                 className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
+              {/* SAID AT THE MOMENT THEY CHOOSE IT, because this address is not only a login.
+                  It is seeded as the resume email, so it is printed on the document an employer
+                  reads (backend routes/profile.ts, lib/resumeEmail.ts). Until now nothing on this
+                  page said so, and a student picking whichever address they happened to be signed
+                  into had no way to know they were also choosing what employers would see.
+
+                  THE RESUME, AND ONLY THE RESUME. An earlier draft of this line said "your resume
+                  and applications", which is not true: lib/packetApplicantEmail.ts states the
+                  boundary outright, that Litos "never puts the personal resume address into an
+                  employer form and never prints the routing alias in the PDF". The form gets a
+                  routing alias. Claiming otherwise here would be a promise the product deliberately
+                  does not keep, on the screen where it is first made.
+
+                  Signup and claim only. On the sign-in flows the choice was made long ago and this
+                  would be noise on a screen whose whole job is one field and a button. Changing it
+                  afterwards is a real path rather than a promise, so the last sentence names it. */}
+              {(flow === "signup" || claimMode) && (
+                <p id="email-hint" className="mt-2 text-xs leading-5 text-muted">
+                  Use the address you want employers to see. Litos prints it on the resume it builds
+                  for you. You can change it later in Documents.
+                </p>
+              )}
               {(flow === "signin" || flow === "signup") && (
                 <PasswordField
                   id="password"
