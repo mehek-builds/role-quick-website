@@ -58,5 +58,22 @@ test("contact fields validate on blur and clear field errors on edit", () => {
 test("signup explicitly introduces account creation and the next step", () => {
   const page = read("app/login/page.tsx");
   assert.match(page, /\? "Create your account"/);
-  assert.match(page, /Free to start, no card needed\. Choose a password, then verify your email/);
+  /* Updated when the Google button was added to this screen. The property is that signup names
+     what happens next, and it now names BOTH next steps rather than only the password one, which
+     described the single path a Google signup does not take. */
+  assert.match(page, /Free to start, no card needed\. Continue with Google, or choose a password and verify your email/);
+});
+
+test("the address note is stated once, above whichever ways in the screen offers", () => {
+  /* A Google signup never reaches the Email field, so the note has to sit above the button too,
+     and it must not then be said twice on one small card. The two renders are mutually exclusive
+     on `showGoogle`, which is what keeps a single #email-hint in the document and the
+     aria-describedby on the input pointing at exactly one node. */
+  const page = read("app/login/page.tsx");
+  assert.match(page, /const showGoogle = Boolean\(googleClientId\) && !claimMode && \(flow === "signin" \|\| flow === "signup"\)/);
+  assert.match(page, /const choosingAddress = flow === "signup" \|\| claimMode/);
+  assert.match(page, /\{choosingAddress && showGoogle && \(/);
+  assert.match(page, /\{choosingAddress && !showGoogle && \(/);
+  assert.match(page, /aria-describedby=\{choosingAddress \? "email-hint" : undefined\}/);
+  assert.equal(page.match(/id="email-hint"/g)?.length, 2, "one render per branch, and no third copy");
 });
