@@ -136,7 +136,44 @@ export default function Login() {
      block's "or" divider is there to supply the spacing. Keeping the condition in one place is what
      stops those two drifting, which is exactly how the label ended up flush against the paragraph
      above it on the signup and claim screens. */
-  const showGoogle = Boolean(googleClientId) && !claimMode && flow === "signin";
+  /* Signup as well as signin, so account creation with Google is not a path that skips the whole
+     screen. It was signin-only, which meant the button that CREATES most accounts lived on the one
+     flow whose copy is written for people who already have one, and a Google-first student never
+     saw the signup screen or anything it says. */
+  const showGoogle = Boolean(googleClientId) && !claimMode && (flow === "signin" || flow === "signup");
+  /* Whether this screen is someone CHOOSING an address rather than recalling one, which is the only
+     moment the note below is worth saying. Both flows that create an account, and no others. */
+  const choosingAddress = flow === "signup" || claimMode;
+
+  /* THE AGREEMENT, AND THE MOMENT IT IS FORMED.
+   *
+   * Until #286 nothing on this page mentioned the Terms, so nobody had agreed to anything: /terms
+   * existed and bound no one. Shown on account creation only; signing in again is not a new
+   * agreement, and repeating it there would be noise on the screen a returning user sees most often.
+   *
+   * A line rather than a tick box, deliberately. Four of the ten products audited do it this way and
+   * the two that use a required checkbox (Careerflow, LoopCV) have the highest-friction gates in the
+   * set. A clickwrap is formed by an affirmative act next to clear notice.
+   *
+   * LIFTED OUT OF THE FORM so it can sit ABOVE the Google button. This used to live below the
+   * Create account button and its comment said the act was "pressing Create account under this
+   * sentence". Adding Google to this screen created a SECOND way to form the agreement, rendered
+   * outside the form and above that sentence, which left the notice describing one of two acts and
+   * following the other. One notice, placed before every act it governs, is the only arrangement
+   * that stays true as controls are added. Rendered in exactly one of two positions, never both. */
+  const termsNotice = (
+    <p className="mt-3 text-center text-xs leading-5 text-muted">
+      By creating an account you agree to the{" "}
+      <a href="/terms" className="underline hover:text-muted">
+        Terms
+      </a>{" "}
+      and the{" "}
+      <a href="/privacy" className="underline hover:text-muted">
+        Privacy Policy
+      </a>
+      .
+    </p>
+  );
   /* Its own flag: sharing `busy` made the submit button announce "Working..."
      for an action nobody pressed, in a second pending verb (finding 34). */
   const [guestBusy, setGuestBusy] = useState(false);
@@ -444,13 +481,36 @@ export default function Login() {
               {claimMode
                 ? "Add an email to keep this work and use Litos on your other devices."
                 : flow === "signup"
-                  ? "Free to start, no card needed. Choose a password, then verify your email."
+                  /* Names Google now that the button is here. Left as "Choose a password, then
+                     verify your email" it described the one path a Google signup does not take,
+                     which is the sort of small untruth a first screen cannot afford. */
+                  ? "Free to start, no card needed. Continue with Google, or choose a password and verify your email."
                   : flow === "recovery"
                     ? "We will verify your email before you choose a new password."
                     : flow === "email-code"
                       ? "We will email you a six-digit code."
                       : "Use your Litos password or continue with Google."}
             </p>
+            {/* ABOVE BOTH WAYS IN, on the screens where an address is being chosen.
+                It used to sit under the Email field, which was the wrong place the moment Google
+                appeared here: a student who continues with Google never looks at that field, and
+                the account they pick in Google's own chooser is the one that lands on their resume.
+                Stated once, before either control, it governs both.
+
+                Once, and only once, is deliberate. Repeating it under the Email field as well would
+                say the same sentence twice on one small card, which is the say-once rule in
+                DESIGN.md. When there is no Google block (the guest claim), it falls through to the
+                Email field below, where it is still the first thing above the input. */}
+            {choosingAddress && showGoogle && (
+              <>
+                <p id="email-hint" className="mt-4 text-xs leading-5 text-muted">
+                  Use the address you want employers to see. Litos prints it on the resume it builds
+                  for you. You can change it later in Documents.
+                </p>
+                {/* Above BOTH creation controls, which is the whole point of moving it here. */}
+                {termsNotice}
+              </>
+            )}
             {showGoogle && (
               <>
                 <div className="mt-6">
@@ -497,7 +557,7 @@ export default function Login() {
                    rather than leaving it as a paragraph a field-by-field pass skips. Undefined when
                    the line is not rendered: a dangling reference to a missing id is announced as
                    nothing by some readers and as the raw id by others. */
-                aria-describedby={flow === "signup" || claimMode ? "email-hint" : undefined}
+                aria-describedby={choosingAddress ? "email-hint" : undefined}
                 className="mt-2 w-full rounded-inner border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
               />
               {/* SAID AT THE MOMENT THEY CHOOSE IT, because this address is not only a login.
@@ -515,8 +575,12 @@ export default function Login() {
 
                   Signup and claim only. On the sign-in flows the choice was made long ago and this
                   would be noise on a screen whose whole job is one field and a button. Changing it
-                  afterwards is a real path rather than a promise, so the last sentence names it. */}
-              {(flow === "signup" || claimMode) && (
+                  afterwards is a real path rather than a promise, so the last sentence names it.
+
+                  THE FALLBACK POSITION. When a Google button is on the screen this same line is
+                  rendered ABOVE it instead, because a student who continues with Google never
+                  reaches this field. `!showGoogle` is what keeps the card from saying it twice. */}
+              {choosingAddress && !showGoogle && (
                 <p id="email-hint" className="mt-2 text-xs leading-5 text-muted">
                   Use the address you want employers to see. Litos prints it on the resume it builds
                   for you. You can change it later in Documents.
@@ -543,33 +607,10 @@ export default function Login() {
                       ? "Create account"
                       : "Send verification code"}
               </Button>
-              {/* The agreement, and the moment it is formed.
-                  Until now nothing on this page mentioned the Terms, so nobody
-                  had agreed to anything: /terms existed and bound no one.
-
-                  Shown on account creation only. Signing in again is not a new
-                  agreement, and repeating it there would be noise on the screen
-                  a returning user sees most often.
-
-                  A line rather than a tick box, deliberately. Four of the ten
-                  products audited do it this way and the two that use a required
-                  checkbox (Careerflow, LoopCV) have the highest-friction gates in
-                  the set. A clickwrap is formed by an affirmative act next to
-                  clear notice, and pressing "Create account" under this sentence
-                  is that act. */}
-              {(flow === "signup" || claimMode) && (
-                <p className="mt-3 text-center text-xs leading-5 text-muted">
-                  By creating an account you agree to the{" "}
-                  <a href="/terms" className="underline hover:text-muted">
-                    Terms
-                  </a>{" "}
-                  and the{" "}
-                  <a href="/privacy" className="underline hover:text-muted">
-                    Privacy Policy
-                  </a>
-                  .
-                </p>
-              )}
+              {/* Below the button when this screen's ONLY creation act is that button. When a
+                  Google button is also here the notice is rendered above both instead, for the
+                  reason given where `termsNotice` is defined. */}
+              {choosingAddress && !showGoogle && termsNotice}
             </form>
             {!claimMode && (
               <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
