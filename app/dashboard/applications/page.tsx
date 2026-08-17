@@ -2970,6 +2970,47 @@ function Applications() {
         <EmptyState visual="applications" title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to fill the form or prepare a tailored packet." : "Add a job URL. Filling is unlimited, and tailoring is available with Litos+."}>
           <Button type="button" onClick={() => setShowNewApplication(true)}>Fill application</Button>
         </EmptyState>
+      ) : selectedId && (!selected || !spec || !review) ? (
+        /* A ROW WAS CLICKED AND THE PACKET WILL NOT OPEN, so say which piece is missing.
+         *
+         * This branch used to fall into the Board below, which is indistinguishable from having
+         * clicked nothing: the row highlights, no panel appears, and no error is logged. That cost a
+         * whole session on the owner account - the Tracker listed applications marked READY whose
+         * rows appeared inert, and the reason could not be told apart from a dead click handler.
+         *
+         * Three things must all be present for the review screen to mount, and each goes missing for
+         * a different reason worth telling apart:
+         *   selected - the packet id is set but no packet in `packets` carries it, so the row and the
+         *              loaded history disagree about the id.
+         *   spec     - /resume/history returned this row without a full spec. It caps full specs, so
+         *              an older row arrives as a stub and there is nothing to review.
+         *   review   - the packet has no _review, so it was never prepared and has no send flow.
+         *
+         * Deliberately keyed on `selectedId` rather than `selected`: the whole point is to catch the
+         * case where an id was chosen and the lookup failed, which is exactly when `selected` is null. */
+        <>
+          {/* No SectionBoundary here on purpose. Those five bands are pinned by
+            tests/section-boundary-placement.test.mjs and each one exists to contain a panel that maps
+            a backend collection. This panel maps nothing and renders static copy off three booleans,
+            so it has nothing to throw and adding a sixth band would only loosen that pin. */}
+          <Card>
+            <div className="p-6">
+              <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">This application will not open</p>
+              <p className="mt-2 text-small leading-6 text-ink">
+                Litos selected it but cannot show its review screen, so nothing has been sent. Nothing about the
+                application changed by clicking it.
+              </p>
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-small text-muted">
+                {!selected && <li>The saved list does not contain a packet with this id, so the row and the loaded history disagree.</li>}
+                {selected && !spec && <li>This row loaded without its full resume spec, which happens on older applications. Reload the page to fetch it.</li>}
+                {selected && spec && !review && <li>This application has no prepared packet, so there is no review or send step for it yet.</li>}
+              </ul>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => { selectedIdRef.current = null; setSelectedId(null); }}>Back to all applications</Button>
+              </div>
+            </div>
+          </Card>
+        </>
       ) : !selected || !spec || !review ? (
         /* A board, not a list. Reviewers of Huntr and Teal both describe the Kanban as the thing
            that replaced their spreadsheet, and what retains is that the data accumulates and stays
