@@ -4,7 +4,6 @@ import type { CanonicalApplication, GeneratedResume } from "../../../lib/api.ts"
 import {
   canonicalApplicationFromPacket,
   linkedLegacyPacketFromCanonicalTrackerPacket,
-  sendableLinkedPacketFromCanonicalEnvelope,
   mergeCanonicalApplicationHistory,
   upsertCanonicalApplicationHistory,
 } from "./canonical-tracker.ts";
@@ -209,56 +208,4 @@ test("a canonical row with no linked packet can never be sent, even when it says
     review_state: "ready_to_submit",
   })]);
   assert.equal(merged[0].spec._review?.portal_supported, false);
-});
-
-test("a READY envelope restores its linked packet so it can be reviewed and sent", () => {
-  const packet = legacy();
-  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
-    legacy_generated_resume_id: packet.id,
-    submission_state: "ready_to_submit",
-    review_state: "ready_to_submit",
-  })]);
-  const sendable = sendableLinkedPacketFromCanonicalEnvelope(merged[0]);
-  // The restored packet carries the LEGACY id, which is what the review/audit/submit routes take.
-  assert.equal(sendable?.id, packet.id);
-  assert.equal(canonicalApplicationFromPacket(sendable), null, "the envelope marker must be gone");
-});
-
-test("an envelope that is not ready keeps the attended path", () => {
-  /* THE ADVERSARY THAT CAN WIN. These are real production rows, not inventions: Mercari and Jump
-     Trading carry review_state=ready with submission_state=not_started, and a tracker-only Free fill
-     has no packet at all. Each one must return null, because each still has a genuine human step and
-     routing it to the submission endpoints would send an application the ledger never called ready. */
-  const packet = legacy();
-
-  // not ready on the canonical row
-  const notReady = mergeCanonicalApplicationHistory([packet], [canonical({
-    legacy_generated_resume_id: packet.id,
-    submission_state: "not_started",
-    review_state: "ready",
-  })]);
-  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(notReady[0]), null);
-
-  // ready, but no linked packet: a tracker-only row has nothing to send
-  const noPacket = mergeCanonicalApplicationHistory([], [canonical({
-    submission_state: "ready_to_submit",
-    review_state: "ready_to_submit",
-  })]);
-  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(noPacket[0]), null);
-
-  // an ordinary legacy packet is not an envelope, so this returns null and the caller uses it directly
-  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(packet), null);
-});
-
-test("a READY envelope on an unsupported portal is still refused", () => {
-  /* portal_supported is the SERVER's answer to whether Litos may press this family's Send. The client
-     must never decide a portal is autonomous on its own, so a false here outranks a ready lifecycle. */
-  const packet = legacy();
-  packet.spec._review = { ...packet.spec._review!, portal_supported: false };
-  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
-    legacy_generated_resume_id: packet.id,
-    submission_state: "ready_to_submit",
-    review_state: "ready_to_submit",
-  })]);
-  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
 });

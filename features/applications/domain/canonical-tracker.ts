@@ -1,5 +1,4 @@
 import type { CanonicalApplication, GeneratedResume } from "../../../lib/api.ts";
-import { reviewCanBeSent } from "./application-filter.ts";
 
 /** A canonical Tracker row may carry a linked generated packet. These markers are local
  * presentation state, never sent back to either API. The public id and lifecycle always belong to
@@ -30,38 +29,6 @@ export function linkedLegacyPacketFromCanonicalTrackerPacket(
   delete restored.canonical_application;
   delete restored.canonical_legacy_packet_id;
   return { ...(restored as GeneratedResume), id: legacyId };
-}
-
-/**
- * The linked legacy packet a READY canonical envelope may be reviewed and sent through, or null.
- *
- * `selectPacket` refuses to hand a canonical envelope to the review, audit or submission endpoints,
- * and that refusal is correct for the ordinary envelope: its own detail owns the portal handoff. But
- * the same comment names the exception - "an explicit packet action first restores the linked
- * packet's legacy route id" - and this is that restore, narrowed to one shape.
- *
- * Three conditions, all required, and each one is doing work:
- *
- *  1. A LINKED PACKET must exist and its id must match the canonical row's own
- *     `legacy_generated_resume_id`. `linkedLegacyPacketFromCanonicalTrackerPacket` enforces that, so a
- *     tracker-only row - one with no packet, added by hand or by a Free fill - can never reach here.
- *  2. `reviewCanBeSent` must accept the review. That is the SAME predicate the Ready filter uses, so
- *     what this permits is exactly what the Tracker labels READY, and the two cannot drift into the
- *     UI promising a send it will not perform.
- *  3. `portal_supported` must not be false, which `reviewCanBeSent` already requires. That is the
- *     server's own answer to whether Litos may press this family's Send, so the client never decides
- *     a portal is autonomous on its own.
- *
- * What stays refused: every envelope that is not ready, every tracker-only row, and every row on a
- * portal the server did not mark supported. Those keep the attended handoff, which is the whole point
- * of the guard this narrows.
- */
-export function sendableLinkedPacketFromCanonicalEnvelope(
-  packet: GeneratedResume | null | undefined,
-): GeneratedResume | null {
-  if (!canonicalApplicationFromPacket(packet)) return null;
-  if (!reviewCanBeSent(packet?.spec._review)) return null;
-  return linkedLegacyPacketFromCanonicalTrackerPacket(packet);
 }
 
 function normalizedPortal(raw: string | null | undefined): string | null {
