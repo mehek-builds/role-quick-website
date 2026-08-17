@@ -26,7 +26,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -1157,8 +1157,12 @@ function Applications() {
   /* Fail closed during query-only navigation. The router can publish application=B while the
      history request for B is still resolving and selectedId still names A. No actionable control
      for A may survive that mismatch, especially its final employer send. */
+  /* The lookup list carries a restored copy of every envelope's linked packet, so the legacy id
+     selectPacket selects resolves to the packet the restore built. See withRestoredLinkedPackets:
+     on canonical rows minted with their own id (Belvedere, Mercari) the envelope is filed under the
+     canonical id and the bare list refused the legacy id with "will not open". */
   const selected = selectedPacketForRequest(
-    packets,
+    withRestoredLinkedPackets(packets ?? []),
     selectedId,
     requestedApplicationId,
     requestedApplicationIntent,

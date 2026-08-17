@@ -139,6 +139,28 @@ function normalizedText(value: string | null | undefined): string {
 }
 
 /**
+ * The loaded history plus a selectable restored copy of every envelope's linked packet.
+ *
+ * `selectPacket` restores a linked packet and selects its LEGACY id, but `selectedPacketForRequest`
+ * fails closed by looking the id up in the loaded list, and the merge replaced the legacy row with
+ * its canonical envelope, filed under the CANONICAL id. On every pre-canonical row the two ids are
+ * the same UUID, which is why this never surfaced; a canonical row minted with its own id (Belvedere
+ * `d1af1c97` -> packet `6fda0404`, measured 2026-08-18) selected an id no list entry carries, and
+ * the screen refused with "the saved list does not contain a packet with this id".
+ *
+ * Appending the restored copies to the LOOKUP list keeps the fail-closed contract intact - the
+ * deep-link guards in selectedPacketForRequest still run, and an id that matches nothing still
+ * returns null - while an id the restore produced now resolves to exactly the packet the restore
+ * built. Display lists are untouched: callers that render rows keep using the raw history.
+ */
+export function withRestoredLinkedPackets(packets: readonly GeneratedResume[]): GeneratedResume[] {
+  const restored = packets
+    .map((packet) => linkedLegacyPacketFromCanonicalTrackerPacket(packet))
+    .filter((packet): packet is GeneratedResume => packet !== null);
+  return restored.length === 0 ? [...packets] : [...packets, ...restored];
+}
+
+/**
  * How strongly a packet identifies as this canonical application. 0 means no match.
  *
  * WHY A STRENGTH AND NOT A BOOLEAN, which is what this was.
