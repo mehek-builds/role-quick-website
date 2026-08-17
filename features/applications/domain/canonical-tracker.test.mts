@@ -224,20 +224,21 @@ test("a READY envelope restores its linked packet so it can be reviewed and sent
   assert.equal(canonicalApplicationFromPacket(sendable), null, "the envelope marker must be gone");
 });
 
-test("an envelope that is not ready keeps the attended path", () => {
-  /* THE ADVERSARY THAT CAN WIN. These are real production rows, not inventions: Mercari and Jump
-     Trading carry review_state=ready with submission_state=not_started, and a tracker-only Free fill
-     has no packet at all. Each one must return null, because each still has a genuine human step and
-     routing it to the submission endpoints would send an application the ledger never called ready. */
+test("an envelope with a linked packet reaches the managed screens even before READY", () => {
+  /* Product decision by the owner, 2026-08-18: the dashboard is self-sufficient and the extension
+     is separate software. Mercari and Belvedere are the measured shapes - review_state=ready with
+     submission_state=not_started, a linked portal-supported packet behind each - and before this
+     they routed to an attended detail whose only action demanded an extension build the store does
+     not ship. The envelope's collapsed needs_attention status now restores the linked packet, so
+     the managed answer/blocker and send screens carry the finish. */
   const packet = legacy();
 
-  // not ready on the canonical row
   const notReady = mergeCanonicalApplicationHistory([packet], [canonical({
     legacy_generated_resume_id: packet.id,
     submission_state: "not_started",
     review_state: "ready",
   })]);
-  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(notReady[0]), null);
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(notReady[0])?.id, packet.id);
 
   // ready, but no linked packet: a tracker-only row has nothing to send
   const noPacket = mergeCanonicalApplicationHistory([], [canonical({
@@ -248,6 +249,14 @@ test("an envelope that is not ready keeps the attended path", () => {
 
   // an ordinary legacy packet is not an envelope, so this returns null and the caller uses it directly
   assert.equal(sendableLinkedPacketFromCanonicalEnvelope(packet), null);
+
+  // terminal states have nothing to finish, so they keep the canonical detail
+  const submitted = mergeCanonicalApplicationHistory([legacy()], [canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "submitted",
+    review_state: "submitted",
+  })]);
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(submitted[0]), null);
 });
 
 test("a READY envelope on an unsupported portal is still refused", () => {
