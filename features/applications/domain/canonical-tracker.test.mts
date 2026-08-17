@@ -158,3 +158,54 @@ test("a canonical lifecycle refresh keeps the linked packet while changing its v
   assert.equal(updated[0].spec._review?.status, "submitted");
   assert.equal(linkedLegacyPacketFromCanonicalTrackerPacket(updated[0])?.id, packet.id);
 });
+
+test("a canonical row that declares itself ready reaches the Ready queue", () => {
+  /* Measured on production 2026-08-17. DRW and Databricks carry submission_state=ready_to_submit AND
+     review_state=ready_to_submit on the CANONICAL row, agreeing with their linked packet rather than
+     contradicting it, and the Tracker still reported "0 ready to send" over them with no reachable
+     send control. */
+  const packet = legacy();
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+    tracker_state: "saved",
+  })]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].spec._review?.status, "ready_to_submit");
+  // The linked packet is still reachable, so opening it still routes to the packet's own id.
+  assert.equal(linkedLegacyPacketFromCanonicalTrackerPacket(merged[0])?.id, packet.id);
+});
+
+test("readiness needs BOTH canonical fields, not review_state alone", () => {
+  /* The adversary that can win, and it is a real row rather than an invention: Mercari and Jump
+     Trading both carry review_state=ready while submission_state says not_started. Those two DO have
+     a next human step, and promoting them would send an application the ledger never called ready.
+     A fix keyed on review_state alone passes the test above and breaks these. */
+  const packet = legacy();
+  for (const overrides of [
+    { submission_state: "not_started" as const, review_state: "ready" as const },
+    { submission_state: "not_started" as const, review_state: "ready_to_submit" as const },
+    { submission_state: "ready_to_submit" as const, review_state: "filling" as const },
+  ]) {
+    const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+      legacy_generated_resume_id: packet.id,
+      ...overrides,
+    })]);
+    assert.equal(
+      merged[0].spec._review?.status,
+      "needs_attention",
+      `${overrides.submission_state}/${overrides.review_state} must stay with the human`,
+    );
+  }
+});
+
+test("a canonical row with no linked packet can never be sent, even when it says ready", () => {
+  // portal_supported is false on the packet-less branch, and reviewCanBeSent requires it not be
+  // false, so there is nothing to send and the promotion above cannot reach it.
+  const merged = mergeCanonicalApplicationHistory([], [canonical({
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  })]);
+  assert.equal(merged[0].spec._review?.portal_supported, false);
+});

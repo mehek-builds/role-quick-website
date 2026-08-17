@@ -70,13 +70,42 @@ function legacyMatchesCanonical(packet: GeneratedResume, application: CanonicalA
     && normalizedText(application.role) === normalizedText(packet.job_context.role);
 }
 
-function canonicalStatus(application: CanonicalApplication): "submitted" | "failed" | "needs_attention" {
+function canonicalStatus(application: CanonicalApplication): "submitted" | "failed" | "ready_to_submit" | "needs_attention" {
   if (application.submission_state === "submitted") return "submitted";
   if (
     application.submission_state === "failed"
     || application.review_state === "failed"
     || application.tracker_state === "failed"
   ) return "failed";
+  /* THE CANONICAL ROW'S OWN READY STATE IS NOT A STALE PACKET STATUS, and conflating the two hid
+   * every sendable application on the owner account.
+   *
+   * The rule below is right, and its wording is precise: a record must not enter the Ready queue
+   * "merely because a LINKED PACKET still carries an older status". That guards against trusting a
+   * packet the canonical ledger has since moved past. It says nothing about the canonical row
+   * declaring readiness itself, and until now this function could not express that difference,
+   * because it only ever read submission_state for "submitted" and "failed".
+   *
+   * Measured on production 2026-08-17, and the two shapes are cleanly separable:
+   *
+   *   DRW / Databricks   submission_state=ready_to_submit  review_state=ready_to_submit  -> READY
+   *   Mercari / Jump     submission_state=not_started      review_state=ready            -> needs you
+   *
+   * The first pair is inside the send workflow on the CANONICAL row's own evidence, agreeing with
+   * its packet rather than contradicting it. Collapsing it to needs_attention made the Tracker say
+   * "0 ready to send" over applications the backend would accept, with no way to reach a send
+   * control - the dashboard reporting a human step that nothing was actually waiting on.
+   *
+   * Both fields must agree before this returns ready. review_state alone is not enough: Mercari and
+   * Jump both carry review_state=ready while their submission_state says not_started, and those two
+   * genuinely do have a next human step.
+   *
+   * A canonical row with NO linked packet cannot reach the queue through this either - that branch
+   * in canonicalTrackerPacket sets portal_supported: false, and reviewCanBeSent requires it not be
+   * false. So this only ever promotes a row that owns a real prepared packet. */
+  if (application.submission_state === "ready_to_submit" && application.review_state === "ready_to_submit") {
+    return "ready_to_submit";
+  }
   // A canonical record outside the legacy send workflow always has a next human step: open the
   // employer form, review the fill, or press the final submit control. It must never enter the
   // Ready/autopilot packet queue merely because a linked packet still carries an older status.
