@@ -34,6 +34,14 @@ export type ReviewAnswerSaveQuestion = {
   answer: string;
   kind: "essay" | "required";
   required: boolean;
+  /* HER EXPLICIT CONFIRMATION OF THIS EXACT ANSWER, and the one field on this type the server reads
+   * as a claim rather than a value. An unedited Save is byte-identical to a save she never looked
+   * at, so the backend's merge rightly mints nothing for it - which left the YOUR TURN panel's
+   * CONFIRM ask re-rendering after every save, forever (the DV Trading loop, 2026-08-17). Set only
+   * on a question she confirmed through the CONFIRM control, never as a default: flagging a whole
+   * list would claim EEO self-identifications she never read, which is the exact laundering the
+   * server's gate exists to refuse. */
+  confirmed?: boolean;
 };
 
 export type ReviewAnswerSaveResponse<Review> = {
@@ -137,6 +145,9 @@ export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestio
         answer: question.answer,
         kind: question.kind,
         required: question.required,
+        /* Present only when true, because absent is the only other honest state: the route's schema
+           takes `confirmed: true` or nothing, and a posted `false` would be refused. */
+        ...(question.confirmed === true ? { confirmed: true as const } : {}),
       })),
     }),
   };

@@ -1,4 +1,4 @@
-import type { ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
+import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
 
 /**
  * What the row's control DOES, as opposed to what it says.
@@ -98,7 +98,13 @@ export function checklistRowControl(
     ? `Answer: ${item.label}`
     : item.actionKind === "review"
       ? `Review the drafted answer to: ${item.label}`
-      : `Confirm your answer to: ${item.label}`;
+      /* Two sentences for one intent, because the accessible name is a promise about what pressing
+         this does. On a settled row the answer is already confirmed and the only thing behind the
+         control is the editor that can change it, so "Confirm your answer" would be a screen reader
+         announcing work that is already done. Same rule as the attach control above. */
+      : item.settled
+        ? `Change your confirmed answer to: ${item.label}`
+        : `Confirm your answer to: ${item.label}`;
   return { element: "button", label: item.action, name, intent: item.actionKind, questionId: item.questionId };
 }
 
@@ -570,8 +576,36 @@ function documentAskItems(
   }).concat(carried);
 }
 
+/**
+ * SHE ALREADY CONFIRMED THIS ONE, says the server, and only the server may say it.
+ *
+ * The CONFIRM row below used to be decided by the label class alone, which cannot change: confirm,
+ * save, "Saved.", and the same amber ask again, indefinitely - driven four full cycles on the DV
+ * Trading packet on 2026-08-17. What a confirmation actually leaves behind is the backend's
+ * applicant-claim (`answer_source: 'applicant_review'`, minted by the save when the request carries
+ * her explicit `confirmed` flag), so that claim is what this reads.
+ *
+ * THE ROUND CHECK MATCHES THE SERVER'S OWN. A claim is only checkable beside the review round it
+ * was minted against; the backend's refreshKnownQuestionAnswers discards a mismatched one, and a
+ * looser client test would show "confirmed" for a claim every server reader is about to throw away.
+ * A review that carries no round cannot have minted any claim, so a claim without a round to match
+ * reads as unconfirmed rather than trusted.
+ */
+function applicantConfirmedAnswer(
+  question: Pick<ApplicationQuestion, "answer" | "answer_source" | "answer_reviewed_at">,
+  questionsReviewedAt: string | undefined,
+): boolean {
+  return Boolean(
+    (question.answer ?? "").trim()
+    && question.answer_source === "applicant_review"
+    && typeof question.answer_reviewed_at === "string"
+    && questionsReviewedAt
+    && question.answer_reviewed_at === questionsReviewedAt,
+  );
+}
+
 export function humanInputItems(
-  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "filled_fields" | "questions" | "required_documents" | "transcript_supported" | "stall" | "status">,
+  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "filled_fields" | "questions" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
      review: the first two live on the packet's job_context and the third on the submission envelope,
      so the caller supplies them. Optional, and every default is the honest one: with no company the
@@ -636,14 +670,28 @@ export function humanInputItems(
       continue;
     }
     if (review.status !== "submitted" && answer && isHumanOnlyChecklistLabel(question.question)) {
-      addUnique(items, {
-        id: `confirm-${question.id}`,
-        label: displayQuestionLabel(question.question),
-        detail: "Needs your confirmation",
-        action: "Confirm",
-        actionKind: "confirm",
-        questionId: question.id,
-      });
+      /* Confirmed once is confirmed, and the row has to say so or the ask never ends. The settled
+         shape keeps the control - she can still change the answer - while taking the row out of the
+         amber panel and out of the "N to check" count. See applicantConfirmedAnswer. */
+      const confirmed = applicantConfirmedAnswer(question, review.questions_reviewed_at);
+      addUnique(items, confirmed
+        ? {
+          id: `confirm-${question.id}`,
+          label: displayQuestionLabel(question.question),
+          detail: "Confirmed by you",
+          action: "Change",
+          actionKind: "confirm",
+          questionId: question.id,
+          settled: true,
+        }
+        : {
+          id: `confirm-${question.id}`,
+          label: displayQuestionLabel(question.question),
+          detail: "Needs your confirmation",
+          action: "Confirm",
+          actionKind: "confirm",
+          questionId: question.id,
+        });
       continue;
     }
     /* An answer Litos holds that the run says never reached the box. Neither of the branches above

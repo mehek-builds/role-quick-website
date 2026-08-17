@@ -213,6 +213,41 @@ describe("saving answers from the Review-answers screen", () => {
     const body = JSON.parse(server.sent[0].init.body) as { questions: Record<string, unknown>[] };
     assert.deepEqual(Object.keys(body.questions[0]).sort(), ["answer", "id", "kind", "question", "required"]);
   });
+
+  /* THE ONE EXTRA FIELD A CLIENT MAY SEND, AND ONLY WHEN IT IS TRUE. An unedited confirmation posts
+     the exact bytes the screen was shown, which the server rightly reads as proof of nothing - so
+     the CONFIRM ask on the DV Trading packet re-rendered after every save, forever. The flag is what
+     makes that save distinguishable, and it must ride only on the question she confirmed: a flag on
+     the whole list would claim answers she never read. */
+  test("a confirmed question carries its flag, and only that question", async () => {
+    const server = accepts();
+    const confirmedAndNot: ReviewAnswerSaveQuestion[] = [
+      { ...answered[0], confirmed: true },
+      { id: "gender", question: "Gender", answer: "Female", kind: "required", required: false },
+    ];
+
+    await saveReviewAnswers({ applicationId: APPLICATION_ID, questions: confirmedAndNot, send: server.send });
+
+    const body = JSON.parse(server.sent[0].init.body) as { questions: Record<string, unknown>[] };
+    assert.equal(body.questions[0].confirmed, true, "her confirmation reaches the route");
+    assert.equal("confirmed" in body.questions[1], false,
+      "and the unflagged question posts exactly what it always posted");
+  });
+
+  /* `confirmed: false` never leaves the screen. The route's schema takes true or nothing, and a
+     posted false would read as "she looked and refused", which no control says. */
+  test("a false confirmed flag is not sent at all", async () => {
+    const server = accepts();
+
+    await saveReviewAnswers({
+      applicationId: APPLICATION_ID,
+      questions: [{ ...answered[0], confirmed: false }],
+      send: server.send,
+    });
+
+    const body = JSON.parse(server.sent[0].init.body) as { questions: Record<string, unknown>[] };
+    assert.deepEqual(Object.keys(body.questions[0]).sort(), ["answer", "id", "kind", "question", "required"]);
+  });
 });
 
 /* THE SAME ANSWERS, PERSISTED FROM THE OTHER SIDE OF THE SCREEN.

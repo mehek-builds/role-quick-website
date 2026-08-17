@@ -77,7 +77,7 @@ test("OPEN PAGE is a real link and the question actions are real buttons, each w
   assert.notEqual(buttonStart, -1, "the answer, review and confirm branches have to render a button");
   const button = row.slice(buttonStart, row.indexOf("</button>", buttonStart));
   assert.match(button, /type="button"/);
-  assert.match(button, /onClick=\{\(\) => onOpenQuestion\(control\.questionId\)\}/, "a button with no onClick is the same defect wearing a different tag");
+  assert.match(button, /onClick=\{\(\) => onOpenQuestion\(control\.questionId, control\.intent\)\}/, "a button with no onClick is the same defect wearing a different tag");
   assert.match(button, /aria-label=\{control\.name\}/, "read_page found these as bare buttons with no accessible name");
 });
 
@@ -88,7 +88,7 @@ test("the panel hands the row everything a control needs, and the page hands the
   assert.match(list, /onAddDocument=\{onAddDocument\}/);
 
   assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} \/>/);
-  assert.match(page, /onOpenQuestion=\{\(questionId\) => reviewPortalQuestions\(questionId\)\}/);
+  assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
 });
 
@@ -251,7 +251,7 @@ test("the read-only packet viewer drops settled rows rather than listing them as
  * features/applications/domain/review-answer-save.ts, whose test holds the behaviour: one request,
  * carrying the answers, never the submission route, and no success banner on a refusal. */
 test("pressing a row opens the answer editor on that question, and saving there writes", () => {
-  assert.match(page, /function reviewPortalQuestions\(focusQuestionId\?: string\)/);
+  assert.match(page, /function reviewPortalQuestions\(focusQuestionId\?: string, intent\?: SubmissionChecklistAction\)/);
   assert.match(page, /setFocusQuestion\(/);
   assert.match(page, /moveToScreen\("questions"\)/);
 

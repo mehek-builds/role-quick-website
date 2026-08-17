@@ -77,7 +77,7 @@ test("each question says why it is hers, and a remembered answer says so on its 
 });
 
 test("the Apply summary line does not leak onto the other routes into the editor", () => {
-  const review = functionBody(PAGE, "function reviewPortalQuestions(focusQuestionId?: string)");
+  const review = functionBody(PAGE, "function reviewPortalQuestions(focusQuestionId?: string, intent?: SubmissionChecklistAction)");
   assert.match(review, /setPrescriptNote\(""\)/);
   const screen = functionBody(PAGE, "function QuestionsScreen(");
   assert.match(screen, /\{!reviewDiscovered && prescriptNote && \(/);
