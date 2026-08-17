@@ -172,9 +172,13 @@ describe("page-level facts stay in the page banner", () => {
   test("the autopilot's unattended send is not a composer refusal", () => {
     // Nobody pressed a composer button. Routing this into the composer would answer a question the
     // composer did not ask, in a panel that is usually closed when this fires.
+    //
+    // This used to pin `setError(reason instanceof Error ? reason.message : ...)`. The reason.message
+    // half printed the send gate's raw token ("packet_stale") in the banner, so the failure now
+    // routes through userFacingError; the placement rule this test is about is unchanged.
     assert.match(
       sendWithoutAsking,
-      /setError\(reason instanceof Error \? reason\.message : "Could not send that application on its own\. It is still here for you\."\);/,
+      /: userFacingError\(reason, "Could not send that application on its own\. It is still here for you\."\)\);/,
     );
     assert.doesNotMatch(sendWithoutAsking, /refuseInComposer/);
   });
