@@ -107,23 +107,51 @@ function normalizedText(value: string | null | undefined): string {
   return (value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
-function legacyMatchesCanonical(packet: GeneratedResume, application: CanonicalApplication): boolean {
-  if (packet.id === application.id) return true;
-  if (application.legacy_generated_resume_id === packet.id) return true;
+/**
+ * How strongly a packet identifies as this canonical application. 0 means no match.
+ *
+ * WHY A STRENGTH AND NOT A BOOLEAN, which is what this was.
+ *
+ * The rules were always ordered strongest-first, but the CALLER took the first packet that returned
+ * true in `created_at desc` order. So a weak portal-URL match on a NEWER packet beat an explicit
+ * `legacy_generated_resume_id` link on an older one, and the canonical row bound to the wrong packet.
+ *
+ * That is not hypothetical. Measured on the owner account 2026-08-17: two Jane Street packets exist
+ * for one posting (`cf2b1055` created 08-16, `496cff97` created 08-14), and 496cff97 is the one that
+ * actually submitted and carried the employer's security code. Both normalize to the same portal URL,
+ * so the newer one matched first and the Tracker showed its state while the submitted packet's state
+ * was invisible. 41 rows on this account carry the DUPLICATE badge, so this is a general hazard
+ * wherever a posting has been prepared twice.
+ *
+ * Returning a rank lets the caller claim every strong match before any weak one is considered, which
+ * is what "strongest identity wins" has to mean when the candidates are ordered by date.
+ */
+function canonicalMatchStrength(packet: GeneratedResume, application: CanonicalApplication): number {
+  // The row IS the packet, or names it outright. Nothing can outrank an explicit link.
+  if (packet.id === application.id) return 3;
+  if (application.legacy_generated_resume_id === packet.id) return 3;
 
   const applicationJobId = application.job_id?.trim();
   const packetJobId = packet.job_context.job_id?.trim();
-  if (applicationJobId && packetJobId && applicationJobId === packetJobId) return true;
+  if (applicationJobId && packetJobId && applicationJobId === packetJobId) return 2;
 
   const applicationPortal = normalizedPortal(application.portal_url);
   const packetPortal = normalizedPortal(packet.spec._review?.portal_url);
-  if (applicationPortal && packetPortal) return applicationPortal === packetPortal;
+  // A shared posting URL. True of every duplicate of the same job, which is exactly why it must not
+  // outrank an explicit link.
+  if (applicationPortal && packetPortal) return applicationPortal === packetPortal ? 1 : 0;
 
   // Company and role are a last resort only when neither side has a stronger identity. Using this
   // fallback while either row has a portal would collapse two real requisitions with the same title.
-  if (applicationJobId || packetJobId || applicationPortal || packetPortal) return false;
+  if (applicationJobId || packetJobId || applicationPortal || packetPortal) return 0;
   return normalizedText(application.company) === normalizedText(packet.job_context.company)
-    && normalizedText(application.role) === normalizedText(packet.job_context.role);
+    && normalizedText(application.role) === normalizedText(packet.job_context.role)
+    ? 1
+    : 0;
+}
+
+function legacyMatchesCanonical(packet: GeneratedResume, application: CanonicalApplication): boolean {
+  return canonicalMatchStrength(packet, application) > 0;
 }
 
 function canonicalStatus(application: CanonicalApplication): "submitted" | "failed" | "ready_to_submit" | "needs_attention" {
@@ -245,8 +273,26 @@ export function mergeCanonicalApplicationHistory(
   for (const application of canonical) {
     if (!application?.id || seenCanonicalIds.has(application.id)) continue;
     seenCanonicalIds.add(application.id);
-    const legacyIndex = legacy.findIndex((packet, index) =>
-      !claimedLegacyIndexes.has(index) && legacyMatchesCanonical(packet, application));
+    /* The STRONGEST identity wins, not the first one encountered.
+     *
+     * findIndex took whichever unclaimed packet matched first, and `legacy` arrives newest-first, so
+     * a shared posting URL on a newer duplicate beat an explicit legacy_generated_resume_id link on
+     * an older packet. Measured: two Jane Street packets for one posting, and the canonical row bound
+     * to the newer one while the packet that had actually submitted showed nothing.
+     *
+     * Ties keep the old behaviour - earliest index, so newest packet - because among equally weak
+     * matches there is no better answer than the most recent, and changing that would move rows
+     * nobody has a reason to move. */
+    let legacyIndex = -1;
+    let bestStrength = 0;
+    legacy.forEach((packet, index) => {
+      if (claimedLegacyIndexes.has(index)) return;
+      const strength = canonicalMatchStrength(packet, application);
+      if (strength > bestStrength) {
+        bestStrength = strength;
+        legacyIndex = index;
+      }
+    });
     if (legacyIndex >= 0) {
       claimedLegacyIndexes.add(legacyIndex);
       merged[legacyIndex] = canonicalTrackerPacket(application, legacy[legacyIndex]);
