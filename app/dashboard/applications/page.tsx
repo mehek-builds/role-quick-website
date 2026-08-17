@@ -1248,13 +1248,31 @@ function Applications() {
      what it is doing while it is on, and gives the student the seconds in which to stop it. */
   const autopilot = useAutopilot(qaMode === false);
 
+  /* Applications the automatic queue must not pick again this session.
+     An id lands here when sendWithoutAsking was REFUSED for a reason that will not change on its
+     own: a deterministic 4xx from submit-request (a stale packet audit needs the student back in
+     Review and fill; no number of retries re-acknowledges a packet), or the local education-drift
+     check. Without this hold the refused packet stayed in the ranked pool, the countdown picked it
+     straight back up, and the card cycled the same two applications against the same 409 all day.
+     Measured live 2026-08-18: Jump Trading, then Akuna, "packet_stale", 0 applied today.
+     Session-scoped on purpose: every way out of a hold (Review and fill, a profile fix) changes
+     the packet server-side, and the next page load starts from that corrected state. Transient
+     failures (network, 5xx, the profile still loading) are NOT held, so those retry. */
+  const [heldFromQueue, setHeldFromQueue] = useState<ReadonlySet<string>>(new Set());
+  const holdFromQueue = useCallback((id: string) => {
+    setHeldFromQueue((current) => (current.has(id) ? current : new Set(current).add(id)));
+  }, []);
+
   const nextPacket = useMemo(
     () => qaMode
       ? reviewablePackets
           .filter((packet) => reviewCanBeSent(packet.spec._review))
           .sort((a, b) => packetTimestamp(b).localeCompare(packetTimestamp(a)))[0] ?? null
-      : nextPreferredReadyPacket(reviewablePackets, currentMatches ?? []),
-    [currentMatches, qaMode, reviewablePackets],
+      : nextPreferredReadyPacket(
+          reviewablePackets.filter((packet) => !heldFromQueue.has(packet.id)),
+          currentMatches ?? [],
+        ),
+    [currentMatches, heldFromQueue, qaMode, reviewablePackets],
   );
 
   /* The BASE resume, once, from the same source use-job-match-scores.ts reads. The next-best-match
@@ -1345,6 +1363,9 @@ function Applications() {
          Refusing keeps the packet; it just has to be opened. */
       const drift = educationDriftMessage(educationDrift(packet.spec, educationProfile));
       if (drift) {
+        // Deterministic: the same drift refuses the same packet every time, so re-queueing it
+        // is the infinite cycle the hold exists for. The fix is in Account, not in a retry.
+        holdFromQueue(id);
         setError(`We did not send this one on its own. ${drift}`);
         return;
       }
@@ -1361,10 +1382,28 @@ function Applications() {
            composer button: this is the countdown on NextMatchCard reaching zero, or that card's own
            Send. Routing it into the composer would put an answer about the autopilot next to a
            button that did not ask, in a panel that is usually closed when this fires. */
-        setError(reason instanceof Error ? reason.message : "Could not send that application on its own. It is still here for you.");
+        const refusal = reason instanceof ApiError && reason.status >= 400 && reason.status < 500;
+        /* A 4xx is the server saying "this request, as it stands, will never be accepted": a stale
+           packet audit, a spent acknowledgement, a blank required answer. Retrying it unchanged is
+           how the queue cycled the same two applications forever, so a refused packet leaves the
+           automatic queue for the session and the countdown moves on to one that can send. A
+           network error or 5xx stays retryable. */
+        if (refusal) holdFromQueue(id);
+        const code = refusal && reason.data && typeof reason.data === "object"
+          ? (reason.data as { code?: string }).code
+          : undefined;
+        const label = [packet.job_context.company, packet.job_context.role].filter(Boolean).join(" · ")
+          || "This application";
+        /* The convention every other surface on this page follows: never print a server token.
+           The old path printed reason.message raw, and for a stale audit that message was the
+           literal string "packet_stale" in a red banner. Name the packet, say what happened, and
+           say the one action that clears it. */
+        setError(code === "PACKET_AUDIT_STALE"
+          ? `Not sent: ${label} changed since you approved it, so Litos held it and moved on. Open it and run Review and fill to approve the current version.`
+          : userFacingError(reason, "Could not send that application on its own. It is still here for you."));
       }
     },
-    [captureCompletedSubmission, educationProfile, educationProfileStatus, packets, qaMode],
+    [captureCompletedSubmission, educationProfile, educationProfileStatus, holdFromQueue, packets, qaMode],
   );
   // The review surface is meant to be read without scrolling, so while it is open the page chrome
   // above it shrinks to what is still useful: the title stays for orientation, the tagline and the
