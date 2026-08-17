@@ -98,7 +98,13 @@ export function checklistRowControl(
     ? `Answer: ${item.label}`
     : item.actionKind === "review"
       ? `Review the drafted answer to: ${item.label}`
-      : `Confirm your answer to: ${item.label}`;
+      /* Two sentences for one intent, because the accessible name is a promise about what pressing
+         this does. On a settled row the answer is already confirmed and the only thing behind the
+         control is the editor that can change it, so "Confirm your answer" would be a screen reader
+         announcing work that is already done. Same rule as the attach control above. */
+      : item.settled
+        ? `Change your confirmed answer to: ${item.label}`
+        : `Confirm your answer to: ${item.label}`;
   return { element: "button", label: item.action, name, intent: item.actionKind, questionId: item.questionId };
 }
 

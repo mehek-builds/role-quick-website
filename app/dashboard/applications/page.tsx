@@ -326,12 +326,16 @@ function Applications() {
      changes on the second press and the second click looks dead, which is the defect this whole
      change exists to remove. */
   const [focusQuestion, setFocusQuestion] = useState<{ id: string; token: number } | null>(null);
-  /* The questions she pressed CONFIRM on, per application, until a save spends them. A ref rather
-     than state because nothing renders from it - it exists so saveReviewedAnswers can flag exactly
-     these questions on the request, which is the only way an unedited confirmation reaches the row
-     (see ReviewAnswerSaveQuestion.confirmed). Keyed by application id so a switch mid-flow cannot
-     carry a confirmation across packets. */
-  const confirmIntentsRef = useRef<{ applicationId: string; questionIds: Set<string> } | null>(null);
+  /* The questions she pressed CONFIRM on, per application, until a save spends them or Back
+     abandons them. A ref rather than state because nothing renders from it - it exists so
+     saveReviewedAnswers can flag exactly these questions on the request, which is the only way an
+     unedited confirmation reaches the row (see ReviewAnswerSaveQuestion.confirmed).
+
+     A MAP AND NOT ONE SLOT, because a slot made packet B's confirm erase packet A's. Confirm on A,
+     switch, confirm on B, come back and save A: the slot held B, A posted no flag, and the CONFIRM
+     ask re-rendered on A - the loop this whole change removes, reintroduced for anyone juggling two
+     packets. Each application's presses live and die under its own key. */
+  const confirmIntentsRef = useRef<Map<string, Set<string>>>(new Map());
   /* The one line at the top of the Apply questions screen, and the marker that the pre-script is
      what put us there. Empty on every other route into the answers editor, which keeps that screen
      exactly as it was for "Check the answers" and for a stalled run.
@@ -2460,12 +2464,14 @@ function Applications() {
        follows posts back the same bytes whether she confirmed one question or none, so the request
        has to carry which questions she explicitly confirmed - see the `confirmed` flag on
        ReviewAnswerSaveQuestion, and the DV Trading loop it closes. Recorded per application so a
-       press on one packet can never claim an answer on another, and spent by saveReviewedAnswers. */
-    if (intent === "confirm" && focusQuestionId) {
-      const current = confirmIntentsRef.current;
-      confirmIntentsRef.current = current?.applicationId === selected.id
-        ? { applicationId: selected.id, questionIds: new Set(current.questionIds).add(focusQuestionId) }
-        : { applicationId: selected.id, questionIds: new Set([focusQuestionId]) };
+       press on one packet can never claim an answer on another; spent by saveReviewedAnswers on a
+       landed save, dropped by Back on an abandoned one. Only for a question the editor is actually
+       about to show - a press whose question is not on the merged list opens nothing she can read,
+       so it must not linger as an intent either. */
+    if (intent === "confirm" && focusQuestionId && merged.some((question) => question.id === focusQuestionId)) {
+      const ids = confirmIntentsRef.current.get(selected.id) ?? new Set<string>();
+      ids.add(focusQuestionId);
+      confirmIntentsRef.current.set(selected.id, ids);
     }
     setFocusQuestion(
       focusQuestionId && merged.some((question) => question.id === focusQuestionId)
@@ -2494,9 +2500,7 @@ function Applications() {
       /* The CONFIRM presses recorded for THIS application, flagged onto exactly those questions and
          no others. A question she confirmed and then emptied is not flagged: a confirmation of a
          blank claims nothing, and the server would mint nothing for it anyway. */
-      const confirmedIds = confirmIntentsRef.current?.applicationId === applicationId
-        ? confirmIntentsRef.current.questionIds
-        : null;
+      const confirmedIds = confirmIntentsRef.current.get(applicationId) ?? null;
       const result = await saveReviewAnswers<SubmissionResponse["review"]>({
         applicationId,
         questions: confirmedIds
@@ -2509,6 +2513,12 @@ function Applications() {
            key is the only thing that survives the transport to distinguish it from a 200. */
         send: (path, init) => api<ReviewAnswerSaveResponse<SubmissionResponse["review"]>>(path, init),
       });
+      /* Spent BEFORE the switch guard below, because by this point the server has already accepted
+         the write and minted the claim - tapping another packet during the round-trip must not leave
+         a spent intent behind to silently re-assert a confirmation on the NEXT save of answers she
+         may have since edited. A refused or raced save keeps the intents, exactly as it keeps her
+         typing: nothing was minted, so nothing was spent. */
+      if (result.saved) confirmIntentsRef.current.delete(applicationId);
       // The switcher renders above this screen, so tapping another row mid-save is a single tap.
       // Same guard, same reason, as approveFinalSubmission.
       if (selectedIdRef.current !== applicationId) return;
@@ -2516,10 +2526,6 @@ function Applications() {
         setError(result.message);
         return;
       }
-      /* Spent. The claim now lives on the row, where every reader checks it; keeping the local
-         intent would silently re-assert a confirmation on the NEXT save of answers she may have
-         since edited. A refused or raced save keeps the intents, exactly as it keeps her typing. */
-      if (confirmIntentsRef.current?.applicationId === applicationId) confirmIntentsRef.current = null;
       const saved: SubmissionResponse = { ...submission, application_id: applicationId, review: result.review };
       submissionRef.current = saved;
       setSubmission(saved);
@@ -3092,7 +3098,15 @@ function Applications() {
         <QuestionsScreen
           questions={questions}
           onChange={setQuestions}
-          onBack={() => moveToScreen(selectedSubmission?.review.status === "needs_attention" ? "portal" : "review")}
+          onBack={() => {
+            /* Back abandons the confirm presses that led here. Left standing, a CONFIRM pressed and
+               then walked away from would ride the next save she makes from this packet, hours
+               later, over answers a run may have rewritten in between - claiming a confirmation of
+               bytes the press never saw. Pressing CONFIRM again is one tap; un-claiming a minted
+               claim is not possible at all, so the intent errs toward dropping. */
+            if (selected) confirmIntentsRef.current.delete(selected.id);
+            moveToScreen(selectedSubmission?.review.status === "needs_attention" ? "portal" : "review");
+          }}
           /* TWO SCREENS, TWO SAVES, and collapsing them is the defect. From Apply the answers ride
              into the packet on the submit-request she is about to press, so keeping them locally IS
              keeping them. From a stopped run there is no such request coming, so the same handler
@@ -4850,7 +4864,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
           </a>
         )}
         {control?.element === "button" && onOpenQuestion && (
-          <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId, control.intent)} className={CHECKLIST_ACTION_CLASS}>
+          <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId, control.intent)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
             {control.label}
           </button>
         )}
