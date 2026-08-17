@@ -57,7 +57,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -326,6 +326,12 @@ function Applications() {
      changes on the second press and the second click looks dead, which is the defect this whole
      change exists to remove. */
   const [focusQuestion, setFocusQuestion] = useState<{ id: string; token: number } | null>(null);
+  /* The questions she pressed CONFIRM on, per application, until a save spends them. A ref rather
+     than state because nothing renders from it - it exists so saveReviewedAnswers can flag exactly
+     these questions on the request, which is the only way an unedited confirmation reaches the row
+     (see ReviewAnswerSaveQuestion.confirmed). Keyed by application id so a switch mid-flow cannot
+     carry a confirmation across packets. */
+  const confirmIntentsRef = useRef<{ applicationId: string; questionIds: Set<string> } | null>(null);
   /* The one line at the top of the Apply questions screen, and the marker that the pre-script is
      what put us there. Empty on every other route into the answers editor, which keeps that screen
      exactly as it was for "Check the answers" and for a stalled run.
@@ -2443,13 +2449,24 @@ function Applications() {
      lands on it rather than at the top of a list of twelve. Save from here writes through
      PUT /applications/:id/review/answers, which persists the answers and leaves the packet's status
      alone. See saveReviewedAnswers. */
-  function reviewPortalQuestions(focusQuestionId?: string) {
+  function reviewPortalQuestions(focusQuestionId?: string, intent?: SubmissionChecklistAction) {
     if (!selected || !submission || submission.application_id !== selected.id) return;
     // Reading the whole list, or answering a stalled run: not the Apply-time pre-script, so its
     // summary line goes away rather than describing the wrong screen.
     setPrescriptNote("");
     const merged = mergeDiscoveredQuestions(questions, submission.review.questions);
     setQuestions(merged);
+    /* THE CONFIRM PRESS IS THE CONFIRMATION, and this is the only place it exists. The Save that
+       follows posts back the same bytes whether she confirmed one question or none, so the request
+       has to carry which questions she explicitly confirmed - see the `confirmed` flag on
+       ReviewAnswerSaveQuestion, and the DV Trading loop it closes. Recorded per application so a
+       press on one packet can never claim an answer on another, and spent by saveReviewedAnswers. */
+    if (intent === "confirm" && focusQuestionId) {
+      const current = confirmIntentsRef.current;
+      confirmIntentsRef.current = current?.applicationId === selected.id
+        ? { applicationId: selected.id, questionIds: new Set(current.questionIds).add(focusQuestionId) }
+        : { applicationId: selected.id, questionIds: new Set([focusQuestionId]) };
+    }
     setFocusQuestion(
       focusQuestionId && merged.some((question) => question.id === focusQuestionId)
         ? { id: focusQuestionId, token: Date.now() }
@@ -2474,9 +2491,19 @@ function Applications() {
     setError(null);
     setNotice(null);
     try {
+      /* The CONFIRM presses recorded for THIS application, flagged onto exactly those questions and
+         no others. A question she confirmed and then emptied is not flagged: a confirmation of a
+         blank claims nothing, and the server would mint nothing for it anyway. */
+      const confirmedIds = confirmIntentsRef.current?.applicationId === applicationId
+        ? confirmIntentsRef.current.questionIds
+        : null;
       const result = await saveReviewAnswers<SubmissionResponse["review"]>({
         applicationId,
-        questions,
+        questions: confirmedIds
+          ? questions.map((question) => confirmedIds.has(question.id) && question.answer.trim()
+            ? { ...question, confirmed: true }
+            : question)
+          : questions,
         /* `saved` is the 202's own word for "a run wrote to this packet and your answers did not
            land". api() resolves on any res.ok and hands back the body with the status gone, so this
            key is the only thing that survives the transport to distinguish it from a 200. */
@@ -2489,6 +2516,10 @@ function Applications() {
         setError(result.message);
         return;
       }
+      /* Spent. The claim now lives on the row, where every reader checks it; keeping the local
+         intent would silently re-assert a confirmation on the NEXT save of answers she may have
+         since edited. A refused or raced save keeps the intents, exactly as it keeps her typing. */
+      if (confirmIntentsRef.current?.applicationId === applicationId) confirmIntentsRef.current = null;
       const saved: SubmissionResponse = { ...submission, application_id: applicationId, review: result.review };
       submissionRef.current = saved;
       setSubmission(saved);
@@ -3108,7 +3139,7 @@ function Applications() {
           restarting={restartingId === selected.id}
           onRetry={retryPreparation}
           onReviewQuestions={() => reviewPortalQuestions()}
-          onOpenQuestion={(questionId) => reviewPortalQuestions(questionId)}
+          onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
           onAddDocument={askForDocument}
           onSelfSubmitted={() => void recordSelfSubmitted()}
         />
@@ -4152,7 +4183,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewQuestions, onOpenQuestion, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -4786,7 +4817,7 @@ const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center ro
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onAddDocument?: (kind: string) => void }) {
+function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onAddDocument?: (kind: string) => void }) {
   const control = checked ? null : checklistRowControl(item, { portalUrl });
   /* Two different things, kept apart deliberately.
      `checked` means "this row came out of the Done column", and it is the only thing that suppresses
@@ -4819,7 +4850,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
           </a>
         )}
         {control?.element === "button" && onOpenQuestion && (
-          <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId)} className={CHECKLIST_ACTION_CLASS}>
+          <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId, control.intent)} className={CHECKLIST_ACTION_CLASS}>
             {control.label}
           </button>
         )}
@@ -4838,7 +4869,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
   );
 }
 
-function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string) => void; onAddDocument?: (kind: string) => void }) {
+function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onAddDocument?: (kind: string) => void }) {
   /* Split before anything is drawn, because these are two different sentences and only one of them
      is a demand. An outstanding row is work the employer is still waiting on. A settled row states
      that something is already handled and keeps a control only so she can change it, which is why

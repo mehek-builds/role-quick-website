@@ -711,3 +711,94 @@ test("the checklist draws one row per kind and keeps the official ask's own door
   const ids = items.map((item) => item.id);
   assert.equal(new Set(ids).size, ids.length, "every row's key has to be distinct");
 });
+
+/* CONFIRMED ONCE IS CONFIRMED, or the ask never ends.
+ *
+ * The CONFIRM row was decided by the label class alone, which a save cannot change: confirm, save,
+ * "Saved. These answers are on this application now" - and the same two amber chips again, driven
+ * four full cycles on the DV Trading packet (application e0a0eb84) on 2026-08-17. What a
+ * confirmation actually leaves on the row is the server's applicant-claim, so that claim is what
+ * flips the row: settled, out of the amber panel and the "N to check" count, control kept so she
+ * can still change the answer. */
+test("a human-only answer she confirmed renders settled, not as an outstanding CONFIRM ask", () => {
+  const round = "2026-08-17T23:00:00.000Z";
+  const dv: Pick<ApplicationReview, "attention_reason" | "questions" | "questions_reviewed_at" | "status"> = {
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: round,
+    questions: [
+      {
+        id: "work-auth",
+        question: "Are you legally authorized to work for any employer in this country?",
+        answer: "Yes",
+        kind: "required",
+        required: true,
+        answer_source: "applicant_review",
+        answer_reviewed_at: round,
+      },
+      {
+        id: "sponsorship",
+        question: "Will you now or in the future require sponsorship to work for this employer?",
+        answer: "Yes, will require firm sponsorship",
+        kind: "required",
+        required: true,
+      },
+    ],
+  };
+
+  const items = humanInputItems(dv);
+  const confirmed = items.find((item) => item.questionId === "work-auth");
+  assert.ok(confirmed, "the confirmed answer keeps its row: the way back to Change must not vanish");
+  assert.equal(confirmed.settled, true, "but it is settled, so it leaves the amber panel and the count");
+  assert.equal(confirmed.detail, "Confirmed by you");
+  assert.equal(confirmed.action, "Change");
+  const outstanding = items.find((item) => item.questionId === "sponsorship");
+  assert.equal(outstanding?.settled, undefined, "the one she has not confirmed still asks");
+  assert.equal(outstanding?.detail, "Needs your confirmation");
+  assert.equal(outstanding?.action, "Confirm");
+});
+
+/* THE ROUND CHECK IS THE SERVER'S OWN. A claim keyed to a review round the row no longer carries is
+   one every server reader is about to discard, so showing "confirmed" for it would promise a state
+   the next refresh takes away. */
+test("a claim from a stale review round still asks for confirmation", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions_reviewed_at: "2026-08-17T23:00:00.000Z",
+    questions: [{
+      id: "sponsorship",
+      question: "Will you now or in the future require sponsorship to work for this employer?",
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      answer_source: "applicant_review",
+      answer_reviewed_at: "2026-08-01T00:00:00.000Z",
+    }],
+  });
+
+  assert.equal(items[0]?.detail, "Needs your confirmation");
+  assert.equal(items[0]?.settled, undefined);
+});
+
+/* AND A CLAIM BESIDE NO ROUND AT ALL IS NOT A CONFIRMATION. The save that mints a claim writes the
+   round in the same transaction, so a review carrying one without the other is a record no reader
+   can check, and the honest row is the asking one. */
+test("a claim on a review with no round still asks for confirmation", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions: [{
+      id: "sponsorship",
+      question: "Will you now or in the future require sponsorship to work for this employer?",
+      answer: "Yes",
+      kind: "required",
+      required: true,
+      answer_source: "applicant_review",
+      answer_reviewed_at: "2026-08-17T23:00:00.000Z",
+    }],
+  });
+
+  assert.equal(items[0]?.detail, "Needs your confirmation");
+  assert.equal(items[0]?.settled, undefined);
+});

@@ -610,6 +610,18 @@ export type ApplicationQuestion = {
   explanation?: string;
   /** True when the answer shown is one she gave on an earlier posting. */
   remembered?: boolean;
+  /* ---- the server's word on who put this answer here ----
+   *
+   * Written only by the backend (see its mergeSubmittedApplicationReviewQuestions) and never sent
+   * back: reviewAnswersRequest deliberately omits both, because a client restating a claim the
+   * server minted is the laundering the backend's gate exists to refuse. Read by the YOUR TURN
+   * checklist to tell a human-only answer she has confirmed from one still waiting on her - without
+   * these two fields the CONFIRM ask re-rendered after every save, forever, because nothing the
+   * screen could see ever changed. 'applicant_review' is her, on the review screen;
+   * 'consent_permission' is Litos accepting an employer's terms under her standing permission. */
+  answer_source?: "applicant_review" | "consent_permission";
+  /** When she reviewed it. Only checkable beside the review's own questions_reviewed_at. */
+  answer_reviewed_at?: string;
 };
 
 /** One question from GET /postings/:jobId/questions that needs the applicant. */
@@ -758,6 +770,10 @@ export type ApplicationReview = {
     | "failed";
   edited_terms: string[];
   questions: ApplicationQuestion[];
+  /** The review round every per-question answer_reviewed_at is keyed to. A claim whose timestamp
+   *  does not equal this round is stale, and the server's own readers discard it; the checklist
+   *  applies the same test rather than inventing a looser one. */
+  questions_reviewed_at?: string;
   skipped_reasons: string[];
   updated_at: string;
   submitted_at?: string;
