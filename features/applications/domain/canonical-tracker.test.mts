@@ -262,3 +262,29 @@ test("a READY envelope on an unsupported portal is still refused", () => {
   })]);
   assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
 });
+
+/* This helper mints a NEW object every call, so it must never be a React dependency unmemoised.
+ *
+ * It ends in `{ ...restored, id: legacyId }`. On 2026-08-17 the applications dashboard computed
+ * canonicalGeneratedPacket from it as a bare const and then listed that const in a useEffect
+ * dependency array. The effect fetched the cover letter, its .then set state, the re-render minted
+ * another object, and the effect refired: GET /applications/<id>/cover-letter about once a second,
+ * 16,567 requests in 45 minutes from a single open tab, every one a 200. It drained the account's
+ * shared rate limit and unrelated reads began answering 429.
+ *
+ * The fix was useMemo at the call site. This test states the property that makes that necessary, so
+ * the next caller learns it here rather than from a production log. */
+test("the linked-packet helper returns a fresh object each call, so callers must memoise", () => {
+  const packet = legacy();
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+  })]);
+
+  const first = linkedLegacyPacketFromCanonicalTrackerPacket(merged[0]);
+  const second = linkedLegacyPacketFromCanonicalTrackerPacket(merged[0]);
+
+  assert.equal(first?.id, packet.id);
+  assert.equal(second?.id, packet.id);
+  assert.deepEqual(first, second, "same inputs must still describe the same packet");
+  assert.notEqual(first, second, "identity is NOT stable: a bare useEffect dependency would loop");
+});

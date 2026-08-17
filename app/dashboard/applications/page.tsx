@@ -1157,13 +1157,28 @@ function Applications() {
   const review = selected?.spec._review;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
-  const canonicalEnvelopePacket = canonicalSelected
+  const canonicalEnvelopePacket = useMemo(() => (canonicalSelected
     ? (packets ?? []).find((packet) => canonicalApplicationFromPacket(packet)?.id === canonicalSelected.id) ?? null
-    : null;
-  const canonicalGeneratedPacket = linkedLegacyPacketFromCanonicalTrackerPacket(canonicalEnvelopePacket)
+    : null), [canonicalSelected, packets]);
+  /* MEMOISED BECAUSE A useEffect BELOW DEPENDS ON IT, and one of the two branches mints a new object.
+   *
+   * linkedLegacyPacketFromCanonicalTrackerPacket ends in `{ ...restored, id: legacyId }`, so it
+   * returns a fresh identity on every call even when the underlying packet is unchanged. Computed
+   * bare, this const therefore changed identity on every render, the cover-letter effect on
+   * canonicalGeneratedPacket refired, its .then called setCanonicalCoverLetter with a new object,
+   * that re-rendered, and the cycle repeated at the speed of the network.
+   *
+   * Measured in production on 2026-08-17: GET /applications/<id>/cover-letter about once a second
+   * from one open dashboard tab - 16,567 requests in 45 minutes, every one a 200, each with its own
+   * CORS preflight. It exhausted the account's general rate limit, which is a shared budget, so
+   * unrelated reads elsewhere started answering 429 while nothing appeared wrong on screen.
+   *
+   * The `.find` branch was always identity-stable (it returns an element of `packets`), which is why
+   * this only bit applications whose canonical tracker packet carries a linked legacy packet id. */
+  const canonicalGeneratedPacket = useMemo(() => linkedLegacyPacketFromCanonicalTrackerPacket(canonicalEnvelopePacket)
     ?? (canonicalSelected?.legacy_generated_resume_id
       ? (packets ?? []).find((packet) => packet.id === canonicalSelected.legacy_generated_resume_id) ?? null
-      : null);
+      : null), [canonicalEnvelopePacket, canonicalSelected, packets]);
   useEffect(() => {
     const applicationId = canonicalSelected?.id;
     queueMicrotask(() => setCanonicalCoverLetterJd(""));
