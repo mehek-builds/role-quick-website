@@ -79,11 +79,42 @@ function reviewIsMidSubmission(review: GeneratedResume['spec']['_review']): bool
     && review?.portal_supported !== false;
 }
 
+/* THE DASHBOARD IS SELF-SUFFICIENT, and the extension is separate software.
+ *
+ * Product decision by the owner, 2026-08-18, reversing the narrower READY-only admission above it:
+ * a canonical Tracker row that carries a linked, portal-supported packet finishes through the
+ * dashboard's own managed screens - the answer/blocker screen for needs_attention, the review and
+ * send screen for the ready states, the code entry for awaiting_security_code - and never requires
+ * the extension. Before this, Belvedere (linked lever packet at needs_attention with nine answered
+ * questions) and Mercari (linked workable packet at ready_to_submit) both routed to an
+ * attended-handoff detail whose only action demanded an extension version the store does not ship,
+ * so two sendable applications had no reachable finish at all.
+ *
+ * What still keeps the attended detail, and why:
+ *   - a tracker-only row (no linked packet): there is nothing for the managed screens to drive;
+ *   - `portal_supported === false`: the server's own answer to whether Litos may press this
+ *     family's Send, which the client never overrides;
+ *   - `submitted` and `failed`: terminal states with nothing to finish.
+ */
+const MANAGED_SCREEN_STATUSES = [
+  'resume_ready',
+  'questions_ready',
+  'ready_to_submit',
+  'ready_for_final_approval',
+  'needs_attention',
+  ...MID_SUBMISSION_STATUSES,
+];
+
+function reviewReachesManagedScreens(review: GeneratedResume['spec']['_review']): boolean {
+  return MANAGED_SCREEN_STATUSES.includes(review?.status ?? '')
+    && review?.portal_supported !== false;
+}
+
 export function sendableLinkedPacketFromCanonicalEnvelope(
   packet: GeneratedResume | null | undefined,
 ): GeneratedResume | null {
   if (!canonicalApplicationFromPacket(packet)) return null;
-  if (!reviewCanBeSent(packet?.spec._review) && !reviewIsMidSubmission(packet?.spec._review)) return null;
+  if (!reviewCanBeSent(packet?.spec._review) && !reviewReachesManagedScreens(packet?.spec._review)) return null;
   return linkedLegacyPacketFromCanonicalTrackerPacket(packet);
 }
 
