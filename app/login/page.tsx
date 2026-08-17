@@ -145,6 +145,19 @@ export default function Login() {
      moment the note below is worth saying. Both flows that create an account, and no others. */
   const choosingAddress = flow === "signup" || claimMode;
 
+  /* The line under the heading, and null on signup, where it was cut.
+     Null rather than an empty string so the caller can drop the paragraph entirely: an empty <p>
+     still carries mt-2 and would leave the heading trailed by a gap holding nothing. */
+  const signupSubheading = claimMode
+    ? "Add an email to keep this work and use Litos on your other devices."
+    : flow === "signup"
+      ? null
+      : flow === "recovery"
+        ? "We will verify your email before you choose a new password."
+        : flow === "email-code"
+          ? "We will email you a six-digit code."
+          : "Use your Litos password or continue with Google.";
+
   /* THE AGREEMENT, AND THE MOMENT IT IS FORMED.
    *
    * Until #286 nothing on this page mentioned the Terms, so nobody had agreed to anything: /terms
@@ -477,20 +490,16 @@ export default function Login() {
                       ? "Sign in with a code"
                       : "Sign in"}
             </h1>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              {claimMode
-                ? "Add an email to keep this work and use Litos on your other devices."
-                : flow === "signup"
-                  /* Names Google now that the button is here. Left as "Choose a password, then
-                     verify your email" it described the one path a Google signup does not take,
-                     which is the sort of small untruth a first screen cannot afford. */
-                  ? "Free to start, no card needed. Continue with Google, or choose a password and verify your email."
-                  : flow === "recovery"
-                    ? "We will verify your email before you choose a new password."
-                    : flow === "email-code"
-                      ? "We will email you a six-digit code."
-                      : "Use your Litos password or continue with Google."}
-            </p>
+            {/* NO SUBHEADING ON SIGNUP. Removed on Mehek's call.
+                The screen says what it is in the heading, and the two controls below say how: a
+                Google button and a password field, both labelled. A sentence naming them again is
+                the say-once rule broken against the product's own furniture. The paragraph is not
+                rendered at all rather than rendered empty, so the heading is not followed by a
+                margin holding nothing. Every other flow keeps its line, because each of those says
+                something the controls do not. */}
+            {signupSubheading && (
+              <p className="mt-2 text-sm leading-6 text-muted">{signupSubheading}</p>
+            )}
             {/* ABOVE BOTH WAYS IN, on the screens where an address is being chosen.
                 It used to sit under the Email field, which was the wrong place the moment Google
                 appeared here: a student who continues with Google never looks at that field, and
@@ -504,8 +513,7 @@ export default function Login() {
             {choosingAddress && showGoogle && (
               <>
                 <p id="email-hint" className="mt-4 text-xs leading-5 text-muted">
-                  Use the address you want employers to see. Litos prints it on the resume it builds
-                  for you. You can change it later in Documents.
+                  Use the address you want employers to see.
                 </p>
                 {/* Above BOTH creation controls, which is the whole point of moving it here. */}
                 {termsNotice}
@@ -566,24 +574,27 @@ export default function Login() {
                   page said so, and a student picking whichever address they happened to be signed
                   into had no way to know they were also choosing what employers would see.
 
-                  THE RESUME, AND ONLY THE RESUME. An earlier draft of this line said "your resume
-                  and applications", which is not true: lib/packetApplicantEmail.ts states the
-                  boundary outright, that Litos "never puts the personal resume address into an
-                  employer form and never prints the routing alias in the PDF". The form gets a
-                  routing alias. Claiming otherwise here would be a promise the product deliberately
-                  does not keep, on the screen where it is first made.
+                  ONE SENTENCE, cut back on Mehek's call from three. It used to add that Litos
+                  prints it on the resume and that it can be changed later in Documents. Both were
+                  true and neither was needed here: "the address you want employers to see" already
+                  carries the only instruction the student has to act on at this moment, and the
+                  rest was explaining the machinery behind it on the busiest screen in the product.
+
+                  If it is ever restored, note what the earlier draft got wrong: it said "your
+                  resume and applications", and lib/packetApplicantEmail.ts states the boundary
+                  outright, that Litos "never puts the personal resume address into an employer form
+                  and never prints the routing alias in the PDF". The form gets a routing alias.
+                  Only the resume carries this address.
 
                   Signup and claim only. On the sign-in flows the choice was made long ago and this
-                  would be noise on a screen whose whole job is one field and a button. Changing it
-                  afterwards is a real path rather than a promise, so the last sentence names it.
+                  would be noise on a screen whose whole job is one field and a button.
 
                   THE FALLBACK POSITION. When a Google button is on the screen this same line is
                   rendered ABOVE it instead, because a student who continues with Google never
                   reaches this field. `!showGoogle` is what keeps the card from saying it twice. */}
               {choosingAddress && !showGoogle && (
                 <p id="email-hint" className="mt-2 text-xs leading-5 text-muted">
-                  Use the address you want employers to see. Litos prints it on the resume it builds
-                  for you. You can change it later in Documents.
+                  Use the address you want employers to see.
                 </p>
               )}
               {(flow === "signin" || flow === "signup") && (

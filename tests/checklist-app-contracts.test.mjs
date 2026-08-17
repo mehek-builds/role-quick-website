@@ -55,13 +55,21 @@ test("contact fields validate on blur and clear field errors on edit", () => {
   assert.match(page, /name: false/);
 });
 
-test("signup explicitly introduces account creation and the next step", () => {
+test("signup names itself in the heading and adds no subheading under it", () => {
+  /* THE CONTRACT CHANGED, on Mehek's call, and this test changed with it rather than being deleted.
+     It used to require the line "Free to start, no card needed...", on the reasoning that signup
+     should state the next step. That line was cut: the heading says what the screen is, and the two
+     labelled controls under it say how, so naming them again in prose was the say-once rule broken
+     against the product's own furniture.
+
+     Null, not an empty string, is the half worth pinning. An empty subheading still renders a <p>
+     carrying mt-2, which leaves the heading trailed by a gap holding nothing, and that is the shape
+     this would silently regress into. */
   const page = read("app/login/page.tsx");
   assert.match(page, /\? "Create your account"/);
-  /* Updated when the Google button was added to this screen. The property is that signup names
-     what happens next, and it now names BOTH next steps rather than only the password one, which
-     described the single path a Google signup does not take. */
-  assert.match(page, /Free to start, no card needed\. Continue with Google, or choose a password and verify your email/);
+  assert.doesNotMatch(page, /Free to start, no card needed/);
+  assert.match(page, /flow === "signup"\s*\n\s*\? null/);
+  assert.match(page, /\{signupSubheading && \(/);
 });
 
 test("the address note is stated once, above whichever ways in the screen offers", () => {
