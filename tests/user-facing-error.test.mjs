@@ -27,3 +27,23 @@ test("safe business copy remains specific", () => {
   assert.equal(userFacingError("Add the job link first.", "Fallback"), "Add the job link first.");
   assert.equal(userFacingError("", "Fallback"), "Fallback");
 });
+
+test("curated copy naming Chrome the browser survives the filter", () => {
+  // These are the product's own hand-written sentences from the attended-fill path. The old
+  // `chrom(?:e|ium)` arm collapsed all three to the fallback, so the applicant read "Litos hit a
+  // problem. Try again." on the one screen that knew the real remedy.
+  for (const message of [
+    "Update the Litos extension from the Chrome Web Store, then try again.",
+    "Chrome blocked the company tab. Allow pop-ups for Litos, then try again.",
+    "Chrome could not open the exact saved company form. Nothing was submitted.",
+  ]) assert.equal(userFacingError(message, "Fallback"), message);
+});
+
+test("chromium binary spellings still collapse", () => {
+  const fallback = "Please try again.";
+  for (const message of [
+    "Failed to launch chromium",
+    "HeadlessChrome/120.0 rejected the session",
+    "headless chrome exited unexpectedly",
+  ]) assert.equal(userFacingError(message, fallback), fallback);
+});
