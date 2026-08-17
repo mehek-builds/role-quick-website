@@ -55,12 +55,35 @@ export function linkedLegacyPacketFromCanonicalTrackerPacket(
  * What stays refused: every envelope that is not ready, every tracker-only row, and every row on a
  * portal the server did not mark supported. Those keep the attended handoff, which is the whole point
  * of the guard this narrows.
+ *
+ * AND ONE STATE PAST READY: `awaiting_security_code`.
+ *
+ * This was missed when the function was first written, and it stranded a real application. A packet
+ * in that state is not merely eligible to be sent - LITOS HAS ALREADY PRESSED SUBMIT, and the
+ * employer answered by emailing a code that must be entered on the same page before the application
+ * is filed. Measured on Jane Street 2026-08-17: the row submitted, Greenhouse emailed an 8-character
+ * code to the packet alias, and the Tracker then routed the row to the attended-handoff detail
+ * because `reviewCanBeSent` does not list that status. The one screen carrying the code entry -
+ * SubmissionScreen, which renders it on `review.status === 'awaiting_security_code'` - was
+ * unreachable, so a submitted application could not be finished from the dashboard at all.
+ *
+ * It is a strictly safer admission than READY, not a looser one: READY says a send MAY happen, this
+ * says one already did. Refusing it cannot prevent a send; it can only abandon one mid-flight.
  */
+const MID_SUBMISSION_STATUSES = ['awaiting_security_code'];
+
+function reviewIsMidSubmission(review: GeneratedResume['spec']['_review']): boolean {
+  return MID_SUBMISSION_STATUSES.includes(review?.status ?? '')
+    // The same server-owned answer the READY path defers to. A portal Litos may not submit on has no
+    // code step to finish, so an unsupported row stays with the attended handoff either way.
+    && review?.portal_supported !== false;
+}
+
 export function sendableLinkedPacketFromCanonicalEnvelope(
   packet: GeneratedResume | null | undefined,
 ): GeneratedResume | null {
   if (!canonicalApplicationFromPacket(packet)) return null;
-  if (!reviewCanBeSent(packet?.spec._review)) return null;
+  if (!reviewCanBeSent(packet?.spec._review) && !reviewIsMidSubmission(packet?.spec._review)) return null;
   return linkedLegacyPacketFromCanonicalTrackerPacket(packet);
 }
 
@@ -155,7 +178,26 @@ export function canonicalTrackerPacket(
     ? {
       ...linkedReview,
       portal_url: application.portal_url ?? undefined,
-      status: canonicalStatus(application),
+      /* THE PACKET WINS WHILE A SUBMISSION IS MID-FLIGHT, and only then.
+       *
+       * The canonical lifecycle is authoritative for where an application HAS GOT TO, and flattening
+       * a linked packet's older status onto it is the whole point of canonicalStatus. But
+       * `awaiting_security_code` is not an older status - it is NEWER than anything the canonical row
+       * knows. The employer has already taken the submission and emailed a code, and the canonical
+       * row still reads `ready_to_submit` because nothing has told it otherwise.
+       *
+       * Measured on Jane Street 2026-08-17: canonical `submission_state = ready_to_submit`, packet
+       * `_review.status = awaiting_security_code`. The override replaced the second with the first,
+       * and SubmissionScreen renders its code entry on `review.status === 'awaiting_security_code'`,
+       * so the one control that could finish a SUBMITTED application was never drawn. The application
+       * sat unfinishable while the code sat unused in the alias.
+       *
+       * Scoped to exactly this state. Every other status still defers to the canonical row, so this
+       * cannot become a general "trust the packet" path - which is the defect canonicalStatus exists
+       * to prevent. */
+      status: linkedReview.status === "awaiting_security_code"
+        ? ("awaiting_security_code" as const)
+        : canonicalStatus(application),
       updated_at: updatedAt,
     }
     : {

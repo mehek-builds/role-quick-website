@@ -288,3 +288,33 @@ test("the linked-packet helper returns a fresh object each call, so callers must
   assert.deepEqual(first, second, "same inputs must still describe the same packet");
   assert.notEqual(first, second, "identity is NOT stable: a bare useEffect dependency would loop");
 });
+
+test("an application awaiting its security code reaches the screen that can enter it", () => {
+  /* REGRESSION for a real stranded application. Jane Street, 2026-08-17: the row submitted,
+     Greenhouse emailed an 8-character code to the packet alias, and the Tracker routed the row to
+     the attended-handoff detail because reviewCanBeSent does not list awaiting_security_code. The one
+     screen carrying the code entry was unreachable, so a SUBMITTED application could not be finished.
+
+     This admission is strictly safer than READY: READY says a send may happen, this says one already
+     did. Refusing it cannot prevent a send, only abandon one mid-flight. */
+  const packet = legacy();
+  packet.spec._review = { ...packet.spec._review!, status: "awaiting_security_code", portal_supported: true };
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "awaiting_security_code",
+    review_state: "awaiting_security_code",
+  })]);
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0])?.id, packet.id);
+});
+
+test("an unsupported portal awaiting a code is still refused", () => {
+  // A portal Litos may not submit on has no code step to finish, so it keeps the attended handoff.
+  const packet = legacy();
+  packet.spec._review = { ...packet.spec._review!, status: "awaiting_security_code", portal_supported: false };
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "awaiting_security_code",
+    review_state: "awaiting_security_code",
+  })]);
+  assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+});
