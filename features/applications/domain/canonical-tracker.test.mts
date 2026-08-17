@@ -5,6 +5,7 @@ import {
   canonicalApplicationFromPacket,
   linkedLegacyPacketFromCanonicalTrackerPacket,
   sendableLinkedPacketFromCanonicalEnvelope,
+  withRestoredLinkedPackets,
   mergeCanonicalApplicationHistory,
   upsertCanonicalApplicationHistory,
 } from "./canonical-tracker.ts";
@@ -363,4 +364,26 @@ test("among equally weak matches the newest still wins", () => {
     (envelope as { canonical_legacy_packet_id?: string } | undefined)?.canonical_legacy_packet_id,
     newer.id,
   );
+});
+
+test("a restored linked packet is selectable by its legacy id", () => {
+  /* Belvedere d1af1c97 -> packet 6fda0404, measured 2026-08-18: selectPacket restored the linked
+     packet and selected the LEGACY id, and the lookup list only carried the envelope under the
+     CANONICAL id, so the screen refused with "the saved list does not contain a packet with this
+     id". Pre-canonical rows share one UUID between application and packet, which is why the gap
+     never surfaced before a canonical row minted its own id. */
+  const packet = legacy();
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+    submission_state: "not_started",
+    review_state: "ready",
+  })]);
+  const lookup = withRestoredLinkedPackets(merged);
+  const found = lookup.find((entry) => entry.id === packet.id);
+  assert.ok(found, "the legacy id must resolve in the lookup list");
+  assert.equal(canonicalApplicationFromPacket(found), null, "the resolved entry is the restored packet, not the envelope");
+  // the envelope itself stays present and untouched for every display consumer
+  assert.ok(lookup.some((entry) => canonicalApplicationFromPacket(entry)));
+  // a list with no envelopes is returned as-is
+  assert.deepEqual(withRestoredLinkedPackets([packet]).map((entry) => entry.id), [packet.id]);
 });
