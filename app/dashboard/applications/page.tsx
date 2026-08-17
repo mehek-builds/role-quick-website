@@ -26,7 +26,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, explicitTerms, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -626,8 +626,22 @@ function Applications() {
     });
   }, []);
 
-  const selectPacket = useCallback((packet: GeneratedResume) => {
-    const canonical = canonicalApplicationFromPacket(packet);
+  const selectPacket = useCallback((incoming: GeneratedResume) => {
+    /* A READY envelope is the named exception to the refusal below, not a hole in it.
+     *
+     * The guard's own comment says "an explicit packet action first restores the linked packet's
+     * legacy route id", and clicking a row the Tracker has labelled READY is that explicit action.
+     * sendableLinkedPacketFromCanonicalEnvelope performs the restore and returns null for every other
+     * shape, so a tracker-only row, an unready row, or a row on a portal the SERVER did not mark
+     * supported still takes the attended path.
+     *
+     * It gates on reviewCanBeSent - the same predicate the Ready filter uses - so the send this
+     * permits is exactly what the label promises. Before this, the Tracker showed READY rows whose
+     * only reachable action was the attended handoff, which is a label promising something the screen
+     * could not do. */
+    const sendable = sendableLinkedPacketFromCanonicalEnvelope(incoming);
+    const packet = sendable ?? incoming;
+    const canonical = sendable ? null : canonicalApplicationFromPacket(packet);
     if (canonical) {
       // Canonical Tracker envelopes must never be sent to the legacy review, audit, or submission
       // endpoints. Their own detail keeps the real portal handoff and retry control available. An
