@@ -91,7 +91,10 @@ describe("an application deep link loads the exact packet", () => {
   test("a query-only packet change hides the prior packet before the new history resolves", () => {
     assert.match(
       applications,
-      /const selected = selectedPacketForRequest\(\s*packets,\s*selectedId,\s*requestedApplicationId,\s*requestedApplicationIntent,\s*resolvedActionableRequestId,\s*\);/,
+      // The lookup list may be wrapped (withRestoredLinkedPackets) so an envelope's restored
+      // legacy id resolves; what the pin protects is that selection still flows through the URL
+      // mismatch gate with all three request guards.
+      /const selected = selectedPacketForRequest\(\s*(?:withRestoredLinkedPackets\()?packets(?: \?\? \[\])?\)?,\s*selectedId,\s*requestedApplicationId,\s*requestedApplicationIntent,\s*resolvedActionableRequestId,\s*\);/,
       "every actionable screen must derive selection through the URL mismatch gate",
     );
     assert.doesNotMatch(
