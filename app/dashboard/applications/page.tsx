@@ -642,6 +642,28 @@ function Applications() {
     const sendable = sendableLinkedPacketFromCanonicalEnvelope(incoming);
     const packet = sendable ?? incoming;
     const canonical = sendable ? null : canonicalApplicationFromPacket(packet);
+    /* TEMPORARY DIAGNOSTIC - DO NOT MERGE TO main.
+     *
+     * Four rounds of inferring this from render output were wrong each time. The question is narrow:
+     * when a READY row is clicked, is this handler even reached, and if so does it take the canonical
+     * early-return or the legacy path? Everything below is derived from the click alone, so the log
+     * answers it without another deploy cycle of guessing.
+     *
+     * Nothing identifying is printed: ids only, no company, role, resume text or email. */
+    // eslint-disable-next-line no-console
+    console.log("[litos-diag] selectPacket", JSON.stringify({
+      incomingId: incoming.id,
+      isEnvelope: canonicalApplicationFromPacket(incoming) !== null,
+      canonicalLegacyPacketId: (incoming as { canonical_legacy_packet_id?: string }).canonical_legacy_packet_id ?? null,
+      canonicalLegacyIdOnRow: canonicalApplicationFromPacket(incoming)?.legacy_generated_resume_id ?? null,
+      reviewStatus: incoming.spec?._review?.status ?? null,
+      portalSupported: incoming.spec?._review?.portal_supported ?? null,
+      hasSpec: Boolean(incoming.spec),
+      hasReview: Boolean(incoming.spec?._review),
+      sendableResolved: sendable !== null,
+      sendableId: sendable?.id ?? null,
+      takingCanonicalEarlyReturn: canonical !== null,
+    }));
     if (canonical) {
       // Canonical Tracker envelopes must never be sent to the legacy review, audit, or submission
       // endpoints. Their own detail keeps the real portal handoff and retry control available. An
