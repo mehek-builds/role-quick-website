@@ -318,3 +318,49 @@ test("an unsupported portal awaiting a code is still refused", () => {
   })]);
   assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
 });
+
+test("an explicit link beats a newer duplicate sharing the posting URL", () => {
+  /* REGRESSION for a real mis-pairing. The owner account holds TWO Jane Street packets for one
+     posting: cf2b1055 (created 08-16) and 496cff97 (created 08-14, the one that actually submitted
+     and carried the employer's security code). Both normalize to the same portal URL, and `legacy`
+     arrives newest-first, so findIndex bound the canonical row to the NEWER packet and the submitted
+     packet's state was invisible in the Tracker. 41 rows on this account carry the DUPLICATE badge. */
+  const portal = "https://boards.greenhouse.io/janestreet/jobs/777";
+  const newerDuplicate = legacy({ id: "packet-newer" });
+  newerDuplicate.spec._review = { ...newerDuplicate.spec._review!, portal_url: portal };
+  const submitted = legacy({ id: "packet-submitted" });
+  submitted.spec._review = { ...submitted.spec._review!, portal_url: portal };
+
+  // Newest first, exactly as /resume/history returns them.
+  const merged = mergeCanonicalApplicationHistory([newerDuplicate, submitted], [canonical({
+    legacy_generated_resume_id: submitted.id,
+    portal_url: portal,
+  })]);
+
+  const envelope = merged.find((p) => canonicalApplicationFromPacket(p));
+  assert.ok(envelope, "the canonical row produced no envelope");
+  assert.equal(
+    linkedLegacyPacketFromCanonicalTrackerPacket(envelope)?.id,
+    submitted.id,
+    "the explicitly linked packet must win over a newer one sharing only the portal URL",
+  );
+});
+
+test("among equally weak matches the newest still wins", () => {
+  // No explicit link on either side, so nothing outranks anything: keep the prior behaviour rather
+  // than reshuffling rows for no reason.
+  const portal = "https://boards.greenhouse.io/acme/jobs/5";
+  const newer = legacy({ id: "packet-newer" });
+  newer.spec._review = { ...newer.spec._review!, portal_url: portal };
+  const older = legacy({ id: "packet-older" });
+  older.spec._review = { ...older.spec._review!, portal_url: portal };
+  const merged = mergeCanonicalApplicationHistory([newer, older], [canonical({ portal_url: portal })]);
+  const envelope = merged.find((p) => canonicalApplicationFromPacket(p));
+  /* Asserted on the pairing marker, not on linkedLegacyPacketFromCanonicalTrackerPacket: that restore
+     deliberately requires an explicit legacy_generated_resume_id, and this fixture has none - that is
+     what makes it the WEAK case. The marker is what records which packet the merge chose. */
+  assert.equal(
+    (envelope as { canonical_legacy_packet_id?: string } | undefined)?.canonical_legacy_packet_id,
+    newer.id,
+  );
+});
