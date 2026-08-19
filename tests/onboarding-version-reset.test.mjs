@@ -25,7 +25,7 @@ describe("the versioned onboarding review contract", () => {
     const api = shipped(await read("lib/api.ts"));
     const state = api.slice(api.indexOf("export type OnboardingState"), api.indexOf("export function getOnboardingState"));
 
-    assert.match(api, /export const CURRENT_ONBOARDING_FLOW_VERSION\s*=\s*2\b/);
+    assert.match(api, /export const CURRENT_ONBOARDING_FLOW_VERSION\s*=\s*3\b/);
     assert.match(state, /flow_version:\s*number/);
     assert.match(state, /flow_completed:\s*boolean/);
     assert.match(state, /requires_onboarding:\s*boolean/);
@@ -39,17 +39,25 @@ describe("the versioned onboarding review contract", () => {
 
     assert.match(call, /method:\s*"POST"/);
     assert.match(call, /disposition:\s*"continued"\s*\|\s*"skipped"/);
-    assert.match(call, /JSON\.stringify\(\{[\s\S]*?flow_version:\s*CURRENT_ONBOARDING_FLOW_VERSION[\s\S]*?step[\s\S]*?disposition[\s\S]*?\}\)/);
+    /* THE VERSION ON THE WIRE IS THE SERVER'S, not this build's constant.
+       Both routes validate the field with a strict z.literal on the backend, so while each side
+       hardcoded its own copy of the number a bump had no safe deploy order in either direction:
+       whichever shipped first sent a number the other rejected, and every acknowledgement 400'd
+       mid-setup. The parameter is what removes the coupling, so it is what this case pins. */
+    assert.match(call, /flowVersion:\s*number/);
+    assert.match(call, /JSON\.stringify\(\{[\s\S]*?flow_version:\s*flowVersion[\s\S]*?step[\s\S]*?disposition[\s\S]*?\}\)/);
+    assert.doesNotMatch(call, /flow_version:\s*CURRENT_ONBOARDING_FLOW_VERSION/, "the acknowledgement hardcodes a version instead of echoing the server's");
   });
 
-  test("flow completion stamps version 2 without rewriting historical completion", async () => {
+  test("flow completion stamps the server's version without rewriting historical completion", async () => {
     const api = shipped(await read("lib/api.ts"));
     const routeAt = api.indexOf('"/onboarding/flow/complete"');
     assert.notEqual(routeAt, -1, "the versioned flow completion route is missing");
     const complete = api.slice(Math.max(0, routeAt - 500), routeAt + 600);
 
     assert.match(complete, /method:\s*"POST"/);
-    assert.match(complete, /JSON\.stringify\(\{\s*flow_version:\s*CURRENT_ONBOARDING_FLOW_VERSION\s*\}\)/);
+    assert.match(complete, /JSON\.stringify\(\{\s*flow_version:\s*flowVersion\s*\}\)/);
+    assert.doesNotMatch(complete, /flow_version:\s*CURRENT_ONBOARDING_FLOW_VERSION/, "completion hardcodes a version instead of echoing the server's");
     assert.doesNotMatch(complete, /completed_at|onboarding_completed_at/);
   });
 
@@ -77,7 +85,7 @@ describe("the versioned onboarding review contract", () => {
     for (const step of ["resume", "impact", "focus", "sponsorship", "base"]) {
       assert.match(
         render,
-        new RegExp(`acknowledgeOnboardingFlowStep\\(\\s*["']${step}["']\\s*,\\s*["']continued["']\\s*\\)`),
+        new RegExp(`acknowledgeOnboardingFlowStep\\(\\s*["']${step}["']\\s*,\\s*["']continued["']\\s*,\\s*state\\.flow_version\\s*\\)`),
         `${step} is not acknowledged as continued`,
       );
     }

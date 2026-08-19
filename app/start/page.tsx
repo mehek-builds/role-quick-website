@@ -54,7 +54,7 @@ import { deferOnboardingForSession } from "@/lib/onboarding-flow";
  * still advance, and not one acknowledgement would ever be written, so the ledger would sit empty
  * while looking healthy. A >= test is the honest shape of the question, because the ledger arrived
  * in version 2 and no later version removes it. */
-function hasFlowLedger(state: { flow_version?: number | null }): boolean {
+function hasFlowLedger(state: OnboardingState): state is OnboardingState & { flow_version: number } {
   return typeof state.flow_version === "number" && state.flow_version >= 2;
 }
 
@@ -373,7 +373,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("focus");
-              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("focus", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("focus", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -387,7 +387,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("sponsorship");
-              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("sponsorship", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("sponsorship", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -403,7 +403,7 @@ export default function Start() {
             onDone={() => {
               stepDone("resume");
               void (async () => {
-                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued");
+                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
@@ -418,7 +418,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("impact");
-              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("impact", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("impact", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -438,7 +438,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("base");
-              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("base", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("base", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -465,7 +465,7 @@ export default function Start() {
                    suppresses the step entirely in that window, so the next load agrees. */
                 setGapsHandled(true);
                 await markGapsAsked();
-                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("gaps", skipped ? "skipped" : "continued");
+                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("gaps", skipped ? "skipped" : "continued", state.flow_version);
                 void refresh();
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
@@ -494,7 +494,7 @@ export default function Start() {
                     ...settings,
                   });
                 }
-                if (hasFlowLedger(state)) await completeOnboardingFlow();
+                if (hasFlowLedger(state)) await completeOnboardingFlow(state.flow_version);
                 track("onboarding_complete", {
                   learned: state.learned.length,
                   applied: state.has_applied,

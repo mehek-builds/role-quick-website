@@ -412,14 +412,26 @@ function FocusForm({
           <div>
             <p className="text-sm text-ink">Categories</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
+              {/* Read from `effectiveCategories`, not `categories`, and that is a correctness fix
+                  rather than a cosmetic one. The field picker above now contributes categories to
+                  what gets written, so a chip drawn from `categories` alone could sit visibly OFF
+                  while its slug went into the PUT anyway - a control that does nothing, which is
+                  the one thing this file refuses to ship. A category a chosen field implies is
+                  therefore drawn ON and locked, the same way a saved one already was, and the note
+                  below says which of the two reasons applies. */}
               {CATEGORIES.map((category) => {
-                const on = categories.includes(category.slug);
+                const impliedByField = categoriesForFields(fields).includes(category.slug);
                 const savedCategory = saved?.categories?.includes(category.slug) ?? false;
-                return <Chip key={category.slug} label={category.label} on={on} disabled={savedCategory} onClick={() => setCategories(on ? categories.filter((value) => value !== category.slug) : [...categories, category.slug])} />;
+                const on = effectiveCategories.includes(category.slug);
+                return <Chip key={category.slug} label={category.label} on={on} disabled={savedCategory || impliedByField} onClick={() => setCategories(on ? categories.filter((value) => value !== category.slug) : [...categories, category.slug])} />;
               })}
             </div>
-            {!!saved?.categories?.length && (
-              <p className="mt-2 text-xs leading-5 text-muted">Saved categories stay on during this review. You can remove one later in Account.</p>
+            {(!!saved?.categories?.length || categoriesForFields(fields).length > 0) && (
+              <p className="mt-2 text-xs leading-5 text-muted">
+                {categoriesForFields(fields).length > 0
+                  ? "Categories from the fields you picked stay on. Change the field above to change them."
+                  : "Saved categories stay on during this review. You can remove one later in Account."}
+              </p>
             )}
           </div>
           <label className="block">
