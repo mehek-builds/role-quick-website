@@ -16,8 +16,12 @@ import {
   type EmailProvider,
   getApplicationEmailStatus,
   getEmailConnections,
+  getNotificationPreferences,
+  type NotificationKind,
   getOnboardingState,
   getSponsorship,
+  setNotificationPreferences,
+  type NotificationPreferences,
   getToken,
   setSponsorFilter,
   type SponsorshipState,
@@ -125,6 +129,12 @@ export default function Settings() {
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  /* The two notification permissions, held as the server's own answer rather than as two local
+     booleans. Null while unread and on a backend that predates the endpoint, which renders no
+     controls at all rather than two dead switches: the repos deploy separately and in either
+     order, and a toggle that silently writes nothing is worse than an absent one. */
+  const [notifications, setNotifications] = useState<NotificationPreferences | null>(null);
+  const [savingNotification, setSavingNotification] = useState<NotificationKind | null>(null);
   const [automaticSubmission, setAutomaticSubmission] = useState<boolean | null>(null);
   const [automaticVerification, setAutomaticVerification] = useState<boolean | null>(null);
   /* The human-check permission, held as the server's VERDICT rather than as anything derived here.
@@ -229,7 +239,7 @@ export default function Settings() {
           window.history.replaceState({}, "", `${window.location.pathname}#plan`);
           if (billingReturn === "success") void refreshBilling();
         }
-        const [meRes, profileRes, onboardingRes, initialConnections, applicationEmailRes, sponsorRes] = await Promise.all([
+        const [meRes, profileRes, onboardingRes, initialConnections, applicationEmailRes, sponsorRes, notificationRes] = await Promise.all([
           api<Me>("/me"),
           api<ApplicationProfile>("/profile/application").catch(() => ({})),
           getOnboardingState(),
@@ -238,6 +248,7 @@ export default function Settings() {
           /* Null on a backend that predates this, which renders no card at all rather than an
              empty one. The two repos deploy separately and in either order. */
           getSponsorship().catch(() => null),
+          getNotificationPreferences().catch(() => null),
         ]);
         let connectionRes = initialConnections;
         let currentApplicationEmail = applicationEmailRes;
@@ -280,6 +291,7 @@ export default function Settings() {
         setProfile(profileRes);
         setSavedProfileJson(JSON.stringify(profileRes));
         setEligibilityDraft(eligibilitySeed(profileRes, onboardingRes.sponsorship_answer));
+        setNotifications(notificationRes);
         setAutomaticSubmission(onboardingRes.automatic_submission_enabled);
         setConsentEligibility(onboardingRes.standing_consent_eligibility ?? null);
         setAutomaticVerification(resolvedVerification);
@@ -396,6 +408,26 @@ export default function Settings() {
      omitted key as "leave it alone" and an explicit false as a revocation, so a patch naming both
      would revoke the grant she never touched. The optimistic value is rolled back per field too,
      so a failure on one cannot disturb the other. */
+  /* One notification permission at a time, saved as the server's own answer.
+   *
+   * SENDS ONLY THE KEY THAT CHANGED. The server stamps a grant date for every key it receives, so
+   * posting both permissions on each toggle would re-date a consent the student did not touch. */
+  async function changeNotification(kind: NotificationKind, enabled: boolean) {
+    const previous = notifications;
+    if (!previous) return;
+    setNotifications({ ...previous, [kind]: { ...previous[kind], enabled } });
+    setSavingNotification(kind);
+    setError(null);
+    try {
+      setNotifications(await setNotificationPreferences({ [kind]: enabled }));
+    } catch (err) {
+      setNotifications(previous);
+      setError(err instanceof Error ? err.message : "Could not save that change.");
+    } finally {
+      setSavingNotification(null);
+    }
+  }
+
   async function changeConsentGrant(field: ConsentGrantField, enabled: boolean) {
     const previous = consentGrants[field];
     setConsentGrants((current) => ({ ...current, [field]: enabled }));
@@ -1158,7 +1190,66 @@ export default function Settings() {
           </div>
         </div>
         <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
-        <p className="mt-2 text-xs leading-5 text-muted">Litos sends transactional account, application, and billing messages only. There are no marketing notification subscriptions or configurable notification channels in the current product.</p>
+
+        {/* THE TWO NOTIFICATION PERMISSIONS, and this is their only re-grant path.
+            The unsubscribe link in every message turns one off without signing in, which is the
+            half that has to work for somebody who cannot log in at all. Turning one back ON is the
+            half that cannot live in an email, because there is no email to click once the mail has
+            stopped. So it lives here, next to the other standing permissions, rather than only on
+            the setup screen that asked the question once and is never shown again.
+
+            Rendered only when the server answered. A backend that predates the endpoint gives null
+            and draws nothing, which is the honest state: two switches that silently write nowhere
+            would be worse than no switches. */}
+        {notifications && (
+          <div className="mt-6 border-t border-border pt-5">
+            <h3 className="text-sm font-medium text-ink">What Litos emails you</h3>
+            <p className="mt-1 text-xs leading-5 text-muted">Two things, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
+            <div className="mt-4 space-y-4">
+              {([
+                {
+                  kind: "strong_match" as const,
+                  label: "Tell me when a strong match opens",
+                  detail: "One posting, at most once a day, and only when it clears the same match score your board ranks by.",
+                },
+                {
+                  kind: "employer_reply" as const,
+                  label: "Tell me when an employer replies",
+                  detail: "Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said.",
+                },
+              ]).map((permission) => (
+                <label key={permission.kind} className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+                  <span>
+                    <span className="block text-sm font-medium text-ink">{permission.label}</span>
+                    <span className="mt-1 block text-xs leading-5 text-muted">{permission.detail}</span>
+                    {/* The grant date, shown for the same reason every other permission on this
+                        screen shows one: a permission with no date beside it cannot be checked
+                        against what the student remembers agreeing to. */}
+                    {notifications[permission.kind].enabled && notifications[permission.kind].granted_at && (
+                      <span className="mt-2 block text-xs leading-5 text-muted">
+                        On since {new Date(notifications[permission.kind].granted_at as string).toLocaleDateString()}
+                      </span>
+                    )}
+                  </span>
+                  <input
+                    aria-label={permission.label}
+                    type="checkbox"
+                    checked={notifications[permission.kind].enabled}
+                    disabled={savingNotification !== null}
+                    onChange={(event) => void changeNotification(permission.kind, event.target.checked)}
+                    className="mt-1 size-4 accent-brand disabled:opacity-40"
+                  />
+                </label>
+              ))}
+            </div>
+            {!notifications.deliverable && (
+              <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
+            )}
+            <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
+          </div>
+        )}
+
+        <p className="mt-4 text-xs leading-5 text-muted">Apart from the two above, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
         </div>
       </Card>}
 

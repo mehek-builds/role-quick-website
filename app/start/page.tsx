@@ -51,6 +51,7 @@ import { BuildStep } from "@/components/start/BuildStep";
 import { QuestionsStep } from "@/components/start/QuestionsStep";
 import { ReviewStep } from "@/components/start/ReviewStep";
 import { TrialStep } from "@/components/start/TrialStep";
+import { NotificationsStep } from "@/components/start/NotificationsStep";
 import { PlanStep } from "@/components/start/PlanStep";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
 import type { BuildResult } from "@/lib/onboarding-build";
@@ -595,6 +596,17 @@ export default function Start() {
       case "trial":
         return (
           <TrialStep onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
+        );
+
+      case "notifications":
+        /* 08, between the gift and the price. It needs nothing from the sitting: the two answers
+           are account facts, so unlike `build` and `questions` a reload lands here and simply
+           works rather than having to rejoin the sequence. */
+        return (
+          <NotificationsStep
+            onLater={later}
+            onDone={() => { stepDone("notifications"); void ack("notifications").then(refresh).catch(fail); }}
+          />
         );
 
       case "plan":

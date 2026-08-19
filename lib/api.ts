@@ -1080,7 +1080,7 @@ export type OnboardingStep =
   | "focus" | "sponsorship" | "resume" | "impact" | "base" | "install" | "apply" | "gaps" | "targeting"
   /* The application sequence, served by the backend once every profile-derived step is satisfied
      and only for an account that has never completed onboarding. */
-  | "match" | "build" | "questions" | "review" | "trial" | "plan"
+  | "match" | "build" | "questions" | "review" | "trial" | "notifications" | "plan"
   | "done";
 
 export type OnboardingState = {
@@ -1233,6 +1233,42 @@ export function acknowledgeOnboardingFlowStep(
       step,
       disposition,
     }),
+  });
+}
+
+/* ---- notifications (screen 08) ----
+ *
+ * TWO PERMISSIONS, NOT A SETTINGS BLOB, which is why each arrives with the date it was granted.
+ * Litos putting mail in somebody's inbox is a thing done TO them, and a boolean with no date
+ * behind it cannot be audited later or explained back to them.
+ *
+ * `deliverable` and `unsubscribe_configured` are the server admitting what it can actually do.
+ * An account with no verified address is never mailed however the toggles read, and a deployment
+ * that cannot mint an unsubscribe link refuses to send at all. Both are surfaced so a student is
+ * never left switching something on and hearing nothing forever with no explanation on screen. */
+export type NotificationKind = "strong_match" | "employer_reply";
+export type NotificationPermission = { enabled: boolean; granted_at: string | null };
+export type NotificationPreferences = {
+  strong_match: NotificationPermission;
+  employer_reply: NotificationPermission;
+  deliverable: boolean;
+  unsubscribe_configured: boolean;
+};
+
+export function getNotificationPreferences() {
+  return api<NotificationPreferences>("/notifications/preferences");
+}
+
+/* Sends only what CHANGED. The server writes a grant timestamp for every key it receives and
+   leaves out keys alone, so posting both permissions on every save would re-date a consent the
+   student never touched. */
+export function setNotificationPreferences(changes: {
+  strong_match?: boolean;
+  employer_reply?: boolean;
+}) {
+  return api<NotificationPreferences>("/notifications/preferences", {
+    method: "PUT",
+    body: JSON.stringify(changes),
   });
 }
 
