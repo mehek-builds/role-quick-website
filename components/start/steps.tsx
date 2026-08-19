@@ -171,9 +171,23 @@ function FocusForm({
      a location by substring (jobPreferences.preferenceFit), so a stray "CA" then matched Chicago,
      Cambridge and Vancouver, and printed "CA" back as the reason the posting was shown. Storing
      one entry per place is the only shape in which the suggestion list and the field agree. */
-  const [chosenLocations, setChosenLocations] = useState<string[]>(() => saved?.locations ?? []);
+  /* NO remote_only STATE ANY MORE. The checkbox is gone (2026-08-19) and "Remote" is a place in
+     this list instead, which the backend already reads: with Remote as the only location the jobs
+     query builds `WHERE remote = true`, the exact clause remote_only built. What is gone is a
+     second control saying the same thing in the opposite direction - the box NARROWED to remote,
+     the chip WIDENS to include it - and the note under it claiming your places are ignored, which
+     routes/jobMonitor.ts stopped doing when the two were made independent.
+
+     An account that stored remote_only: true keeps its meaning here rather than losing it: the
+     seed below turns it into the Remote chip and the write clears the column. Leaving the column
+     set would strand a hard filter that hides every on-site posting behind a control nobody can
+     see or untick. */
+  const [chosenLocations, setChosenLocations] = useState<string[]>(() => {
+    const stored = saved?.locations ?? [];
+    if (saved?.remote_only && !stored.some(isRemoteLocation)) return [...stored, REMOTE_LOCATION];
+    return stored;
+  });
   const [newLocation, setNewLocation] = useState("");
-  const [remoteOnly, setRemoteOnly] = useState(() => saved?.remote_only ?? false);
 
   /* Case-insensitive, because "dubai" and "Dubai" are one place and two chips reading the same
      word is a control that looks broken. Same rule as the Account screen. */
@@ -215,7 +229,7 @@ function FocusForm({
 
   /* The location answer, in the one form the rest of the screen asks about. Either half is a real
      answer to "where"; neither is the same as leaving it blank. */
-  const hasPlace = effectiveLocations.length > 0 || remoteOnly;
+  const hasPlace = effectiveLocations.length > 0;
 
   /* Saved categories, plus the ones the chosen fields imply. Union, never replacement: the screen
      still has no category control, so it must not be able to remove a category the student cannot
@@ -278,7 +292,10 @@ function FocusForm({
       await putTargeting({
         ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories: effectiveCategories }),
         locations: effectiveLocations,
-        remote_only: remoteOnly,
+        /* Written false, never omitted. Omission leaves the stored true in place, and the chip that
+           now carries that meaning is already in `locations` above - so the column has to be
+           cleared in the same write or the account ends up filtered twice. */
+        remote_only: false,
         primary_period: primaryPeriod,
         backup_period: backupPeriod,
       });
@@ -498,7 +515,24 @@ function FocusForm({
           <input
             id="preferred-locations"
             value={newLocation}
-            onChange={(event) => setNewLocation(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setNewLocation(value);
+              /* A PICK FROM THE DROPDOWN ADDS ITSELF. Choosing a place and then having to press a
+                 second button is a step that exists for no reason: the choice was already made,
+                 unambiguously, from a closed list.
+
+                 Typing must NOT trigger this, which is why it keys off the event and not just the
+                 text. A datalist pick reports inputType "insertReplacementText" in Chrome and
+                 Safari and reports none at all in Firefox; every kind of typing reports an
+                 insert or delete type of its own. Matching on the text alone would fire mid-word:
+                 someone typing "Dubai, UAE" passes through the exact string "Dubai". */
+              const inputType = (event.nativeEvent as InputEvent).inputType;
+              const pickedFromList = inputType === "insertReplacementText" || inputType == null;
+              if (pickedFromList && LOCATION_OPTIONS.some((option) => option.toLowerCase() === value.trim().toLowerCase())) {
+                addLocation(value);
+              }
+            }}
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
               /* Enter adds the place; it must not submit or advance the screen. */
@@ -526,13 +560,6 @@ function FocusForm({
         <datalist id="start-location-options">
           {LOCATION_OPTIONS.map((location) => <option key={location} value={location} />)}
         </datalist>
-        <label className="mt-3 flex min-h-11 items-center gap-3 text-sm text-ink">
-          <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
-          Show remote jobs only
-        </label>
-        {remoteOnly && effectiveLocations.length > 0 && (
-          <p className="mt-1.5 text-xs leading-5 text-muted">While this is on, only remote jobs are shown and the places above are ignored.</p>
-        )}
       </div>
       )}
 
@@ -590,7 +617,7 @@ function FocusForm({
       )}
 
       {ready && !hasPlace && (
-        <p role="status" className="mb-4 text-xs leading-5 text-warn">Say where you want to work, or tick &quot;Show remote jobs only&quot;.</p>
+        <p role="status" className="mb-4 text-xs leading-5 text-warn">Add at least one place. Pick &quot;{REMOTE_LOCATION}&quot; if you want to work from anywhere.</p>
       )}
 
       <div className="flex items-center gap-3">
