@@ -1,6 +1,6 @@
 "use client";
 
-/* 03 THE MATCH — the first screen that gives rather than asks.
+/* 03 THE MATCH: the first screen that gives rather than asks.
  *
  * Everything before this took something: a field, a stage, some titles, a file. This screen hands
  * back one real posting, from the live board, that Litos can actually submit to, and asks a single
