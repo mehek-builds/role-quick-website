@@ -45,14 +45,27 @@ test("server plan catalog requires explicit checkout availability", () => {
   assert.equal(verifiedPlanCatalog({ plans }).checkoutAvailable, false);
 });
 
-test("public pricing clearly separates the trial from a later purchase", async () => {
+test("public pricing states the charge and the cancel window, and never promises Free", async () => {
+  /* THE CONTRACT REVERSED, and the test changed with it rather than being deleted.
+     It used to require "stay on Free unless you return and explicitly purchase" and
+     "No charge begins with the 7-day trial", on the reasoning that nothing could be
+     charged without a second deliberate act. That was true while the trial was granted
+     at signup and a purchase was a separate decision. The trial now rides on a Stripe
+     subscription and CONVERTS ON ITS OWN, so those sentences promised the opposite of
+     what the product does, which is the one kind of billing copy that produces
+     chargebacks. What is pinned now is the pair a student needs: what will be taken,
+     and by when they can stop it. */
   const [cards, pricing] = await Promise.all([
     readFile(new URL("../components/pricing/PlanCards.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/pricing/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(cards, /authenticated \|\| extensionCheckout \? plan\.total : "\$0"/);
-  assert.match(cards, /stay on Free unless you return and explicitly purchase/);
-  assert.match(cards, /No charge begins with the 7-day trial/);
+  assert.match(cards, /Then \$\{plan\.total\} \$\{plan\.renewal\}\. Cancel any time\./);
+  assert.match(cards, /Nothing is charged for 7 days\. Cancel any time\./);
+  // The claims that said the money would not be taken must not come back anywhere.
+  assert.doesNotMatch(cards, /stay on Free unless you return/);
+  assert.doesNotMatch(cards, /only after a later, explicit purchase/);
+  assert.doesNotMatch(pricing, /Your account moves to Free/);
   assert.match(cards, /window\.location\.assign\("\/dashboard\/settings#plan"\)/);
   assert.doesNotMatch(cards, /settings\?section=plan/);
   assert.match(cards, /authenticated \? "\/dashboard\/applications\?new=1&intent=fill"/);

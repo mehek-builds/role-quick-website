@@ -6,12 +6,12 @@ import { FeatureMatrix } from "@/components/pricing/FeatureMatrix";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: "Application filling stays free. Compare the 7-day Litos+ trial and weekly, monthly, or three-month Litos+ access.",
+  description: "Compare the 7-day Litos+ trial and weekly, monthly, or three-month Litos+ access.",
 };
 
 const FAQ = [
   ["What stays free?", "Application filling in the dashboard and on supported sites is unlimited. Job search, tracking, receipts, your profile, and access to work you already created also stay free."],
-  ["What happens after my 7-day trial?", "Your account moves to Free. You can keep filling applications and using your existing work. New tailored resumes, cover letters, generated answers, contacts, drafts, insights, and sending without being asked each time require Litos+."],
+  ["What happens after my 7-day trial?", "Litos+ continues at the price you chose. Cancel any time before the seven days are up and you are not charged."],
   ["What is included in the trial?", "You can create 5 tailored resumes, 5 cover letters, and generated answers for 5 applications. Independently, for each of up to 5 represented companies, you can find up to 2 contacts and create up to 2 outreach drafts. Each trial generation requires an explicit click."],
   ["Do the paid terms include different features?", "No. One week, one month, and three months include the same Litos+ tools. Only the access period and price change."],
   ["Does hovering generate anything?", "Only an active paid plan may start tailoring when you hover over an eligible job card. Free and trial accounts must choose Tailor resume, so hovering never consumes trial usage. Sending without being asked each time is a separate opt-in setting."],
