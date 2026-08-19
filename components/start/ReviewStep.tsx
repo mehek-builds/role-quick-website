@@ -89,7 +89,7 @@ export function ReviewStep({
   }
 
   return (
-    <StartShell step="focus" title="Happy with this? Then send it.">
+    <StartShell step="review" title="Happy with this? Then send it.">
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

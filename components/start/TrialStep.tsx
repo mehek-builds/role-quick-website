@@ -54,7 +54,7 @@ export function TrialStep({ onContinue }: { onContinue: () => void }) {
     typeof limit === "number" ? String(Math.max(0, limit - (used ?? 0))) : "Not recorded";
 
   return (
-    <StartShell step="focus" title="Sent. And here's something from us.">
+    <StartShell step="trial" title="Sent. And here's something from us.">
       <div className="rounded-card border border-brand/25 bg-brand-soft/60 px-6 py-7 text-center">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-brand-ink">A gift, on us</p>
         <p className="mt-2 font-mono text-[56px] leading-none tabular-nums text-brand-ink">7</p>

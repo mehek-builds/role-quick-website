@@ -141,6 +141,9 @@ export default function Start() {
           requires_onboarding: true,
           completed_at: qaSaved ? "2026-08-01T10:00:00.000Z" : null,
           has_focus: true,
+          /* The application sequence is part of the QA flow too, so the rail counts the six and a
+             reviewer can open any of them directly with ?qa=1&step=match. */
+          includes_application_steps: true,
           has_resume: true,
           has_impact_review: qaStep !== "impact",
           /* Step-aware like its siblings. Absent, this made the done screen's receipt report the

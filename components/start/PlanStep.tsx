@@ -68,7 +68,7 @@ export function PlanStep({ onFree }: { onFree: () => void }) {
   }
 
   return (
-    <StartShell step="focus" title="What happens after the seven days.">
+    <StartShell step="plan" title="What happens after the seven days.">
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">

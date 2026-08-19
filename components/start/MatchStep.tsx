@@ -95,7 +95,7 @@ export function MatchStep({
      other is a fact about the world. Conflating them would offer a retry that can never help. */
   if (error) {
     return (
-      <StartShell step="focus" title="Finding your first match.">
+      <StartShell step="match" title="Finding your first match.">
         <ErrorNote message={error} />
         <button
           type="button"
@@ -115,7 +115,7 @@ export function MatchStep({
      literally happening: the board is being read for this student. */
   if (match === undefined) {
     return (
-      <StartShell step="focus" title="Finding your first match.">
+      <StartShell step="match" title="Finding your first match.">
         <div className="flex items-center gap-3 text-[13px] text-muted">
           <ThinkingOrb state="searching" size={20} />
           <span className="font-mono text-[11.5px]">Reading the board for your roles</span>
@@ -130,7 +130,7 @@ export function MatchStep({
      no honest match to show, so the screen does not invent one. */
   if (match === null) {
     return (
-      <StartShell step="focus" title="Nothing on the board right now.">
+      <StartShell step="match" title="Nothing on the board right now.">
         <p className="text-[15px] leading-7 text-ink">
           Litos watches the boards through the day and will have matches for you shortly. Your
           resume and roles are saved, so there is nothing to redo.
@@ -152,7 +152,7 @@ export function MatchStep({
   const { job } = match;
 
   return (
-    <StartShell step="focus" title={matchHeadline(match)}>
+    <StartShell step="match" title={matchHeadline(match)}>
       <div className="overflow-hidden rounded-inner border border-border">
         <div className="flex items-center justify-between gap-4 border-b border-border bg-surface-alt px-4 py-1.5">
           <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">

@@ -118,7 +118,7 @@ export function BuildStep({
 
   if (error) {
     return (
-      <StartShell step="focus" title="That build did not finish.">
+      <StartShell step="build" title="That build did not finish.">
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
@@ -134,7 +134,7 @@ export function BuildStep({
 
   return (
     <StartShell
-      step="focus"
+      step="build"
       title={building ? "Building your application." : "Here is your application."}
       wide
     >

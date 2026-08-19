@@ -97,7 +97,7 @@ export function QuestionsStep({
     /* Not reachable from the build screen, which sends the student straight to review when nothing
        is outstanding. Handled anyway rather than rendering an empty card. */
     return (
-      <StartShell step="focus" title={`${company} asks nothing Litos cannot answer.`}>
+      <StartShell step="questions" title={`${company} asks nothing Litos cannot answer.`}>
         <PrimaryButton onClick={() => void save()}>Review and send</PrimaryButton>
       </StartShell>
     );
@@ -107,7 +107,7 @@ export function QuestionsStep({
 
   return (
     <StartShell
-      step="focus"
+      step="questions"
       title={
         questions.length === 1
           ? `One question ${company} asks that I can't answer for you.`
