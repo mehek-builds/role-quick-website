@@ -28,7 +28,7 @@
  * them. The two cases after it hold the ends: a profile with no gaps at all, and the gaps screen
  * rendering anyway.
  *
- * CONSTRAINTS, THE SAME ONES start-base-build.spec.mjs HOLDS
+ * CONSTRAINTS, THE SAME ONES start-base-build.spec.mjs HELD BEFORE THE ONE-PAGE SCREEN WAS CUT
  * =========================================================
  *  - No production backend, no database, no real credentials, no model call. A catch-all route
  *    serves same-origin requests from the local `next start`, answers backend requests from a

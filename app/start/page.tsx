@@ -176,7 +176,14 @@ export default function Start() {
              and a denominator re-derived from that would drop the screen out of the rail on the one
              step where a reviewer is checking the final count. The real backend answers this from
              whether the screen was SHOWN, which stays true across both. */
-          includes_gaps_step: true,
+          /* Both cut screens. The fixture keeps the keys rather than dropping them so a reviewer
+             reading this file sees the answer is NO rather than an omission, and so a stale client
+             pointed at this fixture cannot read a missing field as a screen it should render. */
+          includes_gaps_step: false,
+          /* The QA flow is the TEN-step one: a student whose first employer did not ask about work
+             eligibility, and who therefore still walks the work-visa screen. Nine is the other flow
+             and it is pinned in tests/start-rail-denominator.test.mjs, where the fixture can vary. */
+          includes_sponsorship_step: true,
           // Populated so the base step's languages line is reviewable in QA in its prefilled
           // state, which is the state almost every real student will see.
           gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },

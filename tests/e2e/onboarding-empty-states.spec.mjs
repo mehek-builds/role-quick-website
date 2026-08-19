@@ -55,17 +55,15 @@ after(async () => {
  * printed count skipping a number for everyone who never sees it.
  *
  * So the denominator is the steps the student's own flow contains (components/start/ui.tsx
- * `flowSteps`), and the QA fixture describes ONE flow: the seven-screen one, the account whose
- * resume printed no GPA, scale or major and who is therefore routed through the details screen.
- * Every row below reads "of 7" for that reason, and the run is the regression guard for the count
- * being STABLE across the whole flow. A denominator that counted the details screen only while the
- * student stood on it would read 6 here and 7 on that one row, which is the count growing
- * underneath them - "Step 1 of 6, Your resume" against a flow of seven is the exact bug #285
- * existed for, one screen further along.
+ * `flowSteps`), and the QA fixture describes ONE flow: the ten-screen one, whose first employer
+ * does not ask about work eligibility. Every row below reads "of 10" for that reason, and the run
+ * is the regression guard for the count being STABLE across the whole flow. A denominator that
+ * counted the work-visa screen only while the student stood on it would read 9 here and 10 on that
+ * one row, which is the count growing underneath them - the exact bug #285 existed for.
  *
- * A flow that does NOT contain the screen is the other half, and it is covered where a fixture can
- * vary: tests/e2e/start-onboarding-checklist.spec.mjs asserts six throughout for an account with
- * nothing outstanding, and tests/start-rail-denominator.test.mjs pins both against `flowSteps`.
+ * A flow that does NOT contain that screen is the other half, and it is covered where a fixture can
+ * vary: tests/e2e/start-onboarding-checklist.spec.mjs, and tests/start-rail-denominator.test.mjs
+ * pins both against `flowSteps` directly.
  *
  * The done heading moved from "Your job matches are ready." to "Setup complete." when that screen
  * gained a confirmation: the forward-looking line is still there, below the receipt, as the
@@ -73,24 +71,21 @@ after(async () => {
  * original assertion and shortened with it. */
 test("every onboarding checkpoint renders with a progress indicator", async () => {
   const checkpoints = [
-    /* Roles leads as of flow version 3, and the application sequence added SEVEN screens after the
-       setup ones, so the denominator is 14 rather than 7: a new student's flow really does contain
-       all of them now, and a rail still claiming seven would be describing a flow nobody walks.
-       Six became seven when the notifications screen landed between the trial and the plan. This
-       number is spelled out on every row rather than computed, so adding a screen shows up here as
-       a deliberate edit: the rail is a wayfinding device, and one that counts wrong is worse than
-       none (#285). */
-    ["focus", "What are you going after?", "Setup: step 1 of 14, Your roles"],
-    ["resume", "Start with your resume.", "Setup: step 2 of 14, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 3 of 14, Your impact"],
-    ["sponsorship", "Where can you work?", "Setup: step 4 of 14, Work visa"],
-    ["base", "One page, ready.", "Setup: step 5 of 14, Your one page"],
-    ["gaps", "A few details.", "Setup: step 6 of 14, A few details"],
-    /* Still 7, and the `done` fixture is the row that proves it: it reports NO outstanding gaps, so
-       a denominator re-read from that list would drop to 6 here. Having been shown the screen is
-       what the count follows, and that does not stop being true once the fields are answered. */
-    ["done", "Setup complete.", "Setup: step 14 of 14, Done"],
+    /* TEN, and the QA fixture walks the full ten because it describes a student whose first
+       employer did NOT ask about work eligibility. Nine is the other flow, for the ~40% whose
+       employer asks both halves itself; that one is pinned in start-onboarding-checklist.spec.mjs
+       and against `flowSteps` directly in tests/start-rail-denominator.test.mjs.
+     *
+       The number is spelled out on every row rather than computed, so adding or cutting a screen
+       shows up here as a deliberate edit: the rail is a wayfinding device, and one that counts
+       wrong is worse than none (#285). It read 14 until the cut removed the one-page and details
+       screens and the merges folded `build` into `match` and `impact` into `resume`. */
+    ["focus", "What are you going after?", "Setup: step 1 of 10, Your roles"],
+    ["resume", "Start with your resume.", "Setup: step 2 of 10, Your resume"],
+    ["sponsorship", "Where can you work?", "Setup: step 5 of 10, Work visa"],
+    ["done", "Setup complete.", "Setup: step 10 of 10, Done"],
   ];
+
 
   for (const [step, heading, rail] of checkpoints) {
     await page.goto(`${ORIGIN}/start?qa=1&step=${step}`, { waitUntil: "domcontentloaded" });
