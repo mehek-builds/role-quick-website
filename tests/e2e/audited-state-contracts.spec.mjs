@@ -277,6 +277,18 @@ async function routeSettings(context, deleteResponse, exportResponse = { status:
     if (key === "GET /email-connections") return route.fulfill({ json: { configured: true, connections: [{ provider: "gmail", connected: false, status: "NOT_CONNECTED" }, { provider: "outlook", connected: false, status: "NOT_CONNECTED" }] } });
     if (key === "GET /application-email") return route.fulfill({ json: { configured: true, tracking_active: false, tracking_blocked_reason: "inbound_disabled", domain: "applications@trylitos.com", forward_to: EMAIL, aliases: [] } });
     if (key === "GET /sponsorship") return route.fulfill({ status: 404, json: { error: "fixture" } });
+    /* Settings reads the notification permissions to draw the two controls under Automation. It is
+       an expected read, so it belongs in the stub rather than in `unknown`: this spec's job is to
+       fail when the page makes a request nobody sanctioned, and adding a sanctioned one here is
+       what that looks like. Both off, which is what a fresh account holds. */
+    if (key === "GET /notifications/preferences") {
+      return route.fulfill({ json: {
+        strong_match: { enabled: false, granted_at: null },
+        employer_reply: { enabled: false, granted_at: null },
+        deliverable: true,
+        unsubscribe_configured: true,
+      } });
+    }
     if (key === "GET /account/export") return route.fulfill(exportResponse);
     if (key === "DELETE /account") {
       deleteCalls += 1;
