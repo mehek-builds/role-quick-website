@@ -368,7 +368,26 @@ describe("the application sequence, end to end", () => {
 
     const body = await page.locator("main").innerText();
     assert.match(body, /\$89\.99 today\. Renews every 3 months until canceled\./i);
-    assert.match(body, /Unlimited application filling/i, "Free's real value must be on the paywall");
+    /* WAS an assertion that "Unlimited application filling" appears here, guarding a two-row
+       "If you do nothing / You keep / You lose" table. #363 deleted that table ON PURPOSE and this
+       line was not deleted with it, which is why main went red: the table promised the student
+       unlimited filling free with no time limit if they simply did not act, and that stopped being
+       true when this screen started taking a card for a trial that converts on its own. Doing
+       nothing is now the path that gets CHARGED.
+
+       So the replacement asserts what the screen must say instead - when the charge lands and how
+       to stop it - rather than restoring a sentence the product no longer means. Keeping the old
+       string would have re-created a false promise on the one screen that must not carry one. */
+    assert.match(
+      body,
+      /Free for seven days\. After that, Litos\+ continues at/i,
+      "the paywall must state when the charge lands",
+    );
+    assert.match(
+      body,
+      /any time before then and you are not charged/i,
+      "the paywall must state how to stop the charge",
+    );
     assert.match(body, /Continue on Free/i);
     assert.doesNotMatch(body, /Finish later/i, "the escape here chooses, so it must not say later");
   });
