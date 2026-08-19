@@ -47,6 +47,17 @@ import { StartFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 import { deferOnboardingForSession } from "@/lib/onboarding-flow";
 
+/* Whether this account's flow is one the acknowledgement ledger exists for.
+ *
+ * This was ten hardcoded `state.flow_version === 2` checks, and the roles-first reorder bumped the
+ * server to 3. Every one of them would have gone quietly false: the screens would still render and
+ * still advance, and not one acknowledgement would ever be written, so the ledger would sit empty
+ * while looking healthy. A >= test is the honest shape of the question, because the ledger arrived
+ * in version 2 and no later version removes it. */
+function hasFlowLedger(state: OnboardingState): state is OnboardingState & { flow_version: number } {
+  return typeof state.flow_version === "number" && state.flow_version >= 2;
+}
+
 export default function Start() {
   const router = useRouter();
   const [state, setState] = useState<OnboardingState | null>(null);
@@ -325,25 +336,18 @@ export default function Start() {
     );
     switch (step) {
       case "focus":
-        // During a rolling backend deploy an older state response can still say "focus" before a
-        // resume exists. Keeping the upload here makes the new resume-first contract resilient to
-        // that short mixed-version window.
-        if (!state.has_resume) {
-          return (
-            <ResumeStep
-              onLater={later}
-              onDone={() => {
-                stepDone("resume");
-                void (async () => {
-                  if (state.flow_version === 2) await acknowledgeOnboardingFlowStep("resume", "continued");
-                  const s = await refresh();
-                  if (s.has_resume) await loadProfile();
-                })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
-              }}
-            />
-          );
-        }
-        if (!profile) {
+        /* NO RESUME REDIRECT HERE ANY MORE, and its removal is the whole reorder.
+         *
+         * This case used to answer `focus` with the upload screen whenever `has_resume` was false,
+         * which was correct while the resume came first: a state response saying "focus" without a
+         * resume could only be a stale mixed-version read. Under the roles-first contract that is
+         * the NORMAL state of every new account, and leaving the redirect in place would show the
+         * upload screen under a rail reading "Your roles" to literally everyone.
+         *
+         * The reorder is safe in the other direction too. An OLDER backend answers `resume` first,
+         * and that case still renders the upload, so a rolling deploy degrades to the old order
+         * rather than to a broken screen. */
+        if (state.has_resume && !profile) {
           return (
             <div className="mx-auto max-w-2xl px-6 py-16">
               <StepRail current="focus" />
@@ -369,7 +373,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("focus");
-              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("focus", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("focus", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -383,23 +387,23 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("sponsorship");
-              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("sponsorship", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("sponsorship", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
 
       case "resume":
-        if (state.flow_version === 2 && state.has_resume && !state.flow_completed && parsedProfileStatus !== "ready") {
+        if (hasFlowLedger(state) && state.has_resume && !state.flow_completed && parsedProfileStatus !== "ready") {
           return parsedProfileGate();
         }
         return (
           <ResumeStep
-            savedProfile={state.flow_version === 2 && state.has_resume && state.flow_completed === false ? profile : undefined}
+            savedProfile={hasFlowLedger(state) && state.has_resume && state.flow_completed === false ? profile : undefined}
             onLater={later}
             onDone={() => {
               stepDone("resume");
               void (async () => {
-                if (state.flow_version === 2) await acknowledgeOnboardingFlowStep("resume", "continued");
+                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
@@ -414,7 +418,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("impact");
-              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("impact", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("impact", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -434,7 +438,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("base");
-              void (state.flow_version === 2 ? acknowledgeOnboardingFlowStep("base", "continued") : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
+              void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("base", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
         );
@@ -461,7 +465,7 @@ export default function Start() {
                    suppresses the step entirely in that window, so the next load agrees. */
                 setGapsHandled(true);
                 await markGapsAsked();
-                if (state.flow_version === 2) await acknowledgeOnboardingFlowStep("gaps", skipped ? "skipped" : "continued");
+                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("gaps", skipped ? "skipped" : "continued", state.flow_version);
                 void refresh();
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
@@ -490,7 +494,7 @@ export default function Start() {
                     ...settings,
                   });
                 }
-                if (state.flow_version === 2) await completeOnboardingFlow();
+                if (hasFlowLedger(state)) await completeOnboardingFlow(state.flow_version);
                 track("onboarding_complete", {
                   learned: state.learned.length,
                   applied: state.has_applied,

@@ -73,9 +73,10 @@ after(async () => {
  * original assertion and shortened with it. */
 test("all seven onboarding checkpoints render with a progress indicator", async () => {
   const checkpoints = [
-    ["resume", "Start with your resume.", "Setup: step 1 of 7, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 2 of 7, Your impact"],
-    ["focus", "Here's where we'd start.", "Setup: step 3 of 7, Your roles"],
+    /* Roles leads as of flow version 3, so the first three rows moved and the rest did not. */
+    ["focus", "What are you going after?", "Setup: step 1 of 7, Your roles"],
+    ["resume", "Start with your resume.", "Setup: step 2 of 7, Your resume"],
+    ["impact", "Make your most recent work count.", "Setup: step 3 of 7, Your impact"],
     ["sponsorship", "Where can you work?", "Setup: step 4 of 7, Work visa"],
     ["base", "One page, ready.", "Setup: step 5 of 7, Your one page"],
     ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],

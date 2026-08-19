@@ -154,7 +154,7 @@ test("a backend that never sends the field reads as a six-step flow", () => {
 test("with no current step the result is the unconditional flow", () => {
   const steps = flowSteps(undefined, null);
   assert.equal(steps.length, 6);
-  assert.deepEqual(keys(steps), ["resume", "impact", "focus", "sponsorship", "base", "done"]);
+  assert.deepEqual(keys(steps), ["focus", "resume", "impact", "sponsorship", "base", "done"]);
   assert.equal(
     steps.findIndex((s) => s.key === undefined),
     -1,

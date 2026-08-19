@@ -231,9 +231,12 @@ let heldState = null;
  * only the gap list would park this walk on the sixth screen forever. */
 function derivedStep() {
   if (forceStep) return forceStep;
+  /* FOCUS LEADS, mirroring onboardingStepFrom as of flow version 3. The order in this stub is the
+     product's real routing as far as this file is concerned, so it moves whenever the backend's
+     does or the walk below stops testing anything. */
+  if (!progress.focus) return "focus";
   if (!progress.resume) return "resume";
   if (!progress.impact) return "impact";
-  if (!progress.focus) return "focus";
   if (!progress.sponsorship) return "sponsorship";
   if (!progress.base) return "base";
   if (hasSetupGaps() && !progress.gapsAsked) return "gaps";
@@ -588,7 +591,7 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
     savedTargeting = { ...EMPTY_TARGETING };
     await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
 
-    const first = await screen("Your resume");
+    const first = await screen("Your roles");
     visited.push(first);
 
     /* ── 1. Progress indicator ─────────────────────────────────────────────
@@ -618,15 +621,44 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
     );
 
     /* ── 3. Account setup, and specifically the DELAY half of it ───────────
-       "Delay any fields not genuinely needed to start using the product." The resume is the one
-       input that personalises everything downstream, so it is the only one allowed on screen. Any
-       text, email, tel or number input here is a field that should have waited. */
+       "Delay any fields not genuinely needed to start using the product."
+
+       This criterion did not change; the screen it lands on did. Roles leads as of flow version 3,
+       so the first screen's one ask is a field, a stage and a title or two, all of them taps. The
+       resume is now the SECOND screen, and asking for a file before asking what someone is looking
+       for is exactly the delay this criterion is about - so the file input must NOT be here.
+
+       The one text input allowed is the title search, and it is allowed because it is part of this
+       screen's single ask rather than a second one: a student whose title is not in the offered
+       list types it there. Anything asking for an email, a phone number or a figure is a field
+       that should have waited, and there must be none. */
     const fileInputs = await page.locator("input[type=file]").count();
-    assert.equal(fileInputs, 1, "the first screen must ask for the resume, and ask for it once");
+    assert.equal(fileInputs, 0, "the first screen asks for a file before asking what the student wants");
+    /* VISIBLE fields, because the criterion is about what the screen ASKS for and a collapsed
+       optional disclosure is not an ask. The roles screen keeps locations, remote work and
+       recruiting periods inside a shut <details> labelled OPTIONAL; their inputs are in the DOM
+       the whole time, so a raw count would fail a screen that is behaving correctly. Scoped this
+       way the assertion also gets STRICTER in the direction that matters: move one of those fields
+       into the open and this fails, which is exactly when it should. */
     const prematureFields = await page.locator(
-      "main input[type=text], main input[type=email], main input[type=tel], main input[type=number], main input:not([type])",
+      "main input[type=email]:visible, main input[type=tel]:visible, main input[type=number]:visible, "
+      + "main input[type=text]:not(#additional-role):visible, main input:not([type]):not(#additional-role):visible",
     ).count();
     assert.equal(prematureFields, 0, "the first screen asks for fields that are not needed to start");
+    /* On ARRIVAL there is no free-text input at all, and that is the gate doing its job rather
+       than an accident: the title search lives inside the titles block, and the titles block is
+       withheld until a field and a stage are chosen. A cold first screen is therefore taps only,
+       which is the strongest form this criterion can take. The search is asserted where it
+       actually appears, in the walk below, after the two answers that summon it. */
+    assert.equal(
+      await page.locator("main #additional-role:visible").count(),
+      0,
+      "the title search is offered before a field and a stage have been chosen",
+    );
+
+    /* And the resume still gets asked for, one screen later. A reorder that quietly dropped the
+       upload would satisfy every assertion above and break the product, so the walk below picks it
+       up as its second screen and this file's own rail readings prove the order. */
 
     /* ── 4. Product highlights, and its skip route ─────────────────────────*/
     const highlights = page.locator("section[aria-labelledby='how-litos-works']");
@@ -649,7 +681,7 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
     /* The skip has to SURVIVE, or it is a toggle rather than a skip: a student who has seen the
        walkthrough should not have to dismiss it on every return to setup. */
     await page.reload({ waitUntil: "domcontentloaded" });
-    await screen("Your resume");
+    await screen("Your roles");
     await page.locator("button", { hasText: "How Litos works" }).waitFor({ timeout: 10000 });
     assert.equal(
       await page.locator("section[aria-labelledby='how-litos-works']").count(),
@@ -672,7 +704,7 @@ test("the first step remains operable at 320px and its walkthrough discloses acc
     resetProgress();
     savedTargeting = { ...EMPTY_TARGETING };
     await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
-    await screen("Your resume");
+    await screen("Your roles");
 
     const geometry = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
@@ -729,13 +761,38 @@ test("a failed application-profile read blocks approval instead of clearing save
     applicationProfileGetStatus = 200;
     resetProgress();
     await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
-    await screen("Your resume");
+    await screen("Your roles");
   }
 });
 
 test("the walk: every step in order, each one advancing the rail by one", async () => {
   try {
-    /* ── Step 1, Your resume ───────────────────────────────────────────────*/
+    /* ── Step 1, Your roles ────────────────────────────────────────────────
+       Answered in the order the screen asks: a field, then a stage, and only then a title. The
+       title assertion in the middle is the point of the screen - the offer is DERIVED from the
+       field, so a walk that could pick a title before choosing a field would mean the gate is not
+       real. */
+    /* NOT pushed: the criteria test above already recorded this screen as `first`, and the rail
+       arithmetic at the end counts each screen once. Roles is the first screen now, so it is that
+       test's reading rather than this walk's. */
+    await screen("Your roles");
+    const softwareEngineer = page.getByRole("button", { name: "Software Engineer", exact: true });
+    assert.equal(
+      await softwareEngineer.count(),
+      0,
+      "titles were offered before a field was chosen",
+    );
+
+    await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+    await page.getByRole("button", { name: "Internship", exact: true }).click();
+    await softwareEngineer.waitFor({ timeout: 10_000 });
+    await softwareEngineer.click();
+
+    const rolesContinue = page.locator("button", { hasText: "Continue" });
+    await rolesContinue.click();
+
+    /* ── Step 2, Your resume ───────────────────────────────────────────────*/
+    visited.push(await screen("Your resume"));
     await page.locator("input[type=file]").setInputFiles({
       name: "fixture-resume.pdf",
       mimeType: "application/pdf",
@@ -743,7 +800,7 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     });
     await page.locator("button", { hasText: "See my matches" }).click();
 
-    /* ── Step 2, Your impact ───────────────────────────────────────────────
+    /* ── Step 3, Your impact ───────────────────────────────────────────────
        The entry chooser only renders when the server could not tell which experience is newest
        (status "choose_entry"). This fixture answers "needs_input" with an entry already selected,
        which is the ordinary arrival, so the walk takes the ordinary exit: keep the found bullet
@@ -752,18 +809,6 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     const chooser = page.locator("input[name='recent-experience']");
     if (await chooser.count()) await chooser.first().check();
     await page.locator("button", { hasText: "Continue with what you found." }).click();
-
-    /* ── Step 3, Your roles ────────────────────────────────────────────────*/
-    visited.push(await screen("Your roles"));
-    const rolesContinue = page.locator("button", { hasText: "Continue" });
-    /* The screen seeds itself from the resume inference, so Continue is normally live on arrival.
-       Picking explicitly when it is not keeps the walk about the FLOW rather than about whether
-       the inference happened to produce a role type for this fixture. */
-    if (await rolesContinue.isDisabled()) {
-      await page.locator("button[aria-pressed]").first().click();
-      await page.locator("button[aria-pressed]").last().click();
-    }
-    await rolesContinue.click();
 
     /* ── Step 4, country-scoped work eligibility ──────────────────────────*/
     visited.push(await screen("Work visa"));

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { categoriesForRoles, experienceYears, inferResumeTargeting, inferRoleType } from "./onboarding-role-inference.ts";
+import { FIELDS, categoriesForFields, categoriesForRoles, experienceYears, fieldsForCategories, inferResumeTargeting, inferRoleType, titlesForFields } from "./onboarding-role-inference.ts";
 import type { ParsedProfile } from "./api.ts";
 
 function profile(overrides: Partial<ParsedProfile>): ParsedProfile {
@@ -147,4 +147,70 @@ test("caps inferred categories at three and preserves fallback categories", () =
     ["software-engineering", "data-ml", "design"],
   );
   assert.deepEqual(categoriesForRoles(["Astronaut"], ["research", "other", "design", "product"]), ["research", "other", "design"]);
+});
+
+/* The field-then-stage-then-titles picker. It runs before any resume exists, so every one of these
+   is about what the screen can OFFER with nothing to infer from. */
+
+test("every field carries a stable id, a label and at least one title", () => {
+  assert.ok(FIELDS.length >= 8);
+  assert.equal(new Set(FIELDS.map((field) => field.id)).size, FIELDS.length);
+  for (const field of FIELDS) {
+    assert.match(field.id, /^[a-z-]+$/);
+    assert.ok(field.label.length > 0);
+    assert.ok(field.titles.length > 0);
+  }
+});
+
+test("two fields share the `other` category without sharing an id", () => {
+  const other = FIELDS.filter((field) => field.category === "other").map((field) => field.id);
+  assert.deepEqual(other, ["marketing", "sales"]);
+});
+
+test("titles come back in field order, deduped case-insensitively", () => {
+  const titles = titlesForFields(["software", "product"]);
+  assert.deepEqual(titles.slice(0, 5), FIELDS.find((field) => field.id === "software")!.titles);
+  assert.ok(titles.includes("Product Manager"));
+  assert.equal(new Set(titles.map((title) => title.toLowerCase())).size, titles.length);
+});
+
+test("a title in two fields is offered once", () => {
+  // Business Analyst sits in both product and quant-trading.
+  const titles = titlesForFields(["product", "quant"]);
+  assert.equal(titles.filter((title) => title === "Business Analyst").length, 1);
+});
+
+test("no field chosen offers nothing, which is what makes the gate honest", () => {
+  assert.deepEqual(titlesForFields([]), []);
+});
+
+test("an unknown field id degrades to a smaller offer, never a throw", () => {
+  // The ids ride in a query string from the homepage calibration card, so a stale link must not
+  // break the first screen of setup.
+  assert.deepEqual(titlesForFields(["software", "nonsense"]), titlesForFields(["software"]));
+  assert.deepEqual(titlesForFields(["nonsense"]), []);
+});
+
+test("saved categories pre-select their fields, and a shared category pre-selects both", () => {
+  assert.deepEqual(fieldsForCategories(["software-engineering"]), ["software"]);
+  assert.deepEqual(fieldsForCategories(["other"]), ["marketing", "sales"]);
+  assert.deepEqual(fieldsForCategories([]), []);
+  assert.deepEqual(fieldsForCategories(null), []);
+});
+
+test("the chosen fields answer the category question the screen never asks", () => {
+  // Categories used to arrive from the resume inference, and the screen now runs before any upload.
+  assert.deepEqual(categoriesForFields(["software"]), ["software-engineering"]);
+  assert.deepEqual(categoriesForFields(["software", "quant"]), ["software-engineering", "quant-trading"]);
+  // Two fields, one category: picking both must not write `other` twice.
+  assert.deepEqual(categoriesForFields(["marketing", "sales"]), ["other"]);
+  assert.deepEqual(categoriesForFields([]), []);
+  assert.deepEqual(categoriesForFields(["nonsense"]), []);
+});
+
+test("every field resolves to a category, so no selection can leave targeting unwritable", () => {
+  // A field with no category would disable Continue with nothing on screen to fix it.
+  for (const field of FIELDS) {
+    assert.equal(categoriesForFields([field.id]).length, 1, `${field.id} resolves to no category`);
+  }
 });

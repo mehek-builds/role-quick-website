@@ -1168,26 +1168,45 @@ export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
 }
 
-export const CURRENT_ONBOARDING_FLOW_VERSION = 2;
+/* The version this build KNOWS ABOUT. It is not what gets sent.
+ *
+ * Only two things still read it, and neither talks to the server: the deferral key below, and
+ * tests. Everything on the wire echoes the version the server itself reported. */
+export const CURRENT_ONBOARDING_FLOW_VERSION = 3;
 
+/* ECHO THE SERVER'S VERSION, NEVER A LOCAL CONSTANT.
+ *
+ * Both routes validate this field with `z.literal(CURRENT_ONBOARDING_FLOW_VERSION)` on the backend,
+ * so a mismatch is a 400 rather than a soft degrade - and while both sides hardcoded their own
+ * copy of the number, a version bump had NO safe deploy order in either direction:
+ *
+ *   - backend first: this client still says 2, the literal wants 3, and every acknowledgement
+ *     POSTs a 400 that surfaces as "Could not continue." mid-setup;
+ *   - website first: this client says 3, the old literal wants 2, and the same thing happens
+ *     from the other side.
+ *
+ * Passing the version through from `OnboardingState.flow_version` removes the coupling instead of
+ * re-timing it. The client agrees with whichever server answered it, so a rolling deploy is
+ * survivable and the next bump needs no choreography at all. */
 export function acknowledgeOnboardingFlowStep(
   step: Exclude<OnboardingStep, "install" | "apply" | "targeting" | "done">,
   disposition: "continued" | "skipped",
+  flowVersion: number,
 ) {
   return api<{ ok: true }>("/onboarding/flow/steps", {
     method: "POST",
     body: JSON.stringify({
-      flow_version: CURRENT_ONBOARDING_FLOW_VERSION,
+      flow_version: flowVersion,
       step,
       disposition,
     }),
   });
 }
 
-export function completeOnboardingFlow() {
+export function completeOnboardingFlow(flowVersion: number) {
   return api<{ ok: true; flow_version: number }>("/onboarding/flow/complete", {
     method: "POST",
-    body: JSON.stringify({ flow_version: CURRENT_ONBOARDING_FLOW_VERSION }),
+    body: JSON.stringify({ flow_version: flowVersion }),
   });
 }
 
