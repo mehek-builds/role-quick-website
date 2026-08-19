@@ -20,6 +20,7 @@ import {
   consumePendingBillingAction,
   forgetBillingReturnContext,
   getBillingState,
+  reconcileBillingCheckout,
   getBillingOffer,
   readPendingBillingAction,
 } from "@/features/billing";
@@ -235,6 +236,18 @@ export default function BillingReturnPage() {
         setResult({ kind: "mismatch" });
         return;
       }
+      /* ASK STRIPE BEFORE WAITING TO BE TOLD.
+         The loop below polls OUR database, which only learns about a purchase when
+         the webhook lands. That assumed the webhook would arrive inside seven
+         seconds. It can lag the redirect, be retried for minutes after a 5xx, or
+         never arrive at all if its signing secret is wrong -- and the student is
+         already here, having just handed over a card. One reconcile turns the
+         common case into a first-attempt hit and the broken-webhook case from a
+         permanent dead end into a resolved purchase.
+         Deliberately not awaited into a branch: it never throws, and the poll
+         below remains the fallback for anything it could not settle. */
+      await reconcileBillingCheckout(context);
+      if (stopped) return;
       for (let attempt = 0; attempt < 6; attempt += 1) {
         const [offerResult, state, me] = await Promise.all([
           getBillingOffer(context).catch((reason) => reason),

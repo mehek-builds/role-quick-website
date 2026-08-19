@@ -153,6 +153,7 @@ async function routeBilling(context, meResponse, {
   let stateCalls = 0;
   let portalCalls = 0;
   const unknown = [];
+  let reconcileCalls = 0;
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = request.url();
@@ -172,6 +173,14 @@ async function routeBilling(context, meResponse, {
     if (url.startsWith(BACKEND) && request.method() === "GET" && new URL(url).pathname === "/billing/state") {
       stateCalls += 1;
       return route.fulfill({ json: stateResponse });
+    }
+    /* The return path asks Stripe what happened before it polls our own database.
+       Answering "nothing to reconcile" here keeps the poll below it exercised, which
+       is the behaviour the timeout test depends on; the point of counting it is that
+       the call must happen at all, and exactly once. */
+    if (url.startsWith(BACKEND) && request.method() === "POST" && new URL(url).pathname === "/billing/reconcile") {
+      reconcileCalls += 1;
+      return route.fulfill({ json: { reconciled: false, reason: "not_complete" } });
     }
     if (url.startsWith(BACKEND) && request.method() === "POST" && new URL(url).pathname === "/billing/portal") {
       portalCalls += 1;
@@ -201,6 +210,7 @@ async function routeBilling(context, meResponse, {
     get offerCalls() { return offerCalls; },
     get stateCalls() { return stateCalls; },
     get portalCalls() { return portalCalls; },
+    get reconcileCalls() { return reconcileCalls; },
     unknown,
   };
 }
@@ -214,6 +224,7 @@ test("cancelled billing return never reads the account", async () => {
   assert.equal(traffic.meCalls, 0);
   assert.equal(traffic.offerCalls, 0);
   assert.equal(traffic.stateCalls, 0);
+  assert.equal(traffic.reconcileCalls, 0, "a cancelled return must not go asking Stripe anything");
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
@@ -236,6 +247,9 @@ test("billing return confirms the exact paid offer and account record", async ()
   assert.equal(traffic.meCalls, 1);
   assert.equal(traffic.offerCalls, 1);
   assert.equal(traffic.stateCalls, 1);
+  /* Once, not per attempt. Reconciling inside the poll would multiply a Stripe
+     round trip by the retry count for every returning student. */
+  assert.equal(traffic.reconcileCalls, 1);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
@@ -261,6 +275,7 @@ test("billing return reaches its bounded timeout state", async () => {
 async function routeSettings(context, deleteResponse, exportResponse = { status: 200, json: { email: EMAIL } }) {
   let deleteCalls = 0;
   const unknown = [];
+  let reconcileCalls = 0;
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = request.url();

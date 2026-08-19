@@ -100,6 +100,30 @@ export async function getBillingOffer(offerId: string): Promise<BillingOffer> {
   return api<BillingOffer>(`/billing/offers/${encodeURIComponent(offerId)}`, { cache: "no-store" });
 }
 
+/**
+ * Ask the server to ask Stripe what happened, instead of waiting to be told.
+ *
+ * The return page used to poll our own database for up to seven seconds and then
+ * give up, which assumed the webhook would land in that window. A webhook can lag
+ * the redirect, be retried for minutes after a 5xx, or -- if its signing secret is
+ * wrong -- never arrive, and the student is already back on the site having just
+ * paid. Reconciling first turns "wait and hope" into "go and check".
+ *
+ * Never throws. A failed reconcile must not block the return: the poll below it
+ * is still there and is still correct once the webhook lands.
+ */
+export async function reconcileBillingCheckout(offerId: string): Promise<boolean> {
+  try {
+    const result = await api<{ reconciled?: boolean }>("/billing/reconcile", {
+      method: "POST",
+      body: JSON.stringify({ offer_id: offerId }),
+    });
+    return result?.reconciled === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function createLitosPlusCheckout(
   planId: LitosPlusPlanId,
   context: CheckoutContext,
