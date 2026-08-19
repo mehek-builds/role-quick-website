@@ -37,138 +37,306 @@ export type ResumeTargetingGuess = {
  * The nine fields added on 2026-08-19 are the ones a student could previously only reach by typing
  * in the box. Healthcare alone is 250+ live postings (Physician, Nurse, Nurse Practitioner,
  * Physician Assistant) that no field on this screen used to point at. */
-const ROLE_FAMILIES: { id: string; label: string; match: RegExp; roles: string[]; category: string }[] = [
+/**
+ * One title the picker offers, with the evidence behind offering it.
+ *
+ * `live` is grouped roles on the board, and `stages` is that number broken down for the stages
+ * where it is not zero. BOTH ARE MEASUREMENTS, taken 2026-08-19 against production, and a stage
+ * missing from `stages` was measured at zero rather than left unchecked.
+ *
+ * The board is already freshness-windowed - 14 days for everything, 90 for internships, see the
+ * backend's freshnessPredicate - so `live` is not "roles that ever existed", it is roles open and
+ * recent right now. That is the whole reason there is no separate recency signal here: the newest
+ * posting is not a thing this list has to go and find, it is the only kind of posting the board
+ * has. The verify script asserts it, so the day that stops being true it fails rather than
+ * quietly ranking stale work first.
+ *
+ * `stages` is what "aligned with their level" means in numbers. It is measured with the SAME
+ * evidence the board filters on - roleTypePattern's title words for the six title-stated stages,
+ * the employment_type column for part-time and contract - so the ordering a student sees here and
+ * the results they get afterwards come from one definition rather than two that drift.
+ */
+export type OfferedTitle = {
+  title: string;
+  live: number;
+  stages?: Partial<Record<string, number>>;
+};
+
+const ROLE_FAMILIES: { id: string; label: string; match: RegExp; roles: OfferedTitle[]; category: string }[] = [
   {
     id: "software",
     label: "Software & AI",
     match: /software|developer|frontend|front-end|backend|back-end|full.?stack|web|mobile|ios|android|react|typescript|javascript|java|python|c\+\+/i,
-    roles: ["Software Engineer", "Test Engineer", "Backend Engineer", "Full Stack Engineer", "Frontend Engineer", "Product Engineer"],
+    roles: [
+      { title: "Software Engineer", live: 1723, stages: { internship: 103, contract: 1 } },
+      { title: "Test Engineer", live: 132, stages: { internship: 3 } },
+      { title: "Backend Engineer", live: 102 },
+      { title: "Full Stack Engineer", live: 29 },
+      { title: "Frontend Engineer", live: 24, stages: { internship: 1, "new-grad": 1 } },
+      { title: "Product Engineer", live: 11, stages: { internship: 1 } },
+    ],
     category: "software-engineering",
   },
   {
     id: "data",
     label: "Data & machine learning",
     match: /machine learning|\bml\b|data|analytics|artificial intelligence|\bai\b|pytorch|tensorflow|sql/i,
-    roles: ["Machine Learning Engineer", "Data Scientist", "Data Engineer", "AI Engineer", "Data Analyst", "Analytics Engineer"],
+    roles: [
+      { title: "Machine Learning Engineer", live: 137, stages: { internship: 3 } },
+      { title: "Data Scientist", live: 100 },
+      { title: "Data Engineer", live: 74, stages: { internship: 2 } },
+      { title: "AI Engineer", live: 64, stages: { internship: 1 } },
+      { title: "Data Analyst", live: 45, stages: { internship: 2 } },
+      { title: "Analytics Engineer", live: 27 },
+    ],
     category: "data-ml",
   },
   {
     id: "infrastructure",
     label: "Infrastructure & security",
     match: /devops|site reliability|\bsre\b|infrastructure|kubernetes|terraform|cloud|aws|azure|security|cybersecurity|networking/i,
-    roles: ["Security Engineer", "Site Reliability Engineer", "Platform Engineer", "Infrastructure Engineer", "Network Engineer", "DevOps Engineer"],
+    roles: [
+      { title: "Security Engineer", live: 129 },
+      { title: "Site Reliability Engineer", live: 70, stages: { internship: 2 } },
+      { title: "Platform Engineer", live: 52, stages: { internship: 2 } },
+      { title: "Infrastructure Engineer", live: 34 },
+      { title: "Network Engineer", live: 27 },
+      { title: "DevOps Engineer", live: 23 },
+    ],
     category: "software-engineering",
   },
   {
     id: "support",
     label: "IT & technical support",
     match: /solutions architect|solutions engineer|sales engineer|technical support|help desk|service desk|system administrator|sysadmin|quality assurance/i,
-    roles: ["Solutions Architect", "Solutions Engineer", "Support Engineer", "Technical Support Engineer", "QA Engineer", "Systems Administrator"],
+    roles: [
+      { title: "Solutions Architect", live: 236, stages: { contract: 1 } },
+      { title: "Systems Engineer", live: 204, stages: { internship: 6 } },
+      { title: "Solutions Engineer", live: 141 },
+      { title: "Support Engineer", live: 100, stages: { "new-grad": 1 } },
+      { title: "Technical Support Engineer", live: 33, stages: { "new-grad": 1 } },
+      { title: "QA Engineer", live: 13, stages: { internship: 1, contract: 1 } },
+      { title: "Systems Administrator", live: 13 },
+    ],
     category: "software-engineering",
   },
   {
     id: "product",
     label: "Product & program",
     match: /product manager|product management|product strategy|roadmap|product owner/i,
-    roles: ["Product Manager", "Program Manager", "Technical Program Manager", "Business Analyst", "Technical Product Manager", "Product Owner"],
+    roles: [
+      { title: "Product Manager", live: 391, stages: { contract: 2 } },
+      { title: "Program Manager", live: 330, stages: { contract: 1 } },
+      { title: "Technical Program Manager", live: 147 },
+      { title: "Business Analyst", live: 17, stages: { internship: 2 } },
+      { title: "Product Operations Manager", live: 13 },
+      { title: "Technical Product Manager", live: 11 },
+      { title: "Product Owner", live: 11 },
+    ],
     category: "product",
   },
   {
     id: "design",
     label: "Design",
     match: /design|figma|ux|ui|user experience|visual/i,
-    roles: ["Designer", "Product Designer", "Design Engineer", "UX Engineer", "Motion Designer", "Brand Designer"],
+    roles: [
+      { title: "Designer", live: 204, stages: { internship: 2, contract: 7 } },
+      { title: "Product Designer", live: 103, stages: { internship: 1, contract: 3 } },
+      { title: "Design Engineer", live: 89, stages: { internship: 1, contract: 1 } },
+      { title: "UX Engineer", live: 11 },
+      { title: "Motion Designer", live: 10 },
+      { title: "Brand Designer", live: 8 },
+      { title: "Design Manager", live: 8 },
+    ],
     category: "design",
   },
   {
     id: "quant",
     label: "Finance & trading",
     match: /quant|trading|portfolio|financial|finance|economics/i,
-    roles: ["Trader", "Quantitative Researcher", "Financial Analyst", "Quantitative Trader", "Business Analyst", "Risk Analyst"],
+    roles: [
+      { title: "Trader", live: 66, stages: { internship: 11, "new-grad": 5 } },
+      { title: "Quantitative Researcher", live: 47, stages: { internship: 12, "new-grad": 5 } },
+      { title: "Financial Analyst", live: 32 },
+      { title: "Quantitative Trader", live: 19, stages: { internship: 7, "new-grad": 1 } },
+      { title: "Business Analyst", live: 17, stages: { internship: 2 } },
+      { title: "Risk Analyst", live: 12, stages: { internship: 1 } },
+    ],
     category: "quant-trading",
   },
   {
     id: "hardware",
     label: "Hardware & robotics",
     match: /hardware|embedded|electrical|mechanical|robotics|firmware|cad/i,
-    roles: ["Systems Engineer", "Mechanical Engineer", "Electrical Engineer", "Hardware Engineer", "Firmware Engineer", "Robotics Engineer"],
+    roles: [
+      { title: "Systems Engineer", live: 204, stages: { internship: 6 } },
+      { title: "Mechanical Engineer", live: 108, stages: { internship: 6, "new-grad": 2 } },
+      { title: "Electrical Engineer", live: 88, stages: { internship: 3, "new-grad": 2 } },
+      { title: "Hardware Engineer", live: 39, stages: { internship: 4, "new-grad": 1 } },
+      { title: "Firmware Engineer", live: 21, stages: { "new-grad": 1 } },
+      { title: "Robotics Engineer", live: 10 },
+    ],
     category: "hardware",
   },
   {
     id: "manufacturing",
     label: "Manufacturing & industrial",
     match: /manufacturing|industrial engineer|process engineer|production|assembly|supply chain|logistics|six sigma|lean/i,
-    roles: ["Manufacturing Engineer", "Quality Engineer", "Field Engineer", "Process Engineer", "Validation Engineer", "Project Engineer"],
+    roles: [
+      { title: "Manufacturing Engineer", live: 140, stages: { internship: 10 } },
+      { title: "Quality Engineer", live: 54, stages: { internship: 1, contract: 1 } },
+      { title: "Field Engineer", live: 30, stages: { contract: 1 } },
+      { title: "Process Engineer", live: 19 },
+      { title: "Validation Engineer", live: 15 },
+      { title: "Project Engineer", live: 10 },
+      { title: "Industrial Engineer", live: 8 },
+    ],
     category: "hardware",
   },
   {
     id: "research",
     label: "Research",
     match: /research|laboratory|scientist|publication|thesis/i,
-    roles: ["Scientist", "Research Engineer", "Research Scientist", "Applied Scientist", "Research Analyst"],
+    roles: [
+      { title: "Scientist", live: 176, stages: { contract: 1 } },
+      { title: "Research Engineer", live: 30, stages: { internship: 6 } },
+      { title: "Research Scientist", live: 25, stages: { internship: 1 } },
+      { title: "Applied Scientist", live: 10 },
+      { title: "Research Analyst", live: 8 },
+      { title: "Scientist II", live: 5 },
+    ],
     category: "research",
   },
   {
     id: "healthcare",
     label: "Healthcare & clinical",
     match: /clinical|patient|nursing|\bnurse\b|physician|medical|healthcare|pharmacy|therapist/i,
-    roles: ["Physician", "Nurse", "Nurse Practitioner", "Physician Assistant", "Medical Assistant"],
+    roles: [
+      { title: "Physician", live: 119, stages: { "new-grad": 2, contract: 3 } },
+      { title: "Nurse", live: 63, stages: { "part-time": 1, contract: 3 } },
+      { title: "Nurse Practitioner", live: 59, stages: { "part-time": 1, contract: 3 } },
+      { title: "Physician Assistant", live: 53, stages: { contract: 3 } },
+      { title: "Phlebotomist", live: 30, stages: { internship: 2, "new-grad": 1 } },
+      { title: "Medical Assistant", live: 21, stages: { internship: 2, "new-grad": 1 } },
+    ],
     category: "other",
   },
   {
     id: "consulting",
     label: "Consulting & strategy",
     match: /consulting|consultant|strategy|advisory|due diligence|market entry/i,
-    roles: ["Consultant", "Implementation Consultant", "Business Analyst", "Strategy Manager", "Business Systems Analyst", "Strategy Analyst"],
+    roles: [
+      { title: "Consultant", live: 128, stages: { "part-time": 1, contract: 17 } },
+      { title: "Implementation Consultant", live: 18, stages: { contract: 1 } },
+      { title: "Business Analyst", live: 17, stages: { internship: 2 } },
+      { title: "Strategy Manager", live: 16 },
+      { title: "Engagement Manager", live: 14 },
+      { title: "Business Systems Analyst", live: 12 },
+      { title: "Strategy Analyst", live: 5 },
+    ],
     category: "other",
   },
   {
     id: "operations",
     label: "Operations & project management",
     match: /operations|project manager|project management|scheduling|procurement|vendor management|chief of staff/i,
-    roles: ["Operations Manager", "Project Manager", "Operations Analyst", "Executive Assistant", "Chief of Staff", "Business Operations Manager"],
+    roles: [
+      { title: "Operations Manager", live: 125 },
+      { title: "Project Manager", live: 58, stages: { contract: 2 } },
+      { title: "Operations Specialist", live: 54, stages: { "new-grad": 1, contract: 5 } },
+      { title: "Operations Associate", live: 54, stages: { internship: 1, "new-grad": 2 } },
+      { title: "Operations Analyst", live: 54, stages: { internship: 1 } },
+      { title: "Executive Assistant", live: 31, stages: { "part-time": 1 } },
+      { title: "Chief of Staff", live: 21 },
+    ],
     category: "other",
   },
   {
     id: "finance",
     label: "Finance & accounting",
     match: /accounting|accountant|bookkeeping|audit|payroll|tax|controller|treasury|\bfp&a\b/i,
-    roles: ["Accountant", "Financial Analyst", "Finance Manager", "Senior Accountant", "Controller", "Auditor"],
+    roles: [
+      { title: "Accountant", live: 56 },
+      { title: "Financial Analyst", live: 32 },
+      { title: "Finance Manager", live: 25 },
+      { title: "Senior Accountant", live: 20 },
+      { title: "Controller", live: 18 },
+      { title: "Accounting Manager", live: 14 },
+      { title: "Auditor", live: 14 },
+    ],
     category: "other",
   },
   {
     id: "people",
     label: "People & recruiting",
     match: /recruit|talent acquisition|human resources|\bhr\b|people operations|sourcing candidates|onboarding employees/i,
-    roles: ["Recruiter", "Technical Recruiter", "Sourcer", "HR Business Partner", "Recruiting Coordinator", "People Partner"],
+    roles: [
+      { title: "Recruiter", live: 116, stages: { "new-grad": 1, contract: 31 } },
+      { title: "Technical Recruiter", live: 50, stages: { contract: 16 } },
+      { title: "Sourcer", live: 22, stages: { contract: 3 } },
+      { title: "HR Business Partner", live: 20 },
+      { title: "Recruiting Coordinator", live: 15, stages: { internship: 1, contract: 6 } },
+      { title: "People Partner", live: 9 },
+    ],
     category: "other",
   },
   {
     id: "legal",
     label: "Legal & compliance",
     match: /legal|paralegal|counsel|attorney|compliance|regulatory|contracts|litigation|policy analysis/i,
-    roles: ["Paralegal", "Legal Counsel", "Compliance Manager", "Corporate Counsel", "Compliance Officer", "Contract Manager"],
+    roles: [
+      { title: "Counsel", live: 129, stages: { contract: 1 } },
+      { title: "Paralegal", live: 17 },
+      { title: "Legal Counsel", live: 14 },
+      { title: "Compliance Manager", live: 12 },
+      { title: "Legal Operations", live: 10, stages: { internship: 1 } },
+      { title: "Corporate Counsel", live: 9 },
+      { title: "Contract Manager", live: 6, stages: { contract: 5 } },
+    ],
     category: "other",
   },
   {
     id: "writing",
     label: "Writing & communications",
     match: /technical writing|technical writer|copywriting|copywriter|editorial|\beditor\b|communications|public relations|journalism/i,
-    roles: ["Editor", "Technical Writer", "Communications Manager", "Content Manager", "Video Editor", "Copywriter"],
+    roles: [
+      { title: "Editor", live: 40, stages: { contract: 1 } },
+      { title: "Technical Writer", live: 16 },
+      { title: "Communications Manager", live: 13 },
+      { title: "Content Manager", live: 6 },
+      { title: "Video Editor", live: 6 },
+      { title: "Copywriter", live: 5, stages: { "part-time": 1, contract: 1 } },
+    ],
     category: "other",
   },
   {
     id: "marketing",
     label: "Marketing & growth",
     match: /marketing|growth|content|brand|social media/i,
-    roles: ["Marketing Manager", "Product Marketing Manager", "Growth Marketing Manager", "Content Manager", "Marketing Coordinator"],
+    roles: [
+      { title: "Marketing Manager", live: 189, stages: { contract: 1 } },
+      { title: "Product Marketing Manager", live: 72 },
+      { title: "Field Marketing Manager", live: 26 },
+      { title: "Marketing Specialist", live: 14 },
+      { title: "Growth Marketing Manager", live: 13 },
+      { title: "Marketing Operations Manager", live: 12 },
+      { title: "Campaign Manager", live: 8 },
+    ],
     category: "other",
   },
   {
     id: "sales",
     label: "Sales & customer success",
     match: /sales|account executive|customer success|business development|partnerships/i,
-    roles: ["Account Executive", "Sales Engineer", "Account Manager", "Sales Development Representative", "Customer Success Manager", "Business Development Representative"],
+    roles: [
+      { title: "Account Executive", live: 886 },
+      { title: "Sales Engineer", live: 179, stages: { internship: 2 } },
+      { title: "Account Manager", live: 130, stages: { contract: 2 } },
+      { title: "Sales Manager", live: 89 },
+      { title: "Sales Development Representative", live: 86, stages: { internship: 1, "new-grad": 1 } },
+      { title: "Customer Success Manager", live: 84 },
+      { title: "Business Development Representative", live: 62, stages: { internship: 2 } },
+    ],
     category: "other",
   },
 ];
@@ -263,7 +431,7 @@ export function categoriesForRoles(roles: string[], fallback: string[] = ["other
     ROLE_FAMILIES
       .filter((family) => roles.some((role) =>
         family.match.test(role)
-        || family.roles.some((knownRole) => knownRole.toLowerCase() === role.toLowerCase()),
+        || family.roles.some((offer) => offer.title.toLowerCase() === role.toLowerCase()),
       ))
       .map((family) => family.category),
   )).slice(0, 3);
@@ -283,7 +451,10 @@ export function inferResumeTargeting(profile: ParsedProfile, currentYear = new D
   const matched = ROLE_FAMILIES
     .filter((family) => family.match.test(evidence) || family.match.test(targetEvidence))
     .sort((a, b) => Number(b.match.test(targetEvidence)) - Number(a.match.test(targetEvidence)));
-  for (const family of matched) addUnique(roles, family.roles);
+  /* The resume guess offers the family's strongest titles first, which is the order `roles` now
+     arrives in - so a matched software resume suggests "Software Engineer" (1723 live) before
+     "Product Engineer" (11), rather than whichever the list happened to name first. */
+  for (const family of matched) addUnique(roles, family.roles.map((offer) => offer.title));
   addUnique(roles, (profile.experience ?? []).map((item) => item.title));
 
   const categories = Array.from(new Set(matched.map((family) => family.category))).slice(0, 3);
@@ -322,15 +493,56 @@ export type OnboardingField = {
   label: string;
   /** The EXISTING targeting category this field belongs to. Not unique across fields. */
   category: string;
-  titles: string[];
+  /** Ordered most live roles first, which is the order titlesForFields hands them out in. */
+  titles: OfferedTitle[];
 };
 
 export const FIELDS: OnboardingField[] = ROLE_FAMILIES.map((family) => ({
   id: family.id,
   label: family.label,
   category: family.category,
-  titles: [...family.roles],
+  titles: family.roles.map((role) => ({ ...role, ...(role.stages ? { stages: { ...role.stages } } : {}) })),
 }));
+
+/**
+ * Live roles on the whole board at each stage, measured 2026-08-19 against 16,279 grouped roles.
+ *
+ * This exists because four of the eight stages are RARE, and the screen has no way to know that
+ * from the per-title numbers alone: a title with no apprenticeships looks exactly like a title
+ * whose apprenticeships we failed to measure. Board-wide is the number that tells a student the
+ * shortage is the market and not their answer.
+ *
+ * The measurement uses the backend's own roleTypePattern words, deduped by posting id, so
+ * "Graduate" and "New Graduate" are one role and not two. full-time is deliberately absent: it is
+ * the residual every posting falls into when no other stage word appears, so it is the bulk of the
+ * board and a number for it would say nothing.
+ */
+export const STAGE_BOARD_SUPPLY: Record<string, number> = {
+  internship: 577,
+  "new-grad": 88,
+  contract: 186,
+  "part-time": 31,
+  "co-op": 16,
+  apprenticeship: 4,
+  fellowship: 3,
+};
+
+/**
+ * Under this many live roles board-wide, a stage is worth saying out loud.
+ *
+ * Twenty-five is a little over one screen of results. Below it a student who picks the stage and
+ * walks away expecting a feed gets something closer to a page, and the honest move is to say so on
+ * the screen where they choose rather than let them find out two screens later. Co-op at 16 is
+ * inside this and always was; the line is not drawn to flatter the stages just added.
+ */
+export const THIN_STAGE_ROLES = 25;
+
+/** The chosen stages the board barely carries, in the order the chips present them. */
+export function thinStages(roleTypes: readonly string[]): { stage: string; live: number }[] {
+  return roleTypes
+    .filter((stage) => (STAGE_BOARD_SUPPLY[stage] ?? Infinity) < THIN_STAGE_ROLES)
+    .map((stage) => ({ stage, live: STAGE_BOARD_SUPPLY[stage] ?? 0 }));
+}
 
 /**
  * The titles to offer for the chosen fields, in field order, deduped case-insensitively.
@@ -341,15 +553,94 @@ export const FIELDS: OnboardingField[] = ROLE_FAMILIES.map((family) => ({
  * the screen has nothing to show until a field is chosen, rather than quietly showing everything.
  */
 export function titlesForFields(fieldIds: readonly string[]): string[] {
+  return offersForFields(fieldIds).map((offer) => offer.title);
+}
+
+/** The same list with the measurements still attached, which is what the ordering below needs. */
+export function offersForFields(fieldIds: readonly string[]): OfferedTitle[] {
   const chosen = new Set(fieldIds);
-  const out: string[] = [];
+  const out: OfferedTitle[] = [];
   for (const field of FIELDS) {
     if (!chosen.has(field.id)) continue;
-    for (const title of field.titles) {
-      if (!out.some((item) => item.toLowerCase() === title.toLowerCase())) out.push(title);
+    for (const offer of field.titles) {
+      if (!out.some((item) => item.title.toLowerCase() === offer.title.toLowerCase())) out.push(offer);
     }
   }
   return out;
+}
+
+/**
+ * How many live roles this title has at the stages the student chose.
+ *
+ * MAX, not sum: stages are alternatives a student would accept, so a title with 60 internships and
+ * 2 co-ops is a 60 for someone open to either, not a 62. Summing would also let a title win on
+ * breadth it does not have, by adding up ones and twos across five stages.
+ *
+ * full-time answers with `live` rather than with a stages entry, and that is not a special case
+ * papering over missing data - it is what full-time IS. The backend defines it as the residual: a
+ * posting with no internship, co-op, part-time or contract word in it. So the full-time supply for
+ * a title is very nearly its whole live count, and reading it off `live` is both more accurate
+ * than a measured number would be and immune to drift. new-grad and fellowship are NOT folded in
+ * with it, even though the board treats their postings as full-time too, because a student who
+ * picked them is asking a narrower question and deserves the narrower ranking.
+ *
+ * No stage chosen at all also answers with `live`: the ranking then is simply "most work first",
+ * which is the right default for a screen that has not been told anything to prefer.
+ */
+export function stageSupply(offer: OfferedTitle, roleTypes: readonly string[]): number {
+  if (roleTypes.length === 0 || roleTypes.includes("full-time")) return offer.live;
+  return roleTypes.reduce((best, stage) => Math.max(best, offer.stages?.[stage] ?? 0), 0);
+}
+
+/**
+ * The titles to offer, ordered by what the board can actually give this student.
+ *
+ * THE RANKING IS THE FEATURE. Nineteen fields carry six or seven titles each, and a student
+ * choosing two fields sees a dozen chips; which of them come first decides what most people pick,
+ * so ordering them by anything other than live supply at their own stage is a coin toss dressed up
+ * as a recommendation. A quant student who says "internship" should meet Quantitative Researcher
+ * (12) and Trader (11) before Financial Analyst (0), and today they meet whichever the list
+ * happened to name first.
+ *
+ * IT NEVER REMOVES A TITLE. A stage with no supply reorders the list and empties nothing: the
+ * board's own supply moves week to week, a saved title has to survive being ranked last, and a
+ * student who wants a marketing internship is not helped by a screen that pretends marketing does
+ * not exist. When nothing in the chosen fields has supply at the chosen stage the order falls back
+ * to live volume, which is the field's real roles - the caller says so in words (see
+ * `noStageSupply` below), and saying it beats hiding it.
+ *
+ * Stable within a tie, so two titles the board rates equally keep their field order and the list
+ * does not reshuffle under a student who is still reading it.
+ */
+export function titlesForFocus(fieldIds: readonly string[], roleTypes: readonly string[]): string[] {
+  return offersForFields(fieldIds)
+    .map((offer, index) => ({ offer, index }))
+    .sort((a, b) => {
+      const bySupply = stageSupply(b.offer, roleTypes) - stageSupply(a.offer, roleTypes);
+      if (bySupply !== 0) return bySupply;
+      const byLive = b.offer.live - a.offer.live;
+      return byLive !== 0 ? byLive : a.index - b.index;
+    })
+    .map(({ offer }) => offer.title);
+}
+
+/**
+ * True when the chosen fields have no live roles at all at the chosen stage.
+ *
+ * Distinct from `thinStages`, which is about the whole board: a student can pick a stage the board
+ * carries plenty of and still land on a combination it has none of. Internship is the case that
+ * matters - 577 roles board-wide, and essentially none of them in marketing, accounting, legal or
+ * writing - so "there are internships" and "there are internships for you" are different answers
+ * and the screen owes them the second one.
+ *
+ * False when no field or no stage is chosen, and false for full-time: neither is a claim about
+ * supply, and a screen that has not been told what someone wants must not report a shortage.
+ */
+export function noStageSupply(fieldIds: readonly string[], roleTypes: readonly string[]): boolean {
+  if (fieldIds.length === 0 || roleTypes.length === 0 || roleTypes.includes("full-time")) return false;
+  const offers = offersForFields(fieldIds);
+  if (offers.length === 0) return false;
+  return offers.every((offer) => stageSupply(offer, roleTypes) === 0);
 }
 
 /**
@@ -407,7 +698,7 @@ export function fieldsForFocus(saved: SavedFocus): string[] {
   const titles = new Set((saved?.titles ?? []).map((title) => title.trim().toLowerCase()).filter(Boolean));
   if (titles.size > 0) {
     const matched = FIELDS
-      .filter((field) => field.titles.some((title) => titles.has(title.toLowerCase())))
+      .filter((field) => field.titles.some((offer) => titles.has(offer.title.toLowerCase())))
       .map((field) => field.id);
     if (matched.length > 0) return matched;
   }

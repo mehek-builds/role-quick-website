@@ -4,6 +4,14 @@
 
 ### Added
 
+- The suggested job titles are ordered by how many live roles the board has for each one AT THE
+  CHOSEN STAGE. A quant student who says "internship" now meets Quantitative Researcher and Trader
+  first rather than Financial Analyst, which has 32 live roles and no internships.
+- When the chosen field and stage have no live roles between them, the screen says so and offers
+  the field's real roles anyway instead of showing a shorter list or an empty one.
+- The stage row names the live count for stages the board barely carries: apprenticeship 4,
+  fellowship 3, co-op 16, part-time 31.
+
 - The first setup screen offers nineteen fields instead of nine, and eight stages instead of four.
   Healthcare, operations, consulting, finance, recruiting, legal, writing, infrastructure and
   manufacturing were each reachable only by typing before; part-time, contract, apprenticeship and

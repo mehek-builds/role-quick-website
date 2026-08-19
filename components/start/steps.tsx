@@ -38,7 +38,7 @@ import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
-import { FIELDS, categoriesForFields, categoriesForRoles, fieldsForFocus, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
+import { FIELDS, categoriesForFields, categoriesForRoles, fieldsForFocus, focusPatch, focusSeed, inferResumeTargeting, noStageSupply, thinStages, titlesForFocus, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
@@ -229,10 +229,30 @@ function FocusForm({
      they are not currently showing, and a list that dropped it would leave them unable to see or
      deselect a title Continue is about to commit. */
   const offered = useMemo(() => {
-    const derived = ready ? titlesForFields(fields) : [];
+    /* titlesForFocus, not titlesForFields: the same titles, ordered by how many live roles the
+       board has for each AT THE CHOSEN STAGE. A quant student who says "internship" meets
+       Quantitative Researcher (12 live internships) and Trader (11) first instead of Financial
+       Analyst (0), and the order is the recommendation - most people take one of the first few. */
+    const derived = ready ? titlesForFocus(fields, roleTypes) : [];
     const extra = selectedTitles.filter((title) => !derived.some((item) => item.toLowerCase() === title.toLowerCase()));
     return [...derived, ...extra];
-  }, [ready, fields, selectedTitles]);
+  }, [ready, fields, roleTypes, selectedTitles]);
+
+  /* The two shortages worth saying out loud, and they are not the same shortage.
+     `thin` is about the whole board - some stages barely exist anywhere, and a student who picks
+     one should hear that from the market rather than conclude their answer was wrong.
+     `broadened` is about this combination - internship is 577 roles board-wide and close to none
+     of them are in marketing, accounting, legal or writing, so "there are internships" and "there
+     are internships for you" are different answers and only the second one is useful here. */
+  const thin = useMemo(() => thinStages(roleTypes), [roleTypes]);
+  const broadened = useMemo(
+    /* Only one of the two ever renders, and `thin` wins. Both are true at once for a marketing
+       student who picks Fellowship - 3 on the whole board, none of them in marketing - but two
+       sentences in a row saying "there is very little of this" is one sentence and some noise, and
+       the board-wide number is the one that tells them the shortage is not about their answer. */
+    () => ready && thin.length === 0 && noStageSupply(fields, roleTypes),
+    [ready, thin, fields, roleTypes],
+  );
 
   const customMatches = useMemo(() => {
     const needle = newTitle.trim().toLowerCase();
@@ -482,6 +502,19 @@ function FocusForm({
             );
           })}
         </div>
+        {/* Said with a number, because a number is the only version of this a student can act on.
+            Four of the eight stages are genuinely rare on this board - apprenticeship 4 roles,
+            fellowship 3, co-op 16, part-time 31, all measured 2026-08-19 - and a chip that offers
+            a stage the board almost does not carry is the empty-page failure one level up from the
+            one the title list already guards against. Not a warning and not a disabled chip: the
+            student may want exactly that, and Litos widens the board rather than showing nothing
+            (see relax_targeting in the backend). It just should not be a surprise. */}
+        {thin.length > 0 && (
+          <p className="mt-2.5 text-xs leading-5 text-muted">
+            {thin.map(({ stage, live }) => `${ROLE_TYPES.find((r) => r.slug === stage)?.label ?? stage}: ${live} live`).join(", ")}
+            {" "}on the board right now. Litos will show the closest matches around it.
+          </p>
+        )}
       </div>
 
       <div className="mb-7">
@@ -502,6 +535,20 @@ function FocusForm({
             />
           ))}
         </div>
+
+        {/* THE EXPAND-RATHER-THAN-EMPTY CASE, in one sentence.
+            Nothing in the chosen fields has a live role at the chosen stage - marketing, finance,
+            legal and writing carry essentially no internships, and that is the board and not the
+            student. The list above is NOT emptied for it: these are the field's real roles, most
+            live first, and offering them while saying what the stage costs is the honest version
+            of both. Silence here would read as "these six are internships", which they are not. */}
+        {broadened && (
+          <p className="mt-2.5 text-xs leading-5 text-muted">
+            The board has no {ROLE_TYPES.find((r) => r.slug === roleTypes[0])?.label.toLowerCase() ?? "matching"} roles
+            in {fields.length === 1 ? "this field" : "these fields"} today. These are the roles it does carry, so pick
+            the ones you want and Litos will watch for them.
+          </p>
+        )}
 
         {/* Not a disabled control and not an empty gap: a sentence saying which answer is still
             missing. The screen asks in an order, so it owes the student the reason the SUGGESTIONS
