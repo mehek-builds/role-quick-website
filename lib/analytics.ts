@@ -61,7 +61,14 @@ type OnboardingEvent =
   // matter: a student confirming what their resume already printed, and one typing it from
   // nothing. If the second dominates, the parser is missing languages it should be reading.
   | "onboarding_languages_declared"
-  | "onboarding_complete";
+  | "onboarding_complete"
+  /* The match screen. `shown` carries which rung of the freshness ladder produced the row and
+     whether the board had to be widened past the student's filters to find it, because those two
+     decide what the screen is allowed to claim - and a flow that widens for most students is a
+     targeting problem, not a copy problem. */
+  | "onboarding_match_shown"
+  | "onboarding_match_accepted"
+  | "onboarding_match_reshuffled";
 
 type CoreEvent =
   | "authentication_completed"
