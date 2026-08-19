@@ -213,3 +213,22 @@ describe("a reset review preserves stored profile data", () => {
     assert.doesNotMatch(production, /setProfile\(null\)|setAppProfile\(null\)/);
   });
 });
+
+test("an unknown step renders the done screen rather than a blank page", async () => {
+  /* The switch must have an exhaustive arm. Without one a step name this build does not know
+     matches no case, renderStep() returns undefined, and /start is blank - which made every
+     backend step addition a website-must-ship-first change, and the PR description for the
+     application sequence got that order backwards once already. */
+  const page = shipped(await read("app/start/page.tsx"));
+  const render = page.slice(page.indexOf("switch (step)"));
+  assert.match(render, /^\s*default:/m, "the step switch has no default arm, so an unknown step renders nothing");
+
+  // And the default shares the done screen's arm rather than introducing a second behaviour.
+  const defaultAt = render.indexOf("default:");
+  const doneAt = render.indexOf('case "done":');
+  assert.ok(doneAt >= 0 && doneAt < defaultAt, "default must fall through with the done case");
+  assert.ok(
+    render.slice(doneAt, defaultAt + 400).includes("<DoneStep"),
+    "an unknown step must land on the done screen, which is the exit",
+  );
+});

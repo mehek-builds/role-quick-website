@@ -608,6 +608,20 @@ export default function Start() {
       case "apply":
       case "targeting":
       case "done":
+      /* AN UNKNOWN STEP RENDERS THE DONE SCREEN RATHER THAN NOTHING.
+       *
+       * Without this the switch has no exhaustive arm, so a step name this build does not know
+       * matches no case, renderStep() returns undefined, and /start is a BLANK PAGE. That is not
+       * hypothetical: both repos deploy to production on merge, so every backend change that adds
+       * a step is a window in which the live website is one deploy behind and every account
+       * reaching the new step sees nothing at all. It made the application sequence a
+       * website-must-ship-first change, and the PR description for it got that order backwards
+       * once already.
+       *
+       * The done screen is the right fallback rather than an error: an unknown step means this
+       * build cannot advance the flow, and the honest thing to offer someone in that position is
+       * the exit, with everything they have done already saved. */
+      default:
         return (
           <>
           {error && <div className="mx-auto mb-4 max-w-2xl px-6"><ErrorNote message={error} /></div>}
