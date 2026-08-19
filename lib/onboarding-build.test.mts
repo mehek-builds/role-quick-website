@@ -23,7 +23,7 @@ function deps(overrides: Partial<BuildDeps> = {}): BuildDeps {
   return {
     loadPosting: async () => ({ description: "Full JD text", title: "Software Engineer Intern", company: "Ramp" }),
     loadIdentity: async () => ({ fullName: "A Candidate", resumeEmail: "a@example.com" }),
-    generateResume: async () => ({ applicationId: "app-1", resumeSpec: { school: "USC" } }),
+    generateResume: async () => ({ applicationId: "app-1", resumeSpec: { school: "USC", degree: "BS", grad_date: "May 2027", coursework: "", experience: [], skills: [] } }),
     loadQuestions: async () => ({
       total: 17,
       alreadyAnswered: 14,

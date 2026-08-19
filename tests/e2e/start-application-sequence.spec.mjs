@@ -182,12 +182,59 @@ before(async () => {
        undefined for description, title and company_name, and no stub here could ever show it. A
        stub that does not match the route it stands in for is a test asserting its own fiction. */
     if (path === "/jobs/job-1") return json({ job: JOB });
+    if (path === "/jd-match") {
+      /* THE COLOURS ON THE BUILD SCREEN. Marked terms appear in BOTH panes or neither, which is the
+         contract ISSUE-047 records, so this fixture names terms the stubbed resume genuinely
+         contains ("TypeScript", "PostgreSQL") and one it genuinely does not ("Kubernetes"). A
+         fixture that marked a term the resume never says would be asserting the very bug the
+         contract forbids. */
+      return json({
+        scorable: true,
+        score: 72,
+        /* `term` is the NORMALIZED key, which is what buildRequirementIndex maps and segmentText
+           looks tokens up by; `display` is the printable form. Sending the display casing as the
+           term silently marks nothing, which is exactly what it did on the first run of this. */
+        band: { label: "Fair", tone: "fair" },
+        matched: [
+          { term: "typescript", display: "TypeScript", weight: 1 },
+          { term: "postgresql", display: "PostgreSQL", weight: 1 },
+        ],
+        missing: [{ term: "kubernetes", display: "Kubernetes", weight: 1 }],
+      });
+    }
     if (path === "/profile") return json({ full_name: "A Candidate", resume_email: "a@example.com", school: "USC" });
     if (path === "/profile/application") return json({});
     if (path === "/resume/generate") {
       generationCalls += 1;
       await generationHeld;
-      return json({ resume_id: "r1", canonical_application_id: "app-1", application: { spec: { school: "USC" } } });
+      /* A WHOLE SPEC, because the build screen now RENDERS the resume rather than describing it.
+         This stub returned `{ school: "USC" }` alone, which was enough while the right-hand pane
+         was a sentence of prose and became a blank screen the moment it drew real lines. A stub
+         thinner than the response it stands in for is how a render crash reaches production. */
+      return json({
+        resume_id: "r1",
+        canonical_application_id: "app-1",
+        application: {
+          spec: {
+            school: "USC",
+            degree: "BS Computer Science",
+            grad_date: "May 2027",
+            coursework: "Distributed Systems, Databases",
+            experience: [
+              {
+                org: "Campus Lab",
+                title: "Software Engineering Intern",
+                date_range: "Jun 2026 - Aug 2026",
+                bullets: [
+                  "Built a TypeScript and React dashboard used by 40 researchers.",
+                  "Cut PostgreSQL query time 60% by adding covering indexes.",
+                ],
+              },
+            ],
+            skills: ["TypeScript", "React", "PostgreSQL", "Python"],
+          },
+        },
+      });
     }
     if (path === "/postings/job-1/questions") return json(PRESCRIPT);
     if (path === "/notifications/preferences") {
@@ -290,6 +337,30 @@ describe("the application sequence, end to end", () => {
     await page.getByRole("button", { name: /questions? needs? you/i }).waitFor({ timeout: 20_000 });
     const done = await page.locator("main").innerText();
     assert.match(done, /Here is your application/i);
+
+    /* THE SCREEN SHOWS THE TAILORING RATHER THAN ASSERTING IT.
+     *
+     * The right pane used to be one sentence of prose - "Written for this posting from your own
+     * resume" - which is the product claiming the one thing this screen exists to demonstrate.
+     * These four assertions are the demonstration: the student's real lines, the posting's real
+     * words, the same terms marked on both sides, and a legend saying what the marks mean. */
+    assert.match(done, /Cut PostgreSQL query time 60%/i, "the resume's own bullets are not on screen");
+    assert.match(done, /Software Engineering Intern/i, "the experience the resume was built from is not shown");
+    assert.doesNotMatch(done, /Written for this posting from your own resume/i, "the pane still describes instead of showing");
+    assert.match(done, /asked for, and on your resume/i, "the colour legend is missing");
+
+    /* THE CONTRACT, checked rather than trusted (ISSUE-047): a term marked in the posting must be
+       marked in the resume too. Measured once at 111 of 313 matched terms marked on one side only,
+       which is a colour pointing at nothing. Counting marks per pane is what makes that visible. */
+    const marks = await page.locator("main mark").allInnerTexts();
+    const marked = new Set(marks.map((t) => t.trim().toLowerCase()));
+    assert.ok(marked.has("typescript"), `TypeScript was never marked; marks were ${marks.join(", ")}`);
+    assert.ok(marked.has("postgresql"), `PostgreSQL was never marked; marks were ${marks.join(", ")}`);
+    const postgresMarks = marks.filter((t) => t.trim().toLowerCase() === "postgresql").length;
+    assert.ok(
+      postgresMarks >= 2,
+      `PostgreSQL is marked ${postgresMarks} time(s): a term the posting asks for and the resume answers must be marked on BOTH sides`,
+    );
     // The count is REAL: two outstanding asks in the fixture, not the seventeen the posting holds.
     assert.match(done, /2 questions need you/i);
 
