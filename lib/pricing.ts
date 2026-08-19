@@ -20,7 +20,7 @@
  * production, this file is what has to follow it.
  */
 
-/** Days of Litos+ access at signup, without a card. */
+/** Days of Litos+ access at signup. */
 export const TRIAL_DAYS = 7;
 
 /** New Free has no premium-generation allowance. Application filling is unlimited separately. */

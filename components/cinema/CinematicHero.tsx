@@ -655,7 +655,7 @@ export function CinematicHero() {
               </a>
               <a href="#product" className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-control-border bg-surface px-7 py-3 text-sm font-medium text-ink transition-colors hover:border-ink sm:w-auto">See how Litos works</a>
             </div>
-            <p className="font-mono text-[11px] text-muted">No card required. Application filling stays free.</p>
+            <p className="font-mono text-[11px] text-muted">Application filling stays free.</p>
             {/* The mobile QR handoff (MobileSendLink) was REMOVED here
                 2026-07-28. A QR code and a copy-link button inside the hero
                 card, on the first screen, before a phone visitor knows what

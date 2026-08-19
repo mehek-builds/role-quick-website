@@ -59,8 +59,8 @@ export default function ForCareerCentres() {
         <div className="mt-12">
           <Row q="What does it cost a student?">
             Nothing to install and nothing to use at the volume most students
-            apply at. There is a paid tier for heavier use. No card is needed to
-            start and cancelling takes the same number of clicks as signing up.
+            apply at. There is a paid tier for heavier use, and cancelling takes
+            the same number of clicks as signing up.
           </Row>
 
           <Row q="What does it cost us?">

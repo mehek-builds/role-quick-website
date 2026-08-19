@@ -45,7 +45,7 @@ test("server plan catalog requires explicit checkout availability", () => {
   assert.equal(verifiedPlanCatalog({ plans }).checkoutAvailable, false);
 });
 
-test("public pricing clearly separates the no-card trial from a later purchase", async () => {
+test("public pricing clearly separates the trial from a later purchase", async () => {
   const [cards, pricing] = await Promise.all([
     readFile(new URL("../components/pricing/PlanCards.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/pricing/page.tsx", import.meta.url), "utf8"),
@@ -60,6 +60,44 @@ test("public pricing clearly separates the no-card trial from a later purchase",
   assert.doesNotMatch(cards, /Date\.now\(\) \+ 30 \* 60 \* 1000/);
   assert.match(pricing, /5 tailored resumes, 5 cover letters, and generated answers for 5 applications/);
   assert.match(pricing, /Each trial generation requires an explicit click/);
+});
+
+test("every plan is its own column, and the term is not a radio inside one card", async () => {
+  /* The three paid terms used to be radio rows inside a single Litos+ card, which
+     printed one price at a time and read as two products where there are four
+     prices. Mehek's call 2026-08-19: a term is not a setting on a plan, it is the
+     plan, so each one gets a column and its own button. What is pinned here is the
+     shape that regressed the copy last time: a shared `selected` term feeding one
+     shared button, which is why the checkout call takes the term as an argument
+     rather than reading state that a click has not flushed yet. */
+  const cards = await readFile(new URL("../components/pricing/PlanCards.tsx", import.meta.url), "utf8");
+  assert.match(cards, /lg:grid-cols-4/);
+  assert.match(cards, /LITOS_PLUS_PLANS\.map\(\(plan\) => \{/);
+  assert.match(cards, /continueWithPlan\(planId: LitosPlusPlanId\)/);
+  assert.match(cards, /onClick=\{\(\) => void continueWithPlan\(plan\.id\)\}/);
+  assert.doesNotMatch(cards, /type="radio"/);
+  assert.doesNotMatch(cards, /name="pricing-term"/);
+});
+
+test("no surface promises anything about a card", async () => {
+  /* Removed 2026-08-19 on Mehek's call: the terms of the trial changed and a
+     promise the product may no longer keep is worse than no promise at all. The
+     page still says what it charges and when, which is the part that has to be
+     true; it just no longer says what it collects to do it. Pinned across every
+     surface that carried the line, because it was written five separate times and
+     a sweep that misses one is the version students screenshot. */
+  const files = [
+    "../components/pricing/PlanCards.tsx",
+    "../components/cinema/CinematicHero.tsx",
+    "../components/start/TrialStep.tsx",
+    "../app/login/page.tsx",
+    "../app/for-career-centres/page.tsx",
+    "../lib/pricing.ts",
+  ];
+  for (const file of files) {
+    const source = await readFile(new URL(file, import.meta.url), "utf8");
+    assert.doesNotMatch(source, /no card|without a card|card is needed|card needed|card required/i, `${file} still promises something about a card`);
+  }
 });
 
 test("extension-origin pricing keeps checkout on the extension account", async () => {

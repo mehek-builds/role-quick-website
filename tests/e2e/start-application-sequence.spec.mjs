@@ -304,7 +304,7 @@ describe("the application sequence, end to end", () => {
     assert.match(body, /days of Litos\+/i);
     // 5 limit minus the 1 the build used. Printing 5 here would be a number the account does not have.
     assert.match(body, /Tailored resumes\s*\n?\s*4/i);
-    assert.match(body, /No card/i);
+    assert.match(body, /Nothing to confirm/i);
 
     await page.getByRole("button", { name: "Start using it" }).click();
   });
