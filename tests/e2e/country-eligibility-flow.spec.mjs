@@ -144,6 +144,17 @@ await context.route("**/*", async (route) => {
   } });
   if (key === "GET /email-connections") return route.fulfill({ json: { configured: false, connections: [] } });
   if (key === "GET /application-email") return route.fulfill({ json: { configured: false, tracking_active: false, domain: null, aliases: [] } });
+  /* Settings reads the notification permissions to draw the two controls under Automation. An
+     expected read belongs in the stub rather than in `unknown`: this fixture's job is to fail when
+     the page asks for something nobody sanctioned. Both off, which is what a fresh account holds. */
+  if (key === "GET /notifications/preferences") {
+    return route.fulfill({ json: {
+      strong_match: { enabled: false, granted_at: null },
+      employer_reply: { enabled: false, granted_at: null },
+      deliverable: true,
+      unsubscribe_configured: true,
+    } });
+  }
   if (key === "GET /sponsorship") return route.fulfill({ status: 404, json: { error: "fixture" } });
   unknown.push(key);
   return route.fulfill({ status: 500, json: { error: `unstubbed ${key}` } });
