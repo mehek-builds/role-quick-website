@@ -38,7 +38,7 @@ import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
-import { focusPatch, focusSeed, inferResumeTargeting, type SavedFocus } from "@/lib/onboarding-role-inference";
+import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
@@ -59,9 +59,12 @@ export function FocusStep({
 }: {
   onDone: () => void;
   onLater: () => void;
-  profile: ParsedProfile;
+  /* NULL IS THE NORMAL CASE NOW. This screen runs before the upload, so most students reach it
+     with nothing parsed. A resume still arrives here for anyone walking back through setup, and
+     it is used exactly as it was: to seed, never to gate. */
+  profile: ParsedProfile | null;
 }) {
-  const guess = useMemo(() => inferResumeTargeting(profile), [profile]);
+  const guess = useMemo(() => (profile ? inferResumeTargeting(profile) : null), [profile]);
   /* undefined while the read is in flight. null means there is genuinely nothing stored, which is
      the normal state for a new account: /profile/targeting answers 200-with-nulls, never 404. */
   const [saved, setSaved] = useState<SavedFocus | undefined>(undefined);
@@ -88,7 +91,7 @@ export function FocusStep({
 
   if (loadError) {
     return (
-      <StartShell step="focus" title="Here's where we'd start.">
+      <StartShell step="focus" title="What are you going after?">
         <ErrorNote message={loadError} />
         <button
           type="button"
@@ -106,7 +109,7 @@ export function FocusStep({
 
   if (saved === undefined) {
     return (
-      <StartShell step="focus" title="Here's where we'd start.">
+      <StartShell step="focus" title="What are you going after?">
         <div className="rq-shimmer h-32 rounded-inner" />
       </StartShell>
     );
@@ -119,7 +122,10 @@ export function FocusStep({
     <FocusForm
       key={attempt}
       guess={guess}
-      gradYear={profile.grad_year}
+      /* 0 is the documented "parser found no grad year" value, and periodsFor already answers it
+         with a sensible two-year window from today. A student who has not uploaded yet is in
+         exactly that position, so there is no new branch to write here. */
+      gradYear={profile?.grad_year ?? 0}
       saved={saved}
       onDone={onDone}
       onLater={onLater}
@@ -134,7 +140,7 @@ function FocusForm({
   onDone,
   onLater,
 }: {
-  guess: ReturnType<typeof inferResumeTargeting>;
+  guess: ReturnType<typeof inferResumeTargeting> | null;
   gradYear: number;
   saved: SavedFocus;
   onDone: () => void;
@@ -143,7 +149,14 @@ function FocusForm({
   const seed = useMemo(() => focusSeed(saved, guess), [saved, guess]);
   const [selectedTitles, setSelectedTitles] = useState<string[]>(() => seed.titles);
   const [roleTypes, setRoleTypes] = useState<RoleType[]>(() => seed.roleTypes);
-  const [categories, setCategories] = useState<string[]>(() => saved?.categories?.length ? saved.categories : guess.categories);
+  const [categories, setCategories] = useState<string[]>(() => saved?.categories?.length ? saved.categories : guess?.categories ?? []);
+  /* The field selection, which is the screen's new first question.
+     Seeded from SAVED CATEGORIES first and from the resume guess only where nothing is stored,
+     which is the same direction focusSeed takes for titles: a stated answer outranks a guess. */
+  const [fields, setFields] = useState<string[]>(() => {
+    const stored = fieldsForCategories(saved?.categories);
+    return stored.length > 0 ? stored : fieldsForCategories(guess?.categories);
+  });
   const [locations, setLocations] = useState(() => (saved?.locations ?? []).join(", "));
   const [remoteOnly, setRemoteOnly] = useState(() => saved?.remote_only ?? false);
   const availablePeriods = useMemo(() => periodsFor(gradYear), [gradYear]);
@@ -155,13 +168,40 @@ function FocusForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /* Both answers are required before a title is offered. The stage does not filter the list - it
+     cannot, because titles are stored stage-free and cleanTitle strips "intern" off them - but it
+     is half of what makes the offer specific, so the screen waits for it. */
+  const ready = fields.length > 0 && roleTypes.length > 0;
+
+  /* Saved categories, plus the ones the chosen fields imply. Union, never replacement: the screen
+     still has no category control, so it must not be able to remove a category the student cannot
+     see (the rule focusPatch states for the write, applied here to the gate so the two agree). */
+  const effectiveCategories = useMemo(
+    () => Array.from(new Set([...categories, ...categoriesForFields(fields)])),
+    [categories, fields],
+  );
+
+  /* The offer, plus anything already selected that the offer does not contain.
+     The union is the no-data-loss half: a returning student can carry a saved title from a field
+     they are not currently showing, and a list that dropped it would leave them unable to see or
+     deselect a title Continue is about to commit. */
+  const offered = useMemo(() => {
+    const derived = ready ? titlesForFields(fields) : [];
+    const extra = selectedTitles.filter((title) => !derived.some((item) => item.toLowerCase() === title.toLowerCase()));
+    return [...derived, ...extra];
+  }, [ready, fields, selectedTitles]);
+
   const customMatches = useMemo(() => {
     const needle = newTitle.trim().toLowerCase();
     return JOB_TITLES
-      .filter((title) => !guess.roles.some((role) => role.toLowerCase() === title.toLowerCase()))
+      .filter((title) => !offered.some((role) => role.toLowerCase() === title.toLowerCase()))
       .filter((title) => !needle || title.toLowerCase().includes(needle))
       .slice(0, 6);
-  }, [guess.roles, newTitle]);
+  }, [offered, newTitle]);
+
+  function toggleField(id: string) {
+    setFields((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  }
 
   useEffect(() => setActiveMatchIndex(0), [newTitle]);
 
@@ -192,7 +232,7 @@ function FocusForm({
       /* Partial by omission, and additive on categories. This screen shows titles and one type; it
          must not be able to remove a category the student cannot see. See lib/onboarding-role-inference.ts. */
       await putTargeting({
-        ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories }),
+        ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories: effectiveCategories }),
         locations: locations.split(",").map((value) => value.trim()).filter(Boolean),
         remote_only: remoteOnly,
         primary_period: primaryPeriod,
@@ -208,19 +248,71 @@ function FocusForm({
   return (
     <StartShell
       step="focus"
-      title="Here's where we'd start."
+      title="What are you going after?"
     >
+      {/* THE WELCOME MOVED HERE WITH THE REORDER, and it had to.
+          It used to open the resume screen because the resume screen was first. Roles is first as
+          of flow version 3, and a welcome on screen two is not a welcome: criterion 1 of the
+          onboarding audit (checklist.design/web-app/onboarding, met in #285) asks the FIRST screen
+          to say what this is before it asks for anything, and tests/e2e/start-onboarding-checklist
+          is what caught the regression when the screens moved and these two did not. */}
+      <div className="mb-7"><WelcomeNote /></div>
+
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="mb-7">
-        <p className="text-sm text-ink">Jobs that fit</p>
+        <p className="text-sm text-ink">Field</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
-          {guess.roles.map((title) => (
+          {FIELDS.map((field) => (
+            <Chip
+              key={field.id}
+              label={field.label}
+              on={fields.includes(field.id)}
+              onClick={() => toggleField(field.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mb-7">
+        <p className="text-sm text-ink">Stage</p>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {ROLE_TYPES.map((r) => {
+            const slug = r.slug as RoleType;
+            const on = roleTypes.includes(slug);
+            return (
+              <Chip
+                key={r.slug}
+                label={r.label}
+                on={on}
+                derived={slug === guess?.roleType}
+                onClick={() => setRoleTypes(on ? [] : [slug])}
+              />
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mb-7">
+        <p className="text-sm text-ink">Jobs that fit</p>
+        {!ready ? (
+          /* Not a disabled control and not an empty gap: a sentence saying which answer is still
+             missing. The screen asks in an order, so it owes the student the reason it is waiting. */
+          <p className="mt-2.5 text-sm text-muted">
+            {fields.length === 0 && roleTypes.length === 0
+              ? "Pick a field and a stage and Litos will suggest the titles that fit."
+              : fields.length === 0
+                ? "Pick a field and Litos will suggest the titles that fit."
+                : "Pick a stage and Litos will suggest the titles that fit."}
+          </p>
+        ) : (
+        <>
+        <div className="mt-2.5 flex flex-wrap gap-2">
+          {offered.map((title) => (
             <Chip
               key={title}
               label={title}
               on={selectedTitles.includes(title)}
-              derived
               onClick={() => toggleTitle(title)}
             />
           ))}
@@ -301,32 +393,11 @@ function FocusForm({
           )}
         </div>
 
-        {selectedTitles.some((title) => !guess.roles.includes(title)) && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {selectedTitles.filter((title) => !guess.roles.includes(title)).map((title) => (
-              <Chip key={title} label={title} on onClick={() => toggleTitle(title)} />
-            ))}
-          </div>
+        {/* The row that used to repeat any selected title the guess did not contain is gone:
+            `offered` is already the union of the derived list and the selection, so a second row
+            would draw every one of them twice. */}
+        </>
         )}
-      </div>
-
-      <div className="mb-8">
-        <p className="text-sm text-ink">Type</p>
-        <div className="mt-2.5 flex flex-wrap gap-2">
-          {ROLE_TYPES.map((r) => {
-            const slug = r.slug as RoleType;
-            const on = roleTypes.includes(slug);
-            return (
-              <Chip
-                key={r.slug}
-                label={r.label}
-                on={on}
-                derived={slug === guess.roleType}
-                onClick={() => setRoleTypes(on ? [] : [slug])}
-              />
-            );
-          })}
-        </div>
       </div>
 
       <details className="mb-7 overflow-hidden rounded-card border border-border bg-surface">
@@ -380,16 +451,26 @@ function FocusForm({
         </div>
       </details>
 
-      {categories.length === 0 && (
+      {ready && effectiveCategories.length === 0 && (
         <p role="status" className="mb-4 text-xs leading-5 text-warn">Choose at least one job category to continue.</p>
       )}
 
       <div className="flex items-center gap-3">
-        <PrimaryButton onClick={() => void save()} disabled={busy || selectedTitles.length === 0 || roleTypes.length === 0 || categories.length === 0}>
+        {/* `!ready` is in here for a reason a browser found and no unit test would have.
+            Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
+            student who changed their mind about the field could press Continue and commit titles
+            the screen had stopped drawing. Continue never commits anything invisible: while the
+            offer is withheld, so is the button. */}
+        <PrimaryButton onClick={() => void save()} disabled={busy || !ready || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />
       </div>
+
+      {/* Below the ask, for the same measured reason it sat below the drop zone on the old first
+          screen: at 375px the three walkthrough rows are tall enough to push the primary control
+          off screen, and a setup step whose one ask is below the fold is the worse trade. */}
+      <div className="mt-9"><Highlights /></div>
     </StartShell>
   );
 }
@@ -550,7 +631,6 @@ export function ResumeStep({
           file" off the screen, and a setup step whose one ask is below the fold is a worse trade
           than a walkthrough that needs a scroll. The welcome line is one sentence and stays on
           top, so a student still learns what this is before being asked for anything. */}
-      <div className="mb-7"><WelcomeNote /></div>
 
 
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
@@ -625,7 +705,6 @@ export function ResumeStep({
         <LaterLink onClick={onLater} />
       </div>
 
-      <div className="mt-9"><Highlights /></div>
     </StartShell>
   );
 }

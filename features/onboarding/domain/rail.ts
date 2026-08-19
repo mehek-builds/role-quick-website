@@ -16,9 +16,14 @@ import type { OnboardingState, OnboardingStep } from "@/lib/api";
    review get more space than the short choice screens, so the rail reflects effort instead of
    pretending every click is equal. */
 export const STEPS: { key: OnboardingStep; label: string; weight: number; conditional?: boolean }[] = [
+  /* ROLES LEADS. The backend derives 'focus' before 'resume' as of flow version 3, and this list
+     is the rail's render order, so the two have to move together: a rail still opening on "Your
+     resume" would number every screen one place off from the screen actually drawn.
+     Weight 1 because the screen is now three taps - field, stage, titles - and the rail is a map
+     of TIME, not of importance. */
+  { key: "focus", label: "Your roles", weight: 1 },
   { key: "resume", label: "Your resume", weight: 2 },
   { key: "impact", label: "Your impact", weight: 2 },
-  { key: "focus", label: "Your roles", weight: 1 },
   /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
      in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
   { key: "sponsorship", label: "Work visa", weight: 1 },

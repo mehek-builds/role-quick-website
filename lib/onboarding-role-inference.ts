@@ -7,48 +7,76 @@ export type ResumeTargetingGuess = {
   yearsExperience: number;
 };
 
-const ROLE_FAMILIES: { match: RegExp; roles: string[]; category: string }[] = [
+/* One list, two readers.
+ *
+ * `match` is read by inferResumeTargeting, which guesses from a resume. `id`/`label`/`roles` are
+ * read by the /start roles screen, which now asks BEFORE a resume exists and therefore cannot
+ * guess at all. Keeping both on one row is what stops the screen's title vocabulary drifting away
+ * from the inference's: a family added for the resume reader shows up in the picker automatically.
+ *
+ * `category` is NOT unique - marketing and sales are two fields inside the `other` bucket - so the
+ * picker keys on `id` and only ever writes `category` through focusPatch. The category vocabulary
+ * is shared with Settings and the backend, and this screen is not the place to widen it. */
+const ROLE_FAMILIES: { id: string; label: string; match: RegExp; roles: string[]; category: string }[] = [
   {
+    id: "software",
+    label: "Software & AI",
     match: /software|developer|frontend|front-end|backend|back-end|full.?stack|web|mobile|ios|android|react|typescript|javascript|java|python|c\+\+/i,
     roles: ["Software Engineer", "Full Stack Engineer", "Backend Engineer", "Frontend Engineer", "Product Engineer"],
     category: "software-engineering",
   },
   {
+    id: "data",
+    label: "Data & machine learning",
     match: /machine learning|\bml\b|data|analytics|artificial intelligence|\bai\b|pytorch|tensorflow|sql/i,
     roles: ["Machine Learning Engineer", "Data Scientist", "Data Engineer", "Data Analyst", "AI Engineer"],
     category: "data-ml",
   },
   {
+    id: "product",
+    label: "Product & program",
     match: /product manager|product management|product strategy|roadmap|product owner/i,
     roles: ["Product Manager", "Associate Product Manager", "Technical Product Manager", "Program Manager", "Business Analyst"],
     category: "product",
   },
   {
+    id: "design",
+    label: "Design",
     match: /design|figma|ux|ui|user experience|visual/i,
     roles: ["Product Designer", "UX Designer", "UI Designer", "UX Researcher", "Design Engineer"],
     category: "design",
   },
   {
+    id: "quant",
+    label: "Finance & trading",
     match: /quant|trading|portfolio|financial|finance|economics/i,
     roles: ["Quantitative Researcher", "Quantitative Trader", "Financial Analyst", "Trader", "Business Analyst"],
     category: "quant-trading",
   },
   {
+    id: "hardware",
+    label: "Hardware & robotics",
     match: /hardware|embedded|electrical|mechanical|robotics|firmware|cad/i,
     roles: ["Hardware Engineer", "Embedded Systems Engineer", "Robotics Engineer", "Systems Engineer", "Mechanical Engineer"],
     category: "hardware",
   },
   {
+    id: "research",
+    label: "Research",
     match: /research|laboratory|scientist|publication|thesis/i,
     roles: ["Research Assistant", "Research Scientist", "Research Engineer", "Lab Technician", "Program Analyst"],
     category: "research",
   },
   {
+    id: "marketing",
+    label: "Marketing & growth",
     match: /marketing|growth|content|brand|social media/i,
     roles: ["Marketing Associate", "Growth Marketing Associate", "Product Marketing Associate", "Content Strategist", "Marketing Analyst"],
     category: "other",
   },
   {
+    id: "sales",
+    label: "Sales & customer success",
     match: /sales|account executive|customer success|business development|partnerships/i,
     roles: ["Account Executive", "Business Development Representative", "Customer Success Manager", "Account Manager", "Sales Engineer"],
     category: "other",
@@ -180,6 +208,93 @@ export function inferResumeTargeting(profile: ParsedProfile, currentYear = new D
 
 /* ------------------------------------------------------------------------------------------- */
 
+/* The field-then-stage-then-titles picker, as pure data and two pure functions.
+ *
+ * The roles screen runs FIRST now, before any resume exists, so it has nothing to infer from and
+ * must offer rather than guess. `FIELDS` is that offer, and it is derived from ROLE_FAMILIES so
+ * there is exactly one title vocabulary in this file rather than two that drift.
+ *
+ * WHAT THE STAGE DOES AND DOES NOT DO. It does not change the title strings, and pretending it did
+ * would be a lie the data model would then have to carry. `role_types` is its own saved field, and
+ * cleanTitle above deliberately strips "intern"/"co-op" off a title, so "Software Engineer" is the
+ * stored vocabulary at every stage and the stage is stored beside it. What the stage genuinely
+ * changes is which postings match, which is the board's job and not this screen's.
+ *
+ * So the stage gates the titles rather than filtering them: both answers are required before the
+ * title list is offered at all. That is the point of asking in this order - a student who has said
+ * "Software & AI" and "Internship" is answering a much smaller question than one facing every
+ * title in JOB_TITLES, and the two answers are what make the offer specific.
+ */
+
+export type OnboardingField = {
+  /** Stable across renames; this is what the query string and analytics carry. */
+  id: string;
+  label: string;
+  /** The EXISTING targeting category this field belongs to. Not unique across fields. */
+  category: string;
+  titles: string[];
+};
+
+export const FIELDS: OnboardingField[] = ROLE_FAMILIES.map((family) => ({
+  id: family.id,
+  label: family.label,
+  category: family.category,
+  titles: [...family.roles],
+}));
+
+/**
+ * The titles to offer for the chosen fields, in field order, deduped case-insensitively.
+ *
+ * An unknown id contributes nothing rather than throwing: the ids ride in a query string from the
+ * homepage calibration card, so a stale link must degrade to a smaller offer and never to a broken
+ * screen. An empty selection returns an empty list, which is what makes the gate above truthful -
+ * the screen has nothing to show until a field is chosen, rather than quietly showing everything.
+ */
+export function titlesForFields(fieldIds: readonly string[]): string[] {
+  const chosen = new Set(fieldIds);
+  const out: string[] = [];
+  for (const field of FIELDS) {
+    if (!chosen.has(field.id)) continue;
+    for (const title of field.titles) {
+      if (!out.some((item) => item.toLowerCase() === title.toLowerCase())) out.push(title);
+    }
+  }
+  return out;
+}
+
+/**
+ * The targeting categories the chosen fields imply.
+ *
+ * This exists because the roles screen has no category control and never did: categories used to
+ * arrive from the resume inference, and the screen ran third, after an upload. Running first, for
+ * a student with no resume, that source is gone - and `categories` is a REQUIRED part of the
+ * targeting write, so without this a brand-new account reaches Continue permanently disabled with
+ * no visible way to satisfy it. The field IS the category question, asked in words a student can
+ * answer, so the answer comes from here.
+ *
+ * Deduped because two fields can share one category: picking Marketing and Sales is one `other`.
+ */
+export function categoriesForFields(fieldIds: readonly string[]): string[] {
+  const chosen = new Set(fieldIds);
+  return Array.from(new Set(FIELDS.filter((field) => chosen.has(field.id)).map((field) => field.category)));
+}
+
+/**
+ * Which fields to pre-select for a student who already has targeting.
+ *
+ * Read from SAVED CATEGORIES, never from the resume, and that direction is the same no-data-loss
+ * rule focusSeed states below: a returning student's stated categories outrank anything inferred.
+ * A category holding two fields (marketing and sales both sit in `other`) pre-selects both, which
+ * over-offers rather than under-offers - the student can deselect what they can see, and cannot
+ * deselect a field the screen never drew.
+ */
+export function fieldsForCategories(categories: readonly string[] | null | undefined): string[] {
+  if (!Array.isArray(categories) || categories.length === 0) return [];
+  const wanted = new Set(categories);
+  return FIELDS.filter((field) => wanted.has(field.category)).map((field) => field.id);
+}
+
+
 /* What the /start roles screen is allowed to do to targeting that already exists.
  *
  * This lives beside the inference rather than in its own module because it is the GUARD ON THAT
@@ -236,12 +351,17 @@ function stated<T>(value: T[] | null | undefined): T[] | null {
  * The guess contributes ONE title, not all five. Selecting every suggestion on the student's
  * behalf would make Continue commit five inferred titles that they only ever declined to remove.
  */
-export function focusSeed(saved: SavedFocus, guess: FocusGuess): FocusSelection {
+export function focusSeed(saved: SavedFocus, guess: FocusGuess | null): FocusSelection {
   const savedTitles = stated(saved?.titles);
   const savedRoleTypes = stated(saved?.role_types);
   return {
-    titles: savedTitles ?? (guess.roles[0] ? [guess.roles[0]] : []),
-    roleTypes: savedRoleTypes ?? [guess.roleType],
+    /* A NULL GUESS IS THE COMMON CASE NOW. The roles screen runs before the upload, so most
+       students arrive with no resume to infer from, and the honest seed for them is nothing
+       pre-selected at all: the field picker is what offers titles, and pre-ticking one Litos
+       invented would be the guess-outranks-answer failure this module exists to prevent, just
+       with no answer yet rather than an answer being overwritten. */
+    titles: savedTitles ?? (guess?.roles[0] ? [guess.roles[0]] : []),
+    roleTypes: savedRoleTypes ?? (guess ? [guess.roleType] : []),
   };
 }
 

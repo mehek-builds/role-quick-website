@@ -103,9 +103,14 @@ describe("a reset review preserves stored profile data", () => {
     assert.match(load, /api<ParsedProfile>\("\/profile"\)/);
     assert.match(load, /getApplicationProfile\(\)/);
     assert.doesNotMatch(load, /put|delete|clear|reset/i);
-    assert.match(page, /savedProfile=\{state\.flow_version === 2 && state\.has_resume && state\.flow_completed === false \? profile : undefined\}/);
+    assert.match(page, /savedProfile=\{hasFlowLedger\(state\) && state\.has_resume && state\.flow_completed === false \? profile : undefined\}/);
     assert.doesNotMatch(page, /savedProfile=\{state\.completed_at/);
-    assert.match(page, /state\.flow_version === 2 && state\.has_resume && !state\.flow_completed && parsedProfileStatus !== "ready"/);
+    assert.match(page, /hasFlowLedger\(state\) && state\.has_resume && !state\.flow_completed && parsedProfileStatus !== "ready"/);
+    /* The ledger check is a >= test, not an equality, because the roles-first reorder bumped the
+       server to flow version 3. Ten hardcoded `=== 2` checks would all have gone quietly false:
+       every screen would still render and advance, and not one acknowledgement would be written. */
+    assert.match(page, /flow_version >= 2/);
+    assert.doesNotMatch(page, /flow_version === 2/);
     assert.match(page, /parsedProfileStatus === "error"[\s\S]*?Try loading again/);
   });
 

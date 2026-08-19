@@ -23,16 +23,26 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
  * asserted too, because a receipt printed from constants would otherwise satisfy this case. */
 test("the first step welcomes the user, explains the path, and keeps the exit visible", async () => {
   const steps = await read("components/start/steps.tsx");
+  /* THE FIRST STEP IS THE ROLES SCREEN, as of flow version 3. This case follows the copy again,
+     the same way it followed it out of ResumeStep and into Welcome.tsx: the welcome belongs to
+     whichever screen a cold arrival lands on, and that is FocusForm now. A welcome asserted
+     against ResumeStep would still have passed while greeting the student on screen two. */
+  const focus = steps.slice(steps.indexOf("function FocusForm"), steps.indexOf("export function ResumeStep"));
   const resume = steps.slice(steps.indexOf("export function ResumeStep"), steps.indexOf("export function InstallStep"));
   const welcome = await read("components/start/Welcome.tsx");
 
-  assert.match(resume, /title="Start with your resume\."/);
-  assert.match(resume, /<WelcomeNote \/>/);
+  assert.match(focus, /title="What are you going after\?"/);
+  assert.match(focus, /<WelcomeNote \/>/);
   assert.match(welcome, /Welcome to Litos\./);
   // The path is explained by the walkthrough now, and it has to be skippable to stay on this screen.
-  assert.match(resume, /<Highlights \/>/);
+  assert.match(focus, /<Highlights \/>/);
   assert.match(welcome, /aria-expanded/);
+  assert.match(focus, /<LaterLink onClick=\{onLater\} \/>/);
+
+  // And the second screen keeps its own title and exit: the reorder moved the welcome, not the upload.
+  assert.match(resume, /title="Start with your resume\."/);
   assert.match(resume, /<LaterLink onClick=\{onLater\} \/>/);
+  assert.doesNotMatch(resume, /<WelcomeNote \/>/, "the welcome greets on the second screen too");
 });
 
 test("completion says setup is complete before sending the user to their jobs", async () => {
