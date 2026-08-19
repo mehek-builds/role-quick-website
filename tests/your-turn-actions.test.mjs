@@ -87,7 +87,10 @@ test("the panel hands the row everything a control needs, and the page hands the
   assert.match(list, /onOpenQuestion=\{onOpenQuestion\}/);
   assert.match(list, /onAddDocument=\{onAddDocument\}/);
 
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} \/>/);
+  /* onChooseOption joined the element when the rows learned to draw the employer's own options;
+     tests/question-choice-list.test.mjs pins what pressing one does. The whole-element pin stays,
+     so a prop silently dropped from this line is still a failure here. */
+  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} \/>/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
 });

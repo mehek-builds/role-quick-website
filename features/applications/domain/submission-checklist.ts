@@ -14,6 +14,16 @@ import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from
  */
 export type SubmissionChecklistAction = "open-page" | "answer" | "review" | "confirm" | "attach";
 
+/**
+ * The most options a closed list renders as individual choice rows.
+ *
+ * Below this a list reads at a glance, which is the whole point of showing the employer's own
+ * options instead of a blank box: the acknowledgement lists this exists for offer one or two
+ * sentences. Above it the rows become the wall the blank box was, so the answers editor falls back
+ * to its select and the Your turn row falls back to its plain Answer control.
+ */
+export const QUESTION_CHOICE_LIST_LIMIT = 8;
+
 export type SubmissionChecklistItem = {
   id: string;
   label: string;
@@ -53,6 +63,13 @@ export type SubmissionChecklistItem = {
    * rows for one field.
    */
   subject?: string;
+  /**
+   * The employer's own options, in the employer's own order, when the question behind this row
+   * carries a short closed list. Display plus routing only: picking one opens the answers editor
+   * with that option selected, and the editor's Save is still the only write. Absent past
+   * QUESTION_CHOICE_LIST_LIMIT, where the plain Answer control is the kinder shape.
+   */
+  options?: readonly string[];
 };
 
 /**
@@ -655,6 +672,13 @@ export function humanInputItems(
         action: "Answer",
         actionKind: "answer",
         questionId: question.id,
+        /* The employer's own list rides on the row, so the panel can show what the control accepts
+           instead of naming a box she has to guess the wording for. A blank answer to a closed
+           list is exactly the shape this exists for: she typed "Yes" into an acknowledgement whose
+           only option was a sentence, and the fill failed silently. */
+        ...(question.options && question.options.length > 0 && question.options.length <= QUESTION_CHOICE_LIST_LIMIT
+          ? { options: question.options }
+          : {}),
       });
       continue;
     }
