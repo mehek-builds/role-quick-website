@@ -1,4 +1,5 @@
 import type { PostingPrescriptQuestion } from "./api";
+import type { ResumeSpec } from "@/lib/api";
 
 /* 04 WATCH IT BUILD: the sequence, as a decision that can be tested without spending a generation.
  *
@@ -41,9 +42,14 @@ export type BuildResult = {
   /** The canonical application POST /resume/generate created or linked. The review screen submits
    *  against this, and a null one means there is nothing to send. */
   applicationId: string | null;
-  /** The education lines the generated resume will print, for the drift guard on the review
-   *  screen. Null when the response did not carry a spec. */
-  resumeSpec: { school?: string; degree?: string; grad_date?: string } | null;
+  /** THE WHOLE GENERATED RESUME, not just its education lines.
+   *
+   *  It was narrowed to school/degree/grad_date for the review screen's drift guard, which is all
+   *  that consumer needs. The build screen needs the rest: it renders the actual tailored lines
+   *  beside the posting, marked term by term, because a screen whose job is to SHOW the tailoring
+   *  cannot do it from three academic fields. Null when the response carried no spec, which the
+   *  panes handle rather than assume away. */
+  resumeSpec: ResumeSpec | null;
   /** The questions that need the applicant, passed straight through to screen 05 rather than
    *  re-fetched: the scan is the expensive half and it has already been paid for here. */
   ask: PostingPrescriptQuestion[];

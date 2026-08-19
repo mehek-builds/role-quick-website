@@ -186,7 +186,10 @@ export function resumeSpecText(spec: ResumeSpec): string {
     spec.degree,
     spec.grad_date,
     spec.coursework,
-    ...spec.experience.flatMap((entry) => [entry.org, entry.title, entry.date_range, ...entry.bullets]),
-    ...spec.skills,
+    /* Guarded for the same reason the build pane's lists are: this runs on `application.spec`
+       straight off a generation response, and a partial one would throw inside a memo rather than
+       simply score lower. */
+    ...(spec.experience ?? []).flatMap((entry) => [entry.org, entry.title, entry.date_range, ...(entry.bullets ?? [])]),
+    ...(spec.skills ?? []),
   ].join(" ");
 }
