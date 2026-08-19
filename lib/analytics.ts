@@ -73,7 +73,11 @@ type OnboardingEvent =
      all, and `fixable` separates a one-line profile gap from a genuine build failure - two very
      different things to see rising in a funnel. */
   | "onboarding_build_completed"
-  | "onboarding_build_failed";
+  | "onboarding_build_failed"
+  /* The questions screen. `asked` versus `already_answered` is the ratio that says whether the
+     pre-script is doing its job: a screen that asks eight of seventeen is a profile gap, not a
+     UI problem. */
+  | "onboarding_questions_saved";
 
 type CoreEvent =
   | "authentication_completed"
