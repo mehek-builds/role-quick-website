@@ -217,6 +217,11 @@ const REVISITABLE: { key: OnboardingStep; label: string }[] = [
   { key: "sponsorship", label: "your work visa answer" },
 ];
 
+/* The disclosure names the region it opens, the same contract the welcome walkthrough on the first
+   screen already keeps. A button that expands something it does not name leaves a screen reader
+   with no way to reach what appeared. */
+const REVISIT_LIST_ID = "start-revisit-list";
+
 const RevisitContext = createContext<{
   revisiting: OnboardingStep | null;
   onRevisit: (step: OnboardingStep) => void;
@@ -269,13 +274,14 @@ function RevisitBar({ current }: { current: OnboardingStep }) {
       <button
         type="button"
         aria-expanded={open}
+        aria-controls={REVISIT_LIST_ID}
         onClick={() => setOpen((value) => !value)}
         className="min-h-11 text-muted underline underline-offset-4 hover:text-ink"
       >
         Change something you answered
       </button>
       {open && (
-        <ul className="mt-2 flex flex-wrap gap-2">
+        <ul id={REVISIT_LIST_ID} className="mt-2 flex flex-wrap gap-2">
           {behind.map((item) => (
             <li key={item.key}>
               <button

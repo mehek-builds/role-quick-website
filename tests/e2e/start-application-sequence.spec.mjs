@@ -434,4 +434,33 @@ describe("the application sequence, end to end", () => {
   test("the whole sequence was walked in order", () => {
     assert.deepEqual(acknowledged, ["match", "questions", "review", "trial", "notifications"]);
   });
+
+  /* GOING BACK TO CHANGE AN ANSWER, and coming back to where you were.
+   *
+   * The bug this pins: every screen's Continue acknowledges and refreshes, and the rendered step is
+   * `revisiting ?? served`. Finish a revisited screen with that path and the acknowledgement writes
+   * a second time while the override keeps the student standing on the screen they just finished,
+   * so the button they pressed appears to do nothing. Two assertions, because either one alone
+   * passes on the broken version: the ledger must not gain a row, AND the flow must move. */
+  test("a revisited screen returns the student instead of pinning them, and writes nothing new", async () => {
+    const before = acknowledged.length;
+
+    await page.getByRole("button", { name: "Change something you answered" }).click();
+    const list = page.locator("#start-revisit-list");
+    await list.waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "what you told the employer" }).click();
+
+    // The old screen, in its own words, with the answers still on it.
+    await page.getByText("questions", { exact: false }).first().waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Save and review" }).click();
+
+    /* Back where they were, which by this point in the suite is the plan screen. The server's own
+       answer carries them there, so this is the real step rather than a second override. */
+    await page.getByRole("button", { name: "Continue with 3 months" }).waitFor({ timeout: 15_000 });
+    assert.equal(
+      acknowledged.length,
+      before,
+      `revisiting wrote ${acknowledged.length - before} acknowledgement(s); the ledger already held that screen`,
+    );
+  });
 });

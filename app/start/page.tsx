@@ -80,7 +80,11 @@ export default function Start() {
      than assuming this state survived. */
   const [chosenMatch, setChosenMatch] = useState<OnboardingMatch | null>(null);
   const [built, setBuilt] = useState<BuildResult | null>(null);
-  const [answersGiven, setAnswersGiven] = useState(0);
+  /* THE ANSWERS THEMSELVES, not just how many. Kept because a student can now come BACK to this
+     screen, and a revisit that shows an empty form has lost their work: the built `ask` carries the
+     employer's questions with no answers on them, so seeding from it alone blanks everything they
+     typed and disables the save button they came to press. */
+  const [answersGiven, setAnswersGiven] = useState<{ question: string; answer: string }[]>([]);
   /* The screen the student stepped BACK to, if any. It overrides the server's answer for as long
      as they are there and is cleared on return, so the flow itself never moves: the ledger still
      says where they actually are, and coming back is a trip rather than a rewind. */
@@ -291,6 +295,24 @@ export default function Start() {
       hasFlowLedger(state!) ? acknowledgeOnboardingFlowStep(step, "continued", state!.flow_version) : Promise.resolve(),
     [state],
   );
+  /* FINISHING A SCREEN THE STUDENT CAME BACK TO, which is not the same act as finishing it the
+     first time and must not be handled as one.
+   *
+   * Every screen's own Continue acknowledges and refreshes. That is right going forward and wrong
+   * on a revisit twice over: the ledger already holds this screen (acknowledging again is a write
+   * that says nothing new), and `step` is `revisiting ?? served`, so refreshing alone leaves the
+   * student standing on the screen they just finished with a button that appears to do nothing.
+   *
+   * So a revisit ends the way it began, by clearing the override, and the server's own answer
+   * carries them back to wherever they actually were. Returns true when it handled the completion,
+   * which is what lets each caller keep its ordinary forward path untouched. */
+  const completedRevisit = useCallback(() => {
+    if (revisiting === null) return false;
+    track("onboarding_revisit_saved", { step: revisiting });
+    setRevisiting(null);
+    void refresh();
+    return true;
+  }, [revisiting, refresh]);
   /* Rejoining the sequence after a reload, which drops the per-sitting handoff.
    *
    * Routes on WHAT IS MISSING rather than always restarting: no match means pick one, a match
@@ -431,6 +453,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("focus");
+              if (completedRevisit()) return;
               void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("focus", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -445,6 +468,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("sponsorship");
+              if (completedRevisit()) return;
               void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("sponsorship", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -460,10 +484,14 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("resume");
+              /* A revisit still reloads the parsed profile, because a re-uploaded resume changes it.
+                 It just does not acknowledge or advance. */
+              const cameBack = revisiting !== null;
               void (async () => {
-                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
+                if (!cameBack && hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
+                if (cameBack) { track("onboarding_revisit_saved", { step: "resume" }); setRevisiting(null); }
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -567,6 +595,10 @@ export default function Start() {
           <QuestionsStep
             company={chosenMatch.job.company_name}
             questions={built.ask}
+            /* What they answered last time, replayed onto the employer's questions. Only matters on
+               a revisit: the first time through this is empty and the screen is the blank form it
+               has always been. */
+            given={answersGiven}
             alreadyAnswered={built.alreadyAnswered}
             onLater={later}
             onSaved={async (answers) => {
@@ -580,8 +612,9 @@ export default function Start() {
                 company: chosenMatch.job.company_name,
                 answers,
               });
-              setAnswersGiven(answers.length);
+              setAnswersGiven(answers);
               stepDone("questions");
+              if (completedRevisit()) return;
               await ack("questions");
               await refresh();
             }}
@@ -596,7 +629,7 @@ export default function Start() {
             applicationId={built?.applicationId ?? null}
             resumeSpec={built?.resumeSpec ?? null}
             educationProfile={profile}
-            answersSaved={answersGiven}
+            answersSaved={answersGiven.length}
             fieldsAnswered={built?.totalQuestions ?? 0}
             onSent={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
             onSaveForLater={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
