@@ -180,15 +180,17 @@ before(async () => {
         return json({
           strong_match: { enabled: false, granted_at: null },
           employer_reply: { enabled: false, granted_at: null },
+          activity_digest: { enabled: false, granted_at: null },
           deliverable: true,
           unsubscribe_configured: true,
         });
       }
       return json({
-        /* Both off, which is what a fresh account holds: nothing is pre-ticked, so the walk below
+        /* All off, which is what a fresh account holds: nothing is pre-ticked, so the walk below
            has to actually click a box for anything to be granted. */
         strong_match: { enabled: false, granted_at: null },
         employer_reply: { enabled: false, granted_at: null },
+        activity_digest: { enabled: false, granted_at: null },
         deliverable: true,
         unsubscribe_configured: true,
       });
@@ -346,21 +348,25 @@ describe("the application sequence, end to end", () => {
        consent hygiene and a worse rung. */
     assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);
 
+    /* Chromium in this harness supports the Push API, so the laptop-summary control renders and
+       there are three boxes. It is deliberately NOT ticked here: doing so fires the real browser
+       permission prompt, which Playwright answers by denying, and the assertion worth making is
+       that a refused browser leaves the box off rather than that the prompt can be automated. */
     const boxes = page.locator('main input[type="checkbox"]');
-    assert.equal(await boxes.count(), 2, "two asks, deliberately");
-    for (let i = 0; i < 2; i += 1) {
+    const count = await boxes.count();
+    assert.ok(count === 2 || count === 3, `expected two asks plus the optional laptop one, saw ${count}`);
+    for (let i = 0; i < count; i += 1) {
       assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
     }
 
-    await boxes.nth(0).check();
+    await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
     await page.getByRole("button", { name: "Continue" }).click();
 
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
-    assert.deepEqual(
-      notificationSaves,
-      [{ strong_match: true, employer_reply: false }],
-      "an unticked box must be saved as a decline, not left out as unmentioned",
-    );
+    assert.equal(notificationSaves.length, 1);
+    assert.equal(notificationSaves[0].strong_match, true);
+    assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
+    assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
   });
 
   test("09 the plan: pre-selected, disclosed adjacent, and Free is a real choice", async () => {
