@@ -89,6 +89,10 @@ export default function Start() {
      as they are there and is cleared on return, so the flow itself never moves: the ledger still
      says where they actually are, and coming back is a trip rather than a rewind. */
   const [revisiting, setRevisiting] = useState<OnboardingStep | null>(null);
+  /* Whether the review screen SENT or saved for later. The trial screen opens on the student's own
+     last action, and that screen offers both, so asserting "Sent." was a false statement about
+     what they had just done whenever they chose the other one. */
+  const [applicationSent, setApplicationSent] = useState(false);
   const [profile, setProfile] = useState<ParsedProfile | null>(null);
   const [parsedProfileStatus, setParsedProfileStatus] = useState<"loading" | "ready" | "error">("loading");
   const [parsedProfileLoadError, setParsedProfileLoadError] = useState<string | null>(null);
@@ -638,14 +642,14 @@ export default function Start() {
             educationProfile={profile}
             answersSaved={answersGiven.length}
             fieldsAnswered={built?.totalQuestions ?? 0}
-            onSent={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
-            onSaveForLater={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            onSent={() => { setApplicationSent(true); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            onSaveForLater={() => { setApplicationSent(false); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
           />
         );
 
       case "trial":
         return (
-          <TrialStep onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
+          <TrialStep sent={applicationSent} onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
         );
 
       case "notifications":

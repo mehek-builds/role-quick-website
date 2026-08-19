@@ -353,7 +353,14 @@ describe("the application sequence, end to end", () => {
     assert.match(body, /days of Litos\+/i);
     // 5 limit minus the 1 the build used. Printing 5 here would be a number the account does not have.
     assert.match(body, /Tailored resumes\s*\n?\s*4/i);
-    assert.match(body, /Nothing to confirm/i);
+    /* THIS ACCOUNT HOLDS A TRIAL, so the screen may say so. The line used to be unconditional and
+       read "Nothing to confirm. Already on your account." for everyone, which stopped being true
+       the moment the trial became a Stripe subscription rather than a signup grant: a real new
+       account arrives here holding nothing. The other half of that conditional is the case below. */
+    assert.match(body, /Already on your account/i);
+    assert.doesNotMatch(body, /Nothing is charged for the first seven days/i);
+    // The title follows what the student actually did, and this walk sent.
+    assert.match(body, /Sent\. And here's something from us\./i);
 
     await page.getByRole("button", { name: "Start using it" }).click();
   });
