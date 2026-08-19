@@ -150,7 +150,12 @@ export function PlanCards() {
           >
             Start free
           </ButtonLink>
-          <p className="mt-3 min-h-10 text-center text-label text-muted">New accounts begin with a 7-day Litos+ trial.</p>
+          {/* No trial claim sits here any more. Whether a new account opens on a trial
+              depends on the card gate (CARD_GATE_FROM on the backend): with it off a
+              student can finish setup on Free and never start one, so a sentence
+              promising a trial to "new accounts" is only true half the time. The paid
+              columns say what a trial costs and when it renews, which is true always. */}
+          <p className="mt-3 min-h-10 text-center text-label text-muted" />
           <ul className="mt-6 flex-1 space-y-2.5 text-small text-muted">
             {FREE_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-teal-ink">+</span>{feature}</li>)}
           </ul>
@@ -195,7 +200,7 @@ export function PlanCards() {
               <p className="mt-3 min-h-10 text-center text-label text-muted" aria-live="polite">
                 Due today {authenticated || extensionCheckout ? plan.total : "$0"}. {authenticated || extensionCheckout
                   ? `Renews ${plan.renewal} until canceled.`
-                  : `After the trial, stay on Free unless you return and explicitly purchase.`}
+                  : `Then ${plan.total} ${plan.renewal}. Cancel any time.`}
               </p>
               <ul className="mt-6 flex-1 space-y-2.5 text-small text-muted">
                 {PLUS_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-brand-ink">+</span>{feature}</li>)}
@@ -209,7 +214,7 @@ export function PlanCards() {
       <p className="mt-5 text-center text-label text-muted">
         Savings compare each daily rate with the weekly daily rate. {extensionCheckout
           ? "Stripe opens through the signed-in Litos extension, so the purchase stays with that extension account."
-          : "No charge begins with the 7-day trial. Stripe opens only after a later, explicit purchase."}
+          : "Nothing is charged for 7 days. Cancel any time."}
       </p>
     </div>
   );

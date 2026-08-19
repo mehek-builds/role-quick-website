@@ -157,25 +157,16 @@ export function PlanStep({ onFree }: { onFree?: () => void }) {
         {plan.disclosure} Cancel in Account, in one click, at any time.
       </p>
 
-      <div className="mt-6 overflow-hidden rounded-inner border border-border">
-        <header className="border-b border-border bg-surface-alt px-4 py-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">If you do nothing</span>
-        </header>
-        <div className="grid grid-cols-1 gap-1 border-b border-border px-4 py-3 text-[13px] sm:grid-cols-[110px_minmax(0,1fr)] sm:gap-4">
-          <span className="text-ink">You keep</span>
-          <span className="leading-6 text-muted">
-            Unlimited application filling, your jobs and match scores, the resume you just sent, and
-            every tracker receipt. Free, with no time limit.
-          </span>
-        </div>
-        <div className="grid grid-cols-1 gap-1 px-4 py-3 text-[13px] sm:grid-cols-[110px_minmax(0,1fr)] sm:gap-4">
-          <span className="text-ink">You lose</span>
-          <span className="leading-6 text-muted">
-            New tailored resumes, new cover letters, generated answers and contact discovery, when
-            the seven days end.
-          </span>
-        </div>
-      </div>
+      {/* WAS a two-row "If you do nothing / You keep / You lose" table promising the
+          student unlimited filling, free with no time limit, if they simply did not act.
+          That was true when doing nothing meant declining a purchase. It is the opposite
+          of true now: the card starts a trial that converts on its own, so doing nothing
+          is the path that gets charged. Replaced with the one sentence that matters
+          rather than re-explaining the tiers on the screen that takes the card. */}
+      <p className="mt-6 text-[13px] leading-6 text-muted">
+        Free for seven days. After that, Litos+ continues at {plan.total} {plan.renewal}.
+        Cancel in Account, in one click, any time before then and you are not charged.
+      </p>
 
       <div className="mt-7 flex flex-wrap items-center gap-4">
         <PrimaryButton onClick={() => void checkout()} disabled={busy}>
