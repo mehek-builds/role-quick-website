@@ -23,6 +23,9 @@ export type OnboardingMatch = {
   freshness: MatchFreshness;
   /** Hours since Litos first saw it, floored. Null when `first_seen_at` is unusable. */
   hoursSinceSeen: number | null;
+  /** True when the board had to be widened past the student's stated preferences to find this.
+   *  The copy has to say so: a row found this way is a near miss, not the thing they asked for. */
+  widened: boolean;
 };
 
 const HOUR_MS = 3_600_000;
@@ -79,7 +82,11 @@ export function freshnessOf(job: MonitoredJob, now: number = Date.now()): MatchF
  * A null score never blocks a row - the scorer returns null for postings that list too few real
  * requirements, and that is a fact about the posting's text, not about its fit.
  */
-export function pickOnboardingMatch(jobs: readonly MonitoredJob[], now: number = Date.now()): OnboardingMatch | null {
+export function pickOnboardingMatch(
+  jobs: readonly MonitoredJob[],
+  now: number = Date.now(),
+  widened = false,
+): OnboardingMatch | null {
   const usable = jobs.filter((job) => job.is_active !== false);
   if (usable.length === 0) return null;
 
@@ -88,7 +95,7 @@ export function pickOnboardingMatch(jobs: readonly MonitoredJob[], now: number =
     if (onRung.length === 0) continue;
     const strong = onRung.find((job) => (job.match_score ?? 0) >= STRONG_MATCH_SCORE);
     const job = strong ?? onRung[0];
-    return { job, freshness: rung, hoursSinceSeen: hoursSinceSeen(job.first_seen_at, now) };
+    return { job, freshness: rung, hoursSinceSeen: hoursSinceSeen(job.first_seen_at, now), widened };
   }
   return null;
 }
@@ -102,9 +109,53 @@ export function pickOnboardingMatch(jobs: readonly MonitoredJob[], now: number =
  * freshness predicate on the board already guarantees.
  */
 export function matchHeadline(match: OnboardingMatch): string {
+  /* A WIDENED ROW GETS ITS OWN SENTENCE, and it is checked first.
+     The board was asked again without the student's own filters to find it, so every other line
+     here would be false about it: it is not what they asked for, and saying it is the closest fit
+     "to what you asked for" would be the specific untruth. Naming the widening is also the more
+     useful sentence, because the fix is one they can act on. */
+  if (match.widened) return "Nothing open matches your filters exactly right now, so here is the closest thing.";
   if (match.freshness === "today") return "We just detected this one, and we think it is a perfect fit.";
   if (match.freshness === "this_week") return "We found this one for you this week, and it is a strong fit.";
   return "This one is open now, and it is the closest fit to what you asked for.";
+}
+
+/**
+ * The match to show, guaranteed to be a real posting whenever the board has one at all.
+ *
+ * Two requests at most, and the second only happens when the first came back empty:
+ *
+ *  1. the student's own board, exactly as their preferences describe it;
+ *  2. the same board with `relax_targeting=true`, which drops saved locations, remote_only,
+ *     role_types and desired title terms and NOTHING else. The portal-family, freshness, active
+ *     and sponsor-only constraints all survive, so a widened row is still one Litos can actually
+ *     submit to and one the student is eligible for. See the backend's boardConditions.
+ *
+ * `fetchJobs` is injected rather than imported so this stays a pure decision that can be tested
+ * without a network, and so the caller owns auth and error handling.
+ *
+ * A failed FIRST request is not swallowed - it propagates, because a student whose board could not
+ * be read has a problem worth showing rather than a silently widened result. A failed SECOND
+ * request resolves to null: the widening is a fallback, and a fallback that throws would turn a
+ * merely empty board into a broken screen.
+ */
+export async function fetchOnboardingMatch(
+  fetchJobs: (params: { limit: number; relaxTargeting: boolean }) => Promise<{ jobs: MonitoredJob[] }>,
+  options: { limit?: number; now?: number } = {},
+): Promise<OnboardingMatch | null> {
+  const limit = options.limit ?? 20;
+  const now = options.now ?? Date.now();
+
+  const targeted = await fetchJobs({ limit, relaxTargeting: false });
+  const onTarget = pickOnboardingMatch(targeted.jobs ?? [], now, false);
+  if (onTarget) return onTarget;
+
+  try {
+    const relaxed = await fetchJobs({ limit, relaxTargeting: true });
+    return pickOnboardingMatch(relaxed.jobs ?? [], now, true);
+  } catch {
+    return null;
+  }
 }
 
 /**

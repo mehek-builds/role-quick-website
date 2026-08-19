@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   STRONG_MATCH_SCORE,
+  fetchOnboardingMatch,
   foundLabel,
   freshnessOf,
   hoursSinceSeen,
@@ -122,4 +123,65 @@ test("the meta line says Found, never Posted, and reads like a person", () => {
 test("an unreadable timestamp makes no recency claim in the meta line either", () => {
   const picked = pickOnboardingMatch([job({ id: "x", first_seen_at: null as unknown as string })], NOW)!;
   assert.equal(foundLabel(picked), "On the board now");
+});
+
+/* The guarantee: there is always a role. Two requests at most, and the second only when the first
+   came back empty. */
+
+test("a targeted hit never triggers the widened request", async () => {
+  const calls: boolean[] = [];
+  const match = await fetchOnboardingMatch(async ({ relaxTargeting }) => {
+    calls.push(relaxTargeting);
+    return { jobs: [job({ id: "on-target", first_seen_at: hoursAgo(3) })] };
+  }, { now: NOW });
+
+  assert.deepEqual(calls, [false], "the board was widened even though the student's own filters matched");
+  assert.equal(match?.job.id, "on-target");
+  assert.equal(match?.widened, false);
+});
+
+test("an empty targeted board widens, and the result is marked as widened", async () => {
+  const calls: boolean[] = [];
+  const match = await fetchOnboardingMatch(async ({ relaxTargeting }) => {
+    calls.push(relaxTargeting);
+    return { jobs: relaxTargeting ? [job({ id: "widened", first_seen_at: hoursAgo(3) })] : [] };
+  }, { now: NOW });
+
+  assert.deepEqual(calls, [false, true]);
+  assert.equal(match?.job.id, "widened");
+  assert.equal(match?.widened, true);
+});
+
+test("a widened row never claims to be what the student asked for", async () => {
+  const match = await fetchOnboardingMatch(async ({ relaxTargeting }) => ({
+    jobs: relaxTargeting ? [job({ id: "w", first_seen_at: hoursAgo(1), match_score: 95 })] : [],
+  }), { now: NOW })!;
+
+  // Even at 95 and found an hour ago, it must not be sold as a perfect fit: the board was asked
+  // again without the student's filters to find it.
+  assert.doesNotMatch(matchHeadline(match!), /perfect fit/i);
+  assert.doesNotMatch(matchHeadline(match!), /what you asked for/i);
+  assert.match(matchHeadline(match!), /closest thing/i);
+});
+
+test("a failed first read propagates rather than silently widening", async () => {
+  // A student whose own board could not be read has a problem worth showing. Widening past it
+  // would hide a real failure behind a result that looks fine.
+  await assert.rejects(
+    () => fetchOnboardingMatch(async () => { throw new Error("board unreachable"); }, { now: NOW }),
+    /board unreachable/,
+  );
+});
+
+test("a failed widened read resolves to null rather than breaking the screen", async () => {
+  const match = await fetchOnboardingMatch(async ({ relaxTargeting }) => {
+    if (relaxTargeting) throw new Error("widening failed");
+    return { jobs: [] };
+  }, { now: NOW });
+  assert.equal(match, null);
+});
+
+test("an empty board on both passes yields null, and the caller decides what to say", async () => {
+  const match = await fetchOnboardingMatch(async () => ({ jobs: [] }), { now: NOW });
+  assert.equal(match, null);
 });
