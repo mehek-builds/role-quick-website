@@ -1097,6 +1097,9 @@ export type OnboardingState = {
   flow_version: number;
   flow_completed: boolean;
   requires_onboarding: boolean;
+  /** Server-owned: the dashboard stays shut until a card is on file. Optional because a
+      backend that predates the gate sends nothing, which must read as "not gated". */
+  requires_payment_method?: boolean;
   completed_at: string | null;
   has_focus: boolean;
   /** Whether the one-time visa-sponsorship question has been answered. Absent on older backends. */

@@ -34,7 +34,7 @@ import {
 import { track } from "@/lib/analytics";
 import { PrimaryButton, StartShell } from "./ui";
 
-export function PlanStep({ onFree }: { onFree: () => void }) {
+export function PlanStep({ onFree }: { onFree?: () => void }) {
   const [selected, setSelected] = useState<LitosPlusPlanId>(DEFAULT_LITOS_PLUS_PLAN_ID);
   /* THE RETURN FROM STRIPE LANDS HERE, and without this it lands on a sales pitch.
    *
@@ -56,7 +56,11 @@ export function PlanStep({ onFree }: { onFree: () => void }) {
         if (cancelled) return;
         if (isPaidAccess(access)) {
           track("onboarding_plan_already_paid", {});
-          onFree();
+          /* Advancing a student who has ALREADY paid is not the Free path, it just shares
+             the callback. With the card gate on, onFree is withheld and the refresh that
+             follows checkout is what moves them: the server has the card by then, so the
+             flow no longer stops here. */
+          onFree?.();
           return;
         }
         setSettled(true);
@@ -162,15 +166,19 @@ export function PlanStep({ onFree }: { onFree: () => void }) {
         <PrimaryButton onClick={() => void checkout()} disabled={busy}>
           {busy ? <PendingLabel onColor>Opening checkout...</PendingLabel> : `Continue with ${plan.shortLabel}`}
         </PrimaryButton>
-        {/* Not "Finish later". This one chooses. */}
-        <button
-          type="button"
-          onClick={() => { track("onboarding_plan_declined", {}); onFree(); }}
-          disabled={busy}
-          className="text-sm text-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
-        >
-          Continue on Free
-        </button>
+        {/* Not "Finish later". This one chooses. Absent entirely when the account has no
+            card on file: there is nothing for it to choose, because Free is behind the
+            same gate, and a control that cannot do what it says is worse than no control. */}
+        {onFree && (
+          <button
+            type="button"
+            onClick={() => { track("onboarding_plan_declined", {}); onFree(); }}
+            disabled={busy}
+            className="text-sm text-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
+          >
+            Continue on Free
+          </button>
+        )}
       </div>
     </StartShell>
   );
