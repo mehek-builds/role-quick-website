@@ -1130,6 +1130,9 @@ export type OnboardingState = {
   /** Whether this student's flow contains the application sequence. Server-owned, same rule as
    *  includes_gaps_step: the client must never re-derive which screens a flow contains. */
   includes_application_steps?: boolean;
+  /** Whether the work-visa screen is in THIS student's flow. False when the first employer's own
+   *  questions already produced the declaration. Server-owned, like the two flags above. */
+  includes_sponsorship_step?: boolean;
   /** Page count of the uploaded file, measured at parse time. 0 when never measured. */
   source_pages: number;
   /** The original upload, for the side-by-side. NULL is normal: storing it is best-effort. */
@@ -1192,6 +1195,30 @@ export type Targeting = {
  *  and tailoring against that truncation grades a student on the posting's intro paragraph. */
 export function getJob(jobId: string) {
   return api<MonitoredJob>(`/jobs/${encodeURIComponent(jobId)}`);
+}
+
+/**
+ * What the student answered on the "what the job asks" screen, kept.
+ *
+ * WITHOUT THIS THAT SCREEN DISCARDED EVERYTHING. It asked real questions from a real employer and
+ * the client counted the answers, advanced the flow and threw them away.
+ *
+ * Two things happen server-side, and the difference matters. The genuinely reusable answers (an
+ * exact standardized test score, a placed onsite commitment - almost nothing else, because
+ * answerReuseScope defaults to posting-specific) are remembered on the account. And if the posting
+ * asked BOTH the authorization and the sponsorship question, the pair becomes the account's work
+ * eligibility declaration for that posting's country, which is what lets the work-visa screen be
+ * skipped entirely. `declared_country` says whether that happened.
+ */
+export function saveOnboardingAnswers(body: {
+  job_id?: string | null;
+  company?: string | null;
+  answers: { question: string; answer: string }[];
+}) {
+  return api<{ ok: true; remembered: number; submitted: number; declared_country: string | null }>(
+    "/onboarding/answers",
+    { method: "POST", body: JSON.stringify(body) },
+  );
 }
 
 export function getOnboardingJobs(params: { limit: number; relaxTargeting: boolean }) {

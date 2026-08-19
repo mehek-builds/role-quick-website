@@ -23,26 +23,8 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
      of TIME, not of importance. */
   { key: "focus", label: "Your roles", weight: 1 },
   { key: "resume", label: "Your resume", weight: 2 },
-  { key: "impact", label: "Your impact", weight: 2 },
   /* Weight 1, same as focus: four radio buttons and a short explanation. It is the cheapest screen
      in the flow in time and the most consequential in effect, and the rail is a map of TIME. */
-  { key: "sponsorship", label: "Work visa", weight: 1 },
-  { key: "base", label: "Your one page", weight: 2 },
-  /* Added here by #285, which found it rendering without an entry: `StepRail` used to resolve an
-     unknown key through `Math.max(0, findIndex(...))`, so a rendered screen missing from this list
-     did not fail loudly, it silently reported itself as index 0. The gaps screen was therefore
-     telling every student it was "Step 1 of 6, Your resume" while sitting second from last. A
-     wayfinding device that points backwards is worse than none. That clamp is gone now, so the
-     symptom changed: an unrecognised key leaves `i` at -1 and the rail draws itself with no position
-     at all. Quieter, still wrong, and still the reason every rendered screen belongs in this list.
-
-     Weight 1, alongside focus and sponsorship: it is a handful of short inputs, and the rail is a
-     map of TIME.
-
-     `conditional` marks the one screen the flow does not always contain, so it is the one entry
-     that must not be counted by default. Left in STEPS unconditionally it made the denominator a
-     permanent overcount, which #285 accepted as the cheaper of two errors and this flag removes. */
-  { key: "gaps", label: "A few details", weight: 1, conditional: true },
   /* THE APPLICATION SEQUENCE. All seven are conditional on the same server-owned signal
      (`includes_application_steps`), for the same reason the gaps screen is conditional on its own:
      the flow does not always contain them, and counting them for everybody would make the rail's
@@ -50,9 +32,17 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
      Weights are a map of TIME, so the build gets 2 (it waits on a real generation) and the rest
      get 1: a match is one tap, a few questions are a few taps, and the trial screen only asks the
      student to accept something they already hold. */
-  { key: "match", label: "Your match", weight: 1, conditional: true },
-  { key: "build", label: "Your application", weight: 2, conditional: true },
+  /* One screen, two phases: the posting, then it building. `build` was a separate step and is
+     folded in here, because two step numbers for one continuous action was the rail counting a
+     transition rather than a decision. Weight 2 now: it waits on a real generation. */
+  { key: "match", label: "Your match", weight: 2, conditional: true },
   { key: "questions", label: "What the job asks", weight: 1, conditional: true },
+  /* The work-visa screen, moved here from setup and now CONDITIONAL.
+     39.9% of first applications ask both halves themselves (measured, 318 packets) and the answer
+     becomes the account's declaration, so those students never see this. The other ~60% do, because
+     sponsorship_required_at_onboarding is what turns the sponsor-only board filter on and nothing
+     else can answer it. Its own signal, never inherited: includes_sponsorship_step. */
+  { key: "sponsorship", label: "Work visa", weight: 1, conditional: true },
   { key: "review", label: "Review and send", weight: 1, conditional: true },
   { key: "trial", label: "Your trial", weight: 1, conditional: true },
   /* Weight 1: two switches and a sentence. It sits between the trial and the plan because that is
@@ -64,7 +54,7 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
 ];
 
 /** The seven steps gated by `includes_application_steps`. */
-const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "build", "questions", "review", "trial", "notifications", "plan"]);
+const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "questions", "review", "trial", "notifications", "plan"]);
 
 /** The steps this particular student's flow contains, which is the rail's denominator.
  *
@@ -106,6 +96,9 @@ export function flowSteps(current: OnboardingStep | undefined, state: Onboarding
      two, which is the trap #285 recorded when a screen was counted for everybody. */
   const inFlow = (s: (typeof STEPS)[number]) =>
     (s.key === "gaps" && state?.includes_gaps_step === true)
-    || (APPLICATION_KEYS.has(s.key) && state?.includes_application_steps === true);
+    || (APPLICATION_KEYS.has(s.key) && state?.includes_application_steps === true)
+    /* Its OWN flag, never inherited from includes_application_steps: this screen is skipped for the
+       ~40% whose first employer asked, and counting it for them would print a step nobody walks. */
+    || (s.key === "sponsorship" && state?.includes_sponsorship_step === true);
   return STEPS.filter((s) => !s.conditional || inFlow(s) || s.key === current || s.key === state?.step);
 }

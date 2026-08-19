@@ -41,6 +41,7 @@ const acknowledged = [];
    false, or the server reads it as "not mentioned" and leaves a stale grant on. */
 const notificationSaves = [];
 let submitRequests = 0;
+const savedAnswers = [];
 let checkoutRequests = 0;
 let generationCalls = 0;
 let releaseGeneration;
@@ -104,7 +105,9 @@ const PRESCRIPT = {
 };
 
 function onboardingState() {
-  const APPLICATION = ["match", "build", "questions", "review", "trial", "notifications", "plan"];
+  /* Mirrors APPLICATION_STEPS. `build` is not here: it is a PHASE of the match screen now, not a
+     step, so the ledger never sees it. */
+  const APPLICATION = ["match", "questions", "review", "trial", "notifications", "plan"];
   const step = APPLICATION.find((key) => !acknowledged.includes(key)) ?? "done";
   return {
     step,
@@ -125,6 +128,7 @@ function onboardingState() {
     gaps: [],
     includes_gaps_step: false,
     includes_application_steps: true,
+    includes_sponsorship_step: false,
     gap_suggestions: {},
   };
 }
@@ -160,6 +164,13 @@ before(async () => {
     const json = (body, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
     if (path === "/onboarding/state") return json(onboardingState());
+    if (path === "/onboarding/answers") {
+      /* The write the questions screen used to skip entirely. Recorded so the walk can assert the
+         answers actually left the browser, which is the defect this spec did not catch the first
+         time: it asserted the submit fired, never that the answers persisted. */
+      savedAnswers.push(...JSON.parse(route.request().postData()).answers);
+      return json({ ok: true, remembered: 0, submitted: savedAnswers.length, declared_country: "US" });
+    }
     if (path === "/onboarding/flow/steps") {
       acknowledged.push(JSON.parse(route.request().postData()).step);
       return json({ ok: true });
@@ -307,6 +318,14 @@ describe("the application sequence, end to end", () => {
     await page.getByRole("button", { name: "Save and review" }).click();
   });
 
+  test("the answers actually left the browser", () => {
+    /* The regression this spec missed on its first pass. The screen collected answers, advanced the
+       flow, and discarded them; asserting the submit-request fired proved nothing about the data. */
+    assert.equal(savedAnswers.length, 2, "the questions screen did not persist its answers");
+    assert.ok(savedAnswers.some((a) => /sponsorship/i.test(a.question) && a.answer === "Yes"));
+    assert.ok(savedAnswers.some((a) => /GPA/i.test(a.question) && /3\.6 or above/.test(a.answer)));
+  });
+
   test("06 review: the consequence is stated, and exactly one send is issued", async () => {
     await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
 
@@ -413,6 +432,6 @@ describe("the application sequence, end to end", () => {
   });
 
   test("the whole sequence was walked in order", () => {
-    assert.deepEqual(acknowledged, ["match", "build", "questions", "review", "trial", "notifications"]);
+    assert.deepEqual(acknowledged, ["match", "questions", "review", "trial", "notifications"]);
   });
 });

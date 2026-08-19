@@ -53,7 +53,10 @@ test("completion says setup is complete before sending the user to their jobs", 
   assert.match(done, /role="status"/);
   assert.match(done, /<Receipt rows=\{rows\} \/>/);
   // The rows are read off the account, not hardcoded. See the e2e case for the behavioural proof.
-  assert.match(done, /RECEIPT\[step\.key\]/);
+  // Walked from RECEIPT_ROWS rather than the rail: after the cut, one reportable fact (the built
+  // one-page) outlived its screen, so the receipt's list and the rail's list stopped being equal.
+  assert.match(done, /RECEIPT_ROWS\.map/);
+  assert.match(done, /spec\?\.of\(state\)/);
   assert.match(done, /"See my jobs"/);
   assert.match(done, /<details/);
   assert.match(done, /open=\{permissionsOpen\}/);

@@ -117,8 +117,8 @@ export function QuestionsStep({
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <p className="mb-6 text-sm leading-6 text-muted">
-        These are their words and their options, copied from the form. Answer once and Litos carries
-        them into every application after this.
+        These are their words and their options, copied from the form. They go onto this
+        application, and Litos keeps what it can reuse so the next one is shorter.
         {alreadyAnswered > 0 && ` It already answered ${alreadyAnswered} for you.`}
       </p>
 
