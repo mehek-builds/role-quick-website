@@ -36,6 +36,10 @@ let page;
 /* Everything the flow reads, in one place, so a change to the contract fails here loudly rather
    than being absorbed by six separate hand-written mocks. */
 const acknowledged = [];
+/* Every body the notifications screen PUT. Kept rather than counted, because the thing worth
+   asserting is not that it saved but WHAT it saved: an unticked box has to arrive as an explicit
+   false, or the server reads it as "not mentioned" and leaves a stale grant on. */
+const notificationSaves = [];
 let submitRequests = 0;
 let checkoutRequests = 0;
 let generationCalls = 0;
@@ -100,7 +104,7 @@ const PRESCRIPT = {
 };
 
 function onboardingState() {
-  const APPLICATION = ["match", "build", "questions", "review", "trial", "plan"];
+  const APPLICATION = ["match", "build", "questions", "review", "trial", "notifications", "plan"];
   const step = APPLICATION.find((key) => !acknowledged.includes(key)) ?? "done";
   return {
     step,
@@ -170,6 +174,25 @@ before(async () => {
       return json({ resume_id: "r1", canonical_application_id: "app-1", application: { spec: { school: "USC" } } });
     }
     if (path === "/postings/job-1/questions") return json(PRESCRIPT);
+    if (path === "/notifications/preferences") {
+      if (route.request().method() === "PUT") {
+        notificationSaves.push(JSON.parse(route.request().postData()));
+        return json({
+          strong_match: { enabled: false, granted_at: null },
+          employer_reply: { enabled: false, granted_at: null },
+          deliverable: true,
+          unsubscribe_configured: true,
+        });
+      }
+      return json({
+        /* Both off, which is what a fresh account holds: nothing is pre-ticked, so the walk below
+           has to actually click a box for anything to be granted. */
+        strong_match: { enabled: false, granted_at: null },
+        employer_reply: { enabled: false, granted_at: null },
+        deliverable: true,
+        unsubscribe_configured: true,
+      });
+    }
     if (path === "/applications/app-1/submit-request") {
       submitRequests += 1;
       return json({ review: {} });
@@ -309,6 +332,37 @@ describe("the application sequence, end to end", () => {
     await page.getByRole("button", { name: "Start using it" }).click();
   });
 
+  test("08 notifications: two asks, nothing pre-ticked, and only what was ticked is granted", async () => {
+    await page.getByRole("heading", { name: /when the next one opens/i }).waitFor({ timeout: 20_000 });
+
+    const body = await page.locator("main").innerText();
+    assert.match(body, /Tell me when a strong match opens/i);
+    assert.match(body, /Tell me when an employer replies/i);
+    /* The two promises the backend actually enforces, said on the screen that asks. */
+    assert.match(body, /at most once a day/i);
+    assert.match(body, /unsubscribe link that works without signing in/i);
+    /* Screen 08 is notifications ONLY. Auto-apply and the rest are asked at the moment their
+       feature is first used, and a wall of checkboxes immediately before the price is both worse
+       consent hygiene and a worse rung. */
+    assert.doesNotMatch(body, /apply automatically|send without asking|auto-submit/i);
+
+    const boxes = page.locator('main input[type="checkbox"]');
+    assert.equal(await boxes.count(), 2, "two asks, deliberately");
+    for (let i = 0; i < 2; i += 1) {
+      assert.equal(await boxes.nth(i).isChecked(), false, "a pre-ticked consent is not a consent");
+    }
+
+    await boxes.nth(0).check();
+    await page.getByRole("button", { name: "Continue" }).click();
+
+    await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
+    assert.deepEqual(
+      notificationSaves,
+      [{ strong_match: true, employer_reply: false }],
+      "an unticked box must be saved as a decline, not left out as unmentioned",
+    );
+  });
+
   test("09 the plan: pre-selected, disclosed adjacent, and Free is a real choice", async () => {
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
 
@@ -320,6 +374,6 @@ describe("the application sequence, end to end", () => {
   });
 
   test("the whole sequence was walked in order", () => {
-    assert.deepEqual(acknowledged, ["match", "build", "questions", "review", "trial"]);
+    assert.deepEqual(acknowledged, ["match", "build", "questions", "review", "trial", "notifications"]);
   });
 });

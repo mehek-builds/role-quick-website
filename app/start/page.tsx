@@ -51,6 +51,7 @@ import { BuildStep } from "@/components/start/BuildStep";
 import { QuestionsStep } from "@/components/start/QuestionsStep";
 import { ReviewStep } from "@/components/start/ReviewStep";
 import { TrialStep } from "@/components/start/TrialStep";
+import { NotificationsStep } from "@/components/start/NotificationsStep";
 import { PlanStep } from "@/components/start/PlanStep";
 import type { OnboardingMatch } from "@/lib/onboarding-match";
 import type { BuildResult } from "@/lib/onboarding-build";
@@ -597,11 +598,31 @@ export default function Start() {
           <TrialStep onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
         );
 
+      case "notifications":
+        /* 08, between the gift and the price. It needs nothing from the sitting: the two answers
+           are account facts, so unlike `build` and `questions` a reload lands here and simply
+           works rather than having to rejoin the sequence. */
+        return (
+          <NotificationsStep
+            onLater={later}
+            onDone={() => { stepDone("notifications"); void ack("notifications").then(refresh).catch(fail); }}
+          />
+        );
+
       case "plan":
         /* Paying navigates to Stripe from inside PlanStep and returns to /start, so only the Free
-           path acknowledges here. A student who pays acknowledges on the way back in. */
+           path acknowledges here. A student who pays acknowledges on the way back in.
+           WITHOUT A CARD ON FILE THERE IS NO FREE PATH, and withholding onFree is what
+           removes it. "Continue on Free" acknowledges `plan` and finishes the flow, which
+           under the card gate lands the student on a dashboard that immediately bounces
+           them back to this screen -- a loop, with the exit as the thing that causes it.
+           The server owns the answer; this passes it on rather than deciding locally. */
         return (
-          <PlanStep onFree={() => { stepDone("plan"); void ack("plan").then(refresh).catch(fail); }} />
+          <PlanStep
+            onFree={state?.requires_payment_method
+              ? undefined
+              : () => { stepDone("plan"); void ack("plan").then(refresh).catch(fail); }}
+          />
         );
 
       case "install":

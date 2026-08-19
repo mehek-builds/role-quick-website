@@ -17,4 +17,9 @@ test("billing return verifies the exact offer and account record, then handles c
   assert.match(page, /exact amount Stripe confirmed/);
   assert.match(page, /Resume your action/);
 });
-test("integration permissions and notification limits are stated", () => { const page = read("app/dashboard/settings/page.tsx"); assert.match(page, /requests access only to find a recent application verification code/); assert.match(page, /Request an integration through Contact/); assert.match(page, /There are no marketing notification subscriptions/); });
+/* The notification claim USED TO BE "there are no configurable notification channels", and that
+   became false the day screen 08 shipped two of them. It is not enough to soften the sentence: the
+   reason it was worth asserting is that a student reading Settings should be able to see the whole
+   of what Litos will send them, so the assertion now covers BOTH halves - the two permissions that
+   exist, and the promise that nothing else does. */
+test("integration permissions and notification limits are stated", () => { const page = read("app/dashboard/settings/page.tsx"); assert.match(page, /requests access only to find a recent application verification code/); assert.match(page, /Request an integration through Contact/); assert.match(page, /Tell me when a strong match opens/); assert.match(page, /Tell me when an employer replies/); assert.match(page, /There are no marketing subscriptions and no other notification channels/); });

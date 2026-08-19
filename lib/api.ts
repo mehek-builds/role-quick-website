@@ -1080,7 +1080,7 @@ export type OnboardingStep =
   | "focus" | "sponsorship" | "resume" | "impact" | "base" | "install" | "apply" | "gaps" | "targeting"
   /* The application sequence, served by the backend once every profile-derived step is satisfied
      and only for an account that has never completed onboarding. */
-  | "match" | "build" | "questions" | "review" | "trial" | "plan"
+  | "match" | "build" | "questions" | "review" | "trial" | "notifications" | "plan"
   | "done";
 
 export type OnboardingState = {
@@ -1097,6 +1097,9 @@ export type OnboardingState = {
   flow_version: number;
   flow_completed: boolean;
   requires_onboarding: boolean;
+  /** Server-owned: the dashboard stays shut until a card is on file. Optional because a
+      backend that predates the gate sends nothing, which must read as "not gated". */
+  requires_payment_method?: boolean;
   completed_at: string | null;
   has_focus: boolean;
   /** Whether the one-time visa-sponsorship question has been answered. Absent on older backends. */
@@ -1234,6 +1237,72 @@ export function acknowledgeOnboardingFlowStep(
       disposition,
     }),
   });
+}
+
+/* ---- notifications (screen 08) ----
+ *
+ * TWO PERMISSIONS, NOT A SETTINGS BLOB, which is why each arrives with the date it was granted.
+ * Litos putting mail in somebody's inbox is a thing done TO them, and a boolean with no date
+ * behind it cannot be audited later or explained back to them.
+ *
+ * `deliverable` and `unsubscribe_configured` are the server admitting what it can actually do.
+ * An account with no verified address is never mailed however the toggles read, and a deployment
+ * that cannot mint an unsubscribe link refuses to send at all. Both are surfaced so a student is
+ * never left switching something on and hearing nothing forever with no explanation on screen. */
+export type NotificationKind = "strong_match" | "employer_reply";
+export type NotificationPermission = { enabled: boolean; granted_at: string | null };
+export type NotificationPreferences = {
+  strong_match: NotificationPermission;
+  employer_reply: NotificationPermission;
+  deliverable: boolean;
+  unsubscribe_configured: boolean;
+};
+
+/* NORMALISED AT THE BOUNDARY, NEVER TRUSTED AS SHAPED.
+ *
+ * Settings indexes this by kind to draw a checkbox, so a response missing a key is not a degraded
+ * read, it is a TypeError inside render and a Settings page that never appears at all. Any backend
+ * deployed before this endpoint existed answers a bare `{}` from its catch-all, and the two repos
+ * ship separately and in either order, so the older-backend case is a normal Tuesday rather than
+ * an edge. Stub servers in the e2e fixtures answer unknown paths the same way.
+ *
+ * Missing reads as off, which is what an account that has never granted anything holds anyway, and
+ * `deliverable` defaults to TRUE on a malformed read: the alternative shows every student on an
+ * older backend a warning that Litos cannot email them, which is a claim this function has no
+ * evidence for. */
+function notificationPermission(value: unknown): NotificationPermission {
+  const row = value as { enabled?: unknown; granted_at?: unknown } | null | undefined;
+  return {
+    enabled: row?.enabled === true,
+    granted_at: typeof row?.granted_at === "string" ? row.granted_at : null,
+  };
+}
+
+function normalizeNotificationPreferences(raw: unknown): NotificationPreferences {
+  const body = raw as Partial<NotificationPreferences> | null | undefined;
+  return {
+    strong_match: notificationPermission(body?.strong_match),
+    employer_reply: notificationPermission(body?.employer_reply),
+    deliverable: body?.deliverable !== false,
+    unsubscribe_configured: body?.unsubscribe_configured !== false,
+  };
+}
+
+export function getNotificationPreferences() {
+  return api<unknown>("/notifications/preferences").then(normalizeNotificationPreferences);
+}
+
+/* Sends only what CHANGED. The server writes a grant timestamp for every key it receives and
+   leaves out keys alone, so posting both permissions on every save would re-date a consent the
+   student never touched. */
+export function setNotificationPreferences(changes: {
+  strong_match?: boolean;
+  employer_reply?: boolean;
+}) {
+  return api<unknown>("/notifications/preferences", {
+    method: "PUT",
+    body: JSON.stringify(changes),
+  }).then(normalizeNotificationPreferences);
 }
 
 export function completeOnboardingFlow(flowVersion: number) {

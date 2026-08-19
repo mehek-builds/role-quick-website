@@ -84,6 +84,11 @@ type OnboardingEvent =
   | "onboarding_application_saved_for_later"
   | "onboarding_trial_shown"
   | "onboarding_plan_declined"
+  // A gated GUEST reached the plan screen and cannot pay yet: checkout needs an email
+  // and a guest has none, so they are sent to claim one. Worth its own event because it
+  // is the one exit from the payment gate, and a spike here means the gate is sending
+  // people down a path they are not completing.
+  | "onboarding_plan_claim_required"
   | "onboarding_plan_already_paid";
 
 type CoreEvent =
