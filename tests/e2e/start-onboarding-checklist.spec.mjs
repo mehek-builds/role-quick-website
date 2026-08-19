@@ -833,8 +833,12 @@ test("the walk: every step in order, each one advancing the rail by one", async 
 
     /* A THIRD PLACE LEFT SITTING IN THE BOX, never committed with Enter or Add. It is on screen
        and plainly meant, and pressing Continue straight after typing is the likelier order - so it
-       has to be saved, not dropped. */
-    await locationField.fill("Berlin, Germany");
+       has to be saved, not dropped.
+
+       Deliberately a place the suggestion list does NOT contain. A suggested one would be claimed
+       by the pick-adds-itself rule below the moment the value matched, and this case would quietly
+       stop testing what it is named after. */
+    await locationField.fill("Nairobi");
 
     await rolesContinue.click();
 
@@ -844,9 +848,13 @@ test("the walk: every step in order, each one advancing the rail by one", async 
        Cambridge and Vancouver on the board. */
     assert.deepEqual(
       savedTargeting.locations,
-      ["Dubai", "London", "Berlin, Germany"],
+      ["Dubai", "London", "Nairobi"],
       "the roles screen dropped a place, or split one on its comma",
     );
+    /* The "Show remote jobs only" box is gone and Remote is a place instead, so the column it set
+       must be written false rather than left alone. A stored true with no control left to untick
+       is a hard filter that hides every on-site posting for good. */
+    assert.equal(savedTargeting.remote_only, false, "the roles screen left remote_only set");
 
     /* ── Step 2, Your resume ───────────────────────────────────────────────*/
     visited.push(await screen("Your resume"));
@@ -1287,4 +1295,85 @@ test("an API that never reported the columns is never told to turn them off", as
   } finally {
     consentGrantState = previous;
   }
+});
+
+/* PICKING FROM THE DROPDOWN ADDS THE PLACE, with no second button press.
+ *
+ * A datalist dropdown is browser chrome, so a pick cannot be clicked from here. What CAN be
+ * reproduced is the thing the code keys off: the input event a pick fires, which reports
+ * inputType "insertReplacementText" in Chrome and Safari. Typing fires the same event with an
+ * insert type of its own and must NOT add, or someone typing "Dubai, UAE" loses the string the
+ * moment it passes through a suggested "Dubai" - so both directions are asserted here. */
+test("a place chosen from the dropdown adds itself; typing the same text does not", async () => {
+  resetProgress();
+  savedTargeting = { ...EMPTY_TARGETING };
+
+  await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+  await screen("Your roles");
+  await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+  await page.getByRole("button", { name: "Internship", exact: true }).click();
+  const title = page.getByRole("button", { name: "Software Engineer", exact: true });
+  await title.waitFor({ timeout: 10_000 });
+  await title.click();
+
+  const field = page.getByLabel("Where do you want to work?");
+
+  // Typing a string that IS a suggestion, character events and all: it must stay in the box.
+  await field.click();
+  await field.type("Berlin, Germany", { delay: 10 });
+  assert.equal(
+    await page.getByRole("button", { name: "Berlin, Germany", exact: true }).count(),
+    0,
+    "typing a suggested place added it before the student chose it",
+  );
+  assert.equal(await field.inputValue(), "Berlin, Germany");
+
+  await field.fill("");
+
+  // The pick itself, as the browser reports it.
+  await field.evaluate((node) => {
+    const setValue = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+    setValue.call(node, "Toronto, Canada");
+    node.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertReplacementText" }));
+  });
+
+  await page.getByRole("button", { name: "Toronto, Canada", exact: true }).waitFor({ timeout: 5000 });
+  assert.equal(await field.inputValue(), "", "the box kept the place the dropdown just added");
+});
+
+/* THE ACCOUNTS THAT ALREADY TICKED THE BOX.
+ *
+ * remote_only was a hard filter: the jobs query AND-ed `remote = true` onto everything else, so an
+ * account carrying it sees no on-site posting at all. The box that set it is gone as of
+ * 2026-08-19, which means those accounts have a filter and no control - the one outcome worse than
+ * the duplicated control that was removed. The screen therefore converts the preference on sight:
+ * Remote becomes a place in the list (same clause, `WHERE remote = true`, when it is the only one)
+ * and the column is cleared in the same write. */
+test("an account that stored remote_only gets the Remote chip and the column cleared", async () => {
+  resetProgress();
+  savedTargeting = { ...EMPTY_TARGETING, remote_only: true, locations: null };
+
+  await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
+  await screen("Your roles");
+
+  await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+  await page.getByRole("button", { name: "Internship", exact: true }).click();
+  const title = page.getByRole("button", { name: "Software Engineer", exact: true });
+  await title.waitFor({ timeout: 10_000 });
+  await title.click();
+
+  /* Seeded from the stored preference, not typed by this test. */
+  assert.equal(
+    await page.getByRole("button", { name: "Remote", exact: true }).count(),
+    1,
+    "a stored remote_only did not become a visible Remote chip",
+  );
+
+  const rolesContinue = page.locator("button", { hasText: "Continue" });
+  assert.equal(await rolesContinue.isDisabled(), false, "the seeded place did not satisfy the location gate");
+  await rolesContinue.click();
+  await screen("Your resume");
+
+  assert.deepEqual(savedTargeting.locations, ["Remote"], "the migrated place was not saved");
+  assert.equal(savedTargeting.remote_only, false, "remote_only survived the migration as a hidden filter");
 });
