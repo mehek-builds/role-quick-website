@@ -83,7 +83,8 @@ type OnboardingEvent =
   | "onboarding_application_sent"
   | "onboarding_application_saved_for_later"
   | "onboarding_trial_shown"
-  | "onboarding_plan_declined";
+  | "onboarding_plan_declined"
+  | "onboarding_plan_already_paid";
 
 type CoreEvent =
   | "authentication_completed"

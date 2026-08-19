@@ -19,13 +19,14 @@
  * route: /pricing sends people back to the settings page, and setup has to come back to setup.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
   LITOS_PLUS_PLANS,
   createLitosPlusCheckout,
   getBillingState,
+  isPaidAccess,
   litosPlusPlan,
   rememberBillingReturnContext,
   type LitosPlusPlanId,
@@ -35,9 +36,37 @@ import { PrimaryButton, StartShell } from "./ui";
 
 export function PlanStep({ onFree }: { onFree: () => void }) {
   const [selected, setSelected] = useState<LitosPlusPlanId>(DEFAULT_LITOS_PLUS_PLAN_ID);
+  /* THE RETURN FROM STRIPE LANDS HERE, and without this it lands on a sales pitch.
+   *
+   * Paying navigates away to Stripe, so this screen never gets to acknowledge itself. /billing/return
+   * sends the student back to /start, where the ledger still has `plan` outstanding and the flow
+   * therefore renders this screen again - now to somebody who has just paid, offering to sell them
+   * the same thing a second time. Reading the entitlement on mount and advancing when it is already
+   * paid is what closes that loop, and it is also correct for anyone who bought from /pricing in
+   * another tab. */
+  const [settled, setSettled] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const plan = litosPlusPlan(selected);
+
+  useEffect(() => {
+    let cancelled = false;
+    getBillingState()
+      .then((access) => {
+        if (cancelled) return;
+        if (isPaidAccess(access)) {
+          track("onboarding_plan_already_paid", {});
+          onFree();
+          return;
+        }
+        setSettled(true);
+      })
+      /* A failed read shows the plans rather than blocking the last screen of setup. The worst case
+         is a paid account being offered a plan it already holds, which checkout itself refuses; the
+         alternative is a student stuck on a spinner at the end of onboarding. */
+      .catch(() => { if (!cancelled) setSettled(true); });
+    return () => { cancelled = true; };
+  }, [onFree]);
 
   async function checkout() {
     setBusy(true);
@@ -65,6 +94,17 @@ export function PlanStep({ onFree }: { onFree: () => void }) {
       setError(reason instanceof Error ? reason.message : "Checkout could not open. Nothing was charged.");
       setBusy(false);
     }
+  }
+
+  if (!settled) {
+    /* Held until the entitlement is known. Rendering the plans first and advancing a moment later
+       would flash a sales pitch at somebody who has just paid for it, which is the exact moment
+       this product can least afford to look like it was not listening. */
+    return (
+      <StartShell step="plan" title="What happens after the seven days.">
+        <div className="rq-shimmer h-24 rounded-inner" />
+      </StartShell>
+    );
   }
 
   return (
