@@ -95,6 +95,21 @@ export function PlanStep({ onFree }: { onFree?: () => void }) {
       });
       window.location.assign(session.checkoutUrl);
     } catch (reason) {
+      /* A GUEST CANNOT PAY YET, AND THIS IS THE ONLY WAY OUT OF THE PAYMENT GATE.
+       *
+       * /billing/checkout refuses a guest outright with `claim_required`: Stripe needs
+       * an email and a guest account has none. Guests are NOT exempt from the gate, so
+       * without this branch the screen is a dead end -- the dashboard sends a gated
+       * guest here, and the only control on the page returns a 409 they cannot act on.
+       * Claiming an email converts the guest into a real account, after which checkout
+       * behaves like anyone else's, so the gate is not bypassed by this, only entered
+       * one step earlier. Returning to /start puts them back on this screen able to pay. */
+      const code = (reason as { data?: { code?: string } } | null)?.data?.code;
+      if (code === "claim_required") {
+        track("onboarding_plan_claim_required", {});
+        window.location.assign("/login?intent=claim&next=/start");
+        return;
+      }
       setError(reason instanceof Error ? reason.message : "Checkout could not open. Nothing was charged.");
       setBusy(false);
     }
