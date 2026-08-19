@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FIELDS, categoriesForFields, categoriesForRoles, experienceYears, fieldsForCategories, inferResumeTargeting, inferRoleType, titlesForFields } from "./onboarding-role-inference.ts";
+import { FIELDS, categoriesForFields, categoriesForRoles, experienceYears, fieldsForCategories, fieldsForFocus, inferResumeTargeting, inferRoleType, titlesForFields } from "./onboarding-role-inference.ts";
 import type { ParsedProfile } from "./api.ts";
 
 function profile(overrides: Partial<ParsedProfile>): ParsedProfile {
@@ -162,14 +162,21 @@ test("every field carries a stable id, a label and at least one title", () => {
   }
 });
 
-test("two fields share the `other` category without sharing an id", () => {
+test("many fields share the `other` category without sharing an id", () => {
   const other = FIELDS.filter((field) => field.category === "other").map((field) => field.id);
-  assert.deepEqual(other, ["marketing", "sales"]);
+  // The count is not the assertion and must not become one - `other` is the bucket for every field
+  // the closed eight-category list has no word for, so it grows whenever a field is added. What is
+  // asserted is that sharing a category never costs a field its own identity, because `id` is what
+  // the picker keys on and what the homepage calibration link carries.
+  assert.ok(other.length > 1);
+  for (const id of ["marketing", "sales"]) assert.ok(other.includes(id));
+  assert.equal(new Set(other).size, other.length);
 });
 
 test("titles come back in field order, deduped case-insensitively", () => {
+  const software = FIELDS.find((field) => field.id === "software")!.titles;
   const titles = titlesForFields(["software", "product"]);
-  assert.deepEqual(titles.slice(0, 5), FIELDS.find((field) => field.id === "software")!.titles);
+  assert.deepEqual(titles.slice(0, software.length), software);
   assert.ok(titles.includes("Product Manager"));
   assert.equal(new Set(titles.map((title) => title.toLowerCase())).size, titles.length);
 });
@@ -191,11 +198,44 @@ test("an unknown field id degrades to a smaller offer, never a throw", () => {
   assert.deepEqual(titlesForFields(["nonsense"]), []);
 });
 
-test("saved categories pre-select their fields, and a shared category pre-selects both", () => {
-  assert.deepEqual(fieldsForCategories(["software-engineering"]), ["software"]);
-  assert.deepEqual(fieldsForCategories(["other"]), ["marketing", "sales"]);
+test("saved categories pre-select every field that shares them", () => {
+  // Deliberately over-offering, and that is the whole reason fieldsForFocus below exists: a
+  // category is a lossy record of a field, so reading fields back out of one alone can only widen.
+  assert.deepEqual(fieldsForCategories(["software-engineering"]), ["software", "infrastructure", "support"]);
+  assert.ok(fieldsForCategories(["other"]).length > 5);
   assert.deepEqual(fieldsForCategories([]), []);
   assert.deepEqual(fieldsForCategories(null), []);
+});
+
+test("a returning student's fields are read from their titles, not from the crowded category", () => {
+  // The failure this replaces: nine fields sit in `other`, so a saved ["other"] used to arrive with
+  // nine chips lit up - nine answers the product put in their mouth, on the screen whose whole job
+  // is to stop doing that.
+  assert.deepEqual(
+    fieldsForFocus({ categories: ["other"], titles: ["Recruiter"], role_types: ["full-time"] }),
+    ["people"],
+  );
+  // Case-insensitive, because a title is stored as the student typed it.
+  assert.deepEqual(
+    fieldsForFocus({ categories: ["other"], titles: ["technical recruiter"], role_types: null }),
+    ["people"],
+  );
+  // A title in two fields pre-selects both; that is a real ambiguity in the answer, not a guess.
+  assert.deepEqual(
+    fieldsForFocus({ categories: null, titles: ["Business Analyst"], role_types: null }),
+    ["product", "quant", "consulting"],
+  );
+});
+
+test("free-text titles fall back to the category read rather than to a blank screen", () => {
+  // Nothing they saved is one of the offered titles, so titles cannot answer it and the coarse
+  // read is the only one there is. Over-offering beats blank: they can deselect what they see.
+  assert.deepEqual(
+    fieldsForFocus({ categories: ["design"], titles: ["Biotech"], role_types: null }),
+    ["design"],
+  );
+  assert.deepEqual(fieldsForFocus({ categories: null, titles: ["Biotech"], role_types: null }), []);
+  assert.deepEqual(fieldsForFocus(null), []);
 });
 
 test("the chosen fields answer the category question the screen never asks", () => {

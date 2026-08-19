@@ -14,71 +14,161 @@ export type ResumeTargetingGuess = {
  * guess at all. Keeping both on one row is what stops the screen's title vocabulary drifting away
  * from the inference's: a family added for the resume reader shows up in the picker automatically.
  *
- * `category` is NOT unique - marketing and sales are two fields inside the `other` bucket - so the
+ * `category` is NOT unique - nine of the nineteen fields sit inside the `other` bucket - so the
  * picker keys on `id` and only ever writes `category` through focusPatch. The category vocabulary
- * is shared with Settings and the backend, and this screen is not the place to widen it. */
+ * is shared with Settings and the backend, and this screen is not the place to widen it. That
+ * many fields on one category is also why `fieldsForFocus` exists: reading a returning student's
+ * fields back out of `other` alone would pre-select nine of them.
+ *
+ * EVERY TITLE IN `roles` WAS MEASURED AGAINST THE LIVE BOARD ON 2026-08-19, and none of them
+ * returns fewer than five postings. That check is the point, and it is the same rule
+ * lib/job-titles.ts states for the browse dropdown: a suggestion that lands on an empty page is
+ * worse than no suggestion, because the reader concludes the board is broken rather than that we
+ * offered a word we do not carry. Re-measure with scripts/verify-onboarding-fields.mjs.
+ *
+ * The measurement is also why several titles CHANGED rather than only being added. "Marketing
+ * Associate", "Growth Marketing Associate", "Product Marketing Associate" and "Research Assistant"
+ * each returned ZERO - the marketing field was offering three dead suggestions and a fourth that
+ * returned one - and "Associate Product Manager", "Embedded Systems Engineer" and "UI Designer"
+ * were down in the low single digits. They are replaced by the manager-and-engineer forms the
+ * board actually carries. Nothing is lost for a student who had one saved: FocusForm's `offered`
+ * is the union of this list and their own selection, so a saved title outlives its removal here.
+ *
+ * The nine fields added on 2026-08-19 are the ones a student could previously only reach by typing
+ * in the box. Healthcare alone is 250+ live postings (Physician, Nurse, Nurse Practitioner,
+ * Physician Assistant) that no field on this screen used to point at. */
 const ROLE_FAMILIES: { id: string; label: string; match: RegExp; roles: string[]; category: string }[] = [
   {
     id: "software",
     label: "Software & AI",
     match: /software|developer|frontend|front-end|backend|back-end|full.?stack|web|mobile|ios|android|react|typescript|javascript|java|python|c\+\+/i,
-    roles: ["Software Engineer", "Full Stack Engineer", "Backend Engineer", "Frontend Engineer", "Product Engineer"],
+    roles: ["Software Engineer", "Test Engineer", "Backend Engineer", "Full Stack Engineer", "Frontend Engineer", "Product Engineer"],
     category: "software-engineering",
   },
   {
     id: "data",
     label: "Data & machine learning",
     match: /machine learning|\bml\b|data|analytics|artificial intelligence|\bai\b|pytorch|tensorflow|sql/i,
-    roles: ["Machine Learning Engineer", "Data Scientist", "Data Engineer", "Data Analyst", "AI Engineer"],
+    roles: ["Machine Learning Engineer", "Data Scientist", "Data Engineer", "AI Engineer", "Data Analyst", "Analytics Engineer"],
     category: "data-ml",
+  },
+  {
+    id: "infrastructure",
+    label: "Infrastructure & security",
+    match: /devops|site reliability|\bsre\b|infrastructure|kubernetes|terraform|cloud|aws|azure|security|cybersecurity|networking/i,
+    roles: ["Security Engineer", "Site Reliability Engineer", "Platform Engineer", "Infrastructure Engineer", "Network Engineer", "DevOps Engineer"],
+    category: "software-engineering",
+  },
+  {
+    id: "support",
+    label: "IT & technical support",
+    match: /solutions architect|solutions engineer|sales engineer|technical support|help desk|service desk|system administrator|sysadmin|quality assurance/i,
+    roles: ["Solutions Architect", "Solutions Engineer", "Support Engineer", "Technical Support Engineer", "QA Engineer", "Systems Administrator"],
+    category: "software-engineering",
   },
   {
     id: "product",
     label: "Product & program",
     match: /product manager|product management|product strategy|roadmap|product owner/i,
-    roles: ["Product Manager", "Associate Product Manager", "Technical Product Manager", "Program Manager", "Business Analyst"],
+    roles: ["Product Manager", "Program Manager", "Technical Program Manager", "Business Analyst", "Technical Product Manager", "Product Owner"],
     category: "product",
   },
   {
     id: "design",
     label: "Design",
     match: /design|figma|ux|ui|user experience|visual/i,
-    roles: ["Product Designer", "UX Designer", "UI Designer", "UX Researcher", "Design Engineer"],
+    roles: ["Designer", "Product Designer", "Design Engineer", "UX Engineer", "Motion Designer", "Brand Designer"],
     category: "design",
   },
   {
     id: "quant",
     label: "Finance & trading",
     match: /quant|trading|portfolio|financial|finance|economics/i,
-    roles: ["Quantitative Researcher", "Quantitative Trader", "Financial Analyst", "Trader", "Business Analyst"],
+    roles: ["Trader", "Quantitative Researcher", "Financial Analyst", "Quantitative Trader", "Business Analyst", "Risk Analyst"],
     category: "quant-trading",
   },
   {
     id: "hardware",
     label: "Hardware & robotics",
     match: /hardware|embedded|electrical|mechanical|robotics|firmware|cad/i,
-    roles: ["Hardware Engineer", "Embedded Systems Engineer", "Robotics Engineer", "Systems Engineer", "Mechanical Engineer"],
+    roles: ["Systems Engineer", "Mechanical Engineer", "Electrical Engineer", "Hardware Engineer", "Firmware Engineer", "Robotics Engineer"],
+    category: "hardware",
+  },
+  {
+    id: "manufacturing",
+    label: "Manufacturing & industrial",
+    match: /manufacturing|industrial engineer|process engineer|production|assembly|supply chain|logistics|six sigma|lean/i,
+    roles: ["Manufacturing Engineer", "Quality Engineer", "Field Engineer", "Process Engineer", "Validation Engineer", "Project Engineer"],
     category: "hardware",
   },
   {
     id: "research",
     label: "Research",
     match: /research|laboratory|scientist|publication|thesis/i,
-    roles: ["Research Assistant", "Research Scientist", "Research Engineer", "Lab Technician", "Program Analyst"],
+    roles: ["Scientist", "Research Engineer", "Research Scientist", "Applied Scientist", "Research Analyst"],
     category: "research",
+  },
+  {
+    id: "healthcare",
+    label: "Healthcare & clinical",
+    match: /clinical|patient|nursing|\bnurse\b|physician|medical|healthcare|pharmacy|therapist/i,
+    roles: ["Physician", "Nurse", "Nurse Practitioner", "Physician Assistant", "Medical Assistant"],
+    category: "other",
+  },
+  {
+    id: "consulting",
+    label: "Consulting & strategy",
+    match: /consulting|consultant|strategy|advisory|due diligence|market entry/i,
+    roles: ["Consultant", "Implementation Consultant", "Business Analyst", "Strategy Manager", "Business Systems Analyst", "Strategy Analyst"],
+    category: "other",
+  },
+  {
+    id: "operations",
+    label: "Operations & project management",
+    match: /operations|project manager|project management|scheduling|procurement|vendor management|chief of staff/i,
+    roles: ["Operations Manager", "Project Manager", "Operations Analyst", "Executive Assistant", "Chief of Staff", "Business Operations Manager"],
+    category: "other",
+  },
+  {
+    id: "finance",
+    label: "Finance & accounting",
+    match: /accounting|accountant|bookkeeping|audit|payroll|tax|controller|treasury|\bfp&a\b/i,
+    roles: ["Accountant", "Financial Analyst", "Finance Manager", "Senior Accountant", "Controller", "Auditor"],
+    category: "other",
+  },
+  {
+    id: "people",
+    label: "People & recruiting",
+    match: /recruit|talent acquisition|human resources|\bhr\b|people operations|sourcing candidates|onboarding employees/i,
+    roles: ["Recruiter", "Technical Recruiter", "Sourcer", "HR Business Partner", "Recruiting Coordinator", "People Partner"],
+    category: "other",
+  },
+  {
+    id: "legal",
+    label: "Legal & compliance",
+    match: /legal|paralegal|counsel|attorney|compliance|regulatory|contracts|litigation|policy analysis/i,
+    roles: ["Paralegal", "Legal Counsel", "Compliance Manager", "Corporate Counsel", "Compliance Officer", "Contract Manager"],
+    category: "other",
+  },
+  {
+    id: "writing",
+    label: "Writing & communications",
+    match: /technical writing|technical writer|copywriting|copywriter|editorial|\beditor\b|communications|public relations|journalism/i,
+    roles: ["Editor", "Technical Writer", "Communications Manager", "Content Manager", "Video Editor", "Copywriter"],
+    category: "other",
   },
   {
     id: "marketing",
     label: "Marketing & growth",
     match: /marketing|growth|content|brand|social media/i,
-    roles: ["Marketing Associate", "Growth Marketing Associate", "Product Marketing Associate", "Content Strategist", "Marketing Analyst"],
+    roles: ["Marketing Manager", "Product Marketing Manager", "Growth Marketing Manager", "Content Manager", "Marketing Coordinator"],
     category: "other",
   },
   {
     id: "sales",
     label: "Sales & customer success",
     match: /sales|account executive|customer success|business development|partnerships/i,
-    roles: ["Account Executive", "Business Development Representative", "Customer Success Manager", "Account Manager", "Sales Engineer"],
+    roles: ["Account Executive", "Sales Engineer", "Account Manager", "Sales Development Representative", "Customer Success Manager", "Business Development Representative"],
     category: "other",
   },
 ];
@@ -292,6 +382,36 @@ export function fieldsForCategories(categories: readonly string[] | null | undef
   if (!Array.isArray(categories) || categories.length === 0) return [];
   const wanted = new Set(categories);
   return FIELDS.filter((field) => wanted.has(field.category)).map((field) => field.id);
+}
+
+/**
+ * Which fields to pre-select for a student who already has targeting, reading their TITLES first.
+ *
+ * fieldsForCategories above is the older, coarser answer and is still the fallback. It stopped
+ * being good enough on its own when the field list grew to nineteen: nine of them sit in the
+ * `other` category, so a returning student whose saved categories are ["other"] would arrive with
+ * marketing, sales, operations, consulting, finance, people, legal, healthcare and writing all
+ * lit up - nine answers the product put in their mouth, on the screen whose entire job is to stop
+ * doing exactly that.
+ *
+ * Titles are the precise record and categories are the lossy one, so titles are read first. A
+ * saved "Recruiter" says people; a saved "other" says one of nine things. Falls back to the
+ * category read only when no saved title matches any field's offer, which is the case for a
+ * student whose titles are all free text - there the coarse answer is the only one there is, and
+ * over-offering beats a blank screen since they can deselect what they can see.
+ *
+ * Case-insensitive for the same reason `offered` is: titles are stored as the student typed or
+ * tapped them, and "product manager" and "Product Manager" are the same answer.
+ */
+export function fieldsForFocus(saved: SavedFocus): string[] {
+  const titles = new Set((saved?.titles ?? []).map((title) => title.trim().toLowerCase()).filter(Boolean));
+  if (titles.size > 0) {
+    const matched = FIELDS
+      .filter((field) => field.titles.some((title) => titles.has(title.toLowerCase())))
+      .map((field) => field.id);
+    if (matched.length > 0) return matched;
+  }
+  return fieldsForCategories(saved?.categories);
 }
 
 

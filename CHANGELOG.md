@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.1] - 2026-08-19
+
+### Added
+
+- The first setup screen offers nineteen fields instead of nine, and eight stages instead of four.
+  Healthcare, operations, consulting, finance, recruiting, legal, writing, infrastructure and
+  manufacturing were each reachable only by typing before; part-time, contract, apprenticeship and
+  fellowship had no answer at all.
+- A field can be typed as well as tapped. A field nobody listed is saved as a job-title search
+  term, which is what the board reads, and the screen says so rather than implying more.
+- scripts/verify-onboarding-fields.mjs re-measures every offered title against the live board and
+  fails on any that returns an empty or near-empty page.
+
+### Changed
+
+- The job-title box and the list of chosen titles are open from the first paint. They used to be
+  withheld until a field and a stage were chosen, which made the screen unanswerable for anyone
+  whose job was outside the offered list: to say what they wanted they first had to tap a field
+  they did not mean.
+- Every title the field picker suggests was measured against the live board. Four returned nothing
+  at all - "Marketing Associate", "Growth Marketing Associate", "Product Marketing Associate" and
+  "Research Assistant" - and are replaced by the forms the board actually carries. A title a
+  student already saved is unaffected.
+- A returning student's fields are read from their saved titles rather than from their categories,
+  so a saved "other" no longer arrives with nine fields pre-selected.
+
 ## [0.2.0] - 2026-08-02
 
 ### Added
