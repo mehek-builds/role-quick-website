@@ -1249,11 +1249,13 @@ export function acknowledgeOnboardingFlowStep(
  * An account with no verified address is never mailed however the toggles read, and a deployment
  * that cannot mint an unsubscribe link refuses to send at all. Both are surfaced so a student is
  * never left switching something on and hearing nothing forever with no explanation on screen. */
-export type NotificationKind = "strong_match" | "employer_reply";
+export type NotificationKind = "strong_match" | "employer_reply" | "activity_digest";
 export type NotificationPermission = { enabled: boolean; granted_at: string | null };
 export type NotificationPreferences = {
   strong_match: NotificationPermission;
   employer_reply: NotificationPermission;
+  /** The daily summary of what Litos did, delivered to the browser rather than to an inbox. */
+  activity_digest: NotificationPermission;
   deliverable: boolean;
   unsubscribe_configured: boolean;
 };
@@ -1283,9 +1285,44 @@ function normalizeNotificationPreferences(raw: unknown): NotificationPreferences
   return {
     strong_match: notificationPermission(body?.strong_match),
     employer_reply: notificationPermission(body?.employer_reply),
+    activity_digest: notificationPermission(body?.activity_digest),
     deliverable: body?.deliverable !== false,
     unsubscribe_configured: body?.unsubscribe_configured !== false,
   };
+}
+
+/* ---- laptop notifications ----
+ *
+ * The VAPID public key is served rather than baked into this bundle, so rotating the pair does not
+ * need a website deploy and a deployment with no keys answers `configured: false` instead of the
+ * browser failing obscurely inside PushManager.subscribe. */
+export function getPushKey() {
+  return api<{ configured: boolean; public_key: string | null; missing?: string }>("/notifications/push/key");
+}
+
+export function subscribePush(subscription: { endpoint: string; keys: { p256dh: string; auth: string } }) {
+  return api<{ ok: true }>("/notifications/push/subscribe", {
+    method: "POST",
+    body: JSON.stringify(subscription),
+  });
+}
+
+export function unsubscribePush(endpoint: string) {
+  return api<{ ok: true; removed: boolean }>("/notifications/push/unsubscribe", {
+    method: "POST",
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
+/** What today's digest WOULD say, sending nothing. A digest that goes quiet is indistinguishable
+ *  from one that is broken, and this is how a student tells the two apart. */
+export function previewDigest() {
+  return api<{
+    since: string;
+    digest: { applied: number; needs_you: number; employer_replies: number; applied_companies: string[]; empty: boolean };
+    message: { title: string; body: string } | null;
+    devices: number;
+  }>("/notifications/digest/preview");
 }
 
 export function getNotificationPreferences() {
@@ -1298,6 +1335,7 @@ export function getNotificationPreferences() {
 export function setNotificationPreferences(changes: {
   strong_match?: boolean;
   employer_reply?: boolean;
+  activity_digest?: boolean;
 }) {
   return api<unknown>("/notifications/preferences", {
     method: "PUT",
