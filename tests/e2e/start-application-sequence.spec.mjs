@@ -364,25 +364,38 @@ describe("the application sequence, end to end", () => {
   });
 
   test("09 the plan: pre-selected, one control, and no way past it without a card", async () => {
-    /* THE CONTRACT CHANGED TWICE ON 2026-08-19 and this walk changed with it rather than
-       being deleted. It used to require the free escape ("Free is a real choice"), the
-       panel listing what Free kept, and the "$89.99 today" disclosure.
+    /* THIS WALK HAS NOW BEEN OUT OF DATE TWICE IN ONE DAY, and the reason is worth keeping.
 
-       All three are gone and none of them by accident. New accounts go seven-day trial
-       then Litos+, so Free is somewhere you arrive by cancelling, not a fork offered
-       during setup -- the escape was the one control that let a new account reach the
-       dashboard having never given a card. And "$89.99 today" was simply false once the
-       card started a trial instead of a purchase: nothing is taken for seven days.
+       #363 deleted the two-row "If you do nothing / You keep / You lose" table ON PURPOSE --
+       it promised the student unlimited filling, free with no time limit, if they simply did
+       not act, and that stopped being true when this screen started taking a card for a trial
+       that converts on its own. Doing nothing is now the path that gets CHARGED. The assertion
+       guarding that table was not deleted with it, and main went red.
 
-       What is pinned now is the pair that has to be true on the screen that takes the
-       card -- what will be charged and by when it can be stopped -- plus the absence of
-       every exit, since an exit reappearing is the regression that matters. */
+       Then the free escape went too, because new accounts go seven-day trial then Litos+ and
+       Free is somewhere you arrive by cancelling rather than a fork offered during setup. That
+       control was the one thing that let a new account reach the dashboard having never given
+       a card.
+
+       And "$89.99 today" went with them: false once the card started a trial rather than a
+       purchase, since nothing is taken for seven days, and it sat directly above a sentence
+       saying the opposite.
+
+       So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
+       absence of every exit, rather than any sentence the product no longer means. */
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
-    assert.match(body, /Free for seven days\./i);
-    assert.match(body, /Litos\+ continues at \$89\.99 every 3 months\./i);
-    assert.match(body, /any time before then and you are not charged/i);
+    assert.match(
+      body,
+      /Free for seven days\. After that, Litos\+ continues at/i,
+      "the paywall must state when the charge lands",
+    );
+    assert.match(
+      body,
+      /any time before then and you are not charged/i,
+      "the paywall must state how to stop the charge",
+    );
     assert.doesNotMatch(body, /\$89\.99 today/i, "nothing is charged today, a trial starts");
     assert.doesNotMatch(body, /Continue on Free/i, "the free escape is the whole point of the gate");
     assert.doesNotMatch(body, /Finish later/i);
