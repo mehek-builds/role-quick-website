@@ -156,12 +156,26 @@ export function DashboardShell({
       }
       void getOnboardingState()
         .then((state) => {
+          /* THE CARD GATE IS NOT DEFERRABLE, and that is the whole difference between
+             it and the line below it. "Finish later" exists so an unfinished PROFILE
+             never traps someone on a setup screen; letting it also wave through an
+             account with no card on file would make the gate a suggestion, since
+             deferring is a single click and the flag lives in this browser's own
+             sessionStorage. So this branch is checked first and reads only the
+             server's answer. */
+          if (state.requires_payment_method) {
+            router.replace("/start");
+            return;
+          }
           if (state.requires_onboarding && !onboardingDeferredForSession()) {
             router.replace("/start");
             return;
           }
           setReady(true);
         })
+        /* A failed read opens the dashboard rather than sealing it. The gate is
+           enforced on the server, and the alternative is that one flaky request locks
+           a paying student out of their own account. */
         .catch(() => setReady(true));
       void getProductMeta().catch(() => null);
     });

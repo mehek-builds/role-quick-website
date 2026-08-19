@@ -599,9 +599,18 @@ export default function Start() {
 
       case "plan":
         /* Paying navigates to Stripe from inside PlanStep and returns to /start, so only the Free
-           path acknowledges here. A student who pays acknowledges on the way back in. */
+           path acknowledges here. A student who pays acknowledges on the way back in.
+           WITHOUT A CARD ON FILE THERE IS NO FREE PATH, and withholding onFree is what
+           removes it. "Continue on Free" acknowledges `plan` and finishes the flow, which
+           under the card gate lands the student on a dashboard that immediately bounces
+           them back to this screen -- a loop, with the exit as the thing that causes it.
+           The server owns the answer; this passes it on rather than deciding locally. */
         return (
-          <PlanStep onFree={() => { stepDone("plan"); void ack("plan").then(refresh).catch(fail); }} />
+          <PlanStep
+            onFree={state?.requires_payment_method
+              ? undefined
+              : () => { stepDone("plan"); void ack("plan").then(refresh).catch(fail); }}
+          />
         );
 
       case "install":
