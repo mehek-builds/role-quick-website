@@ -46,7 +46,21 @@ export default function TargetingCard() {
     (async () => {
       try {
         const targeting = await getTargeting();
-        if (!cancelled) setT(targeting);
+        /* THE ONE-WAY MIGRATION OFF remote_only, done on read rather than waiting for an edit.
+           Every other write on this card is triggered by the student touching something, and an
+           account carrying remote_only: true has nothing left to touch - the box that set it is
+           gone. Left alone the column keeps filtering out every on-site posting for good, which is
+           the worst version of this: a filter with no control. So the preference is converted to
+           the Remote chip, which says the same thing to the jobs query, and the revision bump
+           lets the existing autosave clear the column. */
+        if (!cancelled) {
+          const stored = targeting?.locations ?? [];
+          const needsRemoteChip = !!targeting?.remote_only && !stored.some(isRemoteLocation);
+          setT(needsRemoteChip ? { ...targeting, locations: [...stored, REMOTE_LOCATION] } : targeting);
+          /* The bump is what makes the existing autosave clear the column, and it is needed even
+             when Remote was already a place: the chip being right does not make the column right. */
+          if (targeting?.remote_only) setRevision((r) => r + 1);
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Could not load the jobs you want.");
       }
@@ -121,7 +135,13 @@ export default function TargetingCard() {
         titles: current.titles,
         role_types: current.role_types,
         locations: current.locations,
-        remote_only: current.remote_only,
+        /* Always false now. The "Show remote jobs only" box is gone from this card and from
+           onboarding; Remote is a place in the list above instead, and with Remote as the only
+           location the jobs query builds `WHERE remote = true` - the same clause this column
+           built. Written rather than omitted because omission would leave a stored true in place,
+           and that is a hard filter hiding every on-site posting with no control left to untick
+           it. The seed in the effect below is what carries the old preference across. */
+        remote_only: false,
         primary_period: current.primary_period,
         backup_period: current.backup_period,
       });
@@ -171,9 +191,10 @@ export default function TargetingCard() {
             <Chip key={location} label={location} on onClick={() => patch({ locations: locations.filter((value) => value !== location) })} />
           ))}
         </div>
-        {/* Remote is a place, not only the checkbox below. The checkbox hides every on-site job;
-            this chip says "London, Dubai, OR anywhere remote", which is what people actually want
-            and previously had no way to express. */}
+        {/* Remote is a place. It used to sit beside a "Show remote jobs only" checkbox that said
+            the same thing in the opposite direction - the box NARROWED to remote, this chip WIDENS
+            to include it - and the box is gone as of 2026-08-19. With Remote as the only place the
+            jobs query builds `WHERE remote = true`, which is exactly what the box built. */}
         {!remoteChosen && (
           <div className="mt-2.5 flex flex-wrap gap-2">
             <Chip label={`+ ${REMOTE_LOCATION}`} on={false} onClick={() => addLocation(REMOTE_LOCATION)} />
@@ -183,7 +204,24 @@ export default function TargetingCard() {
           <input
             value={newLocation}
             list="litos-location-options"
-            onChange={(event) => setNewLocation(event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setNewLocation(value);
+              /* A PICK FROM THE DROPDOWN ADDS ITSELF, same rule as the onboarding screen: the
+                 choice was already made from a closed list, so a second button press is a step
+                 that exists for no reason.
+
+                 Keyed off the event, not the text. A datalist pick reports inputType
+                 "insertReplacementText" in Chrome and Safari and none at all in Firefox, while
+                 typing always reports an insert or delete type of its own - so typing "Dubai, UAE"
+                 does not fire the moment it passes through "Dubai". */
+              const inputType = (event.nativeEvent as InputEvent).inputType;
+              const pickedFromList = inputType === "insertReplacementText" || inputType == null;
+              if (pickedFromList && suggestions.some((option) => option.toLowerCase() === value.trim().toLowerCase())) {
+                addLocation(value);
+                setNewLocation("");
+              }
+            }}
             onKeyDown={(event) => {
               if (event.key !== "Enter") return;
               event.preventDefault();
@@ -212,20 +250,6 @@ export default function TargetingCard() {
             Add
           </Button>
         </div>
-        <label className="mt-3 flex min-h-11 items-center gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            checked={t.remote_only}
-            onChange={(event) => patch({ remote_only: event.target.checked })}
-            className="accent-brand"
-          />
-          Show remote jobs only
-        </label>
-        {t.remote_only && locations.length > 0 && (
-          <p className="mt-1.5 text-xs leading-5 text-muted">
-            While this is on, only remote jobs are shown and the places above are ignored.
-          </p>
-        )}
       </div>
 
       <div className="mt-6">
