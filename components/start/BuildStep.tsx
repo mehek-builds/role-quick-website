@@ -43,11 +43,15 @@ import type { OnboardingMatch } from "@/lib/onboarding-match";
 export function BuildStep({
   match,
   onQuestions,
+  onPickAnother,
   onLater,
 }: {
   match: OnboardingMatch;
   /** Built. The questions screen takes the result from here. */
   onQuestions: (result: BuildResult) => void;
+  /** Back to the match screen to choose a different posting. The way out of a build that cannot
+   *  succeed for THIS posting no matter how many times it is retried. */
+  onPickAnother: () => void;
   onLater: () => void;
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
@@ -161,15 +165,37 @@ export function BuildStep({
   }, [result, posting.description, posting.id]);
 
   if (error) {
+    /* A FAILED BUILD USED TO BE A DEAD END, and it is step 3 of 10.
+     *
+     * The only control here was "Finish later", which ends setup. Measured on production
+     * 2026-08-20 across ten builds: a frontend student was offered a high-frequency trading firm's
+     * SWE internship by the board, and the resume engine refused it with `resume_quality_hold` -
+     * "no selected bullet shares supported domain evidence with a primary ask". That refusal is
+     * RIGHT: the alternative is leading a resume with an experience that does not answer the
+     * posting, which is the fabrication this product exists not to do.
+     *
+     * But it left the student stranded three screens in, on a posting THEY did not choose - the
+     * board offered it. The fix for that failure is another posting, so the screen offers one.
+     * The grant is not spent either: the free build is released on any response from 400 up, so
+     * the next posting builds for free exactly as this one would have.
+     *
+     * A precondition failure is different and keeps its own wording: a missing resume email is
+     * fixed in Account and follows the student to every posting, so offering a different one would
+     * send them round a loop that fails identically. */
     return (
       <StartShell step="build" title="That build did not finish.">
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
             ? "Add it in Account and Litos will build this one again. The posting is saved."
-            : "Nothing was sent, and nothing was lost. Your resume and roles are saved."}
+            : "Nothing was sent and nothing was lost. Your resume and roles are saved, and this one is not a fit Litos can write honestly. Try another posting."}
         </p>
-        <div className="mt-6"><LaterLink onClick={onLater} /></div>
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          {!error.fixable && (
+            <PrimaryButton onClick={onPickAnother}>Show me a different one</PrimaryButton>
+          )}
+          <LaterLink onClick={onLater} />
+        </div>
       </StartShell>
     );
   }

@@ -334,7 +334,7 @@ export default function Start() {
    * mid-sequence: the alternative is carrying a packet the student cannot see and cannot check. */
   const resumeSequence = useCallback(() => {
     if (!chosenMatch) return <MatchStep onLater={later} onBuild={setChosenMatch} />;
-    return <BuildStep match={chosenMatch} onLater={later} onQuestions={setBuilt} />;
+    return <BuildStep match={chosenMatch} onLater={later} onPickAnother={() => setChosenMatch(null)} onQuestions={setBuilt} />;
   }, [chosenMatch, later]);
 
   const fail = useCallback(
@@ -588,6 +588,9 @@ export default function Start() {
           <BuildStep
             match={chosenMatch}
             onLater={later}
+            /* Clearing the match is what returns this case to the match screen, which is the same
+               route a student takes when they press "Show me a different one" there. */
+            onPickAnother={() => setChosenMatch(null)}
             onQuestions={(result) => {
               setBuilt(result);
               stepDone("match");
