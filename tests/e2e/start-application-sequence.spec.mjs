@@ -176,7 +176,12 @@ before(async () => {
       return json({ ok: true });
     }
     if (path === "/jobs") return json({ jobs: [JOB], ranked: true });
-    if (path === "/jobs/job-1") return json(JOB);
+    /* THE ENVELOPE, because that is what the route actually sends: `{ job: {...} }`.
+       This stub returned the bare posting, which is precisely how the production defect survived
+       every run of this spec - getJob cast the envelope straight to the posting, so the client read
+       undefined for description, title and company_name, and no stub here could ever show it. A
+       stub that does not match the route it stands in for is a test asserting its own fiction. */
+    if (path === "/jobs/job-1") return json({ job: JOB });
     if (path === "/profile") return json({ full_name: "A Candidate", resume_email: "a@example.com", school: "USC" });
     if (path === "/profile/application") return json({});
     if (path === "/resume/generate") {
