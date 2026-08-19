@@ -68,7 +68,12 @@ type OnboardingEvent =
      targeting problem, not a copy problem. */
   | "onboarding_match_shown"
   | "onboarding_match_accepted"
-  | "onboarding_match_reshuffled";
+  | "onboarding_match_reshuffled"
+  /* The build. `outstanding` is the count that decides whether the questions screen is shown at
+     all, and `fixable` separates a one-line profile gap from a genuine build failure - two very
+     different things to see rising in a funnel. */
+  | "onboarding_build_completed"
+  | "onboarding_build_failed";
 
 type CoreEvent =
   | "authentication_completed"

@@ -1177,6 +1177,12 @@ export type Targeting = {
  * An older backend simply ignores the parameter and answers the targeted board, which degrades to
  * "no widening available" rather than to an error - so the two repos can ship in either order.
  */
+/** The full posting, description included. The board row truncates the description for transport,
+ *  and tailoring against that truncation grades a student on the posting's intro paragraph. */
+export function getJob(jobId: string) {
+  return api<MonitoredJob>(`/jobs/${encodeURIComponent(jobId)}`);
+}
+
 export function getOnboardingJobs(params: { limit: number; relaxTargeting: boolean }) {
   const query = new URLSearchParams({ limit: String(params.limit) });
   if (params.relaxTargeting) query.set("relax_targeting", "true");
