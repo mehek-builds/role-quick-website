@@ -1298,24 +1298,33 @@ type ReceiptRowSpec = { done: string; pending: string; of: (s: OnboardingState) 
 /** A field the type promises but the wire may not deliver. Anything not a boolean is unknown. */
 const flag = (value: unknown): boolean | undefined => (typeof value === "boolean" ? value : undefined);
 
+/* THE ROWS THE RECEIPT CAN REPORT, in the order it prints them.
+ *
+ * This used to be derived from STEPS, which broke the moment a fact outlived its screen. Two facts
+ * did: the one-page is still BUILT, now behind the match screen rather than reviewed on its own,
+ * and it is still worth stating. Two others did not survive at all - the impact review and the
+ * gaps list were cut, so a row for either would report on a screen no account is ever shown.
+ *
+ * So this is an explicit list rather than a filter over the flow. A row appears here when Litos
+ * holds a fact it can state; the rail decides what the student WALKS, which is a different
+ * question. */
+const RECEIPT_ROWS = ["focus", "resume", "base", "sponsorship"] as const;
+
+/* Labels live here rather than being read off STEPS because one of these rows is not a step. */
+const RECEIPT_LABEL: Record<(typeof RECEIPT_ROWS)[number], string> = {
+  focus: "Your roles",
+  resume: "Your resume",
+  base: "Your one page",
+  sponsorship: "Work visa",
+};
+
 const RECEIPT: Partial<Record<OnboardingStep, ReceiptRowSpec>> = {
   resume: { done: "Read", pending: "Not read", of: (s) => flag(s.has_resume) },
-  impact: { done: "Reviewed", pending: "Not reviewed", of: (s) => flag(s.has_impact_review) },
   focus: { done: "Saved", pending: "Not saved", of: (s) => flag(s.has_focus) },
   sponsorship: { done: "Answered", pending: "Not answered", of: (s) => flag(s.has_sponsorship_answer) },
   base: { done: "Built", pending: "Not built", of: (s) => flag(s.has_base_resume) },
-  /* `gaps` is what is STILL outstanding, so an empty list is the finished state.
-   *
-   * The pending value states the FACT, not the motive. "Skipped" was wrong on three reachable
-   * paths: a student who filled some fields and pressed Continue, one who left through "Finish
-   * later", and one routed straight here from a legacy step who was never shown the screen at all.
-   * None of them chose to skip anything, and the receipt cannot tell which happened. */
-  gaps: {
-    done: "None missing",
-    pending: "Some outstanding",
-    of: (s) => (Array.isArray(s.gaps) ? s.gaps.length === 0 : undefined),
-  },
 };
+
 
 /** Printed when the backend did not say. Uniform across rows on purpose: the reason is always the
  *  same one, and a per-row phrasing would imply we know more about the gap than we do. */
@@ -1376,8 +1385,12 @@ export function DoneStep({
          because "some outstanding" is a true and useful fact about the account either way.
          Numbering, on the other hand, has to come from the rail, which is what the block below
          does. */
-      STEPS.filter((step) => step.key !== "done").map((step) => {
-        const spec = RECEIPT[step.key];
+      /* Walks RECEIPT_ROWS, not STEPS. See the comment on that list: the receipt reports FACTS
+         and the rail counts SCREENS, and after the cut those two sets stopped being the same. The
+         one-page is the row that proves the difference - built, reportable, and no longer a step. */
+      RECEIPT_ROWS.map((key) => {
+        const step = { key, label: RECEIPT_LABEL[key] } as const;
+        const spec = RECEIPT[key];
         const value = spec?.of(state);
         /* Position in the RAIL, not in this list, and that distinction is the whole point of
            computing it here. The gutter used to be this row's own index, which lined up only while

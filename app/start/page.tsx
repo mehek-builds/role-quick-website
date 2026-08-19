@@ -43,9 +43,10 @@ import { track } from "@/lib/analytics";
 import { DoneStep, FocusStep, GapsStep, ResumeStep } from "@/components/start/steps";
 import { BaseResumeStep } from "@/components/start/BaseResumeStep";
 import { SponsorshipStep } from "@/components/start/SponsorshipStep";
-import { StartFlowProvider, StepRail } from "@/components/start/ui";
+import { RevisitProvider, StartFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 import { deferOnboardingForSession } from "@/lib/onboarding-flow";
+import { saveOnboardingAnswers } from "@/lib/api";
 import { MatchStep } from "@/components/start/MatchStep";
 import { BuildStep } from "@/components/start/BuildStep";
 import { QuestionsStep } from "@/components/start/QuestionsStep";
@@ -79,7 +80,15 @@ export default function Start() {
      than assuming this state survived. */
   const [chosenMatch, setChosenMatch] = useState<OnboardingMatch | null>(null);
   const [built, setBuilt] = useState<BuildResult | null>(null);
-  const [answersGiven, setAnswersGiven] = useState(0);
+  /* THE ANSWERS THEMSELVES, not just how many. Kept because a student can now come BACK to this
+     screen, and a revisit that shows an empty form has lost their work: the built `ask` carries the
+     employer's questions with no answers on them, so seeding from it alone blanks everything they
+     typed and disables the save button they came to press. */
+  const [answersGiven, setAnswersGiven] = useState<{ question: string; answer: string }[]>([]);
+  /* The screen the student stepped BACK to, if any. It overrides the server's answer for as long
+     as they are there and is cleared on return, so the flow itself never moves: the ledger still
+     says where they actually are, and coming back is a trip rather than a rewind. */
+  const [revisiting, setRevisiting] = useState<OnboardingStep | null>(null);
   const [profile, setProfile] = useState<ParsedProfile | null>(null);
   const [parsedProfileStatus, setParsedProfileStatus] = useState<"loading" | "ready" | "error">("loading");
   const [parsedProfileLoadError, setParsedProfileLoadError] = useState<string | null>(null);
@@ -167,7 +176,14 @@ export default function Start() {
              and a denominator re-derived from that would drop the screen out of the rail on the one
              step where a reviewer is checking the final count. The real backend answers this from
              whether the screen was SHOWN, which stays true across both. */
-          includes_gaps_step: true,
+          /* Both cut screens. The fixture keeps the keys rather than dropping them so a reviewer
+             reading this file sees the answer is NO rather than an omission, and so a stale client
+             pointed at this fixture cannot read a missing field as a screen it should render. */
+          includes_gaps_step: false,
+          /* The QA flow is the TEN-step one: a student whose first employer did not ask about work
+             eligibility, and who therefore still walks the work-visa screen. Nine is the other flow
+             and it is pinned in tests/start-rail-denominator.test.mjs, where the fixture can vary. */
+          includes_sponsorship_step: true,
           // Populated so the base step's languages line is reviewable in QA in its prefilled
           // state, which is the state almost every real student will see.
           gap_suggestions: { languages: ["English", "Hindi", "Spanish"] },
@@ -286,6 +302,24 @@ export default function Start() {
       hasFlowLedger(state!) ? acknowledgeOnboardingFlowStep(step, "continued", state!.flow_version) : Promise.resolve(),
     [state],
   );
+  /* FINISHING A SCREEN THE STUDENT CAME BACK TO, which is not the same act as finishing it the
+     first time and must not be handled as one.
+   *
+   * Every screen's own Continue acknowledges and refreshes. That is right going forward and wrong
+   * on a revisit twice over: the ledger already holds this screen (acknowledging again is a write
+   * that says nothing new), and `step` is `revisiting ?? served`, so refreshing alone leaves the
+   * student standing on the screen they just finished with a button that appears to do nothing.
+   *
+   * So a revisit ends the way it began, by clearing the override, and the server's own answer
+   * carries them back to wherever they actually were. Returns true when it handled the completion,
+   * which is what lets each caller keep its ordinary forward path untouched. */
+  const completedRevisit = useCallback(() => {
+    if (revisiting === null) return false;
+    track("onboarding_revisit_saved", { step: revisiting });
+    setRevisiting(null);
+    void refresh();
+    return true;
+  }, [revisiting, refresh]);
   /* Rejoining the sequence after a reload, which drops the per-sitting handoff.
    *
    * Routes on WHAT IS MISSING rather than always restarting: no match means pick one, a match
@@ -346,7 +380,11 @@ export default function Start() {
        leaving durable; this is what makes it immediate, and what keeps a student off a dead end if
        the stamp could not be written at all (see the gaps case below). Every other step stays
        exactly as derived - a stored cursor is the thing this flow is built to avoid. */
-    const step: OnboardingStep = state.step === "gaps" && gapsHandled ? "done" : state.step;
+    /* A revisit overrides the server's answer, and only for as long as the student is there. The
+       ledger is untouched, so "where they actually are" survives the trip and the return lands them
+       back on it rather than replaying the flow forward. */
+    const served: OnboardingStep = state.step === "gaps" && gapsHandled ? "done" : state.step;
+    const step: OnboardingStep = revisiting ?? served;
     const applicationProfileGate = (current: OnboardingStep) => (
       <div className="mx-auto max-w-2xl px-6 py-16">
         <StepRail current={current} />
@@ -422,6 +460,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("focus");
+              if (completedRevisit()) return;
               void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("focus", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -436,6 +475,7 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("sponsorship");
+              if (completedRevisit()) return;
               void (hasFlowLedger(state) ? acknowledgeOnboardingFlowStep("sponsorship", "continued", state.flow_version) : Promise.resolve()).then(refresh).catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -451,10 +491,14 @@ export default function Start() {
             onLater={later}
             onDone={() => {
               stepDone("resume");
+              /* A revisit still reloads the parsed profile, because a re-uploaded resume changes it.
+                 It just does not acknowledge or advance. */
+              const cameBack = revisiting !== null;
               void (async () => {
-                if (hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
+                if (!cameBack && hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
+                if (cameBack) { track("onboarding_revisit_saved", { step: "resume" }); setRevisiting(null); }
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -528,31 +572,22 @@ export default function Start() {
          Each screen acknowledges itself on the way out, and the ledger is what advances the flow.
          Acknowledging means SEEN: declining a match or saving a packet for later still moves on,
          because the alternative is a student parked forever on a screen they have answered. */
+      /* ONE STEP, TWO PHASES. The match screen shows the posting and asks; pressing Build keeps
+         the student on the same step number while the packet is made. `build` used to be a step of
+         its own, which made the rail count a transition rather than a decision. The step is
+         acknowledged once, when the build lands and the student moves on. */
       case "match":
-        return (
-          <MatchStep
-            onLater={later}
-            onBuild={(match) => {
-              setChosenMatch(match);
-              stepDone("match");
-              void ack("match").then(refresh).catch(fail);
-            }}
-          />
-        );
-
-      case "build":
-        /* A reload lands here with no in-memory match, because the handoff is per-sitting. Sending
-           the student back to pick one is the honest recovery: the alternative is guessing which
-           posting they meant. */
-        if (!chosenMatch) return resumeSequence();
+        if (!chosenMatch) {
+          return <MatchStep onLater={later} onBuild={setChosenMatch} />;
+        }
         return (
           <BuildStep
             match={chosenMatch}
             onLater={later}
             onQuestions={(result) => {
               setBuilt(result);
-              stepDone("build");
-              void ack("build").then(refresh).catch(fail);
+              stepDone("match");
+              void ack("match").then(refresh).catch(fail);
             }}
           />
         );
@@ -567,11 +602,26 @@ export default function Start() {
           <QuestionsStep
             company={chosenMatch.job.company_name}
             questions={built.ask}
+            /* What they answered last time, replayed onto the employer's questions. Only matters on
+               a revisit: the first time through this is empty and the screen is the blank form it
+               has always been. */
+            given={answersGiven}
             alreadyAnswered={built.alreadyAnswered}
             onLater={later}
             onSaved={async (answers) => {
-              setAnswersGiven(answers.length);
+              /* THE WRITE THAT WAS MISSING. This screen used to count the answers and discard them,
+                 so a student answered a real employer's questions into nothing. The save also
+                 decides whether the work-visa screen appears at all: when the posting asked both
+                 halves, the server records the declaration for that posting's country and the
+                 refresh below returns a flow without that step. */
+              await saveOnboardingAnswers({
+                job_id: chosenMatch.job.id,
+                company: chosenMatch.job.company_name,
+                answers,
+              });
+              setAnswersGiven(answers);
               stepDone("questions");
+              if (completedRevisit()) return;
               await ack("questions");
               await refresh();
             }}
@@ -586,7 +636,7 @@ export default function Start() {
             applicationId={built?.applicationId ?? null}
             resumeSpec={built?.resumeSpec ?? null}
             educationProfile={profile}
-            answersSaved={answersGiven}
+            answersSaved={answersGiven.length}
             fieldsAnswered={built?.totalQuestions ?? 0}
             onSent={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
             onSaveForLater={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
@@ -668,5 +718,17 @@ export default function Start() {
     }
   };
 
-  return <StartFlowProvider state={state}>{renderStep()}</StartFlowProvider>;
+  return (
+    <StartFlowProvider state={state}>
+      <RevisitProvider
+        value={{
+          revisiting,
+          onRevisit: (target) => { track("onboarding_revisit_opened", { step: target }); setRevisiting(target); },
+          onReturn: () => { setRevisiting(null); void refresh(); },
+        }}
+      >
+        {renderStep()}
+      </RevisitProvider>
+    </StartFlowProvider>
+  );
 }

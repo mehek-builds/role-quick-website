@@ -17,7 +17,7 @@
  * a prop, and why it draws itself with no position at all until the state arrives.
  */
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, useState } from "react";
 import { Button } from "@/components/app/Button";
 import { flowSteps } from "@/features/onboarding";
 import type { OnboardingState, OnboardingStep } from "@/lib/api";
@@ -181,6 +181,7 @@ export function StartShell({
       </a>
 
       <StepRail current={step} />
+      <RevisitBar current={step} />
       {/* Display type: weight 450, never bold. Calm things don't shout. */}
       {title && (
         <h1
@@ -194,6 +195,107 @@ export function StartShell({
       <div className={`min-w-0 ${title ? (wide ? "mt-6" : "mt-8") : "mt-7"}`}>{children}</div>
       {aside && <div className="mt-8">{aside}</div>}
     </main>
+  );
+}
+
+/* Going back to change an answer, from wherever the student is standing.
+ *
+ * The flow is ledger-driven, so the SERVER decides which screen comes next. Without this there was
+ * no way back at all: every screen advanced and nothing returned, so a student who mistyped a role
+ * on the first screen carried it to the end. That is a bad trade in any flow and a worse one in
+ * this one, where the last screen sends a real application.
+ *
+ * Revisiting does NOT un-acknowledge anything. The ledger records that a screen was SEEN, and going
+ * back to change an answer does not unsee it; treating a revisit as an un-acknowledgement would
+ * make the flow walk the student forward through every screen again. What returns them is the same
+ * server answer that got them here, so the trip is always back to where they actually were.
+ */
+const REVISITABLE: { key: OnboardingStep; label: string }[] = [
+  { key: "focus", label: "the roles you picked" },
+  { key: "resume", label: "your resume" },
+  { key: "questions", label: "what you told the employer" },
+  { key: "sponsorship", label: "your work visa answer" },
+];
+
+/* The disclosure names the region it opens, the same contract the welcome walkthrough on the first
+   screen already keeps. A button that expands something it does not name leaves a screen reader
+   with no way to reach what appeared. */
+const REVISIT_LIST_ID = "start-revisit-list";
+
+const RevisitContext = createContext<{
+  revisiting: OnboardingStep | null;
+  onRevisit: (step: OnboardingStep) => void;
+  onReturn: () => void;
+} | null>(null);
+
+export function RevisitProvider({
+  value,
+  children,
+}: {
+  value: { revisiting: OnboardingStep | null; onRevisit: (step: OnboardingStep) => void; onReturn: () => void };
+  children: React.ReactNode;
+}) {
+  return <RevisitContext.Provider value={value}>{children}</RevisitContext.Provider>;
+}
+
+function RevisitBar({ current }: { current: OnboardingStep }) {
+  const ctx = useContext(RevisitContext);
+  const state = useContext(StartFlowContext);
+  const [open, setOpen] = useState(false);
+  if (!ctx) return null;
+
+  /* While revisiting, the only control offered is the way back. Offering the full list again would
+     let a student hop sideways between old screens and lose the thread of where they actually
+     were. */
+  if (ctx.revisiting) {
+    return (
+      <div className="mt-3 flex items-center gap-3 text-[13px]">
+        <span className="text-muted">You came back to change this.</span>
+        <button type="button" onClick={ctx.onReturn} className="text-brand-ink underline underline-offset-4">
+          Done, take me back
+        </button>
+      </div>
+    );
+  }
+
+  /* Only screens BEHIND the student, and only ones their flow actually contains: offering the work
+     visa screen to somebody whose employer already answered it would open a screen the flow skipped
+     on purpose. */
+  const flow = flowSteps(current, state).map((s) => s.key);
+  const at = flow.indexOf(current);
+  const behind = REVISITABLE.filter((item) => {
+    const index = flow.indexOf(item.key);
+    return index >= 0 && index < at;
+  });
+  if (behind.length === 0) return null;
+
+  return (
+    <div className="mt-3 text-[13px]">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={REVISIT_LIST_ID}
+        onClick={() => setOpen((value) => !value)}
+        className="min-h-11 text-muted underline underline-offset-4 hover:text-ink"
+      >
+        Change something you answered
+      </button>
+      {open && (
+        <ul id={REVISIT_LIST_ID} className="mt-2 flex flex-wrap gap-2">
+          {behind.map((item) => (
+            <li key={item.key}>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); ctx.onRevisit(item.key); }}
+                className="min-h-11 rounded-control border border-border px-3 py-1.5 text-[12.5px] text-ink hover:border-brand"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 

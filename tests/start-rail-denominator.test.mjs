@@ -1,50 +1,52 @@
 /**
  * The step rail's denominator, pinned in the suite that runs on every push.
  *
- * WHY THIS EXISTS ALONGSIDE THE TWO BROWSER SPECS
- * ===============================================
- * The arithmetic is covered end to end by tests/e2e/start-onboarding-checklist.spec.mjs and
- * tests/e2e/onboarding-empty-states.spec.mjs, and those prove the thing that actually matters: a
- * student walking the real flow reads a count that matches the screens they are shown. But both
- * need `npm run build` and a Chromium binary, so they run in the e2e job. `npm test` is what runs
- * on every push, and until this file it could not observe the denominator at all: nothing in it
- * referenced STEPS, StepRail or the rail's count.
+ * WHY THIS EXISTS ALONGSIDE THE BROWSER SPECS
+ * ===========================================
+ * The arithmetic is covered end to end by the e2e specs, and those prove what actually matters: a
+ * student walking the real flow reads a count that matches the screens they are shown. But those
+ * need a build and a Chromium binary. `npm test` runs on every push, and this file is the cheap
+ * guard: `flowSteps` is a pure function, so a direct call is the whole test.
  *
- * `flowSteps` is a pure function over a seven-element array, so the cheapest possible guard is a
- * direct call. This file is that guard, and it is deliberately about the RULE rather than about
- * any one screen: the browser specs assert what a student sees, this asserts why.
+ * WHAT THIS FILE IS ABOUT NOW
+ * ===========================
+ * It used to be about the gaps screen. That screen is CUT: measured across 318 real packets, only
+ * 21.7% of applications ask for a GPA at all, and the questions screen collects it from the
+ * employer's own banded list when they do.
  *
- * WHAT CHANGED, AND WHY MOST OF THIS FILE STAYED
- * ==============================================
- * The gaps screen is reachable again. Backend #116 had removed 'gaps' from the step union
- * `onboardingStepFrom` returns, so for a while no student could be routed to it and this file's
- * conditional test was about a screen only QA ever saw. It is now derived once, for a student whose
- * resume printed no GPA, GPA scale or major, and it sits immediately before Done.
+ * The rule it protected did not go anywhere, it changed subject. The one conditional screen is now
+ * the work visa, skipped for the ~40% of students whose first employer asked both halves itself and
+ * shown to the rest, because sponsorship_required_at_onboarding is what turns the sponsor-only
+ * board filter on and nothing else can answer it.
  *
- * That makes the denominator matter MORE, not less, and it moves where the answer comes from: the
- * flow's shape is now the server's `includes_gaps_step`, not anything this module can compute. The
- * two failure modes below are unchanged and are still the whole point - a total that grows under a
- * student, and a total that shrinks under them.
+ * The two failure modes are unchanged and are still the entire point: a total that GROWS under a
+ * student as they walk into a conditional screen, and one that SHRINKS under them as they answer it.
  */
 
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
-/* The module, not the feature's index: node resolves this path literally and needs the extension,
-   while `features/onboarding/index.ts` re-exports extensionless for the bundler. Same shape as
-   every other test here (`../features/jobs/domain/pay.ts`), and tests are exempt from the
-   entry-point rule in tests/architecture-boundaries.test.mjs for exactly this reason. */
 import { STEPS, flowSteps } from "../features/onboarding/domain/rail.ts";
 
-/** Minimal OnboardingState. Only these three fields are read by anything under test. */
-const stateAt = (step, gaps = [], includes_gaps_step = false) => ({ step, gaps, includes_gaps_step });
+/** Minimal OnboardingState. Only the fields the rail reads. */
+const stateAt = (step, extra = {}) => ({
+  step,
+  includes_application_steps: true,
+  includes_sponsorship_step: false,
+  ...extra,
+});
 
 const keys = (steps) => steps.map((s) => s.key);
 
-/* The six steps every student walks. The backend derives 'gaps' as a SEVENTH for some of them, but
-   never in place of one of these, so this is the spine of the flow and the base denominator. */
-const ALWAYS = ["resume", "impact", "focus", "sponsorship", "base", "done"];
+/* The steps a student in the application flow walks. The work visa is the conditional one WITHIN
+   that flow and never replaces any of these, so this is the spine and the base denominator. */
+const ALWAYS = ["focus", "resume", "match", "questions", "review", "trial", "notifications", "plan", "done"];
+
+/* The steps that are unconditional in STEPS itself, which is a different question. The application
+   sequence is conditional on `includes_application_steps` because an account that has already
+   finished onboarding never walks it; these four are in every flow there is. */
+const UNCONDITIONAL = ["focus", "resume", "done"];
 
 test("every conditional step has its own server signal, and no unconditional step is marked one", async () => {
   /* THE RULE, unchanged: a conditional step may never inherit another's signal. `includes_gaps_step`
@@ -62,132 +64,84 @@ test("every conditional step has its own server signal, and no unconditional ste
   const conditional = STEPS.filter((s) => s.conditional).map((s) => s.key);
   assert.deepEqual(
     conditional,
-    ["gaps", "match", "build", "questions", "review", "trial", "notifications", "plan"],
+    ["match", "questions", "sponsorship", "review", "trial", "notifications", "plan"],
   );
 
   const source = await readFile(new URL("../features/onboarding/domain/rail.ts", import.meta.url), "utf8");
   for (const key of conditional) {
-    const gated = key === "gaps"
-      ? /includes_gaps_step/.test(source)
+    const gated = key === "sponsorship"
+      ? /includes_sponsorship_step/.test(source)
       : /includes_application_steps/.test(source);
     assert.ok(gated, `${key} is conditional but no server signal in flowSteps gates it`);
   }
 
-  for (const key of ALWAYS) {
+  for (const key of UNCONDITIONAL) {
     assert.ok(
       !conditional.includes(key),
-      `${key} is in every flow, so marking it conditional would leave it missing from its own count`,
+      `${key} is in every flow there is, so marking it conditional would leave it missing from its own count`,
     );
   }
 });
 
-test("a flow the server says has no gaps screen reads a denominator of six throughout", () => {
+test("a flow without the work-visa screen reads nine throughout", () => {
   for (const step of ALWAYS) {
-    for (const gaps of [[], ["gpa", "gpa_scale", "major"]]) {
-      const steps = flowSteps(step, stateAt(step, gaps, false));
-      assert.equal(
-        steps.length,
-        6,
-        `${step} with ${gaps.length} outstanding gaps claims ${steps.length} steps`,
-      );
-      assert.ok(!keys(steps).includes("gaps"), `${step} counted a screen its flow never routes to`);
-    }
+    const steps = flowSteps(step, stateAt(step));
+    assert.equal(steps.length, 9, `${step} claims ${steps.length} steps in a flow without the visa screen`);
+    assert.ok(!keys(steps).includes("sponsorship"));
   }
 });
 
-test("a flow the server says has one reads seven throughout, on every step", () => {
-  for (const step of ALWAYS) {
-    const steps = flowSteps(step, stateAt(step, [], true));
-    assert.equal(steps.length, 7, `${step} claims ${steps.length} steps`);
-    assert.ok(keys(steps).includes("gaps"));
+test("a flow with it reads ten throughout, on every step", () => {
+  for (const step of [...ALWAYS, "sponsorship"]) {
+    const steps = flowSteps(step, stateAt(step, { includes_sponsorship_step: true }));
+    assert.equal(steps.length, 10, `${step} claims ${steps.length} steps in a flow with the visa screen`);
   }
 });
 
-/* THE FIRST FAILURE MODE, and the one #285 was opened for: the printed total growing underneath a
-   student. It happens whenever the screen is counted only once they are standing on it, because the
-   step before it then reads one lower. `includes_gaps_step` is true from the start of the flow. */
-test("the count does not grow as the student walks into the gaps screen", () => {
-  const onBase = flowSteps("base", stateAt("base", ["gpa", "major"], true));
-  const onGaps = flowSteps("gaps", stateAt("gaps", ["gpa", "major"], true));
-  assert.equal(onBase.length, onGaps.length);
-  assert.deepEqual(keys(onBase), keys(onGaps));
+test("the count does not GROW as the student walks into the visa screen", () => {
+  /* The first of the two failure modes. A student reading eleven on the questions screen must not
+     read twelve on the next one because the rail only counts the screen while they stand on it. */
+  const before = flowSteps("questions", stateAt("questions", { includes_sponsorship_step: true }));
+  const during = flowSteps("sponsorship", stateAt("sponsorship", { includes_sponsorship_step: true }));
+  assert.equal(before.length, during.length);
 });
 
-/* THE SECOND, which is what stops a future fix from keying the denominator off `state.gaps`: the
-   list is what is STILL outstanding, so answering the screen empties it. A count read from it would
-   drop from seven to six on the last screen of setup. The server keeps saying seven because the
-   screen was SHOWN, which does not stop being true. */
-test("the count does not shrink as the gaps are answered", () => {
-  const before = flowSteps("gaps", stateAt("gaps", ["gpa", "gpa_scale", "major"], true)).length;
-  const after = flowSteps("done", stateAt("done", [], true)).length;
-  assert.equal(before, 7);
-  assert.equal(after, 7);
-});
-
-/* ...and the same in the other direction: a student who SKIPS still has every field outstanding,
-   and must not be told the flow grew a screen they already declined. */
-test("outstanding gaps alone never add a step", () => {
-  const skipped = flowSteps("done", stateAt("done", ["gpa", "gpa_scale", "major"], true));
-  const answered = flowSteps("done", stateAt("done", [], true));
-  assert.equal(skipped.length, answered.length);
-  assert.deepEqual(keys(skipped), keys(answered));
+test("the count does not SHRINK once the declaration exists", () => {
+  /* The second. The server stops setting the flag the moment the declaration lands, and a student
+     mid-flow must not watch their total drop from twelve to eleven underneath them. That is why the
+     flag is read for the flow, and why the step being RENDERED is always counted. */
+  const during = flowSteps("sponsorship", stateAt("sponsorship", { includes_sponsorship_step: false }));
+  assert.ok(keys(during).includes("sponsorship"), "the screen being rendered must always be counted");
+  assert.equal(during.length, 10);
 });
 
 test("the rendered step is always in the result, which is what lets the rail locate itself", () => {
-  for (const step of [...ALWAYS, "gaps"]) {
-    const steps = flowSteps(step, stateAt(step, ["gpa"], step === "gaps"));
-    assert.ok(
-      keys(steps).includes(step),
-      `${step} renders but is absent from its own flow, so the rail cannot say where it is`,
-    );
-    assert.ok(steps.findIndex((s) => s.key === step) >= 0);
+  for (const step of [...ALWAYS, "sponsorship"]) {
+    const steps = flowSteps(step, stateAt(step));
+    assert.ok(keys(steps).includes(step), `${step} is rendered but missing from its own flow`);
   }
 });
 
-test("the gaps screen is counted in place: after the one-page review, before Done", () => {
-  const steps = flowSteps("gaps", stateAt("gaps", ["gpa", "gpa_scale", "major"], true));
-  assert.equal(steps.length, 7);
-  assert.equal(steps.findIndex((s) => s.key === "gaps"), 5);
-  assert.equal(steps.findIndex((s) => s.key === "done"), 6);
+test("the visa screen is counted in place: after the questions, before the review", () => {
+  const steps = keys(flowSteps("sponsorship", stateAt("sponsorship", { includes_sponsorship_step: true })));
+  assert.equal(steps.indexOf("sponsorship"), steps.indexOf("questions") + 1);
+  assert.equal(steps.indexOf("review"), steps.indexOf("sponsorship") + 1);
 });
 
-/* The two paths that reach the screen WITHOUT the server deriving it, and therefore without
-   `includes_gaps_step`: the localhost QA bypass (?qa=1&step=gaps) and a legacy step name arriving
-   mid-rolling-deploy. Neither may leave the rendered screen unable to say where it is, which is the
-   invariant #285 restored - so `current` and `state.step` are both still consulted. They genuinely
-   diverge in this flow: an older backend's `state.step: "targeting"` renders as `current: "done"`. */
-test("a screen reached without the server's answer is still counted, from either side", () => {
-  assert.equal(flowSteps("gaps", stateAt("done", [], false)).length, 7, "current alone did not count it");
-  assert.equal(flowSteps("done", stateAt("gaps", [], false)).length, 7, "state.step alone did not count it");
+test("a backend that never sends the flag reads as a flow without the screen", () => {
+  const steps = flowSteps("review", { step: "review", includes_application_steps: true });
+  assert.equal(steps.length, 9);
+  assert.ok(!keys(steps).includes("sponsorship"));
 });
 
-/* An older backend omits the field entirely. Absent is not "true": that backend does not route to
-   the screen, so the flow really is six steps and saying seven would be the #285 overcount again. */
-test("a backend that never sends the field reads as a six-step flow", () => {
-  const legacy = { step: "base", gaps: ["gpa", "major"] };
-  assert.equal(flowSteps("base", legacy).length, 6);
-  assert.ok(!keys(flowSteps("base", legacy)).includes("gaps"));
-});
-
-/* The loading rail. `current` is undefined because the step is genuinely unknown, and the result is
-   the shape of the flow with no conditional screen assumed into it. */
 test("with no current step the result is the unconditional flow", () => {
-  const steps = flowSteps(undefined, null);
-  assert.equal(steps.length, 6);
-  assert.deepEqual(keys(steps), ["focus", "resume", "impact", "sponsorship", "base", "done"]);
-  assert.equal(
-    steps.findIndex((s) => s.key === undefined),
-    -1,
-    "an undefined current must not resolve to a position",
-  );
+  const steps = flowSteps(undefined, { includes_application_steps: true });
+  assert.deepEqual(keys(steps), ALWAYS);
+  assert.equal(steps.findIndex((s) => s.key === undefined), -1, "an undefined current must not resolve to a position");
 });
 
-test("a null state never throws and never invents the conditional screen", () => {
-  for (const step of [...ALWAYS, "gaps"]) {
-    const steps = flowSteps(step, null);
-    assert.ok(keys(steps).includes(step), `${step} is missing from its own flow when state is null`);
-  }
-  assert.equal(flowSteps("base", null).length, 6);
-  // Only because `current` says so; there is no state to corroborate it.
-  assert.equal(flowSteps("gaps", null).length, 7);
+test("a null state never throws and never invents a conditional screen", () => {
+  const steps = flowSteps("focus", null);
+  assert.ok(!keys(steps).includes("sponsorship"));
+  assert.ok(keys(steps).includes("focus"));
 });

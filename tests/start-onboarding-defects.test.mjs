@@ -8,7 +8,7 @@
  * They are static analysis of source text, like most of this suite, so they pin the SHAPE of the
  * fixes rather than their behaviour. That is worth saying plainly, because the first defect below
  * is a race between two fetches and no source assertion can see a race. The behavioural cover for
- * it is tests/e2e/start-base-build.spec.mjs, which forces the losing ordering in a real browser and
+ * it WAS tests/e2e/start-base-build.spec.mjs, deleted with the one-page screen it walked, and
  * goes red on the unfixed tree; these assertions catch a literal reversion of the shape that fixed
  * it, which is a narrower and cheaper thing.
  *

@@ -89,7 +89,11 @@ type OnboardingEvent =
   // is the one exit from the payment gate, and a spike here means the gate is sending
   // people down a path they are not completing.
   | "onboarding_plan_claim_required"
-  | "onboarding_plan_already_paid";
+  | "onboarding_plan_already_paid"
+  /* Somebody went back to change an answer. A step that shows up here often is a step that asked
+     the question badly the first time. */
+  | "onboarding_revisit_opened"
+  | "onboarding_revisit_saved";
 
 type CoreEvent =
   | "authentication_completed"

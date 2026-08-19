@@ -46,21 +46,35 @@ const ADVANCE_MS = 320;
 export function QuestionsStep({
   company,
   questions,
+  given,
   alreadyAnswered,
   onSaved,
   onLater,
 }: {
   company: string;
   questions: PostingPrescriptQuestion[];
+  /** Answers this student already gave on a previous visit to this screen, replayed onto it. */
+  given?: { question: string; answer: string }[];
   /** How many Litos already answered. The honest counterweight that makes a three-question screen
    *  read as progress rather than as a form. */
   alreadyAnswered: number;
   onSaved: (answers: { question: string; answer: string }[]) => Promise<void> | void;
   onLater: () => void;
 }) {
-  const [answers, setAnswers] = useState<AnswerMap>(() =>
-    Object.fromEntries(questions.filter((q) => q.answer).map((q) => [answerKey(q), q.answer])),
-  );
+  const [answers, setAnswers] = useState<AnswerMap>(() => ({
+    ...Object.fromEntries(questions.filter((q) => q.answer).map((q) => [answerKey(q), q.answer])),
+    /* Layered ON TOP of whatever the employer's form already carried, because a student who came
+       back to change an answer is the more recent authority on it. Matched by question text, which
+       is the only identity an answer has once it has left this screen. */
+    ...Object.fromEntries(
+      (given ?? [])
+        .map((item) => {
+          const question = questions.find((q) => q.question === item.question);
+          return question ? [answerKey(question), item.answer] : null;
+        })
+        .filter((entry): entry is [string, string] => entry !== null),
+    ),
+  }));
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,8 +131,8 @@ export function QuestionsStep({
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <p className="mb-6 text-sm leading-6 text-muted">
-        These are their words and their options, copied from the form. Answer once and Litos carries
-        them into every application after this.
+        These are their words and their options, copied from the form. They go onto this
+        application, and Litos keeps what it can reuse so the next one is shorter.
         {alreadyAnswered > 0 && ` It already answered ${alreadyAnswered} for you.`}
       </p>
 

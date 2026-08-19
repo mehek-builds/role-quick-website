@@ -28,7 +28,7 @@
  * them. The two cases after it hold the ends: a profile with no gaps at all, and the gaps screen
  * rendering anyway.
  *
- * CONSTRAINTS, THE SAME ONES start-base-build.spec.mjs HOLDS
+ * CONSTRAINTS, THE SAME ONES start-base-build.spec.mjs HELD BEFORE THE ONE-PAGE SCREEN WAS CUT
  * =========================================================
  *  - No production backend, no database, no real credentials, no model call. A catch-all route
  *    serves same-origin requests from the local `next start`, answers backend requests from a
@@ -231,15 +231,12 @@ let heldState = null;
  * only the gap list would park this walk on the sixth screen forever. */
 function derivedStep() {
   if (forceStep) return forceStep;
-  /* FOCUS LEADS, mirroring onboardingStepFrom as of flow version 3. The order in this stub is the
-     product's real routing as far as this file is concerned, so it moves whenever the backend's
-     does or the walk below stops testing anything. */
+  /* Mirrors onboardingStepFrom. Setup is TWO screens now: the impact review folded into the resume
+     screen, the one-page review became a headless build, and the GPA screen was cut because only
+     21.7% of applications ask for a GPA at all. The work visa moved into the application sequence
+     so the employer gets first refusal on the question. */
   if (!progress.focus) return "focus";
   if (!progress.resume) return "resume";
-  if (!progress.impact) return "impact";
-  if (!progress.sponsorship) return "sponsorship";
-  if (!progress.base) return "base";
-  if (hasSetupGaps() && !progress.gapsAsked) return "gaps";
   return "done";
 }
 
@@ -752,7 +749,12 @@ test("the first step remains operable at 320px and its walkthrough discloses acc
 test("a failed application-profile read blocks approval instead of clearing saved preferences", async () => {
   try {
     resetProgress();
-    Object.assign(progress, { resume: true, impact: true, focus: true, sponsorship: true });
+    Object.assign(progress, { resume: true, focus: true, sponsorship: false });
+    /* THE SCREEN THIS GUARDS MOVED, and the guarantee moved with it. The application-profile gate
+       used to sit on the one-page screen, which is gone; it now sits on the work-visa screen, which
+       is the only remaining setup screen that WRITES to the profile. Forcing that step is what
+       reaches it without walking the whole application sequence, which has its own spec. */
+    forceStep = "sponsorship";
     applicationProfileGetStatus = 503;
     applicationProfilePutBodies.length = 0;
 
@@ -763,6 +765,7 @@ test("a failed application-profile read blocks approval instead of clearing save
     assert.equal(await page.getByRole("button", { name: "Try loading again" }).count(), 1);
     assert.equal(applicationProfilePutBodies.length, 0, "the failed read still wrote an application profile");
   } finally {
+    forceStep = null;
     applicationProfileGetStatus = 200;
     resetProgress();
     await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
@@ -865,53 +868,22 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     });
     await page.locator("button", { hasText: "See my matches" }).click();
 
-    /* ── Step 3, Your impact ───────────────────────────────────────────────
-       The entry chooser only renders when the server could not tell which experience is newest
-       (status "choose_entry"). This fixture answers "needs_input" with an entry already selected,
-       which is the ordinary arrival, so the walk takes the ordinary exit: keep the found bullet
-       and move on. */
-    visited.push(await screen("Your impact"));
-    const chooser = page.locator("input[name='recent-experience']");
-    if (await chooser.count()) await chooser.first().check();
-    await page.locator("button", { hasText: "Continue with what you found." }).click();
+    /* ── Step 3, Done ──────────────────────────────────────────────────────
+       Setup is TWO screens now, and everything that used to sit between here and Done was cut or
+       moved on measured grounds:
 
-    /* ── Step 4, country-scoped work eligibility ──────────────────────────*/
-    visited.push(await screen("Work visa"));
-    await page.getByRole("heading", { name: "Where can you work?" }).waitFor();
-    await page.getByRole("combobox", { name: "Country", exact: true }).selectOption("US");
-    await page.getByLabel("Authorized to work now?").selectOption("yes");
-    await page.getByLabel("Need sponsorship before starting?").selectOption("no");
-    await page.getByLabel("Need sponsorship later?").selectOption("no");
-    await page.locator("button", { hasText: "Continue" }).click();
+         impact       folded into the resume screen. Reviewing the strongest bullet from a resume
+                      is part of handing over that resume, not a separate errand.
+         one page     became a headless build behind the match screen. It was never a question, it
+                      was an artifact review, and the ATS gate still runs and still fails closed.
+         a few details only 21.7% of applications ask for a GPA at all (measured, 318 real packets),
+                      and the questions screen collects it from the employer's own banded list when
+                      they do, which is the answer that actually persists.
+         work visa    moved into the application sequence, where it derives only for the ~60% whose
+                      first employer did not ask both halves itself.
 
-    /* ── Step 5, Your one page ─────────────────────────────────────────────*/
-    visited.push(await screen("Your one page"));
-    const useThis = page.locator("button", { hasText: "Use this resume" }).first();
-    await useThis.waitFor({ timeout: 25000 });
-    await page.waitForFunction(
-      () => [...document.querySelectorAll("button")].some((b) => b.textContent.trim() === "Use this resume" && !b.disabled),
-      undefined,
-      { timeout: 25000 },
-    );
-    await useThis.click();
-    const looksRight = page.locator("button", { hasText: "Looks right" });
-    await looksRight.waitFor({ timeout: 25000 });
-    await looksRight.click();
-
-    /* ── Step 6, A few details ─────────────────────────────────────────────
-       The fixture's resume printed no GPA, scale or major, so this student is routed here once.
-       The walk SKIPS rather than fills, on purpose and in two directions at once: it leaves the
-       account with details outstanding, which is the state every case after the walk reads, and it
-       is the exact path that used to be a dead end. Skipping saves nothing, so a flow that derived
-       this screen from the missing fields alone would answer 'gaps' again on the next state read
-       and park the walk here forever. */
-    visited.push(await screen("A few details"));
-    await page.locator("button", { hasText: "Skip" }).click();
-
-    /* ── Step 7, Done ──────────────────────────────────────────────────────
-       Reached from a skip, with gpa, gpa_scale and major still outstanding. That is the ordinary
-       end of setup rather than a shortcut through it: the details are collected later, in context,
-       when an application actually needs them. */
+       The application sequence that follows Done is walked end to end in
+       tests/e2e/start-application-sequence.spec.mjs. */
     visited.push(await screen("Done"));
   } catch (reason) {
     await captureFailure("walk");
@@ -932,19 +904,13 @@ test("criteria 5-6: the last screen confirms setup is over, then names the first
        rows are the evidence for it. Each one is checked against the flag the walk actually set,
        so a receipt printed from constants rather than from state fails here. */
     assert.match(main, /Setup complete\./, "the flow never acknowledges that setup is finished");
+    /* The receipt now lists only the rows it can actually REPORT on. It used to enumerate every
+       entry in STEPS, which was fine while each had a spec; after the cut and the merges most keys
+       had none and the screen printed a column of "Not recorded" for screens the student had
+       genuinely completed. A row that cannot state a fact is worse than an absent row. */
     for (const [label, value] of [
-      ["Your resume", "Read"],
-      ["Your impact", "Reviewed"],
       ["Your roles", "Saved"],
-      ["Work visa", "Answered"],
-      ["Your one page", "Built"],
-      /* The one row the walk does NOT set, and it belongs here rather than only in the partial
-         case below. The receipt lists every entry in STEPS, which is deliberately WIDER than the
-         rail: the rail counts screens this student was walked through, and `gaps` is the screen the
-         flow does not route to, so the rail omits it while the receipt still reports it. That is
-         the right split, because the row is a fact about the account's details rather than a record
-         of a screen. An honest walk therefore ends with it outstanding. */
-      ["A few details", "Some outstanding"],
+      ["Your resume", "Read"],
     ]) {
       assert.match(
         main,
@@ -994,14 +960,12 @@ test("criterion 6: the receipt reports the account, not a fixed list", async () 
     forceStep = "targeting";        // legacy step -> routed to DoneStep
     omitSponsorshipFlag = true;     // older backend omits a field the type calls non-optional
     progress.base = false;          // resume never built
-    progress.gaps = false;          // details still outstanding
 
     await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
     await screen("Done");
     const main = await page.locator("main").innerText();
 
     assert.match(main, /Your one page\s*\n?\s*Not built/i, "a resume that was never built reports as Built");
-    assert.match(main, /A few details\s*\n?\s*Some outstanding/i, "outstanding details report as complete");
     /* The unknown branch. "Answered" here would be the receipt stating that a student answered a
        work-authorization question they were never asked, which is the worst row on the screen to
        invent. */
@@ -1025,7 +989,9 @@ test("criterion 6: the receipt reports the account, not a fixed list", async () 
 
 test("the rail's arithmetic matches the flow that was actually walked", async () => {
   try {
-    assert.equal(visited.length, 7, `the walk visited ${visited.length} screens`);
+    /* Setup is two screens plus Done. The application sequence that follows is walked in
+       tests/e2e/start-application-sequence.spec.mjs, which counts its own. */
+    assert.equal(visited.length, 3, `the walk visited ${visited.length} screens`);
     const total = visited[0].total;
     assert.equal(
       visited.length,
@@ -1042,8 +1008,8 @@ test("the rail's arithmetic matches the flow that was actually walked", async ()
      * first screen to the last. */
     assert.equal(
       total,
-      7,
-      `the rail claims ${total} steps for an account routed through the details screen`,
+      3,
+      `the rail claims ${total} steps for an account whose flow is setup plus Done`,
     );
     visited.forEach((entry, index) => {
       assert.equal(entry.step, index + 1, `screen ${index + 1} reported itself as step ${entry.step}`);
@@ -1055,92 +1021,6 @@ test("the rail's arithmetic matches the flow that was actually walked", async ()
   }
 });
 
-/* The other half of the denominator, and the case neither spec covered before this one.
- *
- * The walk proves a flow that CONTAINS the details screen reads seven on every screen of it. This
- * proves a flow that does not contain it reads six on every screen of it, and never seven. Together
- * the two say the denominator is a property of the flow's SHAPE - which screens this student will
- * be shown - and not of how complete their profile happens to be at the moment the rail is drawn.
- * A student who skips the screen still has every field outstanding and still reads seven; a student
- * whose resume printed all three never sees it and reads six throughout.
- *
- * The rail numbers here are also asserted by tests/start-rail-denominator.test.mjs against
- * `flowSteps` directly, which is the cheaper guard and the one that runs on every push. What only
- * this case can show is the RECEIPT's finished branch, which the walk no longer reaches: an
- * account with nothing outstanding is the one that renders "None missing". */
-test("a profile with no gaps at all reads six steps, never seven", async () => {
-  try {
-    finishedAccount({ details: "none" });
-    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
-    const done = await screen("Done");
-    assert.equal(done.total, 6, `an account with no outstanding details reads a total of ${done.total}`);
-    assert.equal(done.step, 6, "the last screen is not the last step");
-
-    const main = await page.locator("main").innerText();
-    assert.match(main, /A few details\s*\n?\s*None missing/i, "an account with no gaps reports details outstanding");
-    /* The receipt's gutter, which is a cross-reference to the rail and has to agree with it. The
-       details row is not a screen this student walked, so it carries no step number: a "06" here
-       under a rail reading "Step 6 of 6, Done" would be two different sixes on one screen. */
-    assert.match(main, /05\s*\n?\s*Your one page/i, "the receipt gutter stopped tracking the rail");
-    assert.doesNotMatch(main, /06\s*\n?\s*A few details/i, "an uncounted screen was given a rail step number");
-  } catch (reason) {
-    await captureFailure("no-gaps");
-    throw reason;
-  } finally {
-    noGaps = false;
-  }
-});
-
-/* THE #285 REGRESSION GUARD, and the gaps FORM, which the walk deliberately skips past.
- *
- * The walk takes the SKIP exit, because that is the path that used to be a dead end. This case
- * takes the other one and covers what only it can: GPA and its scale go together or the screen
- * refuses to save (components/start/steps.tsx `hasGpa !== hasGpaScale`).
- *
- * `forceStep` is kept rather than leaning on the derivation, so the case still holds if the routing
- * changes again: what #285 fixed is that a rendered screen missing from STEPS could not say where
- * it was - it resolved through `Math.max(0, findIndex)` to index 0 and reported itself as the FIRST
- * step. That clamp is gone, so the symptom today would be a rail with no position rather than a
- * wrong one, but the requirement is the same, and it applies to every path that renders this screen
- * including ?qa=1&step=gaps and an older backend mid-rolling-deploy. */
-test("a gaps screen that does render names its own position, and still saves", async () => {
-  try {
-    finishedAccount({ details: "outstanding" });
-    forceStep = "gaps";
-    await page.goto(`${ORIGIN}/start`, { waitUntil: "domcontentloaded" });
-    const here = await screen("A few details");
-    assert.equal(here.step, 6, `the gaps screen reported itself as step ${here.step}`);
-    assert.equal(here.total, 7, `the flow standing on the gaps screen claims ${here.total} steps`);
-
-    /* GPA without its scale is the refusal case: a number with no denominator is not an answer, so
-       Continue must not produce a save. Asserted before the happy path so a screen that saved
-       anything at all here fails rather than passing on the second attempt. */
-    await page.locator("#gap-gpa").fill("3.89");
-    await page.locator("button", { hasText: "Continue" }).click();
-    assert.equal(progress.gaps, false, "a GPA with no scale was accepted as an answer");
-
-    await page.locator("#gap-gpa_scale").fill("4.0");
-    await page.locator("#gap-major").fill("Fixture Studies");
-    await page.locator("button", { hasText: "Continue" }).click();
-    await page.waitForFunction(() => true);
-    // The fixture flips this only when the PUT body carries the fields this screen asks for.
-    await page.waitForTimeout(500);
-    assert.equal(progress.gaps, true, "the completed gaps form never reached /profile/application");
-  } catch (reason) {
-    await captureFailure("rendered-gaps");
-    throw reason;
-  } finally {
-    forceStep = null;
-    progress.gaps = false;
-  }
-});
-
-/* The rail before there is anything to say.
- *
- * app/start/page.tsx renders it while GET /onboarding/state is still in flight, and it used to
- * pass "resume" as a stand-in step. For a returning student halfway through setup that is the one
- * device on the screen whose entire job is to say where they are, telling them the wrong thing for
- * the length of a request. It now draws the shape of the flow and makes no claim inside it. */
 test("the rail claims no position before the state arrives", async () => {
   try {
     finishedAccount({ details: "outstanding" });
@@ -1172,13 +1052,12 @@ test("the rail claims no position before the state arrives", async () => {
     /* Then it has to actually resolve, or every assertion above is satisfied by a rail that never
        says anything. Same request, released: nothing is reloaded.
 
-       It resolves on the details screen rather than on Done because that is where this account is
-       routed: `details: "outstanding"` means gpa, gpa_scale and major are missing and the screen
-       has not been shown yet. Which screen it lands on is incidental to this case - what matters is
-       that the rail stops claiming nothing and names a real position. */
+       It resolves on Done because that is where a finished account is routed. Which screen it
+       lands on is incidental to this case - what matters is that the rail stops claiming nothing
+       and names a real position. */
     releaseState();
     heldState = null;
-    await screen("A few details");
+    await screen("Done");
     await loading.first().waitFor({ state: "detached", timeout: 20000 });
   } catch (reason) {
     await captureFailure("loading-rail");

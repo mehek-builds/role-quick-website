@@ -127,11 +127,7 @@ jobs:
       # can only pin the shape of the fix. This spec forces the losing ordering and is the only
       # thing that fails when the defect returns, which is precisely why it must not be a script
       # somebody remembers to run.
-      - name: Base resume build spec
-        run: npm run test:start-base
 
-      - name: Onboarding gaps spec
-        run: npm run test:start-gaps
 
       - name: Country eligibility onboarding and settings spec
         run: npm run test:country-eligibility-flow
@@ -169,8 +165,6 @@ jobs:
           name: click-path-artifacts
           path: |
             test-results/click-path/
-            test-results/start-base/
-            test-results/start-gaps/
             test-results/country-eligibility-flow/
             test-results/narrow-viewport/
           if-no-files-found: ignore
