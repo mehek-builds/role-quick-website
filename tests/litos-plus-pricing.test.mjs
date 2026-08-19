@@ -169,3 +169,31 @@ test("the plan step has no way past it except paying", async () => {
   assert.match(start, /<PlanStep onSettled=\{\(\) => \{ stepDone\("plan"\)/);
   assert.doesNotMatch(start, /requires_payment_method\s*\?/);
 });
+
+test("the return from Stripe reconciles before it polls our own database", async () => {
+  /* THE STUCK LOOP THIS ENDS. Paid state is written by the webhook, and this page
+     used to poll our database for ~7 seconds and then give up, which assumed the
+     webhook would land inside that window. It can lag the redirect, be retried for
+     minutes after a 5xx, or never arrive at all -- production answered 503 to every
+     Stripe event on 2026-08-19 because STRIPE_WEBHOOK_SECRET was not a whsec_ value.
+     Meanwhile the student is back on the site having just handed over a card, and
+     with no free escape on the plan screen there is no way out of being asked to buy
+     what they just bought.
+
+     Order is the whole assertion: reconciling AFTER the poll would still time out in
+     exactly the case this exists for. */
+  const [ret, apiClient] = await Promise.all([
+    readFile(new URL("../app/billing/return/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../features/billing/infrastructure/billing-api.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(ret, /await reconcileBillingCheckout\(context\);/);
+  const reconcileAt = ret.indexOf("await reconcileBillingCheckout(context);");
+  const pollAt = ret.indexOf("for (let attempt = 0; attempt < 6; attempt += 1)");
+  assert.notEqual(reconcileAt, -1);
+  assert.notEqual(pollAt, -1);
+  assert.ok(reconcileAt < pollAt, "reconcile must run before the poll, or it cannot help the case it exists for");
+
+  // It must never throw: a failed reconcile has to fall through to the poll rather
+  // than replacing a slow success with a hard error.
+  assert.match(apiClient, /export async function reconcileBillingCheckout[\s\S]{0,700}?catch \{\s*return false;\s*\}/);
+});
