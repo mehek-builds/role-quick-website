@@ -285,6 +285,19 @@ export default function Start() {
       hasFlowLedger(state!) ? acknowledgeOnboardingFlowStep(step, "continued", state!.flow_version) : Promise.resolve(),
     [state],
   );
+  /* Rejoining the sequence after a reload, which drops the per-sitting handoff.
+   *
+   * Routes on WHAT IS MISSING rather than always restarting: no match means pick one, a match
+   * without a build means build it. Restarting from the match screen in both cases is what
+   * produced a loop with no exit, because picking a match never fills in the build.
+   *
+   * Rebuilding does spend another tailored generation, and that is the honest cost of a reload
+   * mid-sequence: the alternative is carrying a packet the student cannot see and cannot check. */
+  const resumeSequence = useCallback(() => {
+    if (!chosenMatch) return <MatchStep onLater={later} onBuild={setChosenMatch} />;
+    return <BuildStep match={chosenMatch} onLater={later} onQuestions={setBuilt} />;
+  }, [chosenMatch, later]);
+
   const fail = useCallback(
     (reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not continue."),
     [],
@@ -528,9 +541,9 @@ export default function Start() {
 
       case "build":
         /* A reload lands here with no in-memory match, because the handoff is per-sitting. Sending
-           the student back to pick one again is the honest recovery: the alternative is guessing
-           which posting they meant. */
-        if (!chosenMatch) return <MatchStep onLater={later} onBuild={(match) => setChosenMatch(match)} />;
+           the student back to pick one is the honest recovery: the alternative is guessing which
+           posting they meant. */
+        if (!chosenMatch) return resumeSequence();
         return (
           <BuildStep
             match={chosenMatch}
@@ -544,7 +557,11 @@ export default function Start() {
         );
 
       case "questions":
-        if (!built || !chosenMatch) return <MatchStep onLater={later} onBuild={(match) => setChosenMatch(match)} />;
+        /* Both halves matter, and getting this wrong was a trap worth naming. Falling back to the
+           match screen whenever `built` was missing produced a loop with no exit: picking a match
+           sets `chosenMatch` and leaves `built` null, so the very next render fell back to the
+           match screen again, forever. `resumeSequence` routes on what is actually missing. */
+        if (!built || !chosenMatch) return resumeSequence();
         return (
           <QuestionsStep
             company={chosenMatch.job.company_name}
@@ -561,7 +578,7 @@ export default function Start() {
         );
 
       case "review":
-        if (!chosenMatch) return <MatchStep onLater={later} onBuild={(match) => setChosenMatch(match)} />;
+        if (!chosenMatch || !built) return resumeSequence();
         return (
           <ReviewStep
             posting={chosenMatch.job}
