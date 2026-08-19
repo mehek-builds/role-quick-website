@@ -60,7 +60,8 @@ export function BuildStep({
           const identity = await api<ProfileIdentity>("/profile");
           return { fullName: identity.full_name ?? null, resumeEmail: identity.resume_email ?? null };
         },
-        generateResume: (input) => api<unknown>("/resume/generate", {
+        generateResume: async (input) => {
+          const generated = await api<{ canonical_application_id?: string; application?: { spec?: { school?: string; degree?: string; grad_date?: string } } }>("/resume/generate", {
           method: "POST",
           body: JSON.stringify({
             initiation: "explicit_click",
@@ -70,7 +71,12 @@ export function BuildStep({
             job_id: input.jobId,
             contact: { full_name: input.fullName, email: input.resumeEmail },
           }),
-        }),
+          });
+          return {
+            applicationId: generated.canonical_application_id ?? null,
+            resumeSpec: generated.application?.spec ?? null,
+          };
+        },
         loadQuestions: async (jobId) => {
           const prescript = await getPostingQuestions(jobId);
           /* NULL IS NOT A FAILURE HERE, and the existing contract is why: getPostingQuestions
@@ -78,7 +84,11 @@ export function BuildStep({
              which is that there is nothing extra to ask. Onboarding follows that rather than
              inventing a second meaning for the same response. The consequence is stated on the
              button: no outstanding questions sends the student straight to review. */
-          return { total: prescript?.question_count ?? 0, outstanding: prescript?.ask.length ?? 0 };
+          return {
+            total: prescript?.question_count ?? 0,
+            alreadyAnswered: prescript?.already_answered ?? 0,
+            ask: prescript?.ask ?? [],
+          };
         },
       },
       match.job.id,

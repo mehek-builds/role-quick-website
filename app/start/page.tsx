@@ -46,6 +46,14 @@ import { SponsorshipStep } from "@/components/start/SponsorshipStep";
 import { StartFlowProvider, StepRail } from "@/components/start/ui";
 import { RecentExperienceStep } from "@/components/start/RecentExperienceStep";
 import { deferOnboardingForSession } from "@/lib/onboarding-flow";
+import { MatchStep } from "@/components/start/MatchStep";
+import { BuildStep } from "@/components/start/BuildStep";
+import { QuestionsStep } from "@/components/start/QuestionsStep";
+import { ReviewStep } from "@/components/start/ReviewStep";
+import { TrialStep } from "@/components/start/TrialStep";
+import { PlanStep } from "@/components/start/PlanStep";
+import type { OnboardingMatch } from "@/lib/onboarding-match";
+import type { BuildResult } from "@/lib/onboarding-build";
 
 /* Whether this account's flow is one the acknowledgement ledger exists for.
  *
@@ -61,6 +69,16 @@ function hasFlowLedger(state: OnboardingState): state is OnboardingState & { flo
 export default function Start() {
   const router = useRouter();
   const [state, setState] = useState<OnboardingState | null>(null);
+  /* THE APPLICATION SEQUENCE'S IN-MEMORY HANDOFF.
+     match -> build -> questions -> review each need what the screen before produced, and none of it
+     is worth a column: the packet, the resume and the answers are all already persisted server-side
+     by the calls those screens make. What is held here is only the pointer between screens for this
+     sitting. A reload mid-sequence therefore lands the student back on the step the LEDGER says
+     they are on with nothing carried over, which is why each screen re-reads what it needs rather
+     than assuming this state survived. */
+  const [chosenMatch, setChosenMatch] = useState<OnboardingMatch | null>(null);
+  const [built, setBuilt] = useState<BuildResult | null>(null);
+  const [answersGiven, setAnswersGiven] = useState(0);
   const [profile, setProfile] = useState<ParsedProfile | null>(null);
   const [parsedProfileStatus, setParsedProfileStatus] = useState<"loading" | "ready" | "error">("loading");
   const [parsedProfileLoadError, setParsedProfileLoadError] = useState<string | null>(null);
@@ -254,6 +272,20 @@ export default function Start() {
   }, [router, state]);
 
   const stepDone = useCallback((step: OnboardingStep) => track("onboarding_step_done", { step }), []);
+
+  /* Acknowledging an application-sequence screen. Thin on purpose: every one of the six advances
+     the same way, and repeating the ternary six times is how the ten hardcoded flow_version checks
+     happened. `hasFlowLedger` is the same guard the setup screens use, so a backend without the
+     ledger simply advances on its own derivation instead of erroring. */
+  const ack = useCallback(
+    (step: Parameters<typeof acknowledgeOnboardingFlowStep>[0]) =>
+      hasFlowLedger(state!) ? acknowledgeOnboardingFlowStep(step, "continued", state!.flow_version) : Promise.resolve(),
+    [state],
+  );
+  const fail = useCallback(
+    (reason: unknown) => setError(reason instanceof Error ? reason.message : "Could not continue."),
+    [],
+  );
   if (error && !state) {
     return (
       <div className="mx-auto max-w-2xl px-6 py-16">
@@ -475,6 +507,83 @@ export default function Start() {
       // An older backend may briefly return one of the removed steps during a rolling deploy. Treat
       // it as ready rather than sending the student through the deleted extension and sample-form
       // detour until the next state refresh reaches the new backend.
+      /* ── THE APPLICATION SEQUENCE ──────────────────────────────────────────
+         Each screen acknowledges itself on the way out, and the ledger is what advances the flow.
+         Acknowledging means SEEN: declining a match or saving a packet for later still moves on,
+         because the alternative is a student parked forever on a screen they have answered. */
+      case "match":
+        return (
+          <MatchStep
+            onLater={later}
+            onBuild={(match) => {
+              setChosenMatch(match);
+              stepDone("match");
+              void ack("match").then(refresh).catch(fail);
+            }}
+          />
+        );
+
+      case "build":
+        /* A reload lands here with no in-memory match, because the handoff is per-sitting. Sending
+           the student back to pick one again is the honest recovery: the alternative is guessing
+           which posting they meant. */
+        if (!chosenMatch) return <MatchStep onLater={later} onBuild={(match) => setChosenMatch(match)} />;
+        return (
+          <BuildStep
+            match={chosenMatch}
+            onLater={later}
+            onQuestions={(result) => {
+              setBuilt(result);
+              stepDone("build");
+              void ack("build").then(refresh).catch(fail);
+            }}
+          />
+        );
+
+      case "questions":
+        if (!built || !chosenMatch) return <MatchStep onLater={later} onBuild={(match) => setChosenMatch(match)} />;
+        return (
+          <QuestionsStep
+            company={chosenMatch.job.company_name}
+            questions={built.ask}
+            alreadyAnswered={built.alreadyAnswered}
+            onLater={later}
+            onSaved={async (answers) => {
+              setAnswersGiven(answers.length);
+              stepDone("questions");
+              await ack("questions");
+              await refresh();
+            }}
+          />
+        );
+
+      case "review":
+        if (!chosenMatch) return <MatchStep onLater={later} onBuild={(match) => setChosenMatch(match)} />;
+        return (
+          <ReviewStep
+            posting={chosenMatch.job}
+            applicationId={built?.applicationId ?? null}
+            resumeSpec={built?.resumeSpec ?? null}
+            educationProfile={profile}
+            answersSaved={answersGiven}
+            fieldsAnswered={built?.totalQuestions ?? 0}
+            onSent={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            onSaveForLater={() => { stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+          />
+        );
+
+      case "trial":
+        return (
+          <TrialStep onContinue={() => { stepDone("trial"); void ack("trial").then(refresh).catch(fail); }} />
+        );
+
+      case "plan":
+        /* Paying navigates to Stripe from inside PlanStep and returns to /start, so only the Free
+           path acknowledges here. A student who pays acknowledges on the way back in. */
+        return (
+          <PlanStep onFree={() => { stepDone("plan"); void ack("plan").then(refresh).catch(fail); }} />
+        );
+
       case "install":
       case "apply":
       case "targeting":

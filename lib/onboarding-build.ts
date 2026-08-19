@@ -1,3 +1,5 @@
+import type { PostingPrescriptQuestion } from "./api";
+
 /* 04 WATCH IT BUILD: the sequence, as a decision that can be tested without spending a generation.
  *
  * THE STAGES ARE THE REAL CALLS. There are three of them because three things actually happen, and
@@ -36,8 +38,18 @@ export const BUILD_STAGES: readonly { key: BuildStageKey; label: string; orb: Bu
 ];
 
 export type BuildResult = {
-  /** The tailored resume the right-hand pane renders. */
-  resume: unknown;
+  /** The canonical application POST /resume/generate created or linked. The review screen submits
+   *  against this, and a null one means there is nothing to send. */
+  applicationId: string | null;
+  /** The education lines the generated resume will print, for the drift guard on the review
+   *  screen. Null when the response did not carry a spec. */
+  resumeSpec: { school?: string; degree?: string; grad_date?: string } | null;
+  /** The questions that need the applicant, passed straight through to screen 05 rather than
+   *  re-fetched: the scan is the expensive half and it has already been paid for here. */
+  ask: PostingPrescriptQuestion[];
+  /** How many Litos already answered. The counterweight that makes a short screen read as
+   *  progress rather than as a form. */
+  alreadyAnswered: number;
   /** How many of the employer's questions Litos could not answer from what it holds.
    *  This is the number on the button into screen 05, and it is real or the button does not
    *  claim it. */
@@ -60,8 +72,12 @@ export type BuildDeps = {
     jdText: string;
     fullName: string;
     resumeEmail: string;
-  }) => Promise<unknown>;
-  loadQuestions: (jobId: string) => Promise<{ total: number; outstanding: number }>;
+  }) => Promise<{ applicationId: string | null; resumeSpec: BuildResult["resumeSpec"] }>;
+  loadQuestions: (jobId: string) => Promise<{
+    total: number;
+    alreadyAnswered: number;
+    ask: PostingPrescriptQuestion[];
+  }>;
 };
 
 /** Thrown when the account is missing something generation requires, so the screen can say which
@@ -140,9 +156,9 @@ export async function runOnboardingBuild(
   }
 
   onStages(stagesAt("resume", "active"));
-  let resume: unknown;
+  let generated: Awaited<ReturnType<BuildDeps["generateResume"]>>;
   try {
-    resume = await deps.generateResume({
+    generated = await deps.generateResume({
       jobId,
       company: posting.company,
       role: posting.title,
@@ -165,7 +181,16 @@ export async function runOnboardingBuild(
   }
 
   onStages(stagesComplete());
-  return { resume, outstandingQuestions: questions.outstanding, totalQuestions: questions.total };
+  return {
+    applicationId: generated.applicationId,
+    resumeSpec: generated.resumeSpec,
+    ask: questions.ask,
+    alreadyAnswered: questions.alreadyAnswered,
+    /* Derived from the ask list rather than sent separately, so the count on the button and the
+       list on the next screen can never disagree about how many questions there are. */
+    outstandingQuestions: questions.ask.length,
+    totalQuestions: questions.total,
+  };
 }
 
 /**

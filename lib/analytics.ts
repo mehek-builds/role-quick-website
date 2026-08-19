@@ -77,7 +77,13 @@ type OnboardingEvent =
   /* The questions screen. `asked` versus `already_answered` is the ratio that says whether the
      pre-script is doing its job: a screen that asks eight of seventeen is a profile gap, not a
      UI problem. */
-  | "onboarding_questions_saved";
+  | "onboarding_questions_saved"
+  /* The irreversible one. Separated from the save path because the difference between them is the
+     single most important number in this flow. */
+  | "onboarding_application_sent"
+  | "onboarding_application_saved_for_later"
+  | "onboarding_trial_shown"
+  | "onboarding_plan_declined";
 
 type CoreEvent =
   | "authentication_completed"

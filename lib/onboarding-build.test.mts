@@ -10,13 +10,25 @@ import {
   type BuildDeps,
   type BuildStage,
 } from "./onboarding-build.ts";
+import type { PostingPrescriptQuestion } from "./api.ts";
+
+function ask(question: string): PostingPrescriptQuestion {
+  return {
+    question, input_type: "select", options: ["Yes", "No"], required: true,
+    max_length: null, answer: "", reusable: false, remembered: false,
+  } as PostingPrescriptQuestion;
+}
 
 function deps(overrides: Partial<BuildDeps> = {}): BuildDeps {
   return {
     loadPosting: async () => ({ description: "Full JD text", title: "Software Engineer Intern", company: "Ramp" }),
     loadIdentity: async () => ({ fullName: "A Candidate", resumeEmail: "a@example.com" }),
-    generateResume: async () => ({ id: "resume-1" }),
-    loadQuestions: async () => ({ total: 17, outstanding: 3 }),
+    generateResume: async () => ({ applicationId: "app-1", resumeSpec: { school: "USC" } }),
+    loadQuestions: async () => ({
+      total: 17,
+      alreadyAnswered: 14,
+      ask: [ask("Sponsorship?"), ask("GPA?"), ask("Anything else?")],
+    }),
     ...overrides,
   };
 }
@@ -54,7 +66,7 @@ test("a stage is only ever done after its own call resolved", async () => {
   const { seen, onStages } = record();
 
   const run = runOnboardingBuild(
-    deps({ generateResume: () => generation.then(() => ({ id: "r" })) }),
+    deps({ generateResume: () => generation.then(() => ({ applicationId: "app-1", resumeSpec: null })) }),
     "job-1",
     onStages,
   );
@@ -86,6 +98,10 @@ test("the result carries the real counts, not a rounded promise", async () => {
   const result = await runOnboardingBuild(deps(), "job-1", record().onStages);
   assert.equal(result.outstandingQuestions, 3);
   assert.equal(result.totalQuestions, 17);
+  assert.equal(result.alreadyAnswered, 14);
+  assert.equal(result.applicationId, "app-1");
+  // Derived from the ask list, so the button's count and the next screen's list cannot disagree.
+  assert.equal(result.outstandingQuestions, result.ask.length);
 });
 
 test("the full posting is what gets tailored against, never the board preview", async () => {
@@ -95,7 +111,7 @@ test("the full posting is what gets tailored against, never the board preview", 
   await runOnboardingBuild(
     deps({
       loadPosting: async () => ({ description: "the whole description", title: "T", company: "C" }),
-      generateResume: async (input) => { sawJd = input.jdText; return {}; },
+      generateResume: async (input) => { sawJd = input.jdText; return { applicationId: null, resumeSpec: null }; },
     }),
     "job-1",
     record().onStages,
@@ -112,7 +128,7 @@ test("a missing name fails before generation, and says which field", async () =>
     () => runOnboardingBuild(
       deps({
         loadIdentity: async () => ({ fullName: "  ", resumeEmail: "a@example.com" }),
-        generateResume: async () => { generated = true; return {}; },
+        generateResume: async () => { generated = true; return { applicationId: null, resumeSpec: null }; },
       }),
       "job-1",
       onStages,

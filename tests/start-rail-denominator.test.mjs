@@ -28,6 +28,7 @@
  */
 
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 
 /* The module, not the feature's index: node resolves this path literally and needs the extension,
@@ -45,20 +46,32 @@ const keys = (steps) => steps.map((s) => s.key);
    never in place of one of these, so this is the spine of the flow and the base denominator. */
 const ALWAYS = ["resume", "impact", "focus", "sponsorship", "base", "done"];
 
-test("STEPS marks exactly one step conditional, and it is the one not every flow contains", () => {
+test("every conditional step has its own server signal, and no unconditional step is marked one", async () => {
+  /* THE RULE, unchanged: a conditional step may never inherit another's signal. `includes_gaps_step`
+     answers for the gaps screen and no other, and a screen counted by a flag that does not describe
+     it is counted only while the student stands on it, which is the count-grows-underneath-them
+     defect this rule exists to remove.
+     What changed is the number of them. The application sequence added six, and they read
+     `includes_application_steps`, which is the server's answer for exactly those six. So this now
+     checks the PROPERTY rather than a fixed list: every conditional key must be reachable from a
+     signal `flowSteps` actually consults. */
   const conditional = STEPS.filter((s) => s.conditional).map((s) => s.key);
-  assert.deepEqual(
-    conditional,
-    ["gaps"],
-    "a second conditional step needs its own server signal in features/onboarding/domain/rail.ts "
-      + "`flowSteps`: it cannot inherit `includes_gaps_step`, which answers for the gaps screen and "
-      + "no other. Inheriting it would leave the new screen counted only while standing on it, which "
-      + "is the count-grows-underneath-them defect this rule exists to remove.",
-  );
-  assert.ok(
-    !ALWAYS.includes("gaps"),
-    "a step every flow contains must not be conditional: it would be missing from its own count",
-  );
+  assert.deepEqual(conditional, ["gaps", "match", "build", "questions", "review", "trial", "plan"]);
+
+  const source = await readFile(new URL("../features/onboarding/domain/rail.ts", import.meta.url), "utf8");
+  for (const key of conditional) {
+    const gated = key === "gaps"
+      ? /includes_gaps_step/.test(source)
+      : /includes_application_steps/.test(source);
+    assert.ok(gated, `${key} is conditional but no server signal in flowSteps gates it`);
+  }
+
+  for (const key of ALWAYS) {
+    assert.ok(
+      !conditional.includes(key),
+      `${key} is in every flow, so marking it conditional would leave it missing from its own count`,
+    );
+  }
 });
 
 test("a flow the server says has no gaps screen reads a denominator of six throughout", () => {

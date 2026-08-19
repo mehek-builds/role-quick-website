@@ -1076,7 +1076,12 @@ export type RecentExperienceReview = {
 
 // Legacy values stay in the response type during the rolling deploy. The new backend no longer
 // emits them, and /start treats an older response as ready rather than restoring the removed flow.
-export type OnboardingStep = "focus" | "sponsorship" | "resume" | "impact" | "base" | "install" | "apply" | "gaps" | "targeting" | "done";
+export type OnboardingStep =
+  | "focus" | "sponsorship" | "resume" | "impact" | "base" | "install" | "apply" | "gaps" | "targeting"
+  /* The application sequence, served by the backend once every profile-derived step is satisfied
+     and only for an account that has never completed onboarding. */
+  | "match" | "build" | "questions" | "review" | "trial" | "plan"
+  | "done";
 
 export type OnboardingState = {
   /** Unattended submission is earned: the server refuses to enable it until the student has
@@ -1119,6 +1124,9 @@ export type OnboardingState = {
    *  or the printed total drops from seven to six on the last screen of setup. Only the server knows
    *  whether the screen was shown, so only the server can answer this. */
   includes_gaps_step?: boolean;
+  /** Whether this student's flow contains the application sequence. Server-owned, same rule as
+   *  includes_gaps_step: the client must never re-derive which screens a flow contains. */
+  includes_application_steps?: boolean;
   /** Page count of the uploaded file, measured at parse time. 0 when never measured. */
   source_pages: number;
   /** The original upload, for the side-by-side. NULL is normal: storing it is best-effort. */
