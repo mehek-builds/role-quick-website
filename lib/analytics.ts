@@ -68,7 +68,23 @@ type OnboardingEvent =
      targeting problem, not a copy problem. */
   | "onboarding_match_shown"
   | "onboarding_match_accepted"
-  | "onboarding_match_reshuffled";
+  | "onboarding_match_reshuffled"
+  /* The build. `outstanding` is the count that decides whether the questions screen is shown at
+     all, and `fixable` separates a one-line profile gap from a genuine build failure - two very
+     different things to see rising in a funnel. */
+  | "onboarding_build_completed"
+  | "onboarding_build_failed"
+  /* The questions screen. `asked` versus `already_answered` is the ratio that says whether the
+     pre-script is doing its job: a screen that asks eight of seventeen is a profile gap, not a
+     UI problem. */
+  | "onboarding_questions_saved"
+  /* The irreversible one. Separated from the save path because the difference between them is the
+     single most important number in this flow. */
+  | "onboarding_application_sent"
+  | "onboarding_application_saved_for_later"
+  | "onboarding_trial_shown"
+  | "onboarding_plan_declined"
+  | "onboarding_plan_already_paid";
 
 type CoreEvent =
   | "authentication_completed"

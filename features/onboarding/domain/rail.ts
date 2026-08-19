@@ -43,8 +43,24 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
      that must not be counted by default. Left in STEPS unconditionally it made the denominator a
      permanent overcount, which #285 accepted as the cheaper of two errors and this flag removes. */
   { key: "gaps", label: "A few details", weight: 1, conditional: true },
+  /* THE APPLICATION SEQUENCE. All six are conditional on the same server-owned signal
+     (`includes_application_steps`), for the same reason the gaps screen is conditional on its own:
+     the flow does not always contain them, and counting them for everybody would make the rail's
+     denominator a permanent overcount for the accounts that never walk them.
+     Weights are a map of TIME, so the build gets 2 (it waits on a real generation) and the rest
+     get 1: a match is one tap, a few questions are a few taps, and the trial screen only asks the
+     student to accept something they already hold. */
+  { key: "match", label: "Your match", weight: 1, conditional: true },
+  { key: "build", label: "Your application", weight: 2, conditional: true },
+  { key: "questions", label: "What the job asks", weight: 1, conditional: true },
+  { key: "review", label: "Review and send", weight: 1, conditional: true },
+  { key: "trial", label: "Your trial", weight: 1, conditional: true },
+  { key: "plan", label: "Your plan", weight: 1, conditional: true },
   { key: "done", label: "Done", weight: 0 },
 ];
+
+/** The six steps gated by `includes_application_steps`. */
+const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "build", "questions", "review", "trial", "plan"]);
 
 /** The steps this particular student's flow contains, which is the rail's denominator.
  *
@@ -81,6 +97,11 @@ export function flowSteps(current: OnboardingStep | undefined, state: Onboarding
   // Keyed to "gaps" rather than to `conditional` in general: `includes_gaps_step` answers for that
   // screen and no other, so a second conditional step added later must bring its own signal instead
   // of silently inheriting this one.
-  const inFlow = (s: (typeof STEPS)[number]) => s.key === "gaps" && state?.includes_gaps_step === true;
+  /* Each conditional step reads its OWN server signal. Keyed rather than generic on purpose: a
+     later conditional screen must bring its own flag instead of silently inheriting one of these
+     two, which is the trap #285 recorded when a screen was counted for everybody. */
+  const inFlow = (s: (typeof STEPS)[number]) =>
+    (s.key === "gaps" && state?.includes_gaps_step === true)
+    || (APPLICATION_KEYS.has(s.key) && state?.includes_application_steps === true);
   return STEPS.filter((s) => !s.conditional || inFlow(s) || s.key === current || s.key === state?.step);
 }

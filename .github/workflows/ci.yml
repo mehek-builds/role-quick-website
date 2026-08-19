@@ -147,6 +147,13 @@ jobs:
       - name: Start onboarding checklist walk
         run: npm run test:start-checklist
 
+      # The application sequence, walked end to end against a stubbed backend. It belongs in CI for
+      # the same reason it stubs: the last screen of that flow sends a real application, so the one
+      # place its behaviour can be checked on every push is against a stub that asserts the request
+      # rather than its effect.
+      - name: Application sequence walk
+        run: npm run test:start-application
+
       - name: Narrow viewport actions spec
         run: npm run test:narrow-viewport
 

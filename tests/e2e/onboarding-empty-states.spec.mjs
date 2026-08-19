@@ -71,19 +71,21 @@ after(async () => {
  * gained a confirmation: the forward-looking line is still there, below the receipt, as the
  * first-action prompt. The status text below is the sr-only live region, kept from this file's
  * original assertion and shortened with it. */
-test("all seven onboarding checkpoints render with a progress indicator", async () => {
+test("every onboarding checkpoint renders with a progress indicator", async () => {
   const checkpoints = [
-    /* Roles leads as of flow version 3, so the first three rows moved and the rest did not. */
-    ["focus", "What are you going after?", "Setup: step 1 of 7, Your roles"],
-    ["resume", "Start with your resume.", "Setup: step 2 of 7, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 3 of 7, Your impact"],
-    ["sponsorship", "Where can you work?", "Setup: step 4 of 7, Work visa"],
-    ["base", "One page, ready.", "Setup: step 5 of 7, Your one page"],
-    ["gaps", "A few details.", "Setup: step 6 of 7, A few details"],
+    /* Roles leads as of flow version 3, and the application sequence added six screens after the
+       setup ones, so the denominator is 13 rather than 7: a new student's flow really does contain
+       all of them now, and a rail still claiming seven would be describing a flow nobody walks. */
+    ["focus", "What are you going after?", "Setup: step 1 of 13, Your roles"],
+    ["resume", "Start with your resume.", "Setup: step 2 of 13, Your resume"],
+    ["impact", "Make your most recent work count.", "Setup: step 3 of 13, Your impact"],
+    ["sponsorship", "Where can you work?", "Setup: step 4 of 13, Work visa"],
+    ["base", "One page, ready.", "Setup: step 5 of 13, Your one page"],
+    ["gaps", "A few details.", "Setup: step 6 of 13, A few details"],
     /* Still 7, and the `done` fixture is the row that proves it: it reports NO outstanding gaps, so
        a denominator re-read from that list would drop to 6 here. Having been shown the screen is
        what the count follows, and that does not stop being true once the fields are answered. */
-    ["done", "Setup complete.", "Setup: step 7 of 7, Done"],
+    ["done", "Setup complete.", "Setup: step 13 of 13, Done"],
   ];
 
   for (const [step, heading, rail] of checkpoints) {
