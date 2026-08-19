@@ -19,7 +19,10 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { spawn } from "node:child_process";
-import { chromium } from "playwright";
+/* playwright-core, not playwright. Only the core package is a dependency here; the full package
+   resolves locally because something else in the tree hoists it, and it is simply absent after a
+   clean npm ci in CI. */
+import { chromium } from "playwright-core";
 
 const port = 3599;
 const ORIGIN = `http://127.0.0.1:${port}`;
