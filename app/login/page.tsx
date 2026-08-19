@@ -625,11 +625,11 @@ export default function Login() {
             </form>
             {!claimMode && (
               <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
-                {flow !== "signup" && (
-                  <button type="button" onClick={() => { setFlow("signup"); setError(null); }} className="text-brand-ink hover:underline">
-                    Create account
-                  </button>
-                )}
+                {/* CREATE ACCOUNT IS NOT IN THIS ROW ANY MORE. It shipped here as a 12px text
+                    link sharing a wrap row with "Forgot password?" and "Use an email code", which
+                    made the second-most-important act on the page look like a third recovery
+                    option. It is now its own panel under the card. This row is what it always
+                    should have been: the ways back in when the usual one fails. */}
                 {flow !== "signin" && (
                   <button type="button" onClick={() => { setFlow("signin"); setError(null); }} className="text-brand-ink hover:underline">
                     Sign in
@@ -779,6 +779,40 @@ export default function Login() {
           </p>
         )}
       </div>
+
+      {/* THE CREATE ACCOUNT TAB. Its own panel under the form card rather than a line inside it,
+          because the two acts on this screen are not the same size: signing in is one card's
+          worth of work for someone who already has an account, and creating one is the whole
+          reason a first-time visitor is here. As a text link in the footer row it was set at
+          12px beside "Forgot password?", which is the size the system uses for recovery.
+
+          SECONDARY, never primary, and that is the colour law rather than a preference: blue is
+          the one human action per viewport (DESIGN.md, 2026-07-04) and on this card that action
+          is the submit button. A second blue button would say two things are the point.
+
+          Same card grammar as the panel above it (rounded-card, 1px hairline) on the warm
+          striping token, so it reads as a related-but-separate surface rather than a piece of
+          the form that fell off. It does NOT carry the Terms notice: this button changes which
+          flow the card is showing, it does not create anything. The notice is rendered on the
+          signup screen itself, before the controls that actually form the agreement.
+
+          Not shown on the signup screen (nothing to switch to) or in claim mode, where the
+          account is already being made. Credentials step only: once a code has been sent, the
+          card is mid-task and offering a different flow underneath it is an exit, not an option. */}
+      {step === "credentials" && !claimMode && flow !== "signup" && (
+        <div className="mt-4 w-full max-w-sm rounded-card border border-border bg-surface-alt px-8 py-6 text-center">
+          <p className="text-sm leading-6 text-muted">New to Litos?</p>
+          <Button
+            type="button"
+            variant="secondary"
+            block
+            className="mt-3"
+            onClick={() => { setFlow("signup"); setError(null); }}
+          >
+            Create account
+          </Button>
+        </div>
+      )}
 
       {/* "One account for everything. Sign in to see the emails and resumes
           Litos already made for you." came off 2026-07-28. Three footnotes
