@@ -811,8 +811,42 @@ test("the walk: every step in order, each one advancing the rail by one", async 
        reads is the string that addresses it - the property WCAG 2.5.3 is about, and one an
        aria-label would silently break while this line kept passing. */
     const locationField = page.getByLabel("Where do you want to work?");
-    await locationField.fill("Dubai, London");
+
+    /* TWO PLACES, ADDED ONE AT A TIME, because the first version of this field could not do it.
+       It was one comma-separated text box with a datalist hung off it, and a datalist REPLACES the
+       input value when an option is picked - so choosing a second city erased the first. Adding
+       two and asserting BOTH survive is the regression this walk exists to catch; a single-place
+       walk passed against the broken control. */
+    await locationField.fill("Dubai");
+    await locationField.press("Enter");
+    await locationField.fill("London");
+    await locationField.press("Enter");
+    for (const place of ["Dubai", "London"]) {
+      assert.equal(
+        await page.getByRole("button", { name: place, exact: true }).count(),
+        1,
+        `adding a second place dropped "${place}"`,
+      );
+    }
+    /* And the field is empty again, so the next place is typed rather than appended to the last. */
+    assert.equal(await locationField.inputValue(), "", "the location field kept the place it just added");
+
+    /* A THIRD PLACE LEFT SITTING IN THE BOX, never committed with Enter or Add. It is on screen
+       and plainly meant, and pressing Continue straight after typing is the likelier order - so it
+       has to be saved, not dropped. */
+    await locationField.fill("Berlin, Germany");
+
     await rolesContinue.click();
+
+    /* THE WRITE, not just the chips. One entry per place is the whole point: the old field split
+       on commas, and 122 of the 149 suggested places have a comma in the name, so picking
+       "San Francisco, CA" saved TWO locations and the stray "CA" then substring-matched Chicago,
+       Cambridge and Vancouver on the board. */
+    assert.deepEqual(
+      savedTargeting.locations,
+      ["Dubai", "London", "Berlin, Germany"],
+      "the roles screen dropped a place, or split one on its comma",
+    );
 
     /* ── Step 2, Your resume ───────────────────────────────────────────────*/
     visited.push(await screen("Your resume"));
