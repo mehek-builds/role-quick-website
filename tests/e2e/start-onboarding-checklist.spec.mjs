@@ -634,12 +634,17 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
        that should have waited, and there must be none. */
     const fileInputs = await page.locator("input[type=file]").count();
     assert.equal(fileInputs, 0, "the first screen asks for a file before asking what the student wants");
-    /* VISIBLE fields, because the criterion is about what the screen ASKS for and a collapsed
-       optional disclosure is not an ask. The roles screen keeps locations, remote work and
-       recruiting periods inside a shut <details> labelled OPTIONAL; their inputs are in the DOM
-       the whole time, so a raw count would fail a screen that is behaving correctly. Scoped this
-       way the assertion also gets STRICTER in the direction that matters: move one of those fields
-       into the open and this fails, which is exactly when it should. */
+    /* VISIBLE fields, because the criterion is about what the screen ASKS for and a field that has
+       not been revealed yet is not an ask. The roles screen keeps categories and recruiting periods
+       inside a shut <details> labelled OPTIONAL, and holds the location question behind the same
+       gate as the titles, so a COLD first screen is taps only. Their inputs are in the DOM or
+       reachable the moment two chips are tapped, so a raw count would fail a screen that is
+       behaving correctly. Scoped this way the assertion also gets STRICTER in the direction that
+       matters: show one of them on arrival and this fails, which is exactly when it should.
+
+       Location stopped being optional on 2026-08-19 and is now a required answer on this screen
+       (below, in the walk). That does not weaken this criterion: it is revealed after the field and
+       the stage, not before them, so nothing is asked ahead of the answer that makes it specific. */
     const prematureFields = await page.locator(
       "main input[type=email]:visible, main input[type=tel]:visible, main input[type=number]:visible, "
       + "main input[type=text]:not(#additional-role):visible, main input:not([type]):not(#additional-role):visible",
@@ -789,6 +794,24 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     await softwareEngineer.click();
 
     const rolesContinue = page.locator("button", { hasText: "Continue" });
+
+    /* WHERE IS A REQUIRED ANSWER NOW, and this proves the gate rather than the label. Location is
+       a hard filter on the board, so a blank one is not a neutral default - it is a student who
+       asked for the whole world by accident. Continue stays disabled until they answer, and the
+       screen says which answer is missing. */
+    await assert.doesNotReject(rolesContinue.waitFor({ timeout: 5000 }));
+    assert.equal(await rolesContinue.isDisabled(), true, "Continue is offered before the location question is answered");
+    assert.match(
+      await page.locator("main").innerText(),
+      /where do you want to work/i,
+      "the roles screen never asks where",
+    );
+
+    /* By the VISIBLE label. The field is named by its own <label htmlFor>, so the string a student
+       reads is the string that addresses it - the property WCAG 2.5.3 is about, and one an
+       aria-label would silently break while this line kept passing. */
+    const locationField = page.getByLabel("Where do you want to work?");
+    await locationField.fill("Dubai, London");
     await rolesContinue.click();
 
     /* ── Step 2, Your resume ───────────────────────────────────────────────*/

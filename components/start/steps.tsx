@@ -26,6 +26,7 @@ import {
   type ConsentGrantField,
 } from "@/lib/consent-acknowledgement";
 import { STORE_URL } from "@/lib/config";
+import { REMOTE_LOCATION, locationSuggestions } from "@/lib/locations";
 import {
   CATEGORIES,
   ROLE_TYPES,
@@ -40,6 +41,12 @@ import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
 import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
+
+/* Computed once at module load, not per render. The argument is a constant, so the result is
+   invariant - and this list is rendered as ~150 <option> nodes beside an input that re-renders on
+   every keystroke, which is the one place rebuilding it would actually be paid for. The Account
+   screen recomputes because its argument is the live /jobs/facets response; this one cannot be. */
+const LOCATION_OPTIONS = locationSuggestions([]);
 
 /* ------------------------------------------------------------------- 00 FOCUS */
 
@@ -159,6 +166,12 @@ function FocusForm({
   });
   const [locations, setLocations] = useState(() => (saved?.locations ?? []).join(", "));
   const [remoteOnly, setRemoteOnly] = useState(() => saved?.remote_only ?? false);
+  /* Parsed once and read by BOTH the gate and the PUT. Two copies of this split drift, and the
+     shape they drift into is a Continue button that enables on a value the write then drops. */
+  const chosenLocations = useMemo(
+    () => locations.split(",").map((value) => value.trim()).filter(Boolean),
+    [locations],
+  );
   const availablePeriods = useMemo(() => periodsFor(gradYear), [gradYear]);
   const [primaryPeriod, setPrimaryPeriod] = useState<string | null>(() => saved?.primary_period ?? defaultPrimary(gradYear));
   const [backupPeriod, setBackupPeriod] = useState<string | null>(() => saved?.backup_period ?? defaultBackup(gradYear));
@@ -172,6 +185,10 @@ function FocusForm({
      cannot, because titles are stored stage-free and cleanTitle strips "intern" off them - but it
      is half of what makes the offer specific, so the screen waits for it. */
   const ready = fields.length > 0 && roleTypes.length > 0;
+
+  /* The location answer, in the one form the rest of the screen asks about. Either half is a real
+     answer to "where"; neither is the same as leaving it blank. */
+  const hasPlace = chosenLocations.length > 0 || remoteOnly;
 
   /* Saved categories, plus the ones the chosen fields imply. Union, never replacement: the screen
      still has no category control, so it must not be able to remove a category the student cannot
@@ -233,7 +250,7 @@ function FocusForm({
          must not be able to remove a category the student cannot see. See lib/onboarding-role-inference.ts. */
       await putTargeting({
         ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories: effectiveCategories }),
-        locations: locations.split(",").map((value) => value.trim()).filter(Boolean),
+        locations: chosenLocations,
         remote_only: remoteOnly,
         primary_period: primaryPeriod,
         backup_period: backupPeriod,
@@ -400,11 +417,58 @@ function FocusForm({
         )}
       </div>
 
+      {/* WHERE IS NOT OPTIONAL, and it sat behind a closed disclosure labelled "Optional" until
+          2026-08-19. Location is a hard filter on the board - the matcher tests it against the
+          posting's location string - so an unanswered one is not a neutral default, it is a
+          student who quietly asked for the whole world and then has to read past every posting
+          they cannot take. It is a one-line answer; it belongs in the flow with the other three.
+
+          Ticking "remote only" ANSWERS this question, which is why the gate below accepts either.
+          The checkbox hides every on-site posting, so a place would have nothing left to narrow,
+          and demanding a city from someone who just said they want no city is a dead end with no
+          correct way out. */}
+      {/* Held behind the same gate as the titles: the screen asks what before it asks where, and
+          on arrival it is still taps only. */}
+      {ready && (
+      <div className="mb-7">
+        {/* htmlFor + aria-describedby rather than a wrapping label with an aria-label on the input.
+            An aria-label REPLACES the accessible name, so naming this "Preferred locations" while
+            the student reads "Where do you want to work?" leaves a voice-control user saying the
+            words on screen and matching nothing (WCAG 2.5.3), and hands VoiceOver a name that
+            appears nowhere. The hint is a description, not part of the name, which is the split
+            ACCESSIBILITY.md asks every control to state. */}
+        <label htmlFor="preferred-locations" className="block text-sm text-ink">Where do you want to work?</label>
+        <p id="preferred-locations-hint" className="mt-1 text-xs leading-5 text-muted">Separate cities, countries, or regions with commas. Anywhere in the world works, and so does &quot;{REMOTE_LOCATION}&quot;.</p>
+        <input
+          id="preferred-locations"
+          value={locations}
+          onChange={(event) => setLocations(event.target.value)}
+          list="start-location-options"
+          placeholder="Dubai, London, New York"
+          aria-describedby="preferred-locations-hint"
+          className="mt-2 min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        />
+        {/* The board's own cities are US-heavy on their own, which reads to a student in Dubai
+            or Bangalore as "your city is not an option". Same merged list the Account screen
+            offers. Free text still works; this only decides what is SUGGESTED. */}
+        <datalist id="start-location-options">
+          {LOCATION_OPTIONS.map((location) => <option key={location} value={location} />)}
+        </datalist>
+        <label className="mt-3 flex min-h-11 items-center gap-3 text-sm text-ink">
+          <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
+          Show remote jobs only
+        </label>
+        {remoteOnly && chosenLocations.length > 0 && (
+          <p className="mt-1.5 text-xs leading-5 text-muted">While this is on, only remote jobs are shown and the places above are ignored.</p>
+        )}
+      </div>
+      )}
+
       <details className="mb-7 overflow-hidden rounded-card border border-border bg-surface">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-4 px-4 py-3 marker:text-muted sm:px-5">
           <span>
             <span className="block text-sm font-medium text-ink">More job preferences</span>
-            <span className="mt-0.5 block text-xs leading-5 text-muted">Locations, remote work, categories, and recruiting periods.</span>
+            <span className="mt-0.5 block text-xs leading-5 text-muted">Categories and recruiting periods.</span>
           </span>
           <span className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted">Optional</span>
         </summary>
@@ -434,20 +498,6 @@ function FocusForm({
               </p>
             )}
           </div>
-          <label className="block">
-            <span className="text-sm text-ink">Preferred locations</span>
-            <span className="mt-1 block text-xs leading-5 text-muted">Separate cities, countries, or regions with commas. Leave blank for every location allowed by the remote setting below.</span>
-            <input
-              value={locations}
-              onChange={(event) => setLocations(event.target.value)}
-              placeholder="Dubai, London, New York"
-              className="mt-2 min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-            />
-          </label>
-          <label className="flex min-h-11 items-center gap-3 text-sm text-ink">
-            <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
-            Show remote jobs only
-          </label>
           <div>
             <p className="text-sm text-ink">Main recruiting period</p>
             <div className="mt-2.5 flex flex-wrap gap-2">
@@ -467,13 +517,17 @@ function FocusForm({
         <p role="status" className="mb-4 text-xs leading-5 text-warn">Choose at least one job category to continue.</p>
       )}
 
+      {ready && !hasPlace && (
+        <p role="status" className="mb-4 text-xs leading-5 text-warn">Say where you want to work, or tick &quot;Show remote jobs only&quot;.</p>
+      )}
+
       <div className="flex items-center gap-3">
         {/* `!ready` is in here for a reason a browser found and no unit test would have.
             Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
             student who changed their mind about the field could press Continue and commit titles
             the screen had stopped drawing. Continue never commits anything invisible: while the
             offer is withheld, so is the button. */}
-        <PrimaryButton onClick={() => void save()} disabled={busy || !ready || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0}>
+        <PrimaryButton onClick={() => void save()} disabled={busy || !ready || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0 || !hasPlace}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />

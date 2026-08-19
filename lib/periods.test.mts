@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CATEGORIES, defaultBackup, defaultPrimary, periodsFor, targetingHeadline } from "./periods.ts";
+import { CATEGORIES, IMMEDIATE_PERIOD, defaultBackup, defaultPrimary, periodLabel, periodsFor, targetingHeadline } from "./periods.ts";
 
 const august2026 = new Date("2026-08-02T12:00:00Z");
 
@@ -16,7 +16,23 @@ test("the primary and backup defaults are always different", () => {
 });
 
 test("keeps the visible timing choices to one glance", () => {
-  assert.ok(periodsFor(2032, august2026).length <= 8);
+  // Eight terms is the cap. "Immediately" sits outside it, so offering it costs no seasonal
+  // choice - the bug this guards is a row that silently drops the student's graduation term to
+  // make room for a chip that is not a term at all.
+  const offered = periodsFor(2032, august2026);
+  assert.ok(offered.filter((p) => p.slug !== IMMEDIATE_PERIOD).length <= 8);
+  assert.equal(offered.length, 9);
+});
+
+test("immediately is offered first, and never chosen for the student", () => {
+  assert.equal(periodsFor(2028, august2026)[0].slug, IMMEDIATE_PERIOD);
+  assert.equal(periodLabel(IMMEDIATE_PERIOD), "Immediately");
+  // A default is a guess about a term. Availability is not ours to guess, so both defaults stay
+  // seasonal no matter the graduation year.
+  for (const gradYear of [0, 2026, 2027, 2028, 2030, 2032]) {
+    assert.notEqual(defaultPrimary(gradYear, august2026), IMMEDIATE_PERIOD);
+    assert.notEqual(defaultBackup(gradYear, august2026), IMMEDIATE_PERIOD);
+  }
 });
 
 test("a saved title is what the header says", () => {

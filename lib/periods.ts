@@ -10,7 +10,29 @@
  */
 
 export type Season = "spring" | "summer" | "fall" | "winter";
-export type Period = { slug: string; label: string; season: Season; year: number };
+export type Period = { slug: string; label: string; season: Season | null; year: number | null };
+
+/* The one answer that is not a term: "I can start now."
+ *
+ * It is a real saved answer, not a blank. Null on primary_period means the question was never
+ * put; this means it was, and the answer is that no cycle constrains them. The backend accepts
+ * this exact string in routes/targeting.ts (PERIOD_RE) and reads it in lib/jobPreferences.ts,
+ * where it switches the recruiting-period gate OFF instead of joining the allowed set - a
+ * student available now must not have Fall postings hidden by a season they also ticked.
+ *
+ * season and year are null on this one, which is why both are nullable above. Nothing sorts or
+ * compares it: it is prepended after the seasonal window is computed, so it cannot fall out of
+ * the eight-chip cap and cannot be dropped for having already started. */
+export const IMMEDIATE_PERIOD = "immediately";
+const IMMEDIATE: Period = { slug: IMMEDIATE_PERIOD, label: "Immediately", season: null, year: null };
+
+/* A period that IS a term. "Immediately" has no season and no year, so anything that sorts or
+   compares periods works on this narrower type and drops it first. */
+type SeasonalPeriod = Period & { season: Season; year: number };
+
+function seasonalPeriods(gradYear: number, now: Date): SeasonalPeriod[] {
+  return periodsFor(gradYear, now).filter((p): p is SeasonalPeriod => p.slug !== IMMEDIATE_PERIOD);
+}
 
 const SEASONS: { season: Season; label: string; startMonth: number }[] = [
   // startMonth is roughly when the term begins, used only for ordering and for deciding what
@@ -25,6 +47,7 @@ export function periodSlug(season: Season, year: number): string {
 }
 
 export function periodLabel(slug: string): string {
+  if (slug === IMMEDIATE_PERIOD) return IMMEDIATE.label;
   const [season, year] = slug.split("-");
   const s = SEASONS.find((x) => x.season === season);
   return s ? `${s.label} ${year}` : slug;
@@ -37,8 +60,10 @@ function ordinal(season: Season, year: number): number {
 }
 
 /**
- * Every period worth offering: from the next one that has not started, through the term the
- * student graduates in. Capped at 8 so the chip row stays one glance rather than a wall.
+ * Every period worth offering: "Immediately", then from the next term that has not started
+ * through the term the student graduates in. The seasonal terms are capped at 8 so the chip row
+ * stays one glance rather than a wall; "Immediately" sits outside that cap, so the row is at most
+ * nine chips.
  *
  * `now` is injectable because a function whose output silently changes with the wall clock is
  * untestable, and this one decides what the student sees pre-selected.
@@ -49,7 +74,7 @@ export function periodsFor(gradYear: number, now: Date = new Date()): Period[] {
   // "Spring 0" is worse than offering a sensible two-year window from today.
   const endYear = gradYear && gradYear > now.getFullYear() ? gradYear : now.getFullYear() + 2;
 
-  const out: Period[] = [];
+  const out: SeasonalPeriod[] = [];
   for (let year = now.getFullYear(); year <= endYear; year++) {
     for (const s of SEASONS) {
       // Already started = not a thing you can still apply for.
@@ -57,7 +82,10 @@ export function periodsFor(gradYear: number, now: Date = new Date()): Period[] {
       out.push({ slug: periodSlug(s.season, year), label: `${s.label} ${year}`, season: s.season, year });
     }
   }
-  return out.sort((a, b) => ordinal(a.season, a.year) - ordinal(b.season, b.year)).slice(0, 8);
+  const terms = out.sort((a, b) => ordinal(a.season, a.year) - ordinal(b.season, b.year)).slice(0, 8);
+  /* Prepended AFTER the cap, so offering it costs no seasonal choice, and first because it is the
+     soonest answer on a row that otherwise reads earliest-to-latest. */
+  return [IMMEDIATE, ...terms];
 }
 
 /**
@@ -73,7 +101,9 @@ export function periodsFor(gradYear: number, now: Date = new Date()): Period[] {
  * student hunting full-time.
  */
 export function defaultPrimary(gradYear: number, now: Date = new Date()): string | null {
-  const periods = periodsFor(gradYear, now);
+  /* Seasonal terms only. "Immediately" is offered, never pre-selected: it is a statement about
+     the student's own availability, and guessing it for them is the one wrong kind of default. */
+  const periods = seasonalPeriods(gradYear, now);
   if (periods.length === 0) return null;
   const summersBeforeGrad = periods.filter((p) => p.season === "summer" && (!gradYear || p.year < gradYear));
   return (summersBeforeGrad[0] ?? periods[0]).slug;
@@ -84,7 +114,7 @@ export function defaultPrimary(gradYear: number, now: Date = new Date()): string
  * later - a backup you apply to AFTER your main has already closed is not a backup.
  */
 export function defaultBackup(gradYear: number, now: Date = new Date()): string | null {
-  const periods = periodsFor(gradYear, now);
+  const periods = seasonalPeriods(gradYear, now);
   const primary = defaultPrimary(gradYear, now);
   const i = periods.findIndex((p) => p.slug === primary);
   if (i > 0) return periods[i - 1].slug;
