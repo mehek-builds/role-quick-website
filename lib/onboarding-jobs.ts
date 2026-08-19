@@ -22,16 +22,35 @@ function tokens(value: string): Set<string> {
   );
 }
 
+/* One branch per stage, and NO default arm.
+ *
+ * There used to be a trailing `return !internship && !coOp && !newGrad` standing in for full-time,
+ * which read as a sensible default right up until the stage list grew: part-time, contract,
+ * apprenticeship and fellowship would each have fallen into it, so a student who asked for
+ * contract work would have had every ordinary full-time posting scored as a stage match. The
+ * fall-through is now `false` - an unrecognised stage claims nothing rather than claiming
+ * everything - and full-time states its own condition. */
 function matchesType(title: string, roleTypes: RoleType[]): boolean {
   if (roleTypes.length === 0) return false;
   const internship = /\bintern(ship)?\b/i.test(title);
   const coOp = /\bco-?op\b/i.test(title);
   const newGrad = /\b(new grad|graduate|entry.level)\b/i.test(title);
+  const apprenticeship = /\bapprentice(ship)?\b/i.test(title);
+  const fellowship = /\bfellow(ship)?\b/i.test(title);
+  const partTime = /\bpart.?time\b/i.test(title);
+  const contract = /\b(contract|contractor|temporary|freelance)\b/i.test(title);
   return roleTypes.some((type) => {
     if (type === "internship") return internship;
     if (type === "co-op") return coOp;
     if (type === "new-grad") return newGrad;
-    return !internship && !coOp && !newGrad;
+    if (type === "apprenticeship") return apprenticeship;
+    if (type === "fellowship") return fellowship;
+    if (type === "part-time") return partTime;
+    if (type === "contract") return contract;
+    // Unchanged: an apprenticeship or a fellowship is still an ordinary full-time job here, the
+    // same reading the backend's matchingRoleType keeps.
+    if (type === "full-time") return !internship && !coOp && !newGrad && !partTime && !contract;
+    return false;
   });
 }
 

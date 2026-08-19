@@ -38,7 +38,7 @@ import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { JOB_TITLES } from "@/lib/job-titles";
-import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
+import { FIELDS, categoriesForFields, categoriesForRoles, fieldsForFocus, focusPatch, focusSeed, inferResumeTargeting, noStageSupply, thinStages, titlesForFocus, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 
 /* ------------------------------------------------------------------- 00 FOCUS */
@@ -154,9 +154,32 @@ function FocusForm({
      Seeded from SAVED CATEGORIES first and from the resume guess only where nothing is stored,
      which is the same direction focusSeed takes for titles: a stated answer outranks a guess. */
   const [fields, setFields] = useState<string[]>(() => {
-    const stored = fieldsForCategories(saved?.categories);
-    return stored.length > 0 ? stored : fieldsForCategories(guess?.categories);
+    /* fieldsForFocus, not fieldsForCategories: the field list is nineteen long now and nine of
+       those sit in the `other` category, so reading a returning student's fields out of their
+       categories alone would light up nine chips they never picked. It reads their saved TITLES
+       first and falls back to the category only when none of them matches an offer. */
+    const stored = fieldsForFocus(saved);
+    if (stored.length > 0) return stored;
+    /* The guess gets read the same way, ROLES FIRST, and for the same reason. Handing it only its
+       categories put five fields on screen pre-selected for a plain software resume - software,
+       infrastructure, support (all three are software-engineering) plus whatever else it matched -
+       and thirty suggested titles under them. Its roles are real title strings drawn from these
+       very lists, so they name the one or two fields it actually meant. */
+    return fieldsForFocus({ categories: guess?.categories ?? null, titles: guess?.roles ?? null, role_types: null });
   });
+  /* A field the student TYPED rather than tapped.
+     Kept apart from `fields` because it is a different kind of answer: a tapped field is an id
+     with a curated, measured title list behind it, and a typed one is a word. The word is saved as
+     a TITLE - the only free-text channel the backend's targeting schema accepts, and the one the
+     board actually reads, as an ILIKE against the posting title - so typing "Biotech" here means
+     "show me postings whose title says biotech", which is what someone typing it wants.
+     It does not come back as a chip in this row on a return visit, and nothing can make it: it was
+     stored as a title, so a title is what comes back. It reappears in the titles block below,
+     already selected, which is the honest place for it because that is what was saved. */
+  const [customFields, setCustomFields] = useState<string[]>([]);
+  const [newField, setNewField] = useState("");
+  const [fieldMenuOpen, setFieldMenuOpen] = useState(false);
+  const [activeFieldIndex, setActiveFieldIndex] = useState(0);
   const [locations, setLocations] = useState(() => (saved?.locations ?? []).join(", "));
   const [remoteOnly, setRemoteOnly] = useState(() => saved?.remote_only ?? false);
   const availablePeriods = useMemo(() => periodsFor(gradYear), [gradYear]);
@@ -168,17 +191,37 @@ function FocusForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  /* Both answers are required before a title is offered. The stage does not filter the list - it
+  /* Both answers are required before a title is SUGGESTED. The stage does not filter the list - it
      cannot, because titles are stored stage-free and cleanTitle strips "intern" off them - but it
-     is half of what makes the offer specific, so the screen waits for it. */
-  const ready = fields.length > 0 && roleTypes.length > 0;
+     is half of what makes the offer specific, so the suggestions wait for it.
+     What no longer waits is the box the student types into, or the list of what they have already
+     chosen. Withholding those made the screen unanswerable for anyone whose job is not one of the
+     nineteen fields: they had to tap a field they did not mean in order to reach the input where
+     they could say what they did. A suggestion is a convenience and is still earned; the ask
+     itself is open from the first paint. */
+  const ready = fields.length + customFields.length > 0 && roleTypes.length > 0;
 
   /* Saved categories, plus the ones the chosen fields imply. Union, never replacement: the screen
      still has no category control, so it must not be able to remove a category the student cannot
      see (the rule focusPatch states for the write, applied here to the gate so the two agree). */
   const effectiveCategories = useMemo(
-    () => Array.from(new Set([...categories, ...categoriesForFields(fields)])),
-    [categories, fields],
+    () => Array.from(new Set([
+      ...categories,
+      ...categoriesForFields(fields),
+      // A typed field has no category of its own; `other` is the bucket the closed list keeps for
+      // exactly that, and it is what focusPatch would derive for the title it becomes.
+      ...(customFields.length > 0 ? ["other"] : []),
+      /* The title-derived source is what keeps the gate and the write agreeing now that a student
+         can reach Continue on a typed title alone. focusPatch has always run categoriesForRoles
+         over the selection with an "other" fallback, so the WRITE was never going to be
+         category-less; before this line the GATE thought it would be, and blocked Continue behind
+         a warning that pointed at a control inside a collapsed <details>. Same call, same
+         fallback, same answer on both sides. */
+      ...(selectedTitles.length > 0
+        ? categoriesForRoles(selectedTitles, saved?.categories?.length ? [] : ["other"])
+        : []),
+    ])),
+    [categories, fields, customFields, selectedTitles, saved],
   );
 
   /* The offer, plus anything already selected that the offer does not contain.
@@ -186,10 +229,30 @@ function FocusForm({
      they are not currently showing, and a list that dropped it would leave them unable to see or
      deselect a title Continue is about to commit. */
   const offered = useMemo(() => {
-    const derived = ready ? titlesForFields(fields) : [];
+    /* titlesForFocus, not titlesForFields: the same titles, ordered by how many live roles the
+       board has for each AT THE CHOSEN STAGE. A quant student who says "internship" meets
+       Quantitative Researcher (12 live internships) and Trader (11) first instead of Financial
+       Analyst (0), and the order is the recommendation - most people take one of the first few. */
+    const derived = ready ? titlesForFocus(fields, roleTypes) : [];
     const extra = selectedTitles.filter((title) => !derived.some((item) => item.toLowerCase() === title.toLowerCase()));
     return [...derived, ...extra];
-  }, [ready, fields, selectedTitles]);
+  }, [ready, fields, roleTypes, selectedTitles]);
+
+  /* The two shortages worth saying out loud, and they are not the same shortage.
+     `thin` is about the whole board - some stages barely exist anywhere, and a student who picks
+     one should hear that from the market rather than conclude their answer was wrong.
+     `broadened` is about this combination - internship is 577 roles board-wide and close to none
+     of them are in marketing, accounting, legal or writing, so "there are internships" and "there
+     are internships for you" are different answers and only the second one is useful here. */
+  const thin = useMemo(() => thinStages(roleTypes), [roleTypes]);
+  const broadened = useMemo(
+    /* Only one of the two ever renders, and `thin` wins. Both are true at once for a marketing
+       student who picks Fellowship - 3 on the whole board, none of them in marketing - but two
+       sentences in a row saying "there is very little of this" is one sentence and some noise, and
+       the board-wide number is the one that tells them the shortage is not about their answer. */
+    () => ready && thin.length === 0 && noStageSupply(fields, roleTypes),
+    [ready, thin, fields, roleTypes],
+  );
 
   const customMatches = useMemo(() => {
     const needle = newTitle.trim().toLowerCase();
@@ -203,7 +266,45 @@ function FocusForm({
     setFields((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  useEffect(() => setActiveMatchIndex(0), [newTitle]);
+  /* The suggestions under the field box: the fields not already chosen, narrowed by what has been
+     typed. Same shape as `customMatches` below, and deliberately so - two boxes on one screen that
+     behave differently are two things to learn. */
+  const fieldMatches = useMemo(() => {
+    const needle = newField.trim().toLowerCase();
+    return FIELDS
+      .filter((field) => !fields.includes(field.id))
+      .filter((field) => !needle || field.label.toLowerCase().includes(needle))
+      .slice(0, 6);
+  }, [fields, newField]);
+
+  /* Typing the name of a field that already exists selects it rather than storing the word.
+     Someone who types "Design" means the Design chip, and saving "Design" as a job title instead
+     would search postings for the word design and quietly ignore the five measured titles sitting
+     behind that chip. Matched on the label, case-insensitively, because the label is what they can
+     see; ids never appear on screen. */
+  function addField(value: string) {
+    const clean = value.trim();
+    if (!clean) return;
+    const known = FIELDS.find((field) => field.label.toLowerCase() === clean.toLowerCase());
+    if (known) {
+      if (!fields.includes(known.id)) setFields((current) => [...current, known.id]);
+    } else {
+      setCustomFields((current) =>
+        current.some((item) => item.toLowerCase() === clean.toLowerCase()) || current.length >= 12
+          ? current
+          : [...current, clean],
+      );
+    }
+    setNewField("");
+    setActiveFieldIndex(0);
+    setFieldMenuOpen(false);
+  }
+
+  /* The highlighted suggestion resets where the query changes, in the handlers below, rather than
+     in an effect watching the query. The effect form was here first and react-hooks flags it
+     (set-state-in-effect): it renders the list once against the old index and then again against
+     0, and the first of those two paints has a row highlighted that the new query may not even
+     contain. Setting both together is one render and cannot disagree with itself. */
 
   function toggleTitle(title: string) {
     setSelectedTitles((current) =>
@@ -222,6 +323,7 @@ function FocusForm({
         : [...current, clean],
     );
     setNewTitle("");
+    setActiveMatchIndex(0);
     setRoleMenuOpen(false);
   }
 
@@ -231,8 +333,17 @@ function FocusForm({
     try {
       /* Partial by omission, and additive on categories. This screen shows titles and one type; it
          must not be able to remove a category the student cannot see. See lib/onboarding-role-inference.ts. */
+      /* A typed field is written as a title, beside the tapped ones. It is not a second kind of
+         record and there is nowhere for it to be one: `categories` and `role_types` are closed
+         enums the backend validates, and `titles` is the free-text array the board reads. Deduped
+         case-insensitively against what is already selected so typing a field whose name someone
+         also picked as a title does not save the same word twice. */
+      const titles = [...selectedTitles];
+      for (const field of customFields) {
+        if (!titles.some((title) => title.toLowerCase() === field.toLowerCase())) titles.push(field);
+      }
       await putTargeting({
-        ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories: effectiveCategories }),
+        ...focusPatch(saved, { titles, roleTypes, categories: effectiveCategories }),
         locations: locations.split(",").map((value) => value.trim()).filter(Boolean),
         remote_only: remoteOnly,
         primary_period: primaryPeriod,
@@ -271,7 +382,107 @@ function FocusForm({
               onClick={() => toggleField(field.id)}
             />
           ))}
+          {/* Typed fields sit in the same row as the tapped ones, on, and remove on a click. They
+              are not visually distinguished, because the difference between them is a storage
+              detail and the sentence below already states what typing does. What matters is that
+              they are here at all: a word the screen accepted and then did not draw would be a
+              word Continue commits invisibly. */}
+          {customFields.map((field) => (
+            <Chip
+              key={`custom-${field.toLowerCase()}`}
+              label={field}
+              on
+              onClick={() => setCustomFields((current) => current.filter((item) => item !== field))}
+            />
+          ))}
         </div>
+
+        <div
+          className="relative mt-4 max-w-sm"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setFieldMenuOpen(false);
+          }}
+        >
+          <label htmlFor="additional-field" className="text-xs text-muted">Add another field</label>
+          <div className="mt-1.5 flex gap-2">
+            <input
+              id="additional-field"
+              value={newField}
+              onChange={(event) => {
+                setNewField(event.target.value);
+                setActiveFieldIndex(0);
+                setFieldMenuOpen(true);
+              }}
+              onFocus={() => setFieldMenuOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addField(fieldMenuOpen && fieldMatches[activeFieldIndex] ? fieldMatches[activeFieldIndex].label : newField);
+                }
+                if (event.key === "Escape") setFieldMenuOpen(false);
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setFieldMenuOpen(true);
+                  setActiveFieldIndex((current) => Math.min(current + 1, Math.max(0, fieldMatches.length - 1)));
+                }
+                if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActiveFieldIndex((current) => Math.max(0, current - 1));
+                }
+              }}
+              placeholder="Type any field or industry"
+              maxLength={80}
+              role="combobox"
+              aria-expanded={fieldMenuOpen}
+              aria-controls="additional-field-options"
+              aria-activedescendant={fieldMenuOpen && fieldMatches[activeFieldIndex] ? `additional-field-option-${activeFieldIndex}` : undefined}
+              autoComplete="off"
+              className="min-h-[44px] min-w-0 flex-1 rounded-inner border border-control-border bg-white px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+            />
+            <button
+              type="button"
+              onClick={() => addField(newField)}
+              disabled={!newField.trim()}
+              className="min-h-[44px] rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+          {fieldMenuOpen && fieldMatches.length > 0 && (
+            <ul
+              id="additional-field-options"
+              role="listbox"
+              className="absolute inset-x-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-inner border border-border bg-white py-1 shadow-overlay"
+            >
+              {fieldMatches.map((field, index) => (
+                <li
+                  key={field.id}
+                  id={`additional-field-option-${index}`}
+                  role="option"
+                  aria-selected={index === activeFieldIndex}
+                  onPointerDown={(event) => {
+                    event.preventDefault();
+                    addField(field.label);
+                  }}
+                  className={`cursor-pointer px-4 py-2 text-sm hover:text-ink ${index === activeFieldIndex ? "bg-surface-alt text-ink" : "text-muted hover:bg-surface-alt"}`}
+                >
+                  {field.label}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {/* Said only once it can be true. A field that is one of the nineteen carries a measured
+            list of titles behind it; a field nobody listed is one word, and one word is all Litos
+            can search for. Promising more would be the difference between the two chips in the row
+            above, which is the thing a student cannot see. */}
+        {customFields.length > 0 && (
+          <p className="mt-2 text-xs leading-5 text-muted">
+            Litos looks for {customFields.length === 1 ? "that word" : "those words"} in job titles.
+            Pick a listed field too if you want its suggested jobs.
+          </p>
+        )}
       </div>
 
       <div className="mb-7">
@@ -291,22 +502,29 @@ function FocusForm({
             );
           })}
         </div>
+        {/* Said with a number, because a number is the only version of this a student can act on.
+            Four of the eight stages are genuinely rare on this board - apprenticeship 4 roles,
+            fellowship 3, co-op 16, part-time 31, all measured 2026-08-19 - and a chip that offers
+            a stage the board almost does not carry is the empty-page failure one level up from the
+            one the title list already guards against. Not a warning and not a disabled chip: the
+            student may want exactly that, and Litos widens the board rather than showing nothing
+            (see relax_targeting in the backend). It just should not be a surprise. */}
+        {thin.length > 0 && (
+          <p className="mt-2.5 text-xs leading-5 text-muted">
+            {thin.map(({ stage, live }) => `${ROLE_TYPES.find((r) => r.slug === stage)?.label ?? stage}: ${live} live`).join(", ")}
+            {" "}on the board right now. Litos will show the closest matches around it.
+          </p>
+        )}
       </div>
 
       <div className="mb-7">
         <p className="text-sm text-ink">Jobs that fit</p>
-        {!ready ? (
-          /* Not a disabled control and not an empty gap: a sentence saying which answer is still
-             missing. The screen asks in an order, so it owes the student the reason it is waiting. */
-          <p className="mt-2.5 text-sm text-muted">
-            {fields.length === 0 && roleTypes.length === 0
-              ? "Pick a field and a stage and Litos will suggest the titles that fit."
-              : fields.length === 0
-                ? "Pick a field and Litos will suggest the titles that fit."
-                : "Pick a stage and Litos will suggest the titles that fit."}
-          </p>
-        ) : (
-        <>
+        {/* THE CHIPS ARE THE SUGGESTION AND THE SUGGESTION IS WHAT WAITS.
+            `offered` is the union of the derived list and the current selection, so while a field
+            or a stage is still missing it holds only what the student has chosen for themselves.
+            Drawing it unconditionally is what lets the input below open on arrival without
+            breaking the rule that Continue never commits anything invisible: whatever is about to
+            be saved is on screen, whether it was tapped from a suggestion or typed. */}
         <div className="mt-2.5 flex flex-wrap gap-2">
           {offered.map((title) => (
             <Chip
@@ -317,6 +535,33 @@ function FocusForm({
             />
           ))}
         </div>
+
+        {/* THE EXPAND-RATHER-THAN-EMPTY CASE, in one sentence.
+            Nothing in the chosen fields has a live role at the chosen stage - marketing, finance,
+            legal and writing carry essentially no internships, and that is the board and not the
+            student. The list above is NOT emptied for it: these are the field's real roles, most
+            live first, and offering them while saying what the stage costs is the honest version
+            of both. Silence here would read as "these six are internships", which they are not. */}
+        {broadened && (
+          <p className="mt-2.5 text-xs leading-5 text-muted">
+            The board has no {ROLE_TYPES.find((r) => r.slug === roleTypes[0])?.label.toLowerCase() ?? "matching"} roles
+            in {fields.length === 1 ? "this field" : "these fields"} today. These are the roles it does carry, so pick
+            the ones you want and Litos will watch for them.
+          </p>
+        )}
+
+        {/* Not a disabled control and not an empty gap: a sentence saying which answer is still
+            missing. The screen asks in an order, so it owes the student the reason the SUGGESTIONS
+            are waiting - while making clear, in the same breath, that the box below is not. */}
+        {!ready && (
+          <p className="mt-2.5 text-sm text-muted">
+            {fields.length + customFields.length === 0 && roleTypes.length === 0
+              ? "Pick a field and a stage and Litos will suggest the titles that fit, or type one below."
+              : fields.length + customFields.length === 0
+                ? "Pick a field and Litos will suggest the titles that fit, or type one below."
+                : "Pick a stage and Litos will suggest the titles that fit, or type one below."}
+          </p>
+        )}
 
         <div
           className="relative mt-4 max-w-sm"
@@ -331,6 +576,7 @@ function FocusForm({
               value={newTitle}
               onChange={(event) => {
                 setNewTitle(event.target.value);
+                setActiveMatchIndex(0);
                 setRoleMenuOpen(true);
               }}
               onFocus={() => setRoleMenuOpen(true)}
@@ -396,8 +642,6 @@ function FocusForm({
         {/* The row that used to repeat any selected title the guess did not contain is gone:
             `offered` is already the union of the derived list and the selection, so a second row
             would draw every one of them twice. */}
-        </>
-        )}
       </div>
 
       <details className="mb-7 overflow-hidden rounded-card border border-border bg-surface">
@@ -420,16 +664,20 @@ function FocusForm({
                   therefore drawn ON and locked, the same way a saved one already was, and the note
                   below says which of the two reasons applies. */}
               {CATEGORIES.map((category) => {
-                const impliedByField = categoriesForFields(fields).includes(category.slug);
+                /* Implied by ANY of the three sources effectiveCategories reads, not only by the
+                   field row. A category the titles imply goes into the PUT exactly as a field's
+                   does, so drawing it unlocked would offer a control that cannot do what it says:
+                   turning it off would leave the chip dark and the slug in the payload. */
+                const impliedByField = effectiveCategories.includes(category.slug) && !categories.includes(category.slug);
                 const savedCategory = saved?.categories?.includes(category.slug) ?? false;
                 const on = effectiveCategories.includes(category.slug);
                 return <Chip key={category.slug} label={category.label} on={on} disabled={savedCategory || impliedByField} onClick={() => setCategories(on ? categories.filter((value) => value !== category.slug) : [...categories, category.slug])} />;
               })}
             </div>
-            {(!!saved?.categories?.length || categoriesForFields(fields).length > 0) && (
+            {(!!saved?.categories?.length || effectiveCategories.some((slug) => !categories.includes(slug))) && (
               <p className="mt-2 text-xs leading-5 text-muted">
-                {categoriesForFields(fields).length > 0
-                  ? "Categories from the fields you picked stay on. Change the field above to change them."
+                {effectiveCategories.some((slug) => !categories.includes(slug) && !saved?.categories?.includes(slug))
+                  ? "Categories from the fields and jobs you picked stay on. Change those above to change them."
                   : "Saved categories stay on during this review. You can remove one later in Account."}
               </p>
             )}
@@ -463,17 +711,25 @@ function FocusForm({
         </div>
       </details>
 
-      {ready && effectiveCategories.length === 0 && (
+      {/* Reachable only through the disclosure now. categoriesForRoles gives any non-empty
+          selection at least "other", so a student who has chosen a title always has a category;
+          what is left is the one who opened More job preferences and turned every category off. */}
+      {selectedTitles.length > 0 && effectiveCategories.length === 0 && (
         <p role="status" className="mb-4 text-xs leading-5 text-warn">Choose at least one job category to continue.</p>
       )}
 
       <div className="flex items-center gap-3">
-        {/* `!ready` is in here for a reason a browser found and no unit test would have.
-            Deselecting every field hides the title list but does NOT clear `selectedTitles`, so a
+        {/* `!ready` USED TO BE IN HERE, for a reason a browser found and no unit test would have:
+            deselecting every field hid the title list but did NOT clear `selectedTitles`, so a
             student who changed their mind about the field could press Continue and commit titles
-            the screen had stopped drawing. Continue never commits anything invisible: while the
-            offer is withheld, so is the button. */}
-        <PrimaryButton onClick={() => void save()} disabled={busy || !ready || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0}>
+            the screen had stopped drawing.
+            The invariant it protected is "Continue never commits anything invisible", and that is
+            now held where it belongs - the chosen titles are drawn whether or not a field is
+            chosen, so there is nothing left to hide. Keeping the clause as well would have been
+            strictly worse than useless: it would refuse to save a title the student can see, typed
+            themselves, in the one box this screen opens with. What remains is the real
+            requirement, which is that every field being written has something in it. */}
+        <PrimaryButton onClick={() => void save()} disabled={busy || selectedTitles.length === 0 || roleTypes.length === 0 || effectiveCategories.length === 0}>
           {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Continue"}
         </PrimaryButton>
         <LaterLink onClick={onLater} />

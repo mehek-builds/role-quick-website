@@ -1160,7 +1160,18 @@ export type OnboardingState = {
   automatic_conduct_acceptance_consent_version?: string | null;
 };
 
-export type RoleType = "internship" | "co-op" | "new-grad" | "full-time";
+/* Mirrored from the backend's src/lib/jobPreferences.ts ROLE_TYPES, which builds the zod enum that
+   PUT /profile/targeting validates against. A value this union carries and the DEPLOYED backend
+   does not is a 400 on the save, so the backend ships first. Labels live in lib/periods.ts. */
+export type RoleType =
+  | "internship"
+  | "co-op"
+  | "new-grad"
+  | "full-time"
+  | "part-time"
+  | "contract"
+  | "apprenticeship"
+  | "fellowship";
 
 export type Targeting = {
   categories: string[] | null;

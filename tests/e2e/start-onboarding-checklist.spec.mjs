@@ -628,10 +628,10 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
        resume is now the SECOND screen, and asking for a file before asking what someone is looking
        for is exactly the delay this criterion is about - so the file input must NOT be here.
 
-       The one text input allowed is the title search, and it is allowed because it is part of this
-       screen's single ask rather than a second one: a student whose title is not in the offered
-       list types it there. Anything asking for an email, a phone number or a figure is a field
-       that should have waited, and there must be none. */
+       The two text inputs allowed are the field box and the title box, and they are allowed
+       because they ARE this screen's single ask rather than a second one: a student whose field or
+       title is not in the offered list types it there. Anything asking for an email, a phone
+       number or a figure is a field that should have waited, and there must be none. */
     const fileInputs = await page.locator("input[type=file]").count();
     assert.equal(fileInputs, 0, "the first screen asks for a file before asking what the student wants");
     /* VISIBLE fields, because the criterion is about what the screen ASKS for and a collapsed
@@ -640,21 +640,30 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
        the whole time, so a raw count would fail a screen that is behaving correctly. Scoped this
        way the assertion also gets STRICTER in the direction that matters: move one of those fields
        into the open and this fails, which is exactly when it should. */
+    const allowed = ":not(#additional-role):not(#additional-field)";
     const prematureFields = await page.locator(
       "main input[type=email]:visible, main input[type=tel]:visible, main input[type=number]:visible, "
-      + "main input[type=text]:not(#additional-role):visible, main input:not([type]):not(#additional-role):visible",
+      + `main input[type=text]${allowed}:visible, main input:not([type])${allowed}:visible`,
     ).count();
     assert.equal(prematureFields, 0, "the first screen asks for fields that are not needed to start");
-    /* On ARRIVAL there is no free-text input at all, and that is the gate doing its job rather
-       than an accident: the title search lives inside the titles block, and the titles block is
-       withheld until a field and a stage are chosen. A cold first screen is therefore taps only,
-       which is the strongest form this criterion can take. The search is asserted where it
-       actually appears, in the walk below, after the two answers that summon it. */
-    assert.equal(
-      await page.locator("main #additional-role:visible").count(),
-      0,
-      "the title search is offered before a field and a stage have been chosen",
-    );
+    /* BOTH BOXES ARE OPEN ON ARRIVAL, and asserted as open rather than as absent.
+       This assertion used to read the other way: it required that no free-text input existed on a
+       cold first screen, on the argument that taps-only is the strongest form of "do not ask for
+       what is not needed to start". It was the wrong strongest form. The nineteen fields and their
+       measured titles are a good offer and not an exhaustive one, and withholding the box until a
+       field and a stage were chosen made the screen unanswerable for everyone outside it: to say
+       "Biotech" you first had to tap a field you did not mean. A student who arrives knowing their
+       job now types it and continues, which is fewer taps, not more.
+       The criterion itself is unchanged and still has teeth - it is enforced by the count above,
+       which fails on any visible input that is not one of these two by id. What is asserted here
+       is that both are reachable without answering something else first. */
+    for (const id of ["#additional-field", "#additional-role"]) {
+      assert.equal(
+        await page.locator(`main ${id}:visible`).count(),
+        1,
+        `${id} is not offered until another answer has been given`,
+      );
+    }
 
     /* And the resume still gets asked for, one screen later. A reorder that quietly dropped the
        upload would satisfy every assertion above and break the product, so the walk below picks it

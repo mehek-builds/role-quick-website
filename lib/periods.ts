@@ -169,9 +169,24 @@ export function targetingHeadline(
   return `${named} +${labels.length - HEADLINE_CATEGORIES} more`;
 }
 
+/* The stage question, as chips. Closed, and mirrored in the backend's jobPreferences.ts ROLE_TYPES
+ * and in lib/api.ts RoleType.
+ *
+ * Free text has no home here and that is deliberate: a stage is not a search term, it is a filter
+ * the board applies through its own regex per value (roleTypePattern / roleTypeEmploymentPattern in
+ * the backend). A typed "Fellowship" with no matching branch would render a chip that looks like
+ * the other eight and quietly does nothing, which is the failure this codebase refuses to ship.
+ * Adding a stage means adding it in both repos, BACKEND FIRST.
+ *
+ * Ordered longest-commitment-last rather than alphabetically, so the row reads as a spectrum a
+ * student can scan: the four school-shaped stages, then the four arrangements. */
 export const ROLE_TYPES: { slug: string; label: string }[] = [
   { slug: "internship", label: "Internship" },
   { slug: "co-op", label: "Co-op" },
+  { slug: "apprenticeship", label: "Apprenticeship" },
+  { slug: "fellowship", label: "Fellowship" },
   { slug: "new-grad", label: "New grad" },
   { slug: "full-time", label: "Full-time" },
+  { slug: "part-time", label: "Part-time" },
+  { slug: "contract", label: "Contract" },
 ];
