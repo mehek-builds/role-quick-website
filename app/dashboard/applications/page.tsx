@@ -34,7 +34,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { nextMatchScoreRequest } from "@/features/applications";
+import { auditRefusalCode, nextMatchScoreRequest } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -1248,13 +1248,31 @@ function Applications() {
      what it is doing while it is on, and gives the student the seconds in which to stop it. */
   const autopilot = useAutopilot(qaMode === false);
 
+  /* Packets the autopilot has already proved it cannot send on its own, this session.
+   *
+   * THE LOOP USED TO JAM ON THE FIRST ONE. NextMatchCard fires a match exactly once (`fired`), so a
+   * refused send left the card counting nothing, the pill reading "Sending" forever, and this memo
+   * still choosing the same packet - which meant one un-sendable row stopped every other ready
+   * application on the account from being attempted at all. Measured 2026-08-19 on a Five Rings
+   * packet answering packet_stale: "0 applied today", and nothing else was ever tried.
+   *
+   * Held in state rather than derived, because the reason is not on the packet: the server decides
+   * it at send time, and the row still looks perfectly ready. Cleared on reload by design - the
+   * usual repair is the student opening the row, and reloading after that should let it queue
+   * again rather than staying hidden on a stale local decision. */
+  const [unsendable, setUnsendable] = useState<ReadonlySet<string>>(() => new Set());
+  const autopilotCandidates = useMemo(
+    () => (unsendable.size === 0 ? reviewablePackets : reviewablePackets.filter((packet) => !unsendable.has(packet.id))),
+    [reviewablePackets, unsendable],
+  );
+
   const nextPacket = useMemo(
     () => qaMode
-      ? reviewablePackets
+      ? autopilotCandidates
           .filter((packet) => reviewCanBeSent(packet.spec._review))
           .sort((a, b) => packetTimestamp(b).localeCompare(packetTimestamp(a)))[0] ?? null
-      : nextPreferredReadyPacket(reviewablePackets, currentMatches ?? []),
-    [currentMatches, qaMode, reviewablePackets],
+      : nextPreferredReadyPacket(autopilotCandidates, currentMatches ?? []),
+    [autopilotCandidates, currentMatches, qaMode],
   );
 
   /* The BASE resume, once, from the same source use-job-match-scores.ts reads. The next-best-match
@@ -1357,6 +1375,19 @@ function Applications() {
         captureCompletedSubmission(result, "autopilot");
         setPackets((current) => current?.map((item) => (item.id === id ? { ...item, spec: { ...item.spec, _review: result.review } } : item)) ?? current);
       } catch (reason) {
+        /* PARK THE ROW BEFORE THE BANNER, or the loop stops here.
+         *
+         * A packet audit refusal is not transient and the autopilot cannot clear it: the recovery is
+         * a fresh audit and a NEW acknowledgement, and that acknowledgement is the applicant's own
+         * act. The backend says so at /applications/:id/packet-audit/acknowledge - it "must never be
+         * preceded by a machine-written one" - so an unattended re-acknowledge would forge her
+         * review of a PDF she never saw, on the one path that reaches an employer with nobody in
+         * between. The honest move is to stop trying this row and try the next one.
+         *
+         * Keyed on `code`, not on the message: the sentence is copy and will be reworded, and the
+         * previous version of this branch is the reason a raw `packet_stale` was on screen at all. */
+        const code = auditRefusalCode(reason);
+        if (code) setUnsendable((current) => new Set(current).add(id));
         /* Stays in the page banner, deliberately, and is NOT a composer refusal. Nobody pressed a
            composer button: this is the countdown on NextMatchCard reaching zero, or that card's own
            Send. Routing it into the composer would put an answer about the autopilot next to a
