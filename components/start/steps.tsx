@@ -26,7 +26,7 @@ import {
   type ConsentGrantField,
 } from "@/lib/consent-acknowledgement";
 import { STORE_URL } from "@/lib/config";
-import { REMOTE_LOCATION, locationSuggestions } from "@/lib/locations";
+import { REMOTE_LOCATION, isRemoteLocation, locationSuggestions } from "@/lib/locations";
 import {
   CATEGORIES,
   ROLE_TYPES,
@@ -164,14 +164,27 @@ function FocusForm({
     const stored = fieldsForCategories(saved?.categories);
     return stored.length > 0 ? stored : fieldsForCategories(guess?.categories);
   });
-  const [locations, setLocations] = useState(() => (saved?.locations ?? []).join(", "));
+  /* A LIST, NOT A COMMA-SEPARATED STRING, and that is a correctness fix rather than a nicety.
+     Splitting the field on commas made the two halves of this control contradict each other: 122
+     of the 149 places it suggests have a comma IN THE NAME ("San Francisco, CA", "Toronto,
+     Canada"), so choosing one saved two locations - "San Francisco" and "CA". The backend matches
+     a location by substring (jobPreferences.preferenceFit), so a stray "CA" then matched Chicago,
+     Cambridge and Vancouver, and printed "CA" back as the reason the posting was shown. Storing
+     one entry per place is the only shape in which the suggestion list and the field agree. */
+  const [chosenLocations, setChosenLocations] = useState<string[]>(() => saved?.locations ?? []);
+  const [newLocation, setNewLocation] = useState("");
   const [remoteOnly, setRemoteOnly] = useState(() => saved?.remote_only ?? false);
-  /* Parsed once and read by BOTH the gate and the PUT. Two copies of this split drift, and the
-     shape they drift into is a Continue button that enables on a value the write then drops. */
-  const chosenLocations = useMemo(
-    () => locations.split(",").map((value) => value.trim()).filter(Boolean),
-    [locations],
-  );
+
+  /* Case-insensitive, because "dubai" and "Dubai" are one place and two chips reading the same
+     word is a control that looks broken. Same rule as the Account screen. */
+  function addLocation(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    setChosenLocations((current) =>
+      current.some((existing) => existing.toLowerCase() === trimmed.toLowerCase()) ? current : [...current, trimmed],
+    );
+    setNewLocation("");
+  }
   const availablePeriods = useMemo(() => periodsFor(gradYear), [gradYear]);
   const [primaryPeriod, setPrimaryPeriod] = useState<string | null>(() => saved?.primary_period ?? defaultPrimary(gradYear));
   const [backupPeriod, setBackupPeriod] = useState<string | null>(() => saved?.backup_period ?? defaultBackup(gradYear));
@@ -186,9 +199,23 @@ function FocusForm({
      is half of what makes the offer specific, so the screen waits for it. */
   const ready = fields.length > 0 && roleTypes.length > 0;
 
+  /* WHAT CONTINUE WILL ACTUALLY SAVE, which is not the same as the chips.
+     A place still sitting in the entry box is on screen and is plainly meant - dropping it because
+     the student pressed Continue instead of Enter is the silent loss the note on the button below
+     is about, and it is the likelier order: the last thing typed is the thing you press Continue
+     after. So the pending text is committed with the rest rather than discarded, and the gate is
+     computed from the same list the write uses so the two can never disagree. */
+  const effectiveLocations = useMemo(() => {
+    const pending = newLocation.trim();
+    if (!pending || chosenLocations.some((existing) => existing.toLowerCase() === pending.toLowerCase())) {
+      return chosenLocations;
+    }
+    return [...chosenLocations, pending];
+  }, [chosenLocations, newLocation]);
+
   /* The location answer, in the one form the rest of the screen asks about. Either half is a real
      answer to "where"; neither is the same as leaving it blank. */
-  const hasPlace = chosenLocations.length > 0 || remoteOnly;
+  const hasPlace = effectiveLocations.length > 0 || remoteOnly;
 
   /* Saved categories, plus the ones the chosen fields imply. Union, never replacement: the screen
      still has no category control, so it must not be able to remove a category the student cannot
@@ -250,7 +277,7 @@ function FocusForm({
          must not be able to remove a category the student cannot see. See lib/onboarding-role-inference.ts. */
       await putTargeting({
         ...focusPatch(saved, { titles: selectedTitles, roleTypes, categories: effectiveCategories }),
-        locations: chosenLocations,
+        locations: effectiveLocations,
         remote_only: remoteOnly,
         primary_period: primaryPeriod,
         backup_period: backupPeriod,
@@ -438,16 +465,61 @@ function FocusForm({
             appears nowhere. The hint is a description, not part of the name, which is the split
             ACCESSIBILITY.md asks every control to state. */}
         <label htmlFor="preferred-locations" className="block text-sm text-ink">Where do you want to work?</label>
-        <p id="preferred-locations-hint" className="mt-1 text-xs leading-5 text-muted">Separate cities, countries, or regions with commas. Anywhere in the world works, and so does &quot;{REMOTE_LOCATION}&quot;.</p>
-        <input
-          id="preferred-locations"
-          value={locations}
-          onChange={(event) => setLocations(event.target.value)}
-          list="start-location-options"
-          placeholder="Dubai, London, New York"
-          aria-describedby="preferred-locations-hint"
-          className="mt-2 min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-        />
+        <p id="preferred-locations-hint" className="mt-1 text-xs leading-5 text-muted">Add as many cities, countries or regions as you want. Anywhere in the world works, and so does &quot;{REMOTE_LOCATION}&quot;.</p>
+
+        {/* Chosen places, one chip each. Click removes. */}
+        {chosenLocations.length > 0 && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {chosenLocations.map((location) => (
+              <Chip
+                key={location}
+                label={location}
+                on
+                onClick={() => setChosenLocations((current) => current.filter((value) => value !== location))}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Remote is a place, not only the checkbox below it: "London, Dubai, OR anywhere remote"
+            is what people actually mean, and the checkbox alone cannot say it. Same chip the
+            Account screen offers. */}
+        {!chosenLocations.some(isRemoteLocation) && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            <Chip label={`+ ${REMOTE_LOCATION}`} on={false} onClick={() => addLocation(REMOTE_LOCATION)} />
+          </div>
+        )}
+
+        {/* ONE PLACE PER ENTRY. A datalist REPLACES the whole input value when an option is picked
+            - that is what a datalist is for - so hanging one off a comma-separated field meant
+            choosing a second city silently erased the first. Adding to a list instead is what
+            makes the suggestions and multiple choices able to coexist at all. */}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            id="preferred-locations"
+            value={newLocation}
+            onChange={(event) => setNewLocation(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              /* Enter adds the place; it must not submit or advance the screen. */
+              event.preventDefault();
+              addLocation(newLocation);
+            }}
+            list="start-location-options"
+            placeholder="Dubai"
+            aria-describedby="preferred-locations-hint"
+            autoComplete="off"
+            className="min-h-11 min-w-0 flex-1 rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+          />
+          <button
+            type="button"
+            onClick={() => addLocation(newLocation)}
+            disabled={!newLocation.trim()}
+            className="min-h-11 rounded-inner border border-border px-4 text-sm text-ink hover:border-brand disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Add
+          </button>
+        </div>
         {/* The board's own cities are US-heavy on their own, which reads to a student in Dubai
             or Bangalore as "your city is not an option". Same merged list the Account screen
             offers. Free text still works; this only decides what is SUGGESTED. */}
@@ -458,7 +530,7 @@ function FocusForm({
           <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
           Show remote jobs only
         </label>
-        {remoteOnly && chosenLocations.length > 0 && (
+        {remoteOnly && effectiveLocations.length > 0 && (
           <p className="mt-1.5 text-xs leading-5 text-muted">While this is on, only remote jobs are shown and the places above are ignored.</p>
         )}
       </div>
