@@ -369,21 +369,29 @@ describe("the application sequence, end to end", () => {
     assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
   });
 
-  test("09 the plan: pre-selected, disclosed adjacent, and Free is a real choice", async () => {
+  test("09 the plan: pre-selected, one control, and no way past it without a card", async () => {
+    /* THIS WALK HAS NOW BEEN OUT OF DATE TWICE IN ONE DAY, and the reason is worth keeping.
+
+       #363 deleted the two-row "If you do nothing / You keep / You lose" table ON PURPOSE --
+       it promised the student unlimited filling, free with no time limit, if they simply did
+       not act, and that stopped being true when this screen started taking a card for a trial
+       that converts on its own. Doing nothing is now the path that gets CHARGED. The assertion
+       guarding that table was not deleted with it, and main went red.
+
+       Then the free escape went too, because new accounts go seven-day trial then Litos+ and
+       Free is somewhere you arrive by cancelling rather than a fork offered during setup. That
+       control was the one thing that let a new account reach the dashboard having never given
+       a card.
+
+       And "$89.99 today" went with them: false once the card started a trial rather than a
+       purchase, since nothing is taken for seven days, and it sat directly above a sentence
+       saying the opposite.
+
+       So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
+       absence of every exit, rather than any sentence the product no longer means. */
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
-    assert.match(body, /\$89\.99 today\. Renews every 3 months until canceled\./i);
-    /* WAS an assertion that "Unlimited application filling" appears here, guarding a two-row
-       "If you do nothing / You keep / You lose" table. #363 deleted that table ON PURPOSE and this
-       line was not deleted with it, which is why main went red: the table promised the student
-       unlimited filling free with no time limit if they simply did not act, and that stopped being
-       true when this screen started taking a card for a trial that converts on its own. Doing
-       nothing is now the path that gets CHARGED.
-
-       So the replacement asserts what the screen must say instead - when the charge lands and how
-       to stop it - rather than restoring a sentence the product no longer means. Keeping the old
-       string would have re-created a false promise on the one screen that must not carry one. */
     assert.match(
       body,
       /Free for seven days\. After that, Litos\+ continues at/i,
@@ -394,8 +402,14 @@ describe("the application sequence, end to end", () => {
       /any time before then and you are not charged/i,
       "the paywall must state how to stop the charge",
     );
-    assert.match(body, /Continue on Free/i);
-    assert.doesNotMatch(body, /Finish later/i, "the escape here chooses, so it must not say later");
+    assert.doesNotMatch(body, /\$89\.99 today/i, "nothing is charged today, a trial starts");
+    assert.doesNotMatch(body, /Continue on Free/i, "the free escape is the whole point of the gate");
+    assert.doesNotMatch(body, /Finish later/i);
+
+    // Exactly one way forward, and it is checkout.
+    const actions = await page.locator("main button, main a").allInnerTexts();
+    const forward = actions.map((t) => t.trim()).filter((t) => /^Continue/i.test(t));
+    assert.deepEqual(forward, ["Continue with 3 months"]);
   });
 
   test("the whole sequence was walked in order", () => {

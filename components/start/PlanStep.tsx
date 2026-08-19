@@ -7,13 +7,20 @@
  * pre-selected because that is a default rather than a trick, and the exact charge sentence sits
  * next to the button rather than behind a tooltip.
  *
- * THE WORD THAT CHANGES. Every other screen's escape says "Finish later" because it defers this
- * one does not, it CHOOSES, so it reads "Continue on Free". A control that misnames what it does
- * is the dark pattern; the pre-selection is not.
+ * THERE IS NO LONGER A WAY PAST THIS SCREEN WITHOUT A CARD. Mehek's call 2026-08-19.
+ * It used to carry a free-escape link, worded to CHOOSE rather than defer, next to a panel
+ * describing what the free tier kept. Both are gone: a new account goes
+ * seven-day trial then Litos+, and Free is somewhere you arrive by cancelling, not a fork
+ * offered during setup. Leaving the control would have contradicted that, and leaving the
+ * panel would have promised a tier the flow no longer hands out.
  *
- * WHAT FREE ACTUALLY KEEPS is on the screen, and it weakens the ask on purpose. Unlimited filling,
- * the jobs board, the match scores, the resume just sent and every tracker receipt all survive,
- * and a paywall implying otherwise would contradict the product's own positioning.
+ * The trial itself is the softener now and it is a real one -- seven days, nothing charged,
+ * cancel in one click -- which is on the screen in the sentence above the button.
+ *
+ * `onSettled` is NOT that control coming back. It fires only for an account that already
+ * holds Litos+, which is how somebody returning from a completed Stripe checkout gets off
+ * this screen instead of being sold the thing they just bought. It is deliberately not
+ * optional: making it optional is what would let a caller quietly strand a paid student here.
  *
  * Continue goes straight to Stripe. The one line this build changes versus /pricing is the return
  * route: /pricing sends people back to the settings page, and setup has to come back to setup.
@@ -34,7 +41,7 @@ import {
 import { track } from "@/lib/analytics";
 import { PrimaryButton, StartShell } from "./ui";
 
-export function PlanStep({ onFree }: { onFree?: () => void }) {
+export function PlanStep({ onSettled }: { onSettled: () => void }) {
   const [selected, setSelected] = useState<LitosPlusPlanId>(DEFAULT_LITOS_PLUS_PLAN_ID);
   /* THE RETURN FROM STRIPE LANDS HERE, and without this it lands on a sales pitch.
    *
@@ -56,11 +63,12 @@ export function PlanStep({ onFree }: { onFree?: () => void }) {
         if (cancelled) return;
         if (isPaidAccess(access)) {
           track("onboarding_plan_already_paid", {});
-          /* Advancing a student who has ALREADY paid is not the Free path, it just shares
-             the callback. With the card gate on, onFree is withheld and the refresh that
-             follows checkout is what moves them: the server has the card by then, so the
-             flow no longer stops here. */
-          onFree?.();
+          /* The only way off this screen that is not the checkout button, and it fires for
+             exactly one reason: this account already holds Litos+. Paying navigates away to
+             Stripe, so this screen never gets to acknowledge itself; the return lands on
+             /start with `plan` still outstanding and would render this same sales pitch to
+             somebody who just bought it. */
+          onSettled();
           return;
         }
         setSettled(true);
@@ -70,7 +78,7 @@ export function PlanStep({ onFree }: { onFree?: () => void }) {
          alternative is a student stuck on a spinner at the end of onboarding. */
       .catch(() => { if (!cancelled) setSettled(true); });
     return () => { cancelled = true; };
-  }, [onFree]);
+  }, [onSettled]);
 
   async function checkout() {
     setBusy(true);
@@ -152,10 +160,12 @@ export function PlanStep({ onFree }: { onFree?: () => void }) {
         })}
       </div>
 
-      {/* Adjacent to the button, never behind a tooltip. */}
-      <p className="mt-3 font-mono text-[11px] leading-6 text-muted">
-        {plan.disclosure} Cancel in Account, in one click, at any time.
-      </p>
+      {/* plan.disclosure USED TO SIT HERE and it said "$89.99 today", which stopped being
+          true when the card started a trial instead of a purchase: nothing is taken for
+          seven days. It also contradicted the sentence below it, on the one screen in the
+          product where being wrong about money costs the most. The terms line below says
+          the whole thing correctly -- free for seven days, then the price, cancel before
+          then -- so this is one sentence now rather than two that disagree. */}
 
       {/* WAS a two-row "If you do nothing / You keep / You lose" table promising the
           student unlimited filling, free with no time limit, if they simply did not act.
@@ -172,19 +182,6 @@ export function PlanStep({ onFree }: { onFree?: () => void }) {
         <PrimaryButton onClick={() => void checkout()} disabled={busy}>
           {busy ? <PendingLabel onColor>Opening checkout...</PendingLabel> : `Continue with ${plan.shortLabel}`}
         </PrimaryButton>
-        {/* Not "Finish later". This one chooses. Absent entirely when the account has no
-            card on file: there is nothing for it to choose, because Free is behind the
-            same gate, and a control that cannot do what it says is worse than no control. */}
-        {onFree && (
-          <button
-            type="button"
-            onClick={() => { track("onboarding_plan_declined", {}); onFree(); }}
-            disabled={busy}
-            className="text-sm text-muted underline underline-offset-4 hover:text-ink disabled:opacity-50"
-          >
-            Continue on Free
-          </button>
-        )}
       </div>
     </StartShell>
   );
