@@ -1164,6 +1164,25 @@ export type Targeting = {
   backup_period: string | null;
 };
 
+/**
+ * One page of the live board, for the onboarding match screen.
+ *
+ * `relaxTargeting` asks the server to drop the account's own PREFERENCE filters (saved locations,
+ * remote_only, role_types, desired title terms, recruiting period, title category) and NOTHING
+ * else: the portal-family, freshness, active and sponsor-only constraints all survive. It exists
+ * so the match screen can guarantee a role even for a student whose filters match nothing live.
+ * See the backend's boardConditions for the preference-versus-constraint line, and
+ * lib/onboarding-match.ts for the two-step ladder that uses this.
+ *
+ * An older backend simply ignores the parameter and answers the targeted board, which degrades to
+ * "no widening available" rather than to an error - so the two repos can ship in either order.
+ */
+export function getOnboardingJobs(params: { limit: number; relaxTargeting: boolean }) {
+  const query = new URLSearchParams({ limit: String(params.limit) });
+  if (params.relaxTargeting) query.set("relax_targeting", "true");
+  return api<JobsPage>(`/jobs?${query.toString()}`);
+}
+
 export function getOnboardingState() {
   return api<OnboardingState>("/onboarding/state");
 }
