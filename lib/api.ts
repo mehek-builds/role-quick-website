@@ -1192,9 +1192,18 @@ export type Targeting = {
  * "no widening available" rather than to an error - so the two repos can ship in either order.
  */
 /** The full posting, description included. The board row truncates the description for transport,
- *  and tailoring against that truncation grades a student on the posting's intro paragraph. */
+ *  and tailoring against that truncation grades a student on the posting's intro paragraph.
+ *
+ *  UNWRAPS `{ job }`, and the missing unwrap is what broke every onboarding build in production.
+ *  The route answers `{ job: {...} }`; this used to cast the envelope straight to MonitoredJob, so
+ *  `description`, `title` and `company_name` all read undefined. `api<T>()` is an unchecked cast,
+ *  so nothing caught it at compile time and nothing caught it at runtime either: the three fields
+ *  went into JSON.stringify, which DROPS undefined values, and the backend answered "Invalid
+ *  request body / company: Required, role: Required, jd_text: Required" - an error naming three
+ *  fields the client believed it had sent. Hence the explicit response type here rather than
+ *  another bare cast. */
 export function getJob(jobId: string) {
-  return api<MonitoredJob>(`/jobs/${encodeURIComponent(jobId)}`);
+  return api<{ job: MonitoredJob }>(`/jobs/${encodeURIComponent(jobId)}`).then((data) => data.job);
 }
 
 /**
