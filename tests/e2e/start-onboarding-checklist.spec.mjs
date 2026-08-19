@@ -807,7 +807,10 @@ test("the walk: every step in order, each one advancing the rail by one", async 
       "the roles screen never asks where",
     );
 
-    const locationField = page.getByLabel("Preferred locations");
+    /* By the VISIBLE label. The field is named by its own <label htmlFor>, so the string a student
+       reads is the string that addresses it - the property WCAG 2.5.3 is about, and one an
+       aria-label would silently break while this line kept passing. */
+    const locationField = page.getByLabel("Where do you want to work?");
     await locationField.fill("Dubai, London");
     await rolesContinue.click();
 

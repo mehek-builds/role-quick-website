@@ -42,6 +42,12 @@ import { JOB_TITLES } from "@/lib/job-titles";
 import { FIELDS, categoriesForFields, fieldsForCategories, focusPatch, focusSeed, inferResumeTargeting, titlesForFields, type SavedFocus } from "@/lib/onboarding-role-inference";
 import { rankOnboardingJobs, type OnboardingJob } from "@/lib/onboarding-jobs";
 
+/* Computed once at module load, not per render. The argument is a constant, so the result is
+   invariant - and this list is rendered as ~150 <option> nodes beside an input that re-renders on
+   every keystroke, which is the one place rebuilding it would actually be paid for. The Account
+   screen recomputes because its argument is the live /jobs/facets response; this one cannot be. */
+const LOCATION_OPTIONS = locationSuggestions([]);
+
 /* ------------------------------------------------------------------- 00 FOCUS */
 
 /* This screen is reachable long after setup: the step is derived, and `hasFocusTargeting` wants a
@@ -425,24 +431,29 @@ function FocusForm({
           on arrival it is still taps only. */}
       {ready && (
       <div className="mb-7">
-        <label className="block">
-          <span className="text-sm text-ink">Where do you want to work?</span>
-          <span className="mt-1 block text-xs leading-5 text-muted">Separate cities, countries, or regions with commas. Anywhere in the world works, and so does &quot;{REMOTE_LOCATION}&quot;.</span>
-          <input
-            value={locations}
-            onChange={(event) => setLocations(event.target.value)}
-            list="start-location-options"
-            placeholder="Dubai, London, New York"
-            aria-label="Preferred locations"
-            className="mt-2 min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
-          />
-          {/* The board's own cities are US-heavy on their own, which reads to a student in Dubai
-              or Bangalore as "your city is not an option". Same merged list the Account screen
-              offers. Free text still works; this only decides what is SUGGESTED. */}
-          <datalist id="start-location-options">
-            {locationSuggestions([]).map((location) => <option key={location} value={location} />)}
-          </datalist>
-        </label>
+        {/* htmlFor + aria-describedby rather than a wrapping label with an aria-label on the input.
+            An aria-label REPLACES the accessible name, so naming this "Preferred locations" while
+            the student reads "Where do you want to work?" leaves a voice-control user saying the
+            words on screen and matching nothing (WCAG 2.5.3), and hands VoiceOver a name that
+            appears nowhere. The hint is a description, not part of the name, which is the split
+            ACCESSIBILITY.md asks every control to state. */}
+        <label htmlFor="preferred-locations" className="block text-sm text-ink">Where do you want to work?</label>
+        <p id="preferred-locations-hint" className="mt-1 text-xs leading-5 text-muted">Separate cities, countries, or regions with commas. Anywhere in the world works, and so does &quot;{REMOTE_LOCATION}&quot;.</p>
+        <input
+          id="preferred-locations"
+          value={locations}
+          onChange={(event) => setLocations(event.target.value)}
+          list="start-location-options"
+          placeholder="Dubai, London, New York"
+          aria-describedby="preferred-locations-hint"
+          className="mt-2 min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        />
+        {/* The board's own cities are US-heavy on their own, which reads to a student in Dubai
+            or Bangalore as "your city is not an option". Same merged list the Account screen
+            offers. Free text still works; this only decides what is SUGGESTED. */}
+        <datalist id="start-location-options">
+          {LOCATION_OPTIONS.map((location) => <option key={location} value={location} />)}
+        </datalist>
         <label className="mt-3 flex min-h-11 items-center gap-3 text-sm text-ink">
           <input type="checkbox" checked={remoteOnly} onChange={(event) => setRemoteOnly(event.target.checked)} className="accent-brand" />
           Show remote jobs only
