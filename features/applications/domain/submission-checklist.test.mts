@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checklistRowControl, completedSubmissionGroups, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems } from "./submission-checklist.ts";
+import { checklistRowControl, completedSubmissionGroups, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT } from "./submission-checklist.ts";
 
 test("displayQuestionLabel restores sentence case and common application acronyms", () => {
   assert.equal(displayQuestionLabel("select your standardized test score type"), "Select your standardized test score type");
@@ -119,6 +119,41 @@ test("humanInputItems hides stale academic provider blockers already covered by 
   });
 
   assert.deepEqual(items, []);
+});
+
+/* The blocker-10 shape: a required question Litos could not answer, on a control whose options
+   discovery already read. The row has to carry the employer's own list, in the employer's own
+   order, so the panel can offer a choice instead of naming a box she has to guess the wording
+   for. Measured on a live Optiver Greenhouse form on 2026-08-19: the acknowledgement offered two
+   sentences, she was shown a blank box, and "Yes" matched neither. */
+test("humanInputItems carries the employer's own options on a missing required answer", () => {
+  const options = ["I consent to the above.", "Yes, I have read and agree to Optiver's privacy policies, notices and disclaimers."];
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions: [
+      { id: "consent", question: "Do you consent to the processing described above?", answer: "", kind: "required", required: true, options },
+      { id: "essay", question: "Why Optiver?", answer: "", kind: "required", required: true },
+    ],
+  });
+  const consent = items.find((item) => item.questionId === "consent");
+  assert.deepEqual(consent?.options, options, "the employer's list rides the row, unreordered");
+  const essay = items.find((item) => item.questionId === "essay");
+  assert.equal(essay?.options, undefined, "a question with no list stays a plain Answer row");
+});
+
+test("humanInputItems keeps a long option list off the row, where the editor's select is the kinder shape", () => {
+  const options = Array.from({ length: QUESTION_CHOICE_LIST_LIMIT + 1 }, (_, index) => `Office ${index + 1}`);
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "",
+    questions: [
+      { id: "office", question: "Which office are you applying to?", answer: "", kind: "required", required: true, options },
+    ],
+  });
+  const office = items.find((item) => item.questionId === "office");
+  assert.equal(office?.detail, "Required answer missing", "the row itself still exists");
+  assert.equal(office?.options, undefined);
 });
 
 test("completedSubmissionItems shows safe filled fields as done", () => {

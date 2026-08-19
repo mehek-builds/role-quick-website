@@ -599,12 +599,16 @@ export type ApplicationQuestion = {
   answer: string;
   kind: "essay" | "required";
   required: boolean;
-  /* ---- present only on a question that came from the Apply-time pre-script ----
+  /* ---- discovery's word on what the form offers and why the question is hers ----
    *
    * All three are display-only and none of them is sent back: submit-request accepts
    * id/question/answer/kind/required and nothing else, deliberately. They exist so the answers
    * editor can show the employer's real option list instead of an empty box, and can say in one
-   * line why a question is hers rather than leaving her to guess. */
+   * line why a question is hers rather than leaving her to guess.
+   *
+   * `options` used to arrive only from the Apply-time pre-script; a managed run's discovery now
+   * writes it onto the review questions too (see the backend's discoverAndResolveQuestions), so a
+   * stalled run's unanswered question carries the same menu the Apply screen always had. */
   options?: string[] | null;
   /** One line under the label saying why Litos did not answer this. */
   explanation?: string;

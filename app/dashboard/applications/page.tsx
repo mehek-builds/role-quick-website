@@ -57,7 +57,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -2516,6 +2516,17 @@ function Applications() {
     moveToScreen("questions", { scrollToTop: !focusQuestionId });
   }
 
+  /* A Your turn row drew the employer's own options and she pressed one. This is a ROUTE, not a
+     write: it opens the same editor the Answer pill opens, focused on the same question, with her
+     pick already selected, and the editor's Save is still the only thing that persists an answer.
+     The functional update runs after reviewPortalQuestions has queued the merged list, so it maps
+     over that list rather than the stale state this closure captured. */
+  function chooseBlockerOption(questionId: string, option: string) {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    reviewPortalQuestions(questionId, "answer");
+    setQuestions((current) => current.map((question) => question.id === questionId ? { ...question, answer: option } : question));
+  }
+
   /* Save on the REVIEW-ANSWERS screen, which is reached from a run that stopped and needs a real
    * write. See features/applications/domain/review-answer-save.ts for the route and why it is
    * neither of the two that already existed.
@@ -3190,6 +3201,7 @@ function Applications() {
           onReviewPacket={() => moveToScreen("review")}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
+          onChooseOption={chooseBlockerOption}
           onAddDocument={askForDocument}
           onSelfSubmitted={() => void recordSelfSubmitted()}
         />
@@ -4072,6 +4084,15 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false
   useEffect(() => {
     if (!focusQuestionId) return;
     const field = document.getElementById(`question-${focusQuestionId}`);
+    // A short closed list renders as a radio group, which is a container rather than a form
+    // control, so the branch below would refuse it. Scroll to it and put focus on the chosen
+    // option, or the first one when nothing is picked yet.
+    if (field instanceof HTMLElement && field.dataset.choiceList !== undefined) {
+      field.scrollIntoView({ block: "center", behavior: "auto" });
+      const choice = field.querySelector<HTMLInputElement>("input:checked") ?? field.querySelector<HTMLInputElement>("input");
+      choice?.focus();
+      return;
+    }
     // A pre-script question with a closed option list renders as a select, so the caret placement
     // below cannot apply to it. Scroll and focus still do, which is the part that matters.
     if (!(field instanceof HTMLTextAreaElement) && !(field instanceof HTMLSelectElement)) return;
@@ -4097,7 +4118,11 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false
       </div>
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
-          <label htmlFor={`question-${question.id}`} className="text-sm font-medium text-ink">{displayQuestionLabel(question.question)}</label>
+          {/* An employer's question can be a whole consent paragraph. At that length bold stops
+              being emphasis and becomes a wall, so a long label keeps the size and drops the
+              weight, with the line height of body text. The full text always renders: what she is
+              agreeing to is the one thing this screen must not truncate. */}
+          <label htmlFor={`question-${question.id}`} className={`block text-sm text-ink ${question.question.trim().length > 140 ? "font-normal leading-6" : "font-medium"}`}>{displayQuestionLabel(question.question)}</label>
           <p className={`mt-1 font-mono text-[11px] uppercase tracking-[0.08em] ${question.required && !question.answer.trim() ? "text-warn" : "text-muted"}`}>{question.required && !question.answer.trim() ? "Required" : "Review"}</p>
           {/* Why this one is hers. Written by the backend so that the Apply screen and a stalled
               run's attention reason cannot describe the same refusal in two different voices. */}
@@ -4108,16 +4133,40 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false
             /* The employer's own list, so a fixed choice is a choice rather than a box she has to
                guess the wording for. Sixteen DRW self-ratings and Point72's office list are all
                this shape, and a free-text answer to any of them is an answer the form rejects.
-               The first entry is blank on purpose: nothing here is pre-picked. */
-            <select
-              id={`question-${question.id}`}
-              value={question.answer}
-              onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))}
-              className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
-            >
-              <option value="">Choose an answer</option>
-              {question.options.map((option) => <option key={option} value={option}>{option}</option>)}
-            </select>
+               Nothing is pre-picked on either shape.
+
+               Two renderings, split on length. A short list reads at a glance as radio rows, which
+               matters most when the options are whole sentences: Optiver's acknowledgement offers
+               only "I consent to the above.", and a native select clips that to one cropped line
+               behind a click. A long list stays a select, because forty radio rows is a worse box
+               than the closed one. */
+            question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
+              <div id={`question-${question.id}`} role="radiogroup" aria-label={displayQuestionLabel(question.question)} data-choice-list className="mt-4 space-y-2">
+                {question.options.map((option) => (
+                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink ${question.answer === option ? "border-brand" : "border-control-border hover:border-ink"}`}>
+                    <input
+                      type="radio"
+                      name={`question-choice-${question.id}`}
+                      value={option}
+                      checked={question.answer === option}
+                      onChange={() => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: option } : item))}
+                      className="mt-1 h-4 w-4 shrink-0 border-control-border text-brand-ink focus:ring-brand/30"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <select
+                id={`question-${question.id}`}
+                value={question.answer}
+                onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))}
+                className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand"
+              >
+                <option value="">Choose an answer</option>
+                {question.options.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            )
           ) : (
             <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
           )}
@@ -4233,7 +4282,7 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -4476,7 +4525,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             is how "CAPTCHA requires your attention ... is required required field is required ..."
             reached the screen. Each blocker is its own item, because each is its own task. */}
         {needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
@@ -4874,8 +4923,16 @@ const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center ro
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onAddDocument?: (kind: string) => void }) {
+function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void }) {
   const control = checked ? null : checklistRowControl(item, { portalUrl });
+  /* The employer's own options, drawn on the row that names the unanswered question, so what the
+     control accepts is visible where the work is named. Picking one opens the answers editor with
+     that option already selected; the editor's Save is still the only write, so a stray press here
+     sends nothing. Radio INPUTS deliberately, not buttons: tests/your-turn-actions.test.mjs pins the
+     FIRST <button> in this component to onOpenQuestion, and these must not take that pin. */
+  const choices = !checked && item.settled !== true && onChooseOption && item.questionId && item.options && item.options.length > 0
+    ? { questionId: item.questionId, options: item.options, choose: onChooseOption }
+    : null;
   /* Two different things, kept apart deliberately.
      `checked` means "this row came out of the Done column", and it is the only thing that suppresses
      the control, which is safe because nothing in completedSubmissionGroups carries an action word in
@@ -4901,6 +4958,27 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
             reads as a sentence about the employer and the pill stays scannable down a column. */}
         {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
         {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}
+        {choices && (
+          <span role="radiogroup" aria-label={`Choose an answer to: ${item.label}`} className="mt-2 block space-y-1.5">
+            {choices.options.map((option) => (
+              <label key={option} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-inner border border-control-border bg-surface px-3 py-2.5 text-xs leading-5 text-ink hover:border-ink">
+                <input
+                  type="radio"
+                  name={`blocker-choice-${choices.questionId}`}
+                  value={option}
+                  checked={false}
+                  onChange={() => choices.choose(choices.questionId, option)}
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 border-control-border text-brand-ink focus:ring-brand/30"
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+            {/* Said here because the press does not save: it opens the editor with the pick made,
+                and the Save there is the write. A row that looked saved and was not is the exact
+                lie the review screen's own Save button copy exists to prevent. */}
+            <span className="block text-[11px] leading-4 text-muted">Pick one to open it in the editor, then save.</span>
+          </span>
+        )}
         {control?.element === "link" && (
           <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={CHECKLIST_ACTION_CLASS}>
             {control.label}
@@ -4926,7 +5004,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onAddDocument 
   );
 }
 
-function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onAddDocument?: (kind: string) => void }) {
+function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void }) {
   /* Split before anything is drawn, because these are two different sentences and only one of them
      is a demand. An outstanding row is work the employer is still waiting on. A settled row states
      that something is already handled and keeps a control only so she can change it, which is why
@@ -4950,7 +5028,7 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onAddDocument }: { item
           </div>
           <ul className="mt-2 space-y-2">
           {outstanding.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} />
           ))}
           </ul>
         </div>
