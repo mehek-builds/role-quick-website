@@ -59,7 +59,7 @@ export function TrialStep({ onContinue }: { onContinue: () => void }) {
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.1em] text-brand-ink">A gift, on us</p>
         <p className="mt-2 font-mono text-[56px] leading-none tabular-nums text-brand-ink">7</p>
         <p className="mt-2 text-lg text-ink">days of Litos+</p>
-        <p className="mt-3 font-mono text-[11px] text-muted">No card. Nothing to confirm. Already on your account.</p>
+        <p className="mt-3 font-mono text-[11px] text-muted">Nothing to confirm. Already on your account.</p>
       </div>
 
       <div className="mt-6">

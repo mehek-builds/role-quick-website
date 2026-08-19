@@ -661,7 +661,7 @@ export default function Login() {
                   {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Guest mode"}
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-muted">
-                  Your 7-day Litos+ trial starts now. No card needed. Application filling stays free after it ends.
+                  Your 7-day Litos+ trial starts now. Application filling stays free after it ends.
                 </p>
                 {/* Both controls in this block can create an account: Google on a
                     first sign-in, and guest mode, which makes a guest one.

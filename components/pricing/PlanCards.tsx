@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, ButtonLink } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
@@ -13,7 +13,6 @@ import {
   getPlanCatalog,
   isLitosPlusPlanId,
   isPaidAccess,
-  litosPlusPlan,
   rememberBillingReturnContext,
   type EntitlementSnapshot,
   type LitosPlusPlanId,
@@ -34,7 +33,7 @@ export function PlanCards() {
   const [sourceTrigger, setSourceTrigger] = useState("pricing_plan");
   const [actionNonce, setActionNonce] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
+  const [busyPlan, setBusyPlan] = useState<LitosPlusPlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,51 +67,41 @@ export function PlanCards() {
     return () => { cancelled = true; };
   }, []);
 
-  const plan = useMemo(() => litosPlusPlan(selected), [selected]);
   const extensionCheckout = checkoutSource === "extension";
   const paid = !extensionCheckout && isPaidAccess(access);
-  const trial = !extensionCheckout && access?.access_class === "trial_plus";
-  const plusLabel = extensionCheckout
-    ? `Continue with ${plan.shortLabel}`
-    : paid
-    ? "Manage subscription"
-    : !authenticated
-      ? "Start 7-day trial"
-      : trial
-        ? "Choose Litos+"
-        : `Continue with ${plan.shortLabel}`;
 
-  function choose(planId: LitosPlusPlanId) {
+  /* Each term now owns its own button, so the term is an argument rather than
+     a piece of state read back after a setState that has not flushed. The
+     session key still records the last term touched: /login and the extension
+     both read it to come back to the column the student was standing on. */
+  async function continueWithPlan(planId: LitosPlusPlanId) {
     setSelected(planId);
     window.sessionStorage.setItem(SESSION_PLAN_KEY, planId);
     track("plan_selected", { plan_id: planId, source: "pricing" });
-  }
-
-  async function continueWithPlan() {
-    window.sessionStorage.setItem(SESSION_PLAN_KEY, selected);
     if (!extensionCheckout && !authenticated) {
-      window.location.assign(`/login?intent=litos-plus&plan=${selected}`);
+      window.location.assign(`/login?intent=litos-plus&plan=${planId}`);
       return;
     }
     if (paid) {
       window.location.assign("/dashboard/settings#plan");
       return;
     }
-    setBusy(true);
+    setBusyPlan(planId);
     setError(null);
     try {
-      track("checkout_started", { plan_id: selected, source: extensionCheckout ? "extension" : "pricing", trigger: sourceTrigger });
+      track("checkout_started", { plan_id: planId, source: extensionCheckout ? "extension" : "pricing", trigger: sourceTrigger });
       let checkoutUrl: string;
       if (extensionCheckout) {
         checkoutUrl = await createCheckoutThroughExtension({
-          planId: selected,
+          planId,
           placement: "public_pricing",
           trigger: sourceTrigger,
           actionNonce,
         });
       } else {
         if (!access?.account_id) throw new Error("Litos could not bind checkout to this account. Refresh and try again.");
-        const checkout = await createLitosPlusCheckout(selected, {
+        const trial = access?.access_class === "trial_plus";
+        const checkout = await createLitosPlusCheckout(planId, {
           surface: "website",
           placement: "public_pricing",
           trigger: trial ? "trial_early_purchase" : sourceTrigger,
@@ -128,7 +117,7 @@ export function PlanCards() {
       window.location.assign(checkoutUrl);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Checkout could not open. Nothing was charged.");
-      setBusy(false);
+      setBusyPlan(null);
     }
   }
 
@@ -137,77 +126,91 @@ export function PlanCards() {
     : !authenticated || paid || catalog?.checkoutAvailable === true;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-      <article className="flex flex-col rounded-card border border-teal/45 bg-teal-soft/35 p-6 sm:p-8">
-        <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free</p>
-        <div className="mt-5 flex items-end gap-2">
-          <span className="font-mono text-section text-ink">$0</span>
-          <span className="pb-1 font-mono text-machine text-muted">forever</span>
-        </div>
-        <h2 className="mt-6 text-heading font-[450] text-ink">Fill applications. Track every move.</h2>
-        <p className="mt-2 text-body text-muted">Use the dashboard and supported sites without an application limit.</p>
-        <ul className="mt-6 flex-1 space-y-3 text-small text-muted">
-          {FREE_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-teal-ink">+</span>{feature}</li>)}
-        </ul>
-        <ButtonLink href={authenticated ? "/dashboard/applications?new=1&intent=fill" : "/login?intent=start-free"} variant="secondary" block className="mt-7 border-teal text-teal-ink">Start free</ButtonLink>
-        <p className="mt-3 text-center text-label text-muted">New accounts begin with a 7-day Litos+ trial. No card required.</p>
-      </article>
-
-      <article className="rounded-card border border-brand/45 bg-brand-soft/35 p-6 sm:p-8">
-        <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.8fr)]">
-          <div>
-            <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos+</p>
-            <h2 className="mt-5 text-heading font-[450] text-ink">Tailoring, outreach, insights, and automation for the search ahead.</h2>
-            <p className="mt-2 text-body text-muted">The same full toolset is included in every paid term.</p>
-            <ul className="mt-6 space-y-3 text-small text-muted">
-              {PLUS_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-brand-ink">+</span>{feature}</li>)}
-            </ul>
+    <div>
+      {/* Four columns, one per thing you can actually choose. The terms used to
+          sit inside a single Litos+ card as radio rows, which made the page
+          read as two products where there are four prices; a term is not a
+          setting on a plan, it is the plan. The Litos+ feature list repeats in
+          every paid column on purpose: identical lists side by side are the
+          fastest way to show that only the length of access changes. */}
+      <div className="grid items-stretch gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <article className="flex flex-col rounded-card border border-teal/45 bg-teal-soft/35 p-6">
+          <p className="flex min-h-6 items-center font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free</p>
+          <h2 className="mt-4 min-h-14 text-heading font-[450] text-ink">Fill applications. Track every move.</h2>
+          <div className="mt-5 flex items-end gap-2">
+            <span className="font-mono text-section text-ink">$0</span>
+            <span className="pb-1 font-mono text-machine text-muted">forever</span>
           </div>
+          <p className="mt-4 min-h-14 font-mono text-machine text-muted">No application limit, in the dashboard or on supported sites.</p>
+          <ButtonLink
+            href={authenticated ? "/dashboard/applications?new=1&intent=fill" : "/login?intent=start-free"}
+            variant="secondary"
+            block
+            className="mt-6 border-teal text-teal-ink"
+          >
+            Start free
+          </ButtonLink>
+          <p className="mt-3 min-h-10 text-center text-label text-muted">New accounts begin with a 7-day Litos+ trial.</p>
+          <ul className="mt-6 flex-1 space-y-2.5 text-small text-muted">
+            {FREE_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-teal-ink">+</span>{feature}</li>)}
+          </ul>
+        </article>
 
-          <div>
-            <fieldset className="space-y-3">
-              <legend className="font-mono text-label uppercase tracking-[0.08em] text-muted">Choose a term</legend>
-              {LITOS_PLUS_PLANS.map((candidate) => {
-                const active = selected === candidate.id;
-                return (
-                  <label key={candidate.id} className={`relative mt-3 flex min-h-16 cursor-pointer items-center gap-3 rounded-inner border bg-surface px-4 py-3 ${active ? "border-brand-ink text-brand-ink" : "border-border text-ink"}`}>
-                    <input type="radio" name="pricing-term" checked={active} onChange={() => choose(candidate.id)} className="size-4 accent-brand" />
-                    <span className="min-w-0 flex-1">
-                      <span className="flex flex-wrap items-center gap-2 text-small font-medium">
-                        {candidate.label}
-                        {candidate.mostPopular && <span className="rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Most popular</span>}
-                      </span>
-                      <span className="mt-1 block font-mono text-machine text-muted">{candidate.daily}</span>
-                    </span>
-                    <span className="text-right font-mono text-machine text-ink">
-                      <span className="block">{candidate.total}</span>
-                      {candidate.savings && <span className="text-label text-brand-ink">Save {candidate.savings}%</span>}
-                    </span>
-                  </label>
-                );
-              })}
-            </fieldset>
-
-            <div className="mt-5 rounded-inner border border-brand/25 bg-surface p-4" aria-live="polite">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="font-mono text-machine text-muted">Due today</span>
-                <span className="font-mono text-heading text-ink">{authenticated || extensionCheckout ? plan.total : "$0"}</span>
+        {LITOS_PLUS_PLANS.map((plan) => {
+          const busy = busyPlan === plan.id;
+          const preselected = selected === plan.id;
+          const label = paid
+            ? "Manage subscription"
+            : !authenticated && !extensionCheckout
+              ? "Start 7-day trial"
+              : `Continue with ${plan.shortLabel}`;
+          return (
+            <article
+              key={plan.id}
+              aria-label={`Litos+, ${plan.label}`}
+              className={`flex flex-col rounded-card border bg-brand-soft/35 p-6 ${plan.mostPopular ? "border-brand-ink" : "border-brand/45"}${preselected ? " ring-1 ring-brand-ink" : ""}`}
+            >
+              <div className="flex min-h-6 items-center justify-between gap-2">
+                <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Litos+</p>
+                {plan.mostPopular && <span className="rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Most popular</span>}
               </div>
-              <p className="mt-3 font-mono text-machine text-ink">{authenticated || extensionCheckout
-                ? plan.disclosure
-                : `Selected paid term: ${plan.shortLabel} at ${plan.total}. After the trial, stay on Free unless you return and explicitly purchase.`}</p>
-              <p className="mt-1 text-label text-muted">Savings compare each daily rate with the weekly daily rate.</p>
-            </div>
-            {error && <div className="mt-4"><ErrorNote message={error} /></div>}
-            <Button type="button" block className="mt-5" disabled={busy || loading || !canPurchase} aria-busy={busy} onClick={() => void continueWithPlan()}>
-              {busy ? <PendingLabel onColor>Opening Stripe</PendingLabel> : loading ? <PendingLabel onColor>Checking terms</PendingLabel> : plusLabel}
-            </Button>
-            <p className="mt-3 text-center text-label text-muted">{extensionCheckout
-              ? "Stripe opens through the signed-in Litos extension, so the purchase stays with that extension account."
-              : "No charge begins with the 7-day trial. Stripe opens only after a later, explicit purchase."}</p>
-          </div>
-        </div>
-      </article>
+              <h2 className="mt-4 min-h-14 text-heading font-[450] text-ink">{plan.label}</h2>
+              <div className="mt-5 flex items-end gap-2">
+                <span className="font-mono text-section text-ink">{plan.total}</span>
+                <span className="pb-1 font-mono text-machine text-muted">{plan.daily}</span>
+              </div>
+              <p className="mt-4 min-h-14 font-mono text-machine text-muted">
+                {plan.savings ? `Save ${plan.savings}% against the weekly rate.` : "The shortest term, for a search you expect to close fast."}
+              </p>
+              <Button
+                type="button"
+                block
+                className="mt-6"
+                disabled={busy || loading || !canPurchase}
+                aria-busy={busy}
+                onClick={() => void continueWithPlan(plan.id)}
+              >
+                {busy ? <PendingLabel onColor>Opening Stripe</PendingLabel> : loading ? <PendingLabel onColor>Checking terms</PendingLabel> : label}
+              </Button>
+              <p className="mt-3 min-h-10 text-center text-label text-muted" aria-live="polite">
+                Due today {authenticated || extensionCheckout ? plan.total : "$0"}. {authenticated || extensionCheckout
+                  ? `Renews ${plan.renewal} until canceled.`
+                  : `After the trial, stay on Free unless you return and explicitly purchase.`}
+              </p>
+              <ul className="mt-6 flex-1 space-y-2.5 text-small text-muted">
+                {PLUS_FEATURES.map((feature) => <li key={feature} className="flex gap-2.5"><span aria-hidden="true" className="text-brand-ink">+</span>{feature}</li>)}
+              </ul>
+            </article>
+          );
+        })}
+      </div>
+
+      {error && <div className="mt-5"><ErrorNote message={error} /></div>}
+      <p className="mt-5 text-center text-label text-muted">
+        Savings compare each daily rate with the weekly daily rate. {extensionCheckout
+          ? "Stripe opens through the signed-in Litos extension, so the purchase stays with that extension account."
+          : "No charge begins with the 7-day trial. Stripe opens only after a later, explicit purchase."}
+      </p>
     </div>
   );
 }
