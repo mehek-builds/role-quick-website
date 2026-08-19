@@ -145,3 +145,27 @@ test("extension-origin pricing keeps checkout on the extension account", async (
   assert.doesNotMatch(extensionBranch, /api<Me>|getBillingState/);
   assert.match(billingReturn, /We could not confirm the extension account yet\. Open Litos and refresh Plan\./);
 });
+
+test("the plan step has no way past it except paying", async () => {
+  /* THE CONTRACT CHANGED, on Mehek's call 2026-08-19. New accounts go seven-day trial then
+     Litos+, and Free is somewhere you arrive by cancelling rather than a fork offered during
+     setup. "Continue on Free" acknowledged the plan step and finished the flow, so it was the
+     one control that let a new account reach the dashboard having never given a card.
+
+     Pinned by ABSENCE, and the second half matters as much as the first: `onSettled` is not
+     that control renamed. It fires only for an account that already holds Litos+, which is how
+     someone returning from a completed Stripe checkout gets off this screen instead of being
+     sold what they just bought. Required rather than optional, because an optional callback is
+     one a caller can omit and strand a paid student here forever. */
+  const [step, start] = await Promise.all([
+    readFile(new URL("../components/start/PlanStep.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/start/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(step, /Continue on Free/);
+  assert.doesNotMatch(step, /onboarding_plan_declined/);
+  assert.match(step, /\{ onSettled \}: \{ onSettled: \(\) => void \}/);
+  assert.match(step, /isPaidAccess\(access\)[\s\S]{0,600}?onSettled\(\);/);
+  // The caller must always supply it, so a paid return is never stranded.
+  assert.match(start, /<PlanStep onSettled=\{\(\) => \{ stepDone\("plan"\)/);
+  assert.doesNotMatch(start, /requires_payment_method\s*\?/);
+});
