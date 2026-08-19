@@ -51,12 +51,19 @@ test("every conditional step has its own server signal, and no unconditional ste
      answers for the gaps screen and no other, and a screen counted by a flag that does not describe
      it is counted only while the student stands on it, which is the count-grows-underneath-them
      defect this rule exists to remove.
-     What changed is the number of them. The application sequence added six, and they read
-     `includes_application_steps`, which is the server's answer for exactly those six. So this now
+     What changed is the number of them. The application sequence added seven, and they read
+     `includes_application_steps`, which is the server's answer for exactly those seven. So this now
      checks the PROPERTY rather than a fixed list: every conditional key must be reachable from a
-     signal `flowSteps` actually consults. */
+     signal `flowSteps` actually consults.
+
+     The list is still pinned as a VALUE because adding a screen is a deploy-order decision, not a
+     detail: the website has to ship a case for a step before the backend serves it, or the student
+     lands on a fallback screen mid-flow. A new key should arrive here as a deliberate edit. */
   const conditional = STEPS.filter((s) => s.conditional).map((s) => s.key);
-  assert.deepEqual(conditional, ["gaps", "match", "build", "questions", "review", "trial", "plan"]);
+  assert.deepEqual(
+    conditional,
+    ["gaps", "match", "build", "questions", "review", "trial", "notifications", "plan"],
+  );
 
   const source = await readFile(new URL("../features/onboarding/domain/rail.ts", import.meta.url), "utf8");
   for (const key of conditional) {

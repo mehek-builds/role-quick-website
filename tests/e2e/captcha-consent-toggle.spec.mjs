@@ -153,6 +153,17 @@ await context.route("**/*", async (route) => {
     await route.fulfill({ json: { configured: true, tracking_active: false, tracking_blocked_reason: "inbound_disabled", domain: "applications@trylitos.com", forward_to: "fixture@example.invalid", aliases: [] } });
     return;
   }
+  /* Settings reads the notification permissions to draw the two controls under Automation. An
+     expected read belongs in the stub rather than in `unknown`: this fixture's job is to fail when
+     the page asks for something nobody sanctioned. Both off, which is what a fresh account holds. */
+  if (key === "GET /notifications/preferences") {
+    return route.fulfill({ json: {
+      strong_match: { enabled: false, granted_at: null },
+      employer_reply: { enabled: false, granted_at: null },
+      deliverable: true,
+      unsubscribe_configured: true,
+    } });
+  }
   if (key === "GET /sponsorship") {
     await route.fulfill({ status: 404, json: { error: "fixture" } });
     return;

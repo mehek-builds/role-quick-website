@@ -43,7 +43,7 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
      that must not be counted by default. Left in STEPS unconditionally it made the denominator a
      permanent overcount, which #285 accepted as the cheaper of two errors and this flag removes. */
   { key: "gaps", label: "A few details", weight: 1, conditional: true },
-  /* THE APPLICATION SEQUENCE. All six are conditional on the same server-owned signal
+  /* THE APPLICATION SEQUENCE. All seven are conditional on the same server-owned signal
      (`includes_application_steps`), for the same reason the gaps screen is conditional on its own:
      the flow does not always contain them, and counting them for everybody would make the rail's
      denominator a permanent overcount for the accounts that never walk them.
@@ -55,12 +55,16 @@ export const STEPS: { key: OnboardingStep; label: string; weight: number; condit
   { key: "questions", label: "What the job asks", weight: 1, conditional: true },
   { key: "review", label: "Review and send", weight: 1, conditional: true },
   { key: "trial", label: "Your trial", weight: 1, conditional: true },
+  /* Weight 1: two switches and a sentence. It sits between the trial and the plan because that is
+     where permission is cheapest to give and most honest to ask for, right after being handed the
+     seven days and before any price is on screen. */
+  { key: "notifications", label: "Staying in touch", weight: 1, conditional: true },
   { key: "plan", label: "Your plan", weight: 1, conditional: true },
   { key: "done", label: "Done", weight: 0 },
 ];
 
-/** The six steps gated by `includes_application_steps`. */
-const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "build", "questions", "review", "trial", "plan"]);
+/** The seven steps gated by `includes_application_steps`. */
+const APPLICATION_KEYS = new Set<OnboardingStep>(["match", "build", "questions", "review", "trial", "notifications", "plan"]);
 
 /** The steps this particular student's flow contains, which is the rail's denominator.
  *

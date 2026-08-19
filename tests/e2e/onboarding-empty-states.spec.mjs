@@ -73,19 +73,23 @@ after(async () => {
  * original assertion and shortened with it. */
 test("every onboarding checkpoint renders with a progress indicator", async () => {
   const checkpoints = [
-    /* Roles leads as of flow version 3, and the application sequence added six screens after the
-       setup ones, so the denominator is 13 rather than 7: a new student's flow really does contain
-       all of them now, and a rail still claiming seven would be describing a flow nobody walks. */
-    ["focus", "What are you going after?", "Setup: step 1 of 13, Your roles"],
-    ["resume", "Start with your resume.", "Setup: step 2 of 13, Your resume"],
-    ["impact", "Make your most recent work count.", "Setup: step 3 of 13, Your impact"],
-    ["sponsorship", "Where can you work?", "Setup: step 4 of 13, Work visa"],
-    ["base", "One page, ready.", "Setup: step 5 of 13, Your one page"],
-    ["gaps", "A few details.", "Setup: step 6 of 13, A few details"],
+    /* Roles leads as of flow version 3, and the application sequence added SEVEN screens after the
+       setup ones, so the denominator is 14 rather than 7: a new student's flow really does contain
+       all of them now, and a rail still claiming seven would be describing a flow nobody walks.
+       Six became seven when the notifications screen landed between the trial and the plan. This
+       number is spelled out on every row rather than computed, so adding a screen shows up here as
+       a deliberate edit: the rail is a wayfinding device, and one that counts wrong is worse than
+       none (#285). */
+    ["focus", "What are you going after?", "Setup: step 1 of 14, Your roles"],
+    ["resume", "Start with your resume.", "Setup: step 2 of 14, Your resume"],
+    ["impact", "Make your most recent work count.", "Setup: step 3 of 14, Your impact"],
+    ["sponsorship", "Where can you work?", "Setup: step 4 of 14, Work visa"],
+    ["base", "One page, ready.", "Setup: step 5 of 14, Your one page"],
+    ["gaps", "A few details.", "Setup: step 6 of 14, A few details"],
     /* Still 7, and the `done` fixture is the row that proves it: it reports NO outstanding gaps, so
        a denominator re-read from that list would drop to 6 here. Having been shown the screen is
        what the count follows, and that does not stop being true once the fields are answered. */
-    ["done", "Setup complete.", "Setup: step 13 of 13, Done"],
+    ["done", "Setup complete.", "Setup: step 14 of 14, Done"],
   ];
 
   for (const [step, heading, rail] of checkpoints) {
