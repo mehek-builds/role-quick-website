@@ -363,14 +363,34 @@ describe("the application sequence, end to end", () => {
     );
   });
 
-  test("09 the plan: pre-selected, disclosed adjacent, and Free is a real choice", async () => {
+  test("09 the plan: pre-selected, one control, and no way past it without a card", async () => {
+    /* THE CONTRACT CHANGED TWICE ON 2026-08-19 and this walk changed with it rather than
+       being deleted. It used to require the free escape ("Free is a real choice"), the
+       panel listing what Free kept, and the "$89.99 today" disclosure.
+
+       All three are gone and none of them by accident. New accounts go seven-day trial
+       then Litos+, so Free is somewhere you arrive by cancelling, not a fork offered
+       during setup -- the escape was the one control that let a new account reach the
+       dashboard having never given a card. And "$89.99 today" was simply false once the
+       card started a trial instead of a purchase: nothing is taken for seven days.
+
+       What is pinned now is the pair that has to be true on the screen that takes the
+       card -- what will be charged and by when it can be stopped -- plus the absence of
+       every exit, since an exit reappearing is the regression that matters. */
     await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
-    assert.match(body, /\$89\.99 today\. Renews every 3 months until canceled\./i);
-    assert.match(body, /Unlimited application filling/i, "Free's real value must be on the paywall");
-    assert.match(body, /Continue on Free/i);
-    assert.doesNotMatch(body, /Finish later/i, "the escape here chooses, so it must not say later");
+    assert.match(body, /Free for seven days\./i);
+    assert.match(body, /Litos\+ continues at \$89\.99 every 3 months\./i);
+    assert.match(body, /any time before then and you are not charged/i);
+    assert.doesNotMatch(body, /\$89\.99 today/i, "nothing is charged today, a trial starts");
+    assert.doesNotMatch(body, /Continue on Free/i, "the free escape is the whole point of the gate");
+    assert.doesNotMatch(body, /Finish later/i);
+
+    // Exactly one way forward, and it is checkout.
+    const actions = await page.locator("main button, main a").allInnerTexts();
+    const forward = actions.map((t) => t.trim()).filter((t) => /^Continue/i.test(t));
+    assert.deepEqual(forward, ["Continue with 3 months"]);
   });
 
   test("the whole sequence was walked in order", () => {
