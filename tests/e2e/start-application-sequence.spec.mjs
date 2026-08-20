@@ -326,7 +326,14 @@ describe("the application sequence, end to end", () => {
   test("04 the build: stages driven by real calls, resume unresolved until generation is", async () => {
     await page.getByRole("heading", { name: /building your application/i }).waitFor({ timeout: 20_000 });
 
-    // Generation is held open by the stub, so the resume row must still be in flight.
+    /* Generation is held open by the stub, so the resume row must still be in flight.
+     *
+     * WAITED FOR, NOT SNAPSHOTTED. This read `innerText` once, the instant the heading appeared,
+     * and asserted "composing" was already in it - a race between the posting stage resolving and
+     * the assertion running. It passed locally and on most CI runs and failed one, which is the
+     * worst kind of test: a real regression here would be indistinguishable from the flake. The
+     * stub holds generation open until releaseGeneration(), so waiting cannot hang past that. */
+    await page.getByText(/composing/i).waitFor({ timeout: 20_000 });
     const mid = await page.locator("main").innerText();
     assert.match(mid, /Writing your one page for it/i);
     assert.match(mid, /composing/i, "the resume stage is not active while generation is in flight");

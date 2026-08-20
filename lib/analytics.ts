@@ -93,7 +93,8 @@ type OnboardingEvent =
   /* Somebody went back to change an answer. A step that shows up here often is a step that asked
      the question badly the first time. */
   | "onboarding_revisit_opened"
-  | "onboarding_revisit_saved";
+  | "onboarding_revisit_saved"
+  | "onboarding_build_claim_required";
 
 type CoreEvent =
   | "authentication_completed"

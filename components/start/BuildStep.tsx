@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
 import { RequirementProvider, RequirementText } from "@/components/app/RequirementText";
-import { api, getJob, getPostingQuestions, type MonitoredJob, type ResumeSpec } from "@/lib/api";
+import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
   buildRequirementIndex,
   EMPTY_REQUIREMENT_INDEX,
@@ -56,7 +56,7 @@ export function BuildStep({
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null } | null>(null);
   const [posting, setPosting] = useState<MonitoredJob>(match.job);
   /* WHAT THE TAILORING ACTUALLY DID, scored against this posting.
    *
@@ -142,6 +142,9 @@ export function BuildStep({
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable,
+          /* WHICH precondition, not just that there was one. A missing name and a missing email are
+             fixed in different places, and for a guest the email is not fixable in Account at all. */
+          field: reason instanceof BuildPreconditionError ? reason.field : null,
         });
         track("onboarding_build_failed", { fixable });
       });
@@ -163,6 +166,10 @@ export function BuildStep({
       .catch(() => {});
     return () => { cancelled = true; };
   }, [result, posting.description, posting.id]);
+
+  /* The one precondition a guest cannot satisfy from Account, because a guest has no account email.
+     Read at render rather than stored: the student may have claimed one in another tab. */
+  const guestNeedsEmail = error?.fixable === true && error.field === "resume_email" && isGuestSession();
 
   if (error) {
     /* A FAILED BUILD USED TO BE A DEAD END, and it is step 3 of 10.
@@ -187,12 +194,27 @@ export function BuildStep({
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
-            ? "Add it in Account and Litos will build this one again. The posting is saved."
+            ? guestNeedsEmail
+              /* A GUEST HAS NO ACCOUNT EMAIL TO GO AND FIND, which is what made this a dead end.
+               *
+                 `resume_email` is seeded from the login email at upload, so a signed-in student
+                 never sees this screen - measured on prod 2026-08-19, 7 of 7 have one. A guest has
+                 no email anywhere, so "add it in Account" sent them to a page with nothing to add,
+                 three screens into setup. Claiming one is the actual fix, it is the same route the
+                 plan screen already uses for a guest who cannot check out, and an application needs
+                 a contact address anyway: the employer has to be able to reply to it. */
+              ? "An employer needs somewhere to reply. Add your email and Litos will build this one again, with the posting saved."
+              : "Add it in Account and Litos will build this one again. The posting is saved."
             : "Nothing was sent and nothing was lost. Your resume and roles are saved, and this one is not a fit Litos can write honestly. Try another posting."}
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-4">
           {!error.fixable && (
             <PrimaryButton onClick={onPickAnother}>Show me a different one</PrimaryButton>
+          )}
+          {guestNeedsEmail && (
+            <PrimaryButton onClick={() => { track("onboarding_build_claim_required", {}); window.location.assign("/login?intent=claim&next=/start"); }}>
+              Add my email
+            </PrimaryButton>
           )}
           <LaterLink onClick={onLater} />
         </div>
