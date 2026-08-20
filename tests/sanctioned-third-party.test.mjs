@@ -14,13 +14,15 @@ import test from "node:test";
  * third parties", and the guard would then be green while the surface it protects quietly filled up
  * with trackers. These assertions make widening it a deliberate act with a test to change.
  */
-const read = (p) => readFile(new URL(`../${p}`, import.meta.url), "utf8");
+const read = (p) => readFile(p, "utf8");
+const LIST = "tests/e2e/sanctioned-third-parties.mjs";
+const GUARDS = ["tests/e2e/audited-state-contracts.spec.mjs", "tests/e2e/dashboard-click-path.spec.mjs"];
 
 test("exactly one third-party origin is sanctioned, and it is the pixel", async () => {
-  const spec = await read("tests/e2e/audited-state-contracts.spec.mjs");
-  const block = spec.slice(
-    spec.indexOf("const SANCTIONED_THIRD_PARTY_ORIGINS"),
-    spec.indexOf("function isSanctionedThirdParty"),
+  const list = await read(LIST);
+  const block = list.slice(
+    list.indexOf("export const SANCTIONED_THIRD_PARTY_ORIGINS"),
+    list.indexOf("export function isSanctionedThirdParty"),
   );
   const origins = [...block.matchAll(/'(https?:\/\/[^']+)'/g)].map((m) => m[1]);
   assert.deepEqual(
@@ -33,8 +35,7 @@ test("exactly one third-party origin is sanctioned, and it is the pixel", async 
 test("it matches on origin, never on a substring", async () => {
   /* `url.includes("tiktok")` would sanction any host with that string in it, including one an
      attacker or a careless integration controls. The URL constructor is what makes it exact. */
-  const spec = await read("tests/e2e/audited-state-contracts.spec.mjs");
-  const fn = spec.slice(spec.indexOf("function isSanctionedThirdParty"), spec.indexOf("async function routeBilling"));
+  const fn = await read(LIST);
   assert.match(fn, /new URL\(url\)\.origin/, "the check no longer compares origins");
   assert.doesNotMatch(fn, /\.includes\(/, "the check fell back to substring matching");
 });
@@ -42,13 +43,16 @@ test("it matches on origin, never on a substring", async () => {
 test("a sanctioned request is aborted, never fulfilled", async () => {
   /* The same treatment Stripe's domain already gets. The suite must not make a real call to a real
      analytics endpoint, whatever it thinks of the pixel. */
-  const spec = await read("tests/e2e/audited-state-contracts.spec.mjs");
-  for (const match of spec.matchAll(/if \(isSanctionedThirdParty\(url\)\) return ([a-z.]+)\(\)/g)) {
-    assert.equal(match[1], "route.abort", "a sanctioned third party is being fulfilled rather than aborted");
+  for (const path of GUARDS) {
+    const spec = await read(path);
+    for (const match of spec.matchAll(/if \(isSanctionedThirdParty\(url\)\) return ([a-z.]+)\(\)/g)) {
+      assert.equal(match[1], "route.abort", `${path} fulfils a sanctioned third party rather than aborting it`);
+    }
+    assert.doesNotMatch(spec, /route\.fulfill[^\n]*isSanctionedThirdParty/, `${path} fulfils the sanctioned origin`);
   }
 });
 
-test("every unknown-traffic fallback consults the sanction, so the three handlers agree", async () => {
+test("every unknown-traffic fallback consults the sanction, so the handlers agree", async () => {
   const spec = await read("tests/e2e/audited-state-contracts.spec.mjs");
   const fallbacks = [...spec.matchAll(/unknown\.push\(`\$\{request\.method\(\)\} \$\{url\}`\)/g)].length;
   const guards = [...spec.matchAll(/if \(isSanctionedThirdParty\(url\)\)/g)].length;
@@ -57,4 +61,23 @@ test("every unknown-traffic fallback consults the sanction, so the three handler
     fallbacks,
     `${fallbacks} handlers record unknown traffic but ${guards} consult the sanction; one of them will disagree`,
   );
+});
+
+test("every spec with a network guard uses the shared list, never its own copy", async () => {
+  /* The failure this prevents: the pixel tripped the audited-state guard, that one was sanctioned,
+     and the click path guard - a different file with the same contract - stayed red. Two guards,
+     one product, and no shared answer about what the product may talk to. */
+  for (const path of GUARDS) {
+    const spec = await read(path);
+    assert.match(
+      spec,
+      /from "\.\/sanctioned-third-parties\.mjs"/,
+      `${path} does not import the shared list, so it can drift from the others`,
+    );
+    assert.doesNotMatch(
+      spec,
+      /const SANCTIONED_THIRD_PARTY_ORIGINS/,
+      `${path} declares its own sanctioned list instead of importing the shared one`,
+    );
+  }
 });

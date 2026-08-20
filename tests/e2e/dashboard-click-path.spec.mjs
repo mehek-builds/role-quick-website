@@ -85,6 +85,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
 import { BACKEND_ORIGIN, COUNTS, REVIEWABLE_TOTAL, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -144,6 +145,14 @@ await context.route("**/*", async (route) => {
     const body = STUB[path];
     if (body === undefined) unstubbedBackendPaths.add(path);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
+    return;
+  }
+  /* The sanctioned analytics origin is aborted without being recorded. See
+     ./sanctioned-third-parties.mjs for what that list is and the call behind it: the pixel loads
+     from the root layout, so it reaches this surface like every other, and this guard exists to
+     make exactly that visible. */
+  if (isSanctionedThirdParty(url)) {
+    await route.abort();
     return;
   }
   blockedExternal.push(url);
