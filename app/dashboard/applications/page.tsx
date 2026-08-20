@@ -2688,6 +2688,73 @@ function Applications() {
     }
   }
 
+  /* Answer the one question that unlocks a re-run of an application that stopped without saying
+   * whether it reached the employer. `found` is her own look, never a guess: `true` records this as
+   * sent (the same terminal state a confirmed send reaches, with the source named so the receipt
+   * never claims Litos verified it), `false` releases the claim so submit-request's disposition gate
+   * can start a fresh run instead of refusing forever. Ref-guarded for the same reason
+   * submitSecurityCode is: a real employer sits on the other end, and a repeat while the first
+   * answer is still in flight must not fire a second request. */
+  const unverifiedSubmissionInFlight = useRef<string | null>(null);
+  const [unverifiedSubmissionId, setUnverifiedSubmissionId] = useState<string | null>(null);
+  const [unverifiedSubmissionError, setUnverifiedSubmissionError] = useState<string | null>(null);
+
+  async function submitUnverifiedOutcome(found: boolean) {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    if (unverifiedSubmissionInFlight.current === selected.id) return;
+    const requestedId = selected.id;
+    unverifiedSubmissionInFlight.current = requestedId;
+    setUnverifiedSubmissionId(requestedId);
+    setUnverifiedSubmissionError(null);
+    try {
+      const now = new Date().toISOString();
+      const result = qaMode
+        ? found
+          ? {
+            ...submission,
+            review: {
+              ...submission.review,
+              status: "submitted" as const,
+              submitted_at: submission.review.unverified_submission?.at ?? now,
+              attention_reason: undefined,
+              unverified_submission: { ...submission.review.unverified_submission!, resolution: "sent" as const, resolved_at: now },
+              receipt: {
+                confirmation_text: "Confirmed by you: you found this application in the employer’s portal after Litos pressed Send and lost the answer.",
+                final_url: submission.review.unverified_submission?.portal_url ?? submission.review.portal_url ?? "/qa/portal-submission/success",
+                captured_at: now,
+                source: "attended_handoff" as const,
+              },
+            },
+          }
+          : {
+            ...submission,
+            review: {
+              ...submission.review,
+              status: "needs_attention" as const,
+              submission_claimed_at: undefined,
+              unverified_submission: { ...submission.review.unverified_submission!, resolution: "not_sent" as const, resolved_at: now },
+              attention_reason: "You checked and the employer does not have this one, so nothing was sent. Litos can send it again whenever you are ready.",
+              attention_categories: undefined,
+            },
+          }
+        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/unverified`, {
+          method: "POST",
+          body: JSON.stringify({ found }),
+        });
+      if (selectedIdRef.current !== requestedId) return;
+      submissionRef.current = result;
+      setSubmission(result);
+      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithSubmission(packet, result) : packet) ?? current);
+      moveToScreen(screenForStatus(result.review.status, "portal"));
+    } catch (reason) {
+      if (selectedIdRef.current !== requestedId) return;
+      setUnverifiedSubmissionError(reason instanceof Error ? reason.message : "Could not record what you found.");
+    } finally {
+      unverifiedSubmissionInFlight.current = null;
+      setUnverifiedSubmissionId(null);
+    }
+  }
+
   async function retryPreparation() {
     if (!selected || !submission || submission.application_id !== selected.id) return;
     const currentQuestions = mergeDiscoveredQuestions(questions, submission.review.questions);
@@ -3243,6 +3310,9 @@ function Applications() {
           securityCodeSubmitting={securityCodeId === selected.id}
           securityCodeError={securityCodeError}
           onSubmitSecurityCode={submitSecurityCode}
+          unverifiedSubmissionSubmitting={unverifiedSubmissionId === selected.id}
+          unverifiedSubmissionError={unverifiedSubmissionError}
+          onSubmitUnverifiedOutcome={submitUnverifiedOutcome}
           educationProfile={educationProfile}
           educationProfileStatus={qaMode === true ? "ready" : educationProfileStatus}
           onCheckResume={() => moveToScreen("review")}
@@ -4339,10 +4409,53 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
+/**
+ * The one question that unlocks a run that stopped without saying whether it reached the employer.
+ *
+ * This is not a blocker Litos can resolve by rerunning anything: `attention_reason` already says
+ * what happened and where to look (unverifiedSubmissionReason on the backend), so it is rendered
+ * verbatim rather than paraphrased here, the same way BlockerList would if this state had not
+ * bypassed it. What is new is the pair of controls, because the answer can only be hers. Answering
+ * "found" records this as sent - the same terminal state a normal send reaches, with the source
+ * named so the receipt never claims Litos verified it. Answering "not found" releases the claim, so
+ * the ordinary Try again/Review and fill controls become live again the next time this screen
+ * renders, instead of refusing forever.
+ */
+function UnverifiedSubmissionCard({ review, submitting, error, onSubmitOutcome }: {
+  review: ApplicationReview;
+  submitting: boolean;
+  error: string | null;
+  onSubmitOutcome: (found: boolean) => void;
+}) {
+  return (
+    <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
+      <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on you to look</p>
+      <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink">
+        {review.attention_reason
+          ?? "Litos pressed Send and could not confirm what came back, so it does not know whether this application went through. Open the employer's page and look, then say which you found."}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button onClick={() => onSubmitOutcome(true)} disabled={submitting} variant="secondary">
+          {submitting ? "Recording..." : "I found it there"}
+        </Button>
+        <Button onClick={() => onSubmitOutcome(false)} disabled={submitting}>
+          {submitting ? "Recording..." : "It is not there"}
+        </Button>
+      </div>
+      {error && <p role="alert" className="mt-2 text-xs leading-5 text-danger">{error}</p>}
+    </div>
+  );
+}
+
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
+  /* A run may have reached the employer and stopped before it could say so. Gated on the resolution
+     being absent, not just the field's presence: once she has answered, the record stays on the
+     review as history (the same reason `stall` is closed with `resolved_at` rather than deleted),
+     and a resolved one must not reopen this card on every later visit. */
+  const awaitingUnverifiedSubmission = needsAttention && Boolean(review.unverified_submission) && !review.unverified_submission?.resolution;
   const hasQuestionsToReview = needsAttention && review.questions.length > 0;
   const handoffUrl = needsAttention ? submission.handoff_url : undefined;
   const portalUrl = review.portal_url?.trim();
@@ -4576,14 +4689,21 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   return (
     <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
       <Card className="p-7">
-        <h2 className="text-heading font-medium text-ink">{awaitingSecurityCode ? "One code away" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
+        <h2 className="text-heading font-medium text-ink">{awaitingSecurityCode ? "One code away" : awaitingUnverifiedSubmission ? "Waiting on you to look" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
-            reached the screen. Each blocker is its own item, because each is its own task. */}
-        {needsAttention ? (
+            reached the screen. Each blocker is its own item, because each is its own task.
+
+            awaitingUnverifiedSubmission is pulled out of this branch for the same reason
+            awaitingSecurityCode already was: BlockerList's controls (Open page, answer a question,
+            attach a document) all assume the fix is something Litos can rerun once she has acted.
+            The only fix here is the yes/no in UnverifiedSubmissionCard below, and that card renders
+            attention_reason itself, so showing it twice would say the same thing in two different
+            voices. */}
+        {needsAttention && !awaitingUnverifiedSubmission ? (
           <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} />
-        ) : (
+        ) : awaitingUnverifiedSubmission ? null : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
               ? userFacingError(review.submission_error, "Try again in a minute.")
@@ -4600,6 +4720,14 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             submitting={securityCodeSubmitting}
             error={securityCodeError}
             onSubmitCode={onSubmitSecurityCode}
+          />
+        )}
+        {awaitingUnverifiedSubmission && (
+          <UnverifiedSubmissionCard
+            review={review}
+            submitting={unverifiedSubmissionSubmitting}
+            error={unverifiedSubmissionError}
+            onSubmitOutcome={onSubmitUnverifiedOutcome}
           />
         )}
         {review.status === "ready_for_final_approval" && educationDriftWarning && (
@@ -4724,7 +4852,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             )}
           </div>
         )}
-        {needsAttention && !canFinishInDashboard && !attendedHandoffUrl && (
+        {needsAttention && !awaitingUnverifiedSubmission && !canFinishInDashboard && !attendedHandoffUrl && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">No live browser to reopen</p>
             <p className="mt-1 text-xs leading-5 text-muted">
@@ -4755,10 +4883,13 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               fresh audit, the exact-PDF gate and the acknowledged send, and needs_attention rows had
               no route to it: measured on Belvedere 2026-08-18, where every exit from this screen was
               a stale retry. */}
-          {needsAttention && <Button onClick={onReviewPacket}>Review and fill</Button>}
-          {needsAttention && <Button onClick={onRetry} variant="secondary">Try again</Button>}
-          {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
-          {needsAttention && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
+          {/* None of these four replay or resolve anything while the claim is still on the row for
+              an unverified send - submit-request would just answer the same 409 again - so they wait
+              for UnverifiedSubmissionCard's yes/no to release it first. */}
+          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket}>Review and fill</Button>}
+          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
+          {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
           {/* A REAL <button>, from the shared component, and that is not a stylistic preference on

@@ -286,6 +286,43 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
       },
     ],
   }),
+  /* A run that pressed Send and could not confirm what came back - not the CAPTCHA short-circuit
+     the other stalled fixtures trip. Nothing else in this file exercises
+     `SubmissionScreen`'s `awaitingUnverifiedSubmission` branch (UnverifiedSubmissionCard, the
+     yes/no controls, `POST /applications/:id/submission/unverified`), because it is genuinely rare
+     on real accounts: measured against production 2026-08-20, of every currently stalled
+     application across the account, none carried a claim this specific - the CAPTCHA gate stops a
+     run before the click every time it has been observed to. That rarity is exactly why this needs
+     a fixture rather than waiting to find a live one. Reachable at
+     localhost/dashboard/applications?qa=belvedereunverified. */
+  belvedereunverified: qaVariant(QA_PACKET, {
+    id: "d6693be1-9d1d-4f61-9911-8d95f1ad1b08",
+    company: "Belvedere Trading",
+    role: "Software Engineer Intern - Summer 2027",
+    ats: "Lever",
+    score: 85,
+    jd: "Belvedere Trading is hiring a Software Engineer Intern to build low-latency trading infrastructure in a fast, collaborative environment.",
+    title: "Software Engineer",
+    bullets: [
+      "Built reliable TypeScript services that automated 18 operational handoffs.",
+      "Shipped tested developer tools with visible recovery paths for production failures.",
+    ],
+    skills: ["TypeScript", "React", "Node.js", "Distributed Systems", "Trading Systems"],
+    editedTerms: ["reliable", "tested", "production", "Distributed Systems"],
+    status: "needs_attention",
+    attentionReason: "Litos pressed Send and the secure browser was cut off before the employer’s answer came back, so it does not know whether this application went through. "
+      + "Open https://jobs.example.com/belvedere-trading/software-engineer and look. "
+      + "A sent application usually replaces the form with a short confirmation, and many employers email one too. "
+      + "Then tell Litos which you found: if it is there, Litos will record it as sent and will not apply again; if it is not, Litos will send this one for you. "
+      + "Do not submit it by hand in the meantime, because two applications to the same posting count against you and cannot be taken back.",
+    unverifiedSubmission: {
+      at: "2026-08-16T23:51:29.629Z",
+      cause: "run_timed_out",
+      portal_url: "https://jobs.example.com/belvedere-trading/software-engineer",
+    },
+    filledFields: ["name", "email", "phone", "resume"],
+    questions: [],
+  }),
 };
 
 function qaVariant(packet: GeneratedResume, options: {
@@ -303,6 +340,7 @@ function qaVariant(packet: GeneratedResume, options: {
   status?: ApplicationReview["status"];
   attentionReason?: string;
   filledFields?: string[];
+  unverifiedSubmission?: ApplicationReview["unverified_submission"];
 }): GeneratedResume {
   const review = packet.spec._review;
   if (!review) return packet;
@@ -320,13 +358,16 @@ function qaVariant(packet: GeneratedResume, options: {
       _review: {
         ...review,
         jd_text: options.jd,
-        portal_url: `https://jobs.example.com/${options.company.toLowerCase()}/${options.role.toLowerCase().replaceAll(" ", "-")}`,
+        // .replaceAll on company too: every existing scenario happened to be one word, so this
+        // slipped by until "Belvedere Trading" made a raw space land in a URL.
+        portal_url: `https://jobs.example.com/${options.company.toLowerCase().replaceAll(" ", "-")}/${options.role.toLowerCase().replaceAll(" ", "-")}`,
         ats_name: options.ats,
         status: options.status ?? (options.questions.length > 0 ? "questions_ready" : "ready_to_submit"),
         edited_terms: options.editedTerms,
         questions: options.questions,
         attention_reason: options.attentionReason,
         filled_fields: options.filledFields,
+        unverified_submission: options.unverifiedSubmission,
       },
     },
   };
