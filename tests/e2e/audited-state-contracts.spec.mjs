@@ -144,6 +144,35 @@ function isLocal(url) {
   return url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank";
 }
 
+/* THE ONE THIRD PARTY THIS FILE SANCTIONS, and it is a list of one on purpose.
+ *
+ * `app/layout.tsx` loads the TikTok pixel from the ROOT layout, so it fires on every page in the
+ * product, these audited ones included: it requests events.js and calls ttq.page() on load. This
+ * guard treats any unstubbed request as a finding, which is exactly what it is for, so the pixel
+ * turned all twelve cases in this file red the moment it merged (#389).
+ *
+ * Mehek's call 2026-08-20, taken with the alternatives on the table: the pixel stays everywhere,
+ * including the billing return where a purchase completes, because that is where ad attribution is
+ * actually measured. The privacy cost is real and was named rather than discovered - a
+ * cookie-setting tracker now loads on the billing and account-deletion surfaces - and this comment
+ * exists so that trade is legible to whoever reads the guard next rather than looking like a test
+ * that was quietly relaxed to go green.
+ *
+ * NARROW BY CONSTRUCTION. One host, matched on origin rather than substring, so a different tracker
+ * arriving tomorrow still turns this file red and still needs a decision. Aborted rather than
+ * fulfilled, the same treatment Stripe's own domain gets below: the suite must not make a real call
+ * to a real analytics endpoint.
+ */
+const SANCTIONED_THIRD_PARTY_ORIGINS = new Set(['https://analytics.tiktok.com']);
+
+function isSanctionedThirdParty(url) {
+  try {
+    return SANCTIONED_THIRD_PARTY_ORIGINS.has(new URL(url).origin);
+  } catch {
+    return false;
+  }
+}
+
 async function routeBilling(context, meResponse, {
   offerStatus = "paid",
   stateResponse = billingState("plus_paid"),
@@ -202,6 +231,7 @@ async function routeBilling(context, meResponse, {
       return route.fulfill({ json: { product: "litos" } });
     }
     if (url.startsWith("https://billing.stripe.com/")) return route.abort();
+    if (isSanctionedThirdParty(url)) return route.abort();
     unknown.push(`${request.method()} ${url}`);
     return route.abort();
   });
@@ -281,6 +311,7 @@ async function routeSettings(context, deleteResponse, exportResponse = { status:
     const url = request.url();
     if (isLocal(url)) return route.continue();
     if (!url.startsWith(BACKEND)) {
+      if (isSanctionedThirdParty(url)) return route.abort();
       unknown.push(`${request.method()} ${url}`);
       return route.abort();
     }
@@ -443,6 +474,7 @@ async function routeResume(context, {
     const url = request.url();
     if (isLocal(url)) return route.continue();
     if (!url.startsWith(BACKEND)) {
+      if (isSanctionedThirdParty(url)) return route.abort();
       unknown.push(`${request.method()} ${url}`);
       return route.abort();
     }
