@@ -406,6 +406,23 @@ function Applications() {
    * nobody else is going to repeat. `error` wins the render when both are set: a refusal to
    * something she did outranks news about the connection. */
   const [pollError, setPollError] = useState<string | null>(null);
+  /* The one poll failure that must OUTLIVE the tick that raised it, and the last silent member of
+     the dead-button class ("a dead button with no console error is a swallowed 409 in the network
+     tab", measured live 2026-08-19 and 2026-08-20). When the acknowledged packet revalidation is
+     refused (see refreshSubmission), the server wrote a sentence for the applicant - the packet
+     moved, a run claimed the row, the PDF aged out - and the catch used to throw it away while the
+     evidence it guarded vanished, so the send gate closed and the controls changed shape with no
+     words anywhere on screen.
+
+     It rides the POLL'S channel, not `error`: nobody pressed anything, this is news about the
+     packet's state. But it cannot ride it the ordinary way, because the refusal clears the very
+     evidence whose revalidation raised it, so the NEXT tick has nothing left to revalidate,
+     reports a clean poll, and the unconditional banner-clear at the end of the tick would wipe
+     the sentence after one 2.5s round: the Cresta finding again, rebuilt one layer down. The ref
+     keys the sentence to the application it is about; a clean revalidation, a fresh audit, or
+     switching packets retires it. Only ApiError refusals land here - a dropped connection has no
+     server sentence, and the outer poll catch already owns "We lost sight of the form". */
+  const packetRevalidationRefusal = useRef<{ applicationId: string; message: string } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   /* Null means the localhost-only fixture gate has not resolved yet. Treating that as false let
      authenticated effects fire during the first render of a QA page, and a 401 redirected the
@@ -718,9 +735,41 @@ function Applications() {
       : null);
     setError(null);
     setPollError(null);
+    /* Entering a packet starts its story over, and that includes a standing revalidation refusal:
+       the sentence described evidence this entry no longer holds, and left in the ref it would
+       re-pin itself onto the banner at the next poll tick. */
+    packetRevalidationRefusal.current = null;
     setSendRefusal(null);
     setNotice(null);
   }, [moveToScreen]);
+
+  /* The acknowledged branch of the poll's evidence upkeep, out of refreshSubmission for the same
+     reason its comments are: tests/submission-terminal-state.test.mjs bounds the fetch-to-route
+     span so it holds code. Every await in here is guarded by the same requestedId discipline as
+     the caller. On success or a clean invalidation the standing refusal retires; on an HTTP
+     refusal the server's sentence is recorded for the end-of-tick banner write, because the
+     evidence being cleared right here is exactly what stops a later tick from re-raising it. */
+  const revalidateAcknowledgedEvidence = useCallback(async (requestedId: string, currentEvidence: PacketEvidenceSession) => {
+    try {
+      const currentAudit = await api<PacketAuditResponse>(`/applications/${requestedId}/packet-audit`, { method: "POST" });
+      const refreshed = revalidateAcknowledgedPacketEvidence(currentEvidence, requestedId, currentAudit, Date.now());
+      if (selectedIdRef.current !== requestedId || !refreshed) {
+        packetEvidenceRef.current = null;
+        setPacketEvidence(null);
+      } else {
+        packetEvidenceRef.current = refreshed;
+        setPacketEvidence(refreshed);
+      }
+      packetRevalidationRefusal.current = null;
+    } catch (reason) {
+      packetEvidenceRef.current = null;
+      setPacketEvidence(null);
+      // A server sentence, not a transient: see packetRevalidationRefusal.
+      if (reason instanceof ApiError) {
+        packetRevalidationRefusal.current = { applicationId: requestedId, message: reason.message };
+      }
+    }
+  }, []);
 
   /* The answer is put through reviewWithLists on arrival, not only on its way into state through
      setSubmission. Two lines in here read `result.review.questions` directly rather than through
@@ -755,20 +804,7 @@ function Applications() {
     captureCompletedSubmission(result, "poll");
     const currentEvidence = packetEvidenceRef.current;
     if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged) {
-      try {
-        const currentAudit = await api<PacketAuditResponse>(`/applications/${requestedId}/packet-audit`, { method: "POST" });
-        const refreshed = revalidateAcknowledgedPacketEvidence(currentEvidence, requestedId, currentAudit, Date.now());
-        if (selectedIdRef.current !== requestedId || !refreshed) {
-          packetEvidenceRef.current = null;
-          setPacketEvidence(null);
-        } else {
-          packetEvidenceRef.current = refreshed;
-          setPacketEvidence(refreshed);
-        }
-      } catch {
-        packetEvidenceRef.current = null;
-        setPacketEvidence(null);
-      }
+      await revalidateAcknowledgedEvidence(requestedId, currentEvidence);
     } else {
       setPacketEvidence((current) => reconcileUnacknowledgedPacketPoll(current, requestedId, result.review.packet_audit));
     }
@@ -795,7 +831,14 @@ function Applications() {
     // run that had since succeeded. It clears the POLL's banner and only that one: this line used
     // to be setError(null), which also erased the server's answer to a Send the student had just
     // pressed, within 2.5 seconds of it appearing.
-    setPollError(null);
+    //
+    // Unless a refused packet revalidation is standing for THIS application, in which case the
+    // server's sentence IS the banner, across ticks: see packetRevalidationRefusal.
+    if (packetRevalidationRefusal.current?.applicationId === requestedId) {
+      setPollError(packetRevalidationRefusal.current.message);
+    } else {
+      setPollError(null);
+    }
     /* While the student's own send is in flight the poll is usually reporting the status from
        BEFORE the approve, and acting on that walks them backwards onto a live "Send it".
        TERMINAL states are the exception, and the exception is load-bearing: `api()` has no
@@ -807,7 +850,7 @@ function Applications() {
     const terminal = result.review.status === "submitted" || result.review.status === "failed";
     if (approveInFlight.current !== null && !terminal) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
-  }, [captureCompletedSubmission, moveToScreen, qaMode, selectedId]);
+  }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId]);
 
   /* The applicant's own escape hatch when the cover letter has not arrived. The 2.5s poll already
      asks for it, so this exists for the case the poll cannot recover from on its own: a hung or
@@ -2293,6 +2336,13 @@ function Applications() {
         acknowledged: false,
         serverRevalidatedAt: null,
       });
+      /* A fresh audit is the recovery the revalidation refusal was asking for, so the refusal and
+         the poll banner carrying it retire here. The banner would otherwise sit red above the
+         green sentence below, describing evidence that no longer exists. */
+      if (packetRevalidationRefusal.current?.applicationId === applicationId) {
+        packetRevalidationRefusal.current = null;
+        setPollError(null);
+      }
       setNotice("The exact saved packet passed the server audit. Read the requirement evidence while the PDF loads.");
     } catch (reason) {
       if (selectedIdRef.current !== applicationId) return;

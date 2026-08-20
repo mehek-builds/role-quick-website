@@ -23,6 +23,7 @@
     "verify:logos": "node --experimental-strip-types scripts/verify-logo-service.mjs",
     "verify:suggestions": "node --experimental-strip-types scripts/verify-board-suggestions.mjs",
     "test:approve": "node --test tests/e2e/approve-resolves.spec.mjs",
+    "test:packet-flow-refusals": "node --test tests/e2e/packet-flow-refusals.spec.mjs",
     "test:exact-packet-pdf": "node --test tests/e2e/exact-packet-pdf.spec.mjs",
     "test:start-application": "node --test tests/e2e/start-application-sequence.spec.mjs"
   },
