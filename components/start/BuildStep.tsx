@@ -15,19 +15,12 @@
  * anything they are shown.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { RequirementProvider, RequirementText } from "@/components/app/RequirementText";
+import { ResumePaper, type ContactHeader } from "./ResumePaper";
 import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
-import {
-  buildRequirementIndex,
-  EMPTY_REQUIREMENT_INDEX,
-  fetchJdMatch,
-  resumeSpecText,
-  type JdMatchResponse,
-  type ProfileIdentity,
-} from "@/features/applications";
+import { type ProfileIdentity } from "@/features/applications";
 import {
   BuildPreconditionError,
   buildActionLabel,
@@ -58,18 +51,6 @@ export function BuildStep({
   const [result, setResult] = useState<BuildResult | null>(null);
   const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null } | null>(null);
   const [posting, setPosting] = useState<MonitoredJob>(match.job);
-  /* WHAT THE TAILORING ACTUALLY DID, scored against this posting.
-   *
-   * Without it the right pane was a sentence of prose - "Written for this posting from your own
-   * resume" - which is the product ASSERTING the one thing this screen exists to SHOW. A student
-   * watching three stages tick over and then being told, in words, that something was tailored has
-   * been given a progress bar and a promise.
-   *
-   * The scoring is a separate call on purpose. It is not part of runOnboardingBuild: the build has
-   * to be provable without running it, and a failed score must never turn a successful build into a
-   * failed one. Hence its own state and its own catch - the panes fall back to plain, unmarked text
-   * and the flow continues, because the resume is real whether or not it could be scored. */
-  const [scored, setScored] = useState<JdMatchResponse | null>(null);
   /* THE APPLICANT'S NAME, held here because ResumeSpec has no name field.
    *
    * That absence has produced the same bug four times: a resume surface renders `spec.school` in
@@ -151,21 +132,6 @@ export function BuildStep({
     return () => { cancelled = true; };
   }, [match.job.id]);
 
-  /* Scoring the finished resume against this posting, which is what gives both panes their colours.
-   *
-   * Runs AFTER the build rather than inside it, and its failure is not the build's failure: the
-   * resume is real whether or not it could be scored, and turning a successful generation into
-   * "That build did not finish" because a scoring call timed out would be the worst possible trade.
-   * A failed score leaves EMPTY_REQUIREMENT_INDEX, both panes render as plain text, and the student
-   * still gets their resume. */
-  useEffect(() => {
-    if (!result?.resumeSpec) return;
-    let cancelled = false;
-    fetchJdMatch(posting.description ?? null, resumeSpecText(result.resumeSpec), { job_id: posting.id })
-      .then((match) => { if (!cancelled) setScored(match); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [result, posting.description, posting.id]);
 
   /* The one precondition a guest cannot satisfy from Account, because a guest has no account email.
      Read at render rather than stored: the student may have claimed one in another tab. */
@@ -224,16 +190,6 @@ export function BuildStep({
 
   const building = result === null;
 
-  /* THE COLOUR CONTRACT, and it is the reason this pane renders the resume rather than describing
-     it. ISSUE-047: every colour on one side must be supported by something on the other. A term
-     marked in the job description and markable nowhere in the resume is a colour pointing at
-     nothing, which was measured on 111 of 313 matched terms. Both panes here run through the same
-     `RequirementText`, over the same index, so a mark on the left has a mark on the right by
-     construction - and hovering either lifts both. */
-  const index = useMemo(
-    () => (scored ? buildRequirementIndex(scored.matched, scored.missing) : EMPTY_REQUIREMENT_INDEX),
-    [scored],
-  );
 
   return (
     <StartShell
@@ -241,10 +197,6 @@ export function BuildStep({
       title={building ? "Building your application." : "Here is your application."}
       wide
     >
-      {/* One provider over BOTH panes, which is what makes the link real rather than a coincidence
-          of colour. The hover state lives in this context too, so pointing at a term in the posting
-          lifts the same term in the resume and vice versa. */}
-      <RequirementProvider index={index}>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {/* LEFT: the posting, pinned. Unchanged between phases on purpose, so the student can read
             what Litos is reading rather than watching it disappear at the moment it matters. */}
@@ -263,21 +215,18 @@ export function BuildStep({
               {posting.ats_name}
             </p>
             {/* THE POSTING'S OWN WORDS, which is what makes the left pane a job description rather
-                than a job title. Marked term by term against the same index as the resume, so
-                pointing at anything here lifts its answer over there. Only after the build: marking
-                a posting against a resume that does not exist yet would colour it from a previous
-                student's score or from nothing at all.
+                than a job title. There is something to compare against on the right now, so the
+                text has to actually be here.
 
-                `hideMissing` because the legend is gone (Mehek 2026-08-20). A mark now means one
-                thing and one thing only - the posting asked for this and your resume says it - so
-                it explains itself by appearing on both sides at once, and hovering either lifts the
-                pair. The missing tone cannot do that: nothing on the resume side answers it, so
-                without a key it was an orange underline the student had no way to read, attached to
-                a count of what they lack on the screen that is meant to show what Litos just built
-                for them. */}
+                NO TERM MARKING. It was here, over both panes, and it came out with the hand-rolled
+                resume view it was paired with: the shared ResumePaper draws the real document and
+                does not mark, so a mark on this side would point at nothing on that side - the
+                exact ISSUE-047 failure, a colour with no support. Restoring the link means teaching
+                ResumePaper to mark, which is a change to a component four surfaces share and a
+                decision of its own rather than a side effect of this screen. */}
             {!building && posting.description && (
               <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-                <RequirementText text={posting.description} hideMissing />
+                {posting.description}
               </p>
             )}
           </div>
@@ -301,7 +250,14 @@ export function BuildStep({
                 <span className="rq-shimmer h-1.5 w-2/5 rounded-full" />
               </>
             ) : result?.resumeSpec ? (
-              <ResumePane spec={result.resumeSpec} name={applicantName} />
+              /* THE SAME PAPER THE REST OF THE PRODUCT DRAWS, not a second one written for this
+                 screen. It already lays out the header the way a resume lays it out - name centred,
+                 contact line beneath - and it already owns the education, experience and skills
+                 blocks and the one-page fit. A parallel implementation here would drift from it on
+                 the first change to either, and mine already had: no contact line at all. */
+              <div className="origin-top scale-[0.62] [transform-box:content-box]">
+                <ResumePaper spec={result.resumeSpec} contact={contactHeaderOf(result.resumeSpec, applicantName)} />
+              </div>
             ) : (
               /* Generation succeeded but returned no spec to show. Says so rather than printing an
                  empty pane that reads as a failure, and the packet is still real. */
@@ -312,7 +268,6 @@ export function BuildStep({
           </div>
         </section>
       </div>
-      </RequirementProvider>
 
       {/* The stage list. Each row is a real call, and its orb runs only while that call is in
           flight. Five of the six shipped orb states map onto real work here; the three used are
@@ -354,73 +309,12 @@ export function BuildStep({
   );
 }
 
-/* THE RESUME LITOS JUST WROTE, rendered rather than described.
+/* The contact block for the paper, off the spec the generator just returned.
  *
- * Every line here is marked through RequirementText, so a term the posting asked for and this
- * resume answers carries the same colour on both sides of the screen and hovering either lifts
- * both. That is the whole point of the pane: the student can see WHICH of their own lines answer
- * WHICH part of the posting, instead of being told that tailoring happened.
- *
- * Deliberately not the print layout. This is a reading view at 12.5px inside a 380px scroller,
- * sitting next to the job description it was written against; the real one-page document is the
- * next screen, and pretending this is it would set the wrong expectation about what can be edited
- * here. Nothing on this pane is editable, because nothing has been sent yet and the review screen
- * is where lines get changed.
- */
-function ResumePane({ spec, name }: { spec: ResumeSpec; name: string | null }) {
-  return (
-    <div className="flex flex-col gap-3 text-[12.5px] leading-6 text-ink">
-      {/* THE NAME, FIRST, and it is a prop rather than a spec field because ResumeSpec has none.
-          Without it the school renders into the top slot and the student reads their university
-          where their own name belongs - the failure tests/packet-resume-header.test.mjs exists to
-          stop, having happened four times. Not marked: a name is not a requirement the posting
-          asked for, and colouring it would be a colour with nothing behind it. */}
-      {name && <p className="text-[14px] font-medium text-ink">{name}</p>}
-      <section className="flex flex-col gap-0.5">
-        <p className="font-medium">
-          <RequirementText text={spec.school ?? ""} />
-        </p>
-        <p className="text-muted">
-          <RequirementText text={[spec.degree, spec.grad_date].filter(Boolean).join(" · ")} />
-        </p>
-        {/* Coursework is marked because the PDF prints it and the scorer reads it. Leaving it off
-            the screen while crediting its terms is half of what ISSUE-047 measured. */}
-        {spec.coursework && (
-          <p className="text-muted">
-            <RequirementText text={spec.coursework} />
-          </p>
-        )}
-      </section>
-
-      {/* EVERY LIST IS GUARDED, and not as defensive habit. A spec that reached this pane came back
-          from a real generation, so its shape is normally complete - but `application.spec` is
-          whatever the backend sent, an older or partial response drops fields, and `undefined.map`
-          in a render turns a SUCCESSFUL build into a blank screen. The resume exists either way;
-          this pane must never be the reason a student cannot see that. */}
-      {(spec.experience ?? []).map((entry, i) => (
-        <section key={`${entry.org}-${i}`} className="flex flex-col gap-1">
-          <p className="font-medium">
-            <RequirementText text={[entry.title, entry.org].filter(Boolean).join(", ")} />
-          </p>
-          <p className="font-mono text-[11px] text-muted">{entry.date_range}</p>
-          <ul className="flex flex-col gap-1">
-            {(entry.bullets ?? []).map((bullet, b) => (
-              <li key={b} className="pl-3 -indent-3">
-                <span aria-hidden="true" className="text-muted">· </span>
-                <RequirementText text={bullet} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-
-      {(spec.skills ?? []).length > 0 && (
-        <section>
-          <p className="text-muted">
-            <RequirementText text={(spec.skills ?? []).join(", ")} />
-          </p>
-        </section>
-      )}
-    </div>
-  );
+ * `_contact` is what the backend rendered the PDF's own header from (engine/resumeRender.ts), so
+ * reading it here is what keeps this preview and the document the employer receives saying the same
+ * thing. The name falls back to the loaded identity for a spec that predates `_contact`. */
+function contactHeaderOf(spec: ResumeSpec, fallbackName: string | null): ContactHeader {
+  const contact = (spec as ResumeSpec & { _contact?: Partial<ContactHeader> })._contact ?? {};
+  return { ...contact, full_name: contact.full_name?.trim() || fallbackName || "" };
 }

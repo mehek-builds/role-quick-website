@@ -182,26 +182,6 @@ before(async () => {
        undefined for description, title and company_name, and no stub here could ever show it. A
        stub that does not match the route it stands in for is a test asserting its own fiction. */
     if (path === "/jobs/job-1") return json({ job: JOB });
-    if (path === "/jd-match") {
-      /* THE COLOURS ON THE BUILD SCREEN. Marked terms appear in BOTH panes or neither, which is the
-         contract ISSUE-047 records, so this fixture names terms the stubbed resume genuinely
-         contains ("TypeScript", "PostgreSQL") and one it genuinely does not ("Kubernetes"). A
-         fixture that marked a term the resume never says would be asserting the very bug the
-         contract forbids. */
-      return json({
-        scorable: true,
-        score: 72,
-        /* `term` is the NORMALIZED key, which is what buildRequirementIndex maps and segmentText
-           looks tokens up by; `display` is the printable form. Sending the display casing as the
-           term silently marks nothing, which is exactly what it did on the first run of this. */
-        band: { label: "Fair", tone: "fair" },
-        matched: [
-          { term: "typescript", display: "TypeScript", weight: 1 },
-          { term: "postgresql", display: "PostgreSQL", weight: 1 },
-        ],
-        missing: [{ term: "kubernetes", display: "Kubernetes", weight: 1 }],
-      });
-    }
     if (path === "/profile") return json({ full_name: "A Candidate", resume_email: "a@example.com", school: "USC" });
     if (path === "/profile/application") return json({});
     if (path === "/resume/generate") {
@@ -216,6 +196,15 @@ before(async () => {
         canonical_application_id: "app-1",
         application: {
           spec: {
+            /* THE CONTACT BLOCK THE ROUTE ACTUALLY RETURNS. The build screen draws the resume with
+               the shared ResumePaper, whose header is built from `_contact`; a stub without one
+               produced a headerless document and no way to see that the real thing has a header. */
+            _contact: {
+              full_name: "A Candidate",
+              email: "a@example.com",
+              location: "Los Angeles, CA",
+              linkedin_url: "linkedin.com/in/candidate",
+            },
             school: "USC",
             degree: "BS Computer Science",
             grad_date: "May 2027",
@@ -345,39 +334,24 @@ describe("the application sequence, end to end", () => {
     const done = await page.locator("main").innerText();
     assert.match(done, /Here is your application/i);
 
-    /* THE SCREEN SHOWS THE TAILORING RATHER THAN ASSERTING IT.
+    /* THE SCREEN SHOWS THE REAL DOCUMENT, drawn by the paper the rest of the product draws.
      *
-     * The right pane used to be one sentence of prose - "Written for this posting from your own
-     * resume" - which is the product claiming the one thing this screen exists to demonstrate.
-     * These four assertions are the demonstration: the student's real lines, the posting's real
-     * words, the same terms marked on both sides, and a legend saying what the marks mean. */
+     * This pane used to be one sentence of prose asserting that tailoring had happened. Then it was
+     * a hand-rolled reading view with its own markup, which drifted from the real thing immediately
+     * - it had no contact line at all. It is `components/start/ResumePaper` now, the same component
+     * the base-resume screen and the packet viewer use, so the header, the one-page fit and every
+     * block come from one place.
+     *
+     * NO TERM MARKING is asserted here any more. It went out with the hand-rolled view: the shared
+     * paper does not mark, so a mark in the posting would point at nothing in the resume, which is
+     * the ISSUE-047 failure exactly. What is asserted instead is that the student's own lines and
+     * their header are on screen. */
     assert.match(done, /Cut PostgreSQL query time 60%/i, "the resume's own bullets are not on screen");
     assert.match(done, /Software Engineering Intern/i, "the experience the resume was built from is not shown");
     assert.doesNotMatch(done, /Written for this posting from your own resume/i, "the pane still describes instead of showing");
-    /* NO LEGEND, and no count of what the student lacks (Mehek 2026-08-20). A mark means one thing
-       now - the posting asked for this and the resume says it - which it shows by appearing on both
-       sides at once rather than by being named in a key. */
-    assert.doesNotMatch(done, /asked for, and on your resume/i, "the legend is back on the build screen");
-    assert.doesNotMatch(done, /not on your resume/i, "the build screen is counting what the student lacks again");
-
-    /* THE CONTRACT, checked rather than trusted (ISSUE-047): a term marked in the posting must be
-       marked in the resume too. Measured once at 111 of 313 matched terms marked on one side only,
-       which is a colour pointing at nothing. Counting marks per pane is what makes that visible. */
-    const marks = await page.locator("main mark").allInnerTexts();
-    const marked = new Set(marks.map((t) => t.trim().toLowerCase()));
-    assert.ok(marked.has("typescript"), `TypeScript was never marked; marks were ${marks.join(", ")}`);
-    assert.ok(marked.has("postgresql"), `PostgreSQL was never marked; marks were ${marks.join(", ")}`);
-    const postgresMarks = marks.filter((t) => t.trim().toLowerCase() === "postgresql").length;
-    assert.ok(
-      postgresMarks >= 2,
-      `PostgreSQL is marked ${postgresMarks} time(s): a term the posting asks for and the resume answers must be marked on BOTH sides`,
-    );
-    /* And the missing tone is not drawn at all. With the legend gone it would be an orange
-       underline nothing on screen explains, on a term that by definition has no counterpart in the
-       resume pane to point at. The fixture's missing term is "Kubernetes". */
-    assert.ok(!marked.has("kubernetes"), `a missing term is still marked: ${marks.join(", ")}`);
-    // The count is REAL: two outstanding asks in the fixture, not the seventeen the posting holds.
-    assert.match(done, /2 questions need you/i);
+    // The header the applicant is reachable at, which the hand-rolled view omitted entirely.
+    assert.match(done, /a@example\.com/i, "the contact line is missing from the resume header");
+    assert.match(done, /A Candidate/i, "the applicant is not named on their own resume");
 
     await page.getByRole("button", { name: "2 questions need you" }).click();
   });
