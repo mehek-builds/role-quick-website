@@ -118,6 +118,41 @@ export function sendableLinkedPacketFromCanonicalEnvelope(
   return linkedLegacyPacketFromCanonicalTrackerPacket(packet);
 }
 
+/**
+ * The legacy packet id worth fetching before this canonical row's send eligibility can be trusted,
+ * or null when nothing would change by fetching.
+ *
+ * `canonicalTrackerPacket` builds a row's `_review` from whichever legacy packet THIS PAGE LOAD's
+ * merge happened to find - by explicit `legacy_generated_resume_id` link, by shared job id, or by
+ * shared portal URL (`canonicalMatchStrength`) - and falls back to a placeholder with
+ * `portal_supported: false` hardcoded when nothing in the loaded page matched at all. That
+ * placeholder is a statement about what THIS PAGE LOAD saw, not about the account: the bare
+ * `/resume/history` call caps at fifty full specs and, on an account queueing hundreds of
+ * applications, its returned page may not carry this row's linked packet at all. A row whose real
+ * linked packet is genuinely `ready_to_submit` and `portal_supported: true` can merge with nothing
+ * attached and default to reading as extension-only, which is exactly the gap PR #383 already
+ * named and fixed for packet CONTENT (`isStubPacketSpec`, `ApplicationPacket`'s stub hydration).
+ * This is the same fix for the ROUTING decision: the earlier one only ever hydrated the packet a
+ * student had already opened to look at; this lets the page learn a row is sendable before it ever
+ * shows the attended-handoff detail at all.
+ *
+ * Returns the id to hydrate exactly when hydrating it could change the outcome: the canonical row
+ * names a linked packet by id, and the merge did not attach that SAME packet - either nothing
+ * attached at all, or one of `canonicalMatchStrength`'s weaker match kinds attached a different
+ * packet (a duplicate posting, most often) instead of the one this row actually names. Returns null
+ * once a fetch has already attached the right one, so a caller that reruns this after applying a
+ * hydration result stops on its own rather than re-fetching every render.
+ */
+export function canonicalEnvelopeLegacyHydrationId(
+  packet: GeneratedResume | null | undefined,
+): string | null {
+  const canonical = canonicalApplicationFromPacket(packet);
+  const legacyId = canonical?.legacy_generated_resume_id;
+  if (!legacyId) return null;
+  const candidate = packet as Partial<CanonicalTrackerPacket> | null | undefined;
+  return candidate?.canonical_legacy_packet_id === legacyId ? null : legacyId;
+}
+
 function normalizedPortal(raw: string | null | undefined): string | null {
   if (!raw) return null;
   try {
