@@ -68,9 +68,16 @@ const ORIGIN = `http://127.0.0.1:${port}`;
 const server = spawn("node_modules/.bin/next", ["start", "-H", "127.0.0.1", "-p", String(port)], {
   stdio: ["ignore", "ignore", "inherit"],
 });
-await waitForServer(ORIGIN, server);
-
-const browser = await chromium.launch();
+let browser;
+try {
+  await waitForServer(ORIGIN, server);
+  browser = await chromium.launch();
+} catch (reason) {
+  // test.after never registers when startup throws, and an orphaned `next start` keeps the
+  // port bound for every run after this one.
+  server.kill("SIGTERM");
+  throw reason;
+}
 const ARTIFACT_DIR = path.join(process.cwd(), "test-results", "packet-flow-refusals");
 let anyFailure = false;
 
@@ -235,9 +242,13 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
 
 function browserTest(name, body) {
   test(name, async () => {
+    /* The page must be in hand BEFORE the assertion that fails, or the failure capture below is
+       dead code: a body that returns its page has, by definition, already passed every assertion.
+       Each test hands its page over the moment the flow opens, via this holder. */
     let page;
+    const hold = (opened) => { page = opened; };
     try {
-      page = await body();
+      await body(hold);
     } catch (reason) {
       anyFailure = true;
       const slug = name.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
@@ -258,10 +269,11 @@ const ACK_STALE = "The rendered packet no longer matches the saved application. 
 const SUBMIT_STALE = "This application changed after you approved the exact packet Litos prepared, so it was not sent.";
 const REVALIDATION_STALE = "The saved application changed while it was being audited. Reload it and audit again.";
 
-browserTest("a refused acknowledge on Fill company form says the server's sentence, and keeps saying it", async () => {
+browserTest("a refused acknowledge on Fill company form says the server's sentence, and keeps saying it", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     ackResponse: { status: 409, body: { error: ACK_CLAIMED } },
   });
+  hold(page);
   await second.click();
   await page.getByRole("alert").filter({ hasText: ACK_CLAIMED }).first().waitFor({ state: "visible", timeout: 15_000 });
   /* Three ticks of the 2.5s poll. The Cresta approve refusal survived under two and a half
@@ -274,25 +286,25 @@ browserTest("a refused acknowledge on Fill company form says the server's senten
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 0, "a refused acknowledgement must never be followed by a send");
   await context.close();
-  return page;
 });
 
-browserTest("a refused acknowledge on Review filled form says the server's sentence", async () => {
+browserTest("a refused acknowledge on Review filled form says the server's sentence", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(READY, {
     ackResponse: { status: 409, body: { error: ACK_STALE, code: "PACKET_AUDIT_STALE" } },
   });
+  hold(page);
   await second.click();
   await page.getByRole("alert").filter({ hasText: ACK_STALE }).first().waitFor({ state: "visible", timeout: 15_000 });
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 0);
   await context.close();
-  return page;
 });
 
-browserTest("a refused submit-request after an accepted acknowledge says the server's sentence", async () => {
+browserTest("a refused submit-request after an accepted acknowledge says the server's sentence", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     submitResponse: { status: 409, body: { error: SUBMIT_STALE, code: "PACKET_AUDIT_STALE" } },
   });
+  hold(page);
   await second.click();
   await page.getByRole("alert").filter({ hasText: SUBMIT_STALE }).first().waitFor({ state: "visible", timeout: 20_000 });
   await page.waitForTimeout(7000);
@@ -303,7 +315,6 @@ browserTest("a refused submit-request after an accepted acknowledge says the ser
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 1);
   await context.close();
-  return page;
 });
 
 /* The polled revalidation, which was the one member of this class with NO catch that spoke. After
@@ -312,11 +323,12 @@ browserTest("a refused submit-request after an accepted acknowledge says the ser
    changed shape with no words anywhere on screen. The sentence must appear AND survive later
    ticks, because the refusal destroys the very evidence whose revalidation raised it, so the next
    tick reports a clean poll and the old unconditional banner-clear blanked it within one round. */
-browserTest("a refused packet revalidation says the server's sentence, and later ticks do not blank it", async () => {
+browserTest("a refused packet revalidation says the server's sentence, and later ticks do not blank it", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     landed: { status: "needs_attention", attention_reason: "The company's form asked for something new." },
     revalidationRefusal: { status: 409, body: { error: REVALIDATION_STALE, code: "PACKET_AUDIT_STALE" } },
   });
+  hold(page);
   await second.click();
   await page.getByRole("alert").filter({ hasText: REVALIDATION_STALE }).first().waitFor({ state: "visible", timeout: 20_000 });
   /* Two more poll rounds, each of which has no acknowledged evidence left to revalidate and
@@ -328,15 +340,14 @@ browserTest("a refused packet revalidation says the server's sentence, and later
   );
   assert.ok(counts.revalidations >= 1, "the poll never revalidated the acknowledged packet");
   await context.close();
-  return page;
 });
 
-browserTest("the accepted walk still fills and reports the receipt", async () => {
+browserTest("the accepted walk still fills and reports the receipt", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL);
+  hold(page);
   await second.click();
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 1);
   await context.close();
-  return page;
 });

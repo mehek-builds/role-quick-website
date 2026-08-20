@@ -764,8 +764,15 @@ function Applications() {
     } catch (reason) {
       packetEvidenceRef.current = null;
       setPacketEvidence(null);
-      // A server sentence, not a transient: see packetRevalidationRefusal.
-      if (reason instanceof ApiError) {
+      /* A server sentence, not a transient: see packetRevalidationRefusal. Two bounds, both
+         load-bearing. 409 only, because api() throws ApiError for EVERY non-ok status and the
+         authored packet sentences all ride 409 (applications.ts); a 502 during a deploy blip must
+         stay a transient, not become a standing banner no later tick can retire, which is the
+         Cresta pin rebuilt in the other direction. And the same requestedId discipline as the
+         success arm, because a refusal landing after she left the application would write the OLD
+         application's sentence into the ref just after handleSelect cleared it, and the ref would
+         pin that sentence over whatever she is looking at now. */
+      if (reason instanceof ApiError && reason.status === 409 && selectedIdRef.current === requestedId) {
         packetRevalidationRefusal.current = { applicationId: requestedId, message: reason.message };
       }
     }
