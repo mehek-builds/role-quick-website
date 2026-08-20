@@ -45,6 +45,7 @@ const { RESUME_CONTACT_KEYS, resumeContactLine } = await import("../lib/resumeCo
    two repositories have to move together. */
 const BACKEND_CONTACT_KEYS = [
   "full_name",
+  "location",
   "email",
   "phone",
   "linkedin_url",
@@ -52,8 +53,16 @@ const BACKEND_CONTACT_KEYS = [
   "portfolio_url",
 ];
 
-/* Keys that were read once, are not in the schema, and never resolved to anything. */
-const KEYS_THE_BACKEND_NEVER_WRITES = ["location", "linkedin", "website"];
+/* Keys that were read once, are not in the schema, and never resolved to anything.
+ *
+ * `location` LEFT THIS LIST on 2026-08-20 and is now expected. It was a fair entry when written -
+ * engine/resumeRender.ts measured `_contact` carrying no location on any of 158 stored packets -
+ * but the reason was that nothing ever filled it, not that the backend had no place for it. Its
+ * ContactHeader has always had the field and `contactLine` has always printed it first; the parse
+ * reads the applicant's city off their resume now (volley-backend #632), so it resolves. Measured
+ * on the ten-generation run the same day: 9 of 10 carried one, the tenth being a fixture whose
+ * header prints no city. */
+const KEYS_THE_BACKEND_NEVER_WRITES = ["linkedin", "website"];
 
 describe("the packet resume preview", () => {
   test("puts the applicant's name in the header, not their school", () => {
@@ -216,7 +225,13 @@ describe("the packet resume preview", () => {
   });
 
   test("reads only contact keys the backend actually writes", () => {
-    assert.deepEqual([...RESUME_CONTACT_KEYS], ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]);
+    /* The same order engine/resumeRender.ts's `contactLine` prints: where they are, how to reply,
+       then where to look them up. The two lists are separate implementations of one line, so an
+       order that drifts here shows up as a preview that disagrees with the PDF an employer gets. */
+    assert.deepEqual(
+      [...RESUME_CONTACT_KEYS],
+      ["location", "email", "phone", "linkedin_url", "github_url", "portfolio_url"],
+    );
     for (const key of KEYS_THE_BACKEND_NEVER_WRITES) {
       assert.doesNotMatch(
         CONTACT_HELPER,
@@ -224,7 +239,7 @@ describe("the packet resume preview", () => {
         `"${key}" is not a key the backend stores on _contact; it will silently resolve to nothing`
       );
     }
-    for (const key of ["email", "phone", "linkedin_url", "github_url", "portfolio_url"]) {
+    for (const key of ["location", "email", "phone", "linkedin_url", "github_url", "portfolio_url"]) {
       assert.match(
         CONTACT_HELPER,
         new RegExp(`"${key}"`),

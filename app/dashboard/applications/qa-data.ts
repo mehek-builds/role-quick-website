@@ -14,11 +14,18 @@ export const QA_PACKET: GeneratedResume = {
        like the bug cannot reveal the bug, which is the same lesson the packet harness learned in
        tests/packet-resume-header.test.mjs.
 
-       `_contact` is stored verbatim from the resume request body, whose schema is full_name /
-       email / phone / linkedin_url / github_url / portfolio_url. There is no "location" and the
-       URL fields carry the `_url` suffix. */
+       `_contact` is what resumeContactOfRecord assembled and the PDF header was drawn from:
+       full_name / email / phone / location / linkedin_url / github_url / portfolio_url. The URL
+       fields carry the `_url` suffix.
+
+       LOCATION IS REAL NOW. This comment used to say there was no such field, which was true of the
+       request body and not of the stored contact: engine/resumeRender.ts's ContactHeader has always
+       carried one and its contactLine prints it FIRST. Nothing filled it until the parse started
+       reading the applicant's city off their own resume (volley-backend #632), which is why it
+       looked absent. A fixture without it cannot show a preview that drops it. */
     _contact: {
       full_name: "John Doe",
+      location: "Los Angeles, CA",
       email: "john.doe@usc.edu",
       phone: "(213) 555-0148",
       linkedin_url: "linkedin.com/in/johndoe",
