@@ -52,6 +52,7 @@ test("the action pill is an element that can act, never a styled span again", ()
   assert.match(row, /checklistRowControl\(item, \{ portalUrl \}\)/, "the row has to ask the domain what control to draw");
   assert.match(row, /control\?\.element === "link"/);
   assert.match(row, /control\?\.element === "button"/);
+  assert.match(row, /control\?\.element === "restart"/);
 
   // The exact shape of the defect: item.action interpolated into a non-interactive element.
   const deadPill = /<span[^>]*>\s*\{item\.action\}/;
@@ -84,6 +85,7 @@ test("OPEN PAGE is a real link and the question actions are real buttons, each w
 test("the panel hands the row everything a control needs, and the page hands the panel a handler", () => {
   const list = functionBody(page, "BlockerList");
   assert.match(list, /portalUrl=\{portalUrl\}/);
+  assert.match(list, /onRestartInLitos=\{onRestartInLitos\}/);
   assert.match(list, /onOpenQuestion=\{onOpenQuestion\}/);
   assert.match(list, /onAddDocument=\{onAddDocument\}/);
 
@@ -91,7 +93,7 @@ test("the panel hands the row everything a control needs, and the page hands the
      tests/question-choice-list.test.mjs pins what pressing one does. onToggleAcknowledged joined it
      when the row's checkbox stopped being scenery and started writing a stored tick. The
      whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{attentionTicking\} \/>/);
+  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onRestartInLitos=\{onReviewPacket\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{attentionTicking\} \/>/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
   assert.match(page, /onToggleAcknowledged=\{\(item, acknowledged\) => void toggleAttentionAcknowledgement\(item, acknowledged\)\}/);
@@ -144,7 +146,7 @@ test("a settled row keeps its control, and keeps it out of the panel that counts
   /* onToggleAcknowledged rides into the settled strip too: an acknowledged row's checkbox is the
      way the tick is taken back, and dropping the handler here would strand her ticks the way the
      pre-repair rows stranded "Remove this file". */
-  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{tickingIds\} \/>/);
+  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onRestartInLitos=\{onRestartInLitos\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{tickingIds\} \/>/);
 
   const row = functionBody(page, "ChecklistRow");
   // `checked` still suppresses the control, because the Done column has no action words to draw.

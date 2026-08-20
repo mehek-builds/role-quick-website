@@ -59,13 +59,16 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // open, for the same reason a Stratus preview-only stop must not (see the comment two lines up).
   assert.match(dashboard, /const handoffUrl = needsAttention && !awaitingUnverifiedSubmission \? submission\.handoff_url : undefined/);
   assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\) && !attendedHandoffUrl/);
+  assert.match(dashboard, /const staysInsideLitos = review\.portal_supported === true/);
   assert.match(dashboard, /<iframe[\s\S]{0,300}src=\{handoffUrl\}[\s\S]{0,300}Live company application page/);
   assert.match(dashboard, /No live browser to reopen/);
+  assert.match(dashboard, /Restart inside Litos/);
+  assert.match(dashboard, /You do not need the company site/);
   assert.match(dashboard, /Open company page/);
   assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
   assert.match(dashboard, /ensureCurrentExtensionSession\([\s\S]{0,160}minimumAttendedHandoffExtensionVersion\(review\.ats_name\)/);
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
-  assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
+  assert.match(dashboard, /!staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl/);
   assert.match(dashboard, /Open exact company form/);
   assert.match(dashboard, /Manual dashboard trial/);
   assert.match(dashboard, /Use this exact frozen resume and the separate Litos routing email/);

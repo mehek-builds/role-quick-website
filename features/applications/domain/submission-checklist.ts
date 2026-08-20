@@ -12,7 +12,7 @@ import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from
  * has to resolve it through `checklistRowControl`, which returns a link or a button or nothing at
  * all. There is no path left that prints an action word without an element behind it.
  */
-export type SubmissionChecklistAction = "open-page" | "answer" | "review" | "confirm" | "attach";
+export type SubmissionChecklistAction = "open-page" | "restart" | "answer" | "review" | "confirm" | "attach";
 
 /**
  * The most options a closed list renders as individual choice rows.
@@ -103,8 +103,9 @@ export type SubmissionChecklistItem = {
  */
 export type ChecklistRowControl =
   | { element: "link"; label: string; name: string; href: string }
+  | { element: "restart"; label: string; name: string }
   | { element: "attach"; label: string; name: string; kind: string }
-  | { element: "button"; label: string; name: string; intent: Exclude<SubmissionChecklistAction, "open-page" | "attach">; questionId: string };
+  | { element: "button"; label: string; name: string; intent: Exclude<SubmissionChecklistAction, "open-page" | "restart" | "attach">; questionId: string };
 
 export function checklistRowControl(
   item: SubmissionChecklistItem,
@@ -122,6 +123,13 @@ export function checklistRowControl(
       ? `Open the company page for: ${item.label}. You marked this handled.`
       : `Open the company page to handle: ${item.label}`;
     return { element: "link", label: item.action, name, href };
+  }
+  if (item.actionKind === "restart") {
+    return {
+      element: "restart",
+      label: item.action,
+      name: `Review the current packet and restart this application in Litos: ${item.label}`,
+    };
   }
   /* ABOVE the questionId guard, and that placement is the whole point of adding a third member
      rather than reusing "answer". A document ask has no question behind it, so a transcript row
@@ -208,6 +216,20 @@ function normalizedChecklistText(value: string): string {
 
 function isCaptchaChecklistText(value: string): boolean {
   return /captcha|recaptcha|hcaptcha|prove you are human/i.test(value);
+}
+
+/**
+ * A packet-audit stop belongs to Litos, not to the employer's page.
+ *
+ * The first live instance was a Workable application whose packet changed after the applicant had
+ * reviewed it. The checklist treated every free-form attention sentence as work on the company
+ * page, so it rendered both an Open page link and a checkbox saying she handled it there. Neither
+ * could repair the stale packet. The existing Review and fill path can: it stores reviewed answers,
+ * takes a fresh audit, and starts the managed fill again. Keep that recovery attached to the row
+ * that names the stop so this class of audit failure never sends the applicant out of Litos.
+ */
+function isPacketRestartChecklistText(value: string): boolean {
+  return /application changed after you approved the exact packet|packet changed after you approved|review the current packet/i.test(value);
 }
 
 /**
@@ -701,13 +723,14 @@ export function humanInputItems(
   for (const blocker of blockers) {
     if (blockerDuplicatesQuestion(blocker, review.questions)) continue;
     if (fieldEvidenceAlreadyCoversBlocker(blocker, review.filled_fields, review.questions)) continue;
+    const restartInLitos = isPacketRestartChecklistText(blocker);
     addUnique(items, {
       id: `blocker-${keyFor(blocker)}`,
       label: blocker,
-      action: "Open page",
-      actionKind: "open-page",
+      action: restartInLitos ? "Review and fill" : "Open page",
+      actionKind: restartInLitos ? "restart" : "open-page",
       subject: blockerSubject(blocker),
-      acknowledgeable: true,
+      acknowledgeable: !restartInLitos,
     });
   }
 

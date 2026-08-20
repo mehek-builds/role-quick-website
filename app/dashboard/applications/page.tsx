@@ -4723,6 +4723,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
      is open, "the exact page this stopped on" is the only one that answers her question. */
   const portalUrl = (awaitingUnverifiedSubmission ? review.unverified_submission?.portal_url : undefined)?.trim()
     ?? review.portal_url?.trim();
+  /* `portal_supported: true` is the server's answer that this packet belongs to a family Litos can
+     fill itself. A managed run may still stop without a surviving browser session, but that does
+     not turn the employer page into the recovery path: Review and fill starts a fresh managed run
+     from the exact packet and the saved answers. Keep every generic Open page escape off this
+     screen in that case, or an autonomous board advertises the manual workflow at the first retry. */
+  const staysInsideLitos = review.portal_supported === true;
   const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
   const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
   const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
@@ -4966,7 +4972,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             attention_reason itself, so showing it twice would say the same thing in two different
             voices. */}
         {awaitingUnverifiedSubmission ? null : needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
+          <BlockerList items={needsInputItems} portalUrl={staysInsideLitos || attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
@@ -5118,9 +5124,11 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         )}
         {needsAttention && !awaitingUnverifiedSubmission && !canFinishInDashboard && !attendedHandoffUrl && (
           <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-3">
-            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">No live browser to reopen</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "No live browser to reopen"}</p>
             <p className="mt-1 text-xs leading-5 text-muted">
-              This stop came from a managed Stratus run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. The fastest path is to open the company page once, finish the check, then mark it done.
+              {staysInsideLitos
+                ? "Litos can start this company form again from the saved packet and answers. Review anything listed above, then choose Review and fill. You do not need the company site."
+                : "This stop came from a managed run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. Open the company page once, finish the check, then mark it done."}
             </p>
           </div>
         )}
@@ -5138,8 +5146,8 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               )}
             </>
           )}
-          {needsAttention && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
-          {needsAttention && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
+          {needsAttention && !staysInsideLitos && handoffUrl && !attendedHandoffUrl && <ButtonLink href={handoffUrl} target="_blank" rel="noreferrer" variant={canFinishInDashboard ? "secondary" : "primary"}>Open in new tab</ButtonLink>}
+          {needsAttention && !staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl && <ButtonLink href={portalUrl} target="_blank" rel="noreferrer" variant="secondary">Open company page</ButtonLink>}
           {hasQuestionsToReview && <Button onClick={onReviewQuestions} >Check the answers</Button>}
           {/* The audited re-run. "Try again" replays submit-request against the LAST acknowledged
               packet, and any saved answer since then changes packet_version, so on exactly the rows
@@ -5375,7 +5383,7 @@ const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center ro
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
+function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onRestartInLitos?: () => void; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
   const control = checked ? null : checklistRowControl(item, { portalUrl });
   /* THE CHECKBOX IS LIVE ONLY WHERE A TICK CAN BE STORED, which is the acknowledgeable rows - the
      attention blockers whose "done" only she can know - on a screen that passed a handler. Ticking
@@ -5485,6 +5493,11 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption
             {control.label}
           </button>
         )}
+        {control?.element === "restart" && onRestartInLitos && (
+          <button type="button" aria-label={control.name} onClick={onRestartInLitos} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
+            {control.label}
+          </button>
+        )}
         {/* AFTER the question branch, deliberately. tests/your-turn-actions.test.mjs pins the FIRST
             <button> in this component as the one bound to onOpenQuestion, because that is the pill
             that shipped as a styled <span> with nothing behind it. Adding a second interactive
@@ -5500,7 +5513,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption
   );
 }
 
-function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
+function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onRestartInLitos?: () => void; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
   /* Split before anything is drawn, because these are two different sentences and only one of them
      is a demand. An outstanding row is work the employer is still waiting on. A settled row states
      that something is already handled and keeps a control only so she can change it, which is why
@@ -5524,7 +5537,7 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDo
           </div>
           <ul className="mt-2 space-y-2">
           {outstanding.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
           </ul>
         </div>
@@ -5536,7 +5549,7 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDo
             /* onToggleAcknowledged rides into the settled box too: an acknowledged row's checkbox
                is how the tick is taken back, and a settled box without it would strand her ticks
                exactly the way the pre-repair rows stranded "Remove this file". */
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
           </ul>
         </div>
@@ -5554,7 +5567,7 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-export function PortalProgress({ status, startedAt, sending = false, submission }: { status?: ApplicationReview["status"]; startedAt?: string;
+function PortalProgress({ status, startedAt, sending = false, submission }: { status?: ApplicationReview["status"]; startedAt?: string;
   /** True when this screen was entered by pressing "Send it". See submittingPhase. */
   sending?: boolean;
   submission?: SubmissionResponse | null }) {

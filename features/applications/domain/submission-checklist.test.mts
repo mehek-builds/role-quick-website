@@ -85,6 +85,25 @@ test("humanInputItems turns portal blockers and missing answers into checklist r
   assert.equal(items[0]?.action, "Open page");
 });
 
+test("a stale packet is repaired inside Litos rather than assigned to the company page", () => {
+  const label = "This application changed after you approved the exact packet Litos prepared, so it was not sent. Open it to review the current one and send from there.";
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: label,
+    questions: [],
+  });
+
+  assert.equal(items.length, 1);
+  assert.equal(items[0]?.actionKind, "restart");
+  assert.equal(items[0]?.action, "Review and fill");
+  assert.equal(items[0]?.acknowledgeable, false, "an in-dashboard repair must not pretend she handled work on the employer page");
+  assert.deepEqual(checklistRowControl(items[0]!, {}), {
+    element: "restart",
+    label: "Review and fill",
+    name: `Review the current packet and restart this application in Litos: ${label}`,
+  });
+});
+
 test("humanInputItems still shows non-captcha answer work when there is no captcha stop", () => {
   const items = humanInputItems({
     ...review,
@@ -254,15 +273,17 @@ test("every Your turn row that prints an action word resolves to a real control"
     assert.ok(control, `"${item.action}" on "${item.label}" resolved to no control, which is the dead pill`);
     assert.ok(control.name.length > item.label.length, "the control has to carry its own accessible name, not just the caption");
     /* Every member of the union has to name a real target, and each member names a different one:
-       a link has a page, an attach control has a document kind, a button has a question. The
-       members are enumerated rather than defaulted so that a fourth one added later fails to
-       compile here instead of silently taking the questionId branch. */
+       a link has a page, an attach control has a document kind, a restart has its action name,
+       and a button has a question. The members are enumerated rather than defaulted so that a
+       fifth one added later fails to compile here instead of silently taking the questionId branch. */
     assert.ok(
       control.element === "link"
         ? control.href.length > 0
         : control.element === "attach"
           ? control.kind.length > 0
-          : control.questionId.length > 0,
+          : control.element === "restart"
+            ? control.name.length > 0
+            : control.questionId.length > 0,
     );
   }
 });
