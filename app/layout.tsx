@@ -25,6 +25,18 @@ export const metadata: Metadata = {
     `${PRODUCT_NAME} tailors your resume to the posting, fills out the entire application across Lever, Greenhouse, Ashby, Workday, and LinkedIn, and drafts personalized outreach to a real recruiter or alum. Review the job and edited resume side by side, answer only the extra questions, then submit from your dashboard.`,
 };
 
+const TIKTOK_PIXEL_SCRIPT = `
+!function (w, d, t) {
+  w.TiktokAnalyticsObject=t;var ttq=w[t]=w[t]||[];ttq.methods=["page","track","identify","instances","debug","on","off","once","ready","alias","group","enableCookie","disableCookie","holdConsent","revokeConsent","grantConsent"],ttq.setAndDefer=function(t,e){t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}};for(var i=0;i<ttq.methods.length;i++)ttq.setAndDefer(ttq,ttq.methods[i]);ttq.instance=function(t){for(
+var e=ttq._i[t]||[],n=0;n<ttq.methods.length;n++)ttq.setAndDefer(e,ttq.methods[n]);return e},ttq.load=function(e,n){var r="https://analytics.tiktok.com/i18n/pixel/events.js",o=n&&n.partner;ttq._i=ttq._i||{},ttq._i[e]=[],ttq._i[e]._u=r,ttq._t=ttq._t||{},ttq._t[e]=+new Date,ttq._o=ttq._o||{},ttq._o[e]=n||{};n=document.createElement("script")
+;n.type="text/javascript",n.async=!0,n.src=r+"?sdkid="+e+"&lib="+t;e=document.getElementsByTagName("script")[0];e.parentNode.insertBefore(n,e)};
+
+
+  ttq.load('DA3DU3JC77U208UL6HS0');
+  ttq.page();
+}(window, document, 'ttq');
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -36,6 +48,9 @@ export default function RootLayout({
       data-scroll-behavior="smooth"
       className={`${hankenGrotesk.variable} ${azeretMono.variable} h-full antialiased`}
     >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: TIKTOK_PIXEL_SCRIPT }} />
+      </head>
       <body className="min-h-full flex flex-col bg-bg font-sans text-ink">
         {process.env.LITOS_MAINTENANCE_MODE === "1" ? <MaintenanceScreen /> : children}
       </body>
