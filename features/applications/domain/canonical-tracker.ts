@@ -3,10 +3,13 @@ import { reviewCanBeSent } from "./application-filter.ts";
 
 /** A canonical Tracker row may carry a linked generated packet. These markers are local
  * presentation state, never sent back to either API. The public id and lifecycle always belong to
- * the canonical ledger, while the linked id lets an explicit packet action reach the legacy route. */
+ * the canonical ledger, while the linked id lets an explicit packet action reach the legacy route.
+ * `canonical_legacy_hydration_missing_id` is the same idea for the OTHER hydration outcome: a fetch
+ * that came back with no packet at that id, recorded so it reads as settled rather than unresolved. */
 export type CanonicalTrackerPacket = GeneratedResume & {
   canonical_application: CanonicalApplication;
   canonical_legacy_packet_id?: string;
+  canonical_legacy_hydration_missing_id?: string;
 };
 
 export function canonicalApplicationFromPacket(
@@ -142,6 +145,13 @@ export function sendableLinkedPacketFromCanonicalEnvelope(
  * packet (a duplicate posting, most often) instead of the one this row actually names. Returns null
  * once a fetch has already attached the right one, so a caller that reruns this after applying a
  * hydration result stops on its own rather than re-fetching every render.
+ *
+ * Returns null the same way for the OTHER settled outcome: a fetch that already confirmed the named
+ * id does not exist. Without that second check this only ever recognised the found case, so a
+ * not-found result read as permanently unresolved and got re-fetched on every `packets` mutation
+ * that changed this row's object identity - an unrelated `setPackets` elsewhere on the page (e.g.
+ * pressing "Open and fill application" on the SAME row) rebuilds it via `canonicalTrackerPacket` and
+ * so recomputes to the identical doomed id.
  */
 export function canonicalEnvelopeLegacyHydrationId(
   packet: GeneratedResume | null | undefined,
@@ -150,7 +160,28 @@ export function canonicalEnvelopeLegacyHydrationId(
   const legacyId = canonical?.legacy_generated_resume_id;
   if (!legacyId) return null;
   const candidate = packet as Partial<CanonicalTrackerPacket> | null | undefined;
-  return candidate?.canonical_legacy_packet_id === legacyId ? null : legacyId;
+  if (candidate?.canonical_legacy_packet_id === legacyId) return null;
+  if (candidate?.canonical_legacy_hydration_missing_id === legacyId) return null;
+  return legacyId;
+}
+
+/**
+ * Record that `legacyId` was fetched and does not exist, so `canonicalEnvelopeLegacyHydrationId`
+ * stops asking for it again.
+ *
+ * Mirrors how a SUCCESSFUL hydration is remembered: `canonicalTrackerPacket` stamps
+ * `canonical_legacy_packet_id` onto the row once a real linked packet is attached, and
+ * `canonicalEnvelopeLegacyHydrationId` treats that stamp as "already resolved". A not-found result
+ * never goes through `canonicalTrackerPacket` - there is no packet to attach - so without a matching
+ * stamp for THIS outcome the id kept reading as unresolved forever, and every unrelated `setPackets`
+ * call that changed this row's object identity re-triggered the identical doomed fetch, briefly
+ * flipping `checkingSendPath` back to true and hiding whatever button was already showing.
+ */
+export function canonicalEnvelopeWithMissingLegacyHydration(
+  packet: GeneratedResume,
+  legacyId: string,
+): CanonicalTrackerPacket {
+  return { ...packet, canonical_legacy_hydration_missing_id: legacyId } as CanonicalTrackerPacket;
 }
 
 function normalizedPortal(raw: string | null | undefined): string | null {

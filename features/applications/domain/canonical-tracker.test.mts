@@ -4,6 +4,7 @@ import type { CanonicalApplication, GeneratedResume } from "../../../lib/api.ts"
 import {
   canonicalApplicationFromPacket,
   canonicalEnvelopeLegacyHydrationId,
+  canonicalEnvelopeWithMissingLegacyHydration,
   linkedLegacyPacketFromCanonicalTrackerPacket,
   sendableLinkedPacketFromCanonicalEnvelope,
   withRestoredLinkedPackets,
@@ -328,6 +329,40 @@ test("a weaker match that attached the wrong duplicate still asks for the packet
 
 test("an ordinary legacy packet - not a canonical envelope at all - needs no hydration", () => {
   assert.equal(canonicalEnvelopeLegacyHydrationId(legacy()), null);
+});
+
+/* Finding 2, PR #386 review: a not-found hydration result was never persisted onto the packet, so
+ * canonicalEnvelopeLegacyHydrationId kept naming the same doomed id forever. Any unrelated
+ * setPackets call that rebuilt this row's object identity (canonicalTrackerPacket does, on every
+ * merge) recomputed back to "needs hydration" and refetched an id that had already been proven
+ * missing, which briefly re-flipped checkingSendPath to true mid-way through something else -
+ * measured hiding the Fill button while an unrelated fill for the SAME row was already in flight. */
+test("a hydration fetch that finds nothing settles the row, mirroring the found case", () => {
+  const merged = mergeCanonicalApplicationHistory([], [canonical({
+    legacy_generated_resume_id: "vanished-legacy-packet",
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  })]);
+  assert.equal(canonicalEnvelopeLegacyHydrationId(merged[0]), "vanished-legacy-packet");
+
+  const settled = canonicalEnvelopeWithMissingLegacyHydration(merged[0], "vanished-legacy-packet");
+  assert.equal(
+    canonicalEnvelopeLegacyHydrationId(settled),
+    null,
+    "once a fetch has confirmed the named id does not exist, it must not be asked for again",
+  );
+});
+
+test("a stale missing-hydration stamp does not mask a genuinely different id", () => {
+  // If the canonical row's legacy_generated_resume_id ever changes (a re-link), a stamp recorded
+  // against the OLD id must not suppress hydration of the NEW one.
+  const merged = mergeCanonicalApplicationHistory([], [canonical({
+    legacy_generated_resume_id: "second-legacy-packet",
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  })]);
+  const staleStamp = canonicalEnvelopeWithMissingLegacyHydration(merged[0], "first-legacy-packet");
+  assert.equal(canonicalEnvelopeLegacyHydrationId(staleStamp), "second-legacy-packet");
 });
 
 /* This helper mints a NEW object every call, so it must never be a React dependency unmemoised.

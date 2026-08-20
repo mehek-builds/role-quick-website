@@ -26,7 +26,7 @@ import {
 } from "@/lib/api";
 import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
-import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
+import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
@@ -1248,6 +1248,18 @@ function Applications() {
     ?? (canonicalSelected?.legacy_generated_resume_id
       ? (packets ?? []).find((packet) => packet.id === canonicalSelected.legacy_generated_resume_id) ?? null
       : null), [canonicalEnvelopePacket, canonicalSelected, packets]);
+  /* THE SAME CHECK selectPacket ITSELF USES, computed here so the detail screen can OFFER the
+   * managed send flow rather than being routed into it automatically.
+   *
+   * Recomputes off `canonicalEnvelopePacket`, which is reactive to `packets` - so once the routing
+   * hydration effect below folds a sendable packet back into `packets`, this flips non-null on its
+   * own, no separate "hydration found something" flag required. Non-null exactly when
+   * CanonicalApplicationDetail should show its "Continue to send" action instead of the
+   * extension-only copy. */
+  const canonicalReadyToSend = useMemo(
+    () => sendableLinkedPacketFromCanonicalEnvelope(canonicalEnvelopePacket),
+    [canonicalEnvelopePacket],
+  );
   useEffect(() => {
     const applicationId = canonicalSelected?.id;
     queueMicrotask(() => setCanonicalCoverLetterJd(""));
@@ -1296,8 +1308,8 @@ function Applications() {
    * CONTENT, here for the decision of which screen to show at all.
    *
    * canonicalEnvelopeLegacyHydrationId names the one packet worth fetching to find out, and returns
-   * null once a fetch has already attached the right one, which is what stops this from re-firing
-   * after it applies its own result below. */
+   * null once a fetch has already attached the right one - or already confirmed there was nothing
+   * to attach - which is what stops this from re-firing after it applies its own result below. */
   useEffect(() => {
     const application = canonicalSelected;
     const hydrationId = canonicalEnvelopeLegacyHydrationId(canonicalEnvelopePacket);
@@ -1317,7 +1329,14 @@ function Applications() {
         if (!full) {
           // Nothing at that id. Genuinely rare - it means the canonical row names a packet the
           // legacy history no longer has - but it must not be retried on every render, so the
-          // placeholder this row already carries stands, marked as a settled outcome.
+          // outcome is stamped onto the row as SETTLED, not just answered locally. Without this,
+          // an unrelated setPackets elsewhere on the page (canonicalTrackerPacket rebuilds every
+          // row's object identity) recomputes canonicalEnvelopeLegacyHydrationId back to this same
+          // id and refetches it, flipping checkingSendPath back on mid-way through something else.
+          setPackets((current) => (current ?? []).map((item) =>
+            canonicalApplicationFromPacket(item)?.id === application.id
+              ? canonicalEnvelopeWithMissingLegacyHydration(item, hydrationId)
+              : item));
           setCanonicalHydration({ id: application.id, status: "done" });
           return;
         }
@@ -1327,13 +1346,22 @@ function Applications() {
         setPackets((current) => (current ?? []).map((item) =>
           canonicalApplicationFromPacket(item)?.id === application.id ? hydratedEnvelope : item));
         setCanonicalHydration({ id: application.id, status: "done" });
-        /* The one line that actually fixes the bug: if the packet this fetch found turns out
-           sendable, route through the SAME check and the SAME selectPacket the Tracker's own click
-           handler uses, rather than deciding a second time in this effect. A row that turns out
-           genuinely unsupported takes no action here at all - canonicalSelected stays put, and
-           CanonicalApplicationDetail keeps rendering, now backed by the packet this fetch found
-           instead of the placeholder. */
-        if (sendableLinkedPacketFromCanonicalEnvelope(hydratedEnvelope)) selectPacket(hydratedEnvelope);
+        /* NOT A selectPacket CALL HERE, ON PURPOSE.
+         *
+         * This effect runs from a background fetch with no user gesture behind it - it can resolve
+         * a few hundred milliseconds to several seconds after the row was opened, while the student
+         * is mid-read of CanonicalApplicationDetail (or an automated driver is mid-way through many
+         * Tracker rows). Calling selectPacket from here used to swap the whole screen out for the
+         * review flow and force window.scrollTo({ top: 0 }) - moveToScreen does that unconditionally
+         * unless told not to - with no gesture attached, which is exactly the "status changes must
+         * not move focus/screen unexpectedly" case ACCESSIBILITY.md rules out.
+         *
+         * Folding the hydrated packet into `packets` above is enough: canonicalEnvelopePacket reads
+         * off `packets` reactively, so canonicalReadyToSend (computed with this SAME
+         * sendableLinkedPacketFromCanonicalEnvelope check, right below canonicalGeneratedPacket)
+         * flips non-null on its own, and CanonicalApplicationDetail swaps its copy and shows a
+         * "Continue to send" action the student presses themselves. That press is a real click, so
+         * it reaches selectPacket exactly the way every other caller already does. */
       })
       .catch(() => {
         if (!cancelled) setCanonicalHydration({ id: application.id, status: "done" });
@@ -1341,7 +1369,7 @@ function Applications() {
     return () => {
       cancelled = true;
     };
-  }, [canonicalEnvelopePacket, canonicalSelected, qaMode, selectPacket]);
+  }, [canonicalEnvelopePacket, canonicalSelected, qaMode]);
   /* Computed over EVERY reviewable packet, not over visiblePackets, and that is the whole point.
      A filter of "Needs you" hides the sent Akuna application and leaves the eleven that cannot be
      sent looking like eleven live opportunities. The mark has to know about the row the filter
@@ -3142,6 +3170,13 @@ function Applications() {
         <CanonicalApplicationDetail
           application={canonicalSelected}
           checkingSendPath={canonicalHydration?.id === canonicalSelected.id && canonicalHydration.status === "loading"}
+          readyToSend={canonicalReadyToSend !== null}
+          onContinueToSend={() => {
+            // The explicit click every other selectPacket caller already requires - see the "NOT A
+            // selectPacket CALL HERE" comment on the hydration effect above for why this is a
+            // button press rather than something the effect fires on its own.
+            if (canonicalEnvelopePacket) selectPacket(canonicalEnvelopePacket);
+          }}
           fillBusy={creating === "fill"}
           tailorBusy={creating === "tailor"}
           coverLetterBusy={coverLetterBusy}
@@ -3632,6 +3667,8 @@ function Applications() {
 function CanonicalApplicationDetail({
   application,
   checkingSendPath,
+  readyToSend,
+  onContinueToSend,
   fillBusy,
   tailorBusy,
   coverLetterBusy,
@@ -3662,6 +3699,15 @@ function CanonicalApplicationDetail({
       A row with nothing to hydrate - a genuine free-fill row, or one already correctly linked -
       is never in this state, so the ordinary copy below is what most rows still show. */
   checkingSendPath: boolean;
+  /** True once hydration (or the page's own merge) has confirmed a linked packet that is genuinely
+      sendable through Litos's managed screens. This never navigates anything by itself - the effect
+      that discovers it only folds the packet into state - it just tells this screen to offer
+      `onContinueToSend` instead of the extension-only copy. The student's own click is what reaches
+      selectPacket, exactly like every Tracker row click already does. */
+  readyToSend: boolean;
+  /** Explicit, user-pressed handoff to the managed review and send screen. Never called except from
+      a click in this component. */
+  onContinueToSend: () => void;
   fillBusy: boolean;
   tailorBusy: boolean;
   coverLetterBusy: boolean;
@@ -3706,17 +3752,22 @@ function CanonicalApplicationDetail({
               ? "This application is recorded as sent."
               : checkingSendPath
                 ? "Checking whether Litos can send this one for you..."
-                : "Continue on the employer's form."}
+                : readyToSend
+                  ? "Litos can send this application for you."
+                  : "Continue on the employer's form."}
           </p>
           <p className="mt-1 text-small leading-6 text-muted">
             {submitted
               ? "Tracker keeps this canonical record even when no tailored resume packet was generated."
               : checkingSendPath
-                /* This row names a tailored packet the Tracker has not loaded yet. If it turns out
-                   to be on a portal Litos can submit through, this screen hands off to the real
-                   review and send flow automatically - no extension, no separate tab. */
+                /* This row names a tailored packet the Tracker has not loaded yet. Once it loads,
+                   if it turns out to be on a portal Litos can submit through, the button below
+                   changes to "Continue to send" - the student still presses it themselves; nothing
+                   here jumps them to another screen on its own. */
                 ? "Litos is loading this application's tailored packet to see whether it can send it for you directly."
-                : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
+                : readyToSend
+                  ? "This application's tailored packet is ready on a portal Litos can submit through. Continue to Litos's managed review and send screen to finish it - no extension, no separate tab."
+                  : "Litos will verify the extension account, bind this exact application, and open the employer page. Click Fill in the extension card, review every field, then press the employer's submit control yourself."}
           </p>
         </div>
         <div className="mt-4 rounded-inner border border-brand/30 bg-brand-soft/35 p-4">
@@ -3792,16 +3843,21 @@ function CanonicalApplicationDetail({
         </div>
         {error && <div className="mt-4"><ErrorNote message={error} /></div>}
         <div className="mt-5 flex flex-wrap gap-3">
-          {/* Held back while checkingSendPath: pressing this starts the extension handoff, and a
-              row that turns out sendable is about to leave this screen entirely for the managed
-              send flow. Offering the extension path in that half-second window would let a click
-              race the redirect and open a Chrome tab for a form Litos was about to fill without it. */}
-          {!submitted && !checkingSendPath && application.portal_url && (
+          {/* readyToSend gets its OWN button rather than reusing onFill, and the extension button is
+              held back while it is true: pressing "Open and fill application" starts the extension
+              handoff, and a row Litos can send directly should be routed to the managed screens
+              instead, not offered a second, worse path to the same application. checkingSendPath
+              holds both back for the same reason one half-second earlier - the eligibility check
+              itself is still in flight, so neither action is safe to offer yet. */}
+          {!submitted && !checkingSendPath && readyToSend && (
+            <Button type="button" onClick={onContinueToSend}>Continue to send</Button>
+          )}
+          {!submitted && !checkingSendPath && !readyToSend && application.portal_url && (
             <Button type="button" disabled={fillBusy || tailorBusy} onClick={onFill}>
               {fillBusy ? "Checking extension..." : "Open and fill application"}
             </Button>
           )}
-          {!submitted && !checkingSendPath && !application.portal_url && <p className="text-small text-muted">This record has no employer form URL. Add the job again with its exact HTTPS application link.</p>}
+          {!submitted && !checkingSendPath && !readyToSend && !application.portal_url && <p className="text-small text-muted">This record has no employer form URL. Add the job again with its exact HTTPS application link.</p>}
           <ButtonLink href="/dashboard/settings#application-details" variant="quiet">Review saved details</ButtonLink>
         </div>
       </div>

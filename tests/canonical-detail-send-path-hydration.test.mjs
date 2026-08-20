@@ -20,9 +20,21 @@ import { describe, test } from "node:test";
  *
  * THE FIX reuses PR #383's stub-hydration pattern (ApplicationPacket, `isStubPacketSpec`) for the
  * ROUTING decision rather than only for packet content: canonicalEnvelopeLegacyHydrationId names
- * the exact packet worth fetching, a page.tsx effect fetches it and rebuilds the envelope, and if
- * that rebuild turns out sendable it calls the SAME selectPacket the Tracker's own row click uses -
- * no second copy of the eligibility check, no new send path.
+ * the exact packet worth fetching, and a page.tsx effect fetches it and rebuilds the envelope.
+ *
+ * REVISED AFTER CODE REVIEW ON THIS SAME PR (2026-08-20): the effect originally called selectPacket
+ * itself the instant a rebuild turned out sendable - the SAME selectPacket the Tracker's own row
+ * click uses, so there was no second, drifting copy of the eligibility check, but that call ran from
+ * a `.then()` with no user gesture behind it. selectPacket's moveToScreen unconditionally scrolls to
+ * top and swaps CanonicalApplicationDetail for the Review screen, which is correct behaviour for
+ * every OTHER caller (all of them are click handlers) and wrong here: a student reading the detail
+ * panel got the screen pulled out from under them a few hundred ms to seconds after opening the row,
+ * violating ACCESSIBILITY.md's "status changes are announced once without moving focus
+ * unexpectedly". The fix keeps the single-eligibility-check property (still one function decides
+ * sendability, still one function performs the navigation) but moves the CALL of that navigation
+ * behind an explicit "Continue to send" button the student presses themselves. The effect now only
+ * folds the hydrated packet into `packets` state; CanonicalApplicationDetail computes readiness
+ * reactively from that state and offers the button instead of auto-navigating.
  *
  * WHAT THIS FILE CAN AND CANNOT DO, in the words of tests/tracker-row-opens-detail.regression-1.
  * test.mjs beside it: this is static analysis of source text, pinning the SHAPE of the fix so a
@@ -59,14 +71,20 @@ describe("a canonical row's linked packet is hydrated before its send eligibilit
     );
   });
 
-  test("a sendable hydration result routes through selectPacket, not a duplicated eligibility branch", () => {
-    /* This is the one assertion that actually pins the fix: a second, independent "is this sendable"
-       branch inside the hydration effect is exactly the kind of drift that caused the bug, because
-       it can silently disagree with sendableLinkedPacketFromCanonicalEnvelope the way the merge
-       fallback already disagreed with the real packet. */
-    assert.match(
-      applications,
-      /if \(sendableLinkedPacketFromCanonicalEnvelope\(hydratedEnvelope\)\) selectPacket\(hydratedEnvelope\);/,
+  test("the hydration effect never calls selectPacket itself", () => {
+    /* This is the assertion that pins Finding 1's fix: navigating away from whatever the student is
+       currently looking at must never happen from a background .then() with no user gesture behind
+       it. selectPacket is still the ONLY function that performs the navigation - see the next
+       describe block for where it is now called from - but it must not appear inside this effect. */
+    const effectStart = applications.indexOf("useEffect(() => {\n    const application = canonicalSelected;");
+    assert.notEqual(effectStart, -1, "could not locate the routing hydration effect to scope this assertion to");
+    const effectEnd = applications.indexOf("}, [canonicalEnvelopePacket, canonicalSelected, qaMode]);", effectStart);
+    assert.notEqual(effectEnd, -1, "could not locate the end of the routing hydration effect");
+    const effectBody = applications.slice(effectStart, effectEnd);
+    assert.doesNotMatch(
+      effectBody,
+      /selectPacket\(/,
+      "the routing hydration effect must only fold the hydrated packet into state - navigation belongs to an explicit click, not a background fetch resolving",
     );
   });
 
@@ -80,6 +98,17 @@ describe("a canonical row's linked packet is hydrated before its send eligibilit
     );
   });
 
+  test("a not-found hydration result is also persisted, not merely answered for this render", () => {
+    /* Finding 2, same review: without this, a not-found outcome never left a mark on the packet, so
+       canonicalEnvelopeLegacyHydrationId kept naming the same doomed id, and any unrelated
+       setPackets call that rebuilt this row's identity (canonicalTrackerPacket does, on every merge)
+       re-triggered the identical fetch. */
+    assert.match(
+      applications,
+      /canonicalEnvelopeWithMissingLegacyHydration\(item, hydrationId\)/,
+    );
+  });
+
   test("a race between two hydrations is guarded the same way ApplicationPacket's stub hydration is", () => {
     assert.match(applications, /let cancelled = false;[\s\S]{0,400}if \(cancelled\) return;/);
   });
@@ -90,6 +119,35 @@ describe("a canonical row's linked packet is hydrated before its send eligibilit
     // setState in the cover-letter effect beside this one was already written to avoid.
     assert.match(applications, /queueMicrotask\(\(\) => setCanonicalHydration\(null\)\);/);
     assert.match(applications, /queueMicrotask\(\(\) => setCanonicalHydration\(\{ id: application\.id, status: "loading" \}\)\);/);
+  });
+});
+
+describe("send eligibility discovered by hydration is offered, never forced", () => {
+  test("readiness is computed reactively from packets state, with the same eligibility check selectPacket uses", () => {
+    assert.match(
+      applications,
+      /const canonicalReadyToSend = useMemo\(\s*\n\s*\(\) => sendableLinkedPacketFromCanonicalEnvelope\(canonicalEnvelopePacket\),\s*\n\s*\[canonicalEnvelopePacket\],\s*\n\s*\);/,
+    );
+  });
+
+  test("CanonicalApplicationDetail receives readiness as a prop rather than re-deriving it", () => {
+    assert.match(applications, /readyToSend: boolean;/);
+    assert.match(applications, /onContinueToSend: \(\) => void;/);
+    assert.match(applications, /readyToSend=\{canonicalReadyToSend !== null\}/);
+  });
+
+  test("the continue-to-send handler is the only place in this render path that calls selectPacket for a hydrated row", () => {
+    assert.match(
+      applications,
+      /onContinueToSend=\{\(\) => \{[\s\S]{0,200}if \(canonicalEnvelopePacket\) selectPacket\(canonicalEnvelopePacket\);/,
+    );
+  });
+
+  test("a ready row gets an explicit button to press, not an automatic screen change", () => {
+    assert.match(
+      applications,
+      /!submitted && !checkingSendPath && readyToSend && \(\s*\n\s*<Button type="button" onClick=\{onContinueToSend\}>Continue to send<\/Button>/,
+    );
   });
 });
 
@@ -114,9 +172,9 @@ describe("CanonicalApplicationDetail says it is checking, not that this applicat
     assert.match(applications, /"Litos will verify the extension account, bind this exact application, and open the employer page\./);
   });
 
-  test("the extension handoff button is held back while eligibility is still being checked", () => {
-    // Pressing it opens a real Chrome tab. A row that is about to be routed to the managed send
-    // screens must not have already started an extension handoff in the half-second before that.
-    assert.match(applications, /!submitted && !checkingSendPath && application\.portal_url/);
+  test("the extension handoff button is held back while eligibility is still being checked, and once it is known ready", () => {
+    // Pressing it opens a real Chrome tab. A row that is about to offer the managed send screens
+    // must not also offer starting an extension handoff for the same application.
+    assert.match(applications, /!submitted && !checkingSendPath && !readyToSend && application\.portal_url/);
   });
 });
