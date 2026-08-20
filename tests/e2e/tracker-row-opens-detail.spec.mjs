@@ -58,6 +58,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
 import { BACKEND_ORIGIN, BOOTSTRAP, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -203,6 +204,9 @@ await context.route("**/*", async (route) => {
     await json(STUB[pathname] ?? {});
     return;
   }
+  // The sanctioned analytics origin, aborted without being recorded.
+  // See ./sanctioned-third-parties.mjs for the list and the call behind it.
+  if (isSanctionedThirdParty(url)) return route.abort();
   blockedExternal.push(url);
   await route.abort();
 });

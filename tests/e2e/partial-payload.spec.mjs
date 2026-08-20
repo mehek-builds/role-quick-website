@@ -70,6 +70,7 @@ const playwrightModule = await import(PLAYWRIGHT_MODULE);
 const { chromium } = playwrightModule.default ?? playwrightModule;
 
 import { BACKEND_ORIGIN, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 /* The one override the healthy baseline needs. The shared fixture answers the board with two empty
    arrays, which is correct for the click-path spec (it never opens the board) and useless here: an
@@ -158,6 +159,9 @@ await context.route("**/*", async (route) => {
        stub does not model fails loudly instead of silently reading an empty object. */
     return route.fulfill({ status: 404, contentType: "application/json", body: '{"error":"not stubbed"}' });
   }
+  // The sanctioned analytics origin, aborted without being recorded.
+  // See ./sanctioned-third-parties.mjs for the list and the call behind it.
+  if (isSanctionedThirdParty(url)) return route.abort();
   blockedExternal.push(url);
   return route.abort();
 });

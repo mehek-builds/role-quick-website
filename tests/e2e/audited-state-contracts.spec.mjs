@@ -11,6 +11,7 @@ import { createServer } from "node:net";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 const BACKEND = "https://student-outreach-backend.vercel.app";
 const TOKEN = "audited-state-fixture-token";
@@ -202,6 +203,7 @@ async function routeBilling(context, meResponse, {
       return route.fulfill({ json: { product: "litos" } });
     }
     if (url.startsWith("https://billing.stripe.com/")) return route.abort();
+    if (isSanctionedThirdParty(url)) return route.abort();
     unknown.push(`${request.method()} ${url}`);
     return route.abort();
   });
@@ -281,6 +283,7 @@ async function routeSettings(context, deleteResponse, exportResponse = { status:
     const url = request.url();
     if (isLocal(url)) return route.continue();
     if (!url.startsWith(BACKEND)) {
+      if (isSanctionedThirdParty(url)) return route.abort();
       unknown.push(`${request.method()} ${url}`);
       return route.abort();
     }
@@ -443,6 +446,7 @@ async function routeResume(context, {
     const url = request.url();
     if (isLocal(url)) return route.continue();
     if (!url.startsWith(BACKEND)) {
+      if (isSanctionedThirdParty(url)) return route.abort();
       unknown.push(`${request.method()} ${url}`);
       return route.abort();
     }
