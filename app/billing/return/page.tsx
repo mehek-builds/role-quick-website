@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, ButtonLink } from "@/components/app/Button";
 import { ErrorNote, LoadingOrb } from "@/components/app/ui";
 import {
@@ -25,6 +25,12 @@ import {
   readPendingBillingAction,
 } from "@/features/billing";
 import styles from "./receipt.module.css";
+
+declare global {
+  interface Window {
+    ttq?: { track: (event: string, params?: Record<string, unknown>) => void };
+  }
+}
 
 type Result =
   | { kind: "active"; me: Me; receipt: BillingReceipt | null }
@@ -181,6 +187,16 @@ export default function BillingReturnPage() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [extensionRetryBusy, setExtensionRetryBusy] = useState(false);
   const [extensionRetryComplete, setExtensionRetryComplete] = useState(false);
+  const conversionFired = useRef(false);
+  useEffect(() => {
+    if (conversionFired.current) return;
+    if (result?.kind !== "active" && result?.kind !== "extension_active") return;
+    conversionFired.current = true;
+    const receipt = result.kind === "active" ? result.receipt : null;
+    window.ttq?.track("CompletePayment", receipt
+      ? { value: receipt.amount_cents / 100, currency: receipt.currency.toUpperCase(), content_id: receipt.plan, content_type: "product" }
+      : {});
+  }, [result]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const context = params.get("context");
