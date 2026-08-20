@@ -2,9 +2,16 @@
  * The "waiting on you" queue.
  *
  * When an application stops on a human-verification check, the check can only be answered by the
- * person whose application it is, in their own browser. So this is not a work queue anyone else can
- * drain: it is a list pointed at its owner, and the only useful thing it can do is get them back to
- * the right page quickly.
+ * person whose application it is. That used to mean sending them to the employer's own site in a
+ * fresh tab, refilled only if the browser extension happened to be installed and signed in there.
+ * It now means reopening the application inside Litos's own dashboard first: the review screen it
+ * lands on (`SubmissionScreen`, `app/dashboard/applications/page.tsx`) owns the actual decision of
+ * how to finish - a live in-dashboard fill where the infrastructure supports it, the extension where
+ * an ATS family still requires it, or a plain retry otherwise - so this queue's only job is to get
+ * the applicant to that screen and let it decide, not to promise a specific mechanism itself.
+ *
+ * So this is not a work queue anyone else can drain: it is a list pointed at its owner, and the only
+ * useful thing it can do is get them back to the right screen quickly.
  *
  * Ordered oldest first, which is the whole promise. The application nobody has dealt with is exactly
  * the one that keeps getting re-observed, so any ordering that responds to recent activity would
@@ -59,10 +66,10 @@ export function isWaitingOnHuman(review: ReviewLike | null | undefined): boolean
  *
  * portal_url arrives from backend data that ultimately traces back to an employer's posting or a
  * pasted link, and the backend's own guard is zod .url(), which happily accepts
- * `javascript:alert(1)`. This block puts a button in front of the applicant and tells them to click
- * it, which makes it precisely the wrong place to trust a URL. Anything that is not https is
- * dropped, and the row falls through to its "open it from your applications list" branch rather
- * than disappearing - the application still needs finishing either way.
+ * `javascript:alert(1)`. This is now a secondary, optional link (the primary control is the
+ * in-dashboard one keyed on `id`, which needs no external URL at all), but it still puts a link in
+ * front of the applicant, so the same rule applies: anything that is not https is dropped rather
+ * than trusted.
  */
 export function safePortalUrl(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
@@ -106,33 +113,21 @@ export function describeWait(stalledAt: string, now: number): string {
 }
 
 /**
- * Whether anything will actually fill the form once the applicant gets there.
- *
- * "extension" means the Litos extension is installed and signed in to this account, so it will
- * refill the application on arrival. "none" means nothing will: no extension, or an extension that
- * is not signed in as this person. This is the only honest input to the sentence below, and it has
- * to be measured rather than assumed.
- */
-export type HandoffFill = "extension" | "none";
-
-/**
  * What is actually left to do, which must not overstate it.
  *
- * This block used to tell an 'at_submit' applicant "Everything else is filled in. Solve the check
- * and send it." That was true of the run that stalled and false of the page they were about to
- * open. The fill happened inside a managed browser session on a server; clicking through opens a
- * fresh load of the employer's own site in the applicant's own browser, where none of it exists.
- * Three applications sat behind that sentence, and every one of them opened blank under a promise
- * that they would not.
- *
- * So the stage is no longer the whole story. The stage says what the earlier run reached; `fill`
- * says what will happen next, which is the thing the applicant is actually being told. When the
- * extension is there, it refills and the promise is kept by construction. When it is not, the honest
- * thing is to say the form opens blank, and why.
+ * This used to depend on whether the browser extension was installed and signed in, because the
+ * only place that could refill the form was the employer's own page in the applicant's own browser.
+ * That dependency is gone, but nothing has taken its place as a promise this function can make. What
+ * happens on arrival is decided by SubmissionScreen (app/dashboard/applications/page.tsx), and it
+ * genuinely varies: a live in-dashboard fill needs a browser session the current infrastructure does
+ * not keep (measured against production: no packet has ever carried one), and some ATS families
+ * still route through the extension regardless (exactAttendedHandoffUrl, lib/attended-handoff.ts).
+ * Promising a specific mechanism here would be exactly the overstatement the previous version of
+ * this function was written to remove, just relocated rather than fixed. So this says only what is
+ * true unconditionally: where to go, and how far the earlier run got.
  */
-export function describeRemainingWork(stage: "before_fill" | "at_submit", fill: HandoffFill): string {
-  if (fill === "extension") return "Litos fills it in again in your browser. Solve the check and send it.";
+export function describeRemainingWork(stage: "before_fill" | "at_submit"): string {
   return stage === "at_submit"
-    ? "Litos filled it in the run that stopped, but that ran in a different browser, so the form opens blank. Fill it in, solve the check, and send it."
-    : "Nothing is filled in yet, so the form opens blank. Fill it in, solve the check, and send it.";
+    ? "Litos filled it in the run that stopped. Continue in Litos to review it and try again."
+    : "Nothing is filled in yet. Continue in Litos to try the fill again.";
 }
