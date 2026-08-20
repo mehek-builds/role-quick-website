@@ -753,8 +753,13 @@ export type PacketAuditResponse = {
   };
   /** The questions the audit above actually hashed - refreshed and persisted server-side, which can
    *  differ from whatever the caller still holds locally. A caller that goes on to submit its own
-   *  older copy instead of these is comparing two different packets to the one acknowledgement. */
-  questions: ApplicationQuestion[];
+   *  older copy instead of these is comparing two different packets to the one acknowledgement.
+   *
+   *  OPTIONAL, HONESTLY: this dashboard and the backend deploy independently on merge to main, so a
+   *  response can arrive from a backend build that predates this field. A caller must fall back to
+   *  its own local questions when this is absent rather than assume it, or a mid-deploy response
+   *  crashes every question-reading render in the component that adopts it blindly. */
+  questions?: ApplicationQuestion[];
 };
 
 export type ManualHandoffResponse = {

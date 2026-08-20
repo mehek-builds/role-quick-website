@@ -2428,9 +2428,18 @@ function Applications() {
          refreshKnownQuestionAnswers blanks or restores it differently than this audit did. Two
          computations of "the same" unedited packet then disagree, and the acknowledgement this
          audit is about to produce is spent by a submit-request that never should have diverged from
-         it. See the backend route for the full account. */
-      setQuestions(response.questions);
-      const auditedReview = { ...savedReview, packet_audit: response.packet_audit, questions: response.questions };
+         it. See the backend route for the full account.
+
+         FALLS BACK TO THE LOCAL COPY WHEN THE FIELD IS ABSENT, deliberately: this dashboard and
+         student-outreach-backend deploy independently on merge to main, with no guarantee either
+         lands first. A response from a backend still on the pre-fix build has no `questions` key,
+         and adopting `undefined` here would set every question-reading render in this component up
+         to throw on the very next paint - not just for this packet, for the whole screen. Falling
+         back reproduces the pre-fix (stale-resubmit) behaviour for that one request rather than
+         crashing the dashboard; the fix simply does not take effect until both sides are live. */
+      const auditedQuestions = Array.isArray(response.questions) ? response.questions : questions;
+      setQuestions(auditedQuestions);
+      const auditedReview = { ...savedReview, packet_audit: response.packet_audit, questions: auditedQuestions };
       setPackets((current) => current?.map((packet) => packet.id === applicationId
         ? { ...packet, download_url: response.pdf.download_url, spec: { ...packet.spec, _review: auditedReview } }
         : packet) ?? current);
@@ -2439,7 +2448,7 @@ function Applications() {
         applicationId,
         response,
         specJson: JSON.stringify(auditedSpec),
-        questionsSnapshot: packetQuestionsSnapshot(response.questions),
+        questionsSnapshot: packetQuestionsSnapshot(auditedQuestions),
         pdfVerified: false,
         acknowledged: false,
         serverRevalidatedAt: null,

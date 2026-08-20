@@ -278,8 +278,10 @@ test("pressing a row opens the answer editor on that question, and saving there 
      the audit refreshes them server-side, and a snapshot taken from the pre-refresh local copy would
      mark evidence "ready" against a packet the audit never produced. See packet-audit-save-sync.test.mjs
      and packetAuditService.test.ts's "a packet the audit blanked stays blank" for the deadlock this
-     avoids. */
-  assert.match(page, /questionsSnapshot: packetQuestionsSnapshot\(response\.questions\)/);
+     avoids. auditedQuestions falls back to the local copy when the response has none, so a caller
+     talking to a not-yet-deployed backend degrades instead of crashing. */
+  assert.match(page, /const auditedQuestions = Array\.isArray\(response\.questions\) \? response\.questions : questions;/);
+  assert.match(page, /questionsSnapshot: packetQuestionsSnapshot\(auditedQuestions\)/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 
   const questions = functionBody(page, "QuestionsScreen");
