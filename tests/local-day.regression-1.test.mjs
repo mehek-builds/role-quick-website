@@ -131,6 +131,12 @@ const UTC_DAY_ALLOWED = new Map([
     "The export FILENAME. Cosmetic, never read back, and no part of the 'today' the student is "
       + "promised on the dashboard.",
   ],
+  [
+    "app/api/tiktok-event/route.ts",
+    "Server-side rate-limit bucket, same shape as app/api/try/route.ts: no user timezone to work "
+      + "from, and the in-memory counter is shared per warm instance, so one fixed reference is the "
+      + "only coherent choice.",
+  ],
 ]);
 
 describe("a UTC calendar day is allowlisted, never incidental", () => {
