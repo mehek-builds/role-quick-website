@@ -2716,7 +2716,9 @@ function Applications() {
               ...submission.review,
               status: "submitted" as const,
               submitted_at: submission.review.unverified_submission?.at ?? now,
+              submission_error: undefined,
               attention_reason: undefined,
+              attention_categories: undefined,
               unverified_submission: { ...submission.review.unverified_submission!, resolution: "sent" as const, resolved_at: now },
               receipt: {
                 confirmation_text: "Confirmed by you: you found this application in the employer’s portal after Litos pressed Send and lost the answer.",
@@ -2734,7 +2736,7 @@ function Applications() {
               submission_claimed_at: undefined,
               unverified_submission: { ...submission.review.unverified_submission!, resolution: "not_sent" as const, resolved_at: now },
               attention_reason: "You checked and the employer does not have this one, so nothing was sent. Litos can send it again whenever you are ready.",
-              attention_categories: undefined,
+              attention_categories: ["unverified_submission" as const],
             },
           }
         : await api<SubmissionResponse>(`/applications/${requestedId}/submission/unverified`, {
@@ -4420,9 +4422,16 @@ function SecurityCodeCard({ review, submitting, error, onSubmitCode }: {
  * named so the receipt never claims Litos verified it. Answering "not found" releases the claim, so
  * the ordinary Try again/Review and fill controls become live again the next time this screen
  * renders, instead of refusing forever.
+ *
+ * Takes the already-sanitized `safeAttentionReason` rather than the raw `review`, on purpose: every
+ * other reader of `attention_reason` on this screen goes through `userFacingError` first (it exists
+ * to catch stack traces, provider internals, and secret-shaped strings before they reach the
+ * screen), and `unverified_submission.cause` includes `provider_error` - exactly the case a raw
+ * exception message could land in this field. Taking the sanitized string as the prop, instead of
+ * the whole review, makes reading the unsanitized field a type error rather than a habit to remember.
  */
-function UnverifiedSubmissionCard({ review, submitting, error, onSubmitOutcome }: {
-  review: ApplicationReview;
+function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmitOutcome }: {
+  attentionReason: string | undefined;
   submitting: boolean;
   error: string | null;
   onSubmitOutcome: (found: boolean) => void;
@@ -4431,7 +4440,7 @@ function UnverifiedSubmissionCard({ review, submitting, error, onSubmitOutcome }
     <div className="mt-4 rounded-inner border border-border bg-surface-alt p-4">
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on you to look</p>
       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink">
-        {review.attention_reason
+        {attentionReason
           ?? "Litos pressed Send and could not confirm what came back, so it does not know whether this application went through. Open the employer's page and look, then say which you found."}
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
@@ -4456,10 +4465,25 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
      review as history (the same reason `stall` is closed with `resolved_at` rather than deleted),
      and a resolved one must not reopen this card on every later visit. */
   const awaitingUnverifiedSubmission = needsAttention && Boolean(review.unverified_submission) && !review.unverified_submission?.resolution;
-  const hasQuestionsToReview = needsAttention && review.questions.length > 0;
-  const handoffUrl = needsAttention ? submission.handoff_url : undefined;
-  const portalUrl = review.portal_url?.trim();
-  const attendedHandoffUrl = exactAttendedHandoffUrl(review);
+  /* Every control below that can replay, resolve, or open a live/exact form for this application is
+     gated HERE, at the one place they all read from, rather than at each button individually. That
+     is not a style preference: the four buttons this feature explicitly gated (Review and fill, Try
+     again, I cleared the check, I submitted it myself) missed the others that share the same
+     `needsAttention` flag - Check the answers, Finish in this dashboard, the live iframe, Open in
+     new tab, and Open exact company form all read `hasQuestionsToReview` / `handoffUrl` /
+     `attendedHandoffUrl` and would have rendered right alongside the yes/no card, letting her
+     interact with (or submit through) the exact form the card exists to ask about first. Gating the
+     three shared values instead of the many places that read them makes the exclusion automatic for
+     every future control built on them, the same way `awaiting_security_code` gets it for free by
+     being its own status. */
+  const hasQuestionsToReview = needsAttention && !awaitingUnverifiedSubmission && review.questions.length > 0;
+  const handoffUrl = needsAttention && !awaitingUnverifiedSubmission ? submission.handoff_url : undefined;
+  /* Prefers the stalled run's own recorded location over the packet's general portal_url: they can
+     differ (posting migrations, a portal_url repaired after the fact), and while an unverified send
+     is open, "the exact page this stopped on" is the only one that answers her question. */
+  const portalUrl = (awaitingUnverifiedSubmission ? review.unverified_submission?.portal_url : undefined)?.trim()
+    ?? review.portal_url?.trim();
+  const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
   const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
   const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
   const [attendedHandoffError, setAttendedHandoffError] = useState<string | null>(null);
@@ -4701,9 +4725,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             The only fix here is the yes/no in UnverifiedSubmissionCard below, and that card renders
             attention_reason itself, so showing it twice would say the same thing in two different
             voices. */}
-        {needsAttention && !awaitingUnverifiedSubmission ? (
+        {awaitingUnverifiedSubmission ? null : needsAttention ? (
           <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} />
-        ) : awaitingUnverifiedSubmission ? null : (
+        ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
               ? userFacingError(review.submission_error, "Try again in a minute.")
@@ -4724,7 +4748,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         )}
         {awaitingUnverifiedSubmission && (
           <UnverifiedSubmissionCard
-            review={review}
+            attentionReason={safeAttentionReason}
             submitting={unverifiedSubmissionSubmitting}
             error={unverifiedSubmissionError}
             onSubmitOutcome={onSubmitUnverifiedOutcome}

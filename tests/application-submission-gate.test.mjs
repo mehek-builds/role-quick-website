@@ -54,12 +54,15 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // A CAPTCHA handoff is only a live control when the backend gives the dashboard a live browser
   // URL. Managed Stratus preview stops carry only screenshot evidence, so those must not render
   // a button-shaped promise that opens nowhere.
-  assert.match(dashboard, /const handoffUrl = needsAttention \? submission\.handoff_url : undefined/);
+  // !awaitingUnverifiedSubmission joined the gate on 2026-08-20: an application that pressed Send
+  // and lost the confirmation must not offer a live company-page handoff while that claim is still
+  // open, for the same reason a Stratus preview-only stop must not (see the comment two lines up).
+  assert.match(dashboard, /const handoffUrl = needsAttention && !awaitingUnverifiedSubmission \? submission\.handoff_url : undefined/);
   assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\) && !attendedHandoffUrl/);
   assert.match(dashboard, /<iframe[\s\S]{0,300}src=\{handoffUrl\}[\s\S]{0,300}Live company application page/);
   assert.match(dashboard, /No live browser to reopen/);
   assert.match(dashboard, /Open company page/);
-  assert.match(dashboard, /const attendedHandoffUrl = exactAttendedHandoffUrl\(review\)/);
+  assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
   assert.match(dashboard, /ensureCurrentExtensionSession\([\s\S]{0,160}minimumAttendedHandoffExtensionVersion\(review\.ats_name\)/);
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
   assert.match(dashboard, /!handoffUrl && !attendedHandoffUrl && portalUrl/);
@@ -137,7 +140,7 @@ test("Tracker arms only the exact attended URL returned by the backend contract"
   assert.match(handoff, /review\.ats_name === "icims"[\s\S]{0,400}ICIMS_ATTENDED_GATE_REASON[\s\S]{0,200}ICIMS_SECURITY_CODE_GATE_REASON/);
   assert.match(handoff, /return \/\^\\\/jobs\\\/\\d\+\\\/[\s\S]{0,100}\\\/login\$\/i\.test\(url\.pathname\)/);
   assert.doesNotMatch(handoff, /atsName === "icims"[\s\S]{0,400}\\\/apply\$/);
-  assert.match(dashboard, /const attendedHandoffUrl = exactAttendedHandoffUrl\(review\)/);
+  assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
   assert.match(dashboard, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
   assert.doesNotMatch(dashboard, /armHandoffs\(\[\{ id: submission\.application_id, portalUrl: portalUrl/);

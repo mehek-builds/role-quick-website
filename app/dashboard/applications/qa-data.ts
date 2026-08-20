@@ -311,14 +311,14 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
     editedTerms: ["reliable", "tested", "production", "Distributed Systems"],
     status: "needs_attention",
     attentionReason: "Litos pressed Send and the secure browser was cut off before the employer’s answer came back, so it does not know whether this application went through. "
-      + "Open https://jobs.example.com/belvedere-trading/software-engineer and look. "
+      + "Open https://jobs.example.com/belvedere-trading/software-engineer-intern---summer-2027 and look. "
       + "A sent application usually replaces the form with a short confirmation, and many employers email one too. "
       + "Then tell Litos which you found: if it is there, Litos will record it as sent and will not apply again; if it is not, Litos will send this one for you. "
       + "Do not submit it by hand in the meantime, because two applications to the same posting count against you and cannot be taken back.",
     unverifiedSubmission: {
       at: "2026-08-16T23:51:29.629Z",
       cause: "run_timed_out",
-      portal_url: "https://jobs.example.com/belvedere-trading/software-engineer",
+      portal_url: "https://jobs.example.com/belvedere-trading/software-engineer-intern---summer-2027",
     },
     filledFields: ["name", "email", "phone", "resume"],
     questions: [],
