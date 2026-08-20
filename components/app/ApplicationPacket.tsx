@@ -567,7 +567,7 @@ export function ApplicationPacket({
                      means this Tracker row was never given a tailored resume - but it must say so
                      rather than fall through to the same blank box the loading state above replaced. */
                   <div className="rounded-inner border border-dashed border-border bg-surface-alt/50 px-5 py-6 text-center text-[12px] leading-6 text-muted">
-                    Litos could not load the resume for this application. Reload the page and try again.
+                    Litos could not load the resume for this application. It may be missing from an older record.
                   </div>
                 ) : (
                   /* stripMetadata, not the raw spec. This is the first surface that renders
