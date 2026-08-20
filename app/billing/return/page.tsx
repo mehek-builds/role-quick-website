@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, ButtonLink } from "@/components/app/Button";
 import { ErrorNote, LoadingOrb } from "@/components/app/ui";
 import {
@@ -12,6 +12,7 @@ import {
   type BillingReceipt,
   type Me,
 } from "@/lib/api";
+import { sendTikTokEvent } from "@/lib/tiktok-client";
 import { isSafeBillingPortalUrl } from "@/lib/billing";
 import { retryPremiumActionThroughExtension, verifyExtensionCheckoutReturn } from "@/lib/extension-bridge";
 import {
@@ -181,6 +182,10 @@ export default function BillingReturnPage() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [extensionRetryBusy, setExtensionRetryBusy] = useState(false);
   const [extensionRetryComplete, setExtensionRetryComplete] = useState(false);
+  /* Guards the Purchase event to exactly one send per mount. The polling loop below can
+     re-render "active" on retries within the same effect run; without this a slow first
+     paint plus a fast second poll could fire the event twice for one payment. */
+  const purchaseSentRef = useRef(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const context = params.get("context");
@@ -273,7 +278,21 @@ export default function BillingReturnPage() {
           && me
         ) {
           const receipt = await getBillingReceipt().catch(() => null);
-          if (!stopped) setResult({ kind: "active", me, receipt });
+          if (!stopped) {
+            setResult({ kind: "active", me, receipt });
+            /* Fired only after billingReturnVerdict confirms Stripe itself (via
+               reconcileBillingCheckout above), not on a client-side assumption that
+               checkout succeeded -- this is the one point in the funnel with real
+               server-verified proof of payment. */
+            if (!purchaseSentRef.current) {
+              purchaseSentRef.current = true;
+              sendTikTokEvent(
+                "Purchase",
+                `purchase:${receipt?.reference ?? context}`,
+                receipt ? { value: receipt.amount_cents / 100, currency: receipt.currency } : undefined,
+              );
+            }
+          }
           return;
         }
         await new Promise((resolve) => window.setTimeout(resolve, 1200));

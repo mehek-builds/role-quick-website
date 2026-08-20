@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@/lib/analytics";
+import { sendTikTokEvent } from "@/lib/tiktok-client";
 import { isQaRender } from "@/lib/qa-mode";
 import {
   createLitosPlusCheckout,
@@ -140,6 +141,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       request.onBeforeCheckout?.();
       track("plan_selected", { plan_id: planId, feature_key: request.feature, placement: request.placement });
       track("checkout_started", { plan_id: planId, feature_key: request.feature, placement: request.placement });
+      sendTikTokEvent("InitiateCheckout", requestId, { plan_id: planId });
       void emitBillingEvent("upgrade_clicked", {
         feature_key: request.feature,
         placement: request.placement,

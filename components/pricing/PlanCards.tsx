@@ -20,6 +20,7 @@ import {
 } from "@/features/billing";
 import { getToken } from "@/lib/api";
 import { track } from "@/lib/analytics";
+import { sendTikTokEvent } from "@/lib/tiktok-client";
 import { createCheckoutThroughExtension } from "@/lib/extension-bridge";
 
 const SESSION_PLAN_KEY = "litos_plus_selected_plan_v2";
@@ -90,6 +91,7 @@ export function PlanCards() {
     setError(null);
     try {
       track("checkout_started", { plan_id: planId, source: extensionCheckout ? "extension" : "pricing", trigger: sourceTrigger });
+      sendTikTokEvent("InitiateCheckout", crypto.randomUUID(), { plan_id: planId });
       let checkoutUrl: string;
       if (extensionCheckout) {
         checkoutUrl = await createCheckoutThroughExtension({

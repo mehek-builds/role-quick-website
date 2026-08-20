@@ -1,0 +1,45 @@
+/* Server-only. Never import this from a "use client" file: it reads
+   TIKTOK_ACCESS_TOKEN, which must not reach the browser bundle. Client code
+   calls the /api/tiktok-event route instead (see lib/tiktok-client.ts). */
+
+const TIKTOK_PIXEL_CODE = "DA3DU3JC77U208UL6HS0";
+const TIKTOK_EVENTS_ENDPOINT = "https://business-api.tiktok.com/open_api/v1.3/event/track/";
+
+export type TikTokServerEventName = "CompleteRegistration" | "InitiateCheckout" | "Purchase";
+
+export async function sendTikTokServerEvent(input: {
+  event: TikTokServerEventName;
+  eventId: string;
+  properties?: Record<string, string | number>;
+}): Promise<void> {
+  const accessToken = process.env.TIKTOK_ACCESS_TOKEN;
+  if (!accessToken) return;
+
+  const testEventCode = process.env.TIKTOK_TEST_EVENT_CODE;
+  const body = {
+    event_source: "web",
+    event_source_id: TIKTOK_PIXEL_CODE,
+    data: [
+      {
+        event: input.event,
+        event_id: input.eventId,
+        event_time: Math.floor(Date.now() / 1000),
+        properties: input.properties ?? {},
+      },
+    ],
+    ...(testEventCode ? { test_event_code: testEventCode } : {}),
+  };
+
+  try {
+    const response = await fetch(TIKTOK_EVENTS_ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Access-Token": accessToken },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      console.error(`[tiktok-events] ${input.event} rejected: ${response.status}`);
+    }
+  } catch (error) {
+    console.error(`[tiktok-events] ${input.event} threw`, error);
+  }
+}
