@@ -16,10 +16,13 @@ import { userFacingError } from "@/lib/user-facing-error";
  * interview -> offer, so the two are shown together rather than collapsed: the stage is where they
  * put it, and the status line underneath is what Litos did.
  *
- * MOVED WITH BUTTONS, NOT DRAG. Drag-and-drop is the expected affordance and the wrong one here:
- * it is unusable by keyboard, awkward on the phone where a lot of this happens, and it needs a
- * pointer-precision gesture to record a fact the student already knows. Two taps, always available,
- * beat a gesture that only works on one input device.
+ * DRAG ON THE GRID, A CONTROL EVERYWHERE ELSE. The three-column grid only exists at md+, so that is
+ * the only place a drag gesture is offered; it needs a pointer, so it is additive, never the only
+ * path. The select that used to sit visibly on every card still does the same move and still ships
+ * on every card: below md it stays visible (there is exactly one column on screen at a time there,
+ * nothing to drag a card into), and at md+ it collapses to sr-only and reappears the instant it is
+ * keyboard-focused, so a keyboard or screen-reader user loses nothing when the mouse gains a
+ * gesture. Two ways to record the same fact, chosen by the input device that is actually in hand.
  */
 /** "Just now" / "3h ago" / "5d ago", the way the card reads it on a board. Anything past a month
  *  falls back to a date, because "47d ago" is arithmetic the reader has to do. */
@@ -43,6 +46,18 @@ const STAGE_LABEL: Record<Stage, string> = {
   interview: "Interview",
   offer: "Offer",
   closed: "Closed",
+};
+
+/* Reuses the app's own five-look vocabulary (components/app/ui.tsx: quiet / your-turn / happened),
+   rather than inventing a stage palette. Applied is the resting state (sent, nothing to do: quiet).
+   Interview is the one stage asking something of the student (prep: your-turn, brand blue). Offer
+   is the good news landing (happened, positive green). Saved/closed never reach this board. */
+const STAGE_TONE: Record<Stage, { dot: string; text: string; soft: string; border: string }> = {
+  saved: { dot: "bg-faint", text: "text-muted", soft: "bg-surface-alt", border: "border-l-border" },
+  applied: { dot: "bg-faint", text: "text-muted", soft: "bg-surface-alt", border: "border-l-border" },
+  interview: { dot: "bg-brand", text: "text-brand-ink", soft: "bg-brand-soft", border: "border-l-brand" },
+  offer: { dot: "bg-positive", text: "text-positive", soft: "bg-positive-soft", border: "border-l-positive" },
+  closed: { dot: "bg-faint", text: "text-muted", soft: "bg-surface-alt", border: "border-l-border" },
 };
 
 function submissionLabel(status: string): string {
@@ -80,6 +95,8 @@ export function Board({
   const [moveError, setMoveError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [activeStage, setActiveStage] = useState<Stage>("applied");
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<Stage | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,6 +134,41 @@ export function Board({
         return next;
       });
     }
+  }
+
+  /* Dragging is offered from the card body, not from inside the select or the packet-revisit
+     button: those two need their own mousedown-to-drag gesture untouched (a select opening its
+     options, a button being pressed), so a drag that started on either is cancelled here rather
+     than fighting the browser for it. */
+  function handleDragStart(event: React.DragEvent<HTMLLIElement>, card: BoardCard) {
+    if (event.target instanceof HTMLElement && event.target.closest("select, button, a")) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", card.id);
+    setDraggingId(card.id);
+  }
+
+  function handleDragEnd() {
+    setDraggingId(null);
+    setDragOverStage(null);
+  }
+
+  function handleColumnDragOver(event: React.DragEvent<HTMLElement>, stage: Stage) {
+    if (!draggingId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverStage(stage);
+  }
+
+  function handleColumnDrop(event: React.DragEvent<HTMLElement>, stage: Stage) {
+    event.preventDefault();
+    const id = event.dataTransfer.getData("text/plain") || draggingId;
+    const card = (cards ?? []).find((c) => c.id === id);
+    setDraggingId(null);
+    setDragOverStage(null);
+    if (card && card.stage !== stage) move(card, stage);
   }
 
   const openable = (card: BoardCard) =>
@@ -167,19 +219,35 @@ export function Board({
       <div className="grid gap-3 md:grid-cols-3">
       {visibleStages.map((stage) => {
         const column = cards.filter((c) => c.stage === stage);
+        const tone = STAGE_TONE[stage];
+        const isDropTarget = dragOverStage === stage && draggingId !== null;
         return (
-          <section key={stage} aria-labelledby={`col-${stage}`} className={`${activeStage === stage ? "block" : "hidden"} min-w-0 md:block`}>
-            <div className="flex items-baseline justify-between border-b border-border pb-2">
-              <h3 id={`col-${stage}`} className="text-[13px] font-medium text-ink">
+          <section
+            key={stage}
+            aria-labelledby={`col-${stage}`}
+            onDragOver={(event) => handleColumnDragOver(event, stage)}
+            onDragLeave={() => setDragOverStage((current) => (current === stage ? null : current))}
+            onDrop={(event) => handleColumnDrop(event, stage)}
+            className={`${activeStage === stage ? "block" : "hidden"} min-w-0 rounded-card p-2 transition-colors md:block ${isDropTarget ? `${tone.soft} outline outline-2 outline-dashed outline-offset-[-2px] outline-brand/50` : ""}`}
+          >
+            <div className="flex items-center justify-between border-b border-border pb-2">
+              <h3 id={`col-${stage}`} className="flex items-center gap-2 text-[13px] font-medium text-ink">
+                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} aria-hidden />
                 {STAGE_LABEL[stage]}
               </h3>
-              <span className="font-mono text-[11px] text-muted">{column.length}</span>
+              <span className={`rounded-full ${tone.soft} px-2 py-0.5 font-mono text-[11px] ${tone.text}`}>{column.length}</span>
             </div>
             {/* Capped and scrollable, matching the ledger this replaced. An uncapped column grows
                 without bound and stretches every sibling to the tallest one. */}
             <ul className="mt-2 max-h-[60vh] space-y-2 overflow-y-auto pr-1">
               {column.map((card) => (
-                <li key={card.id} className="relative rounded-inner border border-border bg-surface p-3">
+                <li
+                  key={card.id}
+                  draggable={!busy.has(card.id)}
+                  onDragStart={(event) => handleDragStart(event, card)}
+                  onDragEnd={handleDragEnd}
+                  className={`group relative rounded-card border border-l-[3px] ${tone.border} border-border bg-surface p-3 shadow-rest transition-all md:cursor-grab md:active:cursor-grabbing ${draggingId === card.id ? "opacity-40" : "hover:shadow-raised hover:border-control-border"}`}
+                >
                   <button
                     type="button"
                     onClick={() => openable(card) && onOpen?.(card.id)}
@@ -197,7 +265,10 @@ export function Board({
                     {card.submission_status ? ` · Litos: ${submissionLabel(card.submission_status)}` : ""}
                   </p>
                   {/* The move control keeps its right edge clear so the packet mark can sit in the
-                      actual corner rather than above it. */}
+                      actual corner rather than above it. Visible below md, where the mobile tab bar
+                      shows one column at a time and there is nothing to drag a card into; from md up
+                      the grid makes dragging the primary path, so this collapses to sr-only and
+                      reappears the instant a keyboard user tabs to it. */}
                   <div className={revisitable(card) ? "pr-8" : ""}>
                     <MoveControl card={card} stages={visibleStages} busy={busy.has(card.id)} onMove={move} />
                   </div>
@@ -228,11 +299,25 @@ export function Board({
                       </svg>
                     </button>
                   )}
+                  {/* The grip, bottom-left: the only hint on the card that it can be picked up. Mono
+                      dots rather than a labeled control, because at md+ this is a hover/drag cue for
+                      a mouse, not a second control competing with MoveControl's keyboard path.
+                      Hidden below md, where cards are not draggable (nothing to drag them into). */}
+                  <span aria-hidden className="absolute bottom-[15px] left-3 hidden text-faint transition-colors group-hover:text-muted md:block">
+                    <svg viewBox="0 0 12 12" className="h-3 w-3" fill="currentColor">
+                      <circle cx="3" cy="2.5" r="1" />
+                      <circle cx="9" cy="2.5" r="1" />
+                      <circle cx="3" cy="6" r="1" />
+                      <circle cx="9" cy="6" r="1" />
+                      <circle cx="3" cy="9.5" r="1" />
+                      <circle cx="9" cy="9.5" r="1" />
+                    </svg>
+                  </span>
                 </li>
               ))}
               {column.length === 0 && (
-                <li className="rounded-inner border border-dashed border-border px-3 py-4 text-center text-xs text-muted">
-                  Nothing here
+                <li className={`rounded-card border border-dashed px-3 py-4 text-center text-xs transition-colors ${isDropTarget ? "border-brand/50 text-brand-ink" : "border-border text-muted"}`}>
+                  {isDropTarget ? `Drop to move to ${STAGE_LABEL[stage]}` : "Nothing here"}
                 </li>
               )}
             </ul>
@@ -256,7 +341,7 @@ function MoveControl({
   onMove: (card: BoardCard, stage: Stage) => void;
 }) {
   return (
-    <label className="mt-2 block">
+    <label className="mt-2 block md:focus-within:not-sr-only md:sr-only">
       <span className="sr-only">Move {card.role} at {card.company} to another stage</span>
       <select
         value={card.stage}

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ApplicationReview, GeneratedResume, ResumeSpec } from "@/lib/api";
-import { sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
+import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
 import { completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -277,15 +277,85 @@ export function ApplicationPacket({
      wrong for any packet short enough never to scroll. */
   const [active, setActive] = useState("packet-resume");
 
+  /* STUB HYDRATION.
+   *
+   * `packet` is resolved from `packets` every render (see the comment on the call site below), and
+   * `packets` can hold the placeholder `canonicalTrackerPacket` writes for a Tracker row whose linked
+   * legacy packet was not among the 50 full specs `/resume/history` returned: `{ _review: review }`,
+   * no `_contact`, no `experience`. Rendering that straight into `ResumePaper` used to produce a
+   * silently blank resume - no error, no console warning, nothing - because `stripMetadata` defaults
+   * a missing `experience` to `[]` rather than throwing. `isStubPacketSpec` names that shape.
+   *
+   * The fetch below is the same one `page.tsx` already makes for a direct link that names an older
+   * packet (`linkedHistory`, keyed off `requestedCanonicalApplication?.legacy_generated_resume_id`).
+   * The id to ask for is that same field when this packet carries a canonical envelope, falling back
+   * to the packet's own id: for every pre-canonical application the two are the same UUID (see
+   * canonical-tracker.ts), which is why asking for `packet.id` alone already recovers the common
+   * case, and asking for `legacy_generated_resume_id` first covers the rest. */
+  const stub = isStubPacketSpec(packet.spec);
+  /* Keyed by packet id rather than reset imperatively at the top of the effect below: every setState
+     call here happens inside the fetch's own then/catch, which is what an effect that subscribes to
+     an external system (the network) is supposed to do. Comparing `outcome.id` to `packet.id` at read
+     time is what makes switching straight from one stub to another (no unmount in between, since the
+     dialog carries no key) show that packet's own fetch rather than the previous one's leftover
+     result while the new one is still in flight. */
+  const [hydrationOutcome, setHydrationOutcome] = useState<
+    { id: string; packet: GeneratedResume } | { id: string; failed: true } | null
+  >(null);
+  const hydratedPacket = hydrationOutcome && hydrationOutcome.id === packet.id && "packet" in hydrationOutcome
+    ? hydrationOutcome.packet
+    : null;
+  const hydrationFailed = hydrationOutcome !== null && hydrationOutcome.id === packet.id && "failed" in hydrationOutcome;
+  useEffect(() => {
+    if (!stub) return;
+    let cancelled = false;
+    const hydrationId = canonicalApplicationFromPacket(packet)?.legacy_generated_resume_id || packet.id;
+    api<{ resumes: GeneratedResume[] }>(`/resume/history?application=${encodeURIComponent(hydrationId)}`)
+      .then((result) => {
+        if (cancelled) return;
+        const full = result.resumes.find((resume) => resume.id === hydrationId) ?? null;
+        setHydrationOutcome(full && !isStubPacketSpec(full.spec)
+          ? { id: packet.id, packet: full }
+          : { id: packet.id, failed: true });
+      })
+      .catch(() => {
+        if (!cancelled) setHydrationOutcome({ id: packet.id, failed: true });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packet.id, stub]);
+
   const sent = review.status === "submitted";
   const role = packet.job_context.role || "This application";
   const company = packet.job_context.company || "the company";
-  const questions = review.questions ?? [];
-  const filledFields = review.filled_fields ?? [];
-  const safeAttentionReason = review.attention_reason
-    ? userFacingError(review.attention_reason, "Litos could not finish the company's form. Try again in a minute.")
+  /* The resume, the posting text, the answered questions and the receipt all live on whichever
+     packet actually carries them - the hydrated one once it lands, the original before and if
+     hydration never finds anything. Status and the submission timeline stay pinned to the ORIGINAL
+     `review` on purpose: canonicalTrackerPacket already resolved the canonical row's status as
+     authoritative over a linked packet's own (canonical-tracker.ts, canonicalStatus), and letting a
+     hydrated packet's older review override that here would undo that resolution for exactly the
+     packets it exists to protect. */
+  const contentPacket = hydratedPacket ?? packet;
+  const contentReview: ApplicationReview = hydratedPacket?.spec._review
+    ? {
+      ...hydratedPacket.spec._review,
+      status: review.status,
+      updated_at: review.updated_at,
+      submitted_at: review.submitted_at,
+      attention_reason: review.attention_reason,
+      attention_categories: review.attention_categories,
+      portal_url: review.portal_url,
+      ats_name: review.ats_name,
+    }
+    : review;
+  const questions = contentReview.questions ?? [];
+  const filledFields = contentReview.filled_fields ?? [];
+  const safeAttentionReason = contentReview.attention_reason
+    ? userFacingError(contentReview.attention_reason, "Litos could not finish the company's form. Try again in a minute.")
     : undefined;
-  const attentionReview = { ...review, attention_reason: safeAttentionReason };
+  const attentionReview = { ...contentReview, attention_reason: safeAttentionReason };
   /* The company, the role and what the packet already carries. Without the third of those, a
      revisited application that went out WITH its transcript would still be listed here as needing
      one, which is the same class of error as the Done column claiming a box was filled that the run
@@ -300,16 +370,16 @@ export function ApplicationPacket({
   const needsInput = humanInputItems(attentionReview, {
     company: packet.job_context.company,
     role: packet.job_context.role,
-    documents: packet.spec._documents,
+    documents: contentPacket.spec._documents,
   }).filter((item) => !item.settled);
-  const completedItems = completedSubmissionGroups(review);
-  const receipt = review.receipt;
+  const completedItems = completedSubmissionGroups(contentReview);
+  const receipt = contentReview.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
-  const builtAt = formatMoment(packet.created_at);
+  const builtAt = formatMoment(contentPacket.created_at);
   const when = sent
     ? sentAt ? `Sent ${sentAt}` : "Sent"
     : builtAt ? `Built ${builtAt}, not sent` : "Not sent";
-  const jdParagraphs = (review.jd_text ?? "")
+  const jdParagraphs = (contentReview.jd_text ?? "")
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
@@ -481,19 +551,39 @@ export function ApplicationPacket({
                 title={sent ? "The resume they received" : "The resume that will go out"}
               />
               <div className="mt-3">
-                {/* stripMetadata, not the raw spec. This is the first surface that renders
-                    ARBITRARY historical packets rather than the freshly generated one, and the
-                    types are a compile-time claim about stored JSON, not a runtime guarantee. The
-                    page beside this has defended these same fields for as long as it has existed;
-                    reading them raw here meant one packet predating a field threw during render and
-                    unmounted the whole Applications tree, submission poller included. */}
-                {/* name and contact come off the raw packet, not off stripMetadata's result:
-                    they live on `_contact`, which is exactly what that helper strips. */}
-                <ResumePaper
-                  spec={stripMetadata(packet.spec)}
-                  name={contactName(packet.spec)}
-                  contact={contactLine(packet.spec)}
-                />
+                {/* stub && !hydratedPacket && !hydrationFailed: the fetch above is in flight. Say so
+                    rather than rendering `stripMetadata`'s defaults, which is a real resume shape -
+                    zero experience entries, no name - indistinguishable from the empty box this
+                    whole path exists to stop showing. */}
+                {stub && !hydratedPacket && !hydrationFailed ? (
+                  <div
+                    role="status"
+                    className="flex h-40 items-center justify-center rounded-inner border border-border bg-white text-[11px] text-muted"
+                  >
+                    Loading the resume this application was built with...
+                  </div>
+                ) : stub && !hydratedPacket && hydrationFailed ? (
+                  /* The fetch ran and found nothing at `hydrationId`, or refused. Genuinely rare - it
+                     means this Tracker row was never given a tailored resume - but it must say so
+                     rather than fall through to the same blank box the loading state above replaced. */
+                  <div className="rounded-inner border border-dashed border-border bg-surface-alt/50 px-5 py-6 text-center text-[12px] leading-6 text-muted">
+                    Litos could not load the resume for this application. It may be missing from an older record.
+                  </div>
+                ) : (
+                  /* stripMetadata, not the raw spec. This is the first surface that renders
+                      ARBITRARY historical packets rather than the freshly generated one, and the
+                      types are a compile-time claim about stored JSON, not a runtime guarantee. The
+                      page beside this has defended these same fields for as long as it has existed;
+                      reading them raw here meant one packet predating a field threw during render and
+                      unmounted the whole Applications tree, submission poller included. */
+                  /* name and contact come off the raw packet, not off stripMetadata's result:
+                      they live on `_contact`, which is exactly what that helper strips. */
+                  <ResumePaper
+                    spec={stripMetadata(contentPacket.spec)}
+                    name={contactName(contentPacket.spec)}
+                    contact={contactLine(contentPacket.spec)}
+                  />
+                )}
               </div>
               <div className="mt-2 flex items-center justify-between gap-3">
                 <p className="font-mono text-[9px] uppercase tracking-[0.08em] text-muted">
@@ -502,9 +592,9 @@ export function ApplicationPacket({
                 {/* The rendered PDF is the file the employer actually gets, and
                     it is not the same artifact as this spec render. Anyone
                     checking a packet should be able to reach it. */}
-                {packet.download_url && packet.download_url !== "#" && (
+                {contentPacket.download_url && contentPacket.download_url !== "#" && (
                   <a
-                    href={packet.download_url}
+                    href={contentPacket.download_url}
                     target="_blank"
                     rel="noreferrer"
                     className="shrink-0 font-mono text-[9px] uppercase tracking-[0.08em] text-brand-ink underline-offset-2 hover:underline"
@@ -647,7 +737,7 @@ export function ApplicationPacket({
                   </div>
                 )}
 
-                {review.skipped_reasons?.length > 0 && (
+                {contentReview.skipped_reasons?.length > 0 && (
                   /* Skipped is not a gap to hide. Litos declines demographic and
                      EEO questions by default, and that decline is a product
                      guarantee, so it is stated on the record of the submission. */
@@ -656,7 +746,7 @@ export function ApplicationPacket({
                       Left blank on purpose
                     </p>
                     <ul className="mt-2 space-y-1">
-                      {review.skipped_reasons.map((reason) => (
+                      {contentReview.skipped_reasons.map((reason) => (
                         <li key={reason} className="text-[12px] leading-6 text-muted">
                           {reason}
                         </li>
