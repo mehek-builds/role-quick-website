@@ -153,6 +153,24 @@ export function reviewAnswersRequest(questions: readonly ReviewAnswerSaveQuestio
   };
 }
 
+/**
+ * Whether the audit path has an answer mutation to persist.
+ *
+ * A needs_attention row can also carry evidence that an employer may already hold the
+ * application. The backend correctly refuses every answer mutation on that shape. The review
+ * screen nevertheless used to PUT the server's own unchanged questions back before every audit,
+ * turning a read-only packet review into a forbidden edit and preventing the audit from naming the
+ * actual next state. Compare exactly the bytes the route accepts: display-only options and
+ * explanations cannot manufacture a write, while an answer, label, kind, required flag, order, or
+ * explicit confirmation change still must go through the guarded route.
+ */
+export function reviewAnswersNeedSave(
+  stored: readonly ReviewAnswerSaveQuestion[],
+  current: readonly ReviewAnswerSaveQuestion[],
+): boolean {
+  return reviewAnswersRequest(stored).body !== reviewAnswersRequest(current).body;
+}
+
 export async function saveReviewAnswers<Review>(options: {
   applicationId: string;
   questions: readonly ReviewAnswerSaveQuestion[];
