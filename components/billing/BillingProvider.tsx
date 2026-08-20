@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { track } from "@/lib/analytics";
 import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { isQaRender } from "@/lib/qa-mode";
 import {
   createLitosPlusCheckout,
@@ -49,6 +50,11 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
   const triggerRef = useRef<HTMLElement | null>(null);
   const checkoutRequestIdRef = useRef<string | null>(null);
   const checkoutAttemptRef = useRef<ContextualCheckoutAttempt | null>(null);
+  /* Keyed by planId, not just "the current attempt" like checkoutRequestIdRef above:
+     switching plans inside one still-open modal after a failed checkout must get its
+     own event_id, or TikTok's event_id dedup collapses the real second InitiateCheckout
+     into the failed first one. */
+  const tiktokCheckoutIdsRef = useRef(new Map<string, string>());
 
   const loadCatalog = useCallback(async () => {
     const next = await getPlanCatalog();
@@ -141,7 +147,8 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
       request.onBeforeCheckout?.();
       track("plan_selected", { plan_id: planId, feature_key: request.feature, placement: request.placement });
       track("checkout_started", { plan_id: planId, feature_key: request.feature, placement: request.placement });
-      sendTikTokEvent("InitiateCheckout", requestId, { plan_id: planId });
+      const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, planId);
+      sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
       void emitBillingEvent("upgrade_clicked", {
         feature_key: request.feature,
         placement: request.placement,
@@ -184,6 +191,7 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
         trigger: request.trigger,
         plan_id: planId,
       });
+      completeOperationId(tiktokCheckoutIdsRef.current, planId);
       window.location.assign(response.checkoutUrl);
     } catch (reason) {
       if (reason instanceof ApiError && isDefinitiveCheckoutError(reason.status)) {

@@ -26,7 +26,7 @@
  * route: /pricing sends people back to the settings page, and setup has to come back to setup.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
@@ -40,6 +40,7 @@ import {
 } from "@/features/billing";
 import { track } from "@/lib/analytics";
 import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { PrimaryButton, StartShell } from "./ui";
 
 export function PlanStep({ onSettled }: { onSettled: () => void }) {
@@ -56,6 +57,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const plan = litosPlusPlan(selected);
+  const tiktokCheckoutIdsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     let cancelled = false;
@@ -86,7 +88,8 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
     setError(null);
     try {
       track("checkout_started", { plan_id: selected, source: "onboarding", trigger: "start_plan" });
-      sendTikTokEvent("InitiateCheckout", crypto.randomUUID(), { plan_id: selected });
+      const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, selected);
+      sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: selected });
       const access = await getBillingState();
       if (!access?.account_id) throw new Error("Litos could not bind checkout to this account. Refresh and try again.");
       const session = await createLitosPlusCheckout(selected, {
@@ -103,6 +106,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
         returnRoute: "/start",
         expiresAt: session.expires_at,
       });
+      completeOperationId(tiktokCheckoutIdsRef.current, selected);
       window.location.assign(session.checkoutUrl);
     } catch (reason) {
       /* A GUEST CANNOT PAY YET, AND THIS IS THE ONLY WAY OUT OF THE PAYMENT GATE.

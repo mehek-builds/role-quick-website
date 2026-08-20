@@ -5,7 +5,7 @@ export type GoogleSessionResponse = {
 };
 
 type CompletionDependencies = {
-  setSession(token: string, email: string): void;
+  setSession(token: string, email: string, isNewRegistration: boolean): void;
   returningUserRoute(): Promise<string>;
 };
 
@@ -15,6 +15,7 @@ export async function completeGoogleSession(
 ): Promise<string | null> {
   if (typeof response?.token !== "string" || typeof response.email !== "string") return null;
 
-  dependencies.setSession(response.token, response.email);
-  return response.is_new_user === true ? "/start" : dependencies.returningUserRoute();
+  const isNewUser = response.is_new_user === true;
+  dependencies.setSession(response.token, response.email, isNewUser);
+  return isNewUser ? "/start" : dependencies.returningUserRoute();
 }

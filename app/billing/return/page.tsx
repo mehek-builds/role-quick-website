@@ -182,9 +182,11 @@ export default function BillingReturnPage() {
   const [resumeError, setResumeError] = useState<string | null>(null);
   const [extensionRetryBusy, setExtensionRetryBusy] = useState(false);
   const [extensionRetryComplete, setExtensionRetryComplete] = useState(false);
-  /* Guards the Purchase event to exactly one send per mount. The polling loop below can
-     re-render "active" on retries within the same effect run; without this a slow first
-     paint plus a fast second poll could fire the event twice for one payment. */
+  /* Fast-path guard for one mount: the polling loop below can re-render "active" on
+     retries within the same effect run, and without this a slow first paint plus a
+     fast second poll could fire the event twice for one payment. The sessionStorage
+     flag set alongside this (see the "active" branch below) is what guards the
+     slower case, a remount from browser back/forward navigation. */
   const purchaseSentRef = useRef(false);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -283,9 +285,19 @@ export default function BillingReturnPage() {
             /* Fired only after billingReturnVerdict confirms Stripe itself (via
                reconcileBillingCheckout above), not on a client-side assumption that
                checkout succeeded -- this is the one point in the funnel with real
-               server-verified proof of payment. */
-            if (!purchaseSentRef.current) {
+               server-verified proof of payment.
+
+               purchaseSentRef alone only guards one mount: browser back/forward within
+               this tab remounts the page and would re-run this whole branch. The
+               sessionStorage flag survives that remount (billingReturnContext's own
+               entry for this offer lives in sessionStorage too, for hours, so the
+               window is real, not theoretical) without relying on TikTok's Events API
+               to dedupe two separate CAPI calls sent minutes apart, which isn't a
+               documented guarantee. */
+            const purchaseKey = `litos_tiktok_purchase_sent:${receipt?.reference ?? context}`;
+            if (!purchaseSentRef.current && window.sessionStorage.getItem(purchaseKey) !== "1") {
               purchaseSentRef.current = true;
+              window.sessionStorage.setItem(purchaseKey, "1");
               sendTikTokEvent(
                 "Purchase",
                 `purchase:${receipt?.reference ?? context}`,

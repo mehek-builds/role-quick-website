@@ -1,6 +1,8 @@
 "use client";
 
-export type TikTokServerEventName = "CompleteRegistration" | "InitiateCheckout" | "Purchase";
+import type { TikTokServerEventName } from "./tiktok-event-names";
+
+export type { TikTokServerEventName };
 
 /* Fire-and-forget POST to our own /api/tiktok-event route, which holds the
    TikTok access token server-side and forwards to TikTok's Events API. Never

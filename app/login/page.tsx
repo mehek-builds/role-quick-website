@@ -23,7 +23,6 @@ import { completeGoogleSession } from "./google-session";
 import { passwordFormProblem } from "./password-form";
 import { updatePasswordSession } from "./password-session";
 import { track } from "@/lib/analytics";
-import { sendTikTokEvent } from "@/lib/tiktok-client";
 
 type Step = "credentials" | "code" | "new-password";
 type Flow = "signin" | "signup" | "recovery" | "email-code";
@@ -326,12 +325,12 @@ export default function Login() {
       setError(result.error);
       return "rejected";
     }
-    setSession(result.token, result.email ?? email.trim().toLowerCase());
-    track("authentication_completed", { method: "email_verification" });
     /* Only the signup flow reaches here through a genuinely new account: this same
        function also completes password RECOVERY (submitNewPassword), which must
-       never be counted as a registration. */
-    if (flow === "signup") sendTikTokEvent("CompleteRegistration", crypto.randomUUID());
+       never be counted as a registration -- setSession's isNewRegistration is
+       exactly this flow check, so recovery correctly passes false. */
+    setSession(result.token, result.email ?? email.trim().toLowerCase(), false, flow === "signup");
+    track("authentication_completed", { method: "email_verification" });
     router.replace(await landingRoute());
     return "success";
   }
@@ -350,9 +349,8 @@ export default function Login() {
         setError(data?.error ?? "We could not open the guest view.");
         return;
       }
-      setSession(data.token, null, true);
+      setSession(data.token, null, true, true);
       track("authentication_completed", { method: "guest" });
-      sendTikTokEvent("CompleteRegistration", crypto.randomUUID());
       router.replace("/start");
     } catch {
       setError("Something went wrong. Check your internet and try again.");
@@ -378,7 +376,6 @@ export default function Login() {
         });
         if (route) {
           track("authentication_completed", { method: "google" });
-          if (data?.is_new_user === true) sendTikTokEvent("CompleteRegistration", crypto.randomUUID());
           router.replace(route);
           return;
         }
