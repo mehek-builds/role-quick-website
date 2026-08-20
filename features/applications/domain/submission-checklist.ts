@@ -214,6 +214,21 @@ function normalizedChecklistText(value: string): string {
     .trim();
 }
 
+/**
+ * A cover-letter control measured as unsupported is not applicant work.
+ *
+ * Older packets can still carry the generated question that represented the text area or upload
+ * control before the managed run inspected the employer's current form. Once that run reports
+ * `cover_letter_supported: false`, rendering the historical question under Your turn contradicts
+ * the measurement and asks the applicant to review content Litos has nowhere to send.
+ *
+ * Keep the match deliberately field-shaped. A genuine essay that merely mentions a cover letter
+ * must not disappear because the form lacks a cover-letter attachment control.
+ */
+function isCoverLetterFieldLabel(value: string): boolean {
+  return /^(?:please )?(?:(?:attach|upload|provide) (?:a )?)?cover letter(?: optional)?$/.test(normalizedChecklistText(value));
+}
+
 function isCaptchaChecklistText(value: string): boolean {
   return /captcha|recaptcha|hcaptcha|prove you are human/i.test(value);
 }
@@ -673,7 +688,7 @@ function applicantConfirmedAnswer(
 }
 
 export function humanInputItems(
-  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "filled_fields" | "questions" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
+  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
      review: the first two live on the packet's job_context and the third on the submission envelope,
      so the caller supplies them. Optional, and every default is the honest one: with no company the
@@ -735,6 +750,7 @@ export function humanInputItems(
   }
 
   for (const question of review.questions ?? []) {
+    if (review.cover_letter_supported === false && isCoverLetterFieldLabel(question.question)) continue;
     const answer = (question.answer ?? "").trim();
     if (question.required && !answer) {
       addUnique(items, {
