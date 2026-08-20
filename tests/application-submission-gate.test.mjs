@@ -39,6 +39,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
   assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
   assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
+  assert.match(dashboard, /const packetAuditStillGuardsSend = result\.review\.status === "ready_for_final_approval"[\s\S]{0,260}"submission_claimed"/);
+  assert.match(dashboard, /if \(!packetAuditStillGuardsSend\) \{[\s\S]{0,180}setPollError\(null\);[\s\S]{0,80}setNotice\(null\);/);
   assert.match(dashboard, /disabled=\{finalApprovalBlocked\}/);
   assert.match(dashboard, /const requiredAnswerMissing = review\.questions\.some/);
   assert.match(dashboard, /const sensitiveQuestionPresent = review\.questions\.some/);
@@ -93,6 +95,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /hidden items-center gap-2 lg:flex[\s\S]{0,900}Litos cannot fill in this company’s page[\s\S]{0,900}View PDF/);
   assert.match(dashboard, /Litos will never pretend to be you/);
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
+  assert.match(dashboard, /submission\.cover_letter && review\.cover_letter_supported !== false/);
+  assert.match(dashboard, /Check the filled-form proof shown in this dashboard/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
 });
