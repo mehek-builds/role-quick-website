@@ -191,12 +191,33 @@ export default function BillingReturnPage() {
   useEffect(() => {
     if (conversionFired.current) return;
     if (result?.kind !== "active" && result?.kind !== "extension_active") return;
-    conversionFired.current = true;
     const receipt = result.kind === "active" ? result.receipt : null;
+    /* The ref alone only guards one mount. A reload or revisit of this exact URL after a
+       purchase resolves remounts the component, resets the ref, and refires a real
+       CompletePayment for the same receipt -- double-counting a sale in TikTok's reporting.
+       localStorage survives the remount; keying on the receipt reference (falling back to the
+       offer context when no receipt is available, e.g. extension_active) makes the fire
+       idempotent per purchase rather than per mount. */
+    const trackingKey = receipt?.reference
+      ? `litos:ttq-completepayment:${receipt.reference}`
+      : offerId
+        ? `litos:ttq-completepayment:${offerId}`
+        : null;
+    try {
+      if (trackingKey && window.localStorage.getItem(trackingKey)) return;
+    } catch {
+      // Storage unavailable (private mode, disabled) -- fall through and rely on the ref only.
+    }
+    conversionFired.current = true;
+    try {
+      if (trackingKey) window.localStorage.setItem(trackingKey, "1");
+    } catch {
+      // Nothing to persist; the in-memory ref still prevents a second fire within this mount.
+    }
     window.ttq?.track("CompletePayment", receipt
       ? { value: receipt.amount_cents / 100, currency: receipt.currency.toUpperCase(), content_id: receipt.plan, content_type: "product" }
       : {});
-  }, [result]);
+  }, [result, offerId]);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const context = params.get("context");
