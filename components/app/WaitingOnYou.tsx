@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card } from "@/components/app/ui";
 import { ButtonLink } from "@/components/app/Button";
 import { describeRemainingWork, describeWait, type WaitingApplication } from "@/lib/captcha-queue";
+import { armHandoffs } from "@/lib/extension-bridge";
 
 /**
  * Applications stopped on a human-verification check.
@@ -19,13 +20,17 @@ import { describeRemainingWork, describeWait, type WaitingApplication } from "@/
  * What this can do is remove every other obstacle: which application, how long it has waited, and
  * one click to the right place.
  *
- * That place is Litos's own review screen for the application, not the employer's page. Reopening
- * it there (`/dashboard/applications?application={id}`) lands on `SubmissionScreen`, which already
- * knows how to rerun the fill and put a live view of that run in front of the applicant - the same
- * mechanism a normal Send already uses, just entered from this queue instead of mid-session. So
- * this component no longer needs to know anything about the browser extension: it used to be the
- * only thing that could refill a form the applicant reached in a fresh tab, and that is no longer
- * how this queue sends anyone anywhere.
+ * That place is Litos's own review screen for the application, not the employer's page - reopening
+ * it there (`/dashboard/applications?application={id}`) hands the decision of HOW to finish to
+ * `SubmissionScreen`, which knows more than this list does: whether a live in-dashboard fill is
+ * available, whether an ATS family still needs the extension, whether the honest answer is just "try
+ * again". This component does not claim to know which of those it will be, on purpose - see
+ * describeRemainingWork's own comment for why that used to be wrong.
+ *
+ * The one thing still worth arming is the fallback link below, since it can send the applicant to
+ * the employer's page directly, bypassing SubmissionScreen entirely - the same reason armHandoffs
+ * existed here before. `sendToExtension` is a silent no-op with no extension present, so arming
+ * unconditionally on render costs nothing when there is nothing listening.
  */
 export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }) {
   /* Rendered from a client-side clock, set after mount. Formatting a duration during SSR produces
@@ -44,6 +49,18 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, [waiting]);
+
+  /* Arms the fallback link, not the primary one. The primary control navigates inside Litos, where
+     SubmissionScreen owns its own arming (openAttendedHandoff) for the cases that need it. The
+     fallback link below skips Litos entirely and opens the employer's page directly, which is the
+     one case this queue can still put in front of the extension ahead of time - the same reason this
+     effect existed before this component stopped tracking extension state. Armed on render rather
+     than on click for the same reason as before: arming from the click handler races the new tab's
+     page load, and arming everything up front has no race to lose. */
+  useEffect(() => {
+    if (waiting === 0) return;
+    void armHandoffs(items.map((item) => ({ id: item.id, portalUrl: item.portalUrl })));
+  }, [waiting, items]);
 
   if (items.length === 0) return null;
 
@@ -79,8 +96,12 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
                 off the packet, with no external URL involved - so unlike the old portalUrl link,
                 this control never has a "nothing to click" fallback state. */}
             <div className="flex shrink-0 flex-col items-start gap-1 self-start sm:items-end sm:self-auto">
+              {/* intent=apply named explicitly, matching jobApplicationHref's own convention
+                  (features/jobs/domain/job-rows.ts) rather than relying on a bare link defaulting to
+                  the same behavior - this queue's applications are not job-rows-shaped, so that
+                  helper does not fit directly, but its URL contract does. */}
               <ButtonLink
-                href={`/dashboard/applications?application=${encodeURIComponent(item.id)}`}
+                href={`/dashboard/applications?application=${encodeURIComponent(item.id)}&intent=apply`}
                 size="sm"
                 /* Every one of these links reads "Continue in Litos", so without a label a screen
                    reader's link list is N identical entries with no way to tell them apart. */
@@ -89,9 +110,10 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
                 Continue in Litos
               </ButtonLink>
               {item.portalUrl ? (
-                <a
-                  className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
+                <ButtonLink
                   href={item.portalUrl}
+                  variant="quiet"
+                  size="sm"
                   target="_blank"
                   /* noopener is the load-bearing half: this is a third-party employer page and an
                      opened tab can otherwise reach back through window.opener. The url itself is
@@ -100,7 +122,7 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
                   aria-label={`Open the employer's page for ${item.role} at ${item.company} directly, opens in a new tab`}
                 >
                   Or open it yourself
-                </a>
+                </ButtonLink>
               ) : null}
             </div>
           </li>

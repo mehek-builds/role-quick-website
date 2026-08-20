@@ -4,10 +4,11 @@
  * When an application stops on a human-verification check, the check can only be answered by the
  * person whose application it is. That used to mean sending them to the employer's own site in a
  * fresh tab, refilled only if the browser extension happened to be installed and signed in there.
- * It now means reopening the application inside Litos's own dashboard: the review screen it lands
- * on already knows how to rerun the fill and put a live view of that run in front of the applicant
- * (`SubmissionScreen`'s `canFinishInDashboard` branch, `app/dashboard/applications/page.tsx`), so
- * this queue's only job is to get the applicant to that screen, not to the employer's page directly.
+ * It now means reopening the application inside Litos's own dashboard first: the review screen it
+ * lands on (`SubmissionScreen`, `app/dashboard/applications/page.tsx`) owns the actual decision of
+ * how to finish - a live in-dashboard fill where the infrastructure supports it, the extension where
+ * an ATS family still requires it, or a plain retry otherwise - so this queue's only job is to get
+ * the applicant to that screen and let it decide, not to promise a specific mechanism itself.
  *
  * So this is not a work queue anyone else can drain: it is a list pointed at its owner, and the only
  * useful thing it can do is get them back to the right screen quickly.
@@ -116,15 +117,17 @@ export function describeWait(stalledAt: string, now: number): string {
  *
  * This used to depend on whether the browser extension was installed and signed in, because the
  * only place that could refill the form was the employer's own page in the applicant's own browser.
- * That is no longer the mechanism: "Continue in Litos" reopens the application on Litos's own review
- * screen, which reruns the fill itself (a fresh managed-browser run, the same one a normal Send does)
- * and shows a live view of it - the applicant never has to leave Litos or own an up-to-date extension
- * for this to work. So the sentence no longer has an extension-shaped branch. It still distinguishes
- * the two stages, because that is a true fact about how far the earlier run got, not a promise about
- * what happens next.
+ * That dependency is gone, but nothing has taken its place as a promise this function can make. What
+ * happens on arrival is decided by SubmissionScreen (app/dashboard/applications/page.tsx), and it
+ * genuinely varies: a live in-dashboard fill needs a browser session the current infrastructure does
+ * not keep (measured against production: no packet has ever carried one), and some ATS families
+ * still route through the extension regardless (exactAttendedHandoffUrl, lib/attended-handoff.ts).
+ * Promising a specific mechanism here would be exactly the overstatement the previous version of
+ * this function was written to remove, just relocated rather than fixed. So this says only what is
+ * true unconditionally: where to go, and how far the earlier run got.
  */
 export function describeRemainingWork(stage: "before_fill" | "at_submit"): string {
   return stage === "at_submit"
-    ? "Litos filled it in the run that stopped. Continue in Litos to pick up where it left off."
-    : "Nothing is filled in yet. Continue in Litos and it fills the form before you reach the check.";
+    ? "Litos filled it in the run that stopped. Continue in Litos to review it and try again."
+    : "Nothing is filled in yet. Continue in Litos to try the fill again.";
 }

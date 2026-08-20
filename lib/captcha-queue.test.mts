@@ -114,14 +114,20 @@ test("an unreadable timestamp degrades to something true rather than throwing", 
  * "Everything else is filled in. Solve the check and send it." was shown for an 'at_submit' stall
  * and was false in the old mechanism: the fill happened inside a managed browser session on a
  * server, and "Finish this one" opened a fresh load of the employer's site in the applicant's own
- * browser, where none of it survived. The fix was not a more careful sentence about that trip - it
- * was removing the trip. Continuing now reopens the application inside Litos, which reruns the fill
- * itself, so the copy no longer needs an escape hatch for "nothing will actually fill this". */
+ * browser, where none of it survived. The fix moves the destination inside Litos, but does NOT
+ * claim to know what happens once the applicant is there - that decision belongs to the screen they
+ * land on (SubmissionScreen), which genuinely varies by ATS family and by whether the current
+ * infrastructure kept a live session. Promising a specific outcome here, even a truer-sounding one,
+ * would repeat the exact mistake this test exists to catch. */
 test("nothing promises what the old new-tab trip could not deliver", () => {
   for (const stage of ["at_submit", "before_fill"] as const) {
     const copy = describeRemainingWork(stage);
     assert.doesNotMatch(copy, /opens blank/);
     assert.doesNotMatch(copy, /different browser/);
+    // Nor may it promise the opposite without evidence: no claim that a fill or a live view is
+    // guaranteed, since neither is true unconditionally.
+    assert.doesNotMatch(copy, /fills the form/);
+    assert.doesNotMatch(copy, /live view/);
   }
 });
 
@@ -132,8 +138,8 @@ test("the stage still says how far the earlier run actually got", () => {
   assert.match(describeRemainingWork("before_fill"), /Nothing is filled in yet/);
 });
 
-/* Every stage now points at the same place, because the mechanism no longer depends on the browser
- * extension being installed or signed in - continuing happens inside Litos's own dashboard. */
+/* Every stage sends the applicant to the same place - Litos's own dashboard, not the employer's
+ * page - even though what happens after they arrive is not this function's to promise. */
 test("every stage sends the applicant to continue inside Litos", () => {
   assert.match(describeRemainingWork("at_submit"), /Continue in Litos/);
   assert.match(describeRemainingWork("before_fill"), /Continue in Litos/);
