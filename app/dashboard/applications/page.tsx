@@ -80,7 +80,7 @@ type ApplicationSort = "recent" | "company";
    send. An empty object is a real answer, "nothing is attached"; undefined is "nobody has looked".
    The `partial: true` seed below is exactly the second case, and so is a backend that predates the
    documents route. */
-type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; documents?: Record<string, AttachedDocument>; handoff_url?: string; configured?: boolean; partial?: boolean };
+export type SubmissionResponse = { application_id: string; review: ApplicationReview; cover_letter?: CoverLetter | null; documents?: Record<string, AttachedDocument>; handoff_url?: string; configured?: boolean; partial?: boolean };
 
 type ResumeGenerationResponse = {
   resume_id: string;
@@ -2420,7 +2420,26 @@ function Applications() {
       }
       const response = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
       if (selectedIdRef.current !== applicationId) return;
-      const auditedReview = { ...savedReview, packet_audit: response.packet_audit };
+      /* THE AUDIT REFRESHES THE QUESTIONS SERVER-SIDE, AND THIS IS WHERE THAT COMES HOME.
+         response.questions is what the audit above actually hashed - not necessarily the local
+         `questions` this request was built from. Without adopting it here, "Fill company form"
+         goes on to submit the STALE local copy: the merge on the other end sees a difference from
+         what was just audited, on a question that has nothing proving she supplied it, and
+         refreshKnownQuestionAnswers blanks or restores it differently than this audit did. Two
+         computations of "the same" unedited packet then disagree, and the acknowledgement this
+         audit is about to produce is spent by a submit-request that never should have diverged from
+         it. See the backend route for the full account.
+
+         FALLS BACK TO THE LOCAL COPY WHEN THE FIELD IS ABSENT, deliberately: this dashboard and
+         student-outreach-backend deploy independently on merge to main, with no guarantee either
+         lands first. A response from a backend still on the pre-fix build has no `questions` key,
+         and adopting `undefined` here would set every question-reading render in this component up
+         to throw on the very next paint - not just for this packet, for the whole screen. Falling
+         back reproduces the pre-fix (stale-resubmit) behaviour for that one request rather than
+         crashing the dashboard; the fix simply does not take effect until both sides are live. */
+      const auditedQuestions = Array.isArray(response.questions) ? response.questions : questions;
+      setQuestions(auditedQuestions);
+      const auditedReview = { ...savedReview, packet_audit: response.packet_audit, questions: auditedQuestions };
       setPackets((current) => current?.map((packet) => packet.id === applicationId
         ? { ...packet, download_url: response.pdf.download_url, spec: { ...packet.spec, _review: auditedReview } }
         : packet) ?? current);
@@ -2429,7 +2448,7 @@ function Applications() {
         applicationId,
         response,
         specJson: JSON.stringify(auditedSpec),
-        questionsSnapshot: currentQuestionsSnapshot,
+        questionsSnapshot: packetQuestionsSnapshot(auditedQuestions),
         pdfVerified: false,
         acknowledged: false,
         serverRevalidatedAt: null,
@@ -3395,6 +3414,7 @@ function Applications() {
         />
       ) : screen === "submitting" ? (
         <PortalProgress
+          key={selectedSubmission?.application_id}
           status={selectedSubmission?.review.status}
           startedAt={submittingPhase === "sending" ? approveStartedAt ?? selectedSubmission?.review.updated_at : prepareStartedAt ?? selectedSubmission?.review.updated_at}
           sending={submittingPhase === "sending"}
@@ -5409,7 +5429,7 @@ const PORTAL_SLOW_AFTER_S = 45;
 // the original defect past the first threshold.
 const PORTAL_STUCK_AFTER_S = 300;
 
-function PortalProgress({ status, startedAt, sending = false, submission }: { status?: ApplicationReview["status"]; startedAt?: string;
+export function PortalProgress({ status, startedAt, sending = false, submission }: { status?: ApplicationReview["status"]; startedAt?: string;
   /** True when this screen was entered by pressing "Send it". See submittingPhase. */
   sending?: boolean;
   submission?: SubmissionResponse | null }) {
@@ -5429,6 +5449,9 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
   // client hydration. The effect corrects it to the true elapsed time on the first tick, which runs
   // immediately rather than after a second's delay.
   const [elapsed, setElapsed] = useState(0);
+  // Mirrors `elapsed` without being a render dependency, so the stage-history effect below can
+  // stamp a step with "how long in" it arrived without re-running on every clock tick.
+  const elapsedRef = useRef(0);
 
   useEffect(() => {
     // Deliberately a self-rescheduling timeout rather than an interval. The repo bans setInterval in
@@ -5439,7 +5462,9 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
     const anchor = startedMs ?? Date.now();
     const tick = () => {
       if (cancelled) return;
-      setElapsed(Math.max(0, Math.floor((Date.now() - anchor) / 1000)));
+      const next = Math.max(0, Math.floor((Date.now() - anchor) / 1000));
+      elapsedRef.current = next;
+      setElapsed(next);
       timer = window.setTimeout(tick, 1000);
     };
     tick();
@@ -5472,6 +5497,23 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
     : submission?.review.progress_stage ?? "Opening the company form";
   const previewModeLabel = liveViewUrl ? "Live" : progressPreviewUrl ? "Updating" : "Starting";
 
+  // The run's own history of stages, built client-side because the backend hands over one current
+  // string at a time (`progress_stage`), not a log.
+  const [stageHistory, setStageHistory] = useState<{ stage: string; atS: number }[]>([]);
+  const lastStageRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (progressStage === lastStageRef.current) return;
+    lastStageRef.current = progressStage;
+    setStageHistory((prev) => [...prev, { stage: progressStage, atS: elapsedRef.current }]);
+  }, [progressStage]);
+
+  // The toggle itself is always present, collapsed by default, and gated on nothing but whether
+  // there is a second stage to show yet: a run one stage into its history already has something
+  // worth disclosing, and there is no reason to make a student wait out a clock to see it.
+  const priorStages = stageHistory.slice(0, -1);
+  const showHistoryToggle = priorStages.length > 0;
+  const [historyOpen, setHistoryOpen] = useState(false);
+
   const milestone =
     elapsed >= PORTAL_STUCK_AFTER_S
       ? "Still working."
@@ -5484,12 +5526,43 @@ function PortalProgress({ status, startedAt, sending = false, submission }: { st
       <Card className="h-fit p-7">
         <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-brand-ink">Live application status</p>
         <h2 className="mt-3 text-heading font-medium text-ink">{title}</h2>
-        <div className="mt-5 flex items-start gap-3 rounded-inner border border-brand/20 bg-brand-soft/35 px-4 py-4">
-          <span className="mt-1 h-2.5 w-2.5 shrink-0 animate-pulse rounded-full bg-brand" aria-hidden />
-          <div>
-            <p role="status" aria-live="polite" className="text-sm font-medium leading-6 text-ink">{progressStage}</p>
-            <p className="mt-1 text-xs leading-5 text-muted">{body}</p>
+        <div className="mt-5 rounded-inner border border-brand/20 bg-brand-soft/35 px-4 py-4">
+          <div className="flex items-start gap-3">
+            <ThinkingOrb state="working" size={20} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-3">
+                <p role="status" aria-live="polite" className="text-sm font-medium leading-6 text-ink">{progressStage}</p>
+                {showHistoryToggle && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryOpen((open) => !open)}
+                    aria-expanded={historyOpen}
+                    aria-label={historyOpen ? "Hide earlier steps" : "Show earlier steps"}
+                    className="-m-1 shrink-0 rounded-full p-1 text-brand-ink transition-colors hover:bg-brand/10"
+                  >
+                    <svg
+                      viewBox="0 0 16 16"
+                      className={`h-3.5 w-3.5 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+                      aria-hidden="true"
+                    >
+                      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs leading-5 text-muted">{body}</p>
+            </div>
           </div>
+          {showHistoryToggle && historyOpen && (
+            <ul className="mt-3 space-y-2 border-t border-brand/20 pt-3">
+              {priorStages.map((entry) => (
+                <li key={`${entry.atS}-${entry.stage}`} className="flex items-baseline justify-between gap-3 text-xs leading-5 text-muted">
+                  <span className="min-w-0 truncate">{entry.stage}</span>
+                  <span className="shrink-0 font-mono text-[10px] text-muted">{formatElapsed(entry.atS)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <p className="mt-4 font-mono text-[11px] text-muted" aria-hidden>{formatElapsed(elapsed)} elapsed</p>
         {milestone && <p className="mt-2 text-xs text-muted">{milestone}</p>}

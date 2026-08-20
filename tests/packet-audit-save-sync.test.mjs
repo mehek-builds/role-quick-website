@@ -64,7 +64,17 @@ test("a ready packet with a real edit is saved, while an unchanged packet avoids
 test("a selection change stops every post-save route from installing the wrong packet", () => {
   const guards = continueFromResume.match(/selectedIdRef\.current !== applicationId/g) ?? [];
   assert.ok(guards.length >= 3, "save, review, and audit awaits must each re-check the selected application");
-  assert.match(continueFromResume, /const response = await api<PacketAuditResponse>[\s\S]+?if \(selectedIdRef\.current !== applicationId\) return;\s*const auditedReview/);
+  /* setQuestions(auditedQuestions) rides between the guard and auditedReview: the audit refreshes
+     the questions server-side, and adopting them here (rather than after the guard has already let a
+     stale selection through) is what keeps a later submit-request from resubmitting a packet the
+     audit above never produced. See packetAuditService.test.ts's "a packet the audit blanked stays
+     blank" for the deadlock this closes. auditedQuestions falls back to the local `questions` when
+     the response carries none, so a caller talking to a backend that predates this field degrades
+     to the old behaviour instead of crashing on every question-reading render. */
+  assert.match(
+    continueFromResume,
+    /const response = await api<PacketAuditResponse>[\s\S]+?if \(selectedIdRef\.current !== applicationId\) return;\s*[\s\S]*?const auditedQuestions = Array\.isArray\(response\.questions\) \? response\.questions : questions;\s*setQuestions\(auditedQuestions\);\s*const auditedReview/,
+  );
   assert.match(saveResume, /catch \(reason\) \{\s*if \(selectedIdRef\.current === applicationId\)/s);
   assert.match(continueFromResume, /catch \(reason\) \{\s*if \(selectedIdRef\.current !== applicationId\) return;/s);
 });
