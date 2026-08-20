@@ -825,10 +825,25 @@ function Applications() {
 
     captureCompletedSubmission(result, "poll");
     const currentEvidence = packetEvidenceRef.current;
-    if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged) {
+    /* Exact packet evidence is a PRE-SEND gate. Once the run has stopped for a person, failed, or
+       reached a receipt, asking the packet-audit route to revalidate it is both meaningless and
+       contradictory: the route correctly answers that this application can no longer be audited,
+       while the successful audit notice stays green beside it. Measured on the live Quandela
+       human-verification stop on 2026-08-21. Retire the evidence and both of its banners when the
+       run leaves the states in which that audit can still guard an employer send. */
+    const packetAuditStillGuardsSend = result.review.status === "ready_for_final_approval"
+      || result.review.status === "filling"
+      || result.review.status === "submitting"
+      || result.review.status === "submission_claimed";
+    if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged && packetAuditStillGuardsSend) {
       await revalidateAcknowledgedEvidence(requestedId, currentEvidence);
     } else {
       setPacketEvidence((current) => reconcileUnacknowledgedPacketPoll(current, requestedId, result.review.packet_audit));
+      if (!packetAuditStillGuardsSend) {
+        packetRevalidationRefusal.current = null;
+        setPollError(null);
+        setNotice(null);
+      }
     }
     const incomingCoverLetter = submissionCoverLetterField(result);
     if (incomingCoverLetter.included) {
@@ -4687,7 +4702,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
       <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">Waiting on you to look</p>
       <p className="mt-2 whitespace-pre-line text-sm leading-6 text-ink">
         {attentionReason
-          ?? "Litos pressed Send and could not confirm what came back, so it does not know whether this application went through. Open the employer's page and look, then say which you found."}
+          ?? "Litos pressed Send and could not confirm what came back. Check the filled-form proof shown in this dashboard, then choose what it shows."}
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button onClick={() => onSubmitOutcome(true)} disabled={submitting} variant="secondary">
@@ -5036,7 +5051,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             </ul>
           </div>
         )}
-        {submission.cover_letter && (
+        {submission.cover_letter && review.cover_letter_supported !== false && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-xs font-medium text-muted">Cover letter</p>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-ink">{submission.cover_letter.body}</p>

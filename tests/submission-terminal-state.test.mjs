@@ -28,7 +28,7 @@ test("every path that receives a review routes the screen from it", async () => 
   // route, and it must be the ref (readable synchronously) rather than a state value.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,4600}if \(approveInFlight\.current !== null && !terminal\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,6200}if \(approveInFlight\.current !== null && !terminal\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
   );
   // The exception to the exception. A stalled approve never rejects (no AbortController in
   // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the
