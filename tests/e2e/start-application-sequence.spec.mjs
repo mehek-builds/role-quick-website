@@ -347,7 +347,11 @@ describe("the application sequence, end to end", () => {
     assert.match(done, /Cut PostgreSQL query time 60%/i, "the resume's own bullets are not on screen");
     assert.match(done, /Software Engineering Intern/i, "the experience the resume was built from is not shown");
     assert.doesNotMatch(done, /Written for this posting from your own resume/i, "the pane still describes instead of showing");
-    assert.match(done, /asked for, and on your resume/i, "the colour legend is missing");
+    /* NO LEGEND, and no count of what the student lacks (Mehek 2026-08-20). A mark means one thing
+       now - the posting asked for this and the resume says it - which it shows by appearing on both
+       sides at once rather than by being named in a key. */
+    assert.doesNotMatch(done, /asked for, and on your resume/i, "the legend is back on the build screen");
+    assert.doesNotMatch(done, /not on your resume/i, "the build screen is counting what the student lacks again");
 
     /* THE CONTRACT, checked rather than trusted (ISSUE-047): a term marked in the posting must be
        marked in the resume too. Measured once at 111 of 313 matched terms marked on one side only,
@@ -361,6 +365,10 @@ describe("the application sequence, end to end", () => {
       postgresMarks >= 2,
       `PostgreSQL is marked ${postgresMarks} time(s): a term the posting asks for and the resume answers must be marked on BOTH sides`,
     );
+    /* And the missing tone is not drawn at all. With the legend gone it would be an orange
+       underline nothing on screen explains, on a term that by definition has no counterpart in the
+       resume pane to point at. The fixture's missing term is "Kubernetes". */
+    assert.ok(!marked.has("kubernetes"), `a missing term is still marked: ${marks.join(", ")}`);
     // The count is REAL: two outstanding asks in the fixture, not the seventeen the posting holds.
     assert.match(done, /2 questions need you/i);
 

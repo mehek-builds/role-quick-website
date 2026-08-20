@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
+import { RequirementProvider, RequirementText } from "@/components/app/RequirementText";
 import { api, getJob, getPostingQuestions, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
   buildRequirementIndex,
@@ -244,10 +244,18 @@ export function BuildStep({
                 than a job title. Marked term by term against the same index as the resume, so
                 pointing at anything here lifts its answer over there. Only after the build: marking
                 a posting against a resume that does not exist yet would colour it from a previous
-                student's score or from nothing at all. */}
+                student's score or from nothing at all.
+
+                `hideMissing` because the legend is gone (Mehek 2026-08-20). A mark now means one
+                thing and one thing only - the posting asked for this and your resume says it - so
+                it explains itself by appearing on both sides at once, and hovering either lifts the
+                pair. The missing tone cannot do that: nothing on the resume side answers it, so
+                without a key it was an orange underline the student had no way to read, attached to
+                a count of what they lack on the screen that is meant to show what Litos just built
+                for them. */}
             {!building && posting.description && (
               <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-                <RequirementText text={posting.description} />
+                <RequirementText text={posting.description} hideMissing />
               </p>
             )}
           </div>
@@ -283,14 +291,6 @@ export function BuildStep({
         </section>
       </div>
       </RequirementProvider>
-
-      {/* The legend, and it only appears once there is something for it to explain. Naming the
-          colours before anything is coloured is a key to a map nobody has been shown yet. */}
-      {!building && scored?.scorable && (
-        <div className="mt-4 text-[11px]">
-          <MatchLegend missingCount={scored.missing.length} />
-        </div>
-      )}
 
       {/* The stage list. Each row is a real call, and its orb runs only while that call is in
           flight. Five of the six shipped orb states map onto real work here; the three used are
