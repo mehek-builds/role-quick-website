@@ -54,6 +54,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
 import { SESSION_TOKEN } from "./fixture-data.mjs";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 /* ── The fabricated student ──────────────────────────────────────────────────
    Invented for this file. No real person, school, employer or resume.
@@ -406,6 +407,7 @@ await context.route("**/*", async (route) => {
 
   if (!BACKEND_PATHS.has(pathname)) {
     if (ANALYTICS_HOSTS.some((pattern) => pattern.test(hostname))) blockedAnalytics.push(url);
+    else if (isSanctionedThirdParty(url)) { /* see ./sanctioned-third-parties.mjs */ }
     else blockedExternal.push(url);
     await route.abort();
     return;

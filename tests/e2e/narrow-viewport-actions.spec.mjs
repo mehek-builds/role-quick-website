@@ -77,6 +77,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
 import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -252,6 +253,9 @@ for (const vp of VIEWPORTS) {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
         return;
       }
+      // The sanctioned analytics origin, aborted without being recorded.
+      // See ./sanctioned-third-parties.mjs for the list and the call behind it.
+      if (isSanctionedThirdParty(url)) return route.abort();
       blockedExternal.push(url);
       await route.abort();
     });
@@ -371,6 +375,8 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
         return;
       }
+      // Sanctioned analytics origin: aborted, not recorded. See sanctioned-third-parties.mjs.
+      if (isSanctionedThirdParty(url)) return route.abort();
       blockedExternal.push(url);
       await route.abort();
     });
@@ -452,6 +458,8 @@ test("a terminal action bar clears a software keyboard", async () => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
       return;
     }
+    // Sanctioned analytics origin: aborted, not recorded. See sanctioned-third-parties.mjs.
+    if (isSanctionedThirdParty(url)) return route.abort();
     blockedExternal.push(url);
     await route.abort();
   });
