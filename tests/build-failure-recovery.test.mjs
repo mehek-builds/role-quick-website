@@ -53,3 +53,23 @@ test("the free build survives a failed one", async () => {
   assert.match(resume, /reply\.statusCode >= 400/, "the grant is no longer released on a failed build");
   assert.match(resume, /releaseOnboardingBuildGrant/, "the release call is gone");
 });
+
+test("a guest is offered the email they cannot add in Account", async () => {
+  /* THE GUEST DEAD END, found by walking production. `resume_email` is seeded from the login email
+   * at upload, so a signed-in student never reaches this branch (7 of 7 on prod have one). A guest
+   * has no email anywhere, so "add it in Account" pointed at a page with nothing to add, three
+   * screens into a ten-screen setup, with "Finish later" as the only control.
+   *
+   * Claiming an email is the real fix, it is the same route the plan screen already uses for a
+   * guest who cannot check out, and an application needs a contact address regardless: the employer
+   * has to be able to reply to it. */
+  const source = await read("components/start/BuildStep.tsx");
+  const errorBranch = source.slice(source.indexOf("const guestNeedsEmail"), source.indexOf("const building ="));
+
+  assert.match(errorBranch, /isGuestSession\(\)/, "the screen no longer distinguishes a guest");
+  assert.match(errorBranch, /field === "resume_email"/, "the claim is offered for the wrong precondition");
+  assert.match(errorBranch, /Add my email/, "there is no control to add one");
+  assert.match(errorBranch, /login\?intent=claim&next=\/start/, "the claim route is gone or points elsewhere");
+  /* A missing NAME is still an Account fix for everyone, so the guest wording must not swallow it. */
+  assert.match(errorBranch, /Add it in Account and Litos will build this one again/, "the non-guest wording was lost");
+});

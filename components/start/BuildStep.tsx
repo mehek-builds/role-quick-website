@@ -18,8 +18,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { MatchLegend, RequirementProvider, RequirementText } from "@/components/app/RequirementText";
-import { api, getJob, getPostingQuestions, type MonitoredJob, type ResumeSpec } from "@/lib/api";
+import { RequirementProvider, RequirementText } from "@/components/app/RequirementText";
+import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import {
   buildRequirementIndex,
   EMPTY_REQUIREMENT_INDEX,
@@ -56,7 +56,7 @@ export function BuildStep({
 }) {
   const [stages, setStages] = useState<BuildStage[]>(() => initialStages());
   const [result, setResult] = useState<BuildResult | null>(null);
-  const [error, setError] = useState<{ message: string; fixable: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; fixable: boolean; field: "full_name" | "resume_email" | null } | null>(null);
   const [posting, setPosting] = useState<MonitoredJob>(match.job);
   /* WHAT THE TAILORING ACTUALLY DID, scored against this posting.
    *
@@ -142,6 +142,9 @@ export function BuildStep({
         setError({
           message: reason instanceof Error ? reason.message : "Litos could not build this application.",
           fixable,
+          /* WHICH precondition, not just that there was one. A missing name and a missing email are
+             fixed in different places, and for a guest the email is not fixable in Account at all. */
+          field: reason instanceof BuildPreconditionError ? reason.field : null,
         });
         track("onboarding_build_failed", { fixable });
       });
@@ -163,6 +166,10 @@ export function BuildStep({
       .catch(() => {});
     return () => { cancelled = true; };
   }, [result, posting.description, posting.id]);
+
+  /* The one precondition a guest cannot satisfy from Account, because a guest has no account email.
+     Read at render rather than stored: the student may have claimed one in another tab. */
+  const guestNeedsEmail = error?.fixable === true && error.field === "resume_email" && isGuestSession();
 
   if (error) {
     /* A FAILED BUILD USED TO BE A DEAD END, and it is step 3 of 10.
@@ -187,12 +194,27 @@ export function BuildStep({
         <ErrorNote message={error.message} />
         <p className="mt-4 text-sm leading-6 text-muted">
           {error.fixable
-            ? "Add it in Account and Litos will build this one again. The posting is saved."
+            ? guestNeedsEmail
+              /* A GUEST HAS NO ACCOUNT EMAIL TO GO AND FIND, which is what made this a dead end.
+               *
+                 `resume_email` is seeded from the login email at upload, so a signed-in student
+                 never sees this screen - measured on prod 2026-08-19, 7 of 7 have one. A guest has
+                 no email anywhere, so "add it in Account" sent them to a page with nothing to add,
+                 three screens into setup. Claiming one is the actual fix, it is the same route the
+                 plan screen already uses for a guest who cannot check out, and an application needs
+                 a contact address anyway: the employer has to be able to reply to it. */
+              ? "An employer needs somewhere to reply. Add your email and Litos will build this one again, with the posting saved."
+              : "Add it in Account and Litos will build this one again. The posting is saved."
             : "Nothing was sent and nothing was lost. Your resume and roles are saved, and this one is not a fit Litos can write honestly. Try another posting."}
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-4">
           {!error.fixable && (
             <PrimaryButton onClick={onPickAnother}>Show me a different one</PrimaryButton>
+          )}
+          {guestNeedsEmail && (
+            <PrimaryButton onClick={() => { track("onboarding_build_claim_required", {}); window.location.assign("/login?intent=claim&next=/start"); }}>
+              Add my email
+            </PrimaryButton>
           )}
           <LaterLink onClick={onLater} />
         </div>
@@ -244,10 +266,18 @@ export function BuildStep({
                 than a job title. Marked term by term against the same index as the resume, so
                 pointing at anything here lifts its answer over there. Only after the build: marking
                 a posting against a resume that does not exist yet would colour it from a previous
-                student's score or from nothing at all. */}
+                student's score or from nothing at all.
+
+                `hideMissing` because the legend is gone (Mehek 2026-08-20). A mark now means one
+                thing and one thing only - the posting asked for this and your resume says it - so
+                it explains itself by appearing on both sides at once, and hovering either lifts the
+                pair. The missing tone cannot do that: nothing on the resume side answers it, so
+                without a key it was an orange underline the student had no way to read, attached to
+                a count of what they lack on the screen that is meant to show what Litos just built
+                for them. */}
             {!building && posting.description && (
               <p className="mt-1 whitespace-pre-line text-[12.5px] leading-6 text-ink">
-                <RequirementText text={posting.description} />
+                <RequirementText text={posting.description} hideMissing />
               </p>
             )}
           </div>
@@ -283,14 +313,6 @@ export function BuildStep({
         </section>
       </div>
       </RequirementProvider>
-
-      {/* The legend, and it only appears once there is something for it to explain. Naming the
-          colours before anything is coloured is a key to a map nobody has been shown yet. */}
-      {!building && scored?.scorable && (
-        <div className="mt-4 text-[11px]">
-          <MatchLegend missingCount={scored.missing.length} />
-        </div>
-      )}
 
       {/* The stage list. Each row is a real call, and its orb runs only while that call is in
           flight. Five of the six shipped orb states map onto real work here; the three used are

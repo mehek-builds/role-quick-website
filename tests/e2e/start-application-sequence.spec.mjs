@@ -326,7 +326,14 @@ describe("the application sequence, end to end", () => {
   test("04 the build: stages driven by real calls, resume unresolved until generation is", async () => {
     await page.getByRole("heading", { name: /building your application/i }).waitFor({ timeout: 20_000 });
 
-    // Generation is held open by the stub, so the resume row must still be in flight.
+    /* Generation is held open by the stub, so the resume row must still be in flight.
+     *
+     * WAITED FOR, NOT SNAPSHOTTED. This read `innerText` once, the instant the heading appeared,
+     * and asserted "composing" was already in it - a race between the posting stage resolving and
+     * the assertion running. It passed locally and on most CI runs and failed one, which is the
+     * worst kind of test: a real regression here would be indistinguishable from the flake. The
+     * stub holds generation open until releaseGeneration(), so waiting cannot hang past that. */
+    await page.getByText(/composing/i).waitFor({ timeout: 20_000 });
     const mid = await page.locator("main").innerText();
     assert.match(mid, /Writing your one page for it/i);
     assert.match(mid, /composing/i, "the resume stage is not active while generation is in flight");
@@ -347,7 +354,11 @@ describe("the application sequence, end to end", () => {
     assert.match(done, /Cut PostgreSQL query time 60%/i, "the resume's own bullets are not on screen");
     assert.match(done, /Software Engineering Intern/i, "the experience the resume was built from is not shown");
     assert.doesNotMatch(done, /Written for this posting from your own resume/i, "the pane still describes instead of showing");
-    assert.match(done, /asked for, and on your resume/i, "the colour legend is missing");
+    /* NO LEGEND, and no count of what the student lacks (Mehek 2026-08-20). A mark means one thing
+       now - the posting asked for this and the resume says it - which it shows by appearing on both
+       sides at once rather than by being named in a key. */
+    assert.doesNotMatch(done, /asked for, and on your resume/i, "the legend is back on the build screen");
+    assert.doesNotMatch(done, /not on your resume/i, "the build screen is counting what the student lacks again");
 
     /* THE CONTRACT, checked rather than trusted (ISSUE-047): a term marked in the posting must be
        marked in the resume too. Measured once at 111 of 313 matched terms marked on one side only,
@@ -361,6 +372,10 @@ describe("the application sequence, end to end", () => {
       postgresMarks >= 2,
       `PostgreSQL is marked ${postgresMarks} time(s): a term the posting asks for and the resume answers must be marked on BOTH sides`,
     );
+    /* And the missing tone is not drawn at all. With the legend gone it would be an orange
+       underline nothing on screen explains, on a term that by definition has no counterpart in the
+       resume pane to point at. The fixture's missing term is "Kubernetes". */
+    assert.ok(!marked.has("kubernetes"), `a missing term is still marked: ${marks.join(", ")}`);
     // The count is REAL: two outstanding asks in the fixture, not the seventeen the posting holds.
     assert.match(done, /2 questions need you/i);
 
