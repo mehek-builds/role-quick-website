@@ -108,8 +108,17 @@ export function QuestionsStep({
   }
 
   if (questions.length === 0) {
-    /* Not reachable from the build screen, which sends the student straight to review when nothing
-       is outstanding. Handled anyway rather than rendering an empty card. */
+    /* THE BACKSTOP, and it used to be the ordinary path.
+     *
+       This comment used to claim the branch was unreachable because the build screen sent the
+       student straight to review. It did not: the handoff acknowledged `match` alone, so the
+       server served this step whether or not anything was outstanding, and a student whose posting
+       asked nothing extra got a screen telling them so and a click to leave it. app/start/page.tsx
+       acknowledges `questions` alongside `match` when the build found none, which is what finally
+       made that sentence true.
+     *
+       Kept, because a reload can still land here directly and an empty card is worse than a
+       sentence. It is a backstop now rather than a routine screen. */
     return (
       <StartShell step="questions" title={`${company} asks nothing Litos cannot answer.`}>
         <PrimaryButton onClick={() => void save()}>Review and send</PrimaryButton>

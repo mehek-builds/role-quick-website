@@ -594,7 +594,27 @@ export default function Start() {
             onQuestions={(result) => {
               setBuilt(result);
               stepDone("match");
-              void ack("match").then(refresh).catch(fail);
+              /* A SCREEN WITH NOTHING TO ASK IS NOT A SCREEN, so it is acknowledged here rather
+                 than shown.
+               *
+                 QuestionsStep has always carried an empty branch reading "<Employer> asks nothing
+                 Litos cannot answer" above a single Continue, and its own comment called that
+                 branch unreachable "because the build screen sends the student straight to review".
+                 It never did: this handler acknowledged `match` alone, so the server served
+                 `questions` next whether or not any existed, and a student whose posting asked
+                 nothing extra was shown a screen that told them so and charged them a click for it.
+                 Caught by walking the flow for screenshots on 2026-08-20.
+               *
+                 The step is ACKNOWLEDGED, not removed: the rail still counts it and marks it done,
+                 which is both true - Litos answered everything the employer asked - and the only
+                 way to skip it without the total shrinking underneath somebody standing on step 3,
+                 which is the failure #616 exists for. */
+              const nothingToAsk = result.outstandingQuestions === 0;
+              void (async () => {
+                await ack("match");
+                if (nothingToAsk) await ack("questions");
+                await refresh();
+              })().catch(fail);
             }}
           />
         );
