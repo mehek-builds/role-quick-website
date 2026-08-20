@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/app/ui";
-import { describeRemainingWork, describeWait, type HandoffFill, type WaitingApplication } from "@/lib/captcha-queue";
-import { getToken, isGuestSession } from "@/lib/api";
-import { armHandoffs, ensureExtensionSession } from "@/lib/extension-bridge";
+import { ButtonLink } from "@/components/app/Button";
+import { describeRemainingWork, describeWait, type WaitingApplication } from "@/lib/captcha-queue";
 
 /**
  * Applications stopped on a human-verification check.
@@ -17,15 +16,16 @@ import { armHandoffs, ensureExtensionSession } from "@/lib/extension-bridge";
  *
  * Litos does not and will not solve these. The check exists to establish that the person applying
  * is a person, and answering it on their behalf would defeat the thing the employer is asking for.
- * What this can do is remove every other obstacle: which application, how long it has waited, what
- * will actually be filled in when they get there, and one click to the exact page.
+ * What this can do is remove every other obstacle: which application, how long it has waited, and
+ * one click to the right place.
  *
- * "what will actually be filled in when they get there" is doing real work in that sentence. The
- * earlier fill lived in a managed browser session on a server and does not survive the click, so
- * the only thing that can fill the employer's form is the extension, in this browser. That is why
- * this component talks to it: it asks whether the extension is there and signed in before making
- * any claim about the form, and it tells the extension which pages the applicant is about to open
- * so the fill starts on arrival instead of waiting to be asked a question they already answered.
+ * That place is Litos's own review screen for the application, not the employer's page. Reopening
+ * it there (`/dashboard/applications?application={id}`) lands on `SubmissionScreen`, which already
+ * knows how to rerun the fill and put a live view of that run in front of the applicant - the same
+ * mechanism a normal Send already uses, just entered from this queue instead of mid-session. So
+ * this component no longer needs to know anything about the browser extension: it used to be the
+ * only thing that could refill a form the applicant reached in a fresh tab, and that is no longer
+ * how this queue sends anyone anywhere.
  */
 export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }) {
   /* Rendered from a client-side clock, set after mount. Formatting a duration during SSR produces
@@ -44,30 +44,6 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(timer);
   }, [waiting]);
-
-  /* What will actually happen when they click through, measured rather than assumed.
-     Starts at "none" and only becomes "extension" once the extension has answered and holds a
-     session for this account. Defaulting the other way would put the old overpromise back on the
-     screen for everyone whose extension is missing, signed out, or slow to wake. */
-  const [fill, setFill] = useState<HandoffFill>("none");
-  useEffect(() => {
-    if (waiting === 0) return;
-    let live = true;
-    void ensureExtensionSession({ token: getToken(), guest: isGuestSession() }).then((state) => {
-      if (live) setFill(state.signedIn ? "extension" : "none");
-    });
-    return () => {
-      live = false;
-    };
-  }, [waiting]);
-
-  /* Armed when the queue renders, not when a link is clicked. The click navigates immediately, so
-     arming from its handler is a race against the employer's page load; arming everything up front
-     has no race to lose. Each arming is handed out once and expires on its own. */
-  useEffect(() => {
-    if (fill !== "extension") return;
-    void armHandoffs(items.map((item) => ({ id: item.id, portalUrl: item.portalUrl })));
-  }, [fill, items]);
 
   if (items.length === 0) return null;
 
@@ -96,30 +72,37 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
               <p className="mt-0.5 text-sm text-muted">
                 {now === null ? "Waiting" : describeWait(item.stalledAt, now)}
                 {". "}
-                {describeRemainingWork(item.stage, fill)}
+                {describeRemainingWork(item.stage)}
               </p>
             </div>
-            {item.portalUrl ? (
-              <a
-                className="inline-flex min-h-11 shrink-0 items-center justify-center self-start rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink sm:self-auto"
-                href={item.portalUrl}
-                target="_blank"
-                /* noopener is the load-bearing half: these are third-party employer pages and an
-                   opened tab can otherwise reach back through window.opener. The url itself is
-                   https-checked in safePortalUrl; rel does nothing against a javascript: href. */
-                rel="noopener noreferrer"
-                /* Every one of these links reads "Finish this one", so without a label a screen
+            {/* `id` is on every row this queue can produce - waitingApplications reads it straight
+                off the packet, with no external URL involved - so unlike the old portalUrl link,
+                this control never has a "nothing to click" fallback state. */}
+            <div className="flex shrink-0 flex-col items-start gap-1 self-start sm:items-end sm:self-auto">
+              <ButtonLink
+                href={`/dashboard/applications?application=${encodeURIComponent(item.id)}`}
+                size="sm"
+                /* Every one of these links reads "Continue in Litos", so without a label a screen
                    reader's link list is N identical entries with no way to tell them apart. */
-                aria-label={`Finish ${item.role} at ${item.company}, opens in a new tab`}
+                aria-label={`Continue ${item.role} at ${item.company} in Litos`}
               >
-                Finish this one
-              </a>
-            ) : (
-              /* No stored portal url, which happens on packets built before the field existed and
-                 on anything created from a pasted description. Saying so is better than rendering a
-                 button that goes nowhere. */
-              <span className="shrink-0 self-start text-sm text-muted sm:self-auto">Open it from your applications list</span>
-            )}
+                Continue in Litos
+              </ButtonLink>
+              {item.portalUrl ? (
+                <a
+                  className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline"
+                  href={item.portalUrl}
+                  target="_blank"
+                  /* noopener is the load-bearing half: this is a third-party employer page and an
+                     opened tab can otherwise reach back through window.opener. The url itself is
+                     https-checked in safePortalUrl; rel does nothing against a javascript: href. */
+                  rel="noopener noreferrer"
+                  aria-label={`Open the employer's page for ${item.role} at ${item.company} directly, opens in a new tab`}
+                >
+                  Or open it yourself
+                </a>
+              ) : null}
+            </div>
           </li>
         ))}
       </ul>

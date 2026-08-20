@@ -112,30 +112,31 @@ test("an unreadable timestamp degrades to something true rather than throwing", 
 /* The reported defect, in one assertion.
  *
  * "Everything else is filled in. Solve the check and send it." was shown for an 'at_submit' stall
- * and was false: that fill happened inside a managed browser session on a server, and "Finish this
- * one" opens a fresh load of the employer's site in the applicant's own browser, where none of it
- * survives. Three applications sat behind that sentence and every one of them opened blank. Nothing
- * may claim the form is already filled unless something is actually going to fill it. */
-test("nothing claims the form is filled when nothing is going to fill it", () => {
+ * and was false in the old mechanism: the fill happened inside a managed browser session on a
+ * server, and "Finish this one" opened a fresh load of the employer's site in the applicant's own
+ * browser, where none of it survived. The fix was not a more careful sentence about that trip - it
+ * was removing the trip. Continuing now reopens the application inside Litos, which reruns the fill
+ * itself, so the copy no longer needs an escape hatch for "nothing will actually fill this". */
+test("nothing promises what the old new-tab trip could not deliver", () => {
   for (const stage of ["at_submit", "before_fill"] as const) {
-    const copy = describeRemainingWork(stage, "none");
-    assert.match(copy, /opens blank/);
-    assert.doesNotMatch(copy, /Everything else is filled in/);
+    const copy = describeRemainingWork(stage);
+    assert.doesNotMatch(copy, /opens blank/);
+    assert.doesNotMatch(copy, /different browser/);
   }
 });
 
-/* The stage still carries a real distinction when nobody is going to refill: one run got as far as
- * the check, the other never touched the form. Both open blank, and both say so. */
+/* The stage still carries a real distinction: one run got as far as the check, the other never
+ * touched the form. Both continue inside Litos, and both say how far the earlier run got. */
 test("the stage still says how far the earlier run actually got", () => {
-  assert.match(describeRemainingWork("at_submit", "none"), /the run that stopped/);
-  assert.match(describeRemainingWork("before_fill", "none"), /Nothing is filled in yet/);
+  assert.match(describeRemainingWork("at_submit"), /the run that stopped/);
+  assert.match(describeRemainingWork("before_fill"), /Nothing is filled in yet/);
 });
 
-/* With the extension signed in, the promise is kept by construction: it refills the application on
- * arrival, so this is the one case where the applicant can be told the fill is handled. */
-test("the promise is only made when the extension is there to keep it", () => {
-  assert.match(describeRemainingWork("at_submit", "extension"), /Litos fills it in again in your browser/);
-  assert.match(describeRemainingWork("before_fill", "extension"), /Litos fills it in again in your browser/);
+/* Every stage now points at the same place, because the mechanism no longer depends on the browser
+ * extension being installed or signed in - continuing happens inside Litos's own dashboard. */
+test("every stage sends the applicant to continue inside Litos", () => {
+  assert.match(describeRemainingWork("at_submit"), /Continue in Litos/);
+  assert.match(describeRemainingWork("before_fill"), /Continue in Litos/);
 });
 
 // ---- link safety ----
