@@ -1029,7 +1029,16 @@ const GAP_LABEL: Record<string, { label: string; note?: string; placeholder: str
     note: "Use a source you personally choose, such as LinkedIn or a university event. Litos detects job boards for each application.",
     placeholder: "LinkedIn or university career fair",
   },
+  sat_score: { label: "SAT score", placeholder: "1520" },
+  act_score: { label: "ACT score", placeholder: "34" },
 };
+
+/* Asked only of a declared internship/co-op/new-grad target (see hasSetupGapsFrom, backend), so
+   "None" is a real, common answer here rather than the rare exception it would be on a general
+   application. Matches the option set the Settings page already writes with; "Both" carries score
+   inputs for each half rather than one shared field, since a form that asks for one exam's number
+   still needs the right one. */
+const TEST_TYPE_OPTIONS = ["SAT", "ACT", "Both", "None"] as const;
 
 export function GapsStep({
   gaps,
@@ -1048,6 +1057,8 @@ export function GapsStep({
 
   const showGpa = gaps.includes("gpa") || gaps.includes("gpa_scale");
   const showSalary = gaps.includes("desired_salary") || gaps.includes("desired_salary_currency");
+  const showTestScore = gaps.includes("standardized_test_type");
+  const testType = values.standardized_test_type ?? "";
   async function save() {
     setBusy(true);
     setError(null);
@@ -1075,6 +1086,10 @@ export function GapsStep({
       setBusy(false);
       return;
     }
+    // Score inputs only mean anything alongside the test they belong to. A stray value typed
+    // before backing out to "None" must not be saved as a number for a test she never sat.
+    if (body.standardized_test_type !== "SAT" && body.standardized_test_type !== "Both") delete body.sat_score;
+    if (body.standardized_test_type !== "ACT" && body.standardized_test_type !== "Both") delete body.act_score;
     try {
       if (Object.keys(body).length > 0) await putApplicationProfile(body);
       onDone(Object.keys(body).length === 0);
@@ -1153,6 +1168,31 @@ export function GapsStep({
             {field("desired_salary")}
             {field("desired_salary_currency")}
           </div>
+        </div>
+      )}
+
+      {showTestScore && (
+        <div className="mb-5">
+          <label htmlFor="gap-standardized_test_type" className="text-[13px] text-ink">Standardized test record</label>
+          <div className="mt-2">
+            <select
+              id="gap-standardized_test_type"
+              value={testType}
+              onChange={(e) => setValues((v) => ({ ...v, standardized_test_type: e.target.value }))}
+              className="min-h-11 w-full rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+            >
+              <option value="" disabled>Select one</option>
+              {TEST_TYPE_OPTIONS.map((option) => (
+                <option key={option} value={option}>{option}</option>
+              ))}
+            </select>
+          </div>
+          {(testType === "SAT" || testType === "Both") && (
+            <div className="mt-3">{field("sat_score")}</div>
+          )}
+          {(testType === "ACT" || testType === "Both") && (
+            <div className="mt-3">{field("act_score")}</div>
+          )}
         </div>
       )}
 
