@@ -1056,7 +1056,14 @@ function Applications() {
              their historical actionable behavior, while both paths still enter through
              selectPacket and therefore retain the exact-packet audit gate. */
           setRevisitingId(null);
-          setResolvedActionableRequestId(requested.id);
+          /* Echo back the id the URL actually asked for, not `requested.id`. A Jobs-page link built
+             from a legacy packet id resolves through a canonical row minted with its OWN id
+             (Databricks: legacy f9a270b7 -> canonical 2d5e38f6), and selectedPacketForRequest's race
+             guard compares this value against `requestedApplicationId` verbatim. Storing the
+             canonical id there made every such deep link fail that comparison permanently, not just
+             during the in-flight window the guard exists for: "the saved list does not contain a
+             packet with this id" fired even though the packet was found and selected. */
+          setResolvedActionableRequestId(requestedApplicationId);
           selectPacket(requested);
         } else {
           setResolvedActionableRequestId(null);

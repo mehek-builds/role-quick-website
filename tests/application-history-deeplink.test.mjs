@@ -104,7 +104,12 @@ describe("an application deep link loads the exact packet", () => {
     );
     assert.match(
       applications,
-      /setResolvedActionableRequestId\(requested\.id\);\s*selectPacket\(requested\);/,
+      /setResolvedActionableRequestId\(requestedApplicationId\);\s*selectPacket\(requested\);/,
+      // NOT `requested.id`: a canonical row can carry its own id, distinct from the legacy id the
+      // URL named (Databricks, measured live 2026-08-20: legacy f9a270b7 resolved through canonical
+      // 2d5e38f6). Pinning requested.id here made the gate compare requestedApplicationId against a
+      // value it could never equal, so the deep link failed closed permanently instead of only
+      // during the in-flight window this gate exists for.
       "the gate opens only when the exact requested packet is selected",
     );
   });
