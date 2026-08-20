@@ -346,6 +346,11 @@ export function ApplicationPacket({
       submitted_at: review.submitted_at,
       attention_reason: review.attention_reason,
       attention_categories: review.attention_categories,
+      /* WITH the report they annotate, never split from it. The ticks are keyed by the sentence
+         they were made against; taking a fresh attention_reason from `review` while keeping an
+         older packet's tick map would let a stale tick settle a re-emitted, genuinely outstanding
+         blocker and hide it from this list. */
+      attention_acknowledgements: review.attention_acknowledgements,
       portal_url: review.portal_url,
       ats_name: review.ats_name,
     }
@@ -362,16 +367,24 @@ export function ApplicationPacket({
      reported empty: a record of a finished application asserting outstanding work.
      `_documents` is the packet's own stored record rather than the submission envelope, because this
      viewer resolves from `packets` and deliberately never holds a submission. */
-  /* Settled rows dropped, and only here. A settled row is a confirmation that carries a control back
-     to the thing it confirms, and this viewer is read-only: it has no upload handler to hand a row,
-     and by a rule of its own it prints no action words at all. So one would arrive under a heading
-     that reads "Needs your input" as a bare line of text with nothing to press, which is the dead
-     pill wearing the opposite face. The review screen is where these rows have somewhere to go. */
-  const needsInput = humanInputItems(attentionReview, {
+  /* Settled rows dropped, and only here - EXCEPT the ones she ticked herself. A server-settled row
+     is a confirmation that carries a control back to the thing it confirms, and this viewer is
+     read-only: it has no upload handler to hand a row, and by a rule of its own it prints no action
+     words at all. So one would arrive under a heading that reads "Needs your input" as a bare line
+     of text with nothing to press, which is the dead pill wearing the opposite face. The review
+     screen is where those rows have somewhere to go.
+
+     An acknowledged row is the opposite case: its content IS her tick, it needs no control, and
+     dropping it erased the only record of what she handled by hand - three blockers vanishing from
+     the packet record with no trace, while the heading went on saying input was needed. It stays,
+     rendered as done, with its detail saying whose word the tick is. */
+  const inputItems = humanInputItems(attentionReview, {
     company: packet.job_context.company,
     role: packet.job_context.role,
     documents: contentPacket.spec._documents,
-  }).filter((item) => !item.settled);
+  });
+  const needsInput = inputItems.filter((item) => !item.settled);
+  const acknowledgedItems = inputItems.filter((item) => item.acknowledged === true);
   const completedItems = completedSubmissionGroups(contentReview);
   const receipt = contentReview.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
@@ -639,7 +652,7 @@ export function ApplicationPacket({
                   }
                 />
 
-                {(needsInput.length > 0 || completedItems.length > 0) && (
+                {(needsInput.length > 0 || acknowledgedItems.length > 0 || completedItems.length > 0) && (
                   <div className="mt-3 overflow-hidden rounded-inner border border-border bg-surface">
                     {needsInput.length > 0 && (
                       <div className="border-b border-border bg-warn-soft/40 px-4 py-3">
@@ -649,6 +662,21 @@ export function ApplicationPacket({
                         <ul className="mt-2 space-y-2">
                           {needsInput.map((item) => (
                             <CheckRow key={item.id} item={item} checked={false} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {/* Her own ticks, kept in the record and out of the amber ask: each row's
+                        detail already says "Ticked off by you", so this list is her word about the
+                        work, not Litos claiming it measured anything. */}
+                    {acknowledgedItems.length > 0 && (
+                      <div className="border-b border-border px-4 py-3">
+                        <p className="font-mono text-[9px] font-medium uppercase tracking-[0.08em] text-teal-ink">
+                          Handled by you
+                        </p>
+                        <ul className="mt-2 space-y-2">
+                          {acknowledgedItems.map((item) => (
+                            <CheckRow key={item.id} item={item} checked />
                           ))}
                         </ul>
                       </div>

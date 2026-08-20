@@ -837,3 +837,108 @@ test("a claim on a review with no round still asks for confirmation", () => {
   assert.equal(items[0]?.detail, "Needs your confirmation");
   assert.equal(items[0]?.settled, undefined);
 });
+
+/* THE TICK, AS THE DOMAIN SEES IT. attention_acknowledgements is the applicant's stored word that
+   she handled a blocker on the employer's page herself, written by
+   POST /applications/:id/review/attention-acks and keyed by the row id derived here from the
+   sentence. The panel's checkbox used to be scenery: no handler, no request, cleared by the next
+   poll (measured on the Easy Dynamics rippling packet, 2026-08-20). These tests hold the decision
+   half of the repair: which rows take a tick, and what a stored tick renders as. */
+test("an acknowledged blocker renders settled with its control kept, and its tick stays live", () => {
+  const blocker = '"Willingness to undergo a background check" is required and is still empty';
+  const base = {
+    status: "needs_attention" as const,
+    attention_reason: blocker,
+    questions: [],
+    filled_fields: [],
+  };
+  const unticked = humanInputItems(base);
+  assert.equal(unticked.length, 1);
+  assert.equal(unticked[0]?.acknowledgeable, true, "a blocker only she can resolve takes a tick");
+  assert.equal(unticked[0]?.settled, undefined, "and starts outstanding");
+
+  const ticked = humanInputItems({
+    ...base,
+    attention_acknowledgements: { [unticked[0]!.id]: { label: blocker, acknowledged_at: "2026-08-20T09:00:00.000Z" } },
+  });
+  assert.equal(ticked[0]?.settled, true, "out of the amber panel and out of the N-to-check count");
+  assert.equal(ticked[0]?.acknowledged, true, "and marked as HER tick, so the checkbox stays live to take it back");
+  assert.equal(ticked[0]?.acknowledgeable, true);
+  assert.equal(ticked[0]?.actionKind, "open-page", "the way back to the employer page survives on the settled row");
+  assert.match(ticked[0]?.detail ?? "", /Ticked off by you/, "the settled row says what the tick is: her word, not a re-measurement");
+});
+
+test("a tick whose sentence has left the report acknowledges nothing", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: '"Discipline" is required and is still empty',
+    questions: [],
+    filled_fields: [],
+    attention_acknowledgements: { "blocker-some-older-sentence": { acknowledged_at: "2026-08-19T09:00:00.000Z" } },
+  });
+  assert.equal(items[0]?.settled, undefined, "a stale key must not settle a row it never named");
+});
+
+test("the captcha row takes a tick like any other attention row", () => {
+  const base = {
+    status: "needs_attention" as const,
+    attention_reason: "CAPTCHA requires your attention",
+    questions: [],
+    filled_fields: [],
+  };
+  const [captchaRow] = humanInputItems(base);
+  assert.equal(captchaRow?.acknowledgeable, true);
+  const [ticked] = humanInputItems({
+    ...base,
+    attention_acknowledgements: { [captchaRow!.id]: { acknowledged_at: "2026-08-20T09:00:00.000Z" } },
+  });
+  assert.equal(ticked?.settled, true);
+  assert.equal(ticked?.acknowledged, true);
+});
+
+/* WHERE THE TICK IS REFUSED, and each refusal is a decision recorded on the type: a question row's
+   "done" is the answer landing on the row, a document row feeds the send gate through
+   documentControls, and a form-with-no-control row gates the send the same way. A tick on any of
+   those would render "settled" beside a Send button still grey because of that exact row. */
+test("question and document rows take no tick, because their done is the server's to say", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    attention_reason: "Something on the page still needs you",
+    questions: [{ id: "start", question: "When can you start?", answer: "", kind: "required", required: true }],
+    filled_fields: [],
+    required_documents: [{ kind: "transcript", label: "Transcript", official_requested: false }],
+    transcript_supported: false,
+  }, { company: "Kos" });
+
+  assert.ok(items.length >= 3, "the fixture has to produce a blocker, a question and a document row");
+  for (const item of items) {
+    if (item.id.startsWith("blocker-")) {
+      assert.equal(item.acknowledgeable, true, `${item.id} is an attention row and takes a tick`);
+    } else {
+      assert.notEqual(item.acknowledgeable, true, `${item.id} must not take a tick`);
+    }
+  }
+});
+
+/* The accessible name is a promise about what pressing the link is FOR, and it changes when she has
+   already said the work is done - the same two-sentence rule the attach and confirm controls
+   follow. Without this, a screen reader on the settled strip is told to "handle" the row she just
+   marked handled. */
+test("the settled open-page link stops promising work and still opens the page", () => {
+  const blocker = '"Discipline" is required and is still empty';
+  const base = {
+    status: "needs_attention" as const,
+    attention_reason: blocker,
+    questions: [],
+    filled_fields: [],
+  };
+  const [row] = humanInputItems(base);
+  const [ticked] = humanInputItems({
+    ...base,
+    attention_acknowledgements: { [row!.id]: { label: blocker, acknowledged_at: "2026-08-20T09:00:00.000Z" } },
+  });
+  const control = checklistRowControl(ticked!, { portalUrl: "https://example.com/apply" });
+  assert.equal(control?.element, "link", "the way back to the page survives the tick");
+  assert.match(control?.element === "link" ? control.name : "", /You marked this handled/);
+  assert.doesNotMatch(control?.element === "link" ? control.name : "", /to handle:/);
+});

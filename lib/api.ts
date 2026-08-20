@@ -814,6 +814,12 @@ export type ApplicationReview = {
   browser_context_id?: string;
   browser_session_id?: string;
   attention_reason?: string;
+  /* Her own ticks on the "Your turn" panel, keyed by the checklist row id the dashboard derives
+     from each attention sentence. Written by POST /applications/:id/review/attention-acks and read
+     back into humanInputItems, which renders a ticked row as settled. Display-only on both sides:
+     the send gate keeps reading the run's measurements, and the backend drops this map whenever a
+     run writes a fresh attention_reason, so a tick never outlives the report it was made against. */
+  attention_acknowledgements?: Record<string, { label?: string; acknowledged_at: string }>;
   attention_categories?: Array<
     | "captcha"
     | "security_code"

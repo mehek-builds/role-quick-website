@@ -30,6 +30,7 @@ import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, can
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
@@ -390,6 +391,15 @@ function Applications() {
      race each other's optimistic row check for no gain. */
   const savingAnswersRef = useRef<string | null>(null);
   const [savingAnswersId, setSavingAnswersId] = useState<string | null>(null);
+  /* Ticks in flight on the Your turn panel, keyed application:row. The ref is the synchronous
+     guard (a double click lands before any re-render, exactly the reason savingAnswersRef exists)
+     and the state is its visible half, the same ref+state pairing savingAnswersId documents: the
+     state disables the row's checkbox while its own write is out, so a slow round trip reads as
+     busy instead of dead. Per row, not per application, because ticking two different rows back to
+     back is the ordinary way the panel is used. Lazy ref init, so the Set is not rebuilt and
+     discarded on every render of this component. */
+  const attentionTickRef = useRef<Set<string> | null>(null);
+  const [attentionTicking, setAttentionTicking] = useState<ReadonlySet<string>>(() => new Set());
   const [packetAuditBusy, setPacketAuditBusy] = useState(false);
   const packetAuditInFlight = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -2694,6 +2704,65 @@ function Applications() {
     setQuestions((current) => current.map((question) => question.id === questionId ? { ...question, answer: option } : question));
   }
 
+  /* One tick on a Your turn attention row, PERSISTED, which is the whole repair: the panel's
+     checkbox used to be an <input> with no handler, no state and no request - ticked, it recorded
+     nothing, and the next poll cleared it (measured on the Easy Dynamics rippling packet,
+     2026-08-20). The write goes through saveAttentionAcknowledgement, the domain module that owns
+     the route, the body and the 202 reading, exactly as the answers save owns its own; the row
+     re-renders settled from the RESPONSE's review, so a box that shows ticked is a box whose tick
+     is on the row. Display-only by design: the send gate keeps reading the run's measurements, and
+     this is the applicant's own record of what she handled on the company page herself. */
+  async function toggleAttentionAcknowledgement(item: SubmissionChecklistItem, acknowledged: boolean) {
+    if (!selected || !submission || submission.application_id !== selected.id) return;
+    const applicationId = selected.id;
+    /* The QA fixtures render real needs_attention panels for applications that do not exist, so a
+       tick there must not reach the backend: it would be a write against a fixture UUID and a 404
+       painted across a demo screen. The local merge gives the demo the same behaviour. */
+    if (qaMode) {
+      setSubmission((current) => {
+        if (current?.application_id !== applicationId) return current;
+        const ticks = { ...(current.review.attention_acknowledgements ?? {}) };
+        if (acknowledged) ticks[item.id] = { label: item.label, acknowledged_at: new Date().toISOString() };
+        else delete ticks[item.id];
+        return { ...current, review: { ...current.review, attention_acknowledgements: Object.keys(ticks).length > 0 ? ticks : undefined } };
+      });
+      return;
+    }
+    const tickKey = `${applicationId}:${item.id}`;
+    const inFlight = (attentionTickRef.current ??= new Set());
+    if (inFlight.has(tickKey)) return;
+    inFlight.add(tickKey);
+    setAttentionTicking((current) => new Set(current).add(item.id));
+    setError(null);
+    try {
+      const result = await saveAttentionAcknowledgement<SubmissionResponse["review"]>({
+        applicationId,
+        itemId: item.id,
+        label: item.label,
+        acknowledged,
+        send: (path, init) => api<AttentionAcknowledgementResponse<SubmissionResponse["review"]>>(path, init),
+      });
+      if (selectedIdRef.current !== applicationId) return;
+      /* On the raced 202 the result still carries the review the winning run stored, and that is
+         what the panel must show: the sentence she ticked may no longer exist. Installed exactly
+         like a landed tick, with the message beside it. */
+      if (!result.saved) setError(result.message);
+      const storedReview = result.review;
+      if (!storedReview) return;
+      setSubmission((current) => current?.application_id === applicationId ? { ...current, review: storedReview } : current);
+      setPackets((current) => current?.map((packet) => packet.id === applicationId
+        ? { ...packet, spec: { ...packet.spec, _review: storedReview } }
+        : packet) ?? current);
+    } finally {
+      inFlight.delete(tickKey);
+      setAttentionTicking((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    }
+  }
+
   /* Save on the REVIEW-ANSWERS screen, which is reached from a run that stopped and needs a real
    * write. See features/applications/domain/review-answer-save.ts for the route and why it is
    * neither of the two that already existed.
@@ -3450,6 +3519,8 @@ function Applications() {
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
           onChooseOption={chooseBlockerOption}
+          onToggleAcknowledged={(item, acknowledged) => void toggleAttentionAcknowledgement(item, acknowledged)}
+          attentionTicking={attentionTicking}
           onAddDocument={askForDocument}
           onSelfSubmitted={() => void recordSelfSubmitted()}
         />
@@ -4618,7 +4689,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onSelfSubmitted: () => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -4888,7 +4959,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             attention_reason itself, so showing it twice would say the same thing in two different
             voices. */}
         {awaitingUnverifiedSubmission ? null : needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} />
+          <BlockerList items={needsInputItems} portalUrl={attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
@@ -5297,8 +5368,24 @@ const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center ro
    that draws the word without the element. Each control also carries its own accessible name, so a
    screen reader hears "Confirm your answer to: will you require sponsorship ..." rather than the
    bare "button" read_page found on the live page. */
-function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption, onAddDocument }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void }) {
+function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { item: SubmissionChecklistItem; checked: boolean; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
   const control = checked ? null : checklistRowControl(item, { portalUrl });
+  /* THE CHECKBOX IS LIVE ONLY WHERE A TICK CAN BE STORED, which is the acknowledgeable rows - the
+     attention blockers whose "done" only she can know - on a screen that passed a handler. Ticking
+     writes through POST /applications/:id/review/attention-acks and the row re-renders settled from
+     the stored review; unticking is the same box on the settled row, taking the tick back. Every
+     other outstanding row used to draw this same checkbox DEAD: no handler, no state, no request,
+     ticked and then cleared by the next poll (measured on the Easy Dynamics rippling packet,
+     2026-08-20 - the same scenery class as the styled-span pills above). Those rows now get a plain
+     marker instead, because their "done" is the server's to say - a question row completes through
+     its own control, a document row through documentControls - and a box that can be ticked into
+     recording nothing must be absent rather than dead.
+
+     A plain function, checked FIRST in the branch chain below: an acknowledged row is also settled,
+     so a chain that consulted `done` before the tick would swallow her tick into the static
+     checkmark and take the way back with it. One branch, one input, no ordering to get wrong. */
+  const toggleTick = !checked && item.acknowledgeable === true ? onToggleAcknowledged : undefined;
+  const ticking = tickingIds?.has(item.id) === true;
   /* The employer's own options, drawn on the row that names the unanswered question, so what the
      control accepts is visible where the work is named. Picking one opens the answers editor with
      that option already selected; the editor's Save is still the only write, so a stray press here
@@ -5317,14 +5404,38 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption
   const done = checked || item.settled === true;
   return (
     <li className="grid grid-cols-[18px_1fr] gap-2 text-sm leading-5 text-muted">
-      {done ? (
+      {toggleTick ? (
+        /* One input for both directions. `checked` comes from the STORED item, never from local
+           state, so the box shows what is actually on the row - the exact opposite of the dead
+           checkbox, whose tick lived only until the next render. Disabled while its own write is in
+           flight, so a slow round trip reads as busy instead of dead. The wrapping label widens the
+           hit target to ACCESSIBILITY.md's 24px floor without moving the 18px column (negative
+           margins give the layout back what the target takes); accent-* is how every other native
+           checkbox in this repo is tinted, and focus-visible comes from the shared global outline
+           rather than a re-invented ring. */
+        <label className="-mx-[5px] -mb-[5px] -mt-[3px] flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center">
+          <input
+            type="checkbox"
+            checked={item.acknowledged === true}
+            disabled={ticking}
+            onChange={() => toggleTick(item, item.acknowledged !== true)}
+            aria-label={item.acknowledged === true
+              ? `Untick ${item.label}. You marked this handled yourself.`
+              : `Mark ${item.label} done. This records that you handled it on the company page yourself.`}
+            className="h-[14px] w-[14px] accent-teal-ink disabled:opacity-50"
+          />
+        </label>
+      ) : done ? (
         <span aria-hidden className="mt-0.5 flex h-[14px] w-[14px] items-center justify-center rounded-[3px] border border-teal/40 bg-teal-soft text-teal-ink">
           <svg viewBox="0 0 16 16" className="h-3 w-3">
             <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </span>
       ) : (
-        <input type="checkbox" aria-label={`Mark ${item.label} done`} className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border-warn/60 bg-surface text-warn focus:ring-warn/30" />
+        /* Not a checkbox. This row's "done" is measured by the product - the answer landing, the
+           file attaching - so the only honest mark here is a placeholder that keeps the column
+           aligned. The row's own control, below, is the way to act on it. */
+        <span aria-hidden className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border border-warn/40 bg-surface" />
       )}
       <span>
         <span className={done ? "text-ink" : "text-warn"}>{item.label}</span>
@@ -5354,7 +5465,11 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption
           </span>
         )}
         {control?.element === "link" && (
-          <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={CHECKLIST_ACTION_CLASS}>
+          /* The same done switch the button branches carry, needed here since acknowledged rows
+             made open-page the first link that can appear settled: a filled pill inside the quiet
+             settled strip would be the loudest thing on the panel beside the one row that needs
+             nothing doing. */
+          <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
             {control.label}
           </a>
         )}
@@ -5378,7 +5493,7 @@ function ChecklistRow({ item, checked, portalUrl, onOpenQuestion, onChooseOption
   );
 }
 
-function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDocument }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void }) {
+function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, tickingIds }: { items: readonly SubmissionChecklistItem[]; portalUrl?: string; onOpenQuestion?: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption?: (questionId: string, option: string) => void; onAddDocument?: (kind: string) => void; onToggleAcknowledged?: (item: SubmissionChecklistItem, acknowledged: boolean) => void; tickingIds?: ReadonlySet<string> }) {
   /* Split before anything is drawn, because these are two different sentences and only one of them
      is a demand. An outstanding row is work the employer is still waiting on. A settled row states
      that something is already handled and keeps a control only so she can change it, which is why
@@ -5402,7 +5517,7 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDo
           </div>
           <ul className="mt-2 space-y-2">
           {outstanding.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} />
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
           </ul>
         </div>
@@ -5411,7 +5526,10 @@ function BlockerList({ items, portalUrl, onOpenQuestion, onChooseOption, onAddDo
         <div className="mt-3 rounded-inner border border-border bg-surface-alt px-4 py-3">
           <ul className="space-y-2">
           {settled.map((item) => (
-            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} />
+            /* onToggleAcknowledged rides into the settled box too: an acknowledged row's checkbox
+               is how the tick is taken back, and a settled box without it would strand her ticks
+               exactly the way the pre-repair rows stranded "Remove this file". */
+            <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onOpenQuestion={onOpenQuestion} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
           </ul>
         </div>

@@ -40,6 +40,7 @@ export {
 } from "./domain/daily-matches";
 export * from "./domain/requirement-terms";
 export * from "./domain/review-answer-save";
+export * from "./domain/attention-acknowledgement";
 export * from "./domain/submission-checklist";
 export * from "./domain/submission-state";
 export * from "./infrastructure/applications-api";
