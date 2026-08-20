@@ -122,6 +122,19 @@ test("humanInputItems still shows non-captcha answer work when there is no captc
   assert.equal(items.find((item) => item.label === "What are your annualized total compensation expectations?")?.detail, "Needs your confirmation");
 });
 
+test("a measured unsupported cover letter is not left as applicant work", () => {
+  const items = humanInputItems({
+    status: "needs_attention",
+    cover_letter_supported: false,
+    questions: [
+      { id: "cover", question: "Cover letter", answer: "A historical draft", kind: "essay", required: false },
+      { id: "why", question: "Why did your cover letter focus on this team?", answer: "Because the work matches my background.", kind: "essay", required: false },
+    ],
+  });
+
+  assert.deepEqual(items.map((item) => item.label), ["Why did your cover letter focus on this team?"]);
+});
+
 test("humanInputItems hides stale academic provider blockers already covered by filled evidence", () => {
   const items = humanInputItems({
     status: "needs_attention",
