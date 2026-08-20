@@ -43,10 +43,29 @@ jobs:
       - name: Tests
         run: npm test
 
-      # `next build` type-checks app/ regardless of tsc, and has caught a real
-      # production break that `npx tsc --noEmit` missed: tsc reports pre-existing
-      # TS5097 errors in .mts test files, so its output was treated as noise and
-      # the real error in app code was never reached (PR #88).
+      # TYPES, BEFORE THE BUILD, because 36 seconds of tsc beats four minutes of
+      # next build for the same answer on most breaks.
+      #
+      # This step was deliberately absent, and the reason is worth keeping: tsc
+      # used to report pre-existing TS5097 errors in .mts test files, so its
+      # output was treated as noise and a real error in app code was never
+      # reached (PR #88). Measured on main 2026-08-20 that noise is gone - zero
+      # TS5097, clean exit - so the objection no longer holds and the gate is
+      # worth having again.
+      #
+      # It does NOT replace Build. `next build` type-checks app/ through the
+      # Next plugin and catches route and server-component mistakes tsc alone
+      # does not see, which is why both run.
+      #
+      # The backend has carried this gate for a while, and the reason this one
+      # was added is that its absence cost something concrete: an
+      # `import.meta.url` in a backend test passed `npm test` under tsx and
+      # failed `tsc --noEmit`, turning main red (volley-backend #643, repaired
+      # in #644). Two runners, two answers, and only one of them was being run
+      # here.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Build
         run: npm run build
         env:
