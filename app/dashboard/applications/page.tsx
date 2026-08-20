@@ -29,7 +29,7 @@ import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
-import { auditAnswerWrite, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
+import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
@@ -2413,9 +2413,15 @@ function Applications() {
         setPackets((current) => current?.map((packet) => packet.id === applicationId
           ? { ...packet, spec: { ...packet.spec, _review: saved.review } }
           : packet) ?? current);
-      } else if (answerWrite === "answers_only") {
+      } else if (answerWrite === "answers_only" && reviewAnswersNeedSave(canonicalReview.questions, questions)) {
         /* The same helper the Save button uses, so there is one definition of this request and one
            reading of the 202 that means a run wrote to the packet under it.
+
+           An unchanged list is deliberately not a write. A stopped row may carry send evidence,
+           in which case the server correctly refuses answer MUTATIONS. Posting its own byte-for-byte
+           answer list back anyway turned the read-only exact-packet audit into that forbidden
+           mutation and hid the real next-state gate behind REVIEW_ANSWERS_NOT_EDITABLE. The helper
+           compares only fields this route accepts, so display metadata cannot skip a real save.
 
            A REFUSAL IS RAISED, NOT SWALLOWED. This route refuses a stopped run whose row says
            something may already be at the employer, and the applicant needs the reason rather than

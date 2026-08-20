@@ -49,6 +49,7 @@ test("the audit binds the exact saved spec and canonical review instead of stale
      write through a route that does not relabel it. Same value read, so the assertion follows the
      value rather than the shape of the call around it. */
   assert.match(continueFromResume, /auditAnswerWrite\(canonicalReview\.status\)/);
+  assert.match(continueFromResume, /answerWrite === "answers_only" && reviewAnswersNeedSave\(canonicalReview\.questions, questions\)/);
   assert.doesNotMatch(continueFromResume, /auditAnswerWrite\(review\.status\)/);
   assert.doesNotMatch(continueFromResume, /let savedReview = review;/);
   assert.match(continueFromResume, /specJson: JSON\.stringify\(auditedSpec\)/);

@@ -11,6 +11,7 @@ import {
   REVIEW_ANSWERS_SAVED_NOTICE,
   REVIEW_ANSWERS_SAVE_RACED,
   auditAnswerWrite,
+  reviewAnswersNeedSave,
   reviewAnswersPath,
   saveReviewAnswers,
   type ReviewAnswerSaveQuestion,
@@ -27,6 +28,21 @@ const answered: ReviewAnswerSaveQuestion[] = [
     required: true,
   },
 ];
+
+test("an unchanged stored answer list does not manufacture an audit-time write", () => {
+  assert.equal(reviewAnswersNeedSave(answered, answered.map((question) => ({
+    ...question,
+    // Display-only fields can be present on the live client shape. The request strips them.
+    options: ["Yes", "No"],
+    explanation: "Taken from the saved application packet.",
+  } as ReviewAnswerSaveQuestion))), false);
+});
+
+test("any accepted answer field change still requires the guarded save", () => {
+  assert.equal(reviewAnswersNeedSave(answered, [{ ...answered[0], answer: "Yes" }]), true);
+  assert.equal(reviewAnswersNeedSave(answered, [{ ...answered[0], confirmed: true }]), true);
+  assert.equal(reviewAnswersNeedSave(answered, []), true);
+});
 
 type Sent = { path: string; init: { method: string; body: string } };
 
