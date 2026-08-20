@@ -88,11 +88,13 @@ test("the panel hands the row everything a control needs, and the page hands the
   assert.match(list, /onAddDocument=\{onAddDocument\}/);
 
   /* onChooseOption joined the element when the rows learned to draw the employer's own options;
-     tests/question-choice-list.test.mjs pins what pressing one does. The whole-element pin stays,
-     so a prop silently dropped from this line is still a failure here. */
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} \/>/);
+     tests/question-choice-list.test.mjs pins what pressing one does. onToggleAcknowledged joined it
+     when the row's checkbox stopped being scenery and started writing a stored tick. The
+     whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
+  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{attentionTicking\} \/>/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
+  assert.match(page, /onToggleAcknowledged=\{\(item, acknowledged\) => void toggleAttentionAcknowledgement\(item, acknowledged\)\}/);
 });
 
 /* The third control the panel can draw, added when an employer's form started asking for a file.
@@ -139,7 +141,10 @@ test("a settled row keeps its control, and keeps it out of the panel that counts
   const amber = list.indexOf("Your turn");
   const settledStrip = list.indexOf("settled.length > 0");
   assert.ok(amber !== -1 && settledStrip > amber, "the settled strip is drawn after the panel, outside it");
-  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} \/>/);
+  /* onToggleAcknowledged rides into the settled strip too: an acknowledged row's checkbox is the
+     way the tick is taken back, and dropping the handler here would strand her ticks the way the
+     pre-repair rows stranded "Remove this file". */
+  assert.match(list.slice(settledStrip), /<ChecklistRow key=\{item\.id\} item=\{item\} checked=\{false\} portalUrl=\{portalUrl\} onOpenQuestion=\{onOpenQuestion\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{tickingIds\} \/>/);
 
   const row = functionBody(page, "ChecklistRow");
   // `checked` still suppresses the control, because the Done column has no action words to draw.
@@ -149,6 +154,53 @@ test("a settled row keeps its control, and keeps it out of the panel that counts
   assert.match(row, /className=\{done \? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS\}/);
   assert.match(row, /\{!done && item\.badge/, "a stored file must not go on wearing a REQUIRED pill");
   assert.match(page, /const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 /, "quieter, and still a 44px target");
+});
+
+/* THE CHECKBOX THAT CHECKED NOTHING.
+ *
+ * Each outstanding row drew `<input type="checkbox" aria-label="Mark ... done">` with no onChange,
+ * no state and no request behind it: ticking wrote nothing, and the next poll re-rendered the panel
+ * with the box cleared. Measured on the Easy Dynamics rippling packet on 2026-08-20 - the same
+ * scenery class as the styled-span pills the tests above exist for, one element to the left.
+ *
+ * The decision half lives in features/applications/domain/submission-checklist.ts (acknowledgeable
+ * rows, and the stored tick rendering them settled) and is executable-tested there; the backend
+ * write is tested in the backend's attentionAcknowledgement.test.ts. What only this file can pin is
+ * the JSX: every checkbox the row draws is bound to the toggle, checked state comes from the stored
+ * item and never from local state, and the rows whose "done" the server measures draw NO checkbox
+ * at all - a box that cannot record a tick must be absent rather than dead. */
+test("the row's one checkbox is live, shows the stored tick, and rows the server measures draw none", () => {
+  const row = functionBody(page, "ChecklistRow");
+
+  /* Whole elements, lazily to each self-close: `onChange={() =>` carries a bare `>` that a
+     character-class extraction stops at, which is how this assertion first read a live box as dead. */
+  const checkboxes = [...row.matchAll(/<input\s[\s\S]*?\/>/g)]
+    .map((match) => match[0])
+    .filter((element) => element.includes('type="checkbox"'));
+  assert.equal(checkboxes.length, 1,
+    "ONE box for both directions. Two inputs was the shape that made branch order load-bearing: the acknowledged branch had to precede `done` or her tick fell into the static checkmark and lost its way back.");
+  const box = checkboxes[0];
+  assert.match(box, /onChange=\{\(\) => toggleTick\(item, item\.acknowledged !== true\)\}/,
+    "a checkbox with no onChange is the dead control again, and the direction must come from the stored item");
+  assert.match(box, /checked=\{item\.acknowledged === true\}/,
+    "checked comes from the STORED item, never from local state - the dead box's tick lived until the next render and no further");
+  assert.match(box, /disabled=\{ticking\}/,
+    "the in-flight tick must read as busy, not dead: the box is fully controlled, so without this a slow round trip shows nothing at all");
+  assert.match(box, /aria-label=\{item\.acknowledged === true\s*\?/,
+    "the accessible name states the direction the press will take, from the same stored fact as checked");
+
+  /* The 24px hit target. The visual box stays 14px inside the 18px column; the wrapping label is
+     what a finger actually has to hit, and ACCESSIBILITY.md's floor is binding via AGENTS.md. */
+  const labelStart = row.indexOf("<label");
+  const labelTag = row.slice(labelStart, row.indexOf(">", labelStart));
+  assert.match(labelTag, /h-6 w-6/, "the tick target must not shrink back to the 14px decoration it was");
+
+  // The live box exists only where a tick can be stored; everything else gets a plain marker.
+  assert.match(row, /item\.acknowledgeable === true \? onToggleAcknowledged : undefined/);
+  assert.match(row, /<span aria-hidden className="mt-0\.5 h-\[14px\] w-\[14px\] rounded-\[3px\] border border-warn\/40 bg-surface" \/>/,
+    "the placeholder keeps the 18px column aligned for the rows whose done is the server's to say");
+  assert.equal(/aria-label=\{`Mark \$\{item\.label\} done`\}(?![\s\S]{0,200}onChange)/.test(row), false,
+    "the dead 'Mark ... done' checkbox must not come back without a handler");
 });
 
 test("the review screen can reopen an attached document after the ask has stopped being outstanding", () => {
@@ -238,9 +290,17 @@ test("the blocker sentence names a control that exists on the screen it is print
   assert.match(page, /Press Add \{ask\.kind\}, next to Send application, to attach one\./);
 });
 
-test("the read-only packet viewer drops settled rows rather than listing them as input it needs", () => {
+test("the read-only packet viewer drops settled rows from its ask list, and keeps her own ticks in the record", () => {
   const viewer = readFileSync(fileURLToPath(new URL("../components/app/ApplicationPacket.tsx", import.meta.url)), "utf8");
-  assert.match(viewer, /\}\)\.filter\(\(item\) => !item\.settled\);/);
+  /* Server-settled rows still leave the "Needs your input" list: they are confirmations that carry
+     a control this viewer cannot draw. Acknowledged rows come back in their own strip, rendered as
+     done, because dropping them erased the only record of what she handled by hand. */
+  assert.match(viewer, /const needsInput = inputItems\.filter\(\(item\) => !item\.settled\);/);
+  assert.match(viewer, /const acknowledgedItems = inputItems\.filter\(\(item\) => item\.acknowledged === true\);/);
+  assert.match(viewer, /Handled by you/);
+  /* And the ticks are read from the SAME review the fresh attention_reason comes from: an older
+     hydrated map beside a newer report would let a stale tick hide a live blocker. */
+  assert.match(viewer, /attention_acknowledgements: review\.attention_acknowledgements,/);
 });
 
 /* THE SECOND HALF OF THIS ROW'S PROMISE, which was missing for as long as the row existed.

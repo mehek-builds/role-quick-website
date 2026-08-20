@@ -57,6 +57,28 @@ export type SubmissionChecklistItem = {
    */
   settled?: boolean;
   /**
+   * This row takes a tick. True only on the rows built FROM attention_reason - the blockers whose
+   * only resolution is on the employer's own page - because those are the rows where "done" is a
+   * fact only the applicant can know, and her tick is the honest record of it.
+   *
+   * Deliberately absent everywhere else, and the absences are each a decision:
+   * - A question row (answer/review/confirm) completes through its own control and the server's
+   *   own record. A tick that marked it done without the answer landing would be the Done column
+   *   lying again, one row earlier.
+   * - A document row feeds the send gate through documentControls, which never reads ticks. A
+   *   ticked document row would read settled beside a Send button still grey because of it, and
+   *   the screen would be contradicting itself about the same file.
+   */
+  acknowledgeable?: boolean;
+  /**
+   * The applicant ticked this row, and the tick is stored on the review
+   * (attention_acknowledgements, written by POST /applications/:id/review/attention-acks). Always
+   * paired with settled, and distinct from it: settled says "out of the outstanding count", this
+   * says "by her own hand, and the checkbox must stay live so she can take it back". A server-
+   * settled row (a confirmed answer, an attached file) is not hers to untick.
+   */
+  acknowledged?: boolean;
+  /**
    * Normalized name of the FIELD the row is about, used to dedupe. The runner emits more than one
    * blocker line per field, so "What is your top location preference?" is required and is still
    * empty and location choice left for you: "what is your top location preference?" arrived as two
@@ -92,7 +114,14 @@ export function checklistRowControl(
   if (item.actionKind === "open-page") {
     const href = context.portalUrl?.trim();
     if (!href) return null;
-    return { element: "link", label: item.action, name: `Open the company page to handle: ${item.label}`, href };
+    /* Two sentences for one link, because the accessible name is a promise about what pressing it
+       is FOR - the same rule the attach and confirm controls follow. On an acknowledged row she has
+       already said the work is done, so "to handle" would be a screen reader assigning her work she
+       just marked handled; the link stays only as the way back to the page. */
+    const name = item.settled
+      ? `Open the company page for: ${item.label}. You marked this handled.`
+      : `Open the company page to handle: ${item.label}`;
+    return { element: "link", label: item.action, name, href };
   }
   /* ABOVE the questionId guard, and that placement is the whole point of adding a third member
      rather than reusing "answer". A document ask has no question behind it, so a transcript row
@@ -622,7 +651,7 @@ function applicantConfirmedAnswer(
 }
 
 export function humanInputItems(
-  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "filled_fields" | "questions" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
+  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "filled_fields" | "questions" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
   /* The employer, the role, and what the application already carries. None of the three is on the
      review: the first two live on the packet's job_context and the third on the submission envelope,
      so the caller supplies them. Optional, and every default is the honest one: with no company the
@@ -632,6 +661,24 @@ export function humanInputItems(
 ): SubmissionChecklistItem[] {
   const items: SubmissionChecklistItem[] = [];
   for (const item of documentAskItems(review.required_documents ?? [], context, review)) addUnique(items, item);
+  /* HER STORED TICKS, applied to the attention rows as they are built. The tick is her word that
+     she handled that line on the employer's page herself, so a ticked row renders settled - out of
+     the amber panel and out of "N to check" - while KEEPING its Open page control (the settled rule:
+     the way back stays) and staying acknowledgeable, so the same checkbox can take the tick back.
+     The detail says exactly what the tick is and is not: Litos has not re-measured the form, and a
+     re-run starts the checklist clean because the backend drops this map with every fresh
+     attention_reason. */
+  /* Applied by MAP AT THE EXITS, never at individual construction sites, and guarded on the row's
+     own acknowledgeable flag. Wrapping literals one by one is how a third acknowledgeable row gets
+     added with a live checkbox whose stored tick never renders back - the dead-checkbox defect one
+     row class at a time - and an unguarded wrapper is how a stray key like "missing-<id>" could
+     settle a question row, which the flag's own comment forbids. */
+  const acknowledgements = review.attention_acknowledgements;
+  const withAcknowledgement = (item: SubmissionChecklistItem): SubmissionChecklistItem => (
+    item.acknowledgeable === true && acknowledgements?.[item.id]
+      ? { ...item, settled: true, acknowledged: true, detail: "Ticked off by you. Litos has not re-checked the company's form." }
+      : item
+  );
   const blockers = compactLines(review.attention_reason);
   const captchaBlockers = blockers.filter(isCaptchaChecklistText);
   const captchaOnly = captchaBlockers.length > 0
@@ -644,8 +691,9 @@ export function humanInputItems(
       label: captchaBlockers[0] ?? "CAPTCHA requires your attention",
       action: "Open page",
       actionKind: "open-page",
+      acknowledgeable: true,
     });
-    return items;
+    return items.map(withAcknowledgement);
   }
 
   const emptySubjects = emptyFieldSubjects(blockers);
@@ -659,6 +707,7 @@ export function humanInputItems(
       action: "Open page",
       actionKind: "open-page",
       subject: blockerSubject(blocker),
+      acknowledgeable: true,
     });
   }
 
@@ -737,7 +786,7 @@ export function humanInputItems(
     }
   }
 
-  return items;
+  return items.map(withAcknowledgement);
 }
 
 export function completedSubmissionItems(review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "status">): SubmissionChecklistItem[] {
