@@ -274,7 +274,12 @@ test("pressing a row opens the answer editor on that question, and saving there 
   assert.match(screen, /setPacketEvidence\(null\)/, "saving voids the prior exact-packet audit");
   assert.match(screen, /void saveReviewedAnswers\(\)/, "and a stalled run's save is the one that writes");
 
-  assert.match(page, /questionsSnapshot: currentQuestionsSnapshot/);
+  /* The snapshot is keyed to the audit response's own questions, not the local `questions` state:
+     the audit refreshes them server-side, and a snapshot taken from the pre-refresh local copy would
+     mark evidence "ready" against a packet the audit never produced. See packet-audit-save-sync.test.mjs
+     and packetAuditService.test.ts's "a packet the audit blanked stays blank" for the deadlock this
+     avoids. */
+  assert.match(page, /questionsSnapshot: packetQuestionsSnapshot\(response\.questions\)/);
   assert.match(page, /`\/applications\/\$\{applicationId\}\/submit-request`/);
 
   const questions = functionBody(page, "QuestionsScreen");

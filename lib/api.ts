@@ -751,6 +751,10 @@ export type PacketAuditResponse = {
     size_bytes: number;
     download_url: string;
   };
+  /** The questions the audit above actually hashed - refreshed and persisted server-side, which can
+   *  differ from whatever the caller still holds locally. A caller that goes on to submit its own
+   *  older copy instead of these is comparing two different packets to the one acknowledgement. */
+  questions: ApplicationQuestion[];
 };
 
 export type ManualHandoffResponse = {
