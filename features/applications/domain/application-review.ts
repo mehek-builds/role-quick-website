@@ -375,3 +375,29 @@ export function stripMetadata(spec: {
     skill_source: spec.skill_source,
   };
 }
+
+/**
+ * True when a packet's spec is the placeholder `canonicalTrackerPacket` (canonical-tracker.ts)
+ * writes for a Tracker row whose linked legacy packet has not been loaded - either it fell outside
+ * `/resume/history`'s 50-full-spec cap, or the merge never found it at all. That placeholder is
+ * exactly `{ _review: review }`: no `_contact`, no `experience`, nothing to draw a resume from.
+ *
+ * `_contact` is the signal, not `experience` alone. A genuinely zero-experience resume - a student
+ * applying before their first internship - still carries `_contact.full_name`, because the backend
+ * writes it verbatim from the generation request onto every packet a real generation produced
+ * (routes/resume.ts, `_contact: body.contact`). Only a packet that was never generated, or whose
+ * generated spec was never fetched, comes back with no contact at all. Requiring both conditions
+ * means an unusual but real zero-experience resume (which still has `_contact`) is never mistaken
+ * for a stub.
+ *
+ * ApplicationPacket used to render `stripMetadata(spec)` straight off whatever `packets` already
+ * held, with no check at all. `stripMetadata` defaults a missing `experience` to `[]`, so the
+ * placeholder rendered as a silently blank resume box instead of throwing or asking for the real
+ * data. This is the check that was missing.
+ */
+export function isStubPacketSpec(spec: {
+  _contact?: Record<string, string | undefined>;
+  experience?: unknown[];
+}): boolean {
+  return !spec._contact?.full_name?.trim() && (spec.experience ?? []).length === 0;
+}
