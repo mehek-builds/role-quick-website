@@ -794,6 +794,7 @@ export type ApplicationReview = {
     | "required_field"
     | "evidence_gap"
     | "cover_letter"
+    | "unverified_submission"
     | "unknown"
   >;
   /* The typed half of attention_reason. Written by the backend when an application stops on a
@@ -861,6 +862,19 @@ export type ApplicationReview = {
     decided_at: string;
   };
   submission_claimed_at?: string;
+  /** Set when a run may have reached the employer and stopped before it could confirm it, e.g. a
+   *  managed session that timed out or errored at the submit step. `resolution` is the applicant's
+   *  own answer after she has looked, in her own portal or mailbox - undefined means the question is
+   *  still open. Nothing here is ever decided by guessing on her behalf: `POST
+   *  /applications/:id/submission/unverified` is the only thing that can move it. */
+  unverified_submission?: {
+    at: string;
+    cause: "run_timed_out" | "no_confirmation_state" | "provider_error";
+    portal_url?: string;
+    submission_run_id?: string;
+    resolution?: "sent" | "not_sent";
+    resolved_at?: string;
+  };
   filled_fields?: string[];
   progress_screenshot_url?: string;
   progress_stage?: string;
