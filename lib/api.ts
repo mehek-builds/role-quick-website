@@ -8,6 +8,7 @@ import { requestShareKey, shareInFlight } from "./in-flight";
 import { apiErrorMessage } from "./api-error-message";
 import { clearExtensionSession } from "./extension-bridge";
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit";
+import { sendTikTokEvent } from "./tiktok-client";
 
 /* Defined in session-identity, not here, so this module and the instrumentation
  * entry point read the same constant instead of two copies of the string. */
@@ -45,7 +46,7 @@ export function getOrCreateGuestKey(): string {
   return created;
 }
 
-export function setSession(token: string, email?: string | null, isGuest = false) {
+export function setSession(token: string, email?: string | null, isGuest = false, isNewRegistration = false) {
   const normalizedEmail = email?.trim().toLowerCase() || null;
   const previousEmail = getStoredEmail()?.trim().toLowerCase() || null;
   if ((isGuest && previousEmail) || (normalizedEmail && previousEmail && normalizedEmail !== previousEmail)) {
@@ -56,7 +57,6 @@ export function setSession(token: string, email?: string | null, isGuest = false
   else window.localStorage.removeItem(EMAIL_KEY);
   window.localStorage.setItem(SESSION_MODE_KEY, isGuest ? "guest" : "verified");
   window.localStorage.setItem(HISTORY_KEY, "true");
-  if (!isGuest) window.localStorage.removeItem(GUEST_KEY);
 
   /* Name the PostHog person after the account, so the anonymous pageviews that
    * led here stop being a separate stranger.
@@ -70,6 +70,25 @@ export function setSession(token: string, email?: string | null, isGuest = false
    * would throw the association away in the one case that needs it most, a
    * guest who signs up for a real account on the same browser. */
   identifyUser(userIdFromToken(token));
+
+  /* CompleteRegistration lives here for the same reason identifyUser does: five
+   * call sites feed setSession, and a sixth auth method that only calls
+   * setSession still fires this correctly instead of needing its own bespoke
+   * "is this really new" check.
+   *
+   * The event_id is derived from a stable identity (the email being claimed,
+   * or the guest's persisted idempotency key read from GUEST_KEY before it is
+   * cleared below) rather than a random UUID, so a duplicate call for the same
+   * underlying account -- two tabs, a client retry after a slow-but-successful
+   * request -- collapses to one conversion via TikTok's event_id dedup instead
+   * of double-counting. Read BEFORE the GUEST_KEY removal below, which only
+   * fires for a real account and would otherwise erase the key this needs. */
+  if (isNewRegistration) {
+    const registrationKey = isGuest ? getOrCreateGuestKey() : normalizedEmail;
+    if (registrationKey) sendTikTokEvent("CompleteRegistration", `signup:${registrationKey}`);
+  }
+
+  if (!isGuest) window.localStorage.removeItem(GUEST_KEY);
 }
 
 export function clearSession() {

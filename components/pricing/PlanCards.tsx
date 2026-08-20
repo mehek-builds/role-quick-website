@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, ButtonLink } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
@@ -20,6 +20,8 @@ import {
 } from "@/features/billing";
 import { getToken } from "@/lib/api";
 import { track } from "@/lib/analytics";
+import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { createCheckoutThroughExtension } from "@/lib/extension-bridge";
 
 const SESSION_PLAN_KEY = "litos_plus_selected_plan_v2";
@@ -35,6 +37,7 @@ export function PlanCards() {
   const [loading, setLoading] = useState(true);
   const [busyPlan, setBusyPlan] = useState<LitosPlusPlanId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const tiktokCheckoutIdsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +93,8 @@ export function PlanCards() {
     setError(null);
     try {
       track("checkout_started", { plan_id: planId, source: extensionCheckout ? "extension" : "pricing", trigger: sourceTrigger });
+      const tiktokEventId = operationIdFor(tiktokCheckoutIdsRef.current, planId);
+      sendTikTokEvent("InitiateCheckout", tiktokEventId, { plan_id: planId });
       let checkoutUrl: string;
       if (extensionCheckout) {
         checkoutUrl = await createCheckoutThroughExtension({
@@ -114,6 +119,7 @@ export function PlanCards() {
         });
         checkoutUrl = checkout.checkoutUrl;
       }
+      completeOperationId(tiktokCheckoutIdsRef.current, planId);
       window.location.assign(checkoutUrl);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Checkout could not open. Nothing was charged.");
