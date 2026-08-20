@@ -3,6 +3,8 @@ import test from "node:test";
 import type { CanonicalApplication, GeneratedResume } from "../../../lib/api.ts";
 import {
   canonicalApplicationFromPacket,
+  canonicalEnvelopeLegacyHydrationId,
+  canonicalEnvelopeWithMissingLegacyHydration,
   linkedLegacyPacketFromCanonicalTrackerPacket,
   sendableLinkedPacketFromCanonicalEnvelope,
   withRestoredLinkedPackets,
@@ -271,6 +273,96 @@ test("a READY envelope on an unsupported portal is still refused", () => {
     review_state: "ready_to_submit",
   })]);
   assert.equal(sendableLinkedPacketFromCanonicalEnvelope(merged[0]), null);
+});
+
+/* CANONICAL DETAIL SHOWED THE EXTENSION-ONLY COPY FOR A PORTAL-SUPPORTED, READY-TO-SUBMIT PACKET.
+ *
+ * Measured on production 2026-08-20: a Databricks application had a linked legacy packet at
+ * `ready_to_submit`, `portal_supported: true`, but the Tracker's own page load never attached that
+ * packet during its merge - `/resume/history`'s bare call caps at fifty full specs, and on an
+ * account queueing hundreds of applications the page it returned did not carry this row's packet at
+ * all. `canonicalTrackerPacket` then built this row's `_review` from its packet-less placeholder,
+ * which hardcodes `portal_supported: false`, so `sendableLinkedPacketFromCanonicalEnvelope` refused
+ * it and the Tracker showed the same "install the extension" copy as a genuinely unsupported row -
+ * with no way to reach the real send path at all.
+ *
+ * `canonicalEnvelopeLegacyHydrationId` is the fix's first half: it names the one packet worth
+ * fetching by its EXACT id, the same fetch PR #383 already gave `ApplicationPacket` for packet
+ * CONTENT, now used to decide the ROUTING before the Tracker ever commits to the attended detail. */
+test("a canonical row naming a legacy packet the merge did not attach needs hydration", () => {
+  const merged = mergeCanonicalApplicationHistory([], [canonical({
+    legacy_generated_resume_id: "databricks-legacy-packet",
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  })]);
+  assert.equal(canonicalEnvelopeLegacyHydrationId(merged[0]), "databricks-legacy-packet");
+});
+
+test("a canonical row already correctly linked needs no hydration", () => {
+  const packet = legacy();
+  const merged = mergeCanonicalApplicationHistory([packet], [canonical({
+    legacy_generated_resume_id: packet.id,
+  })]);
+  assert.equal(canonicalEnvelopeLegacyHydrationId(merged[0]), null);
+});
+
+test("a canonical row with genuinely no linked packet needs no hydration", () => {
+  // legacy_generated_resume_id is absent entirely: this is a real Free-fill row, not a gap in what
+  // this page load happened to see, and there is nothing to fetch that would change the answer.
+  const merged = mergeCanonicalApplicationHistory([], [canonical()]);
+  assert.equal(canonicalEnvelopeLegacyHydrationId(merged[0]), null);
+});
+
+test("a weaker match that attached the wrong duplicate still asks for the packet the row actually names", () => {
+  // canonicalMatchStrength's portal-URL match (strength 1) attaches SOME packet so the merge does
+  // not fall back to the packet-less placeholder, but it is not the packet this canonical row's own
+  // legacy_generated_resume_id names. Hydration must ask for the id the row names, not settle for
+  // whatever the fuzzy match already attached.
+  const duplicate = legacy({ id: "wrong-duplicate-packet" });
+  const merged = mergeCanonicalApplicationHistory([duplicate], [canonical({
+    legacy_generated_resume_id: "true-databricks-packet",
+    portal_url: duplicate.spec._review?.portal_url,
+  })]);
+  assert.equal(linkedLegacyPacketFromCanonicalTrackerPacket(merged[0]), null, "the mismatched link must not be trusted as-is");
+  assert.equal(canonicalEnvelopeLegacyHydrationId(merged[0]), "true-databricks-packet");
+});
+
+test("an ordinary legacy packet - not a canonical envelope at all - needs no hydration", () => {
+  assert.equal(canonicalEnvelopeLegacyHydrationId(legacy()), null);
+});
+
+/* Finding 2, PR #386 review: a not-found hydration result was never persisted onto the packet, so
+ * canonicalEnvelopeLegacyHydrationId kept naming the same doomed id forever. Any unrelated
+ * setPackets call that rebuilt this row's object identity (canonicalTrackerPacket does, on every
+ * merge) recomputed back to "needs hydration" and refetched an id that had already been proven
+ * missing, which briefly re-flipped checkingSendPath to true mid-way through something else -
+ * measured hiding the Fill button while an unrelated fill for the SAME row was already in flight. */
+test("a hydration fetch that finds nothing settles the row, mirroring the found case", () => {
+  const merged = mergeCanonicalApplicationHistory([], [canonical({
+    legacy_generated_resume_id: "vanished-legacy-packet",
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  })]);
+  assert.equal(canonicalEnvelopeLegacyHydrationId(merged[0]), "vanished-legacy-packet");
+
+  const settled = canonicalEnvelopeWithMissingLegacyHydration(merged[0], "vanished-legacy-packet");
+  assert.equal(
+    canonicalEnvelopeLegacyHydrationId(settled),
+    null,
+    "once a fetch has confirmed the named id does not exist, it must not be asked for again",
+  );
+});
+
+test("a stale missing-hydration stamp does not mask a genuinely different id", () => {
+  // If the canonical row's legacy_generated_resume_id ever changes (a re-link), a stamp recorded
+  // against the OLD id must not suppress hydration of the NEW one.
+  const merged = mergeCanonicalApplicationHistory([], [canonical({
+    legacy_generated_resume_id: "second-legacy-packet",
+    submission_state: "ready_to_submit",
+    review_state: "ready_to_submit",
+  })]);
+  const staleStamp = canonicalEnvelopeWithMissingLegacyHydration(merged[0], "first-legacy-packet");
+  assert.equal(canonicalEnvelopeLegacyHydrationId(staleStamp), "second-legacy-packet");
 });
 
 /* This helper mints a NEW object every call, so it must never be a React dependency unmemoised.
