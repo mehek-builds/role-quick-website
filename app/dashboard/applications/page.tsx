@@ -73,6 +73,22 @@ import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "recent" | "company";
+
+/* These guards are deliberately pure. Both callers resume after a network await, so the screen
+   and evidence captured when the request started are already historical. Read the synchronous
+   refs at the write boundary and commit only while the poll still owns that piece of UI state. */
+function submissionPollMayReplaceQuestions(currentScreen: Screen): boolean {
+  return currentScreen === "portal" || currentScreen === "submitting";
+}
+
+function acknowledgedEvidenceRevalidationMayCommit(
+  currentScreen: Screen,
+  currentEvidence: PacketEvidenceSession | null,
+  requestedEvidence: PacketEvidenceSession,
+): boolean {
+  return submissionPollMayReplaceQuestions(currentScreen) && currentEvidence === requestedEvidence;
+}
+
 /* `partial` marks the snapshot selectPacket seeds from a board row, which carries `review` and
    nothing else. nextSubmissionState reads it so the first real server answer always replaces the
    seed. See features/applications/domain/submission-state.ts for what that fixes. */
@@ -352,6 +368,12 @@ function Applications() {
      answered a question would take a screen away from her rather than give her one. */
   const [prescriptNote, setPrescriptNote] = useState("");
   const [screen, setScreen] = useState<Screen>("review");
+  /* The route the applicant chose, available synchronously to a poll that started on the prior
+     screen. React state alone is one render behind the click: a submission fetch begun on portal
+     can resolve after Review and fill moves to review, see the old portal closure, and route the
+     applicant straight back to the same blocker card. Every screen write goes through
+     moveToScreen, so this ref and the rendered state have one writer and cannot drift. */
+  const screenRef = useRef<Screen>("review");
   /* WHICH action put us on the "submitting" screen, which the status alone cannot tell us.
      The progress screen says one of two things, and the difference is the whole point of it:
      preparing the form is "nothing is sent yet", and approving is "sending it now". It read that
@@ -628,6 +650,8 @@ function Applications() {
      this scroll is scheduled in a requestAnimationFrame and rAF does not run at all in a hidden
      tab, so the winner differed between a real browser and an automated one. */
   const moveToScreen = useCallback((next: Screen, options: { scrollToTop?: boolean } = {}) => {
+    // Publish the navigation before React commits it so an already-running poll cannot undo it.
+    screenRef.current = next;
     setScreen((current) => {
       if (current === next) return current;
       if (options.scrollToTop !== false) requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
@@ -768,7 +792,15 @@ function Applications() {
     try {
       const currentAudit = await api<PacketAuditResponse>(`/applications/${requestedId}/packet-audit`, { method: "POST" });
       const refreshed = revalidateAcknowledgedPacketEvidence(currentEvidence, requestedId, currentAudit, Date.now());
-      if (selectedIdRef.current !== requestedId || !refreshed) {
+      /* Review and fill clears this exact evidence before navigating. A revalidation that began
+         before that click must not install its answer after the click, even though the selected
+         application id still matches. Identity covers a newer audit on the same application, and
+         screenRef covers deliberate navigation away from the poll-owned screens. */
+      if (
+        selectedIdRef.current !== requestedId
+        || !acknowledgedEvidenceRevalidationMayCommit(screenRef.current, packetEvidenceRef.current, currentEvidence)
+      ) return;
+      if (!refreshed) {
         packetEvidenceRef.current = null;
         setPacketEvidence(null);
       } else {
@@ -777,6 +809,10 @@ function Applications() {
       }
       packetRevalidationRefusal.current = null;
     } catch (reason) {
+      if (
+        selectedIdRef.current !== requestedId
+        || !acknowledgedEvidenceRevalidationMayCommit(screenRef.current, packetEvidenceRef.current, currentEvidence)
+      ) return;
       packetEvidenceRef.current = null;
       setPacketEvidence(null);
       /* A server sentence, not a transient: see packetRevalidationRefusal. Two bounds, both
@@ -853,7 +889,14 @@ function Applications() {
     /* NOT a bare `review.updated_at` comparison: that versions the review alone, and this response
        also carries cover_letter, handoff_url and configured. See submission-state.ts. */
     setSubmission((current) => nextSubmissionState(current, result));
-    setQuestions((current) => mergeDiscoveredQuestions(current, result.review.questions));
+    /* A response is authoritative while the poll still owns portal/submitting, including deletion.
+       The request may have started there and resolved after the applicant reached Questions, so
+       check the synchronous route at the state-write boundary. Keeping the current array on any
+       other screen preserves unsaved typing. Merging an empty server list is not an alternative:
+       it kept every stale local row and made a fixed Recruitee question impossible to retire. */
+    setQuestions((current) => submissionPollMayReplaceQuestions(screenRef.current)
+      ? result.review.questions
+      : current);
     setPackets((current) => {
       if (!current) return current;
       const packet = current.find((item) => item.id === requestedId);
@@ -886,6 +929,13 @@ function Applications() {
        dropped. */
     const terminal = result.review.status === "submitted" || result.review.status === "failed";
     if (approveInFlight.current !== null && !terminal) return;
+    /* The fetch may have started before Review and fill left the portal. Keep its canonical data
+       updates above, but do not let its old needs_attention status reverse the applicant's newer
+       navigation. A receipt remains authoritative even if it arrives after she changed screens. */
+    const pollMayRoute = screenRef.current === "submitting"
+      || screenRef.current === "portal"
+      || result.review.status === "submitted";
+    if (!pollMayRoute) return;
     moveToScreen(screenForStatus(result.review.status, "submitting"));
   }, [captureCompletedSubmission, moveToScreen, qaMode, revalidateAcknowledgedEvidence, selectedId]);
 
@@ -2553,10 +2603,15 @@ function Applications() {
   }
 
   function reviewPacketAgain() {
+    if (!selectedSubmission) return;
     /* A stopped run can change the stored questions after the last exact-packet audit. Keeping that
        old evidence mounted makes packetEvidenceReady false, and reviewPrimaryDisabled then disables
-       the very button whose instruction says to audit again. Clear both copies synchronously before
-       returning to review so the next press starts a fresh audit of the current answers. */
+       the very button whose instruction says to audit again. The server list is authoritative here
+       too: this handler is available only on the portal screen, where there are no unsaved answer
+       edits, and an empty list is the backend saying the former blocker was not a question. Clear
+       both evidence copies synchronously before returning to review so the next press starts a
+       fresh audit of the current packet. */
+    setQuestions(selectedSubmission.review.questions);
     packetEvidenceRef.current = null;
     setPacketEvidence(null);
     moveToScreen("review");

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import ts from "typescript";
 
 /* Comments stripped before any "is it gone?" assertion, the same way R-046 does it in
    tests/review-highlighting.test.mjs and the header guard does it in
@@ -12,6 +13,44 @@ import test from "node:test";
    the explanation to satisfy a grep would be the wrong repair. */
 function shippedCode(source) {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+}
+
+function deferred() {
+  let resolve;
+  let reject;
+  const promise = new Promise((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
+async function loadDashboardRaceGuards(source) {
+  const names = new Set([
+    "submissionPollMayReplaceQuestions",
+    "acknowledgedEvidenceRevalidationMayCommit",
+  ]);
+  const sourceFile = ts.createSourceFile(
+    "applications-page.tsx",
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+  const declarations = sourceFile.statements.filter(
+    (statement) => ts.isFunctionDeclaration(statement)
+      && statement.name
+      && names.has(statement.name.text),
+  );
+  assert.equal(declarations.length, names.size, "dashboard race guards must remain executable and named");
+  const moduleSource = `${declarations.map((node) => node.getText(sourceFile)).join("\n")}\nexport { ${[...names].join(", ")} };`;
+  const javascript = ts.transpileModule(moduleSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ESNext,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  return import(`data:text/javascript;base64,${Buffer.from(javascript).toString("base64")}`);
 }
 
 test("saved answers honor standing consent while retaining a manual fallback", async () => {
@@ -66,7 +105,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /No live browser to reopen/);
   assert.match(dashboard, /Restart inside Litos/);
   assert.match(dashboard, /You do not need the company site/);
-  assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,500}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
+  assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,700}setQuestions\(selectedSubmission\.review\.questions\);[\s\S]{0,120}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
   assert.match(dashboard, /onReviewPacket=\{reviewPacketAgain\}/);
   assert.match(dashboard, /Open company page/);
   assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
@@ -101,6 +140,97 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /Check the filled-form proof shown in this dashboard/);
   assert.doesNotMatch(dashboard, /Review the answers that need your voice/);
   assert.doesNotMatch(dashboard, /Continue to \$\{questions\.length\} question/);
+});
+
+test("a zero-question server packet retires stale local questions without overwriting later question edits", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+
+  const { submissionPollMayReplaceQuestions } = await loadDashboardRaceGuards(dashboard);
+  const response = deferred();
+  const typedQuestions = [{ id: "phone", question: "Phone", answer: "+971 unsaved" }];
+  let currentScreen = "portal";
+  let questions = [{ id: "phone", question: "Phone", answer: "+971 stored" }];
+  const poll = response.promise.then((serverQuestions) => {
+    questions = submissionPollMayReplaceQuestions(currentScreen) ? serverQuestions : questions;
+  });
+
+  /* The request began on portal. The applicant then reached Questions and typed before it
+     resolved. The empty server list is authoritative for a poll still on portal, but historical
+     once the applicant owns the editor. */
+  currentScreen = "questions";
+  questions = typedQuestions;
+  response.resolve([]);
+  await poll;
+  assert.strictEqual(questions, typedQuestions);
+
+  assert.equal(submissionPollMayReplaceQuestions("portal"), true);
+  assert.equal(submissionPollMayReplaceQuestions("submitting"), true);
+  assert.equal(submissionPollMayReplaceQuestions("review"), false);
+  assert.equal(submissionPollMayReplaceQuestions("questions"), false);
+
+  const refreshStart = dashboard.indexOf("const refreshSubmission = useCallback(async () => {");
+  const refreshEnd = dashboard.indexOf("/* The applicant's own escape hatch", refreshStart);
+  assert.ok(refreshStart > 0 && refreshEnd > refreshStart);
+  const refresh = dashboard.slice(refreshStart, refreshEnd);
+  assert.match(refresh, /setQuestions\(\(current\) => submissionPollMayReplaceQuestions\(screenRef\.current\)[\s\S]{0,100}\? result\.review\.questions[\s\S]{0,40}: current\);/);
+  assert.doesNotMatch(refresh, /setQuestions\(\(current\) => mergeDiscoveredQuestions\(current, result\.review\.questions\)\)/);
+
+  /* The ref is written before the state update, so a fetch already past its await observes the
+     applicant's click immediately rather than the portal value captured when it started. */
+  assert.match(dashboard, /const screenRef = useRef<Screen>\("review"\);/);
+  assert.match(dashboard, /const moveToScreen = useCallback[\s\S]{0,220}screenRef\.current = next;[\s\S]{0,100}setScreen/);
+  assert.match(refresh, /const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,180}result\.review\.status === "submitted";[\s\S]{0,100}if \(!pollMayRoute\) return;[\s\S]{0,120}moveToScreen\(screenForStatus/);
+});
+
+test("a cleared packet audit cannot be resurrected by an older revalidation", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const { acknowledgedEvidenceRevalidationMayCommit } = await loadDashboardRaceGuards(dashboard);
+
+  const acknowledgedEvidence = { applicationId: "cbs", acknowledged: true };
+  const refreshedEvidence = { applicationId: "cbs", acknowledged: true, serverRevalidatedAt: 2 };
+  const response = deferred();
+  let currentScreen = "portal";
+  let currentEvidence = acknowledgedEvidence;
+  const revalidation = response.promise.then((refreshed) => {
+    if (acknowledgedEvidenceRevalidationMayCommit(currentScreen, currentEvidence, acknowledgedEvidence)) {
+      currentEvidence = refreshed;
+    }
+  });
+
+  /* reviewPacketAgain deliberately clears both evidence copies and leaves portal while the
+     request is unresolved. Its old answer no longer owns either the route or the evidence slot. */
+  currentEvidence = null;
+  currentScreen = "review";
+  response.resolve(refreshedEvidence);
+  await revalidation;
+  assert.equal(currentEvidence, null);
+
+  assert.equal(
+    acknowledgedEvidenceRevalidationMayCommit("portal", acknowledgedEvidence, acknowledgedEvidence),
+    true,
+  );
+  assert.equal(
+    acknowledgedEvidenceRevalidationMayCommit("portal", refreshedEvidence, acknowledgedEvidence),
+    false,
+    "a newer evidence object on the same application must win",
+  );
+  assert.equal(
+    acknowledgedEvidenceRevalidationMayCommit("review", acknowledgedEvidence, acknowledgedEvidence),
+    false,
+    "deliberate review navigation must invalidate a portal request",
+  );
+
+  const revalidateStart = dashboard.indexOf("const revalidateAcknowledgedEvidence = useCallback");
+  const revalidateEnd = dashboard.indexOf("const refreshSubmission = useCallback", revalidateStart);
+  const revalidate = dashboard.slice(revalidateStart, revalidateEnd);
+  assert.match(revalidate, /acknowledgedEvidenceRevalidationMayCommit\(screenRef\.current, packetEvidenceRef\.current, currentEvidence\)/);
+  assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,800}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
 });
 
 /* PR #319's TEST, KEPT AS ITS INTENT AND NOT AS ITS LINE.
