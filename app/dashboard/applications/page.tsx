@@ -2552,6 +2552,16 @@ function Applications() {
     }
   }
 
+  function reviewPacketAgain() {
+    /* A stopped run can change the stored questions after the last exact-packet audit. Keeping that
+       old evidence mounted makes packetEvidenceReady false, and reviewPrimaryDisabled then disables
+       the very button whose instruction says to audit again. Clear both copies synchronously before
+       returning to review so the next press starts a fresh audit of the current answers. */
+    packetEvidenceRef.current = null;
+    setPacketEvidence(null);
+    moveToScreen("review");
+  }
+
   async function prepareApplication(
     finalQuestions = questions,
     /* `restart` is PR #375's flag and rides this function rather than a fourth caller of
@@ -3543,7 +3553,7 @@ function Applications() {
           onRestart={() => void restartPreparedRun()}
           restarting={restartingId === selected.id}
           onRetry={retryPreparation}
-          onReviewPacket={() => moveToScreen("review")}
+          onReviewPacket={reviewPacketAgain}
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
           onChooseOption={chooseBlockerOption}
