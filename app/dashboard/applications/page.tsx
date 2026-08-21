@@ -1346,7 +1346,10 @@ function Applications() {
       const params = new URLSearchParams(window.location.search);
       const intent = params.get("intent");
       const checkoutAction = params.get("checkout_action");
-      if (existing && intent !== "fill") {
+      if (existing) {
+        // A reviewable packet already covers this job. That is true whether she arrived to
+        // compare it or to fill it, so an existing packet always wins over intent=fill's manual
+        // extension composer below it would otherwise force open a second, redundant fill.
         selectPacket(existing);
         setShowNewApplication(false);
         setNotice("Your resume is ready. Compare it with the job below.");
@@ -1366,8 +1369,15 @@ function Applications() {
           setPendingJob(null);
           return;
         }
-        if (intent === "tailor") {
-          const actionKey = `${pendingJob.id}:tailor`;
+        if (intent === "tailor" || (intent === "fill" && canUse("ai_resume_tailoring") === true)) {
+          // Litos's main flow is the server-driven managed fill (submit-request -> the portal
+          // review screen), which requires a generated packet with a stored review; only
+          // resume/generate (via createApplication) produces one. A Plus/trial account can reach
+          // that flow straight from Fill application, not only from Tailor resume, so intent=fill
+          // takes the same door intent=tailor already does when tailoring is entitled. Free
+          // accounts have no route to a stored review at all, so they fall through to the
+          // extension composer below, same as before.
+          const actionKey = `${pendingJob.id}:${intent}`;
           if (actionStartedFor.current !== actionKey) {
             actionStartedFor.current = actionKey;
             void createApplication(draft);
