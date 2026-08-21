@@ -9,6 +9,9 @@ import { apiErrorMessage } from "./api-error-message";
 import { clearExtensionSession } from "./extension-bridge";
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "./work-eligibility-limit";
 import { sendTikTokEvent } from "./tiktok-client";
+import { PACKET_AUDIT_VERSION } from "./packet-audit-version";
+
+export { PACKET_AUDIT_VERSION } from "./packet-audit-version";
 
 /* Defined in session-identity, not here, so this module and the instrumentation
  * entry point read the same constant instead of two copies of the string. */
@@ -711,7 +714,7 @@ export type PacketAuditHighlightTerm = PacketAuditTerm & {
 };
 
 export type PacketAudit = {
-  version: "packet_audit_v1";
+  version: typeof PACKET_AUDIT_VERSION;
   status: "passed";
   complete: true;
   degraded: false;
@@ -729,6 +732,11 @@ export type PacketAudit = {
     resumeContactEmailSha256: string;
     applicantEmailSha256: string;
     pdf: { objectKey: string; sha256: string; sizeBytes: number };
+    employerDelivery: {
+      version: "employer_delivery_v1";
+      mode: "full" | "browser" | "extension";
+      sha256: string;
+    };
   };
   identities: {
     resume_email: string;

@@ -105,7 +105,7 @@ function packetAuditResponse(packet) {
   const jd = packet.spec._review.jd_text;
   return {
     packet_audit: {
-      version: "packet_audit_v1",
+      version: "packet_audit_v2",
       status: "passed",
       complete: true,
       degraded: false,
@@ -123,6 +123,11 @@ function packetAuditResponse(packet) {
         resumeContactEmailSha256: PACKET_DIGEST,
         applicantEmailSha256: PACKET_DIGEST,
         pdf: { objectKey: PACKET_OBJECT_KEY, sha256: PACKET_DIGEST, sizeBytes: PACKET_SIZE_BYTES },
+        employerDelivery: {
+          version: "employer_delivery_v1",
+          mode: "browser",
+          sha256: PACKET_DIGEST,
+        },
       },
       identities: {
         resume_email: "fixture@example.invalid",

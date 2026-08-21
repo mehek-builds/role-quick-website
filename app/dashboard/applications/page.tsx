@@ -667,11 +667,8 @@ function Applications() {
   const moveToScreen = useCallback((next: Screen, options: { scrollToTop?: boolean } = {}) => {
     // Publish the navigation before React commits it so an already-running poll cannot undo it.
     screenRef.current = next;
-    setScreen((current) => {
-      if (current === next) return current;
-      if (options.scrollToTop !== false) requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "auto" }));
-      return next;
-    });
+    if (options.scrollToTop !== false) window.scrollTo({ top: 0, behavior: "auto" });
+    setScreen((current) => current === next ? current : next);
   }, []);
 
   /* A stale packet refusal is a route transition, not a red failure banner. The server is still
@@ -1775,6 +1772,15 @@ function Applications() {
     && activePacketEvidence.specJson === JSON.stringify(spec)
     && activePacketEvidence.questionsSnapshot === currentQuestionsSnapshot,
   );
+  const packetEvidenceNeedsFreshAudit = Boolean(
+    activePacketEvidence
+    && deferredSpec === spec
+    && (packetDraftChanged
+      || !packetAuditBindingReady
+      || !auditedDisplayReady
+      || activePacketEvidence.specJson !== JSON.stringify(spec)
+      || activePacketEvidence.questionsSnapshot !== currentQuestionsSnapshot),
+  );
   const packetEvidenceReviewed = Boolean(packetEvidenceReady && activePacketEvidence?.acknowledged);
   const manualTrialEvidence = selected
     && activePacketEvidence
@@ -1809,13 +1815,17 @@ function Applications() {
   const reviewPrimaryBusy = saving || coverLetterBusy || packetAuditBusy;
   const reviewPrimaryDisabled = reviewPrimaryBusy
     || !review?.jd_text.trim()
-    || Boolean(activePacketEvidence && !packetEvidenceReady);
+    || Boolean(activePacketEvidence && !packetEvidenceReady && !packetEvidenceNeedsFreshAudit);
   const reviewPrimaryLabel = !activePacketEvidence
     ? review?.status === "ready_for_final_approval"
       ? "Review and send"
       : "Review and fill"
-    : !packetEvidenceReady
-      ? "Loading exact PDF"
+    : packetEvidenceNeedsFreshAudit
+      ? "Audit again"
+      : !exactPacketPdfReady
+        ? "Loading exact PDF"
+        : !packetEvidenceReady
+          ? "Checking saved packet"
       : review?.status === "ready_for_final_approval"
         ? "Review filled form"
         : "Fill company form";
@@ -2733,6 +2743,12 @@ function Applications() {
     packetEvidenceRef.current = null;
     setPacketEvidence(null);
     moveToScreen("review");
+  }
+
+  async function auditPacketAgain() {
+    packetEvidenceRef.current = null;
+    setPacketEvidence(null);
+    await continueFromResume();
   }
 
   async function prepareApplication(
@@ -3826,29 +3842,6 @@ function Applications() {
                       onResult={setMatchResult}
                       disabled={qaMode !== false}
                     />}
-                  {/* On desktop the review itself scrolls inside two fixed-height panes. Keeping
-                      the primary action after those panes put it below the viewport before the
-                      student had taken any action. The same exact-packet gate is available here
-                      immediately, while narrower screens retain the sticky terminal bar. */}
-                  <div className="hidden items-center gap-2 lg:flex">
-                    {review.portal_supported === false && (
-                      <p className="max-w-xs text-right text-xs leading-5 text-muted">
-                        Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.
-                      </p>
-                    )}
-                    {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && (
-                      <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>
-                    )}
-                    {review.portal_supported === false
-                      ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
-                      : <Button
-                        onClick={packetEvidenceReady ? continueFromVerifiedPacket : continueFromResume}
-                        disabled={reviewPrimaryDisabled}
-                        className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-                      >
-                        {reviewPrimaryBusy ? <PendingLabel state="solving" onColor>Making...</PendingLabel> : reviewPrimaryLabel}
-                      </Button>}
-                  </div>
                 </div>
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
@@ -4018,7 +4011,7 @@ function Applications() {
               is not a flex item there at all, and justify-between with ONE item resolves to
               flex-start: the primary action slid to the left edge on a phone while the same bar on
               the questions screen sat right. Same bar, three alignments, depending on branch. */}
-          <TerminalActionBar className="justify-end sm:justify-between lg:hidden">
+          <TerminalActionBar className="justify-end sm:justify-between lg:!sticky lg:!bottom-[var(--dashboard-action-sticky-offset,2.5rem)] lg:!shadow-raised">
             {review.portal_supported === false
               ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
               : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
@@ -4026,7 +4019,7 @@ function Applications() {
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
               {review.portal_supported === false
                 ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
-                : <Button onClick={packetEvidenceReady ? continueFromVerifiedPacket : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                : <Button onClick={packetEvidenceReady ? continueFromVerifiedPacket : packetEvidenceNeedsFreshAudit ? auditPacketAgain : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
                     : reviewPrimaryLabel}
@@ -5388,7 +5381,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">{staysInsideLitos ? "Restart inside Litos" : "No live browser to reopen"}</p>
             <p className="mt-1 text-xs leading-5 text-muted">
               {staysInsideLitos
-                ? "Litos can start this company form again from the saved packet and answers. Review anything listed above, then choose Review and fill. You do not need the company site."
+                ? "Litos can start this company form again from the saved packet and answers. Open packet review, then audit the saved packet there. You do not need the company site."
                 : "This stop came from a managed run or a pre-fill gate, so Litos only has the filled preview and the blocker list here. Open the company page once, finish the check, then mark it done."}
             </p>
           </div>
@@ -5419,7 +5412,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           {/* None of these four replay or resolve anything while the claim is still on the row for
               an unverified send - submit-request would just answer the same 409 again - so they wait
               for UnverifiedSubmissionCard's yes/no to release it first. */}
-          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket}>Review and fill</Button>}
+          {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket}>Open packet review</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}

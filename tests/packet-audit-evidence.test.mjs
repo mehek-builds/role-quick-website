@@ -9,6 +9,12 @@ import {
   reconcileUnacknowledgedPacketPoll,
   revalidateAcknowledgedPacketEvidence,
 } from "../features/applications/domain/packet-evidence-session.ts";
+import {
+  exactPacketAuditRanges,
+  packetAuditIdentityMatches,
+  packetAuditResponseMatchesApplication,
+} from "../features/applications/domain/packet-audit-display.ts";
+import { PACKET_AUDIT_VERSION } from "../lib/packet-audit-version.ts";
 
 const componentUrl = new URL("../components/app/PacketAuditEvidence.tsx", import.meta.url);
 const displayDomainUrl = new URL("../features/applications/domain/packet-audit-display.ts", import.meta.url);
@@ -29,7 +35,7 @@ function packetAuditResponse(overrides = {}) {
   const auditDigest = overrides.digest ?? digest;
   return {
     packet_audit: {
-      version: "packet_audit_v1",
+      version: PACKET_AUDIT_VERSION,
       status: "passed",
       complete: true,
       degraded: false,
@@ -50,6 +56,11 @@ function packetAuditResponse(overrides = {}) {
         resumeContactEmailSha256: digest,
         applicantEmailSha256: digest,
         pdf: { objectKey: "resumes/exact.pdf", sha256: digest, sizeBytes: 42 },
+        employerDelivery: {
+          version: "employer_delivery_v1",
+          mode: "browser",
+          sha256: digest,
+        },
       },
       identities: {
         resume_email: "student@example.edu",
@@ -64,6 +75,52 @@ function packetAuditResponse(overrides = {}) {
     },
   };
 }
+
+test("a backend-shaped v2 audit binds the exact employer delivery envelope", () => {
+  const response = packetAuditResponse();
+  assert.equal(packetAuditResponseMatchesApplication(applicationId, response), true);
+  assert.equal(
+    packetAuditIdentityMatches(response.packet_audit, structuredClone(response.packet_audit)),
+    true,
+  );
+
+  for (const mutate of [
+    (candidate) => { candidate.packet_audit.version = "packet_audit_v1"; },
+    (candidate) => { candidate.packet_audit.bindings.employerDelivery.version = "employer_delivery_v0"; },
+    (candidate) => { candidate.packet_audit.bindings.employerDelivery.mode = "email"; },
+    (candidate) => { candidate.packet_audit.bindings.employerDelivery.sha256 = "not-a-digest"; },
+  ]) {
+    const candidate = structuredClone(response);
+    mutate(candidate);
+    assert.equal(packetAuditResponseMatchesApplication(applicationId, candidate), false);
+  }
+
+  const changedDelivery = structuredClone(response.packet_audit);
+  changedDelivery.bindings.employerDelivery.sha256 = otherDigest;
+  assert.equal(packetAuditIdentityMatches(response.packet_audit, changedDelivery), false);
+});
+
+test("v2 requirement ranges render while v1 and unknown versions fail closed", () => {
+  const jdText = "Build reliable systems";
+  const audit = packetAuditResponse().packet_audit;
+  audit.clauses = [{
+    text: jdText,
+    start: 0,
+    end: jdText.length,
+    verdict: "missing",
+    highlight_terms: [{
+      text: "reliable",
+      key: "reliable",
+      start: 6,
+      end: 14,
+      clauseIndex: 0,
+      tone: "missing",
+    }],
+  }];
+  assert.equal(exactPacketAuditRanges(jdText, audit)?.length, 1);
+  assert.equal(exactPacketAuditRanges(jdText, { ...audit, version: "packet_audit_v1" }), null);
+  assert.equal(exactPacketAuditRanges(jdText, { ...audit, version: "packet_audit_v99" }), null);
+});
 
 function packetEvidence(overrides = {}) {
   return {
@@ -296,7 +353,9 @@ test("unsupported or overlapping audit colors fail closed", async () => {
   const source = await readFile(componentUrl, "utf8");
   const domain = await readFile(displayDomainUrl, "utf8");
   assert.match(domain, /ranges\[index\]\.start < ranges\[index - 1\]\.end/);
-  assert.match(source, /The requirement evidence does not match this saved job description/);
+  assert.doesNotMatch(source, /role="alert"/);
+  assert.match(source, /return <div className="whitespace-pre-line">\{jdText\}<\/div>/);
+  assert.match(source, /return null/);
   assert.match(domain, /auditValue\.status !== "passed"/);
   assert.match(domain, /auditValue\.rejectedCount !== 0/);
   assert.match(domain, /isHighlightTone\(term\.tone\)/);
@@ -327,6 +386,8 @@ test("the browser binds the audit to this application and exact stored PDF", asy
   assert.match(domain, /audit\.packet_version/);
   assert.match(domain, /audit\.audit_digest/);
   assert.match(domain, /typeof pdf\.download_url === "string"/);
+  assert.match(domain, /isEmployerDeliveryBinding\(bindingsValue\.employerDelivery\)/);
+  assert.match(domain, /currentBindings\.employerDelivery\.sha256 === nextBindings\.employerDelivery\.sha256/);
 });
 
 test("the active audit owns the legend and replaces the live score and gap list", async () => {
