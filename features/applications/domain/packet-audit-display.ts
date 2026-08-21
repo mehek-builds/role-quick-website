@@ -1,4 +1,5 @@
 import type { PacketAudit, PacketAuditHighlightTerm } from "@/lib/api";
+import { PACKET_AUDIT_VERSION } from "../../../lib/packet-audit-version.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -25,6 +26,18 @@ function isHighlightTone(value: unknown): value is "covered" | "missing" | "edit
   return value === "covered" || value === "missing" || value === "edited";
 }
 
+function isEmployerDeliveryBinding(value: unknown): value is {
+  version: "employer_delivery_v1";
+  mode: "full" | "browser" | "extension";
+  sha256: string;
+} {
+  return isRecord(value)
+    && value.version === "employer_delivery_v1"
+    && (value.mode === "full" || value.mode === "browser" || value.mode === "extension")
+    && typeof value.sha256 === "string"
+    && /^[a-f0-9]{64}$/i.test(value.sha256);
+}
+
 /**
  * Runtime-validates the server audit before any ranges are flattened or rendered. API response
  * types do not protect the browser from malformed JSON, and a new or unknown tone must never be
@@ -32,7 +45,7 @@ function isHighlightTone(value: unknown): value is "covered" | "missing" | "edit
  */
 export function exactPacketAuditRanges(jdText: string, auditValue: unknown): PacketAuditHighlightTerm[] | null {
   if (!isRecord(auditValue)
-    || auditValue.version !== "packet_audit_v1"
+    || auditValue.version !== PACKET_AUDIT_VERSION
     || auditValue.status !== "passed"
     || auditValue.complete !== true
     || auditValue.degraded !== false
@@ -99,7 +112,9 @@ export function packetAuditDisplayIsExact(jdText: string, audit: PacketAudit): b
 /** Retains a browser-rendered proof only while the server reports the same immutable audit. */
 export function packetAuditIdentityMatches(currentValue: unknown, nextValue: unknown): boolean {
   if (!isRecord(currentValue) || !isRecord(nextValue)) return false;
-  if (typeof currentValue.packet_version !== "string"
+  if (currentValue.version !== PACKET_AUDIT_VERSION
+    || nextValue.version !== PACKET_AUDIT_VERSION
+    || typeof currentValue.packet_version !== "string"
     || !/^[a-f0-9]{64}$/i.test(currentValue.packet_version)
     || currentValue.packet_version !== nextValue.packet_version
     || typeof currentValue.audit_digest !== "string"
@@ -109,10 +124,15 @@ export function packetAuditIdentityMatches(currentValue: unknown, nextValue: unk
   const currentBindings = currentValue.bindings;
   const nextBindings = nextValue.bindings;
   if (!isRecord(currentBindings) || !isRecord(nextBindings)
-    || !isRecord(currentBindings.pdf) || !isRecord(nextBindings.pdf)) return false;
+    || !isRecord(currentBindings.pdf) || !isRecord(nextBindings.pdf)
+    || !isEmployerDeliveryBinding(currentBindings.employerDelivery)
+    || !isEmployerDeliveryBinding(nextBindings.employerDelivery)) return false;
   const currentPdf = currentBindings.pdf;
   const nextPdf = nextBindings.pdf;
-  return typeof currentBindings.resumeContactEmailSha256 === "string"
+  return currentBindings.employerDelivery.version === nextBindings.employerDelivery.version
+    && currentBindings.employerDelivery.mode === nextBindings.employerDelivery.mode
+    && currentBindings.employerDelivery.sha256 === nextBindings.employerDelivery.sha256
+    && typeof currentBindings.resumeContactEmailSha256 === "string"
     && /^[a-f0-9]{64}$/i.test(currentBindings.resumeContactEmailSha256)
     && currentBindings.resumeContactEmailSha256 === nextBindings.resumeContactEmailSha256
     && typeof currentBindings.applicantEmailSha256 === "string"
@@ -143,7 +163,7 @@ export function packetAuditResponseMatchesApplication(applicationId: string, res
   const bindingsValue = audit.bindings;
   if (!isRecord(bindingsValue)) return false;
   const bindingValue = bindingsValue.pdf;
-  if (!isRecord(bindingValue)) return false;
+  if (!isRecord(bindingValue) || !isEmployerDeliveryBinding(bindingsValue.employerDelivery)) return false;
   const bindings = bindingsValue;
   const binding = bindingValue;
   const identities = audit.identities;
@@ -162,7 +182,8 @@ export function packetAuditResponseMatchesApplication(applicationId: string, res
     binding.sha256,
   ];
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return hashFields.every((value) => typeof value === "string" && /^[a-f0-9]{64}$/i.test(value))
+  return audit.version === PACKET_AUDIT_VERSION
+    && hashFields.every((value) => typeof value === "string" && /^[a-f0-9]{64}$/i.test(value))
     && bindings.applicationId === applicationId
     && typeof identities.resume_email === "string"
     && emailPattern.test(identities.resume_email)

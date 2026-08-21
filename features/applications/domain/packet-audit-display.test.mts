@@ -2,13 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { exactPacketAuditRanges, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAuditIdentityMatches, packetAuditResponseMatchesApplication } from "./packet-audit-display.ts";
+import { PACKET_AUDIT_VERSION } from "../../../lib/packet-audit-version.ts";
 
 const jdText = "Build reliable APIs. Improve deployment safety.";
 const evidence = { source: "resume_spec", path: "/experience/0/bullets/0", quote: "Built reliable APIs", sha256: "a".repeat(64) };
 
 function validAudit(): Record<string, unknown> {
   return {
-    version: "packet_audit_v1",
+    version: PACKET_AUDIT_VERSION,
     status: "passed",
     complete: true,
     degraded: false,
@@ -74,6 +75,7 @@ test("rejects empty, unknown-verdict, and overlapping clauses", () => {
 
 test("retains local render proof only for the exact audit and PDF identity", () => {
   const identity = {
+    version: PACKET_AUDIT_VERSION,
     packet_version: "b".repeat(64),
     audit_digest: "c".repeat(64),
     identities: { resume_email: "me@usc.edu", applicant_email: "app@apply.litos.test" },
@@ -81,6 +83,7 @@ test("retains local render proof only for the exact audit and PDF identity", () 
       resumeContactEmailSha256: "a".repeat(64),
       applicantEmailSha256: "e".repeat(64),
       pdf: { objectKey: "resumes/exact.pdf", sha256: "d".repeat(64), sizeBytes: 42 },
+      employerDelivery: { version: "employer_delivery_v1", mode: "browser", sha256: "f".repeat(64) },
     },
   };
   assert.equal(packetAuditIdentityMatches(identity, structuredClone(identity)), true);
@@ -94,6 +97,7 @@ test("retains local render proof only for the exact audit and PDF identity", () 
     (copy: typeof identity) => { copy.bindings.pdf.objectKey = "resumes/other.pdf"; },
     (copy: typeof identity) => { copy.bindings.pdf.sha256 = "e".repeat(64); },
     (copy: typeof identity) => { copy.bindings.pdf.sizeBytes = 43; },
+    (copy: typeof identity) => { copy.bindings.employerDelivery.sha256 = "e".repeat(64); },
   ]) {
     const changed = structuredClone(identity);
     mutate(changed);
@@ -106,6 +110,7 @@ test("matches one application to an exact packet envelope without trusting respo
   const digest = "f".repeat(64);
   const response = {
     packet_audit: {
+      version: PACKET_AUDIT_VERSION,
       audit_digest: digest,
       packet_version: digest,
       bindings: {
@@ -119,6 +124,7 @@ test("matches one application to an exact packet envelope without trusting respo
         resumeContactEmailSha256: digest,
         applicantEmailSha256: digest,
         pdf: { objectKey: "resumes/exact.pdf", sha256: digest, sizeBytes: 42 },
+        employerDelivery: { version: "employer_delivery_v1", mode: "browser", sha256: digest },
       },
       identities: { resume_email: "me@usc.edu", applicant_email: "app@apply.litos.test" },
     },

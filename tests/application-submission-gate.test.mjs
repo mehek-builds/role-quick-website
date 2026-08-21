@@ -134,7 +134,13 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /JSON\.stringify\(\{ outcome \}\)/);
   assert.match(dashboard, /source: "attended_handoff"/);
   assert.match(dashboard, /Open the company page/);
-  assert.match(dashboard, /hidden items-center gap-2 lg:flex[\s\S]{0,900}Litos cannot fill in this company’s page[\s\S]{0,900}View PDF/);
+  assert.match(dashboard, /TerminalActionBar className="justify-end sm:justify-between lg:!sticky/);
+  assert.doesNotMatch(dashboard, /TerminalActionBar className="justify-end sm:justify-between lg:hidden"/);
+  assert.match(dashboard, /packetEvidenceNeedsFreshAudit \? auditPacketAgain : continueFromResume/);
+  assert.match(dashboard, /async function auditPacketAgain\(\)[\s\S]{0,180}packetEvidenceRef\.current = null;[\s\S]{0,100}setPacketEvidence\(null\);[\s\S]{0,100}await continueFromResume\(\)/);
+  assert.match(dashboard, /packetEvidenceNeedsFreshAudit[\s\S]{0,500}\? "Audit again"[\s\S]{0,160}!exactPacketPdfReady[\s\S]{0,80}\? "Loading exact PDF"/);
+  assert.match(dashboard, /Open packet review/);
+  assert.match(dashboard, /if \(options\.scrollToTop !== false\) window\.scrollTo/);
   assert.match(dashboard, /Litos will never pretend to be you/);
   assert.match(dashboard, /will not get past the puzzle that checks you are human, a code on your phone, a login/);
   assert.match(dashboard, /submission\.cover_letter && review\.cover_letter_supported !== false/);

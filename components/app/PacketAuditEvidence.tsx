@@ -8,7 +8,7 @@ export { manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAud
 
 export function AuditedJobDescription({ jdText, audit }: { jdText: string; audit: PacketAudit }) {
   if (!packetAuditDisplayIsExact(jdText, audit)) {
-    return <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">The requirement evidence does not match this saved job description.</p>;
+    return <div className="whitespace-pre-line">{jdText}</div>;
   }
   const ranges = exactPacketAuditRanges(jdText, audit) ?? [];
   const content: React.ReactNode[] = [];
@@ -29,7 +29,7 @@ export function AuditedJobDescription({ jdText, audit }: { jdText: string; audit
 
 export function PacketAuditBreakdown({ jdText, audit }: { jdText: string; audit: PacketAudit }) {
   if (!packetAuditDisplayIsExact(jdText, audit)) {
-    return <p role="alert" className="rounded-inner bg-danger-soft px-4 py-3 text-sm text-danger">The requirement evidence does not match this saved job description.</p>;
+    return null;
   }
   return (
     <section aria-labelledby="packet-audit-heading">
