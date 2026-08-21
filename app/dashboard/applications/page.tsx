@@ -35,7 +35,7 @@ import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/f
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
 import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { auditRefusalCode, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
+import { auditRefusalCode, historicalPacketAuditStaleMessage, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -348,6 +348,9 @@ function Applications() {
      answer, PDF, or JD mutation must make the proof unusable even when the row ID stays the same. */
   const [packetEvidence, setPacketEvidence] = useState<PacketEvidenceSession | null>(null);
   const packetEvidenceRef = useRef<PacketEvidenceSession | null>(null);
+  /* One compatibility refresh per exact stored stale report. Polls can replace the packet object
+     while recovery is in flight, so object identity cannot be the key. */
+  const persistedPacketAuditRecoveryRef = useRef<string | null>(null);
   const [spec, setSpec] = useState<ResumeSpec | null>(null);
   const editResumeSpec = useCallback((next: ResumeSpec) => {
     editorRevisionRef.current += 1;
@@ -677,7 +680,7 @@ function Applications() {
      The machine code decides whether this path runs, so changing applicant-facing copy cannot turn
      an unrelated 409 into a packet mutation. */
   const recoverPacketAuditReview = useCallback(async (applicationId: string, reason: unknown): Promise<boolean> => {
-    if (!packetAuditReviewRecoveryCode(reason)) return false;
+    if (!packetAuditReviewRecoveryCode(reason) && !historicalPacketAuditStaleMessage(reason)) return false;
     /* A refusal for packet A can arrive after the switcher moved to B. Treat the coded refusal as
        handled, but do not clear B's evidence, route, questions, or banners. This guard must precede
        every write below, including the synchronous refs. */
@@ -818,6 +821,7 @@ function Applications() {
     setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
     setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
     const status = packet.spec._review?.status;
+    const historicalPacketAuditStale = historicalPacketAuditStaleMessage(packet.spec._review);
     /* A different packet, so any "sending" flag belongs to the one we are leaving. Without this,
        switching to a packet whose stored status is `filling` captioned it "You told Litos to send
        this" for an application the student never authorised. */
@@ -827,7 +831,7 @@ function Applications() {
     /* A ready packet still has one mandatory stop before the employer send: the posting, exact
        resume, evidence colours and gap list. Routing it straight to the portal screen is how the
        Cresta packet reached Send it without that audit. */
-    moveToScreen(status === "ready_for_final_approval" ? "review" : screenForStatus(status, "review"));
+    moveToScreen(historicalPacketAuditStale || status === "ready_for_final_approval" ? "review" : screenForStatus(status, "review"));
     /* Seeded from the board row so the portal screen has something to draw before the first poll
        answers, and marked `partial` because that is exactly what it is. The cover letter is carried
        across too: /resume/history already sends `spec._cover_letter` on every row, and leaving it
@@ -1400,7 +1404,8 @@ function Applications() {
     requestedApplicationIntent,
     resolvedActionableRequestId,
   );
-  const review = selected?.spec._review;
+  const storedReview = selected?.spec._review;
+  const review = storedReview ? reviewWithLists(storedReview) : undefined;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const canonicalEnvelopePacket = useMemo(() => (canonicalSelected
@@ -1437,6 +1442,17 @@ function Applications() {
     () => sendableLinkedPacketFromCanonicalEnvelope(canonicalEnvelopePacket),
     [canonicalEnvelopePacket],
   );
+  /* Old deployments stored PACKET_AUDIT_STALE as an attention item. Opening one of those rows is
+     itself enough to begin the safe compatibility path: clear any old browser proof, request a
+     fresh audit, and remain on review with acknowledgement false. No click is replayed and no send
+     endpoint is called. reviewWithLists already removed the obsolete sentence for this render. */
+  useEffect(() => {
+    if (!selected || !storedReview || !historicalPacketAuditStaleMessage(storedReview)) return;
+    const token = `${selected.id}:${storedReview.updated_at}:${storedReview.attention_reason ?? ""}`;
+    if (persistedPacketAuditRecoveryRef.current === token) return;
+    persistedPacketAuditRecoveryRef.current = token;
+    void recoverPacketAuditReview(selected.id, storedReview);
+  }, [recoverPacketAuditReview, selected, storedReview]);
   useEffect(() => {
     const applicationId = canonicalSelected?.id;
     queueMicrotask(() => setCanonicalCoverLetterJd(""));
@@ -3105,6 +3121,7 @@ function Applications() {
       moveToScreen(screenForStatus(result.review.status, "portal"));
     } catch (reason) {
       if (selectedIdRef.current !== requestedId) return;
+      if (await recoverPacketAuditReview(requestedId, reason)) return;
       setSecurityCodeError(reason instanceof Error ? reason.message : "Could not send the security code.");
     } finally {
       securityCodeInFlight.current = null;
@@ -3300,7 +3317,10 @@ function Applications() {
     }
   }
 
-  if (error && packets === null) {
+  const visiblePageError = historicalPacketAuditStaleMessage(error) ? null : error;
+  const visiblePollError = historicalPacketAuditStaleMessage(pollError) ? null : pollError;
+
+  if (visiblePageError && packets === null) {
     return (
       <EmptyState
         visual="error"
@@ -3389,7 +3409,7 @@ function Applications() {
           a layout change to the whole screen. */}
       {/* One banner, two sources, and `error` wins. A refusal to something the student pressed
           outranks news about the connection, and the poll can no longer overwrite either. */}
-      {(error ?? pollError) && <ErrorNote message={error ?? pollError!} />}
+      {(visiblePageError ?? visiblePollError) && <ErrorNote message={visiblePageError ?? visiblePollError!} />}
       {/* Derived from the SPEC BEING EDITED, not from the stored packet, so it clears the moment
           the student fixes the education line rather than sitting there until she saves. */}
       {reviewOpen && educationDriftBanner && (

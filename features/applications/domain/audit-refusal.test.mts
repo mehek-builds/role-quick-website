@@ -1,6 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { auditRefusalCode, packetAuditReviewRecoveryCode } from "./audit-refusal.ts";
+import {
+  auditRefusalCode,
+  historicalPacketAuditStaleMessage,
+  packetAuditReviewRecoveryCode,
+  packetAuditReviewRecoveryRequired,
+  withoutHistoricalPacketAuditStaleAttention,
+} from "./audit-refusal.ts";
 
 /* The autopilot jammed on the first un-sendable row: NextMatchCard fires a match once, so a refused
    send left the pill reading "Sending" forever and the same packet still chosen as next. One row
@@ -64,4 +70,37 @@ test("a non-error rejection does not throw", () => {
   assert.equal(auditRefusalCode(undefined), null);
   assert.equal(auditRefusalCode("packet_stale"), null);
   assert.equal(auditRefusalCode({ data: "not an object" }), null);
+});
+
+test("the exact historical stale report enters review recovery without becoming a user task", () => {
+  const forbidden = "This application changed after you approved the exact packet Litos prepared, so it was not sent. Open it to review the current one and send from there.";
+  const review = {
+    attention_reason: forbidden,
+    attention_acknowledgements: { old: true },
+  };
+
+  assert.equal(historicalPacketAuditStaleMessage(review), true);
+  assert.equal(packetAuditReviewRecoveryRequired(review), true);
+  assert.deepEqual(withoutHistoricalPacketAuditStaleAttention(review), {
+    attention_reason: undefined,
+    attention_acknowledgements: undefined,
+  });
+});
+
+test("historical compatibility is exact and preserves unrelated employer blockers", () => {
+  const forbidden = "This application changed after you approved the exact packet Litos prepared, so it was not sent.";
+  const employerBlocker = "\"Phone number\" is required and is still empty";
+  const combined = {
+    attention_reason: `${forbidden}\n${employerBlocker}`,
+    attention_acknowledgements: { phone: true },
+  };
+
+  assert.deepEqual(withoutHistoricalPacketAuditStaleAttention(combined), {
+    attention_reason: employerBlocker,
+    attention_acknowledgements: { phone: true },
+  });
+  assert.equal(historicalPacketAuditStaleMessage("The packet changed after you approved it."), false);
+  assert.equal(historicalPacketAuditStaleMessage(new FakeApiError(forbidden, { code: "SENSITIVE_QUESTION" })), false);
+  assert.equal(packetAuditReviewRecoveryRequired(new FakeApiError(forbidden, { code: "SENSITIVE_QUESTION" })), false);
+  assert.equal(packetAuditReviewRecoveryRequired(new FakeApiError("same words", { code: "SENSITIVE_QUESTION" })), false);
 });

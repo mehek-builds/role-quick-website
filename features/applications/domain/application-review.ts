@@ -1,6 +1,7 @@
 // Extension included so the node test runner can load this module directly, the same convention
 // daily-matches.ts uses for application-filter.ts. See allowImportingTsExtensions in tsconfig.json.
 import { normalizeTerm } from "./requirement-terms.ts";
+import { withoutHistoricalPacketAuditStaleAttention } from "./audit-refusal.ts";
 /* Type only, so it is erased before node ever sees it and the direct load above still works. Same
    arrangement as submission-checklist.ts, which is loaded by node:test the same way. */
 import type { ApplicationReview } from "@/lib/api";
@@ -299,18 +300,20 @@ export function screenForStatus(status: ReviewStatus | string | undefined, fallb
  * keeps its object identity and does not re-render the screen it is confirming.
  */
 export function reviewWithLists(review: ApplicationReview): ApplicationReview {
+  const safeReview = withoutHistoricalPacketAuditStaleAttention(review);
   if (
-    Array.isArray(review.questions)
+    safeReview === review
+    && Array.isArray(review.questions)
     && Array.isArray(review.filled_fields)
     && Array.isArray(review.skipped_reasons)
     && Array.isArray(review.edited_terms)
   ) return review;
   return {
-    ...review,
-    questions: Array.isArray(review.questions) ? review.questions : [],
-    filled_fields: Array.isArray(review.filled_fields) ? review.filled_fields : [],
-    skipped_reasons: Array.isArray(review.skipped_reasons) ? review.skipped_reasons : [],
-    edited_terms: Array.isArray(review.edited_terms) ? review.edited_terms : [],
+    ...safeReview,
+    questions: Array.isArray(safeReview.questions) ? safeReview.questions : [],
+    filled_fields: Array.isArray(safeReview.filled_fields) ? safeReview.filled_fields : [],
+    skipped_reasons: Array.isArray(safeReview.skipped_reasons) ? safeReview.skipped_reasons : [],
+    edited_terms: Array.isArray(safeReview.edited_terms) ? safeReview.edited_terms : [],
   };
 }
 

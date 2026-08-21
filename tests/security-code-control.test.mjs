@@ -114,3 +114,19 @@ test("the endpoint it posts to is the only one that may move this state", () => 
   assert.match(handler, /method: "POST"/);
   assert.match(handler, /JSON\.stringify\(\{ code \}\)/);
 });
+
+test("a stale exact packet leaves security-code mode without rendering the server sentence", () => {
+  const handler = source.slice(
+    source.indexOf("async function submitSecurityCode"),
+    source.indexOf("async function retryPreparation"),
+  );
+  const catchStart = handler.indexOf("} catch (reason) {");
+  const catchBody = handler.slice(catchStart, handler.indexOf("} finally {", catchStart));
+  assert.ok(catchStart >= 0, "the security-code request must retain an explicit refusal path");
+  assert.match(catchBody, /selectedIdRef\.current !== requestedId/);
+  assert.match(catchBody, /await recoverPacketAuditReview\(requestedId, reason\)/);
+  assert.ok(
+    catchBody.indexOf("recoverPacketAuditReview(requestedId, reason)") < catchBody.indexOf("setSecurityCodeError("),
+    "packet recovery must consume the coded refusal before applicant-facing error state is written",
+  );
+});

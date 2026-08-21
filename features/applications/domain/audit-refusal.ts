@@ -30,6 +30,71 @@ const REVIEW_RECOVERY_REQUIRED = new Set([
   "PACKET_AUDIT_ACK_REQUIRED",
 ]);
 
+/* Historical rows predate structured refusal codes and persisted one of these values directly in
+ * attention_reason. They are not applicant tasks. They are an invalidation signal that must clear
+ * the old browser proof and open a new, unacknowledged packet review.
+ *
+ * Exact equality is deliberate. The ordinary refusal path remains code-only, and text that merely
+ * resembles this copy is still treated as a real employer-form blocker. This compatibility list is
+ * only for the finite wire values already written to stored applications. */
+const HISTORICAL_PACKET_AUDIT_STALE_MESSAGES = new Set([
+  "PACKET_AUDIT_STALE",
+  "packet_stale",
+  "This application changed after you approved the exact packet Litos prepared, so it was not sent.",
+  "This application changed after you approved the exact packet Litos prepared, so it was not sent. Open it to review the current one and send from there.",
+]);
+
+function normalizedHistoricalMessage(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim();
+}
+
+function historicalMessageValue(value: unknown): string | null {
+  if (typeof value === "string") return value;
+  if (typeof value !== "object" || value === null) return null;
+  const data = (value as { data?: unknown }).data;
+  if (typeof data === "object" && data !== null && typeof (data as { code?: unknown }).code === "string") {
+    return null;
+  }
+  const attentionReason = (value as { attention_reason?: unknown }).attention_reason;
+  if (typeof attentionReason === "string") return attentionReason;
+  const message = (value as { message?: unknown }).message;
+  return typeof message === "string" ? message : null;
+}
+
+function isHistoricalPacketAuditStaleLine(value: string): boolean {
+  return HISTORICAL_PACKET_AUDIT_STALE_MESSAGES.has(normalizedHistoricalMessage(value));
+}
+
+/** True only for a historical packet-stale value that was persisted or thrown without a code. */
+export function historicalPacketAuditStaleMessage(value: unknown): boolean {
+  const message = historicalMessageValue(value);
+  return message !== null && message.split(/\r?\n/).some(isHistoricalPacketAuditStaleLine);
+}
+
+/**
+ * Removes historical packet invalidation copy before any attention-list renderer sees it.
+ *
+ * An unrelated line in the same stored report is preserved. A report containing only the legacy
+ * line loses its old acknowledgements too, because those ticks were keyed to evidence that no
+ * longer exists. The server audit itself is not altered here. Recovery replaces its browser proof
+ * with a fresh unacknowledged audit before another send can become available.
+ */
+export function withoutHistoricalPacketAuditStaleAttention<
+  T extends { attention_reason?: string; attention_acknowledgements?: unknown },
+>(review: T): T {
+  const reason = review.attention_reason;
+  if (!reason) return review;
+  const lines = reason.split(/\r?\n/);
+  const retained = lines.filter((line) => !isHistoricalPacketAuditStaleLine(line));
+  if (retained.length === lines.length) return review;
+  const attentionReason = retained.map((line) => line.trim()).filter(Boolean).join("\n");
+  return {
+    ...review,
+    attention_reason: attentionReason || undefined,
+    ...(attentionReason ? {} : { attention_acknowledgements: undefined }),
+  };
+}
+
 /**
  * The audit code on a failed send, or null when this is not an audit refusal.
  *
@@ -49,4 +114,9 @@ export function auditRefusalCode(reason: unknown): string | null {
 export function packetAuditReviewRecoveryCode(reason: unknown): string | null {
   const code = auditRefusalCode(reason);
   return code && REVIEW_RECOVERY_REQUIRED.has(code) ? code : null;
+}
+
+/** Structured current refusals and the finite historical rows both need a new manual review. */
+export function packetAuditReviewRecoveryRequired(reason: unknown): boolean {
+  return packetAuditReviewRecoveryCode(reason) !== null || historicalPacketAuditStaleMessage(reason);
 }

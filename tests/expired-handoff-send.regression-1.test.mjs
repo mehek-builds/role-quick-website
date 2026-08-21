@@ -86,7 +86,9 @@ test("a refusal to a press cannot be erased by the poll that follows it", async 
 
   // Two channels, and the one the student caused wins the render.
   assert.match(dashboard, /const \[pollError, setPollError\] = useState<string \| null>\(null\)/);
-  assert.match(dashboard, /\(error \?\? pollError\) && <ErrorNote message=\{error \?\? pollError!\} \/>/);
+  assert.match(dashboard, /const visiblePageError = historicalPacketAuditStaleMessage\(error\) \? null : error;/);
+  assert.match(dashboard, /const visiblePollError = historicalPacketAuditStaleMessage\(pollError\) \? null : pollError;/);
+  assert.match(dashboard, /\(visiblePageError \?\? visiblePollError\) && <ErrorNote message=\{visiblePageError \?\? visiblePollError!\} \/>/);
 });
 
 test("the server's own sentence reaches the screen, next to the button that caused it", async () => {
