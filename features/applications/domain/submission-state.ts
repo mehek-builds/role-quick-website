@@ -69,6 +69,56 @@ export type SubmissionSnapshot = {
   partial?: boolean;
 };
 
+/** True only when an incoming poll snapshot is provably older than the one already installed. */
+export function submissionSnapshotIsOlder<T extends SubmissionSnapshot>(
+  current: T | null | undefined,
+  incoming: T,
+): boolean {
+  if (!current || current.application_id !== incoming.application_id || current.partial) return false;
+  if ((current.review as { status?: string }).status === "submitted"
+    && (incoming.review as { status?: string }).status !== "submitted") return true;
+  const currentTime = Date.parse(current.review.updated_at);
+  const incomingTime = Date.parse(incoming.review.updated_at);
+  return Number.isFinite(currentTime) && Number.isFinite(incomingTime) && incomingTime < currentTime;
+}
+
+/** Packet-visible review fields that can change while updated_at stays fixed. */
+export function submissionReviewPacketIdentity(review: unknown): string {
+  if (!review || typeof review !== "object") return "";
+  const value = review as { questions?: unknown; packet_audit?: unknown };
+  return JSON.stringify([value.questions ?? null, value.packet_audit ?? null]);
+}
+
+/**
+ * Reconciles the two reads in one submission poll.
+ *
+ * The packet-audit POST runs after the submission GET and may normalize and persist questions.
+ * Its packet identity and question list therefore outrank the earlier GET. When a rolling backend
+ * does not yet return questions, retain the already installed client list instead of restoring the
+ * older GET payload.
+ */
+export function submissionAfterPacketAudit<
+  Q,
+  A,
+  T extends SubmissionSnapshot & { review: SubmissionSnapshot["review"] & { questions: Q[]; packet_audit?: A } },
+>(
+  incoming: T,
+  current: T | null | undefined,
+  audit: { packet_audit: A; questions?: Q[] },
+): T {
+  const questions = Array.isArray(audit.questions)
+    ? audit.questions
+    : current?.review.questions ?? incoming.review.questions;
+  return {
+    ...incoming,
+    review: {
+      ...incoming.review,
+      questions,
+      packet_audit: audit.packet_audit,
+    },
+  };
+}
+
 export type SubmissionCoverLetterField<T extends CoverLetterLike = CoverLetterLike> =
   | { included: false }
   | { included: true; value: T | null };
@@ -217,6 +267,7 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   if (!current) return incoming;
   // A snapshot for a different packet is not a version of this one, it is the wrong application.
   if (current.application_id !== incoming.application_id) return incoming;
+  if (submissionSnapshotIsOlder(current, incoming)) return current;
   const currentCoverLetter = submissionCoverLetterField(current);
   const incomingCoverLetter = submissionCoverLetterField(incoming);
   const nextIncoming = !incomingCoverLetter.included && currentCoverLetter.included
@@ -226,6 +277,7 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   if (current.partial) return nextIncoming;
   if (current.review.updated_at !== nextIncoming.review.updated_at) return nextIncoming;
   if (coverLetterIdentity(current.cover_letter) !== coverLetterIdentity(nextIncoming.cover_letter)) return nextIncoming;
+  if (submissionReviewPacketIdentity(current.review) !== submissionReviewPacketIdentity(nextIncoming.review)) return nextIncoming;
   /* `documents` lives outside `review` and is versioned by nothing, exactly like `cover_letter`
      above, so it gets its own comparison for the reason the header states. Left out, a poll whose
      only news was a newly attached transcript matched on review.updated_at (which nothing advances
@@ -240,6 +292,27 @@ export function nextSubmissionState<T extends SubmissionSnapshot>(current: T | n
   if ((current.handoff_url ?? null) !== (nextIncoming.handoff_url ?? null)) return nextIncoming;
   if ((current.configured ?? null) !== (nextIncoming.configured ?? null)) return nextIncoming;
   return current;
+}
+
+/**
+ * Publishes a server envelope to the synchronous ref before React applies its queued state write.
+ *
+ * A direct mutation response is causally authoritative: it is the answer to the applicant's own
+ * submit or approve request. A poll response is reconciled against the ref because another request
+ * may have completed while that poll was waiting on a later packet-audit read. Returning the exact
+ * object written to the ref keeps the subsequent submission, packet, question, and route writes on
+ * one canonical envelope.
+ */
+export function publishSubmissionEnvelope<T extends SubmissionSnapshot>(
+  ref: { current: T | null },
+  incoming: T,
+  authority: "direct" | "poll",
+): T {
+  const canonical = authority === "direct"
+    ? incoming
+    : nextSubmissionState(ref.current, incoming);
+  ref.current = canonical;
+  return canonical;
 }
 
 /**

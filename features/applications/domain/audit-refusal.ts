@@ -25,6 +25,11 @@ const AUTOPILOT_CANNOT_CLEAR = new Set([
   "PACKET_RESUME_EXPIRED",
 ]);
 
+const REVIEW_RECOVERY_REQUIRED = new Set([
+  "PACKET_AUDIT_STALE",
+  "PACKET_AUDIT_ACK_REQUIRED",
+]);
+
 /**
  * The audit code on a failed send, or null when this is not an audit refusal.
  *
@@ -38,4 +43,10 @@ export function auditRefusalCode(reason: unknown): string | null {
   const code = (data as { code?: unknown }).code;
   if (typeof code !== "string") return null;
   return AUTOPILOT_CANNOT_CLEAR.has(code) ? code : null;
+}
+
+/** A refusal the dashboard can safely turn into a fresh, unacknowledged review packet. */
+export function packetAuditReviewRecoveryCode(reason: unknown): string | null {
+  const code = auditRefusalCode(reason);
+  return code && REVIEW_RECOVERY_REQUIRED.has(code) ? code : null;
 }

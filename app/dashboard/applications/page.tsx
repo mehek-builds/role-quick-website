@@ -33,9 +33,9 @@ import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type Review
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
 import { duplicateBadge, duplicatePostingMarks, duplicatePostingNote } from "@/features/applications";
 import { isHttpsJobUrl, missingApplicationFields, type ApplicationDraftField } from "@/features/applications";
-import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, submissionCoverLetterField } from "@/features/applications";
+import { COVER_LETTER_WAIT_MS, HANDOFF_CLOCK_TICK_MS, coverLetterBlocks, coverLetterGate, documentsFromSpecMarks, handoffWindowExpired, nextCoverLetterValue, nextSubmissionState, publishSubmissionEnvelope, reconcilePacketEvidenceWithSubmission, submissionAfterPacketAudit, submissionCoverLetterField, submissionReviewPacketIdentity, submissionSnapshotIsOlder } from "@/features/applications";
 import { MatchScore, MatchGaps } from "@/components/app/MatchScore";
-import { auditRefusalCode, nextMatchScoreRequest } from "@/features/applications";
+import { auditRefusalCode, nextMatchScoreRequest, packetAuditReviewRecoveryCode } from "@/features/applications";
 import { getBaseResume } from "@/lib/base-resume";
 import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
@@ -89,6 +89,10 @@ function acknowledgedEvidenceRevalidationMayCommit(
   return submissionPollMayReplaceQuestions(currentScreen) && currentEvidence === requestedEvidence;
 }
 
+function packetAuditRecoveryMayCommit(currentApplicationId: string | null, requestedApplicationId: string): boolean {
+  return currentApplicationId === requestedApplicationId;
+}
+
 /* `partial` marks the snapshot selectPacket seeds from a board row, which carries `review` and
    nothing else. nextSubmissionState reads it so the first real server answer always replaces the
    seed. See features/applications/domain/submission-state.ts for what that fixes. */
@@ -136,7 +140,8 @@ function sameCoverLetter(left: CoverLetter | undefined, right: CoverLetter): boo
 }
 
 function packetWithSubmission(packet: GeneratedResume, submission: SubmissionResponse): GeneratedResume {
-  const reviewUnchanged = packet.spec._review?.updated_at === submission.review.updated_at;
+  const reviewUnchanged = packet.spec._review?.updated_at === submission.review.updated_at
+    && submissionReviewPacketIdentity(packet.spec._review) === submissionReviewPacketIdentity(submission.review);
   const coverLetterField = submissionCoverLetterField(submission);
   const nextCoverLetter = nextCoverLetterValue(packet.spec._cover_letter, submission);
   const coverLetterUnchanged = nextCoverLetter === undefined
@@ -154,6 +159,13 @@ function packetWithSubmission(packet: GeneratedResume, submission: SubmissionRes
       _cover_letter: nextCoverLetter,
     },
   };
+}
+
+/** A mutation response is causally newer even when a backend keeps review.updated_at unchanged. */
+function packetWithDirectSubmission(packet: GeneratedResume, submission: SubmissionResponse): GeneratedResume {
+  const hydrated = packetWithSubmission(packet, submission);
+  if (hydrated.spec._review === submission.review) return hydrated;
+  return { ...hydrated, spec: { ...hydrated.spec, _review: submission.review } };
 }
 
 type ProfileIdentity = {
@@ -659,6 +671,68 @@ function Applications() {
     });
   }, []);
 
+  /* A stale packet refusal is a route transition, not a red failure banner. The server is still
+     fail-closed: this takes a new audit, clears the old acknowledgement, and sends the applicant
+     back to the exact packet review. It never acknowledges that audit and never retries the send.
+     The machine code decides whether this path runs, so changing applicant-facing copy cannot turn
+     an unrelated 409 into a packet mutation. */
+  const recoverPacketAuditReview = useCallback(async (applicationId: string, reason: unknown): Promise<boolean> => {
+    if (!packetAuditReviewRecoveryCode(reason)) return false;
+    /* A refusal for packet A can arrive after the switcher moved to B. Treat the coded refusal as
+       handled, but do not clear B's evidence, route, questions, or banners. This guard must precede
+       every write below, including the synchronous refs. */
+    if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+    packetEvidenceRef.current = null;
+    setPacketEvidence(null);
+    packetRevalidationRefusal.current = null;
+    setError(null);
+    setPollError(null);
+    setSendRefusal(null);
+    moveToScreen("review");
+    setNotice("Litos is refreshing the exact packet for review.");
+    try {
+      const audit = await api<PacketAuditResponse>(`/applications/${applicationId}/packet-audit`, { method: "POST" });
+      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+      const raw = await api<SubmissionResponse>(`/applications/${applicationId}/submission`);
+      if (!packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)) return true;
+      const server = { ...raw, review: reviewWithLists(raw.review) };
+      const canonical = publishSubmissionEnvelope(
+        submissionRef,
+        submissionAfterPacketAudit(server, submissionRef.current, audit),
+        "direct",
+      );
+      const auditedQuestions = canonical.review.questions;
+      const freshEvidence = spec
+        ? {
+          applicationId,
+          response: audit,
+          specJson: JSON.stringify(spec),
+          questionsSnapshot: packetQuestionsSnapshot(auditedQuestions),
+          pdfVerified: false,
+          acknowledged: false,
+          serverRevalidatedAt: null,
+        }
+        : null;
+      packetEvidenceRef.current = freshEvidence;
+      setPacketEvidence(freshEvidence);
+      setQuestions(auditedQuestions);
+      setSubmission(canonical);
+      setPackets((current) => current?.map((packet) => {
+        if (packet.id !== applicationId) return packet;
+        return { ...packetWithDirectSubmission(packet, canonical), download_url: audit.pdf.download_url };
+      }) ?? current);
+      setNotice("The current exact packet is ready. Review its PDF, then continue.");
+    } catch {
+      if (selectedIdRef.current !== applicationId) return true;
+      /* The recovery itself can lose another optimistic race. Keep the gate closed and leave one
+         neutral route to run a fresh audit, without pinning the sentence the user cannot act on. */
+      packetEvidenceRef.current = null;
+      setPacketEvidence(null);
+      setNotice("This application is paused for a fresh exact-packet review.");
+    }
+    return true;
+  }, [moveToScreen, spec]);
+
   // Lifted out of MatchScore so the gap list and BOTH panes' highlighting read one /jd-match
   // result. The JD pane used to highlight against resumeTerms, every content word anywhere in the
   // resume, which lit up "backed", "services" and "deployed" in the same blue as "PostgreSQL" and
@@ -799,20 +873,17 @@ function Applications() {
       if (
         selectedIdRef.current !== requestedId
         || !acknowledgedEvidenceRevalidationMayCommit(screenRef.current, packetEvidenceRef.current, currentEvidence)
-      ) return;
-      if (!refreshed) {
-        packetEvidenceRef.current = null;
-        setPacketEvidence(null);
-      } else {
-        packetEvidenceRef.current = refreshed;
-        setPacketEvidence(refreshed);
-      }
-      packetRevalidationRefusal.current = null;
+      ) return { kind: "aborted" as const };
+      /* The poll owns one commit after both of its reads finish. Returning the audit keeps the
+         question set, packet evidence and submission envelope on the same server snapshot instead
+         of committing evidence here and then letting the caller install its older GET payload. */
+      return { kind: "current" as const, audit: currentAudit, evidence: refreshed };
     } catch (reason) {
       if (
         selectedIdRef.current !== requestedId
         || !acknowledgedEvidenceRevalidationMayCommit(screenRef.current, packetEvidenceRef.current, currentEvidence)
-      ) return;
+      ) return { kind: "aborted" as const };
+      if (await recoverPacketAuditReview(requestedId, reason)) return { kind: "aborted" as const };
       packetEvidenceRef.current = null;
       setPacketEvidence(null);
       /* A server sentence, not a transient: see packetRevalidationRefusal. Two bounds, both
@@ -826,8 +897,9 @@ function Applications() {
       if (reason instanceof ApiError && reason.status === 409 && selectedIdRef.current === requestedId) {
         packetRevalidationRefusal.current = { applicationId: requestedId, message: reason.message };
       }
+      return { kind: "refused" as const };
     }
-  }, []);
+  }, [recoverPacketAuditReview]);
 
   /* The answer is put through reviewWithLists on arrival, not only on its way into state through
      setSubmission. Two lines in here read `result.review.questions` directly rather than through
@@ -839,7 +911,7 @@ function Applications() {
     if (!selectedId || qaMode) return;
     const requestedId = selectedId;
     const raw = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
-    const result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
+    let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
 
     // A poll for packet A can land after the user has switched to packet B: the fetch closes over
     // the id it asked for, but the poll effect's cleanup cannot reach inside an in-flight request.
@@ -872,7 +944,25 @@ function Applications() {
       || result.review.status === "submitting"
       || result.review.status === "submission_claimed";
     if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged && packetAuditStillGuardsSend) {
-      await revalidateAcknowledgedEvidence(requestedId, currentEvidence);
+      const revalidation = await revalidateAcknowledgedEvidence(requestedId, currentEvidence);
+      if (revalidation.kind === "aborted") return;
+      if (revalidation.kind === "current") {
+        /* POST /packet-audit is the later, mutating read. It normalizes and persists the exact
+           questions its audit hashes, so its payload outranks the GET that started this poll. On a
+           rolling deploy where questions is absent, retain the already acknowledged client set and
+           never restore the older GET list. */
+        const base = submissionSnapshotIsOlder(submissionRef.current, result)
+          ? submissionRef.current!
+          : result;
+        result = submissionAfterPacketAudit(base, submissionRef.current, revalidation.audit);
+        if (
+          selectedIdRef.current !== requestedId
+          || !acknowledgedEvidenceRevalidationMayCommit(screenRef.current, packetEvidenceRef.current, currentEvidence)
+        ) return;
+        packetEvidenceRef.current = revalidation.evidence;
+        setPacketEvidence(revalidation.evidence);
+        packetRevalidationRefusal.current = null;
+      }
     } else {
       setPacketEvidence((current) => reconcileUnacknowledgedPacketPoll(current, requestedId, result.review.packet_audit));
       if (!packetAuditStillGuardsSend) {
@@ -881,6 +971,11 @@ function Applications() {
         setNotice(null);
       }
     }
+    /* The GET began before the audit await. A run response or a newer poll may have installed a
+       later server revision while this one was waiting. Never roll status, questions or packet
+       state backward from that provably older snapshot. */
+    if (submissionSnapshotIsOlder(submissionRef.current, result)) return;
+    result = publishSubmissionEnvelope(submissionRef, result, "poll");
     const incomingCoverLetter = submissionCoverLetterField(result);
     if (incomingCoverLetter.included) {
       setCoverLetterBody(incomingCoverLetter.value?.body ?? "");
@@ -1610,7 +1705,10 @@ function Applications() {
          * Keyed on `code`, not on the message: the sentence is copy and will be reworded, and the
          * previous version of this branch is the reason a raw `packet_stale` was on screen at all. */
         const code = auditRefusalCode(reason);
-        if (code) setUnsendable((current) => new Set(current).add(id));
+        if (code) {
+          setUnsendable((current) => new Set(current).add(id));
+          return;
+        }
         /* Stays in the page banner, deliberately, and is NOT a composer refusal. Nobody pressed a
            composer button: this is the countdown on NextMatchCard reaching zero, or that card's own
            Send. Routing it into the composer would put an answer about the autopilot next to a
@@ -2552,7 +2650,9 @@ function Applications() {
     } catch (reason) {
       if (selectedIdRef.current !== applicationId) return;
       setPacketEvidence(null);
-      setError(reason instanceof Error ? reason.message : "Litos could not audit this exact packet.");
+      if (!(await recoverPacketAuditReview(applicationId, reason))) {
+        setError(reason instanceof Error ? reason.message : "Litos could not audit this exact packet.");
+      }
     } finally {
       setPacketAuditBusy(false);
     }
@@ -2595,7 +2695,9 @@ function Applications() {
       }
       await prepareApplication(questions);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Litos could not record this exact packet review.");
+      if (!(await recoverPacketAuditReview(applicationId, reason))) {
+        setError(reason instanceof Error ? reason.message : "Litos could not record this exact packet review.");
+      }
     } finally {
       if (packetAuditInFlight.current === applicationId) packetAuditInFlight.current = null;
       setPacketAuditBusy(false);
@@ -2644,19 +2746,32 @@ function Applications() {
           body: JSON.stringify({ questions: finalQuestions, ...(options.restart ? { restart: true } : {}) }),
         });
         captureCompletedSubmission(result, options.restart ? "restart" : "review");
-        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithSubmission(packet, result) : packet) ?? current);
-        if (selectedIdRef.current !== applicationId) return;
-        const incomingCoverLetter = submissionCoverLetterField(result);
+        if (selectedIdRef.current !== applicationId) {
+          setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
+          return;
+        }
+        const published = publishSubmissionEnvelope(submissionRef, result, "direct");
+        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, published) : packet) ?? current);
+        const nextEvidence = reconcilePacketEvidenceWithSubmission(
+          packetEvidenceRef.current,
+          applicationId,
+          published.review.questions,
+          published.review.packet_audit,
+        );
+        packetEvidenceRef.current = nextEvidence;
+        setPacketEvidence(nextEvidence);
+        setQuestions(published.review.questions);
+        const incomingCoverLetter = submissionCoverLetterField(published);
         if (incomingCoverLetter.included) {
           setCoverLetterBody(incomingCoverLetter.value?.body ?? "");
           if (!incomingCoverLetter.value) setCoverLetterDownloadUrl(null);
         }
-        setSubmission(result);
+        setSubmission(published);
         // This response is the END of the run, not an acknowledgement of its start, and it is
         // routinely terminal ("failed", "needs_attention", "ready_for_final_approval"). It used to
         // be installed into state and then ignored for routing, which left the progress screen
         // spinning over a run that was already over.
-        moveToScreen(screenForStatus(result.review.status, "submitting"));
+        moveToScreen(screenForStatus(published.review.status, "submitting"));
       } else {
         await new Promise((resolve) => setTimeout(resolve, 650));
         const now = new Date().toISOString();
@@ -2665,6 +2780,7 @@ function Applications() {
         return;
       }
     } catch (reason) {
+      if (await recoverPacketAuditReview(applicationId, reason)) return;
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
          goes back there and lands beside the control, not on the review screen behind a banner. */
       moveToScreen(options.restart ? "portal" : "review");
@@ -2678,6 +2794,7 @@ function Applications() {
   async function completeHandoff(outcome: "cleared" | "submitted" = "cleared") {
     if (!selected || !submission) return;
     if (submission.application_id !== selected.id) return;
+    const requestedId = selected.id;
     setError(null);
     try {
       const result = qaMode
@@ -2698,14 +2815,31 @@ function Applications() {
             },
           }
           : { ...submission, review: { ...submission.review, status: "ready_for_final_approval" as const, attention_reason: undefined } }
-        : await api<SubmissionResponse>(`/applications/${selected.id}/submission/handoff-complete`, {
+        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/handoff-complete`, {
           method: "POST",
           body: JSON.stringify({ outcome }),
         });
-      setSubmission(result);
-      moveToScreen(result.review.status === "submitted" ? "submitted" : "portal");
+      if (selectedIdRef.current !== requestedId) {
+        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
+        return;
+      }
+      const published = publishSubmissionEnvelope(submissionRef, result, "direct");
+      const nextEvidence = reconcilePacketEvidenceWithSubmission(
+        packetEvidenceRef.current,
+        requestedId,
+        published.review.questions,
+        published.review.packet_audit,
+      );
+      packetEvidenceRef.current = nextEvidence;
+      setPacketEvidence(nextEvidence);
+      setQuestions(published.review.questions);
+      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, published) : packet) ?? current);
+      setSubmission(published);
+      moveToScreen(published.review.status === "submitted" ? "submitted" : "portal");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not tell whether it went through.");
+      if (!(await recoverPacketAuditReview(requestedId, reason))) {
+        setError(reason instanceof Error ? reason.message : "We could not tell whether it went through.");
+      }
     }
   }
 
@@ -2727,6 +2861,7 @@ function Applications() {
   async function recordSelfSubmitted() {
     if (!selected || !submission) return;
     if (submission.application_id !== selected.id) return;
+    const requestedId = selected.id;
     setError(null);
     try {
       const result = qaMode
@@ -2745,11 +2880,28 @@ function Applications() {
             },
           },
         }
-        : await api<SubmissionResponse>(`/applications/${selected.id}/submission/self-submitted`, { method: "POST" });
-      setSubmission(result);
-      moveToScreen(result.review.status === "submitted" ? "submitted" : "portal");
+        : await api<SubmissionResponse>(`/applications/${requestedId}/submission/self-submitted`, { method: "POST" });
+      if (selectedIdRef.current !== requestedId) {
+        setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, result) : packet) ?? current);
+        return;
+      }
+      const published = publishSubmissionEnvelope(submissionRef, result, "direct");
+      const nextEvidence = reconcilePacketEvidenceWithSubmission(
+        packetEvidenceRef.current,
+        requestedId,
+        published.review.questions,
+        published.review.packet_audit,
+      );
+      packetEvidenceRef.current = nextEvidence;
+      setPacketEvidence(nextEvidence);
+      setQuestions(published.review.questions);
+      setPackets((current) => current?.map((packet) => packet.id === requestedId ? packetWithDirectSubmission(packet, published) : packet) ?? current);
+      setSubmission(published);
+      moveToScreen(published.review.status === "submitted" ? "submitted" : "portal");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "We could not record that you sent this one yourself.");
+      if (!(await recoverPacketAuditReview(requestedId, reason))) {
+        setError(reason instanceof Error ? reason.message : "We could not record that you sent this one yourself.");
+      }
     }
   }
 
@@ -3098,6 +3250,7 @@ function Applications() {
       /* Back to the screen this came from, and back to "preparing": leaving the phase on "sending"
          would caption the NEXT run of the progress screen as a send that is not happening. */
       setSubmittingPhase("preparing");
+      if (await recoverPacketAuditReview(requestedId, reason)) return;
       moveToScreen("portal");
       /* WHERE A REFUSED SEND IS SAID, and it is beside the button rather than at the top of the
          page. The same argument ISSUE-043 settled for the composer: this screen is long, the Send
@@ -3616,6 +3769,7 @@ function Applications() {
           attentionTicking={attentionTicking}
           onAddDocument={askForDocument}
           onSelfSubmitted={() => void recordSelfSubmitted()}
+          onPacketAuditRefusal={(reason) => recoverPacketAuditReview(selected.id, reason)}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -4782,7 +4936,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean> }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -4900,6 +5054,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
       setAttendedHandoffState("idle");
     } catch (reason) {
       companyTab.close();
+      if (await onPacketAuditRefusal(reason)) return;
       setAttendedHandoffState("failed");
       setAttendedHandoffError(reason instanceof Error ? reason.message : "Litos could not revalidate this exact packet. Nothing was opened.");
     }

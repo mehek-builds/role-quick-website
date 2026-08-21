@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { auditRefusalCode } from "./audit-refusal.ts";
+import { auditRefusalCode, packetAuditReviewRecoveryCode } from "./audit-refusal.ts";
 
 /* The autopilot jammed on the first un-sendable row: NextMatchCard fires a match once, so a refused
    send left the pill reading "Sending" forever and the same packet still chosen as next. One row
@@ -32,6 +32,15 @@ test("every refusal the autopilot cannot clear parks the row", () => {
     "PACKET_RESUME_EXPIRED",
   ]) {
     assert.equal(auditRefusalCode(new FakeApiError("refused", { code })), code);
+  }
+});
+
+test("only stale or missing acknowledgement enters canonical packet review recovery", () => {
+  for (const code of ["PACKET_AUDIT_STALE", "PACKET_AUDIT_ACK_REQUIRED"]) {
+    assert.equal(packetAuditReviewRecoveryCode(new FakeApiError("wording is irrelevant", { code })), code);
+  }
+  for (const code of ["PACKET_AUDIT_REQUIRED", "PACKET_PDF_INVALID", "PACKET_RESUME_EXPIRED"]) {
+    assert.equal(packetAuditReviewRecoveryCode(new FakeApiError("wording is irrelevant", { code })), null);
   }
 });
 

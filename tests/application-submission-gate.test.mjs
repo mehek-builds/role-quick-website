@@ -29,6 +29,7 @@ async function loadDashboardRaceGuards(source) {
   const names = new Set([
     "submissionPollMayReplaceQuestions",
     "acknowledgedEvidenceRevalidationMayCommit",
+    "packetAuditRecoveryMayCommit",
   ]);
   const sourceFile = ts.createSourceFile(
     "applications-page.tsx",
@@ -230,7 +231,87 @@ test("a cleared packet audit cannot be resurrected by an older revalidation", as
   const revalidateEnd = dashboard.indexOf("const refreshSubmission = useCallback", revalidateStart);
   const revalidate = dashboard.slice(revalidateStart, revalidateEnd);
   assert.match(revalidate, /acknowledgedEvidenceRevalidationMayCommit\(screenRef\.current, packetEvidenceRef\.current, currentEvidence\)/);
+  assert.match(revalidate, /return \{ kind: "current" as const, audit: currentAudit, evidence: refreshed \};/);
+  const refreshEnd = dashboard.indexOf("/* The applicant's own escape hatch", revalidateEnd);
+  const refresh = dashboard.slice(revalidateEnd, refreshEnd);
+  assert.match(refresh, /const revalidation = await revalidateAcknowledgedEvidence\(requestedId, currentEvidence\);/);
+  assert.match(refresh, /const base = submissionSnapshotIsOlder\(submissionRef\.current, result\)[\s\S]{0,140}submissionRef\.current![\s\S]{0,80}: result;[\s\S]{0,120}result = submissionAfterPacketAudit\(base, submissionRef\.current, revalidation\.audit\);/);
+  assert.match(refresh, /if \(submissionSnapshotIsOlder\(submissionRef\.current, result\)\) return;/);
+  assert.ok(
+    refresh.indexOf("submissionAfterPacketAudit(base") < refresh.indexOf("setQuestions((current)"),
+    "the audit's question snapshot must replace the earlier GET before any client copy commits",
+  );
   assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,800}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
+});
+
+test("coded stale packet refusals recover to unacknowledged review without a red banner", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const recoveryStart = dashboard.indexOf("const recoverPacketAuditReview = useCallback");
+  const recoveryEnd = dashboard.indexOf("// Lifted out of MatchScore", recoveryStart);
+  const recovery = dashboard.slice(recoveryStart, recoveryEnd);
+  assert.match(recovery, /packetAuditReviewRecoveryCode\(reason\)/, "recovery must be keyed on the response code");
+  const ownershipGuard = recovery.indexOf("packetAuditRecoveryMayCommit(selectedIdRef.current, applicationId)");
+  const firstRefWrite = recovery.indexOf("packetEvidenceRef.current = null");
+  assert.ok(ownershipGuard >= 0 && firstRefWrite > ownershipGuard, "a late refusal must prove it still owns the selected packet before any write");
+  assert.match(recovery, /packetEvidenceRef\.current = null;[\s\S]{0,100}setPacketEvidence\(null\)/);
+  assert.match(recovery, /\/packet-audit`[\s\S]{0,240}\/submission`/);
+  assert.match(recovery, /submissionAfterPacketAudit\(server, submissionRef\.current, audit\)/);
+  assert.match(recovery, /acknowledged: false/);
+  assert.match(recovery, /moveToScreen\("review"\)/);
+  assert.doesNotMatch(recovery, /reason\.message/, "the stale server sentence must not become a banner");
+
+  const prepareStart = dashboard.indexOf("async function prepareApplication(");
+  const prepareEnd = dashboard.indexOf("async function completeHandoff", prepareStart);
+  assert.match(
+    dashboard.slice(prepareStart, prepareEnd),
+    /catch \(reason\) \{[\s\S]{0,120}recoverPacketAuditReview\(applicationId, reason\)/,
+  );
+  const approveStart = dashboard.indexOf("async function approveFinalSubmission()");
+  const approveEnd = dashboard.indexOf("async function restartPreparedRun", approveStart);
+  assert.match(
+    dashboard.slice(approveStart, approveEnd),
+    /catch \(reason\) \{[\s\S]{0,400}recoverPacketAuditReview\(requestedId, reason\)/,
+  );
+
+  const autopilotStart = dashboard.indexOf("const sendWithoutAsking = useCallback");
+  const autopilotEnd = dashboard.indexOf("// The review surface", autopilotStart);
+  const autopilotCatch = dashboard.slice(autopilotStart, autopilotEnd);
+  assert.match(autopilotCatch, /const code = auditRefusalCode\(reason\);[\s\S]{0,180}setUnsendable[\s\S]{0,100}return;/);
+  assert.ok(
+    autopilotCatch.indexOf("return;", autopilotCatch.indexOf("if (code)"))
+      < autopilotCatch.indexOf("setError(reason instanceof Error ? reason.message"),
+    "a parked audit refusal must return before the ordinary global red banner",
+  );
+});
+
+test("a late packet A refusal cannot clear packet B after the applicant switches", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const { packetAuditRecoveryMayCommit } = await loadDashboardRaceGuards(dashboard);
+  const refusal = deferred();
+  let selectedId = "packet-a";
+  const packetBState = {
+    evidence: { applicationId: "packet-b", acknowledged: true },
+    questions: [{ id: "b-question", answer: "B" }],
+    screen: "portal",
+  };
+  let rendered = packetBState;
+  const recovery = refusal.promise.then(() => {
+    if (!packetAuditRecoveryMayCommit(selectedId, "packet-a")) return;
+    rendered = { evidence: null, questions: [], screen: "review" };
+  });
+
+  selectedId = "packet-b";
+  refusal.resolve({ code: "PACKET_AUDIT_STALE" });
+  await recovery;
+  assert.strictEqual(rendered, packetBState);
+  assert.equal(packetAuditRecoveryMayCommit("packet-a", "packet-a"), true);
+  assert.equal(packetAuditRecoveryMayCommit("packet-b", "packet-a"), false);
 });
 
 /* PR #319's TEST, KEPT AS ITS INTENT AND NOT AS ITS LINE.
