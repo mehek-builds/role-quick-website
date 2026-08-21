@@ -66,6 +66,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /No live browser to reopen/);
   assert.match(dashboard, /Restart inside Litos/);
   assert.match(dashboard, /You do not need the company site/);
+  assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,500}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
+  assert.match(dashboard, /onReviewPacket=\{reviewPacketAgain\}/);
   assert.match(dashboard, /Open company page/);
   assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
   assert.match(dashboard, /ensureCurrentExtensionSession\([\s\S]{0,160}minimumAttendedHandoffExtensionVersion\(review\.ats_name\)/);
