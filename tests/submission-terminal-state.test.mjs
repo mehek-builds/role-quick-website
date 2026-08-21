@@ -19,7 +19,7 @@ test("every path that receives a review routes the screen from it", async () => 
   // the match cannot reach across unrelated code.
   assert.match(
     dashboard,
-    /\/submit-request`[\s\S]{0,1100}moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/submit-request`[\s\S]{0,2400}moveToScreen\(screenForStatus\(published\.review\.status, "submitting"\)\)/,
   );
   // The poll has two explicit routing guards. While the student's own approve is in flight the
   // poll can be reporting the status from before that approve. An in-flight poll can also land
@@ -27,7 +27,7 @@ test("every path that receives a review routes the screen from it", async () => 
   // route, and the navigation guard must read the synchronous ref rather than stale React state.
   assert.match(
     dashboard,
-    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,6800}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
+    /\/applications\/\$\{requestedId\}\/submission`[\s\S]{0,10000}if \(approveInFlight\.current !== null && !terminal\) return;[\s\S]{0,800}const pollMayRoute = screenRef\.current === "submitting"[\s\S]{0,240}if \(!pollMayRoute\) return;\s*\n\s*moveToScreen\(screenForStatus\(result\.review\.status, "submitting"\)\)/,
   );
   // The exception to the exception. A stalled approve never rejects (no AbortController in
   // lib/api.ts), so suppressing every poll route would strand the student on the spinner with the

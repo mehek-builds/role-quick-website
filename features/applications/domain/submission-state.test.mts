@@ -11,10 +11,22 @@ import {
   handoffWindowExpired,
   nextCoverLetterValue,
   nextSubmissionState,
+  publishSubmissionEnvelope,
+  submissionAfterPacketAudit,
+  submissionReviewPacketIdentity,
+  submissionSnapshotIsOlder,
   submissionCoverLetterField,
   type SpecDocumentMark,
   type SubmissionSnapshot,
 } from "./submission-state.ts";
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 /* The measured packet. Cresta, 8142004c-3358-4538-8778-16df5e31c5bb, read out of production on
    2026-08-09: status ready_for_final_approval, `_review.updated_at` 2026-08-08T22:10:10.431Z,
@@ -256,6 +268,165 @@ test("a packet with no marks seeds no measurement, rather than an empty one that
 test("a snapshot for another packet is never a version of this one", () => {
   const other: SubmissionSnapshot = { ...fromServer, application_id: "0000ffff-0000-0000-0000-000000000000" };
   assert.equal(nextSubmissionState(fromServer, other), other);
+});
+
+test("a strictly older server snapshot cannot roll a newer run state backward", () => {
+  const newer = {
+    ...fromServer,
+    review: { ...fromServer.review, status: "ready_for_final_approval", updated_at: "2026-08-21T10:26:03.000Z" },
+  };
+  const older = {
+    ...fromServer,
+    review: { ...fromServer.review, status: "filling", updated_at: "2026-08-21T10:22:53.000Z" },
+  };
+  assert.equal(submissionSnapshotIsOlder(newer, older), true);
+  assert.equal(nextSubmissionState(newer, older), newer);
+  assert.equal(submissionSnapshotIsOlder(older, newer), false);
+  assert.equal(nextSubmissionState(older, newer), newer);
+});
+
+test("invalid timestamps do not invent an ordering", () => {
+  const current = { ...fromServer, review: { ...fromServer.review, updated_at: "unknown" } };
+  const incoming = { ...fromServer, review: { ...fromServer.review, updated_at: "also unknown" } };
+  assert.equal(submissionSnapshotIsOlder(current, incoming), false);
+});
+
+test("the later packet audit replaces the earlier poll question list", () => {
+  const oldQuestion = { id: "legacy-phone", question: "Meine Daten", answer: "+49" };
+  const currentQuestion = { id: "custom", question: "Allgemeine Anrede", answer: "Frau" };
+  const incoming = {
+    ...fromServer,
+    review: { ...fromServer.review, questions: [oldQuestion, currentQuestion], packet_audit: { packet_version: "old" } },
+  };
+  const current = {
+    ...fromServer,
+    review: { ...fromServer.review, questions: [currentQuestion], packet_audit: { packet_version: "approved" } },
+  };
+  const reconciled = submissionAfterPacketAudit(incoming, current, {
+    packet_audit: { packet_version: "approved" },
+    questions: [currentQuestion],
+  });
+  assert.deepEqual(reconciled.review.questions, [currentQuestion]);
+  assert.deepEqual(reconciled.review.packet_audit, { packet_version: "approved" });
+});
+
+test("a rolling audit response without questions preserves the acknowledged client list", () => {
+  const stale = { id: "legacy-phone", question: "Meine Daten", answer: "+49" };
+  const currentQuestion = { id: "custom", question: "Allgemeine Anrede", answer: "Frau" };
+  const incoming = {
+    ...fromServer,
+    review: { ...fromServer.review, questions: [stale], packet_audit: { packet_version: "old" } },
+  };
+  const current = {
+    ...fromServer,
+    review: { ...fromServer.review, questions: [currentQuestion], packet_audit: { packet_version: "approved" } },
+  };
+  const reconciled = submissionAfterPacketAudit(incoming, current, {
+    packet_audit: { packet_version: "approved" },
+  });
+  assert.deepEqual(reconciled.review.questions, [currentQuestion]);
+});
+
+test("same-timestamp packet question and audit changes are not deduped", () => {
+  const stale = { id: "legacy-phone", question: "Meine Daten", answer: "+49" };
+  const currentQuestion = { id: "custom", question: "Allgemeine Anrede", answer: "Frau" };
+  const current = {
+    ...fromServer,
+    review: { ...fromServer.review, questions: [stale, currentQuestion], packet_audit: { packet_version: "old" } },
+  };
+  const incoming = {
+    ...fromServer,
+    review: { ...fromServer.review, questions: [currentQuestion], packet_audit: { packet_version: "approved" } },
+  };
+  assert.notEqual(submissionReviewPacketIdentity(current.review), submissionReviewPacketIdentity(incoming.review));
+  assert.equal(nextSubmissionState(current, incoming), incoming);
+});
+
+test("a held old poll cannot overwrite a direct submit result before React effects run", async () => {
+  const staleQuestion = { id: "legacy-phone", question: "Meine Daten", answer: "+49" };
+  const canonicalQuestion = { id: "salutation", question: "Allgemeine Anrede", answer: "Frau" };
+  const approvedAudit = { packet_version: "approved", audit_digest: "approved-digest" };
+  const oldGet = {
+    ...fromServer,
+    review: {
+      ...fromServer.review,
+      status: "filling",
+      updated_at: "2026-08-21T10:22:53.000Z",
+      questions: [staleQuestion],
+      packet_audit: { packet_version: "old", audit_digest: "old-digest" },
+    },
+  };
+  const submitResult = {
+    ...fromServer,
+    review: {
+      ...fromServer.review,
+      status: "ready_for_final_approval",
+      updated_at: "2026-08-21T10:26:03.000Z",
+      questions: [canonicalQuestion],
+      packet_audit: approvedAudit,
+    },
+  };
+  const heldGet = deferred<typeof oldGet>();
+  const heldAudit = deferred<{ packet_audit: typeof approvedAudit; questions: typeof canonicalQuestion[] }>();
+  const submissionRef = { current: oldGet as typeof oldGet | typeof submitResult | null };
+  const screenRef = { current: "submitting" };
+  let submission = oldGet;
+  let packets = [{ id: fromServer.application_id, review: oldGet.review }];
+  let screen = "submitting";
+  let questions = oldGet.review.questions;
+  let packetEvidence = { packet_audit: oldGet.review.packet_audit };
+  const queuedReactEffects: Array<() => void> = [];
+
+  const poll = (async () => {
+    let result = await heldGet.promise;
+    const audit = await heldAudit.promise;
+    const base = submissionSnapshotIsOlder(submissionRef.current, result)
+      ? submissionRef.current!
+      : result;
+    result = submissionAfterPacketAudit(base, submissionRef.current, audit) as typeof result;
+    if (submissionSnapshotIsOlder(submissionRef.current, result)) return;
+    const canonical = publishSubmissionEnvelope(submissionRef, result, "poll");
+    queuedReactEffects.push(() => {
+      submission = canonical;
+      packets = packets.map((packet) => packet.id === canonical.application_id
+        ? { ...packet, review: canonical.review }
+        : packet);
+      questions = canonical.review.questions;
+      packetEvidence = { packet_audit: canonical.review.packet_audit };
+      screenRef.current = canonical.review.status === "ready_for_final_approval" ? "portal" : "submitting";
+      screen = screenRef.current;
+    });
+  })();
+
+  heldGet.resolve(oldGet);
+  await Promise.resolve();
+
+  /* The direct submit answer arrives while POST /packet-audit is still held. React has not applied
+     any queued state writes, so the ref is the only current envelope the resumed poll can see. */
+  const publishedSubmit = publishSubmissionEnvelope(submissionRef, submitResult, "direct");
+  screenRef.current = "portal";
+  queuedReactEffects.push(() => {
+    submission = publishedSubmit;
+    packets = packets.map((packet) => packet.id === publishedSubmit.application_id
+      ? { ...packet, review: publishedSubmit.review }
+      : packet);
+    questions = publishedSubmit.review.questions;
+    packetEvidence = { packet_audit: publishedSubmit.review.packet_audit };
+    screen = screenRef.current;
+  });
+  assert.equal(submission.review.status, "filling", "the regression must exercise the ref-lag window");
+  assert.equal(submissionRef.current, submitResult, "the direct response is synchronous truth before effects");
+
+  heldAudit.resolve({ packet_audit: approvedAudit, questions: [canonicalQuestion] });
+  await poll;
+  for (const apply of queuedReactEffects) apply();
+
+  assert.equal(submission.review.status, "ready_for_final_approval");
+  assert.equal(packets[0].review.status, "ready_for_final_approval");
+  assert.equal(screen, "portal");
+  assert.deepEqual(questions, [canonicalQuestion]);
+  assert.deepEqual(packetEvidence.packet_audit, approvedAudit);
+  assert.equal(submissionRef.current?.review.status, "ready_for_final_approval");
 });
 
 test("nothing held yet means install", () => {

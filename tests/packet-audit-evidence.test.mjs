@@ -225,6 +225,7 @@ test("prepare and poll responses hydrate the generated cover letter into review 
   const prepare = source.slice(prepareStart, prepareEnd);
 
   assert.match(source, /function packetWithSubmission\(packet: GeneratedResume, submission: SubmissionResponse\)/);
+  assert.match(source, /submissionReviewPacketIdentity\(packet\.spec\._review\) === submissionReviewPacketIdentity\(submission\.review\)/);
   assert.match(source, /const nextCoverLetter = nextCoverLetterValue\(packet\.spec\._cover_letter, submission\)/);
   assert.match(source, /_cover_letter: nextCoverLetter/);
   assert.match(source, /coverLetterField\.included && !coverLetterField\.value[\s\S]{0,100}\? undefined/);
@@ -232,15 +233,46 @@ test("prepare and poll responses hydrate the generated cover letter into review 
   assert.match(poll, /setCoverLetterBody\(incomingCoverLetter\.value\?\.body \?\? ""\)/);
   assert.match(poll, /if \(!incomingCoverLetter\.value\) setCoverLetterDownloadUrl\(null\)/);
   assert.match(poll, /packetWithSubmission\(packet, result\)/);
-  assert.match(prepare, /packetWithSubmission\(packet, result\)/);
-  assert.match(prepare, /const incomingCoverLetter = submissionCoverLetterField\(result\)/);
+  assert.match(prepare, /packetWithDirectSubmission\(packet, published\)/);
+  assert.match(prepare, /const incomingCoverLetter = submissionCoverLetterField\(published\)/);
   assert.match(prepare, /setCoverLetterBody\(incomingCoverLetter\.value\?\.body \?\? ""\)/);
   assert.match(prepare, /if \(!incomingCoverLetter\.value\) setCoverLetterDownloadUrl\(null\)/);
+  const directPublish = prepare.indexOf('publishSubmissionEnvelope(submissionRef, result, "direct")');
+  const currentPacketWrite = prepare.indexOf("packetWithDirectSubmission(packet, published)");
+  const submissionWrite = prepare.indexOf("setSubmission(published)");
+  assert.ok(directPublish >= 0, "the submit response must synchronously publish its envelope");
+  assert.ok(currentPacketWrite > directPublish, "the current packet write must follow ref publication");
+  assert.ok(submissionWrite > directPublish, "the React submission write must follow ref publication");
   assert.ok(
-    prepare.indexOf("if (selectedIdRef.current !== applicationId) return")
-      < prepare.indexOf("const incomingCoverLetter = submissionCoverLetterField(result)"),
+    prepare.indexOf("if (selectedIdRef.current !== applicationId)")
+      < prepare.indexOf("const incomingCoverLetter = submissionCoverLetterField(published)"),
     "a response for a packet the student left must not overwrite the current review editor",
   );
+});
+
+test("handoff completion and self-submission publish only to the packet that started them", async () => {
+  const source = await readFile(dashboardUrl, "utf8");
+  for (const [name, endMarker] of [
+    ["completeHandoff", "recordSelfSubmitted"],
+    ["recordSelfSubmitted", "reviewPortalQuestions"],
+  ]) {
+    const start = source.indexOf(`async function ${name}`);
+    const end = source.indexOf(`function ${endMarker}`, start);
+    const action = source.slice(start, end);
+    assert.match(action, /const requestedId = selected\.id;/);
+    const selectionGuard = action.indexOf("if (selectedIdRef.current !== requestedId)");
+    const directPublish = action.indexOf('publishSubmissionEnvelope(submissionRef, result, "direct")');
+    const evidenceWrite = action.indexOf("packetEvidenceRef.current = nextEvidence");
+    const questionWrite = action.indexOf("setQuestions(published.review.questions)");
+    const submissionWrite = action.indexOf("setSubmission(published)");
+    assert.ok(selectionGuard >= 0, `${name} must discard selected-screen writes after a packet switch`);
+    assert.ok(directPublish > selectionGuard, `${name} must publish only after its selection guard`);
+    assert.ok(evidenceWrite > directPublish, `${name} evidence must follow synchronous envelope publication`);
+    assert.ok(questionWrite > directPublish, `${name} questions must follow synchronous envelope publication`);
+    assert.ok(submissionWrite > directPublish, `${name} React submission state must follow synchronous envelope publication`);
+    assert.match(action, /reconcilePacketEvidenceWithSubmission\([\s\S]{0,260}published\.review\.packet_audit/);
+    assert.match(action, /packetWithDirectSubmission\(packet, published\)/);
+  }
 });
 
 test("the dashboard renders only exact server-owned JD ranges and clause evidence", async () => {

@@ -18,9 +18,8 @@
  *   - the same walk succeeding end to end, so the refusal coverage cannot pass by breaking
  *     the path it guards.
  *
- * Every refusal assertion demands the SERVER'S OWN SENTENCE inside the page's one error banner
- * (role=alert), not a generic failure, and re-reads it seconds later because the Cresta finding
- * (approve-resolves.spec.mjs) showed a poll can wipe a banner faster than a person reads it.
+ * Codeless state conflicts still show the server's actionable sentence. Coded stale-packet
+ * conflicts take a fresh audit and return to review without acknowledging or retrying the send.
  *
  * SAFETY: every backend request is stubbed. Nothing here can reach an employer.
  *
@@ -168,7 +167,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, revalidations: 0 };
+  const counts = { ack: 0, submit: 0, audits: 0, revalidations: 0 };
   await context.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
@@ -184,7 +183,8 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
         return json({ acknowledged: true });
       }
       if (p.endsWith("/packet-audit")) {
-        if (revalidationRefusal && counts.ack > 0) {
+        counts.audits += 1;
+        if (revalidationRefusal && counts.ack > 0 && counts.revalidations === 0) {
           counts.revalidations += 1;
           return json(revalidationRefusal.body, revalidationRefusal.status);
         }
@@ -288,57 +288,52 @@ browserTest("a refused acknowledge on Fill company form says the server's senten
   await context.close();
 });
 
-browserTest("a refused acknowledge on Review filled form says the server's sentence", async (hold) => {
+browserTest("a coded stale acknowledge refreshes an unacknowledged packet instead of showing the raw sentence", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(READY, {
     ackResponse: { status: 409, body: { error: ACK_STALE, code: "PACKET_AUDIT_STALE" } },
   });
   hold(page);
   await second.click();
-  await page.getByRole("alert").filter({ hasText: ACK_STALE }).first().waitFor({ state: "visible", timeout: 15_000 });
+  await page.getByRole("status").filter({ hasText: "The current exact packet is ready" }).first().waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByRole("button", { name: "Review filled form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await page.getByRole("alert").filter({ hasText: ACK_STALE }).count(), 0);
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 0);
+  assert.ok(counts.audits >= 2, "the initial audit and fresh recovery audit must both run");
   await context.close();
 });
 
-browserTest("a refused submit-request after an accepted acknowledge says the server's sentence", async (hold) => {
+browserTest("a coded stale submit-request refreshes review without auto-acknowledging or retrying", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     submitResponse: { status: 409, body: { error: SUBMIT_STALE, code: "PACKET_AUDIT_STALE" } },
   });
   hold(page);
   await second.click();
-  await page.getByRole("alert").filter({ hasText: SUBMIT_STALE }).first().waitFor({ state: "visible", timeout: 20_000 });
-  await page.waitForTimeout(7000);
-  assert.ok(
-    (await page.locator("main").innerText()).includes(SUBMIT_STALE),
-    "the submit refusal was wiped before a person could read it",
-  );
+  await page.getByRole("status").filter({ hasText: "The current exact packet is ready" }).first().waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByRole("button", { name: "Fill company form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await page.getByRole("alert").filter({ hasText: SUBMIT_STALE }).count(), 0);
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 1);
+  assert.ok(counts.audits >= 2, "the refusal must take one fresh unacknowledged audit");
   await context.close();
 });
 
-/* The polled revalidation, which was the one member of this class with NO catch that spoke. After
-   an accepted acknowledgement the 2.5s poll re-audits the exact packet, and a refusal there used
-   to clear the acknowledged evidence and say nothing: the send gate closed and the controls
-   changed shape with no words anywhere on screen. The sentence must appear AND survive later
-   ticks, because the refusal destroys the very evidence whose revalidation raised it, so the next
-   tick reports a clean poll and the old unconditional banner-clear blanked it within one round. */
-browserTest("a refused packet revalidation says the server's sentence, and later ticks do not blank it", async (hold) => {
+/* A polled revalidation has no button press to return to. A coded stale response now clears the old
+   acknowledgement, takes a fresh audit, and routes to review with neutral status. The fresh packet
+   must remain unacknowledged, and recovery must not replay either the acknowledgement or the send. */
+browserTest("a coded stale packet revalidation returns to fresh review without repeating the send", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
-    landed: { status: "needs_attention", attention_reason: "The company's form asked for something new." },
+    landed: { status: "ready_for_final_approval", attention_reason: "The company form is ready for review." },
     revalidationRefusal: { status: 409, body: { error: REVALIDATION_STALE, code: "PACKET_AUDIT_STALE" } },
   });
   hold(page);
   await second.click();
-  await page.getByRole("alert").filter({ hasText: REVALIDATION_STALE }).first().waitFor({ state: "visible", timeout: 20_000 });
-  /* Two more poll rounds, each of which has no acknowledged evidence left to revalidate and
-     would have cleared the banner before this fix. */
-  await page.waitForTimeout(6000);
-  assert.ok(
-    (await page.locator("main").innerText()).includes(REVALIDATION_STALE),
-    "the revalidation refusal was blanked by a later clean poll tick",
-  );
+  await page.getByRole("status").filter({ hasText: "The current exact packet is ready" }).first().waitFor({ state: "visible", timeout: 25_000 });
+  await page.getByRole("button", { name: "Review filled form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  assert.equal(await page.getByRole("alert").filter({ hasText: REVALIDATION_STALE }).count(), 0);
   assert.ok(counts.revalidations >= 1, "the poll never revalidated the acknowledged packet");
+  assert.equal(counts.ack, 1, "recovery must not acknowledge the fresh audit");
+  assert.equal(counts.submit, 1, "recovery must not retry the send");
   await context.close();
 });
 

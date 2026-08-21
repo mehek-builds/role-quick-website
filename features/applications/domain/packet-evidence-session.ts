@@ -112,3 +112,17 @@ export function revalidateAcknowledgedPacketEvidence(
     || !packetAuditIdentityMatches(current.response.packet_audit, serverResponse.packet_audit)) return null;
   return { ...current, response: serverResponse, serverRevalidatedAt: revalidatedAt };
 }
+
+/** Keeps exact-packet proof only when a direct server envelope still names the same packet. */
+export function reconcilePacketEvidenceWithSubmission(
+  current: PacketEvidenceSession | null,
+  applicationId: string,
+  questions: readonly ApplicationQuestion[],
+  packetAudit: unknown,
+): PacketEvidenceSession | null {
+  if (!current
+    || current.applicationId !== applicationId
+    || current.questionsSnapshot !== packetQuestionsSnapshot(questions)
+    || !packetAuditIdentityMatches(current.response.packet_audit, packetAudit)) return null;
+  return current;
+}
