@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
-import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata } from "@/features/applications";
+import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
 import { completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -355,12 +355,13 @@ export function ApplicationPacket({
       ats_name: review.ats_name,
     }
     : review;
-  const questions = contentReview.questions ?? [];
-  const filledFields = contentReview.filled_fields ?? [];
-  const safeAttentionReason = contentReview.attention_reason
-    ? userFacingError(contentReview.attention_reason, "Litos could not finish the company's form. Try again in a minute.")
+  const safeContentReview = withoutHistoricalPacketAuditStaleAttention(contentReview);
+  const questions = safeContentReview.questions ?? [];
+  const filledFields = safeContentReview.filled_fields ?? [];
+  const safeAttentionReason = safeContentReview.attention_reason
+    ? userFacingError(safeContentReview.attention_reason, "Litos could not finish the company's form. Try again in a minute.")
     : undefined;
-  const attentionReview = { ...contentReview, attention_reason: safeAttentionReason };
+  const attentionReview = { ...safeContentReview, attention_reason: safeAttentionReason };
   /* The company, the role and what the packet already carries. Without the third of those, a
      revisited application that went out WITH its transcript would still be listed here as needing
      one, which is the same class of error as the Done column claiming a box was filled that the run
@@ -385,8 +386,8 @@ export function ApplicationPacket({
   });
   const needsInput = inputItems.filter((item) => !item.settled);
   const acknowledgedItems = inputItems.filter((item) => item.acknowledged === true);
-  const completedItems = completedSubmissionGroups(contentReview);
-  const receipt = contentReview.receipt;
+  const completedItems = completedSubmissionGroups(safeContentReview);
+  const receipt = safeContentReview.receipt;
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
   const builtAt = formatMoment(contentPacket.created_at);
   const when = sent

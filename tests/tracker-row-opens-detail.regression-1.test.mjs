@@ -76,7 +76,7 @@ describe("a review's declared lists are made real before anything reads them", (
     assert.notEqual(start, -1, "reviewWithLists must still exist");
     const body = domain.slice(start, domain.indexOf("\n}", start));
     for (const field of ["questions", "filled_fields", "skipped_reasons", "edited_terms"]) {
-      assert.match(body, new RegExp(`${field}: Array\\.isArray\\(review\\.${field}\\) \\? review\\.${field} : \\[\\]`), field);
+      assert.match(body, new RegExp(`${field}: Array\\.isArray\\(safeReview\\.${field}\\) \\? safeReview\\.${field} : \\[\\]`), field);
     }
     /* Never a status, never a count, never an answer. An absent list means "none of these", which
        is what an empty list says; an absent status has no honest default at all, and inventing one
