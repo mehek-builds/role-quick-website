@@ -276,6 +276,12 @@ function Applications() {
   const resumeOperationIds = useRef(new Map<string, string>());
   const coverLetterOperationIds = useRef(new Map<string, string>());
   const [canonicalFillError, setCanonicalFillError] = useState<string | null>(null);
+  /* A third errorSurface, not a reuse of canonicalFillError: that one is read only inside
+     CanonicalApplicationDetail (line ~3689), which is not the screen the extension-recovery button
+     lives on. Without this, fillApplication's "tracker" surface would set an error nothing on
+     SubmissionScreen renders, so a blocked pop-up, a missing extension, or a failed /applications
+     call would fail completely silently from her point of view - the button just does nothing. */
+  const [submissionFillError, setSubmissionFillError] = useState<string | null>(null);
   const [canonicalCoverLetter, setCanonicalCoverLetter] = useState<CanonicalCoverLetterResponse | null>(null);
   const [canonicalCoverLetterBody, setCanonicalCoverLetterBody] = useState("");
   const [canonicalCoverLetterJd, setCanonicalCoverLetterJd] = useState("");
@@ -791,6 +797,7 @@ function Applications() {
       setSelectedId(null);
       setCanonicalSelected(canonical);
       setCanonicalFillError(null);
+      setSubmissionFillError(null);
       setSpec(null);
       setQuestions([]);
       setSubmission(null);
@@ -804,6 +811,7 @@ function Applications() {
     }
     setCanonicalSelected(null);
     setCanonicalFillError(null);
+    setSubmissionFillError(null);
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
@@ -1987,7 +1995,7 @@ function Applications() {
 
   async function fillApplication(
     draft: NewApplicationDraft = newApplication,
-    errorSurface: "composer" | "tracker" = "composer",
+    errorSurface: "composer" | "tracker" | "submission" = "composer",
   ) {
     const company = draft.company.trim();
     const role = draft.role.trim();
@@ -1995,6 +2003,11 @@ function Applications() {
     const reportFailure = (message: string, fields: ApplicationDraftField[] = []) => {
       if (errorSurface === "tracker") {
         setCanonicalFillError(message);
+        setSubmissionFillError(null);
+        setError(null);
+      } else if (errorSurface === "submission") {
+        setSubmissionFillError(message);
+        setCanonicalFillError(null);
         setError(null);
       } else {
         refuseInComposer("action", message, fields);
@@ -2015,6 +2028,7 @@ function Applications() {
     }
     setComposerRefusal(null);
     setCanonicalFillError(null);
+    setSubmissionFillError(null);
     setCreating("fill");
     setError(null);
     setNotice(null);
@@ -3866,6 +3880,16 @@ function Applications() {
           onAddDocument={askForDocument}
           onSelfSubmitted={() => void recordSelfSubmitted()}
           onPacketAuditRefusal={(reason) => recoverPacketAuditReview(selected.id, reason)}
+          onOpenWithExtension={() => void fillApplication({
+            company: selected.job_context.company ?? "",
+            role: selected.job_context.role ?? "",
+            portalUrl: selectedSubmission.review.portal_url ?? "",
+            jobDescription: "",
+            jobId: selected.job_context.job_id ?? null,
+            canonicalApplicationId: canonicalIdByPacketId[selected.id] ?? null,
+          }, "submission")}
+          extensionFillBusy={creating === "fill"}
+          extensionFillError={submissionFillError}
         />
       ) : screen === "submitted" ? (
         <SubmissionReceipt review={selectedSubmission?.review ?? review} role={selected.job_context.role ?? "Role"} company={selected.job_context.company ?? "Company"} />
@@ -5009,7 +5033,7 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean> }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -5042,6 +5066,15 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
      from the exact packet and the saved answers. Keep every generic Open page escape off this
      screen in that case, or an autonomous board advertises the manual workflow at the first retry. */
   const staysInsideLitos = review.portal_supported === true;
+  /* Gated the same way every other post-resolution control is (see the comment above
+     awaitingUnverifiedSubmission): only once she has answered "it is not there" does a recovery
+     control belong on screen at all. Narrower than that gate alone, though - `challenge_on_screen`
+     is a fact about THIS specific stop, not about needs_attention in general, so an ordinary timeout
+     or provider error still offers only Try again. A CAPTCHA wall is not always deterministic (a
+     retry can draw an easier challenge, or none), so this sits ALONGSIDE Try again rather than
+     replacing it: the extension path is the guaranteed way to finish it now, not the only way. */
+  const captchaBlockedLastAttempt = needsAttention && !awaitingUnverifiedSubmission
+    && review.unverified_submission?.challenge_on_screen === true;
   const attendedHandoffUrl = awaitingUnverifiedSubmission ? null : exactAttendedHandoffUrl(review);
   const canFinishInDashboard = Boolean(handoffUrl) && !attendedHandoffUrl;
   const [attendedHandoffState, setAttendedHandoffState] = useState<"idle" | "preparing" | "failed">("idle");
@@ -5474,6 +5507,20 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
               for UnverifiedSubmissionCard's yes/no to release it first. */}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onReviewPacket}>Open packet review</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && <Button onClick={onRetry} variant="secondary">Try again</Button>}
+          {/* The synced-fill recovery: the extension reads the SAME reviewed answers this managed
+              run already produced (handoff-packet.ts on the extension side), so nothing here
+              regenerates or re-syncs anything - it opens the employer's page with those answers
+              ready to place, and she solves whatever check stopped the managed run herself.
+
+              disabled and errored through their own props rather than reusing canonicalFillError:
+              that state is only read inside CanonicalApplicationDetail, a screen this button does
+              not live on, so a failure here (blocked pop-up, extension not installed, a failed
+              /applications call) would otherwise fail with no visible feedback at all. */}
+          {captchaBlockedLastAttempt && (
+            <Button onClick={onOpenWithExtension} variant="secondary" disabled={extensionFillBusy}>
+              {extensionFillBusy ? "Checking extension..." : "Open and fill with extension"}
+            </Button>
+          )}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
           {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
@@ -5534,6 +5581,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         )}
         {attendedHandoffError && (
           <p role="alert" className="mt-3 text-xs leading-5 text-danger">{attendedHandoffError}</p>
+        )}
+        {extensionFillError && (
+          <p role="alert" className="mt-3 text-xs leading-5 text-danger">{extensionFillError}</p>
         )}
         {/* The server's own answer to the last press, beside the button that made it. Never routed
             through the page banner: the poll clears that one, and this screen is long enough that a

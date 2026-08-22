@@ -113,8 +113,8 @@ describe("every message a composer button raises lands beside that button", () =
     );
     assert.match(
       fillApplication,
-      /if \(errorSurface === "tracker"\)[\s\S]{0,240}else \{\s*refuseInComposer\("action", message, fields\);/,
-      "a composer retry stays beside its button while a Tracker retry stays in canonical detail",
+      /if \(errorSurface === "tracker"\)[\s\S]{0,480}else \{\s*refuseInComposer\("action", message, fields\);/,
+      "a composer retry stays beside its button while a Tracker or captcha-recovery retry stays off the page banner",
     );
     assert.doesNotMatch(fillApplication, /\/resume\/generate/);
   });
