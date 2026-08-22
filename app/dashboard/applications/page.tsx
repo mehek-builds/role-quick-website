@@ -3611,10 +3611,70 @@ function Applications() {
           checkingSendPath={canonicalHydration?.id === canonicalSelected.id && canonicalHydration.status === "loading"}
           readyToSend={canonicalReadyToSend !== null}
           onContinueToSend={() => {
-            // The explicit click every other selectPacket caller already requires - see the "NOT A
-            // selectPacket CALL HERE" comment on the hydration effect above for why this is a
-            // button press rather than something the effect fires on its own.
-            if (canonicalEnvelopePacket) selectPacket(canonicalEnvelopePacket);
+            // The explicit click the bootstrap effect's apply-intent branch relies on: it is the
+            // same navigation an ordinary Jobs-page deep link performs, and that branch is what
+            // actually calls selectPacket, from the SAME place every other apply-intent link does.
+            if (!canonicalEnvelopePacket) return;
+            /* `intent=detail` is deliberately read-only (see the branch above that sets
+               resolvedActionableRequestId to null for it), but this button can still render on a
+               detail view when canonicalReadyToSend is non-null. selectPacket alone leaves the URL
+               on intent=detail and resolvedActionableRequestId on null, so selectedPacketForRequest's
+               two independent guards - the intent check and the resolvedActionableRequestId match -
+               both stay failed no matter what selectPacket resolves internally: this is the exact
+               "the saved list does not contain a packet with this id" refusal, on every single
+               canonical row a student reaches through detail instead of an apply-intent deep link.
+               Measured on this account 2026-08-22: Databricks, IMC Trading, and a freshly-created
+               Notion application all hit it, none had any prior state to blame.
+
+               THE FIRST VERSION OF THIS FIX also called setResolvedActionableRequestId and
+               selectPacket synchronously here, to show the review screen immediately rather than
+               wait on a fetch. Caught in review: requestedApplicationId/requestedApplicationIntent
+               come straight from useSearchParams, and the bootstrap effect a few hundred lines up
+               depends on both - so the SAME router.replace that fixes the guards below also changes
+               those params, and once the navigation lands the effect re-runs, re-fetches
+               /resume/history and /applications, and calls selectPacket a SECOND time from its own
+               `apply` branch. selectPacket unconditionally calls moveToScreen, which scrolls to top
+               whenever scrollToTop is not passed false - so the synchronous call's screen would
+               jump and re-render again moments later from a call nothing here gestured, overwriting
+               spec/questions/matchResult/packetEvidence/submission with whatever that second fetch
+               returned. That is exactly the "background effect must not call selectPacket without a
+               user gesture" hazard the OTHER hydration effect's own comment already names, just
+               reached through this handler instead.
+
+               So this handler does ONLY the navigation. It restores the SAME id/intent pair an
+               ordinary Jobs-page apply link produces - canonicalGeneratedPacket carries the restored
+               legacy id sendableLinkedPacketFromCanonicalEnvelope already validated as ready - and
+               leaves resolving it and calling selectPacket to that SAME bootstrap effect, the one
+               already exercised by every normal deep link. One fetch, one selectPacket call, same as
+               clicking "Fix application" from Jobs. The review screen appears once that fetch
+               resolves rather than instantly, which is the same latency a normal deep link already
+               has. */
+            const restoredId = canonicalGeneratedPacket?.id ?? canonicalEnvelopePacket.id;
+            if (searchParams.get("application") === restoredId && searchParams.get("intent") === "apply") {
+              /* Reached when an ordinary list click already landed on this exact id with
+                 intent=apply while the row was still canonical-only - DRW, tested 2026-08-22: no
+                 linked legacy packet existed yet, the ROUTING HYDRATION effect above folded one in
+                 once its fetch resolved, canonicalReadyToSend flipped non-null, and this button
+                 appeared, all without the URL ever changing. router.replace with the SAME
+                 application/intent params is a no-op: requestedApplicationId/requestedApplicationIntent
+                 (read from these same searchParams) do not change, so the bootstrap effect's
+                 dependency array sees nothing different and never re-runs - selectPacket is never
+                 called, and the screen sits on this same summary forever with no fetch and no error
+                 to explain why.
+
+                 That effect's own comment already names the fix: "That press is a real click, so it
+                 reaches selectPacket exactly the way every other caller already does." Calling it
+                 directly here cannot double-fire the way the removed synchronous call below did,
+                 because the bootstrap effect provably will not also run: there is no URL change for
+                 it to react to. */
+              setResolvedActionableRequestId(restoredId);
+              selectPacket(canonicalEnvelopePacket);
+              return;
+            }
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("application", restoredId);
+            params.set("intent", "apply");
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false });
           }}
           fillBusy={creating === "fill"}
           tailorBusy={creating === "tailor"}
