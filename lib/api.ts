@@ -916,6 +916,9 @@ export type ApplicationReview = {
     submission_run_id?: string;
     resolution?: "sent" | "not_sent";
     resolved_at?: string;
+    /** Mirrors applicationReview.ts on the backend: the runner saw a rendered CAPTCHA still standing
+     *  after the press. Selects the extension-recovery offer once she has answered the yes/no card. */
+    challenge_on_screen?: true;
   };
   filled_fields?: string[];
   progress_screenshot_url?: string;
