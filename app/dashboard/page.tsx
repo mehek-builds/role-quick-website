@@ -639,7 +639,7 @@ export default function Home() {
           <p className="mt-1 text-sm text-muted">
             {targetLabel}
             <span aria-hidden="true" className="mx-2 text-faint">·</span>
-            <Link href="/dashboard/settings#job-search" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
+            <Link href="/dashboard/settings#job-search" className="inline-flex min-h-6 items-center text-muted underline decoration-border underline-offset-4 hover:text-ink">
               Change what you want
             </Link>
           </p>
@@ -731,7 +731,7 @@ export default function Home() {
           <div>
             <h2 id="matches-heading" className="text-base font-medium text-ink">Your top jobs today</h2>
           </div>
-          <Link href="/dashboard/jobs" className="text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
+          <Link href="/dashboard/jobs" className="inline-flex min-h-6 items-center text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
         </div>
 
       {jobs === null ? (
@@ -845,7 +845,7 @@ function OverviewColumn({
     <section aria-labelledby={id} className="flex flex-col p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 id={id} className="text-base font-medium text-ink">{title}</h2>
-        <Link href={href} className={`text-small font-medium ${linkClass}`}>View all</Link>
+        <Link href={href} className={`inline-flex min-h-6 items-center text-small font-medium ${linkClass}`}>View all</Link>
       </div>
       {/* Plain markup, matching Momentum's Stat. The dl this replaces held anchors as direct
           children, which a description list may not have, and it printed the term above the

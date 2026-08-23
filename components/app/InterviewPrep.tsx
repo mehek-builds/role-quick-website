@@ -71,7 +71,7 @@ export function InterviewPrep({
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="text-sm font-medium text-ink transition-colors hover:text-brand-ink"
+        className="inline-flex min-h-6 items-center text-sm font-medium text-ink transition-colors hover:text-brand-ink"
       >
         {open ? "Hide interview questions" : "What they are likely to ask"}
       </button>

@@ -4919,7 +4919,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   return editing ? (
     <textarea autoFocus aria-label="Edit optimized resume text" value={value} onChange={(event) => onChange(event.target.value)} onBlur={() => setEditing(false)} rows={Math.max(2, Math.ceil(value.length / 75))} className="w-full resize-none rounded-inner border border-control-border bg-white px-2 py-1 outline-none focus:border-brand" />
   ) : (
-    <button type="button" onClick={() => setEditing(true)} className={`text-left leading-[1.35] hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30 ${className}`}>
+    <button type="button" onClick={() => setEditing(true)} className={`min-h-6 text-left leading-[1.35] hover:bg-brand-soft/50 focus:outline-none focus:ring-2 focus:ring-brand/30 ${className}`}>
       {/* hideMissing: an amber "asked for and NOT on your resume" mark cannot honestly appear on
           the resume. If the word were here the scorer would have counted it as covered. */}
       <RequirementText text={value} editedTerms={terms} hideMissing />
@@ -4980,7 +4980,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
   }, [focusQuestionId, focusToken]);
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <button onClick={onBack} className="text-sm text-muted hover:text-ink">Back</button>
+      <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Back</button>
       <div>
         <p className="text-small text-muted">{applicationRole} · {applicationCompany}</p>
         <h2 className="mt-2 text-heading font-medium tracking-tight text-ink">

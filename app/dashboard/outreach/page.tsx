@@ -748,7 +748,7 @@ export default function Outreach() {
                     {e.draft_text.length > 160 && (
                       <button
                         onClick={() => setOpen(open === e.id ? null : e.id)}
-                        className="mt-2 text-xs font-medium text-ink underline underline-offset-4"
+                        className="mt-2 inline-flex min-h-6 items-center text-xs font-medium text-ink underline underline-offset-4"
                       >
                         {open === e.id ? "Show less" : "Show full draft"}
                       </button>
