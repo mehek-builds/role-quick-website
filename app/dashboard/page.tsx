@@ -21,6 +21,7 @@ import { Funnel } from "@/components/app/Funnel";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 /* MatchScore, ResumePaper, contactName, contactLine and stripMetadata were all imported for the
    review drawer and went with it. The dashboard renders no resume and scores no packet against a
    posting now; the card's ScoreRing is a different, already-fetched number. */
@@ -266,6 +267,8 @@ export default function Home() {
   const [qaMode, setQaMode] = useState(false);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
+  const focusUndoAfterDismissRef = useRef<string | null>(null);
+  const focusSkipAfterUndoRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prewarmFailures, setPrewarmFailures] = useState<string[]>([]);
   /* Jobs whose packet is being built right now, by either path. This is what lets the card say
@@ -356,6 +359,36 @@ export default function Home() {
    * ways depending on which button got pressed. Finished is finished. The only state that is
    * genuinely different is having had no matches at all, and that is todayJobs.length === 0. */
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
+  const matchQueueKey = jobs === null
+    ? "loading"
+    : visibleJobs.length > 0
+      ? `jobs-${visibleJobs.map((job) => job.id).join(":")}`
+      : dayQueueFinished
+        ? "complete"
+        : "empty";
+  useEffect(() => {
+    const jobId = focusUndoAfterDismissRef.current;
+    if (!jobId || lastDismissed !== jobId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const undo = document.getElementById("dashboard-skip-undo");
+      if (!(undo instanceof HTMLButtonElement)) return;
+      undo.focus();
+      focusUndoAfterDismissRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [lastDismissed]);
+  useEffect(() => {
+    const jobId = focusSkipAfterUndoRef.current;
+    if (!jobId || lastDismissed !== null || dismissed.includes(jobId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const restoredSkip = [...document.querySelectorAll<HTMLButtonElement>("[data-dashboard-skip-id]")]
+        .find((button) => button.dataset.dashboardSkipId === jobId);
+      if (!restoredSkip) return;
+      restoredSkip.focus();
+      focusSkipAfterUndoRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dismissed, lastDismissed]);
   /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
   const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
   /* Applications stopped on a human-verification check, oldest first. Kept out of the summary
@@ -464,19 +497,30 @@ export default function Home() {
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];
-    setDismissed(next);
-    setLastDismissed(jobId);
+    focusUndoAfterDismissRef.current = jobId;
+    runDashboardTransition(() => {
+      setDismissed(next);
+      setLastDismissed(jobId);
+    });
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
     // Undo is a second chance, not furniture. It used to sit there until you skipped something
     // else, so a status message stayed on screen for the rest of the session.
-    window.setTimeout(() => setLastDismissed((current) => (current === jobId ? null : current)), 8000);
+    window.setTimeout(() => {
+      runDashboardTransition(() => setLastDismissed((current) => (
+        current === jobId && document.activeElement?.id !== "dashboard-skip-undo" ? null : current
+      )));
+    }, 8000);
   }
 
   function undoDismiss() {
     if (!lastDismissed) return;
-    const next = dismissed.filter((id) => id !== lastDismissed);
-    setDismissed(next);
-    setLastDismissed(null);
+    const restoredJobId = lastDismissed;
+    const next = dismissed.filter((id) => id !== restoredJobId);
+    focusSkipAfterUndoRef.current = restoredJobId;
+    runDashboardTransition(() => {
+      setDismissed(next);
+      setLastDismissed(null);
+    });
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
   }
 
@@ -734,6 +778,7 @@ export default function Home() {
           <Link href="/dashboard/jobs" className="inline-flex min-h-6 items-center text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
         </div>
 
+      <MotionPanel key={matchQueueKey} name="dashboard-home-matches">
       {jobs === null ? (
         <ShimmerRows rows={4} />
       ) : visibleJobs.length === 0 ? (
@@ -789,13 +834,23 @@ export default function Home() {
           ))}
         </div>
       )}
+      </MotionPanel>
       </section>
 
       {lastDismissed && (
-        <div role="status" className="flex items-center justify-between rounded-inner bg-surface-alt px-4 py-3 text-sm text-muted">
-          <span>Skipped for today.</span>
-          <button type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
-        </div>
+        <MotionPanel key={lastDismissed} name="dashboard-home-skip-status">
+          <div
+            role="status"
+            onBlur={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget)) return;
+              runDashboardTransition(() => setLastDismissed((current) => current === lastDismissed ? null : current));
+            }}
+            className="flex items-center justify-between rounded-inner bg-surface-alt px-4 py-3 text-sm text-muted"
+          >
+            <span>Skipped for today.</span>
+            <button id="dashboard-skip-undo" type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
+          </div>
+        </MotionPanel>
       )}
 
       {/* A quota readout at 0.7% is noise, and it was competing with the header for the page's one
@@ -1006,7 +1061,7 @@ function JobMatchCard({
             in flight. The chip and this slot use one name for each state, so a card never says
             two things at once. */}
         <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4">
-          <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
+          <button type="button" data-dashboard-skip-id={job.id} onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Skip
           </button>
           {status === "preparing" ? (

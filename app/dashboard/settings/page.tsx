@@ -2,8 +2,9 @@
 
 import { Button, ButtonLink } from "@/components/app/Button";
 import { AvailabilityWindowTable } from "@/components/app/AvailabilityWindowTable";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
   api,
   ApplicationProfile,
@@ -192,6 +193,19 @@ export default function Settings() {
   const [deleteComplete, setDeleteComplete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteConfirmed = deleteConfirmation === DELETE_CONFIRMATION_PHRASE;
+  const finishDeleteDialogClose = useCallback(() => {
+    const dialog = deleteDialogRef.current;
+    if (dialog?.open) dialog.close();
+  }, []);
+  const {
+    closing: deleteDialogClosing,
+    requestClose: requestDeleteDialogClose,
+    resetExit: resetDeleteDialogExit,
+  } = useDashboardOverlayExit({
+    dialogRef: deleteDialogRef,
+    nativeBackdrop: true,
+    onExitComplete: finishDeleteDialogClose,
+  });
 
   useEffect(() => {
     const syncTab = () => runDashboardTransition(() => setActiveTab(tabFromHash(window.location.hash)));
@@ -227,6 +241,20 @@ export default function Settings() {
       observer?.disconnect();
     };
   }, [accountTabsViewport]);
+
+  useEffect(() => {
+    const viewport = accountTabsViewport;
+    const selected = viewport?.querySelector<HTMLElement>(`#tab-${activeTab}`);
+    if (!viewport || !selected) return;
+    const viewportRect = viewport.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    if (selectedRect.left >= viewportRect.left && selectedRect.right <= viewportRect.right) return;
+    selected.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [accountTabsViewport, activeTab]);
 
   function selectTab(tab: AccountTab) {
     if (tab === activeTab) return;
@@ -770,7 +798,7 @@ export default function Settings() {
                 role="tab"
                 id={`tab-${tab.id}`}
                 aria-selected={activeTab === tab.id}
-                aria-controls={tab.id === "job-search" ? "job-search" : `panel-${tab.id}`}
+                aria-controls="account-panel"
                 tabIndex={activeTab === tab.id ? 0 : -1}
                 onClick={() => selectTab(tab.id)}
                 onKeyDown={(event) => {
@@ -793,7 +821,7 @@ export default function Settings() {
         {showAccountTabOverflowCue && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2 sm:hidden"
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2"
           >
             <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
               ›
@@ -810,8 +838,9 @@ export default function Settings() {
       )}
 
       <MotionPanel key={activeTab} name="dashboard-account-panel">
+      <div id="account-panel" role="tabpanel" aria-labelledby={`tab-${activeTab}`} tabIndex={0}>
       {activeTab === "job-search" && (
-        <section id="job-search" role="tabpanel" aria-labelledby="tab-job-search" className="space-y-4">
+        <section id="job-search" className="space-y-4">
           <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
             <div>
               <h2 className="text-base font-medium text-ink">Main resume</h2>
@@ -930,15 +959,13 @@ export default function Settings() {
 
       {/* Account, and the data controls under it.
 
-          One <section role="tabpanel"> around BOTH cards, matching the job-search panel above
-          (ISSUE-013b). "Your data" used to be its own top-level `activeTab === "sign-in"` block with
-          no id, no role and no aria-labelledby, which put Export data and Delete account - the two
-          most destructive controls in the product - outside the region the tab's aria-controls names.
-          A screen reader user moving by panel never reached them. The panel id stays "panel-sign-in"
-          so aria-controls on the tab still resolves; it is not a hash target ("#sign-in" is the tab
-          id, resolved by tabFromHash, not by scrolling). */}
+          Both cards stay in one conditional branch inside the shared account tabpanel (ISSUE-013b).
+          "Your data" used to be its own top-level `activeTab === "sign-in"` block, which put Export
+          data and Delete account outside the active panel. The inner id stays "panel-sign-in" for
+          existing source contracts; it is not a hash target ("#sign-in" is resolved by tabFromHash,
+          not by scrolling). */}
       {activeTab === "sign-in" && (
-        <section id="panel-sign-in" role="tabpanel" aria-labelledby="tab-sign-in" className="space-y-4">
+        <section id="panel-sign-in" className="space-y-4">
         <Card className="p-6">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-base font-medium text-ink">Account</h2>
@@ -1034,17 +1061,32 @@ export default function Settings() {
           <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
           <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
             <Button variant="secondary" type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null}>{dataBusy === "export" ? "Preparing..." : "Export data"}</Button>
-            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); setDeleteError(null); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
+            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); setDeleteError(null); resetDeleteDialogExit(); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
             <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
           </div>
         </Card>
-        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={(event) => { if (dataBusy === "delete") event.preventDefault(); }} onClose={() => deleteTriggerRef.current?.focus()} className="rq-dashboard-dialog m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
+        <dialog
+          ref={deleteDialogRef}
+          aria-labelledby="delete-title"
+          aria-describedby="delete-description"
+          aria-hidden={deleteDialogClosing || undefined}
+          inert={deleteDialogClosing || undefined}
+          onCancel={(event) => {
+            event.preventDefault();
+            if (dataBusy !== "delete") requestDeleteDialogClose();
+          }}
+          onClick={(event) => {
+            if (event.target === deleteDialogRef.current && dataBusy !== "delete") requestDeleteDialogClose();
+          }}
+          onClose={() => window.requestAnimationFrame(() => deleteTriggerRef.current?.focus())}
+          className={`rq-dashboard-dialog m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35 ${deleteDialogClosing ? "rq-dashboard-dialog-exit" : ""}`}
+        >
           {deleteComplete ? (
             <div className="p-6" role="status">
               <p className="text-label text-positive">Complete</p>
               <h2 id="delete-title" className="mt-2 text-heading">Your Litos account was deleted.</h2>
               <p id="delete-description" className="mt-3 text-body text-muted">The account-linked data named in the Privacy policy was removed. This cannot be undone.</p>
-              <Button className="mt-6" onClick={() => { deleteDialogRef.current?.close(); router.replace("/"); }}>Continue to Litos</Button>
+              <Button className="mt-6" onClick={() => requestDeleteDialogClose(() => router.replace("/"))}>Continue to Litos</Button>
             </div>
           ) : (
             <form method="dialog" className="p-6" onSubmit={(event) => { event.preventDefault(); void deleteAccount(); }}>
@@ -1063,7 +1105,7 @@ export default function Settings() {
               <input id="delete-confirmation" aria-describedby="delete-confirmation-instructions delete-confirmation-phrase" autoComplete="off" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="rq-field mt-3 w-full rounded-inner px-4 py-3 text-sm" />
               {deleteError && <div className="mt-3"><ErrorNote message={deleteError} /></div>}
               <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <Button variant="secondary" type="button" disabled={dataBusy === "delete"} onClick={() => deleteDialogRef.current?.close()}>Keep account</Button>
+                <Button variant="secondary" type="button" disabled={dataBusy === "delete"} onClick={() => requestDeleteDialogClose()}>Keep account</Button>
                 <Button variant="danger" type="submit" disabled={dataBusy !== null || !deleteConfirmed}>{dataBusy === "delete" ? "Deleting..." : "Delete account permanently"}</Button>
               </div>
             </form>
@@ -1073,7 +1115,7 @@ export default function Settings() {
       )}
 
       {activeTab === "automation" && (
-        <section className="space-y-4" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
+        <section className="space-y-4" id="panel-automation">
           <div>
             <h2 className="text-heading font-medium text-ink">Automation</h2>
             <p className="mt-1 text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
@@ -1325,7 +1367,7 @@ export default function Settings() {
           header. Every numeric check passed ("cardTop 0, inView true") while
           the thing the reader came for was invisible. Same scroll-margin the
           homepage sections use. */}
-      {activeTab === "application-details" && <Card className="p-6" id="panel-application-details" role="tabpanel" aria-labelledby="tab-application-details">
+      {activeTab === "application-details" && <Card className="p-6" id="panel-application-details">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-medium text-ink">Application details</h2>
@@ -1448,7 +1490,7 @@ export default function Settings() {
       </Card>}
 
       {/* Plan + usage */}
-      {activeTab === "plan" && <section className="space-y-4" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
+      {activeTab === "plan" && <section className="space-y-4" id="panel-plan">
         <PlanStatus showAction={false} />
         <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
@@ -1468,6 +1510,7 @@ export default function Settings() {
         )}
         </Card>
       </section>}
+      </div>
       </MotionPanel>
     </div>
   );

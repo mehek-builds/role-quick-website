@@ -137,6 +137,11 @@ jobs:
       - name: Dashboard motion spec
         run: npm run test:dashboard-motion
 
+      # Locks the production geometry, focus, error recovery, tab semantics, and reflow contracts
+      # established by the dashboard visual QA pass. The spec keeps screenshots for every green run.
+      - name: Dashboard visual regressions spec
+        run: npm run test:dashboard-visual-regressions
+
       # Same job on purpose: it reuses the build and the Chromium installed
       # above rather than paying for either twice. This spec is the ONLY thing
       # that can observe the per-band error boundaries actually containing a
@@ -191,6 +196,7 @@ jobs:
           path: |
             test-results/click-path/
             test-results/country-eligibility-flow/
+            test-results/dashboard-visual-regressions/
             test-results/narrow-viewport/
           if-no-files-found: ignore
           retention-days: 7

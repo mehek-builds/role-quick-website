@@ -16,7 +16,7 @@ test("Account automation uses three scannable surfaces without dropping permissi
   const source = await readFile(settingsPage, "utf8");
   const panel = automationPanel(source);
 
-  assert.match(panel, /<section className="space-y-4" id="panel-automation" role="tabpanel"/);
+  assert.match(panel, /<section className="space-y-4" id="panel-automation">/);
   assert.match(panel, /className="grid items-start gap-4 xl:grid-cols-2"/);
   assert.equal(
     [...panel.matchAll(/<Card className=/g)].length,
@@ -58,5 +58,9 @@ test("Account tabs expose a truthful mobile overflow cue", async () => {
   assert.match(source, /viewport\.addEventListener\("scroll", updateOverflowCue, \{ passive: true \}\)/);
   assert.match(source, /new ResizeObserver\(updateOverflowCue\)/);
   assert.match(source, /\{showAccountTabOverflowCue && \(/);
-  assert.match(source, /aria-hidden="true"[\s\S]*?sm:hidden/);
+  const cue = source.slice(
+    source.indexOf("{showAccountTabOverflowCue && ("),
+    source.indexOf("<MotionPanel", source.indexOf("{showAccountTabOverflowCue && (")),
+  );
+  assert.doesNotMatch(cue, /sm:hidden/);
 });

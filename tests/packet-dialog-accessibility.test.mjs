@@ -37,11 +37,11 @@ const dashboard = await readFile(new URL("../app/dashboard/page.tsx", import.met
 /* The dashboard component and the sandbox it is iterated in, held to the same
    contract on purpose: a sandbox that behaves differently stops being one. */
 const DIALOGS = [
-  ["ApplicationPacket", packet, /aria-label=\{`Application packet: \$\{role\} at \$\{company\}`\}/],
-  ["PacketViewer", sandbox, /aria-label=\{`Application packet: \$\{packet\.role\} at \$\{packet\.company\}`\}/],
+  ["ApplicationPacket", packet, /aria-label=\{`Application packet: \$\{role\} at \$\{company\}`\}/, /\}, \[requestClose\]\);/],
+  ["PacketViewer", sandbox, /aria-label=\{`Application packet: \$\{packet\.role\} at \$\{packet\.company\}`\}/, /\}, \[\]\);/],
 ];
 
-for (const [name, source, label] of DIALOGS) {
+for (const [name, source, label, trapDependencies] of DIALOGS) {
   test(`${name} names its dialog, and the name says which packet`, () => {
     assert.match(source, /role="dialog"/);
     assert.match(source, /aria-modal="true"/);
@@ -76,12 +76,12 @@ for (const [name, source, label] of DIALOGS) {
   });
 
   test(`${name} holds onClose in a ref, so the trap survives a parent render`, () => {
-    /* The trap effect runs on [] deps. If it keyed on onClose, a caller passing
-       an inline arrow would tear it down every parent commit, and the cleanup's
-       focus restore would throw focus out of an open dialog onto the page
-       behind it. Reading through a ref survives a caller that forgets. */
+    /* The production trap depends on the shared lifecycle's stable requestClose function, while
+       the sandbox has no lifecycle hook and still runs on an empty list. Neither keys on onClose:
+       an inline callback would otherwise tear the trap down every parent commit and restore focus
+       into the page behind the still-open dialog. */
     assert.match(source, /onCloseRef\.current\(\)/);
-    assert.match(source, /\}, \[\]\);/);
+    assert.match(source, trapDependencies);
   });
 }
 
@@ -119,7 +119,7 @@ test("TranscriptModal keeps the trap, the Escape close and the ref that survives
   assert.match(transcript, /event\.key === "Escape"/);
   assert.match(transcript, /previous\?\.focus\?\.\(\)/);
   assert.match(transcript, /onCloseRef\.current\(\)/);
-  assert.match(transcript, /\}, \[\]\);/);
+  assert.match(transcript, /\}, \[requestClose\]\);/);
 });
 
 /* Was "the review drawer keeps its own naming pattern, which is the one-per-page

@@ -11,13 +11,16 @@ test("the shared Litos+ modal preserves context and a manual way forward", async
   ]);
   assert.match(modal, /<dialog/);
   assert.match(modal, /onCancel=/);
-  assert.match(modal, /request\.onManual\?\.\(\)/);
-  assert.match(modal, /onClose\(\)/);
+  assert.match(modal, /const manualAction = presentRequest\.onManual/);
+  assert.match(modal, /manualAction\?\.\(\)/);
+  assert.match(modal, /onCloseRef\.current\(\)/);
   assert.match(modal, /LITOS_PLUS_PLANS\.map/);
   assert.match(modal, /Most popular/);
   assert.match(modal, /href="\/terms"/);
   assert.match(modal, /href="\/privacy"/);
   assert.match(provider, /triggerRef\.current/);
+  assert.match(provider, /trigger\?: HTMLElement \| null/);
+  assert.match(provider, /options\?\.trigger\?\.isConnected[\s\S]*\? options\.trigger[\s\S]*: document\.activeElement/);
   assert.match(provider, /triggerRef\.current\?\.focus\(\)/);
   assert.match(provider, /createPendingBillingAction/);
   assert.match(provider, /actionNonce: action\.action_nonce/);
@@ -66,7 +69,8 @@ test("authoritative exhausted-meter denials bypass cached trial feature grants",
   assert.equal((applications.match(/\{ source: "server_denial" \}/g) ?? []).length, 2);
   assert.match(applications, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)/);
   assert.match(applications, /isStructuredUpgradeDenial\(reason, "ai_cover_letter_generation"\)/);
-  assert.equal((outreach.match(/\{ source: "server_denial" \}/g) ?? []).length, 2);
+  assert.equal((outreach.match(/\{ source: "server_denial", trigger: upgradeTrigger \}/g) ?? []).length, 2);
+  assert.equal((outreach.match(/const upgradeTrigger = event\.currentTarget;/g) ?? []).length, 2);
   assert.match(outreach, /isStructuredUpgradeDenial\(reason, "contact_discovery"\)/);
   assert.match(outreach, /isStructuredUpgradeDenial\(reason, "outreach_email_generation"\)/);
   assert.match(home, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)[\s\S]*\{ source: "server_denial" \}/);
@@ -187,8 +191,10 @@ test("paid hover and sending without another prompt use separate server features
 
 test("network ownership controls stay available when discovery is locked", async () => {
   const network = await read("app/dashboard/network/page.tsx");
-  assert.match(network, /if \(!premium \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setPeople\(\[\]\);/);
-  assert.match(network, /if \(!premium \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setCompanies\(\[\]\);/);
+  assert.match(network, /if \(networkAccess === false \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setPeople\(\[\]\);/);
+  assert.match(network, /if \(networkAccess === false \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setCompanies\(\[\]\);/);
+  assert.match(network, /if \(networkAccess !== true \|\| status\?\.connected !== true\) return/);
+  assert.doesNotMatch(network, /if \(!premium \|\| status\?\.connected === false\)/);
   assert.match(network, /tab === "linkedin"/);
   assert.match(network, /\/network\/linkedin\/import\/preview/);
   assert.match(network, /\/network\/linkedin\/import\/commit/);
@@ -267,7 +273,7 @@ test("durable outreach drafts survive reload and remain editable", async () => {
   const outreach = await read("app/dashboard/outreach/page.tsx");
   assert.match(outreach, /api<\{ drafts\?: DurableOutreachDraft\[\] \}>\("\/drafts\?limit=100"/);
   assert.match(outreach, /durableDraft: saved/);
-  assert.match(outreach, /editSavedDraft\(e\.durableDraft!\)/);
+  assert.match(outreach, /editSavedDraft\(e\.durableDraft!, event\.currentTarget\)/);
   assert.match(outreach, /`\/drafts\/\$\{encodeURIComponent\(editingDraftId\)\}`/);
   assert.match(outreach, /method: "PATCH"/);
   assert.match(outreach, /"Save changes"/);

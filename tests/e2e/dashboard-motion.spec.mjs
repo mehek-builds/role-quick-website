@@ -104,6 +104,7 @@ async function startMotionSampler(page) {
           name,
           playState: animation.playState,
           pseudoElement: effect?.pseudoElement ?? null,
+          delay: typeof timing?.delay === "number" ? timing.delay : null,
           duration: typeof timing?.duration === "number" ? timing.duration : null,
         });
       }
@@ -158,8 +159,10 @@ test("route navigation creates a brief page exit and entry", async () => {
   assert.ok(names.has("rq-dashboard-page-exit"), `missing page exit animation: ${JSON.stringify(samples)}`);
   assert.ok(names.has("rq-dashboard-page-enter"), `missing page entry animation: ${JSON.stringify(samples)}`);
   assert.ok(
-    samples.filter((sample) => sample.duration !== null).every((sample) => sample.duration <= 300),
-    `dashboard route motion exceeded 300ms: ${JSON.stringify(samples)}`,
+    samples
+      .filter((sample) => sample.duration !== null)
+      .every((sample) => Math.max(0, sample.delay ?? 0) + sample.duration <= 320),
+    `dashboard route handoff exceeded the 320ms total budget: ${JSON.stringify(samples)}`,
   );
   await context.close();
 });

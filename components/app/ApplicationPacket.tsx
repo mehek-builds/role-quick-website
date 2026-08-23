@@ -6,6 +6,7 @@ import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, start
 import { completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
+import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 
 /* REVISITING AN APPLICATION, against real packet data.
  *
@@ -261,16 +262,23 @@ export function ApplicationPacket({
   const scroller = useRef<HTMLDivElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
   const dialog = useRef<HTMLDivElement>(null);
-  /* onClose read through a ref so the effect below can hold [] deps and run exactly once. Keying
-     the effect on onClose meant any caller passing an inline arrow rebuilt the focus trap on every
-     parent render, and the cleanup threw focus out of the dialog each time. A ref survives a caller
-     that forgets to memoise; the parent memoises too, but only one of those is enforceable here. */
+  const backdrop = useRef<HTMLButtonElement>(null);
+  /* onClose is read through a ref so the focus trap can depend only on the overlay lifecycle's
+     stable requestClose function. Keying the effect on onClose meant any caller passing an inline
+     arrow rebuilt the trap on every parent render, and the cleanup threw focus out of the dialog
+     each time. A ref survives a caller that forgets to memoise; the parent memoises too, but only
+     one of those is enforceable here. */
   const onCloseRef = useRef(onClose);
   /* Assigned in an effect, not during render: writing a ref during render is a React rule
      violation (react-hooks/refs) because it mutates state the renderer may discard. An effect with
      no dep array runs after every commit, which is exactly the freshness this needs. */
   useEffect(() => {
     onCloseRef.current = onClose;
+  });
+  const { closing, requestClose } = useDashboardOverlayExit({
+    dialogRef: dialog,
+    backdropRef: backdrop,
+    onExitComplete: () => onCloseRef.current(),
   });
   /* Seeded to the resume, which is what the scroller actually shows on open. It said "packet-jd",
      so the rail asserted Job description while the reader was looking at section 01, and stayed
@@ -405,9 +413,10 @@ export function ApplicationPacket({
     closeButton.current?.focus();
 
     function onKey(event: KeyboardEvent) {
+      if (dialog.current?.hasAttribute("inert")) return;
       if (event.key === "Escape") {
         event.stopPropagation();
-        onCloseRef.current();
+        requestClose();
         return;
       }
       if (event.key !== "Tab" || !dialog.current) return;
@@ -430,9 +439,11 @@ export function ApplicationPacket({
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = overflow;
-      previous?.focus?.();
+      window.requestAnimationFrame(() => {
+        if (previous?.isConnected) previous?.focus?.();
+      });
     };
-  }, []);
+  }, [requestClose]);
 
   const rail = [
     { id: "packet-resume", label: "Resume" },
@@ -475,19 +486,22 @@ export function ApplicationPacket({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 ${closing ? "pointer-events-none" : ""}`}>
       <button
+        ref={backdrop}
         aria-hidden="true"
         tabIndex={-1}
-        onClick={onClose}
-        className="rq-dashboard-backdrop absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px]"
+        onClick={() => requestClose()}
+        className={`rq-dashboard-backdrop absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px] ${closing ? "rq-dashboard-backdrop-exit" : ""}`}
       />
       <div
         ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label={`Application packet: ${role} at ${company}`}
-        className="rq-dashboard-dialog relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay"
+        aria-hidden={closing || undefined}
+        inert={closing || undefined}
+        className={`rq-dashboard-dialog relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay ${closing ? "rq-dashboard-dialog-exit" : ""}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
           <div className="min-w-0">
@@ -524,7 +538,7 @@ export function ApplicationPacket({
           </div>
           <button
             ref={closeButton}
-            onClick={onClose}
+            onClick={() => requestClose()}
             className="shrink-0 rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-muted transition-colors hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             Close

@@ -48,10 +48,18 @@ test("request error states use the shared announced retry control without nestin
   assert.doesNotMatch(source, /function NetworkRequestError[\s\S]{0,300}?role="alert"/);
   assert.match(source, /<DataErrorState[\s\S]*onRetry=\{onRetry\}/);
   assert.match(source, /function retryStatus\(\)[\s\S]*setStatusReload\(\(value\) => value \+ 1\)/);
+  assert.match(source, /function focusNetworkPanel\(\)[\s\S]*getElementById\("network-panel"\)\?\.focus\(\)/);
+  for (const retry of ["retryStatus", "retryPeople", "retryCompanies", "retryBilling"]) {
+    assert.match(source, new RegExp(`function ${retry}\\(\\) \\{\\s*focusNetworkPanel\\(\\)`));
+  }
 });
 
-test("unknown network access stays loading and never commits empty lists", () => {
+test("unknown network access stays loading only while billing is active", () => {
   assert.match(source, /const networkAccess = canUse\("networking_discovery"\)/);
+  assert.match(source, /loading: billingLoading/);
+  assert.match(source, /error: billingError/);
+  assert.match(source, /refresh: refreshBilling/);
+  assert.match(source, /const billingUnavailable = !billingLoading && networkAccess === null/);
   assert.doesNotMatch(source, /if \(!premium \|\| status\?\.connected === false\)/);
 
   const statusRequestEnd = source.indexOf("}, [statusReload]);");
@@ -68,7 +76,9 @@ test("unknown network access stays loading and never commits empty lists", () =>
   const peoplePanel = source.slice(source.indexOf('{tab === "people"'), source.indexOf('{tab === "companies"'));
   const companiesPanel = source.slice(source.indexOf('{tab === "companies"'), source.indexOf('{tab === "linkedin"'));
   for (const panel of [peoplePanel, companiesPanel]) {
-    assert.match(panel, /networkAccess === null[\s\S]{0,80}<ShimmerRows rows=\{3\}/);
+    assert.match(panel, /billingLoading[\s\S]{0,80}<ShimmerRows rows=\{3\}/);
+    assert.match(panel, /billingUnavailable[\s\S]{0,260}?title="Could not check your plan access"/);
+    assert.match(panel, /onRetry=\{retryBilling\}/);
     assert.match(panel, /status === null[\s\S]{0,80}<ShimmerRows rows=\{3\}/);
   }
 });

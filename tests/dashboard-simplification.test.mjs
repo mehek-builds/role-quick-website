@@ -15,6 +15,12 @@ test("Applications opens the board by default and keeps selected detail first on
      scrolling strip, asserted in tests/applications-mobile-controls.test.mjs. */
   assert.match(source, /className="hidden max-h-\[280px\] overflow-y-auto border-t border-border lg:block"/);
   assert.match(source, /← All applications/);
+  assert.equal(source.match(/← All applications/g)?.length, 1);
+  const canonicalDetail = source.slice(
+    source.indexOf("function CanonicalApplicationDetail"),
+    source.indexOf("function ApplicationFillReceipt"),
+  );
+  assert.doesNotMatch(canonicalDetail, /onBack|← All applications/);
 });
 
 test("dashboard navigation and hero use the simplified product language", () => {

@@ -41,6 +41,7 @@ import { RequirementBreakdown } from "@/components/app/RequirementBreakdown";
 import { ResumeHealth } from "@/components/app/ResumeHealth";
 import { Board } from "@/components/app/Board";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 /* contactName and contactLine, not a local read of `_contact`. They are the fourth and fifth
    readers of that record, and the two that already know its exact key names: the backend stores it
    verbatim from the resume request body, so "location" and "linkedin" resolve to nothing and fail
@@ -685,8 +686,8 @@ function Applications() {
   const moveToScreen = useCallback((next: Screen, options: { scrollToTop?: boolean } = {}) => {
     // Publish the navigation before React commits it so an already-running poll cannot undo it.
     screenRef.current = next;
+    runDashboardTransition(() => setScreen((current) => current === next ? current : next));
     if (options.scrollToTop !== false) window.scrollTo({ top: 0, behavior: "auto" });
-    setScreen((current) => current === next ? current : next);
   }, []);
 
   /* A stale packet refusal is a route transition, not a red failure banner. The server is still
@@ -1885,6 +1886,19 @@ function Applications() {
     : canonicalSelected?.review_state.replaceAll("_", " ") ?? "Opening";
   const selectedApplicationRowId = canonicalSelected?.id
     ?? (selected ? canonicalIdByPacketId[selected.id] ?? selected.id : openingApplicationId);
+  /* Only the task surface moves. The packet viewer and document dialog stay outside this keyed
+     boundary, so a poll-driven screen change cannot remount an open modal or disturb its focus.
+     A stable transition name lets React pair the old and new snapshots, while the key changes only
+     when the application or its actual task screen changes. */
+  const applicationTaskPanelKey = canonicalSelected
+    ? `canonical-${canonicalSelected.id}`
+    : selected && spec && review
+      ? `packet-${selected.id}-${screen}`
+      : selectedId
+        ? `unavailable-${selectedId}`
+        : packets === null
+          ? "loading"
+          : "ledger";
   useEffect(() => {
     if (!applicationTaskOpen || !pendingApplicationFocusRef.current) return;
     const frame = window.requestAnimationFrame(() => {
@@ -3767,6 +3781,11 @@ function Applications() {
         </section>
       )}
 
+      <MotionPanel
+        key={applicationTaskPanelKey}
+        name="dashboard-applications-task"
+        className={applicationTaskOpen ? "space-y-4" : "space-y-6"}
+      >
       {packets === null ? (
         <ShimmerRows rows={4} />
       ) : canonicalSelected ? (
@@ -3851,7 +3870,6 @@ function Applications() {
           coverLetterEditorOpen={canonicalCoverLetterEditorOpen}
           coverLetterDownloadUrl={canonicalCoverLetter?.download_url ?? canonicalGeneratedPacket?.cover_letter_download_url ?? null}
           error={canonicalFillError}
-          onBack={closeApplication}
           onFill={() => void fillApplication({
             company: canonicalSelected.company,
             role: canonicalSelected.role,
@@ -4270,6 +4288,7 @@ function Applications() {
           )}
         </>
       )}
+      </MotionPanel>
 
       {/* Rendered last and positioned fixed, so it lies over whichever screen the page is already
           on and closing it returns the user to exactly that, untouched.
@@ -4340,7 +4359,6 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen,
   coverLetterDownloadUrl,
   error,
-  onBack,
   onFill,
   onTailor,
   onOpenCoverLetterEditor,
@@ -4379,7 +4397,6 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen: boolean;
   coverLetterDownloadUrl: string | null;
   error: string | null;
-  onBack: () => void;
   onFill: () => void;
   onTailor: () => void;
   onOpenCoverLetterEditor: () => void;
@@ -4397,8 +4414,7 @@ function CanonicalApplicationDetail({
     <Card className="overflow-hidden">
       <div className="grid h-1 grid-cols-3" aria-hidden="true"><span className="bg-teal" /><span className="bg-brand" /><span className="bg-coral" /></div>
       <div className="p-6">
-        <button type="button" onClick={onBack} className="min-h-11 text-small text-muted hover:text-ink">← All applications</button>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free application fill</p>
             <h2 className="mt-2 text-heading font-[450] text-ink">{application.role}</h2>

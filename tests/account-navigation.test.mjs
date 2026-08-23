@@ -23,7 +23,11 @@ test("job search and account settings share one tabbed account destination", asy
 
   assert.doesNotMatch(layout, /href: "\/dashboard\/profile"/);
   assert.match(layout, /const MOBILE_NAV = NAV\.slice\(0, 4\)/);
-  assert.match(layout, /aria-controls="dashboard-more-dialog"/);
+  assert.match(layout, /id="dashboard-more-button"/);
+  assert.match(layout, /aria-controls=\{moreOpen \? "dashboard-more-dialog" : undefined\}/);
+  assert.match(layout, /matchMedia\("\(min-width: 64rem\)"\)/);
+  assert.match(layout, /moreDialogRef\.current\.contains\(document\.activeElement\)/);
+  assert.match(layout, /\.dashboard-shell aside \[aria-current="page"\]/);
   assert.match(layout, /role="dialog"/);
   assert.match(layout, /href: "\/dashboard\/network", label: "Network"/);
   assert.match(layout, /href: "\/dashboard\/outreach", label: "Outreach"/);
@@ -38,7 +42,11 @@ test("job search and account settings share one tabbed account destination", asy
   assert.match(settings, /<TargetingCard \/>/);
   assert.match(settings, /role="tablist"/);
   assert.match(shippedCopy(settings), /role="tabpanel"/);
+  assert.match(settings, /aria-controls="account-panel"/);
   assert.match(settings, /"ArrowLeft", "ArrowRight", "Home", "End"/);
+  assert.match(settings, /querySelector<HTMLElement>\(`#tab-\$\{activeTab\}`\)/);
+  assert.match(settings, /selected\.scrollIntoView\(\{[\s\S]{0,180}?inline: "nearest"/);
+  assert.match(settings, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches \? "auto" : "smooth"/);
   assert.match(oldProfileRoute, /redirect\("\/dashboard\/settings#job-search"\)/);
 });
 
@@ -53,7 +61,7 @@ function tabBlocks(settings) {
   }));
 }
 
-test("ISSUE-013b: each account tab renders one region, and its destructive controls are inside it", async () => {
+test("ISSUE-013b: every account tab controls one mounted panel, with its content inside", async () => {
   // Export data and Delete account used to render from a SECOND top-level `activeTab === "sign-in"`
   // block with no id, no role and no aria-labelledby, and the visa filter did the same on the
   // job-search tab. Both sat outside the element the tab's aria-controls names, so a screen reader
@@ -62,25 +70,38 @@ test("ISSUE-013b: each account tab renders one region, and its destructive contr
     await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8"),
   );
   const blocks = tabBlocks(settings);
+  const panelStart = settings.indexOf('<div id="account-panel" role="tabpanel"');
+  const panelEnd = settings.indexOf("</MotionPanel>", panelStart);
+
+  assert.notEqual(panelStart, -1, "the shared account panel must be mounted");
+  assert.notEqual(panelEnd, -1, "the shared account panel must close inside MotionPanel");
+  assert.match(
+    settings.slice(panelStart, panelEnd),
+    /aria-labelledby=\{`tab-\$\{activeTab\}`\}/,
+    "the shared panel must be named by the active tab",
+  );
+  assert.equal(
+    [...settings.matchAll(/role="tabpanel"/g)].length,
+    1,
+    "Account must expose one tabpanel instead of nested panels",
+  );
+  assert.match(settings, /id=\{`tab-\$\{tab\.id\}`\}/);
+  assert.match(settings, /aria-controls="account-panel"/);
 
   for (const tab of ACCOUNT_TAB_IDS) {
     const forTab = blocks.filter((block) => block.tab === tab);
     assert.equal(
       forTab.length,
       1,
-      `"${tab}" must render as exactly one region, not ${forTab.length} sibling blocks`,
+      `"${tab}" must render as exactly one content block, not ${forTab.length} sibling blocks`,
     );
     const [{ body }] = forTab;
-    // The opening element of the block, i.e. the thing the tab points at.
-    const opening = body.slice(0, body.indexOf(">") + 1);
-    assert.match(opening, /role="tabpanel"/, `"${tab}" must open with role="tabpanel"`);
-    assert.match(
-      opening,
-      new RegExp(`aria-labelledby="tab-${tab}"`),
-      `"${tab}" must be named by its own tab button`,
+    const blockStart = settings.indexOf(body, panelStart);
+    assert.ok(
+      blockStart >= panelStart && blockStart < panelEnd,
+      `"${tab}" content must stay inside the shared account panel`,
     );
-    // aria-labelledby has to point at an id that exists: the tab strip renders id={`tab-${tab.id}`}.
-    assert.match(settings, /id=\{`tab-\$\{tab\.id\}`\}/);
+    assert.doesNotMatch(body.slice(0, body.indexOf(">") + 1), /role="tabpanel"|aria-labelledby=/);
   }
 
   const signIn = blocks.find((block) => block.tab === "sign-in");
@@ -94,6 +115,8 @@ test("ISSUE-013b: each account tab renders one region, and its destructive contr
   const jobSearch = blocks.find((block) => block.tab === "job-search");
   assert.match(jobSearch.body, /id="visa-sponsorship"/);
   assert.match(jobSearch.body.slice(0, jobSearch.body.indexOf(">") + 1), /id="job-search"/);
-  assert.match(settings, /aria-controls=\{tab\.id === "job-search" \? "job-search" : `panel-\$\{tab\.id\}`\}/);
   assert.match(settings, /id="panel-sign-in"/);
+  assert.match(settings, /id="panel-application-details"/);
+  assert.match(settings, /id="panel-automation"/);
+  assert.match(settings, /id="panel-plan"/);
 });

@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import ResumeWorkspace from "../resume/page";
 import { api, getApplicationProfile, type ApplicationProfile, type CanonicalApplication, type CanonicalCoverLetterResponse, type DocumentSummary, type GeneratedResume } from "@/lib/api";
 import { Button, ButtonLink } from "@/components/app/Button";
-import { Card, DataErrorState, EmptyState, ErrorNote, ShimmerRows } from "@/components/app/ui";
+import { Card, DataErrorState, EmptyState, ErrorNote, PendingLabel, ShimmerRows } from "@/components/app/ui";
 import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 import { useBilling } from "@/components/billing/BillingProvider";
+import { createLatestRequestCoordinator, restoreFocusAfterRetry } from "@/lib/latest-request";
 import { userFacingError } from "@/lib/user-facing-error";
 
 const TABS = [
@@ -20,6 +21,7 @@ const TABS = [
 type Tab = typeof TABS[number][0];
 type DocumentResource = "resumes" | "coverLetters" | "applications" | "attachments" | "profile";
 type DocumentResourceErrors = Partial<Record<DocumentResource, string>>;
+type DocumentResourcePending = Partial<Record<DocumentResource, boolean>>;
 
 export default function DocumentsPage() {
   const router = useRouter();
@@ -31,9 +33,11 @@ export default function DocumentsPage() {
   const [attachments, setAttachments] = useState<DocumentSummary[] | null>(null);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
   const [resourceErrors, setResourceErrors] = useState<DocumentResourceErrors>({});
+  const [pendingResources, setPendingResources] = useState<DocumentResourcePending>({});
   const [documentsTabsViewport, setDocumentsTabsViewport] = useState<HTMLDivElement | null>(null);
   const [showDocumentsTabOverflowCue, setShowDocumentsTabOverflowCue] = useState(false);
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const [resourceRequests] = useState(() => createLatestRequestCoordinator<DocumentResource>());
 
   const setResourceError = useCallback((resource: DocumentResource, message: string | null) => {
     setResourceErrors((current) => {
@@ -44,54 +48,65 @@ export default function DocumentsPage() {
     });
   }, []);
 
-  const loadResumes = useCallback(async () => {
-    try {
-      const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
-      setResumes(history.resumes);
-      setResourceError("resumes", null);
-    } catch (reason) {
-      setResourceError("resumes", userFacingError(reason, "Your tailored resume history could not load."));
-    }
-  }, [setResourceError]);
+  const setResourcePending = useCallback((resource: DocumentResource, pending: boolean) => {
+    setPendingResources((current) => ({ ...current, [resource]: pending }));
+  }, []);
 
-  const loadCoverLetters = useCallback(async () => {
-    try {
-      const result = await api<{ cover_letters?: CanonicalCoverLetterResponse[] }>("/cover-letters", { cache: "no-store" });
-      setCoverLetters(result.cover_letters ?? []);
-      setResourceError("coverLetters", null);
-    } catch (reason) {
-      setResourceError("coverLetters", userFacingError(reason, "Your cover letters could not load."));
-    }
-  }, [setResourceError]);
+  const runResourceLoad = useCallback(<Value,>(
+    resource: DocumentResource,
+    request: () => Promise<Value>,
+    onSuccess: (value: Value) => void,
+    failureMessage: string,
+    supersede = false,
+  ) => resourceRequests.run(resource, request, {
+    onStart: () => {
+      setResourcePending(resource, true);
+      setResourceError(resource, null);
+    },
+    onSuccess,
+    onError: (reason) => setResourceError(resource, userFacingError(reason, failureMessage)),
+    onSettled: () => setResourcePending(resource, false),
+  }, { supersede }), [resourceRequests, setResourceError, setResourcePending]);
 
-  const loadApplications = useCallback(async () => {
-    try {
-      const result = await api<{ applications?: CanonicalApplication[] }>("/applications?limit=200");
-      setApplications(result.applications ?? []);
-      setResourceError("applications", null);
-    } catch (reason) {
-      setResourceError("applications", userFacingError(reason, "Application details for your cover letters could not load."));
-    }
-  }, [setResourceError]);
+  const loadResumes = useCallback((supersede = false) => runResourceLoad(
+    "resumes",
+    () => api<{ resumes: GeneratedResume[] }>("/resume/history"),
+    (history) => setResumes(history.resumes),
+    "Your tailored resume history could not load.",
+    supersede,
+  ), [runResourceLoad]);
 
-  const loadAttachments = useCallback(async () => {
-    try {
-      const result = await api<{ documents?: DocumentSummary[] } | DocumentSummary[]>("/documents");
-      setAttachments(Array.isArray(result) ? result : result.documents ?? []);
-      setResourceError("attachments", null);
-    } catch (reason) {
-      setResourceError("attachments", userFacingError(reason, "Your reusable attachments could not load."));
-    }
-  }, [setResourceError]);
+  const loadCoverLetters = useCallback((supersede = false) => runResourceLoad(
+    "coverLetters",
+    () => api<{ cover_letters?: CanonicalCoverLetterResponse[] }>("/cover-letters", { cache: "no-store" }),
+    (result) => setCoverLetters(result.cover_letters ?? []),
+    "Your cover letters could not load.",
+    supersede,
+  ), [runResourceLoad]);
 
-  const loadProfile = useCallback(async () => {
-    try {
-      setProfile(await getApplicationProfile());
-      setResourceError("profile", null);
-    } catch (reason) {
-      setResourceError("profile", userFacingError(reason, "Your saved application answers could not load."));
-    }
-  }, [setResourceError]);
+  const loadApplications = useCallback((supersede = false) => runResourceLoad(
+    "applications",
+    () => api<{ applications?: CanonicalApplication[] }>("/applications?limit=200"),
+    (result) => setApplications(result.applications ?? []),
+    "Application details for your cover letters could not load.",
+    supersede,
+  ), [runResourceLoad]);
+
+  const loadAttachments = useCallback((supersede = false) => runResourceLoad(
+    "attachments",
+    () => api<{ documents?: DocumentSummary[] } | DocumentSummary[]>("/documents"),
+    (result) => setAttachments(Array.isArray(result) ? result : result.documents ?? []),
+    "Your reusable attachments could not load.",
+    supersede,
+  ), [runResourceLoad]);
+
+  const loadProfile = useCallback((supersede = false) => runResourceLoad(
+    "profile",
+    getApplicationProfile,
+    setProfile,
+    "Your saved application answers could not load.",
+    supersede,
+  ), [runResourceLoad]);
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
@@ -130,6 +145,20 @@ export default function DocumentsPage() {
       observer?.disconnect();
     };
   }, [documentsTabsViewport]);
+
+  useEffect(() => {
+    const viewport = documentsTabsViewport;
+    const selected = tabRefs.current[tab];
+    if (!viewport || !selected) return;
+    const viewportRect = viewport.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    if (selectedRect.left >= viewportRect.left && selectedRect.right <= viewportRect.right) return;
+    selected.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [documentsTabsViewport, tab]);
 
   function choose(next: Tab) {
     if (next === tab) return;
@@ -171,13 +200,38 @@ export default function DocumentsPage() {
   const savedAnswerCount = profile ? Object.values(profile).filter((value) => typeof value === "string" && value.trim()).length : 0;
   const coverLetterResourcesFailed = Boolean(resourceErrors.coverLetters || resourceErrors.resumes || resourceErrors.applications);
   const hasCoverLetterContent = (coverLetters?.length ?? 0) > 0 || (legacyCoverLetters?.length ?? 0) > 0;
+  const coverLetterResourcesPending = Boolean(pendingResources.coverLetters || pendingResources.resumes || pendingResources.applications);
+  const activeTabPending = tab === "tailored-resumes"
+    ? Boolean(pendingResources.resumes)
+    : tab === "cover-letters"
+      ? coverLetterResourcesPending
+      : tab === "saved-answers"
+        ? Boolean(pendingResources.profile)
+        : tab === "attachments"
+          ? Boolean(pendingResources.attachments)
+          : false;
+  const activeTabHasData = tab === "tailored-resumes"
+    ? resumes !== null
+    : tab === "cover-letters"
+      ? coverLetters !== null || resumes !== null || applications !== null
+      : tab === "saved-answers"
+        ? profile !== null
+        : tab === "attachments"
+          ? attachments !== null
+          : false;
+
+  function retryDocumentResource(retry: () => Promise<unknown>) {
+    void retry();
+    restoreFocusAfterRetry("documents-panel");
+  }
 
   function retryCoverLetterResources() {
-    const retries: Promise<void>[] = [];
+    const retries: Promise<unknown>[] = [];
     if (resourceErrors.coverLetters) retries.push(loadCoverLetters());
     if (resourceErrors.resumes) retries.push(loadResumes());
     if (resourceErrors.applications) retries.push(loadApplications());
     void Promise.all(retries);
+    restoreFocusAfterRetry("documents-panel");
   }
 
   return (
@@ -206,7 +260,7 @@ export default function DocumentsPage() {
               role="tab"
               id={`documents-tab-${value}`}
               aria-selected={tab === value}
-              aria-controls={`documents-panel-${value}`}
+              aria-controls="documents-panel"
               tabIndex={tab === value ? 0 : -1}
               onClick={() => choose(value)}
               onKeyDown={(event) => {
@@ -224,7 +278,7 @@ export default function DocumentsPage() {
         {showDocumentsTabOverflowCue && (
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2 sm:hidden"
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2"
           >
             <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
               ›
@@ -234,7 +288,12 @@ export default function DocumentsPage() {
       </div>
 
       <MotionPanel key={tab} name="dashboard-documents-panel">
-        <div id={`documents-panel-${tab}`} role="tabpanel" aria-labelledby={`documents-tab-${tab}`} tabIndex={0}>
+        <div id="documents-panel" role="tabpanel" aria-labelledby={`documents-tab-${tab}`} aria-busy={activeTabPending} tabIndex={0}>
+        {activeTabPending && activeTabHasData && (
+          <p role="status" className="mb-4 text-small text-muted">
+            <PendingLabel>Refreshing...</PendingLabel>
+          </p>
+        )}
         {tab === "base-resume" && <ResumeWorkspace />}
         {tab === "tailored-resumes" && (
           resourceErrors.resumes ? (
@@ -242,7 +301,7 @@ export default function DocumentsPage() {
               headingLevel="h2"
               title="Tailored resumes did not load."
               body={resourceErrors.resumes}
-              onRetry={() => void loadResumes()}
+              onRetry={() => retryDocumentResource(loadResumes)}
             />
           ) : <GeneratedLibrary kind="resume" items={resumes} />
         )}
@@ -261,7 +320,7 @@ export default function DocumentsPage() {
                 canonical={resourceErrors.coverLetters ? [] : coverLetters}
                 legacy={resourceErrors.resumes ? [] : legacyCoverLetters}
                 applications={applications ?? []}
-                onChanged={() => void loadCoverLetters()}
+                onChanged={() => void loadCoverLetters(true)}
               />
             )}
           </div>
@@ -272,7 +331,7 @@ export default function DocumentsPage() {
               headingLevel="h2"
               title="Saved answers did not load."
               body={resourceErrors.profile}
-              onRetry={() => void loadProfile()}
+              onRetry={() => retryDocumentResource(loadProfile)}
             />
           ) : (
             <Card className="p-6">
@@ -289,7 +348,7 @@ export default function DocumentsPage() {
               headingLevel="h2"
               title="Attachments did not load."
               body={resourceErrors.attachments}
-              onRetry={() => void loadAttachments()}
+              onRetry={() => retryDocumentResource(loadAttachments)}
             />
           ) : attachments === null ? <ShimmerRows rows={3} /> : attachments.length === 0 ? (
             <EmptyState visual="applications" title="No reusable attachments" body="Employer documents you upload will stay available here when the application allows reuse." />

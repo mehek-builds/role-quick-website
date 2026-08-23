@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
+import { createExclusiveMutationCoordinator, createLatestRequestCoordinator, restoreFocusAfterRetry } from "@/lib/latest-request";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -18,6 +19,11 @@ import {
 } from "@/lib/profile-editor";
 
 type ParsedProfile = Record<string, unknown>;
+type ResumeResource = "profile" | "bank" | "targeting";
+type ResumeResourcePending = Partial<Record<ResumeResource, boolean>>;
+type ProfileLoadResult =
+  | { kind: "missing" }
+  | { kind: "ready"; profile: ParsedProfile; targetingError: string | null };
 
 export default function ResumeWorkspace() {
   const embedded = usePathname() === "/dashboard/documents";
@@ -26,92 +32,133 @@ export default function ResumeWorkspace() {
   const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
   const [bankLoadError, setBankLoadError] = useState<string | null>(null);
   const [targetingRefreshError, setTargetingRefreshError] = useState<string | null>(null);
+  const [pendingResources, setPendingResources] = useState<ResumeResourcePending>({});
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const uploadInFlightRef = useRef(false);
   const [savedEntriesJson, setSavedEntriesJson] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const uploadedProfileRef = useRef<ParsedProfile | null>(null);
+  const [resourceRequests] = useState(() => createLatestRequestCoordinator<ResumeResource>());
+  const [mutations] = useState(() => createExclusiveMutationCoordinator<"upload" | "save">());
 
-  const loadProfile = useCallback(async () => {
-    try {
+  const setResourcePending = useCallback((resource: ResumeResource, pending: boolean) => {
+    setPendingResources((current) => ({ ...current, [resource]: pending }));
+  }, []);
+
+  const loadProfile = useCallback((supersede = false) => resourceRequests.run<ProfileLoadResult>(
+    "profile",
+    async () => {
       const profileRes = await api<ParsedProfile>("/profile").catch((reason) => {
         if (reason instanceof ApiError && reason.status === 404) return "missing" as const;
         throw reason;
       });
-      if (profileRes === "missing") {
-        setProfile("missing");
-        setProfileLoadError(null);
-        setTargetingRefreshError(null);
-        return;
-      }
-      let targetingRes;
+      if (profileRes === "missing") return { kind: "missing" };
+
       try {
-        targetingRes = await getTargeting();
+        const targetingRes = await getTargeting();
+        return {
+          kind: "ready",
+          profile: targetingRes.titles?.length
+            ? { ...profileRes, target_roles: targetingRes.titles }
+            : profileRes,
+          targetingError: null,
+        };
       } catch (reason) {
         const profileWithoutTargetRoles = { ...profileRes };
         delete profileWithoutTargetRoles.target_roles;
-        setProfile(profileWithoutTargetRoles);
-        setProfileLoadError(null);
-        setTargetingRefreshError(userFacingError(reason, "Your resume loaded, but target roles could not load."));
-        return;
+        return {
+          kind: "ready",
+          profile: profileWithoutTargetRoles,
+          targetingError: userFacingError(reason, "Your resume loaded, but target roles could not load."),
+        };
       }
-      setProfile(
-        targetingRes.titles?.length
-          ? { ...profileRes, target_roles: targetingRes.titles }
-          : profileRes,
-      );
-      setProfileLoadError(null);
-      setTargetingRefreshError(null);
-    } catch (reason) {
-      setProfileLoadError(userFacingError(reason, "Your resume could not load."));
-    }
-  }, []);
+    },
+    {
+      onStart: () => {
+        setResourcePending("profile", true);
+        setProfileLoadError(null);
+        setTargetingRefreshError(null);
+      },
+      onSuccess: (result) => {
+        if (result.kind === "missing") {
+          setProfile("missing");
+          setTargetingRefreshError(null);
+          return;
+        }
+        setProfile(result.profile);
+        setTargetingRefreshError(result.targetingError);
+      },
+      onError: (reason) => setProfileLoadError(userFacingError(reason, "Your resume could not load.")),
+      onSettled: () => setResourcePending("profile", false),
+    },
+    { supersede },
+  ), [resourceRequests, setResourcePending]);
 
-  const loadBank = useCallback(async (failureMessage = "Your work history could not load.") => {
-    try {
-      const bank = await api<{ entries: ExperienceEntry[] }>("/profile/experience-bank");
-      setEntries(bank.entries);
-      setSavedEntriesJson(JSON.stringify(bank.entries));
-      setBankLoadError(null);
-    } catch (reason) {
-      setBankLoadError(userFacingError(reason, failureMessage));
-    }
-  }, []);
+  const loadBank = useCallback((
+    failureMessage = "Your work history could not load.",
+    supersede = false,
+  ) => resourceRequests.run(
+    "bank",
+    () => api<{ entries: ExperienceEntry[] }>("/profile/experience-bank"),
+    {
+      onStart: () => {
+        setResourcePending("bank", true);
+        setBankLoadError(null);
+      },
+      onSuccess: (bank) => {
+        setEntries(bank.entries);
+        setSavedEntriesJson(JSON.stringify(bank.entries));
+      },
+      onError: (reason) => setBankLoadError(userFacingError(reason, failureMessage)),
+      onSettled: () => setResourcePending("bank", false),
+    },
+    { supersede },
+  ), [resourceRequests, setResourcePending]);
 
-  const loadTargeting = useCallback(async (failureMessage: string, useUploadedFallback = false) => {
-    try {
-      const targeting = await getTargeting();
-      if (targeting.titles?.length) {
-        setProfile((current) => {
-          const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
-          return base ? { ...base, target_roles: targeting.titles } : current;
-        });
-      } else if (useUploadedFallback && uploadedProfileRef.current) {
-        const inferredRoles = Array.isArray(uploadedProfileRef.current.target_roles)
-          ? uploadedProfileRef.current.target_roles
-          : [];
-        if (inferredRoles.length > 0) {
+  const loadTargeting = useCallback((
+    failureMessage: string,
+    useUploadedFallback = false,
+    supersede = false,
+  ) => resourceRequests.run(
+    "targeting",
+    getTargeting,
+    {
+      onStart: () => {
+        setResourcePending("targeting", true);
+        setTargetingRefreshError(null);
+      },
+      onSuccess: (targeting) => {
+        if (targeting.titles?.length) {
           setProfile((current) => {
             const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
-            return base ? { ...base, target_roles: inferredRoles } : current;
+            return base ? { ...base, target_roles: targeting.titles } : current;
           });
+        } else if (useUploadedFallback && uploadedProfileRef.current) {
+          const inferredRoles = Array.isArray(uploadedProfileRef.current.target_roles)
+            ? uploadedProfileRef.current.target_roles
+            : [];
+          if (inferredRoles.length > 0) {
+            setProfile((current) => {
+              const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
+              return base ? { ...base, target_roles: inferredRoles } : current;
+            });
+          }
         }
-      }
-      setTargetingRefreshError(null);
-    } catch (reason) {
-      setTargetingRefreshError(userFacingError(reason, failureMessage));
-    }
-  }, []);
+      },
+      onError: (reason) => setTargetingRefreshError(userFacingError(reason, failureMessage)),
+      onSettled: () => setResourcePending("targeting", false),
+    },
+    { supersede },
+  ), [resourceRequests, setResourcePending]);
 
   const refreshUploadedProfile = useCallback(async () => {
     await Promise.allSettled([
-      loadBank("Your resume uploaded, but its refreshed work history could not load."),
-      loadTargeting("Your resume uploaded, but target roles could not refresh.", true),
+      loadBank("Your resume uploaded, but its refreshed work history could not load.", true),
+      loadTargeting("Your resume uploaded, but target roles could not refresh.", true, true),
     ]);
   }, [loadBank, loadTargeting]);
 
@@ -121,100 +168,115 @@ export default function ResumeWorkspace() {
     });
   }, [loadBank, loadProfile]);
 
+  function retryProfile() {
+    void loadProfile();
+    restoreFocusAfterRetry("resume-profile-heading");
+  }
+
+  function retryBank() {
+    void loadBank();
+    restoreFocusAfterRetry("resume-bank-heading");
+  }
+
+  function retryTargeting() {
+    void loadTargeting("Target roles could not load.", true);
+    restoreFocusAfterRetry("resume-profile-heading");
+  }
+
   async function upload(file: File) {
-    if (uploadInFlightRef.current) return;
-    uploadInFlightRef.current = true;
-    setUploading(true);
-    setError(null);
-    try {
-      const form = new FormData();
-      // The backend multipart handler only reads the part named "resume" (profile.ts);
-      // "file" is silently ignored and the upload 400s.
-      form.append("resume", file);
-      const res = await fetch(`${API_URL}/profile`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${getToken()}`, ...litosClientHeaders() },
-        body: form,
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(data?.error ?? "Upload failed. Is it a PDF under 10 MB?");
-      } else {
-        const parsedProfile = data as ParsedProfile;
-        uploadedProfileRef.current = parsedProfile;
-        const parsedProfileWithoutTargetRoles = { ...parsedProfile };
-        delete parsedProfileWithoutTargetRoles.target_roles;
-        const currentRoles = profile && profile !== "missing" && Array.isArray(profile.target_roles)
-          ? profile.target_roles
-          : [];
-        setProfile(
-          currentRoles.length > 0
-            ? { ...parsedProfileWithoutTargetRoles, target_roles: currentRoles }
-            : parsedProfileWithoutTargetRoles,
-        );
-        setEntries(null);
-        await refreshUploadedProfile();
+    await mutations.run("upload", async () => {
+      setUploading(true);
+      setError(null);
+      try {
+        const form = new FormData();
+        // The backend multipart handler only reads the part named "resume" (profile.ts);
+        // "file" is silently ignored and the upload 400s.
+        form.append("resume", file);
+        const res = await fetch(`${API_URL}/profile`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${getToken()}`, ...litosClientHeaders() },
+          body: form,
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+          setError(data?.error ?? "Upload failed. Is it a PDF under 10 MB?");
+        } else {
+          const parsedProfile = data as ParsedProfile;
+          uploadedProfileRef.current = parsedProfile;
+          const parsedProfileWithoutTargetRoles = { ...parsedProfile };
+          delete parsedProfileWithoutTargetRoles.target_roles;
+          const currentRoles = profile && profile !== "missing" && Array.isArray(profile.target_roles)
+            ? profile.target_roles
+            : [];
+          setProfile(
+            currentRoles.length > 0
+              ? { ...parsedProfileWithoutTargetRoles, target_roles: currentRoles }
+              : parsedProfileWithoutTargetRoles,
+          );
+          setEntries(null);
+          await refreshUploadedProfile();
+        }
+      } catch {
+        setError("Network error during upload. You can retry the same file.");
+      } finally {
+        setUploading(false);
       }
-    } catch {
-      setError("Network error during upload. You can retry the same file.");
-    } finally {
-      uploadInFlightRef.current = false;
-      setUploading(false);
-    }
+    });
   }
 
   async function saveBank() {
-    if (!entries) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const cleaned = entries
-        .map((e) => ({
-          ...(e.id ? { id: e.id } : {}),
-          type: e.type,
-          org: e.org.trim(),
-          title: e.title?.trim() || undefined,
-          date_range: e.date_range?.trim() || undefined,
-          /* This PUT replaces the whole bank, so omitting a field does not leave the stored value
-             alone, it deletes it - which is how every parsed city was lost the first time. Now
-             editable above, so an empty string here is the student clearing it on purpose. */
-          location: e.location?.trim() || undefined,
-          bullet_variants: e.bullet_variants.map((b) => b.trim()).filter(Boolean),
-          tags: (e.tags ?? []).map((t) => t.trim()).filter(Boolean),
-        }));
-      /* The API requires an org and at least one bullet per entry, so incomplete rows cannot be
-         sent. They used to be dropped here silently and the page still said "Saved", so a half
-         filled entry disappeared and reported success. That was survivable while the only way in
-         was one "Add entry" button; two Add buttons and two empty states inviting "add one by
-         hand" make it the common case. Say what is wrong instead, and save nothing until it is
-         fixed: a partial save would renumber the bank under the student mid-edit.
-         A row with nothing typed in it at all is the student changing their mind after clicking
-         Add, so it is dropped without complaint. */
-      const started = cleaned.filter((e) => !(e.org && e.bullet_variants.length > 0))
-        .filter((e) => e.org || e.bullet_variants.length > 0 || e.title || e.date_range);
-      if (started.length > 0) {
-        const named = started.find((e) => e.org)?.org;
-        setError(
-          started.length === 1
-            ? `${named ? `"${named}"` : "One entry"} needs both an organization and at least one bullet before it can be saved.`
-            : `${started.length} entries need both an organization and at least one bullet before they can be saved.`,
+    if (!entries || mutations.isActive()) return;
+    await mutations.run("save", async () => {
+      setSaving(true);
+      setError(null);
+      try {
+        const cleaned = entries
+          .map((e) => ({
+            ...(e.id ? { id: e.id } : {}),
+            type: e.type,
+            org: e.org.trim(),
+            title: e.title?.trim() || undefined,
+            date_range: e.date_range?.trim() || undefined,
+            /* This PUT replaces the whole bank, so omitting a field does not leave the stored value
+               alone, it deletes it - which is how every parsed city was lost the first time. Now
+               editable above, so an empty string here is the student clearing it on purpose. */
+            location: e.location?.trim() || undefined,
+            bullet_variants: e.bullet_variants.map((b) => b.trim()).filter(Boolean),
+            tags: (e.tags ?? []).map((t) => t.trim()).filter(Boolean),
+          }));
+        /* The API requires an org and at least one bullet per entry, so incomplete rows cannot be
+           sent. They used to be dropped here silently and the page still said "Saved", so a half
+           filled entry disappeared and reported success. That was survivable while the only way in
+           was one "Add entry" button; two Add buttons and two empty states inviting "add one by
+           hand" make it the common case. Say what is wrong instead, and save nothing until it is
+           fixed: a partial save would renumber the bank under the student mid-edit.
+           A row with nothing typed in it at all is the student changing their mind after clicking
+           Add, so it is dropped without complaint. */
+        const started = cleaned.filter((e) => !(e.org && e.bullet_variants.length > 0))
+          .filter((e) => e.org || e.bullet_variants.length > 0 || e.title || e.date_range);
+        if (started.length > 0) {
+          const named = started.find((e) => e.org)?.org;
+          setError(
+            started.length === 1
+              ? `${named ? `"${named}"` : "One entry"} needs both an organization and at least one bullet before it can be saved.`
+              : `${started.length} entries need both an organization and at least one bullet before they can be saved.`,
+          );
+          return;
+        }
+        const complete = cleaned.filter((e) => e.org && e.bullet_variants.length > 0);
+        const res = await api<{ entries: ExperienceEntry[] }>(
+          "/profile/experience-bank",
+          { method: "PUT", body: JSON.stringify({ entries: complete }) },
         );
+        setEntries(res.entries);
+        setSavedEntriesJson(JSON.stringify(res.entries));
+        setSavedAt(Date.now());
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not save.");
+      } finally {
         setSaving(false);
-        return;
       }
-      const complete = cleaned.filter((e) => e.org && e.bullet_variants.length > 0);
-      const res = await api<{ entries: ExperienceEntry[] }>(
-        "/profile/experience-bank",
-        { method: "PUT", body: JSON.stringify({ entries: complete }) },
-      );
-      setEntries(res.entries);
-      setSavedEntriesJson(JSON.stringify(res.entries));
-      setSavedAt(Date.now());
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save.");
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   function patchEntry(i: number, patch: Partial<ExperienceEntry>) {
@@ -240,10 +302,18 @@ export default function ResumeWorkspace() {
      would write the wrong row as soon as the two categories interleave. */
   const { work: workEntries, leadership: leadershipEntries } = splitBankByCategory(entries ?? []);
   const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesJson;
-  const uploadReady = profile !== null && entries !== null && profileLoadError === null && bankLoadError === null;
+  const profileRefreshing = Boolean(pendingResources.profile || pendingResources.targeting);
+  const bankRefreshing = Boolean(pendingResources.bank);
+  const uploadReady = profile !== null
+    && entries !== null
+    && profileLoadError === null
+    && bankLoadError === null
+    && !saving
+    && !profileRefreshing
+    && !bankRefreshing;
 
   function chooseUpload(file: File | undefined) {
-    if (!file || !uploadReady || uploadInFlightRef.current) return;
+    if (!file || !uploadReady || mutations.isActive()) return;
     const pdfMime = file.type === "application/pdf";
     const genericPdf = (file.type === "" || file.type === "application/octet-stream") && /\.pdf$/i.test(file.name);
     if ((!pdfMime && !genericPdf) || file.size > 10 * 1024 * 1024) {
@@ -269,18 +339,18 @@ export default function ResumeWorkspace() {
       {error && <ErrorNote message={error} />}
 
       {/* Base resume */}
-      <Card className="p-6">
+      <Card className="p-6" aria-busy={profileRefreshing}>
         {profileLoadError ? (
           <DataErrorState
             headingLevel="h2"
             title="Your resume did not load."
             body={profileLoadError}
-            onRetry={() => void loadProfile()}
+            onRetry={retryProfile}
           />
         ) : <>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-medium text-ink">Your resume</h2>
+            <h2 id="resume-profile-heading" tabIndex={-1} className="text-base font-medium text-ink">Your resume</h2>
             <p className="mt-1 text-sm text-muted">
               {profile === null
                 ? <PendingLabel>Reading...</PendingLabel>
@@ -295,7 +365,7 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={() => fileRef.current?.click()}
-              disabled={uploading || !uploadReady} >
+              disabled={uploading || saving || !uploadReady} >
               {uploading
                 ? <PendingLabel state="composing" onColor>Reading...</PendingLabel>
                 : profile === "missing"
@@ -306,7 +376,7 @@ export default function ResumeWorkspace() {
               ref={fileRef}
               type="file"
               accept="application/pdf"
-              disabled={uploading || !uploadReady}
+              disabled={uploading || saving || !uploadReady}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -318,7 +388,7 @@ export default function ResumeWorkspace() {
         </div>
 
         <div
-          onDragEnter={(event) => { event.preventDefault(); if (uploadReady && !uploading) setDragActive(true); }}
+          onDragEnter={(event) => { event.preventDefault(); if (uploadReady && !uploading && !saving) setDragActive(true); }}
           onDragOver={(event) => event.preventDefault()}
           onDragLeave={(event) => { if (event.currentTarget === event.target) setDragActive(false); }}
           onDrop={(event) => { event.preventDefault(); setDragActive(false); chooseUpload(event.dataTransfer.files[0]); }}
@@ -331,13 +401,18 @@ export default function ResumeWorkspace() {
           {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploading ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} className="font-medium text-brand-ink underline underline-offset-4">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
-        {profile !== null && profile !== "missing" && !uploading && targetingRefreshError === null && (
+        {profileRefreshing && profile !== null && profile !== "missing" && !uploading && (
+          <p role="status" className="mt-5 text-small text-muted">
+            <PendingLabel>Refreshing resume details...</PendingLabel>
+          </p>
+        )}
+        {profile !== null && profile !== "missing" && !uploading && !profileRefreshing && targetingRefreshError === null && (
           <ProfilePreview profile={profile} onProfileChange={(next) => setProfile(next as ParsedProfile)} />
         )}
         {targetingRefreshError && (
           <div className="mt-5 space-y-3">
             <ErrorNote message={targetingRefreshError} />
-            <Button type="button" variant="secondary" onClick={() => void loadTargeting("Target roles could not load.", true)}>
+            <Button type="button" variant="secondary" onClick={retryTargeting}>
               Try refresh again
             </Button>
           </div>
@@ -346,10 +421,10 @@ export default function ResumeWorkspace() {
       </Card>
 
       {/* Everything you have done */}
-      <section>
+      <section aria-busy={bankRefreshing}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-base font-medium text-ink">Work history</h2>
+            <h2 id="resume-bank-heading" tabIndex={-1} className="text-base font-medium text-ink">Work history</h2>
             {/* "We pick the ones that fit each job" is the same promise the
                 whole product makes on every screen. The heading plus the
                 first sentence is the whole idea. */}
@@ -363,7 +438,7 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={saveBank}
-              disabled={saving || entries === null || bankLoadError !== null || !entriesDirty} >
+              disabled={saving || uploading || bankRefreshing || entries === null || bankLoadError !== null || !entriesDirty} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
@@ -374,8 +449,14 @@ export default function ResumeWorkspace() {
             headingLevel="h3"
             title="Work history did not load."
             body={bankLoadError}
-            onRetry={() => void loadBank()}
+            onRetry={retryBank}
           />
+        )}
+
+        {bankRefreshing && entries !== null && (
+          <p role="status" className="mb-4 text-small text-muted">
+            <PendingLabel>Refreshing work history...</PendingLabel>
+          </p>
         )}
 
         {entries === null ? (

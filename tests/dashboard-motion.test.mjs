@@ -60,7 +60,7 @@ test("reduced motion disables dashboard snapshots, entries, and scoped loaders",
 
   assert.match(
     reducedMotion,
-    /\.dashboard-shell \.animate-pulse,\s*\.rq-dashboard-backdrop,\s*\.rq-dashboard-dialog\s*\{\s*animation:\s*none;/,
+    /\.dashboard-shell \.animate-pulse,\s*\.rq-dashboard-backdrop,\s*\.rq-dashboard-dialog,\s*dialog\.rq-dashboard-dialog::backdrop\s*\{\s*animation:\s*none;/,
     "dashboard loading, backdrop, and dialog animation must stop together",
   );
   assert.doesNotMatch(

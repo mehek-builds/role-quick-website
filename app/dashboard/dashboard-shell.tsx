@@ -58,6 +58,7 @@ export function DashboardShell({
   const [moreOpen, setMoreOpen] = useState(false);
   const [moreClosing, setMoreClosing] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreBackdropRef = useRef<HTMLDivElement>(null);
   const moreDialogRef = useRef<HTMLElement>(null);
   const moreCloseTimer = useRef<number | null>(null);
 
@@ -73,6 +74,16 @@ export function DashboardShell({
       finish();
       return;
     }
+    const dialog = moreDialogRef.current;
+    if (dialog) {
+      const transform = window.getComputedStyle(dialog).transform;
+      dialog.style.setProperty("--rq-dashboard-dialog-exit-from", transform);
+    }
+    const backdrop = moreBackdropRef.current;
+    if (backdrop) {
+      const opacity = window.getComputedStyle(backdrop).opacity;
+      backdrop.style.setProperty("--rq-dashboard-backdrop-exit-from", opacity);
+    }
     setMoreClosing(true);
     moreCloseTimer.current = window.setTimeout(finish, MORE_EXIT_MS);
   }, []);
@@ -86,6 +97,26 @@ export function DashboardShell({
 
   useEffect(() => () => {
     if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
+  }, []);
+
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 64rem)");
+    const closeAtDesktop = () => {
+      if (!desktop.matches || !moreDialogRef.current) return;
+      const focusWasInside = moreDialogRef.current.contains(document.activeElement);
+      if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
+      moreCloseTimer.current = null;
+      setMoreOpen(false);
+      setMoreClosing(false);
+      if (focusWasInside) {
+        window.requestAnimationFrame(() => {
+          document.querySelector<HTMLElement>('.dashboard-shell aside [aria-current="page"]')?.focus();
+        });
+      }
+    };
+    desktop.addEventListener("change", closeAtDesktop);
+    closeAtDesktop();
+    return () => desktop.removeEventListener("change", closeAtDesktop);
   }, []);
 
   useEffect(() => {
@@ -301,11 +332,12 @@ export function DashboardShell({
           </Link>
         ))}
         <button
+          id="dashboard-more-button"
           ref={moreButtonRef}
           type="button"
           aria-haspopup="dialog"
           aria-expanded={moreOpen && !moreClosing}
-          aria-controls="dashboard-more-dialog"
+          aria-controls={moreOpen ? "dashboard-more-dialog" : undefined}
           aria-current={moreActive ? "page" : undefined}
           aria-label={moreActive ? "More, current section" : "More"}
           onClick={openMore}
@@ -321,6 +353,7 @@ export function DashboardShell({
       </nav>
       {moreOpen && (
         <div
+          ref={moreBackdropRef}
           aria-hidden="true"
           className={`rq-dashboard-backdrop fixed inset-0 z-40 bg-ink/35 lg:hidden ${moreClosing ? "rq-dashboard-backdrop-exit" : ""}`}
           onClick={() => closeMore(true)}

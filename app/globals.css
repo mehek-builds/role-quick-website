@@ -495,17 +495,17 @@ html:has(.dashboard-shell) {
 }
 
 @keyframes rq-dashboard-dialog-enter {
-  from { opacity: 0; transform: translateY(10px) scale(0.99); }
-  to { opacity: 1; transform: none; }
+  from { transform: translateY(10px) scale(0.99); }
+  to { transform: none; }
 }
 
 @keyframes rq-dashboard-backdrop-exit {
-  from { opacity: 1; }
+  from { opacity: var(--rq-dashboard-backdrop-exit-from, 1); }
   to { opacity: 0; }
 }
 
 @keyframes rq-dashboard-dialog-exit {
-  from { transform: none; }
+  from { transform: var(--rq-dashboard-dialog-exit-from, none); }
   to { transform: translateY(8px) scale(0.99); }
 }
 
@@ -517,6 +517,10 @@ html:has(.dashboard-shell) {
   animation: rq-dashboard-dialog-enter var(--motion-enter) var(--motion-ease-out) both;
 }
 
+dialog.rq-dashboard-dialog::backdrop {
+  animation: rq-dashboard-backdrop-enter var(--motion-state) ease-out both;
+}
+
 .rq-dashboard-backdrop-exit {
   animation: rq-dashboard-backdrop-exit var(--motion-exit) ease-in both;
   pointer-events: none;
@@ -524,6 +528,11 @@ html:has(.dashboard-shell) {
 
 .rq-dashboard-dialog-exit {
   animation: rq-dashboard-dialog-exit var(--motion-exit) ease-in both;
+  pointer-events: none;
+}
+
+dialog.rq-dashboard-dialog-exit::backdrop {
+  animation: rq-dashboard-backdrop-exit var(--motion-exit) ease-in both;
   pointer-events: none;
 }
 
@@ -619,7 +628,8 @@ html:has(.dashboard-shell) {
   }
   .dashboard-shell .animate-pulse,
   .rq-dashboard-backdrop,
-  .rq-dashboard-dialog {
+  .rq-dashboard-dialog,
+  dialog.rq-dashboard-dialog::backdrop {
     animation: none;
   }
   ::view-transition-old(*),

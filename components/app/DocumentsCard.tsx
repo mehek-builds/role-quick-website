@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/app/Button";
+import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import { Card, formatDate, formatRelativeDate } from "./ui";
 import { deleteUserDocument, listUserDocuments, type DocumentSummary } from "@/lib/api";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -60,6 +61,19 @@ export default function DocumentsCard() {
      from. A Map keyed by document id and not a single ref, because there is one trigger per row and
      which one opened the dialog is the only thing that can answer where focus belongs. */
   const removeButtons = useRef(new Map<string, HTMLButtonElement | null>());
+  const finishDocumentDialogClose = useCallback(() => {
+    const node = dialog.current;
+    if (node?.open) node.close();
+  }, []);
+  const {
+    closing: documentDialogClosing,
+    requestClose: requestDocumentDialogClose,
+    resetExit: resetDocumentDialogExit,
+  } = useDashboardOverlayExit({
+    dialogRef: dialog,
+    nativeBackdrop: true,
+    onExitComplete: finishDocumentDialogClose,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -90,14 +104,16 @@ export default function DocumentsCard() {
      content, which for one frame is a confirmation naming the wrong file, or naming none. */
   useEffect(() => {
     if (!confirming) return;
-    dialog.current?.showModal();
+    resetDocumentDialogExit();
+    const node = dialog.current;
+    if (node && !node.open) node.showModal();
     /* Focus lands on Keep, never on Remove. Left to the browser's own dialog-focusing rule it would
        take the first focusable element in the dialog, and a destructive control sitting under a
        freshly pressed Enter or Space is how a confirmation step becomes a formality. Queried rather
        than held on a ref because Button forwards no ref: it types its props as
        ComponentPropsWithoutRef. */
     dialog.current?.querySelector<HTMLElement>("[data-confirm-keep]")?.focus();
-  }, [confirming]);
+  }, [confirming, resetDocumentDialogExit]);
 
   async function remove(file: DocumentSummary) {
     /* The re-entry guard the disabled attribute used to provide. See the confirm button below for
@@ -117,7 +133,7 @@ export default function DocumentsCard() {
     removeButtons.current.delete(file.id);
     setRemoved(`${file.file_name} was removed from Litos.`);
     setDeleting(false);
-    dialog.current?.close();
+    requestDocumentDialogClose();
   }
 
   const empty = documents !== null && documents.length === 0;
@@ -210,10 +226,16 @@ export default function DocumentsCard() {
         ref={dialog}
         aria-labelledby="remove-document-title"
         aria-describedby="remove-document-description"
+        aria-hidden={documentDialogClosing || undefined}
+        inert={documentDialogClosing || undefined}
         /* Escape is disarmed only while the request is in flight, so a half-finished delete cannot
            be closed out from under its own error message. */
         onCancel={(event) => {
-          if (deleting) event.preventDefault();
+          event.preventDefault();
+          if (!deleting) requestDocumentDialogClose();
+        }}
+        onClick={(event) => {
+          if (event.target === dialog.current && !deleting) requestDocumentDialogClose();
         }}
         onClose={() => {
           const closed = confirming;
@@ -224,10 +246,12 @@ export default function DocumentsCard() {
              announcement and the nearest thing to where she was. A dialog that closes onto nothing
              drops a keyboard user back at the top of the document. */
           const trigger = closed ? removeButtons.current.get(closed.id) : null;
-          if (trigger) trigger.focus();
-          else status.current?.focus();
+          window.requestAnimationFrame(() => {
+            if (trigger?.isConnected) trigger.focus();
+            else status.current?.focus();
+          });
         }}
-        className="m-auto w-[min(92vw,480px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35"
+        className={`rq-dashboard-dialog m-auto w-[min(92vw,480px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35 ${documentDialogClosing ? "rq-dashboard-dialog-exit" : ""}`}
       >
         {confirming && (
           <form
@@ -276,7 +300,7 @@ export default function DocumentsCard() {
                      mid-flight, and a Keep that disables itself under a pointer that just clicked it
                      is one more way for focus to leave the dialog. */
                   if (deleting) return;
-                  dialog.current?.close();
+                  requestDocumentDialogClose();
                 }}
               >
                 {DOCUMENT_REMOVAL_KEEP_LABEL}

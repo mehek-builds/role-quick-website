@@ -35,7 +35,12 @@ type BillingContextValue = {
   error: string | null;
   canUse: (feature: PremiumFeatureKey) => boolean | null;
   refresh: () => Promise<void>;
-  openUpgrade: (request: UpgradeRequest, options?: { source?: UpgradeOpenSource }) => void;
+  openUpgrade: (request: UpgradeRequest, options?: OpenUpgradeOptions) => void;
+};
+
+type OpenUpgradeOptions = {
+  source?: UpgradeOpenSource;
+  trigger?: HTMLElement | null;
 };
 
 const BillingContext = createContext<BillingContextValue | null>(null);
@@ -101,11 +106,15 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  const openUpgrade = useCallback((next: UpgradeRequest, options?: { source?: UpgradeOpenSource }) => {
+  const openUpgrade = useCallback((next: UpgradeRequest, options?: OpenUpgradeOptions) => {
     if (!shouldOpenUpgrade(access, next.feature, options?.source)) return;
     checkoutRequestIdRef.current = crypto.randomUUID();
     checkoutAttemptRef.current = null;
-    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    triggerRef.current = options?.trigger?.isConnected
+      ? options.trigger
+      : document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setRequest({ ...next, returnRoute: next.returnRoute ?? currentBillingReturnRoute() });
     track("paywall_impression", { feature_key: next.feature, placement: next.placement, trigger: next.trigger });
     void emitBillingEvent("paywall_impression", {

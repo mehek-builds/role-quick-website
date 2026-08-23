@@ -28,7 +28,13 @@ type Company = { id?: string; name: string; connection_count?: number; open_role
 type Preview = { import_id: string; accepted_rows: number; rejected_rows: number; warnings?: string[]; expires_at?: string };
 
 export default function NetworkPage() {
-  const { canUse, openUpgrade } = useBilling();
+  const {
+    canUse,
+    openUpgrade,
+    loading: billingLoading,
+    error: billingError,
+    refresh: refreshBilling,
+  } = useBilling();
   const [tab, setTab] = useState<NetworkTab>("people");
   const [status, setStatus] = useState<LinkedInStatus | null>(null);
   const [people, setPeople] = useState<Person[] | null>(null);
@@ -53,6 +59,7 @@ export default function NetworkPage() {
   });
   const networkAccess = canUse("networking_discovery");
   const premium = networkAccess === true;
+  const billingUnavailable = !billingLoading && networkAccess === null;
   const disconnectedWithRetainedData = status?.connected === false && (status.retained_people_count ?? 0) > 0;
 
   useEffect(() => {
@@ -129,7 +136,12 @@ export default function NetworkPage() {
     return () => { cancelled = true; };
   }, [companiesReload, networkAccess, status?.connected]);
 
+  function focusNetworkPanel() {
+    document.getElementById("network-panel")?.focus();
+  }
+
   function retryStatus() {
+    focusNetworkPanel();
     statusRequestGenerationRef.current += 1;
     setStatus(null);
     setStatusError(null);
@@ -137,15 +149,22 @@ export default function NetworkPage() {
   }
 
   function retryPeople() {
+    focusNetworkPanel();
     setPeople(null);
     setPeopleError(null);
     setPeopleReload((value) => value + 1);
   }
 
   function retryCompanies() {
+    focusNetworkPanel();
     setCompanies(null);
     setCompaniesError(null);
     setCompaniesReload((value) => value + 1);
+  }
+
+  function retryBilling() {
+    focusNetworkPanel();
+    void refreshBilling();
   }
 
   function refreshNetworkLists() {
@@ -273,7 +292,7 @@ export default function NetworkPage() {
             role="tab"
             id={`network-tab-${id}`}
             aria-selected={tab === id}
-            aria-controls={`network-panel-${id}`}
+            aria-controls="network-panel"
             tabIndex={tab === id ? 0 : -1}
             onClick={() => chooseTab(id)}
             onKeyDown={(event) => {
@@ -291,11 +310,17 @@ export default function NetworkPage() {
       {error && <ErrorNote message={error} />}
 
       <MotionPanel key={tab} name="dashboard-network-panel">
-      <div id={`network-panel-${tab}`} role="tabpanel" aria-labelledby={`network-tab-${tab}`} tabIndex={0}>
+      <div id="network-panel" role="tabpanel" aria-labelledby={`network-tab-${tab}`} tabIndex={0}>
       {tab === "people" && (
         <section>
-          {networkAccess === null ? (
+          {billingLoading ? (
             <ShimmerRows rows={3} />
+          ) : billingUnavailable ? (
+            <NetworkRequestError
+              title="Could not check your plan access"
+              body={billingError ? "Litos could not verify Network access just now." : "Network access was not included in the latest plan response."}
+              onRetry={retryBilling}
+            />
           ) : premium && statusError ? (
             <NetworkRequestError title="Could not check your network" body="Litos cannot tell whether your import is connected. Retry before treating this as an empty network." onRetry={retryStatus} />
           ) : disconnectedWithRetainedData ? (
@@ -318,7 +343,12 @@ export default function NetworkPage() {
       )}
 
       {tab === "companies" && (
-        networkAccess === null ? <ShimmerRows rows={3} />
+        billingLoading ? <ShimmerRows rows={3} />
+          : billingUnavailable ? <NetworkRequestError
+            title="Could not check your plan access"
+            body={billingError ? "Litos could not verify Network access just now." : "Network access was not included in the latest plan response."}
+            onRetry={retryBilling}
+          />
           : premium && statusError ? <NetworkRequestError title="Could not check your network" body="Litos cannot tell whether your import is connected. Retry before treating this as an empty network." onRetry={retryStatus} />
           : disconnectedWithRetainedData ? <EmptyState visual="jobs" title="Network use is disconnected" body="Company matches are hidden because disconnect stops future use. Delete the retained import from LinkedIn settings whenever you choose." />
           : networkAccess === false ? <LockedInsight title="Companies where you have a path" body="Litos+ groups real imported connections by company and never invents a second-degree relationship." onOpen={() => requestPremium("networking_discovery", "company_matches")} />

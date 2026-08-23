@@ -198,8 +198,8 @@ export default function Outreach() {
   const composerTriggerRef = useRef<HTMLElement | null>(null);
   const composerTitleRef = useRef<HTMLHeadingElement>(null);
 
-  function openComposer(focusTarget: "title" | "draft" = "title") {
-    const trigger = document.activeElement;
+  function openComposer(focusTarget: "title" | "draft" = "title", explicitTrigger?: HTMLElement) {
+    const trigger = explicitTrigger ?? document.activeElement;
     if (trigger instanceof HTMLElement && trigger !== document.body) {
       composerTriggerRef.current = trigger;
     }
@@ -263,7 +263,7 @@ export default function Outreach() {
     }
   }
 
-  function editSavedDraft(saved: DurableOutreachDraft) {
+  function editSavedDraft(saved: DurableOutreachDraft, trigger?: HTMLElement) {
     const savedDomain = saved.contact.company_domain
       ?? (saved.company_scope_key.startsWith("domain:") ? saved.company_scope_key.slice("domain:".length) : "");
     setApplicationId(saved.application_id);
@@ -291,7 +291,7 @@ export default function Outreach() {
     });
     setResolvedContacts(null);
     setComposeError(null);
-    openComposer("draft");
+    openComposer("draft", trigger);
   }
 
   async function saveEditedDraft() {
@@ -456,6 +456,8 @@ export default function Outreach() {
     const restored = readOutreachCheckoutState();
     if (!restored) return;
     queueMicrotask(() => {
+      focusDraftOnOpen.current = restored.editingDraftId !== null;
+      focusComposerTitleOnOpen.current = restored.editingDraftId === null;
       runDashboardTransition(() => {
         setContactName(restored.contactName);
         setContactTitle(restored.contactTitle);
@@ -515,9 +517,7 @@ export default function Outreach() {
                 type="button"
                 variant="secondary"
                 className="shrink-0 border-coral text-coral-ink"
-                aria-controls="outreach-composer"
-                aria-expanded="false"
-                onClick={() => openComposer()}
+                onClick={(event) => openComposer("title", event.currentTarget)}
               >
                 Start outreach
               </Button>
@@ -541,7 +541,8 @@ export default function Outreach() {
           <div className="mt-4 rounded-inner border border-coral/30 bg-coral-soft/25 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-small font-medium text-ink">Find a verified contact</p><p className="mt-1 text-label text-muted">Litos uses the exact company domain you enter to keep contact and draft usage together.</p></div>
-              <Button type="button" variant="secondary" className="border-coral text-coral-ink" disabled={resolveBusy || !company.trim() || !companyDomain.trim() || !targetRole.trim()} onClick={() => {
+              <Button type="button" variant="secondary" className="border-coral text-coral-ink" disabled={resolveBusy || !company.trim() || !companyDomain.trim() || !targetRole.trim()} onClick={(event) => {
+                const upgradeTrigger = event.currentTarget;
                 setResolveBusy(true);
                 setComposeError(null);
                 const operationKey = `contact:${companyDomain.trim().toLowerCase()}:${targetRole.trim().toLowerCase()}`;
@@ -573,7 +574,7 @@ export default function Outreach() {
                         returnRoute: "/dashboard/outreach?checkout_action=resolve_contacts",
                         applicationId: canonicalApplicationId ?? undefined,
                         onBeforeCheckout: () => rememberOutreachCheckoutState(currentCheckoutState(canonicalApplicationId)),
-                      }, { source: "server_denial" });
+                      }, { source: "server_denial", trigger: upgradeTrigger });
                       return;
                     }
                     setComposeError(reason instanceof Error ? reason.message : "Litos could not find contacts for this company.");
@@ -600,7 +601,8 @@ export default function Outreach() {
           <div className="mt-5 flex flex-wrap gap-3">
             {editingDraftId && <Button type="button" variant="secondary" disabled={composeBusy || !subject.trim() || !draft.trim()} onClick={() => void saveEditedDraft()}>{composeBusy ? <PendingLabel>Saving draft</PendingLabel> : "Save changes"}</Button>}
             {!editingDraftId && <Button type="button" variant="secondary" disabled={composeBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim() || !subject.trim() || !draft.trim()} onClick={() => void saveManualDraft()}>{composeBusy ? <PendingLabel>Saving draft</PendingLabel> : "Save draft"}</Button>}
-            <Button type="button" variant="secondary" disabled={composeBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim()} onClick={async () => {
+            <Button type="button" variant="secondary" disabled={composeBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim()} onClick={async (event) => {
+              const upgradeTrigger = event.currentTarget;
               setComposeBusy(true); setComposeError(null);
               let canonicalApplicationId = applicationId;
               try {
@@ -666,7 +668,7 @@ export default function Outreach() {
                     applicationId: canonicalApplicationId ?? undefined,
                     contactId: canonicalContactId,
                     onBeforeCheckout: () => rememberOutreachCheckoutState(currentCheckoutState(canonicalApplicationId)),
-                  }, { source: "server_denial" });
+                  }, { source: "server_denial", trigger: upgradeTrigger });
                 } else {
                   setComposeError(reason instanceof Error ? reason.message : "Litos could not draft this message.");
                 }
@@ -780,7 +782,7 @@ export default function Outreach() {
                     {e.durableDraft && (
                       <button
                         type="button"
-                        onClick={() => editSavedDraft(e.durableDraft!)}
+                        onClick={(event) => editSavedDraft(e.durableDraft!, event.currentTarget)}
                         className="flex min-h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink"
                       >
                         Edit

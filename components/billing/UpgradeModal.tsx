@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "@/components/app/Button";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
+import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
   DEFAULT_LITOS_PLUS_PLAN_ID,
   FREE_FEATURES,
@@ -134,8 +135,13 @@ export function UpgradeModal({
   onCheckout: (planId: LitosPlusPlanId) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
   const descriptionId = useId();
+  /* Keep the last request available while a controlled parent lowers `open`. Without this retained
+     value, `request === null` removes the native dialog during render, before the close effect can
+     put it through the same exit path as its buttons, backdrop, and Escape. */
+  const [presentRequest, setPresentRequest] = useState<UpgradeRequest | null>(request);
   const [selectedPlan, setSelectedPlan] = useState<LitosPlusPlanId>(() => {
     if (typeof window === "undefined") return DEFAULT_LITOS_PLUS_PLAN_ID;
     const saved = window.sessionStorage.getItem(SESSION_PLAN_KEY);
@@ -145,24 +151,52 @@ export function UpgradeModal({
   });
 
   useEffect(() => {
-    if (!open) return;
+    onCloseRef.current = onClose;
+  });
+  const finishClose = useCallback(() => {
+    const dialog = dialogRef.current;
+    if (dialog?.open) dialog.close();
+    setPresentRequest(null);
+    onCloseRef.current();
+  }, []);
+  const { closing, requestClose, resetExit } = useDashboardOverlayExit({
+    dialogRef,
+    nativeBackdrop: true,
+    onExitComplete: finishClose,
+  });
+
+  useEffect(() => {
+    if (!open || !request) return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) setPresentRequest(request);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, request]);
+
+  useEffect(() => {
+    if (!open || !presentRequest) return;
+    resetExit();
     const dialog = dialogRef.current;
     if (dialog && !dialog.open) dialog.showModal();
-  }, [open]);
+  }, [open, presentRequest, resetExit]);
 
   useEffect(() => {
     if (open) return;
     const dialog = dialogRef.current;
-    if (dialog?.open) dialog.close();
-  }, [open]);
+    if (dialog?.open) requestClose();
+  }, [open, requestClose]);
 
-  if (!request) return null;
-  const defaults = COPY[request.feature];
+  if (!presentRequest) return null;
+  const defaults = COPY[presentRequest.feature];
   const copy = {
-    title: request.title ?? defaults.title,
-    explanation: request.explanation ?? defaults.explanation,
-    manualLabel: request.manualLabel ?? defaults.manualLabel,
+    title: presentRequest.title ?? defaults.title,
+    explanation: presentRequest.explanation ?? defaults.explanation,
+    manualLabel: presentRequest.manualLabel ?? defaults.manualLabel,
   };
+  const manualAction = presentRequest.onManual;
   const plan = litosPlusPlan(selectedPlan);
   const trial = access?.access_class === "trial_plus";
   const checkoutAvailable = catalog?.checkoutAvailable === true;
@@ -174,8 +208,18 @@ export function UpgradeModal({
   }
 
   function close() {
-    if (busy) return;
-    onClose();
+    if (busy || closing) return;
+    requestClose();
+  }
+
+  function continueManually() {
+    manualAction?.();
+  }
+
+  function leaveFor(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    requestClose(() => window.location.assign(href));
   }
 
   return (
@@ -183,15 +227,16 @@ export function UpgradeModal({
       ref={dialogRef}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      aria-hidden={closing || undefined}
+      inert={closing || undefined}
       onCancel={(event) => {
-        if (busy) event.preventDefault();
-        else onClose();
+        event.preventDefault();
+        if (!busy) requestClose();
       }}
-      onClose={onClose}
       onClick={(event) => {
         if (event.target === dialogRef.current) close();
       }}
-      className="m-auto max-h-[90svh] w-[min(96vw,1040px)] overflow-hidden rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35 max-sm:h-svh max-sm:max-h-none max-sm:w-screen max-sm:max-w-none max-sm:rounded-none"
+      className={`rq-dashboard-dialog m-auto max-h-[90svh] w-[min(96vw,1040px)] overflow-hidden rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35 max-sm:h-svh max-sm:max-h-none max-sm:w-screen max-sm:max-w-none max-sm:rounded-none ${closing ? "rq-dashboard-dialog-exit" : ""}`}
     >
       <div className="flex max-h-[90svh] flex-col max-sm:h-svh max-sm:max-h-none">
         <header className="sticky top-0 z-10 flex items-start justify-between gap-6 border-b border-border bg-surface px-5 py-4 sm:px-7">
@@ -203,7 +248,7 @@ export function UpgradeModal({
           <button
             type="button"
             aria-label="Close Litos+ options"
-            disabled={busy}
+            disabled={busy || closing}
             onClick={close}
             className="flex size-11 shrink-0 items-center justify-center rounded-control text-heading text-muted transition-colors hover:bg-surface-alt hover:text-ink disabled:opacity-50"
           >
@@ -284,19 +329,16 @@ export function UpgradeModal({
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                   <button
                     type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      request.onManual?.();
-                      onClose();
-                    }}
+                    disabled={busy || closing}
+                    onClick={() => requestClose(continueManually)}
                     className="min-h-11 text-small font-medium text-brand-ink underline decoration-brand/35 underline-offset-4 disabled:opacity-50"
                   >
                     {copy.manualLabel}
                   </button>
-                  <button type="button" disabled={busy} onClick={close} className="min-h-11 text-small text-muted hover:text-ink disabled:opacity-50">Not now</button>
+                  <button type="button" disabled={busy || closing} onClick={close} className="min-h-11 text-small text-muted hover:text-ink disabled:opacity-50">Not now</button>
                 </div>
                 <p className="mt-3 text-label leading-5 text-muted">
-                  Manage or cancel in Account. Review the <a href="/terms" className="underline underline-offset-2">Terms</a> and <a href="/privacy" className="underline underline-offset-2">Privacy Policy</a> before checkout.
+                  Manage or cancel in Account. Review the <a href="/terms" onClick={(event) => leaveFor(event, "/terms")} className="underline underline-offset-2">Terms</a> and <a href="/privacy" onClick={(event) => leaveFor(event, "/privacy")} className="underline underline-offset-2">Privacy Policy</a> before checkout.
                 </p>
               </div>
             </section>
