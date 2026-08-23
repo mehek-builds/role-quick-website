@@ -64,6 +64,8 @@ import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
+import { applicationSelectionPath } from "./application-selection-url";
+import { applicationMatchesQuery, applicationNextActionRank, applicationWorkflowRevision } from "@/features/applications";
 import { ExactPacketPdf } from "@/components/app/ExactPacketPdf";
 import { AuditedJobDescription, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, PacketAuditBreakdown, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/components/app/PacketAuditEvidence";
 import { acknowledgePacketEvidence, packetAuditAcknowledgementAccepted, packetQuestionsSnapshot, reconcilePacketPdfVerification, reconcileUnacknowledgedPacketPoll, revalidateAcknowledgedPacketEvidence, type PacketEvidenceSession, type PacketPdfEvidenceVerification } from "@/features/applications";
@@ -72,7 +74,7 @@ import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
-type ApplicationSort = "recent" | "company";
+type ApplicationSort = "next" | "recent" | "company";
 
 /* These guards are deliberately pure. Both callers resume after a network await, so the screen
    and evidence captured when the request started are already historical. Read the synchronous
@@ -557,6 +559,7 @@ function Applications() {
     setSendRefusal({ applicationId, message, issues });
   }, []);
   const [pendingJob, setPendingJob] = useState<MonitoredJob | null>(null);
+  const resolvedJobParam = useRef<string | null>(null);
   const [submission, setSubmissionState] = useState<SubmissionResponse | null>(null);
   /* THE ONE WRITER, and it is a wrapper rather than the raw setter on purpose.
    *
@@ -622,6 +625,15 @@ function Applications() {
      trails requestedApplicationId during a query-only navigation, which is the short window where
      the prior packet's controls must disappear. It does not pin later ledger switching to the URL. */
   const [resolvedActionableRequestId, setResolvedActionableRequestId] = useState<string | null>(null);
+  /* A ledger press selects from data already in memory, then gives the same identity to the URL.
+     The history effect still refreshes that packet, but this ref tells it not to select the same
+     row a second time and reset the screen after the student has already started working. */
+  const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean } | null>(null);
+  const pendingApplicationFocusRef = useRef(false);
+  const applicationTaskHeadingRef = useRef<HTMLHeadingElement | null>(null);
+  const [openingApplicationId, setOpeningApplicationId] = useState<string | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [applicationQuery, setApplicationQuery] = useState("");
   /* Writes the choice back to the URL, so the select and the deep link move the same thing.
      Everything removes the parameter rather than writing state=all: a URL that says nothing is
      what a plain visit looks like, and this is also what closes the ledger section.
@@ -634,7 +646,7 @@ function Applications() {
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
-  const [applicationSort, setApplicationSort] = useState<ApplicationSort>("recent");
+  const [applicationSort, setApplicationSort] = useState<ApplicationSort>("next");
 
   const closeNewApplication = useCallback(() => {
     setShowNewApplication(false);
@@ -864,6 +876,96 @@ function Applications() {
     setSendRefusal(null);
     setNotice(null);
   }, [moveToScreen]);
+
+  /* User navigation writes local state and route state as one action. The local write makes the
+     switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
+     application instead of whichever packet happened to be selected before it. */
+  const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}) => {
+    locallyOpenedRequestRef.current = { id: packet.id, revision: applicationWorkflowRevision(packet), routeCommitted: false };
+    pendingApplicationFocusRef.current = true;
+    resolvedJobParam.current = null;
+    setPendingJob(null);
+    setOpeningApplicationId(packet.id);
+    setSwitcherOpen(false);
+    setShowNewApplication(false);
+    setComposerRefusal(null);
+    setResolvedActionableRequestId(packet.id);
+    selectPacket(packet);
+    const nextPath = applicationSelectionPath(window.location, packet.id);
+    const navigate = options.history === "replace" ? router.replace : router.push;
+    navigate(nextPath, { scroll: false });
+  }, [router, selectPacket]);
+
+  const resetApplicationWorkflow = useCallback(() => {
+    pendingApplicationFocusRef.current = false;
+    selectedIdRef.current = null;
+    editorRevisionRef.current += 1;
+    setOpeningApplicationId(null);
+    setSwitcherOpen(false);
+    setResolvedActionableRequestId(null);
+    setSelectedId(null);
+    setCanonicalSelected(null);
+    setRevisitingId(null);
+    setCanonicalFillError(null);
+    setSubmissionFillError(null);
+    setMatchResult(null);
+    setPacketEvidence(null);
+    setSpec(null);
+    setQuestions([]);
+    setSubmission(null);
+    setSendRefusal(null);
+    setNotice(null);
+  }, [setSubmission]);
+
+  const closeApplication = useCallback(() => {
+    locallyOpenedRequestRef.current = null;
+    resolvedJobParam.current = null;
+    setPendingJob(null);
+    resetApplicationWorkflow();
+    router.push(applicationSelectionPath(window.location, null), { scroll: false });
+  }, [resetApplicationWorkflow, router]);
+
+  /* Back and Forward change the route without calling the row or close handlers. When the route
+     stops naming an application, retire the local workflow immediately instead of waiting for the
+     history fetch to finish. A just-clicked row is the one exception: its local selection lands a
+     frame before router.push updates useSearchParams, and the ref keeps that intentional handoff
+     from being mistaken for Back. */
+  useLayoutEffect(() => {
+    const localOpen = locallyOpenedRequestRef.current;
+    if (requestedApplicationId !== null) {
+      const canonicalMatchesRequest = canonicalSelected === null
+        || canonicalSelected.id === requestedApplicationId
+        || canonicalSelected.legacy_generated_resume_id === requestedApplicationId;
+      const pendingLocalCanonical = Boolean(
+        canonicalSelected
+        && localOpen
+        && !localOpen.routeCommitted
+        && (localOpen.id === canonicalSelected.id || localOpen.id === canonicalSelected.legacy_generated_resume_id),
+      );
+      /* A canonical-only detail has no selectedId for selectedPacketForRequest to gate. Clear the
+         prior detail before paint when browser history names a different application, or its Fill
+         and Tailor controls survive under the new URL while that request loads or after it fails. */
+      if (!canonicalMatchesRequest && !pendingLocalCanonical) {
+        if (localOpen?.routeCommitted) locallyOpenedRequestRef.current = null;
+        resetApplicationWorkflow();
+        setOpeningApplicationId(requestedApplicationId);
+        return;
+      }
+      if (localOpen?.id === requestedApplicationId) localOpen.routeCommitted = true;
+      else if (localOpen?.routeCommitted) locallyOpenedRequestRef.current = null;
+      return;
+    }
+    if (localOpen && !localOpen.routeCommitted) return;
+    if (localOpen) locallyOpenedRequestRef.current = null;
+    if (
+      selectedIdRef.current === null
+      && openingApplicationId === null
+      && canonicalSelected === null
+      && revisitingId === null
+      && resolvedActionableRequestId === null
+    ) return;
+    resetApplicationWorkflow();
+  }, [canonicalSelected, openingApplicationId, requestedApplicationId, resetApplicationWorkflow, resolvedActionableRequestId, revisitingId]);
 
   /* The acknowledged branch of the poll's evidence upkeep, out of refreshSubmission for the same
      reason its comments are: tests/submission-terminal-state.test.mjs bounds the fetch-to-route
@@ -1242,14 +1344,29 @@ function Applications() {
              canonical id there made every such deep link fail that comparison permanently, not just
              during the in-flight window the guard exists for: "the saved list does not contain a
              packet with this id" fired even though the packet was found and selected. */
+          const localOpen = locallyOpenedRequestRef.current;
+          const alreadySelectedLocally = localOpen?.id === requestedApplicationId;
+          if (alreadySelectedLocally) locallyOpenedRequestRef.current = null;
           setResolvedActionableRequestId(requestedApplicationId);
-          selectPacket(requested);
+          setOpeningApplicationId(null);
+          /* A local click renders immediately, then this request returns the authoritative packet.
+             Reusing the local workflow is safe only when those server-owned bytes are identical.
+             If another tab advanced or submitted the application, the fresh selection replaces
+             every action, answer, document, and screen state before the user can continue. */
+          if (!alreadySelectedLocally || localOpen.revision !== applicationWorkflowRevision(requested)) {
+            selectPacket(requested);
+          }
         } else {
           setResolvedActionableRequestId(null);
+          setOpeningApplicationId(null);
           if (requestedApplicationIntent !== "detail") setRevisitingId(null);
         }
       })
-      .catch((reason) => !cancelled && setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page."));
+      .catch((reason) => {
+        if (cancelled) return;
+        setOpeningApplicationId(null);
+        setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page.");
+      });
     /* The education block as it stands NOW, to check the frozen packet against. Failure is not the
        same as agreement: sending stays blocked until the comparison succeeds. */
     queueMicrotask(() => {
@@ -1314,7 +1431,6 @@ function Applications() {
    * every 2.5 seconds. The ref is what stops a second lookup: it records the id this effect has
    * already acted on, and the request checks it again on the way back rather than being cancelled,
    * so a double-invoked effect in development still lands its result exactly once. */
-  const resolvedJobParam = useRef<string | null>(null);
   useEffect(() => {
     if (qaMode !== false || packets === null) return;
     const jobId = new URLSearchParams(window.location.search).get("job");
@@ -1326,13 +1442,7 @@ function Applications() {
       /* queueMicrotask for the same reason the pendingJob effect below uses it: selectPacket writes
          six pieces of state, and doing that synchronously inside an effect cascades the render. */
       queueMicrotask(() => {
-        selectPacket(packet);
-        /* The same helper the composer's Close uses, so there is one definition of what this URL
-           looks like with the parameter gone. */
-        replaceClosedComposerUrl(
-          window.location,
-          (data, unused, url) => window.history.replaceState(data, unused, url),
-        );
+        openApplication(packet, { history: "replace" });
       });
       return;
     }
@@ -1346,7 +1456,7 @@ function Applications() {
         if (resolvedJobParam.current !== jobId) return;
         setError("We could not open that job link. Everything you have already built is listed below.");
       });
-  }, [packets, qaMode, selectPacket]);
+  }, [openApplication, packets, qaMode]);
 
   useEffect(() => {
     if (!pendingJob || packets === null) return;
@@ -1356,7 +1466,7 @@ function Applications() {
       const intent = params.get("intent");
       const checkoutAction = params.get("checkout_action");
       if (existing && intent !== "fill") {
-        selectPacket(existing);
+        openApplication(existing, { history: "replace" });
         setShowNewApplication(false);
         setNotice("Your resume is ready. Compare it with the job below.");
       } else {
@@ -1393,7 +1503,7 @@ function Applications() {
     // createApplication is redeclared every render and is not a dependency worth chasing: the
     // effect is keyed on pendingJob, which is cleared above, so it runs once per arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [packets, pendingJob, selectPacket]);
+  }, [openApplication, packets, pendingJob]);
 
   /* Fail closed during query-only navigation. The router can publish application=B while the
      history request for B is still resolving and selectedId still names A. No actionable control
@@ -1412,6 +1522,16 @@ function Applications() {
   const storedReview = selected?.spec._review;
   const review = storedReview ? reviewWithLists(storedReview) : undefined;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
+  const actionableQuestionIds = useMemo(() => {
+    if (!selected || !selectedSubmission) return [];
+    return humanInputItems(selectedSubmission.review, {
+      company: selected.job_context.company,
+      role: selected.job_context.role,
+      documents: selectedSubmission.documents,
+    })
+      .filter((item) => item.settled !== true && item.questionId)
+      .map((item) => item.questionId!);
+  }, [selected, selectedSubmission]);
   const reviewablePackets = useMemo(() => onlyReviewablePackets(packets ?? []), [packets]);
   const canonicalEnvelopePacket = useMemo(() => (canonicalSelected
     ? (packets ?? []).find((packet) => canonicalApplicationFromPacket(packet)?.id === canonicalSelected.id) ?? null
@@ -1573,13 +1693,22 @@ function Applications() {
      sent looking like eleven live opportunities. The mark has to know about the row the filter
      just removed. */
   const duplicateMarks = useMemo(() => duplicatePostingMarks(reviewablePackets), [reviewablePackets]);
+  const deferredApplicationQuery = useDeferredValue(applicationQuery);
   const visiblePackets = useMemo(() => {
     const filtered = reviewablePackets.filter((packet) =>
-      statusMatchesApplicationFilter(packet.spec._review, applicationFilter));
-    return [...filtered].sort((a, b) => applicationSort === "company"
-      ? (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "")
-      : packetTimestamp(b).localeCompare(packetTimestamp(a)));
-  }, [applicationFilter, applicationSort, reviewablePackets]);
+      statusMatchesApplicationFilter(packet.spec._review, applicationFilter)
+      && applicationMatchesQuery(packet, deferredApplicationQuery));
+    return [...filtered].sort((a, b) => {
+      if (applicationSort === "company") {
+        return (a.job_context.company ?? "").localeCompare(b.job_context.company ?? "");
+      }
+      if (applicationSort === "next") {
+        const priority = applicationNextActionRank(a.spec._review) - applicationNextActionRank(b.spec._review);
+        if (priority !== 0) return priority;
+      }
+      return packetTimestamp(b).localeCompare(packetTimestamp(a));
+    });
+  }, [applicationFilter, applicationSort, deferredApplicationQuery, reviewablePackets]);
   const legacyCount = (packets?.length ?? 0) - reviewablePackets.length;
 
   /* ---- sending without being asked ----
@@ -1744,6 +1873,26 @@ function Applications() {
   // legacy-resumes banner go, because together they cost roughly 120px of the one screen the JD and
   // the resume are supposed to share.
   const reviewOpen = Boolean(selected && spec && review) && screen === "review";
+  const applicationTaskOpen = Boolean(openingApplicationId || canonicalSelected || selectedId);
+  const applicationTaskPacket = selected
+    ?? reviewablePackets.find((packet) => packet.id === openingApplicationId || packet.id === selectedId)
+    ?? canonicalEnvelopePacket;
+  const applicationTaskRole = applicationTaskPacket?.job_context.role ?? canonicalSelected?.role ?? "Application";
+  const applicationTaskCompany = applicationTaskPacket?.job_context.company ?? canonicalSelected?.company ?? "Company";
+  const applicationTaskReview = applicationTaskPacket?.spec._review;
+  const applicationTaskStatus = applicationTaskReview
+    ? statusLabel(false, applicationTaskReview.status)
+    : canonicalSelected?.review_state.replaceAll("_", " ") ?? "Opening";
+  const selectedApplicationRowId = canonicalSelected?.id
+    ?? (selected ? canonicalIdByPacketId[selected.id] ?? selected.id : openingApplicationId);
+  useEffect(() => {
+    if (!applicationTaskOpen || !pendingApplicationFocusRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      applicationTaskHeadingRef.current?.focus({ preventScroll: true });
+      pendingApplicationFocusRef.current = false;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [applicationTaskOpen, selectedApplicationRowId]);
   const educationDriftBanner = useMemo(
     () => (spec ? educationDriftMessage(educationDrift(spec, educationProfile)) : null),
     [educationProfile, spec],
@@ -1836,7 +1985,7 @@ function Applications() {
           ? "Checking saved packet"
       : review?.status === "ready_for_final_approval"
         ? "Review filled form"
-        : "Fill company form";
+        : "Approve packet and fill form";
 
   const recordPacketPdfVerification = useCallback((verified: PacketPdfEvidenceVerification | null) => {
     setPacketEvidence((current) => reconcilePacketPdfVerification(current, verified));
@@ -2266,7 +2415,7 @@ function Applications() {
         if (updatedCanonical) {
           setCanonicalSelected(updatedCanonical);
         } else {
-          selectPacket(created);
+          openApplication(created, { history: "replace" });
         }
         setNewApplication(EMPTY_APPLICATION_DRAFT);
         forgetCheckoutDraft();
@@ -2299,7 +2448,7 @@ function Applications() {
       setPackets(history.resumes);
       if (!fallbackCreated?.spec._review) throw new Error("Your resume was made, but we could not open it. Reload the page.");
       completeOperationId(resumeOperationIds.current, operationKey);
-      selectPacket(fallbackCreated);
+      openApplication(fallbackCreated, { history: "replace" });
       setNewApplication(EMPTY_APPLICATION_DRAFT);
       forgetCheckoutDraft();
       setShowNewApplication(false);
@@ -2648,7 +2797,7 @@ function Applications() {
       if (selectedIdRef.current !== applicationId) return;
       /* THE AUDIT REFRESHES THE QUESTIONS SERVER-SIDE, AND THIS IS WHERE THAT COMES HOME.
          response.questions is what the audit above actually hashed - not necessarily the local
-         `questions` this request was built from. Without adopting it here, "Fill company form"
+         `questions` this request was built from. Without adopting it here, "Approve packet and fill form"
          goes on to submit the STALE local copy: the merge on the other end sees a difference from
          what was just audited, on a question that has nothing proving she supplied it, and
          refreshKnownQuestionAnswers blanks or restores it differently than this audit did. Two
@@ -3366,21 +3515,17 @@ function Applications() {
   }
 
   return (
-    <div className={reviewOpen ? "space-y-4" : "space-y-6"}>
+    <div className={applicationTaskOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${reviewOpen ? "text-heading" : "text-section"}`}>Applications</h1>
+          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${applicationTaskOpen ? "text-heading" : "text-section"}`}>Applications</h1>
           {/* Every selected screen needs a way back to the mobile list. Desktop keeps the compact
               switcher beside the detail, so this control would only repeat it there. */}
-          {selected && spec && review && (
+          {applicationTaskOpen && (
             <button
               type="button"
-              onClick={() => {
-                selectedIdRef.current = null;
-                setSelectedId(null);
-                setMatchResult(null);
-              }}
-              className="mt-1 text-sm text-muted transition-colors hover:text-ink"
+              onClick={closeApplication}
+              className="mt-1 inline-flex min-h-11 items-center rounded-full px-3 text-sm text-muted transition-colors hover:bg-surface-alt hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
             >
               ← All applications
             </button>
@@ -3392,7 +3537,7 @@ function Applications() {
             beside the list the sending draws from. This page still READS the same server field,
             because the lock note and the cancel window below are that setting's consequence, and
             the consequence stays where the applications are. */}
-        <div className="flex flex-wrap items-center gap-4">
+        {!applicationTaskOpen && <div className="flex flex-wrap items-center gap-4">
           <Button
             type="button"
             variant={showNewApplication ? "quiet" : "primary"}
@@ -3400,14 +3545,14 @@ function Applications() {
           >
             {showNewApplication ? "Close" : "Fill application"}
           </Button>
-        </div>
+        </div>}
       </div>
 
       {/* No autopilot.error row here any more. That error is only ever set by the toggle's own
           save, and the toggle is on Jobs now, so a copy on this page could never fire. */}
-      {!selected && canUse("automatic_submission") !== false && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
-      {!selected && preferenceError && <ErrorNote message={preferenceError} />}
-      {!selected && packets !== null && reviewablePackets.length > 0 && (
+      {!applicationTaskOpen && canUse("automatic_submission") !== false && <AutopilotLockNote enabled={autopilot.enabled} eligibility={autopilot.eligibility} />}
+      {!applicationTaskOpen && preferenceError && <ErrorNote message={preferenceError} />}
+      {!applicationTaskOpen && packets !== null && reviewablePackets.length > 0 && (
         <NextMatchCard
           match={nextMatch}
           /* The only thing this card is still waiting on. Packets are loaded by the time it mounts
@@ -3420,7 +3565,7 @@ function Applications() {
           onSend={(id) => void sendWithoutAsking(id)}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);
-            if (packet) selectPacket(packet);
+            if (packet) openApplication(packet);
           }}
         />
       )}
@@ -3462,47 +3607,59 @@ function Applications() {
           refusal={composerRefusal}
         />
       )}
-      {legacyCount > 0 && !reviewOpen && (
+      {legacyCount > 0 && !applicationTaskOpen && (
         <p className="border-y border-border py-3 text-sm text-muted">
           {legacyCount} saved resume{legacyCount === 1 ? "" : "s"} · Add a job URL to turn one into a reviewable application.
         </p>
       )}
 
-      {/* Two reasons this section exists, and it has to render for both.
-
-          With a packet open it is the switcher: the only in-context way to move to another
-          application. With nothing open and a filter on, it is the answer to the deep link Home
-          just followed. Gating the whole thing on `selected` made every ?state= arrival inert,
-          because the filter it had just set had no rows to apply to and no visible control to
-          change: Home's banner promised the applications that had stopped for the student and
-          delivered the same board as the plain URL.
-
-          It stays hidden on an unfiltered board view, where it would only restate the board below
-          it. Setting the select back to Everything is what closes it, which is also how the
-          filter is cleared. */}
-      {packets !== null && (selected ? reviewablePackets.length > 1 : ledgerRendersOnLanding(applicationFilter, reviewablePackets.length)) && (
-        /* Keep the switcher above every screen branch. Historical marker for the invariant:
-           packet.job_context.role} · {packet.job_context.company} */
-        /* Every control in here used to sit behind `hidden lg:block`. Filter and sort being
-           desktop-only was a deliberate trade; the switcher going with them was not, and it is the
-           only in-context way to move between applications, so a phone user's sole escape from an
-           open packet was the "All applications" link. Litos's traffic is TikTok and Instagram, so
-           most real sessions were the ones missing it. */
+      {/* The landing ledger is for browsing. Once an application is open, its compact identity row
+          stays in the same place and the full ledger moves behind Switch applications, keeping the
+          packet or blocker task above the fold without taking away fast cross-application access. */}
+      {packets !== null && (applicationTaskOpen ? reviewablePackets.length > 0 : ledgerRendersOnLanding(applicationFilter, reviewablePackets.length)) && (
         <section aria-labelledby="application-ledger-heading" className="border-y border-border">
-          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
-            <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
-              {/* Visible whenever this is the landing view for a filter, so the student reads what
-                  they are looking at in words. Beside an open packet it goes back to being the
-                  switcher's label: the heading there would compete with the packet's own. */}
-              <h2 id="application-ledger-heading" className={selected || canonicalSelected ? "sr-only" : "text-sm font-medium text-ink"}>
-                {selected || canonicalSelected ? "Your applications" : applicationFilterHeading(applicationFilter)}
-              </h2>
+          {applicationTaskOpen ? (
+            <div className="flex min-h-14 items-center justify-between gap-4 py-2.5">
+              <div className="min-w-0">
+                <h2 ref={applicationTaskHeadingRef} tabIndex={-1} id="application-ledger-heading" className="truncate text-sm font-medium text-ink outline-none">{applicationTaskRole}</h2>
+                <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
+                  <span className="truncate">{applicationTaskCompany}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="shrink-0 font-mono text-label uppercase tracking-[0.06em]">{applicationTaskStatus}</span>
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSwitcherOpen((current) => !current)}
+                aria-expanded={switcherOpen}
+                aria-controls="application-switcher-list"
+                className="min-h-11 shrink-0 rounded-full border border-control-border px-4 text-xs font-medium text-ink transition-colors hover:border-ink"
+              >
+                {switcherOpen ? "Done" : "Switch applications"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-3">
+              <h2 id="application-ledger-heading" className="text-sm font-medium text-ink">{applicationFilterHeading(applicationFilter)}</h2>
               <span data-testid="application-ledger-count" className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
               {duplicatePostingNote(duplicateMarks) && (
                 <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
               )}
             </div>
-            <div className="flex gap-2">
+          )}
+
+          {(!applicationTaskOpen || switcherOpen) && <div id="application-switcher-list">
+            <div className="flex flex-col gap-2 border-t border-border py-3 sm:flex-row sm:items-center">
+              <label className="sr-only" htmlFor="application-search">Search applications</label>
+              <input
+                id="application-search"
+                type="search"
+                value={applicationQuery}
+                onChange={(event) => setApplicationQuery(event.target.value)}
+                placeholder="Search role, company, or job board"
+                className="min-h-11 min-w-0 flex-1 rounded-inner border border-control-border bg-surface px-3 text-sm text-ink outline-none placeholder:text-muted focus:border-brand"
+              />
+              <div className="flex gap-2">
               <label className="sr-only" htmlFor="application-filter">Filter applications</label>
               <select id="application-filter" value={applicationFilter} onChange={(event) => setApplicationFilter(event.target.value as ApplicationFilter)} className="min-h-11 rounded-full border border-control-border bg-surface px-3 text-xs text-ink">
                 <option value="all">Everything</option>
@@ -3512,44 +3669,47 @@ function Applications() {
               </select>
               <label className="sr-only" htmlFor="application-sort">Sort applications</label>
               <select id="application-sort" value={applicationSort} onChange={(event) => setApplicationSort(event.target.value as ApplicationSort)} className="min-h-11 rounded-full border border-control-border bg-surface px-3 text-xs text-ink">
+                <option value="next">Next action</option>
                 <option value="recent">Recent first</option>
                 <option value="company">Company A-Z</option>
               </select>
+              </div>
             </div>
-          </div>
-          {/* Below lg the ledger becomes a horizontally scrolling strip of chips rather than a
-              table. Four columns of role, company, date and status do not survive 375px, and a
-              vertical list of 50 rows between the page header and the review surface would bury
-              the thing the student actually opened. The strip is the shape this codebase already
-              uses for the same problem: the Board's stage picker and the Account tab strip. The
-              negative margin lets it bleed to both edges of the phone screen, so the last chip is
-              visibly cut rather than looking like the end of the list. */}
+
           <div className="-mx-4 overflow-x-auto border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
             {visiblePackets.length === 0 ? (
-              <>
-                <p className="py-2 text-sm text-muted">No applications in this view.</p>
+              <div className="flex items-center justify-between gap-3 py-2">
+                <p className="text-sm text-muted">No applications match this view.</p>
                 <Button
                   type="button"
-                  onClick={() => setApplicationFilter("all")}
+                  onClick={() => {
+                    setApplicationQuery("");
+                    setApplicationFilter("all");
+                  }}
                   variant="secondary"
                 >
                   Show all applications
                 </Button>
-              </>
+              </div>
             ) : (
               <div className="flex min-w-max gap-2">
                 {visiblePackets.map((packet) => (
                   <button
                     key={packet.id}
                     type="button"
-                    onClick={() => selectPacket(packet)}
-                    aria-pressed={packet.id === selected?.id || packet.id === canonicalSelected?.id}
-                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selected?.id || packet.id === canonicalSelected?.id ? "border-brand bg-brand-soft" : "border-border"}`}
+                    onClick={() => openApplication(packet)}
+                    aria-pressed={packet.id === selectedApplicationRowId}
+                    className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
                   >
-                    <span className={`truncate text-[13px] font-medium ${packet.id === selected?.id || packet.id === canonicalSelected?.id ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
+                    <span className={`truncate text-[13px] font-medium ${packet.id === selectedApplicationRowId ? "text-brand-ink" : "text-ink"}`}>{packet.job_context.role || "Role"}</span>
                     <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
+                    {packet.spec._review && (
+                      <span className="mt-1 truncate font-mono text-label uppercase tracking-[0.05em] text-muted">
+                        {statusLabel(false, packet.spec._review.status)}
+                      </span>
+                    )}
                     {duplicateBadge(duplicateMarks.get(packet.id)) && (
-                      <span className="mt-1 truncate text-[10px] uppercase tracking-[0.05em] text-muted">
+                      <span className="mt-1 truncate text-label uppercase tracking-[0.05em] text-muted">
                         {duplicateBadge(duplicateMarks.get(packet.id))!.label}
                       </span>
                     )}
@@ -3558,15 +3718,17 @@ function Applications() {
               </div>
             )}
           </div>
-          {/* Whole rows: max-h-72 cut the fifth row in half, which reads as a broken layout
-              rather than as "there is more below". */}
+
           <div className="hidden max-h-[280px] overflow-y-auto border-t border-border lg:block">
             {visiblePackets.length === 0 ? (
               <div className="flex items-center justify-between gap-4 py-3">
-                <p className="text-sm text-muted">No applications in this view.</p>
+                <p className="text-sm text-muted">No applications match this view.</p>
                 <Button
                   type="button"
-                  onClick={() => setApplicationFilter("all")}
+                  onClick={() => {
+                    setApplicationQuery("");
+                    setApplicationFilter("all");
+                  }}
                   variant="secondary"
                 >
                   Show all applications
@@ -3574,33 +3736,18 @@ function Applications() {
               </div>
             ) : (
               <>
-                {/* An unlabelled column of company names and bare dates left "Jul 21, 2026"
-                    meaning nothing. Say what each column is. */}
                 <div className="hidden grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-2 py-2 text-[11px] text-muted sm:grid">
                   <span>Role</span>
                   <span>Company</span>
                   <span>Last updated</span>
                   <span>Status</span>
                 </div>
-                {/* Each row declares type="button" rather than leaving it to the default. A bare
-                    button is a SUBMIT button, and the whole value of a ledger row is that pressing
-                    it changes what this page is showing rather than navigating. The chip strip
-                    above already declares it; this one, the desktop row and the one students on a
-                    laptop actually press, was the only control on the screen still relying on there
-                    being no form element anywhere above it. */}
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} type="button" onClick={() => selectPacket(packet)} aria-pressed={packet.id === selected?.id || packet.id === canonicalSelected?.id} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selected?.id || packet.id === canonicalSelected?.id ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} type="button" onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
                       <time className="hidden text-xs text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
-                      {/* A column where every cell reads the same carries no information and costs
-                          a fifth of the row. It only renders when the rows actually differ. */}
-                      {/* Two chips, not one, and the order is deliberate: the status is what the
-                          row IS and the duplicate mark is what it costs. "Already applied" is the
-                          one that changes what she can do, because the backend refuses that send
-                          with a 409 rather than sending a second application the employer counts
-                          against her. */}
                       <span className="flex items-center gap-1.5">
                         {packet.spec._review && <Chip label={statusLabel(false, packet.spec._review.status)} kind={chipKind(packet.spec._review.status)} />}
                         {(() => {
@@ -3614,6 +3761,7 @@ function Applications() {
               </>
             )}
           </div>
+          </div>}
         </section>
       )}
 
@@ -3701,10 +3849,7 @@ function Applications() {
           coverLetterEditorOpen={canonicalCoverLetterEditorOpen}
           coverLetterDownloadUrl={canonicalCoverLetter?.download_url ?? canonicalGeneratedPacket?.cover_letter_download_url ?? null}
           error={canonicalFillError}
-          onBack={() => {
-            setCanonicalSelected(null);
-            setCanonicalFillError(null);
-          }}
+          onBack={closeApplication}
           onFill={() => void fillApplication({
             company: canonicalSelected.company,
             role: canonicalSelected.role,
@@ -3773,7 +3918,7 @@ function Applications() {
                 {selected && spec && !review && <li>This application has no prepared packet, so there is no review or send step for it yet.</li>}
               </ul>
               <div className="mt-5 flex flex-wrap gap-2">
-                <Button variant="secondary" onClick={() => { selectedIdRef.current = null; setSelectedId(null); }}>Back to all applications</Button>
+                <Button variant="secondary" onClick={closeApplication}>Back to all applications</Button>
               </div>
             </div>
           </Card>
@@ -3792,7 +3937,7 @@ function Applications() {
           openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);
-            if (packet) selectPacket(packet);
+            if (packet) openApplication(packet);
           }}
           /* Revisit does NOT call selectPacket. Selecting drives the review flow and moves the
              whole page onto a screen for that packet; looking at what was already sent should
@@ -3811,7 +3956,11 @@ function Applications() {
         </SectionBoundary>
       ) : screen === "questions" ? (
         <QuestionsScreen
+          key={selected.id}
+          applicationRole={selected.job_context.role ?? "Application"}
+          applicationCompany={selected.job_context.company ?? "Company"}
           questions={questions}
+          actionableQuestionIds={actionableQuestionIds}
           onChange={setQuestions}
           onBack={() => {
             /* Back abandons the confirm presses that led here. Left standing, a CONFIRM pressed and
@@ -4100,7 +4249,7 @@ function Applications() {
               ? <p className="text-sm text-ink">Litos cannot fill in this company’s page. Your resume is ready, so apply on their site.</p>
               : <p className="hidden text-sm text-ink sm:block">Litos fills the form with your saved answers and this resume.</p>}
             <div className="flex gap-2">
-              {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View PDF</a>}
+              {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
               {review.portal_supported === false
                 ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
                 : <Button onClick={packetEvidenceReady ? continueFromVerifiedPacket : packetEvidenceNeedsFreshAudit ? auditPacketAgain : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
@@ -4774,11 +4923,30 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: { questions: ApplicationQuestion[]; onChange: (questions: ApplicationQuestion[]) => void; onBack: () => void; onSubmit: () => void; saving?: boolean; reviewDiscovered?: boolean; focusQuestion?: { id: string; token: number } | null; prescriptNote?: string }) {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, actionableQuestionIds = [], onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+  applicationRole: string;
+  applicationCompany: string;
+  questions: ApplicationQuestion[];
+  actionableQuestionIds?: string[];
+  onChange: (questions: ApplicationQuestion[]) => void;
+  onBack: () => void;
+  onSubmit: () => void;
+  saving?: boolean;
+  reviewDiscovered?: boolean;
+  focusQuestion?: { id: string; token: number } | null;
+  prescriptNote?: string;
+}) {
+  const [showAllAnswers, setShowAllAnswers] = useState(false);
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
-  const visibleQuestions = reviewDiscovered ? questions : missingQuestions;
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
+  const actionableIds = new Set(actionableQuestionIds);
+  if (focusQuestionId) actionableIds.add(focusQuestionId);
+  const actionableQuestions = questions.filter((question) => actionableIds.has(question.id));
+  const focusedReview = reviewDiscovered && actionableQuestions.length > 0 && !showAllAnswers;
+  const visibleQuestions = reviewDiscovered
+    ? (focusedReview ? actionableQuestions : questions)
+    : missingQuestions;
   /* Arriving from a Your turn row means the student pressed ONE thing, so the caret belongs in that
      answer. Without this the screen opens at the top of a list of every question the form asked and
      the row she pressed can be several screens down, which is close enough to nothing happening.
@@ -4810,16 +4978,30 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false
     <div className="mx-auto max-w-3xl space-y-6">
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">Back</button>
       <div>
-        <h2 className="text-heading font-medium tracking-tight text-ink">{reviewDiscovered ? "Review answers" : "Answer these"}</h2>
+        <p className="text-small text-muted">{applicationRole} · {applicationCompany}</p>
+        <h2 className="mt-2 text-heading font-medium tracking-tight text-ink">
+          {reviewDiscovered && actionableQuestions.length > 0
+            ? `${actionableQuestions.length} ${actionableQuestions.length === 1 ? "answer needs" : "answers need"} you.`
+            : reviewDiscovered ? "Review answers" : "Answer these"}
+        </h2>
         {reviewDiscovered && (
           <p className="mt-1 text-sm leading-6 text-muted">
-            Nothing here has gone to the employer. Change anything that is wrong, then save to put these answers on the company&apos;s form.
+            Nothing here has gone to the employer. Check what needs you, then save to continue the application.
           </p>
         )}
         {/* The Apply-time line, which says what Litos already handled as well as what is left. A
             screen that only counts what is still owed reads as a bill. */}
         {!reviewDiscovered && prescriptNote && (
           <p className="mt-1 text-sm leading-6 text-muted">{prescriptNote}</p>
+        )}
+        {reviewDiscovered && actionableQuestions.length > 0 && actionableQuestions.length < questions.length && (
+          <button
+            type="button"
+            onClick={() => setShowAllAnswers((current) => !current)}
+            className="mt-3 min-h-11 text-sm font-medium text-brand-ink hover:text-ink"
+          >
+            {showAllAnswers ? `Focus on ${actionableQuestions.length} that need you` : `Review all ${questions.length} saved answers`}
+          </button>
         )}
       </div>
       {visibleQuestions.map((question) => (
@@ -4874,7 +5056,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false
               </select>
             )
           ) : (
-            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={6} className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
+            <textarea id={`question-${question.id}`} value={question.answer} onChange={(event) => onChange(questions.map((item) => item.id === question.id ? { ...item, answer: event.target.value } : item))} rows={3} className="mt-4 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-brand" />
           )}
           {/* Said once, on the row it is true of, rather than as a promise at the top of a screen
               she cannot check. A declaration about her carries to the next posting; an answer about
@@ -4891,7 +5073,7 @@ function QuestionsScreen({ questions, onChange, onBack, onSubmit, saving = false
           screen this is a request to the server, and a button that reads "Save" throughout a write
           it does not acknowledge is how the old handler got away with saving nothing. */}
       <TerminalActionBar className="justify-end">
-        <Button onClick={onSubmit} disabled={saving}>{saving ? "Saving..." : "Save"}</Button>
+        <Button onClick={onSubmit} disabled={saving}>{saving ? "Saving..." : "Save and continue"}</Button>
       </TerminalActionBar>
     </div>
   );
@@ -5303,9 +5485,38 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     if (finalApprovalBlocked) return;
     onApprove();
   }
+  /* The unverified-send choice is consequential and depends on this exact proof. Its evidence is
+     first in DOM order so mobile, tablet, keyboard, and screen-reader users inspect it before the
+     yes/no controls. Desktop keeps the familiar action-left, evidence-right composition. */
+  const filledFormEvidence = (
+    <Card className={`overflow-hidden ${awaitingUnverifiedSubmission ? "lg:order-2" : ""}`}>
+      <div id="live-company-page" className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">{canFinishInDashboard ? "Finish the company page here" : "What the form looked like after we filled it in"}</p></div>
+      {canFinishInDashboard && handoffUrl ? (
+        <iframe
+          src={handoffUrl}
+          title="Live company application page"
+          className="h-[72vh] min-h-[560px] w-full bg-white"
+          allow="clipboard-read; clipboard-write"
+        />
+      ) : review.preview_screenshot_url ? (
+        previewFailed ? (
+          <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
+        ) : (
+          <img
+            src={review.preview_screenshot_url}
+            alt="The company's application page after Litos filled it in"
+            className="h-auto w-full"
+            onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
+            onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
+          />
+        )
+      ) : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
+    </Card>
+  );
   return (
-    <div className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-[1fr_1.15fr]">
-      <Card className="p-7">
+    <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
+      {awaitingUnverifiedSubmission && filledFormEvidence}
+      <Card className={`p-7 ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
         <h2 className="text-heading font-medium text-ink">{awaitingSecurityCode ? "One code away" : awaitingUnverifiedSubmission ? "Waiting on you to look" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
@@ -5681,29 +5892,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         ))}
         <p className="mt-5 text-xs leading-5 text-muted">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
       </Card>
-      <Card className="overflow-hidden">
-        <div id="live-company-page" className="border-b border-border px-5 py-4"><p className="text-sm font-medium text-ink">{canFinishInDashboard ? "Finish the company page here" : "What the form looked like after we filled it in"}</p></div>
-        {canFinishInDashboard && handoffUrl ? (
-          <iframe
-            src={handoffUrl}
-            title="Live company application page"
-            className="h-[72vh] min-h-[560px] w-full bg-white"
-            allow="clipboard-read; clipboard-write"
-          />
-        ) : review.preview_screenshot_url ? (
-          previewFailed ? (
-            <div className="p-10 text-center text-sm text-warn">Litos could not load the filled form preview. Try filling the form again before sending.</div>
-          ) : (
-            <img
-              src={review.preview_screenshot_url}
-              alt="The company's application page after Litos filled it in"
-              className="h-auto w-full"
-              onLoad={() => setPreviewState({ url: previewUrl, loaded: true, failed: false })}
-              onError={() => setPreviewState({ url: previewUrl, loaded: false, failed: true })}
-            />
-          )
-        ) : <div className="p-10 text-center text-sm text-muted">Litos is still taking the picture.</div>}
-      </Card>
+      {!awaitingUnverifiedSubmission && filledFormEvidence}
     </div>
   );
 }

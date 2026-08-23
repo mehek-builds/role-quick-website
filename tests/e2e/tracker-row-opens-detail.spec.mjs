@@ -129,20 +129,68 @@ const SENT = thinPacket("sent", "submitted", {
   role: "Data Science Intern, Customer Success",
   company: "Fixture Analytics",
 });
+const FRESHLY_SENT_READY = thinPacket("ready", "submitted", {
+  role: "Software Engineering Internship, Fall 2026",
+  company: "Fixture Audio",
+});
+const UNVERIFIED_BASE = thinPacket("unverified", "needs_attention", {
+  role: "Verification Evidence Engineer",
+  company: "Fixture Evidence",
+});
+const UNVERIFIED = {
+  ...UNVERIFIED_BASE,
+  spec: {
+    ...UNVERIFIED_BASE.spec,
+    _review: {
+      ...UNVERIFIED_BASE.spec._review,
+      attention_reason: "Litos pressed Send and could not confirm what came back. Inspect the proof below.",
+      attention_categories: ["unverified_submission"],
+      portal_supported: true,
+      preview_screenshot_url: "/qa/portal-preview.svg",
+      unverified_submission: {
+        at: "2026-08-10T12:35:00.000Z",
+        cause: "no_confirmation_state",
+        portal_url: "https://jobs.example.invalid/evidence",
+      },
+    },
+  },
+};
 
 const RESUMES = [NEEDS_YOU, READY, SENT];
+let resumeHistoryOverride = null;
+const CANONICAL_A = {
+  id: "canonical-application-a",
+  legacy_generated_resume_id: null,
+  company: "Canonical Alpha",
+  role: "Canonical Product Engineer",
+  portal_url: "https://jobs.example.invalid/canonical-a",
+  tracker_state: "tracked",
+  review_state: "needs_attention",
+  submission_state: "not_started",
+  created_at: "2026-08-10T12:00:00.000Z",
+  updated_at: "2026-08-10T12:30:00.000Z",
+};
+const CANONICAL_B = {
+  ...CANONICAL_A,
+  id: "canonical-application-b",
+  company: "Canonical Beta",
+  role: "Canonical Platform Engineer",
+  portal_url: "https://jobs.example.invalid/canonical-b",
+};
+let canonicalApplicationsOverride = null;
+let failApplicationHistory = false;
 
 /**
- * The rows under test, and the heading each must produce.
+ * The rows under test, and the screen-specific control each must produce.
  *
- * The heading is SubmissionScreen's own h2 for that status, so a case cannot pass on the page
- * merely surviving: it has to have drawn the detail for the row that was pressed.
+ * Each control belongs to the selected packet's screen, so a case cannot pass on the page merely
+ * surviving: it has to have drawn the detail for the row that was pressed.
  */
 const CASES = [
-  { name: "a needs_attention row opens in place", packet: NEEDS_YOU, heading: "Needs your input" },
-  { name: "a ready_for_final_approval row opens in place", packet: READY, heading: "Review" },
+  { name: "a needs_attention row opens in place", packet: NEEDS_YOU, expected: { role: "heading", name: "Needs your input" } },
+  { name: "a ready_for_final_approval row opens in place", packet: READY, expected: { role: "button", name: "Review and send" } },
   /* The contrast case. Green before the fix and after it. */
-  { name: "a submitted row still opens in place", packet: SENT, heading: "Sent" },
+  { name: "a submitted row still opens in place", packet: SENT, expected: { role: "heading", name: "Sent" } },
 ];
 
 const port = await freePort();
@@ -174,7 +222,8 @@ await context.route("**/*", async (route) => {
     return;
   }
   if (url.startsWith(BACKEND_ORIGIN)) {
-    const pathname = new URL(url).pathname;
+    const parsedUrl = new URL(url);
+    const pathname = parsedUrl.pathname;
     backendPaths.push(pathname);
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
     if (pathname.startsWith("/jobs/")) {
@@ -185,7 +234,19 @@ await context.route("**/*", async (route) => {
       return;
     }
     if (pathname === "/resume/history") {
-      await json({ resumes: RESUMES });
+      if (failApplicationHistory) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "fixture history failure" }) });
+        return;
+      }
+      await json({ resumes: resumeHistoryOverride ?? RESUMES });
+      return;
+    }
+    if (pathname === "/applications") {
+      if (failApplicationHistory) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "fixture ledger failure" }) });
+        return;
+      }
+      await json({ applications: canonicalApplicationsOverride ?? [] });
       return;
     }
     if (pathname === "/dashboard/bootstrap") {
@@ -226,7 +287,23 @@ let pageErrors = [];
 page.on("pageerror", (reason) => pageErrors.push(String(reason?.stack ?? reason)));
 
 const ARTIFACT_DIR = path.join(process.cwd(), "test-results", "tracker-row");
+const VISUAL_OUTPUT_DIR = process.env.LITOS_VISUAL_OUTPUT_DIR?.trim() || null;
 let anyFailure = false;
+
+async function captureVisual(name) {
+  if (!VISUAL_OUTPUT_DIR) return;
+  await mkdir(VISUAL_OUTPUT_DIR, { recursive: true });
+  await page.screenshot({ path: path.join(VISUAL_OUTPUT_DIR, name), fullPage: false });
+}
+
+async function assertInsideViewport(locator, label) {
+  const box = await locator.boundingBox();
+  assert.ok(box, `${label} must have a rendered box`);
+  const viewport = page.viewportSize();
+  assert.ok(viewport, "the viewport must be measurable");
+  assert.ok(box.y >= 0 && box.y + box.height <= viewport.height, `${label} must be visible without vertical scrolling`);
+  assert.ok(box.x >= 0 && box.x + box.width <= viewport.width, `${label} must be visible without horizontal scrolling`);
+}
 
 async function captureFailure(label, reason) {
   anyFailure = true;
@@ -286,13 +363,15 @@ for (const item of CASES) {
     assert.equal(await row.count(), 1, `${item.packet.job_context.role} must be exactly one visible row`);
     await row.click();
 
+    await page.waitForURL((url) => (
+      url.pathname === "/dashboard/applications"
+      && url.searchParams.get("application") === item.packet.id
+      && url.searchParams.get("intent") === "apply"
+    ), { timeout: 10_000 });
+
     /* THE EJECTION CHECK. The report was that the browser left the product entirely on this click,
        so the address is asserted before anything about what rendered. */
-    assert.equal(
-      page.url(),
-      `${ORIGIN}/dashboard/applications`,
-      `pressing the row navigated away from the Tracker, to ${page.url()}`,
-    );
+    assert.equal(new URL(page.url()).pathname, "/dashboard/applications", `pressing the row navigated away from the Tracker, to ${page.url()}`);
 
     /* The route boundary, by its own words. If this is on screen the click destroyed the page. */
     const boundary = await page.getByText("This page did not load.").isVisible().catch(() => false);
@@ -301,12 +380,119 @@ for (const item of CASES) {
     assert.deepEqual(pageErrors, [], "the click threw on the page");
 
     /* And it opened THIS row, not merely something. */
-    await page.getByRole("heading", { name: item.heading, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
-    assert.equal(await row.getAttribute("aria-pressed"), "true", "the pressed row must read as selected");
+    await page.getByRole(item.expected.role, { name: item.expected.name, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("button", { name: "Switch applications", exact: true }).click();
+    const selectedRow = page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: item.packet.job_context.role });
+    assert.equal(await selectedRow.getAttribute("aria-pressed"), "true", "the pressed row must read as selected");
 
     assert.deepEqual(blockedExternal, [], "no request may leave this machine");
   });
 }
+
+browserTest("the focused workspace keeps its identity and primary action above the fold on desktop", async () => {
+  await page.setViewportSize({ width: 1512, height: 684 });
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
+    const switcher = page.getByRole("button", { name: "Switch applications", exact: true });
+    const primary = page.getByRole("button", { name: "Review and send", exact: true });
+    await primary.waitFor({ state: "visible", timeout: 10_000 });
+    await assertInsideViewport(switcher, "the selected application switcher");
+    await assertInsideViewport(primary, "the primary review action");
+    await captureVisual("applications-focused-desktop-1512x684.png");
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
+browserTest("the focused workspace keeps its identity and primary action above the fold on mobile", async () => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
+    const switcher = page.getByRole("button", { name: "Switch applications", exact: true });
+    const primary = page.getByRole("button", { name: "Review and send", exact: true });
+    await primary.waitFor({ state: "visible", timeout: 10_000 });
+    await assertInsideViewport(switcher, "the selected application switcher");
+    await assertInsideViewport(primary, "the primary review action");
+    await captureVisual("applications-focused-mobile-375x812.png");
+  } finally {
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
+browserTest("mobile unverified-send choices appear only after the filled-form proof", async () => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  resumeHistoryOverride = [UNVERIFIED];
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: UNVERIFIED.job_context.role }).click();
+    const proofHeading = page.getByText("What the form looked like after we filled it in", { exact: true });
+    const decision = page.getByRole("button", { name: "I found it there", exact: true });
+    await proofHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await decision.waitFor({ state: "visible", timeout: 10_000 });
+    const proofBox = await proofHeading.boundingBox();
+    const decisionBox = await decision.boundingBox();
+    assert.ok(proofBox && decisionBox && proofBox.y < decisionBox.y, "the outcome controls appeared before the proof they ask the applicant to inspect");
+  } finally {
+    resumeHistoryOverride = null;
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
+browserTest("fresh server state replaces an immediately opened stale row", async () => {
+  await openTracker();
+  resumeHistoryOverride = [NEEDS_YOU, FRESHLY_SENT_READY, SENT];
+  try {
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
+    await page.getByRole("heading", { name: "Sent", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByRole("button", { name: "Review and send", exact: true }).count(), 0, "stale review controls must be replaced by the fresh submitted state");
+  } finally {
+    resumeHistoryOverride = null;
+  }
+});
+
+browserTest("browser Back returns from an application to the ledger and Forward restores it", async () => {
+  await openTracker();
+  await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
+  await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000 });
+  await page.goBack();
+  await page.waitForURL((url) => url.pathname === "/dashboard/applications" && !url.searchParams.has("application"), { timeout: 10_000 });
+  await page.getByRole("heading", { name: "Your applications", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  await page.goForward();
+  await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000 });
+  await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+});
+
+browserTest("a failed canonical Back load never leaves the prior application's controls under the new URL", async () => {
+  canonicalApplicationsOverride = [CANONICAL_A, CANONICAL_B];
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_A.role }).click();
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
+    await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+
+    await page.getByRole("button", { name: "Switch applications", exact: true }).click();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_B.role }).click();
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000 });
+    await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+
+    failApplicationHistory = true;
+    await page.goBack();
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
+    await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "hidden", timeout: 10_000 });
+    assert.equal(await page.getByRole("button", { name: "Tailor resume", exact: true }).count(), 0, "the previous canonical application kept an active Tailor control after the route changed");
+    assert.equal(await page.getByRole("heading", { name: CANONICAL_B.role, exact: true }).count(), 0, "the previous canonical identity survived a failed Back load");
+
+    failApplicationHistory = false;
+    await page.goForward();
+    await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_B.id, { timeout: 10_000 });
+    await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  } finally {
+    failApplicationHistory = false;
+    canonicalApplicationsOverride = null;
+  }
+});
 
 /**
  * The second half of the report: a ?job= link that is really an application.
@@ -333,6 +519,8 @@ browserTest("a ?job= link carrying an application id opens the application, and 
 
   /* And the parameter is gone, so a reload does not ask the postings endpoint about it again. */
   assert.equal(new URL(page.url()).searchParams.get("job"), null, `the job parameter survived: ${page.url()}`);
+  assert.equal(new URL(page.url()).searchParams.get("application"), NEEDS_YOU.id, "the opened application must replace the job parameter");
+  assert.equal(new URL(page.url()).searchParams.get("intent"), "apply");
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(blockedExternal, []);
 });
@@ -353,10 +541,19 @@ browserTest("a ?job= link that is neither still says so, in words a student can 
 browserTest("the switcher still moves between the rows after each has been opened", async () => {
   await openTracker();
   for (const item of [...CASES, ...CASES].map((c) => c.packet)) {
+    const switchButton = page.getByRole("button", { name: "Switch applications", exact: true });
+    if (await switchButton.isVisible().catch(() => false)) await switchButton.click();
     const row = page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: item.job_context.role });
     await row.click();
-    assert.equal(page.url(), `${ORIGIN}/dashboard/applications`);
-    assert.equal(await row.getAttribute("aria-pressed"), "true", `${item.job_context.role} did not become the selected row`);
+    await page.waitForURL((url) => url.searchParams.get("application") === item.id && url.searchParams.get("intent") === "apply", { timeout: 10_000 });
+    assert.equal(new URL(page.url()).pathname, "/dashboard/applications");
+    const selectedHeading = page.getByRole("heading", { name: item.job_context.role, exact: true }).first();
+    assert.equal(await selectedHeading.isVisible(), true, `${item.job_context.role} did not become the compact selected row`);
+    await page.waitForFunction(
+      (role) => document.activeElement?.tagName === "H2" && document.activeElement.textContent?.trim() === role,
+      item.job_context.role,
+      { timeout: 10_000 },
+    );
   }
   assert.deepEqual(pageErrors, [], "switching between rows threw on the page");
   assert.deepEqual(blockedExternal, []);

@@ -143,7 +143,7 @@ describe("the Tracker renders the mark, and computes it over every packet", () =
     const mobile = page.indexOf('{packet.job_context.company || "Company"}');
     assert.ok(desktop > 0 && mobile > 0);
     assert.match(page.slice(desktop - 400, desktop + 400), /duplicateBadge\(duplicateMarks\.get\(packet\.id\)\)/);
-    assert.match(page.slice(mobile, mobile + 400), /duplicateBadge\(duplicateMarks\.get\(packet\.id\)\)/);
+    assert.match(page.slice(mobile, mobile + 800), /duplicateBadge\(duplicateMarks\.get\(packet\.id\)\)/);
   });
 
   test("marks are computed over reviewablePackets, never over the filtered view", () => {

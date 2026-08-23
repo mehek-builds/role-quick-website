@@ -40,8 +40,9 @@ export function selectedPacketForRequest<T extends { id: string }>(
      is non-actionable, so a malformed or future intent cannot accidentally expose send controls. */
   if (requestedApplicationIntent !== null && requestedApplicationIntent !== "apply") return null;
   /* Mismatch means the URL changed but its new packet has not been loaded and selected yet. Once
-     the request resolves, ledger switching is local page state again and must not be pinned to the
-     original deep-link id forever. */
+     the request resolves, selection can carry the restored legacy packet id while the URL carries
+     its canonical application id, so resolved request identity is the binding rather than raw id
+     equality. */
   if (requestedApplicationId && requestedApplicationId !== resolvedActionableRequestId) return null;
   return packets?.find((packet) => packet.id === selectedId) ?? null;
 }

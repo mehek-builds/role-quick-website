@@ -2,7 +2,7 @@
  * A DEAD BUTTON WITH NO CONSOLE ERROR IS A SWALLOWED 409 IN THE NETWORK TAB.
  *
  * Measured live three times now, most recently 2026-08-20 on the Applications tracker: pressing
- * "Fill company form" fired POST /applications/:id/packet-audit/acknowledge, the server answered
+ * "Approve packet and fill form" fired POST /applications/:id/packet-audit/acknowledge, the server answered
  * 409 with an authored sentence written for the applicant, and the person watching the button saw
  * nothing change. The backend writes those sentences on purpose (applications.ts answers the
  * acknowledge with "This application cannot be acknowledged in its current state" when a run has
@@ -12,7 +12,7 @@
  * These cases pin the whole audit -> acknowledge -> submit-request walk from both entry points:
  *
  *   - "Review filled form" (ready_for_final_approval) with the acknowledge answering 409;
- *   - "Fill company form" (resume_ready, the live 2026-08-20 shape) with the acknowledge
+ *   - "Approve packet and fill form" (resume_ready, the live 2026-08-20 shape) with the acknowledge
  *     answering the codeless current-state 409;
  *   - the same walk with the acknowledge accepted and submit-request answering 409;
  *   - the same walk succeeding end to end, so the refusal coverage cannot pass by breaking
@@ -88,7 +88,7 @@ test.after(async () => {
 
 /* The two entry points into the audited flow. READY approves a filled form; FILL is the packet
    the live 2026-08-20 dead button was measured on, where the same primary control reads
-   "Review and fill" and then "Fill company form". */
+   "Review and fill" and then "Approve packet and fill form". */
 const READY = RESUMES.find((r) => r.spec?._review?.status === "ready_for_final_approval");
 const FILL = RESUMES.find((r) => r.spec?._review?.status === "resume_ready");
 assert.ok(READY, "the fixture must contain a ready_for_final_approval packet");
@@ -238,7 +238,7 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
   await first.click();
   await page.getByText("Exact audited PDF loaded, 1 page.", { exact: true })
     .waitFor({ state: "visible", timeout: 25_000 });
-  const secondLabel = packet === READY ? "Review filled form" : "Fill company form";
+  const secondLabel = packet === READY ? "Review filled form" : "Approve packet and fill form";
   const second = page.getByRole("button", { name: secondLabel, exact: true });
   await second.waitFor({ state: "visible", timeout: 25_000 });
 
@@ -274,7 +274,7 @@ const ACK_STALE = "The rendered packet no longer matches the saved application. 
 const SUBMIT_STALE = "This application changed after you approved the exact packet Litos prepared, so it was not sent.";
 const REVALIDATION_STALE = "The saved application changed while it was being audited. Reload it and audit again.";
 
-browserTest("a refused acknowledge on Fill company form says the server's sentence, and keeps saying it", async (hold) => {
+browserTest("a refused acknowledge on Approve packet and fill form says the server's sentence, and keeps saying it", async (hold) => {
   const { context, page, second, counts } = await openAuditedFlow(FILL, {
     ackResponse: { status: 409, body: { error: ACK_CLAIMED } },
   });
@@ -315,7 +315,7 @@ browserTest("a coded stale submit-request refreshes review without auto-acknowle
   hold(page);
   await second.click();
   await page.getByRole("status").filter({ hasText: "The current exact packet is ready" }).first().waitFor({ state: "visible", timeout: 20_000 });
-  await page.getByRole("button", { name: "Fill company form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByRole("button", { name: "Approve packet and fill form", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await page.getByRole("alert").filter({ hasText: SUBMIT_STALE }).count(), 0);
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 1);

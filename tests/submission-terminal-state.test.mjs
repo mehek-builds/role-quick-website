@@ -75,7 +75,7 @@ test("an unsupported portal replaces the send control with a way to apply by han
     dashboard,
     /review\.portal_supported === false[\s\S]{0,900}Open the company page[\s\S]{0,900}: <Button/,
   );
-  assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Fill company form"/);
+  assert.match(dashboard, /const reviewPrimaryLabel[\s\S]{0,500}"Approve packet and fill form"/);
   // The resume itself stays reachable: this is a gate on submitting, not on the packet.
-  assert.match(dashboard, /selected\.download_url[\s\S]{0,200}View PDF/);
+  assert.match(dashboard, /selected\.download_url[\s\S]{0,200}View exact PDF/);
 });

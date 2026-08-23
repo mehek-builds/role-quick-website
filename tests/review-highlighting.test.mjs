@@ -185,7 +185,7 @@ test("R-049: a run in progress shows elapsed time", () => {
 
 test("R-051d: the packet switcher is not nested inside the review screen", () => {
   // It must render above the screen branch, so a portal run cannot unmount every other application.
-  const switcherAt = dashboard.indexOf("packet.job_context.role} · {packet.job_context.company}");
+  const switcherAt = dashboard.indexOf("applicationTaskRole");
   const screenBranchAt = dashboard.indexOf("screen === \"questions\" ?");
   assert.ok(switcherAt > 0 && screenBranchAt > 0);
   assert.ok(switcherAt < screenBranchAt, "the switcher must be rendered before the screen branch");

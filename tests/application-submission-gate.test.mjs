@@ -68,7 +68,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // describe is unchanged, so the assertions follow the new wording.
   assert.match(dashboard, /"Review and fill"/);
   assert.match(dashboard, /review\?\.status === "ready_for_final_approval"[\s\S]{0,100}"Review and send"/);
-  assert.match(dashboard, /"Fill company form"/);
+  assert.match(dashboard, /"Approve packet and fill form"/);
   assert.match(dashboard, /Litos fills the form with your saved answers and this resume/);
   assert.match(dashboard, /Check the preview, then send/);
   assert.match(dashboard, /submission_authorized_at/);
@@ -370,6 +370,24 @@ test("Tracker arms only the exact attended URL returned by the backend contract"
   assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
   assert.match(dashboard, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
   assert.doesNotMatch(dashboard, /armHandoffs\(\[\{ id: submission\.application_id, portalUrl: portalUrl/);
+});
+
+test("unverified submission evidence precedes its outcome controls on narrow screens", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const start = dashboard.indexOf("function SubmissionScreen(");
+  const end = dashboard.indexOf("function SubmissionReceipt(", start);
+  const screen = dashboard.slice(start, end);
+  const evidenceBefore = screen.indexOf("{awaitingUnverifiedSubmission && filledFormEvidence}");
+  const decision = screen.indexOf("<UnverifiedSubmissionCard");
+  const ordinaryEvidence = screen.indexOf("{!awaitingUnverifiedSubmission && filledFormEvidence}");
+
+  assert.ok(evidenceBefore > 0 && decision > evidenceBefore, "the proof must be encountered before the consequential yes/no controls");
+  assert.ok(ordinaryEvidence > decision, "other review states keep their action-first reading order");
+  assert.match(screen, /filledFormEvidence =[\s\S]{0,160}<Card className=\{`overflow-hidden \$\{awaitingUnverifiedSubmission \? "lg:order-2" : ""\}`\}/);
+  assert.match(screen, /<Card className=\{`p-7 \$\{awaitingUnverifiedSubmission \? "lg:order-1" : ""\}`\}>/);
 });
 
 test("overview keeps three application states and sends matches to the review screen", async () => {

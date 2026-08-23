@@ -298,6 +298,11 @@ for (const vp of VIEWPORTS) {
       assert.equal(atRest.occludedByNav, false, `the action overlaps the mobile tab bar at ${label}: ${JSON.stringify(atRest)}`);
 
       if (!stickyExpected) {
+        /* A focused application intentionally replaces the browsing ledger with a compact
+           identity row. Return through the real escape control before checking that the landing
+           ledger count still keeps its no-wrap contract. */
+        await page.getByRole("button", { name: /All applications/ }).click();
+        await page.getByTestId("application-ledger-count").waitFor();
         const ledgerCountLines = await page.getByTestId("application-ledger-count").evaluate((node) => {
           const range = document.createRange();
           range.selectNodeContents(node);

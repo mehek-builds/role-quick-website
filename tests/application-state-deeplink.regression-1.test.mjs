@@ -207,12 +207,12 @@ describe("the chosen view is visible on the page it lands on", () => {
        in full. The polarity and the threshold now live in ledgerRendersOnLanding, whose truth table
        is asserted below; what is left here is the wiring, so both halves have to be right.
 
-       The `selected ?` branch is pinned with it: the ledger is also the switcher, and a mutant that
-       dropped that branch would take the only in-context way to move between applications with it. */
+       The task-open branch is pinned with it: the compact identity row is also the switcher, and a
+       mutant that dropped that branch would take the only in-context way to move applications. */
     const gate = ledger.source.slice(Math.max(0, ledger.start - 400), ledger.start);
     assert.match(
       gate,
-      /selected \? reviewablePackets\.length > 1 : ledgerRendersOnLanding\(applicationFilter, reviewablePackets\.length\)/,
+      /applicationTaskOpen \? reviewablePackets\.length > 0 : ledgerRendersOnLanding\(applicationFilter, reviewablePackets\.length\)/,
       "the ledger's gate must be the tested predicate, over the real filter and the real count",
     );
   });
@@ -273,22 +273,16 @@ describe("the chosen view is visible on the page it lands on", () => {
       /applicationFilterHeading\(applicationFilter\)/,
       "a filter the student cannot see is a filter they cannot clear",
     );
-    const heading = ledger.body.slice(ledger.body.indexOf('id="application-ledger-heading"'));
-    const className = heading.match(/className=\{([^}]+)\}/)?.[1] ?? "";
-    assert.match(className, /selected/, "the heading is only sr-only beside an open application, not on the landing view");
-
-    /* BOTH branches, or the ternary is decoration. `selected ? "sr-only" : "sr-only"` satisfied a
-       test that only looked for the word `selected` and put the heading straight back into the
-       screen reader-only layer it was moved out of, which is the whole of the visible half of this
-       fix. The true branch stays sr-only on purpose: beside an open packet this heading would
-       compete with the packet's own. */
-    const branches = className.match(/selected \|\| canonicalSelected \? "([^"]*)" : "([^"]*)"/);
-    assert.ok(branches, `expected the heading className to be a two-branch ternary on either selected record, got: ${className}`);
-    const [, whenSelected, whenLanding] = branches;
-    assert.equal(whenSelected, "sr-only", "beside an open packet the heading stays the switcher's label");
-    assert.doesNotMatch(whenLanding, /\bsr-only\b/, "on the landing view the heading has to be readable, not announced only");
-    assert.doesNotMatch(whenLanding, /\bhidden\b/, "nor display:none at any width");
-    assert.match(whenLanding, /text-/, "and carries real type, so it reads as the heading of the list below it");
+    assert.match(
+      ledger.body,
+      /applicationTaskOpen \? \([\s\S]{0,900}<h2[^>]*id="application-ledger-heading"[^>]*>\{applicationTaskRole\}<\/h2>/,
+      "an open application names its compact switcher row",
+    );
+    assert.match(
+      ledger.body,
+      /<h2 id="application-ledger-heading" className="text-sm font-medium text-ink">\{applicationFilterHeading\(applicationFilter\)\}<\/h2>/,
+      "the landing heading is visible text, not a screen-reader-only label",
+    );
   });
 
   test("the filter can still be set back to everything from that view", () => {

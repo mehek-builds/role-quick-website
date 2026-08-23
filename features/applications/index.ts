@@ -5,6 +5,7 @@
  * forcing route and component changes.
  */
 export * from "./domain/application-filter";
+export * from "./domain/application-queue";
 export * from "./domain/application-review";
 export * from "./domain/apply-variant";
 export * from "./domain/audit-refusal";

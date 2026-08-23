@@ -65,7 +65,7 @@ describe("the route the sidebar actually links to", () => {
     const gate = applications.slice(Math.max(0, start - 400), start);
     assert.match(
       gate,
-      /selected \? reviewablePackets\.length > 1 : ledgerRendersOnLanding\(applicationFilter, reviewablePackets\.length\)/,
+      /applicationTaskOpen \? reviewablePackets\.length > 0 : ledgerRendersOnLanding\(applicationFilter, reviewablePackets\.length\)/,
       "the landing branch has to be the tested predicate, over the real count",
     );
   });
