@@ -505,8 +505,8 @@ html:has(.dashboard-shell) {
 }
 
 @keyframes rq-dashboard-dialog-exit {
-  from { opacity: 1; transform: none; }
-  to { opacity: 0; transform: translateY(8px) scale(0.99); }
+  from { transform: none; }
+  to { transform: translateY(8px) scale(0.99); }
 }
 
 .rq-dashboard-backdrop {
