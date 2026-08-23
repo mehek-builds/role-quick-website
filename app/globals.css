@@ -427,7 +427,8 @@ html:has(.dashboard-shell) {
 }
 
 /* Dashboard motion. The rail and mobile bar stay still while a route body leaves quickly and the
-   next one settles like a sheet placed on a desk. Peer panels crossfade in the same location. */
+   next one settles like a sheet placed on a desk. Peer panels replace one another in sequence so
+   two readable states never compete in the same space. */
 @keyframes rq-dashboard-page-exit {
   from { opacity: 1; transform: none; }
   to { opacity: 0; transform: translateY(-4px); }
@@ -461,7 +462,7 @@ html:has(.dashboard-shell) {
 }
 
 ::view-transition-new(.rq-dashboard-panel) {
-  animation: rq-dashboard-panel-enter var(--motion-enter) var(--motion-ease-out) 55ms both;
+  animation: rq-dashboard-panel-enter var(--motion-state) var(--motion-ease-out) var(--motion-exit) both;
 }
 
 ::view-transition-group(.rq-dashboard-route-trace) {
