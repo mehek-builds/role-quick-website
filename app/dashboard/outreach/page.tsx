@@ -194,10 +194,15 @@ export default function Outreach() {
   const draftOperationIds = useRef(new Map<string, string>());
   const focusDraftOnOpen = useRef(false);
   const focusComposerTitleOnOpen = useRef(false);
-  const focusStartAfterClose = useRef(false);
+  const focusTriggerAfterClose = useRef(false);
+  const composerTriggerRef = useRef<HTMLElement | null>(null);
   const composerTitleRef = useRef<HTMLHeadingElement>(null);
 
   function openComposer(focusTarget: "title" | "draft" = "title") {
+    const trigger = document.activeElement;
+    if (trigger instanceof HTMLElement && trigger !== document.body) {
+      composerTriggerRef.current = trigger;
+    }
     focusDraftOnOpen.current = focusTarget === "draft";
     focusComposerTitleOnOpen.current = focusTarget === "title";
     if (composeOpen) {
@@ -211,7 +216,7 @@ export default function Outreach() {
   }
 
   function closeComposer() {
-    focusStartAfterClose.current = true;
+    focusTriggerAfterClose.current = true;
     runDashboardTransition(() => setComposeOpen(false));
   }
 
@@ -368,9 +373,14 @@ export default function Outreach() {
     } else if (composeOpen && focusComposerTitleOnOpen.current) {
       focusComposerTitleOnOpen.current = false;
       frame = window.requestAnimationFrame(() => composerTitleRef.current?.focus());
-    } else if (!composeOpen && focusStartAfterClose.current) {
-      focusStartAfterClose.current = false;
-      frame = window.requestAnimationFrame(() => document.getElementById("outreach-start-button")?.focus());
+    } else if (!composeOpen && focusTriggerAfterClose.current) {
+      focusTriggerAfterClose.current = false;
+      const trigger = composerTriggerRef.current;
+      composerTriggerRef.current = null;
+      frame = window.requestAnimationFrame(() => {
+        if (trigger?.isConnected) trigger.focus();
+        else document.getElementById("outreach-start-button")?.focus();
+      });
     }
     return () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
