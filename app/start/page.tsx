@@ -140,6 +140,10 @@ export default function Start() {
     }
   }, []);
 
+  /* The synchronous setters in this effect construct a localhost-only QA fixture after inspecting
+     window.location. Production takes the asynchronous server path below. Keeping this exception
+     at the fixture boundary makes the intentional client-only initialization explicit. */
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     // Same localhost-only QA bypass the dashboard uses (?qa=1&step=resume), so every step of the
     // flow can be opened and reviewed without a live account. Never reachable in production.
@@ -276,6 +280,7 @@ export default function Start() {
       }
     })();
   }, [loadProfile, router, refresh]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)

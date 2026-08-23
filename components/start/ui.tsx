@@ -18,6 +18,7 @@
  */
 
 import { createContext, useContext, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/app/Button";
 import { flowSteps } from "@/features/onboarding";
 import type { OnboardingState, OnboardingStep } from "@/lib/api";
@@ -170,7 +171,7 @@ export function StartShell({
           logo, no way back to the site (audit finding 38). The mark goes home,
           the same door /login gives. Deliberately not the full marketing header:
           this is a flow, and a nav bar here would invite leaving it. */}
-      <a
+      <Link
         href="/"
         aria-label="Litos home"
         className="mb-7 inline-flex min-h-[44px] items-center gap-2 text-ink transition-opacity hover:opacity-70 sm:mb-8"
@@ -178,7 +179,7 @@ export function StartShell({
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/litos-mark.svg" alt="" className="h-6 w-6" />
         <span className="text-base font-medium tracking-tight">Litos</span>
-      </a>
+      </Link>
 
       <StepRail current={step} />
       <RevisitBar current={step} />

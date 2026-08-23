@@ -142,7 +142,6 @@ export function useJobMatchScores(
     /* react-hooks/set-state-in-effect fires on the call, not on a real synchronous setState: every
        setScores in scoreJobs sits behind `await fetchJdMatch`, so nothing is set during the effect
        body and there is no cascading render to avoid. */
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     void scoreJobs(jobs.slice(0, batchSize), resumeText, () => alive);
     return () => {
       alive = false;

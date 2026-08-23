@@ -649,9 +649,11 @@ test("the controlled portal mirrors every supported adapter without an employer 
   const page = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
   const casePage = await readFile(new URL("../app/qa/portal-submission/[board]/[case]/page.tsx", import.meta.url), "utf8");
   const portal = await readFile(new URL("../app/qa/portal-submission/portal-form.tsx", import.meta.url), "utf8");
-  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
+  assert.match(page, /const ripplingFieldIdentities = newRipplingFieldIdentities\(\)/);
+  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} ripplingFieldIdentities=\{ripplingFieldIdentities\} \/>/);
   assert.doesNotMatch(page, /useSearchParams|Suspense/);
-  assert.match(casePage, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
+  assert.match(casePage, /const ripplingFieldIdentities = newRipplingFieldIdentities\(\)/);
+  assert.match(casePage, /return <PortalForm board=\{board\} caseId=\{caseId\} ripplingFieldIdentities=\{ripplingFieldIdentities\} \/>/);
   /* The board union moved OUT of portal-form.tsx into boards.ts on 2026-07-28,
      so that the two route files and the form could not disagree about which
      board a URL means. This assertion followed it. Reading the shared module is
