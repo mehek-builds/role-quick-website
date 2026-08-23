@@ -16,7 +16,7 @@ import {
   type Targeting,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
-import { Button } from "@/components/app/Button";
+import { Button, ButtonLink } from "@/components/app/Button";
 import { Funnel } from "@/components/app/Funnel";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
@@ -644,9 +644,9 @@ export default function Home() {
             </Link>
           </p>
         </div>
-        <Link href="/dashboard/applications?new=1&intent=fill" className="flex min-h-11 items-center rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
+        <ButtonLink href="/dashboard/applications?new=1&intent=fill" variant="secondary">
           Fill application
-        </Link>
+        </ButtonLink>
       </section>
 
       <PlanStatus compact />
@@ -1005,7 +1005,7 @@ function JobMatchCard({
         {/* Only one state here has nothing to click, and it is the one where a request really is
             in flight. The chip and this slot use one name for each state, so a card never says
             two things at once. */}
-        <div className="mt-auto flex items-center justify-end gap-2 pt-4">
+        <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4">
           <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Skip
           </button>
