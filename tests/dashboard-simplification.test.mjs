@@ -15,7 +15,7 @@ test("Applications opens the board by default and keeps selected detail first on
      scrolling strip, asserted in tests/applications-mobile-controls.test.mjs. */
   assert.match(source, /className="hidden max-h-\[280px\] overflow-y-auto border-t border-border lg:block"/);
   assert.match(source, /← All applications/);
-  assert.equal(source.match(/← All applications/g)?.length, 1);
+  assert.equal(source.match(/← All applications/g)?.length, 1, "selected workspaces render one application escape control");
   const canonicalDetail = source.slice(
     source.indexOf("function CanonicalApplicationDetail"),
     source.indexOf("function ApplicationFillReceipt"),
