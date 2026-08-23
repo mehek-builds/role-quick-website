@@ -183,6 +183,8 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
+  const [accountTabsViewport, setAccountTabsViewport] = useState<HTMLDivElement | null>(null);
+  const [showAccountTabOverflowCue, setShowAccountTabOverflowCue] = useState(false);
   const [savedProfileJson, setSavedProfileJson] = useState("");
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
@@ -201,6 +203,30 @@ export default function Settings() {
       window.removeEventListener("popstate", syncTab);
     };
   }, []);
+
+  useEffect(() => {
+    const viewport = accountTabsViewport;
+    if (!viewport) return;
+
+    const updateOverflowCue = () => {
+      const remaining = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft;
+      setShowAccountTabOverflowCue(remaining > 2);
+    };
+
+    updateOverflowCue();
+    viewport.addEventListener("scroll", updateOverflowCue, { passive: true });
+    window.addEventListener("resize", updateOverflowCue);
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateOverflowCue);
+    observer?.observe(viewport);
+
+    return () => {
+      viewport.removeEventListener("scroll", updateOverflowCue);
+      window.removeEventListener("resize", updateOverflowCue);
+      observer?.disconnect();
+    };
+  }, [accountTabsViewport]);
 
   function selectTab(tab: AccountTab) {
     if (tab === activeTab) return;
@@ -730,38 +756,50 @@ export default function Settings() {
         <p className="mt-1 text-sm text-muted">Everything Litos uses for your job search, in one place.</p>
       </div>
 
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <div
-          className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
-          role="tablist"
-          aria-label="Account categories"
-        >
-          {ACCOUNT_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`tab-${tab.id}`}
-              aria-selected={activeTab === tab.id}
-              aria-controls={tab.id === "job-search" ? "job-search" : `panel-${tab.id}`}
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              onClick={() => selectTab(tab.id)}
-              onKeyDown={(event) => {
-                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-                  event.preventDefault();
-                  moveTab(tab.id, event.key);
-                }
-              }}
-              className={`min-h-10 rounded-full px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                activeTab === tab.id
-                  ? "bg-surface font-medium text-ink shadow-rest"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <div className="relative -mx-4 sm:mx-0">
+        <div ref={setAccountTabsViewport} className="overflow-x-auto px-4 sm:px-0">
+          <div
+            className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
+            role="tablist"
+            aria-label="Account categories"
+          >
+            {ACCOUNT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                aria-controls={tab.id === "job-search" ? "job-search" : `panel-${tab.id}`}
+                tabIndex={activeTab === tab.id ? 0 : -1}
+                onClick={() => selectTab(tab.id)}
+                onKeyDown={(event) => {
+                  if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                    event.preventDefault();
+                    moveTab(tab.id, event.key);
+                  }
+                }}
+                className={`min-h-10 rounded-full px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                  activeTab === tab.id
+                    ? "bg-surface font-medium text-ink shadow-rest"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
+        {showAccountTabOverflowCue && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2 sm:hidden"
+          >
+            <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
+              ›
+            </span>
+          </div>
+        )}
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -1034,229 +1072,244 @@ export default function Settings() {
         </section>
       )}
 
-      {activeTab === "automation" && <Card className="p-6" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
-        <h2 className="text-base font-medium text-ink">Automation</h2>
-        <div className="pt-1">
-        <p className="text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
-        <div className="mt-5 space-y-4">
-          {/* Locked until the student has personally approved a few real submissions. LazyApply
-              sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
-              with users reporting permanently restricted LinkedIn accounts. The lock is enforced on
-              the server; this copy exists so the control is not an unexplained dead toggle. */}
-          <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
-            <span>
-              <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
-              {canUse("automatic_submission") === false && <span className="ml-2 inline-flex rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Litos+</span>}
-              <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
-              {canUse("automatic_submission") === false && <span className="mt-2 block text-xs leading-5 text-muted">Application filling remains unlimited. On Free, you review the form and press the employer&apos;s final submit control.</span>}
-              {consentEligibility && !consentEligibility.eligible && !automaticSubmission && (
-                <span className="mt-2 block text-xs leading-5 text-warn">
-                  Available after you have approved {consentEligibility.required} applications
-                  yourself. {consentEligibility.remaining} to go. That way you have seen what Litos
-                  fills in on a real form before it sends one without you.
-                </span>
-              )}
-            </span>
-            <input
-              aria-label="Send an application without asking me again"
-              type="checkbox"
-              checked={automaticSubmission}
-              // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
-              disabled={savingAutomation || (!automaticSubmission && canUse("automatic_submission") !== false && consentEligibility?.eligible === false)}
-              onChange={(event) => changeAutomaticSubmission(event.target.checked)}
-              className="mt-1 size-4 accent-brand disabled:opacity-40"
-            />
-          </label>
-          {/* Directly under the submission switch because it is the same moment on the same form,
-              and ungated unlike that switch, which is the server's rule rather than this screen's:
-              resuming a fill sends nothing to anybody. It re-reads a form that still stops at the
-              submit button, and whether anything is ever sent stays with the permission above.
-              Revoking is allowed from any state.
-
-              THIS CONTROL IS ALSO THE ONLY RE-CONSENT PATH. Accounts stamped with the superseded
-              version arrive here unticked with a real date on the row; ticking the box writes the
-              current version and makes the extension's resume path work for them again. */}
-          <ConsentAcknowledgementControl
-            idPrefix="settings"
-            values={consentGrants}
-            grantedAt={consentGrantedAt}
-            disabled={savingConsentGrant !== null}
-            onChange={(field, enabled) => void changeConsentGrant(field, enabled)}
-          />
-          <CaptchaConsentControl
-            idPrefix="settings"
-            value={captchaConsent}
-            grantedAt={captchaConsentGrantedAt}
-            disabled={savingCaptchaConsent}
-            onChange={(enabled) => void changeCaptchaConsent(enabled)}
-          />
-          <div className="rounded-inner border border-border p-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-ink">Use a Litos application email</p>
-                <p className="mt-1 text-xs leading-5 text-muted">
-                  New application packets use a Litos address when replies to it are arriving. Employer mail forwards to your account email.
-                </p>
-              </div>
-              {/* THE BADGE READS THE LIVE PROBE, NOT THE CONFIGURATION. It used to read
-                  `configured`, which is true whenever an environment variable is set. Measured on
-                  2026-08-08: configured was true, /health reported this subsystem degraded with
-                  deliverable false, every run that day fell back to the plain account address with
-                  tracked false, and this panel said the feature was on. See
-                  lib/application-email-status.ts. */}
-              <Chip label={applicationEmailBadge(applicationEmail).label} kind={applicationEmailBadge(applicationEmail).kind} />
-            </div>
-            {applicationEmailBadge(applicationEmail).note && (
-              <p className="mt-3 text-xs leading-5 text-warn">{applicationEmailBadge(applicationEmail).note}</p>
-            )}
-            <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
-              <div>
-                {/* "Address", not "domain": the value the backend sends here is a full mailbox
-                    (applications@trylitos.com), and the aliases minted off it are
-                    applications+app-<id>@trylitos.com. Calling it a domain invited the reading that
-                    aliases live on a subdomain, which they do not. */}
-                <p className="text-xs font-medium text-muted">Address on your applications</p>
-                <p className="mt-1 break-words text-sm text-ink">
-                  {applicationEmailAddressInUse(applicationEmail, me.email)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted">Forwarding</p>
-                <p className="mt-1 text-sm text-ink">
-                  {applicationEmail?.forward_to ?? applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
-                </p>
-              </div>
-            </div>
+      {activeTab === "automation" && (
+        <section className="space-y-4" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
+          <div>
+            <h2 className="text-heading font-medium text-ink">Automation</h2>
+            <p className="mt-1 text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
           </div>
-          <div className="rounded-inner border border-border p-4">
-            <div className="flex items-start justify-between gap-5">
-              <label htmlFor="automatic-email-verification">
-                <span className="block text-sm font-medium text-ink">Use my connected inbox as a fallback</span>
-                <span className="mt-1 block text-xs leading-5 text-muted">Allow Litos to read an application code from Gmail or Outlook only when a company sends it to that personal inbox.</span>
-              </label>
-              <input
-                id="automatic-email-verification"
-                aria-label="Use my connected inbox as a fallback"
-                type="checkbox"
-                checked={automaticVerification}
-                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
-                onChange={(event) => changeAutomaticVerification(event.target.checked)}
-                className="mt-1 size-4 accent-brand disabled:opacity-40"
-              />
-            </div>
-            {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
-              <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
-            )}
-            {verificationAvailability === "personal_inbox_disconnected" && (
-              <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until one verification inbox is available.</p>
-            )}
-            {verificationAvailability === "litos_inbox" && (
-              <p className="mt-3 text-xs leading-5 text-muted">The Litos application inbox is active. Codes sent to its packet-specific address do not require access to Gmail or Outlook.</p>
-            )}
-            {verificationAvailability === "personal_inbox" && (
-              <p className="mt-3 text-xs leading-5 text-muted">Your connected personal inbox is available as a fallback.</p>
-            )}
-            {verificationAvailability === "none" && (
-              <p className="mt-3 text-xs leading-5 text-warn">No verification inbox is active. Litos will stop and ask you for the code.</p>
-            )}
-            <div className="mt-4 border-t border-border pt-4">
-              <p className="text-xs font-medium text-muted">Inbox access</p>
-              <p className="mt-1 text-xs leading-5 text-muted">Your provider shows exactly what Litos can access before you approve it.</p>
-              <p className="mt-2 text-xs leading-5 text-muted">Litos requests access only to find a recent application verification code while a form is waiting. It does not use this connection to send mail or read unrelated messages. Connection time and the latest provider state appear below; Litos does not currently keep a user-visible sync activity log.</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {(["gmail", "outlook"] as const).map((provider) => {
-                  const connection = emailConnections.connections.find((item) => item.provider === provider);
-                  const connected = connection?.connected === true;
-                  const label = provider === "gmail" ? "Gmail" : "Outlook";
-                  return (
-                    <div key={provider} className="flex items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium text-ink">{label}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
-                        </p>
-                        {connection?.connected_at && <p className="mt-1 text-xs text-muted">Connected {new Date(connection.connected_at).toLocaleDateString()}</p>}
-                      </div>
-                      <Button
-                        type="button"
-                        disabled={!emailConnections.configured || connectionBusy !== null}
-                        onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, verificationConnectionPrompt))}
-                        variant={connected ? "secondary" : "primary"}
-                        size="sm"
-                      >
-                        {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="mt-3 text-xs text-muted">Need another provider? <a href="/contact" className="font-medium text-brand-ink underline underline-offset-4">Request an integration through Contact.</a></p>
-            </div>
-          </div>
-        </div>
-        <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
 
-        {/* THE TWO NOTIFICATION PERMISSIONS, and this is their only re-grant path.
-            The unsubscribe link in every message turns one off without signing in, which is the
-            half that has to work for somebody who cannot log in at all. Turning one back ON is the
-            half that cannot live in an email, because there is no email to click once the mail has
-            stopped. So it lives here, next to the other standing permissions, rather than only on
-            the setup screen that asked the question once and is never shown again.
-
-            Rendered only when the server answered. A backend that predates the endpoint gives null
-            and draws nothing, which is the honest state: two switches that silently write nowhere
-            would be worse than no switches. */}
-        {notifications && (
-          <div className="mt-6 border-t border-border pt-5">
-            <h3 className="text-sm font-medium text-ink">What Litos emails you</h3>
-            <p className="mt-1 text-xs leading-5 text-muted">Two things, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
-            <div className="mt-4 space-y-4">
-              {([
-                {
-                  kind: "strong_match" as const,
-                  label: "Tell me when a strong match opens",
-                  detail: "One posting, at most once a day, and only when it clears the same match score your board ranks by.",
-                },
-                {
-                  kind: "employer_reply" as const,
-                  label: "Tell me when an employer replies",
-                  detail: "Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said.",
-                },
-              ]).map((permission) => (
-                <label key={permission.kind} className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+          <div className="grid items-start gap-4 xl:grid-cols-2">
+            <Card className="p-5 sm:p-6">
+              <h3 className="text-base font-medium text-ink">Sending permissions</h3>
+              <p className="mt-1 text-sm leading-6 text-muted">Control what Litos may prepare, resume, and send on your behalf.</p>
+              <div className="mt-5 space-y-4">
+                {/* Locked until the student has personally approved a few real submissions. LazyApply
+                    sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
+                    with users reporting permanently restricted LinkedIn accounts. The lock is enforced on
+                    the server; this copy exists so the control is not an unexplained dead toggle. */}
+                <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
                   <span>
-                    <span className="block text-sm font-medium text-ink">{permission.label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-muted">{permission.detail}</span>
-                    {/* The grant date, shown for the same reason every other permission on this
-                        screen shows one: a permission with no date beside it cannot be checked
-                        against what the student remembers agreeing to. */}
-                    {notifications[permission.kind].enabled && notifications[permission.kind].granted_at && (
-                      <span className="mt-2 block text-xs leading-5 text-muted">
-                        On since {new Date(notifications[permission.kind].granted_at as string).toLocaleDateString()}
+                    <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
+                    {canUse("automatic_submission") === false && <span className="ml-2 inline-flex rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Litos+</span>}
+                    <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
+                    {canUse("automatic_submission") === false && <span className="mt-2 block text-xs leading-5 text-muted">Application filling remains unlimited. On Free, you review the form and press the employer&apos;s final submit control.</span>}
+                    {consentEligibility && !consentEligibility.eligible && !automaticSubmission && (
+                      <span className="mt-2 block text-xs leading-5 text-warn">
+                        Available after you have approved {consentEligibility.required} applications
+                        yourself. {consentEligibility.remaining} to go. That way you have seen what Litos
+                        fills in on a real form before it sends one without you.
                       </span>
                     )}
                   </span>
                   <input
-                    aria-label={permission.label}
+                    aria-label="Send an application without asking me again"
                     type="checkbox"
-                    checked={notifications[permission.kind].enabled}
-                    disabled={savingNotification !== null}
-                    onChange={(event) => void changeNotification(permission.kind, event.target.checked)}
+                    checked={automaticSubmission}
+                    // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
+                    disabled={savingAutomation || (!automaticSubmission && canUse("automatic_submission") !== false && consentEligibility?.eligible === false)}
+                    onChange={(event) => changeAutomaticSubmission(event.target.checked)}
                     className="mt-1 size-4 accent-brand disabled:opacity-40"
                   />
                 </label>
-              ))}
-            </div>
-            {!notifications.deliverable && (
-              <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
-            )}
-            <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
-          </div>
-        )}
+                {/* Directly under the submission switch because it is the same moment on the same form,
+                    and ungated unlike that switch, which is the server's rule rather than this screen's:
+                    resuming a fill sends nothing to anybody. It re-reads a form that still stops at the
+                    submit button, and whether anything is ever sent stays with the permission above.
+                    Revoking is allowed from any state.
 
-        <p className="mt-4 text-xs leading-5 text-muted">Apart from the two above, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
-        </div>
-      </Card>}
+                    THIS CONTROL IS ALSO THE ONLY RE-CONSENT PATH. Accounts stamped with the superseded
+                    version arrive here unticked with a real date on the row; ticking the box writes the
+                    current version and makes the extension's resume path work for them again. */}
+                <ConsentAcknowledgementControl
+                  idPrefix="settings"
+                  values={consentGrants}
+                  grantedAt={consentGrantedAt}
+                  disabled={savingConsentGrant !== null}
+                  onChange={(field, enabled) => void changeConsentGrant(field, enabled)}
+                />
+                <CaptchaConsentControl
+                  idPrefix="settings"
+                  value={captchaConsent}
+                  grantedAt={captchaConsentGrantedAt}
+                  disabled={savingCaptchaConsent}
+                  onChange={(enabled) => void changeCaptchaConsent(enabled)}
+                />
+              </div>
+              <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
+            </Card>
+
+            <Card className="p-5 sm:p-6">
+              <h3 className="text-base font-medium text-ink">Application email and verification inbox</h3>
+              <p className="mt-1 text-sm leading-6 text-muted">See where employer messages arrive and control the personal inbox fallback.</p>
+              <div className="mt-5 space-y-4">
+                <div className="rounded-inner border border-border bg-surface-alt p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-ink">Use a Litos application email</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">
+                        New application packets use a Litos address when replies to it are arriving. Employer mail forwards to your account email.
+                      </p>
+                    </div>
+                    {/* THE BADGE READS THE LIVE PROBE, NOT THE CONFIGURATION. It used to read
+                        `configured`, which is true whenever an environment variable is set. Measured on
+                        2026-08-08: configured was true, /health reported this subsystem degraded with
+                        deliverable false, every run that day fell back to the plain account address with
+                        tracked false, and this panel said the feature was on. See
+                        lib/application-email-status.ts. */}
+                    <Chip label={applicationEmailBadge(applicationEmail).label} kind={applicationEmailBadge(applicationEmail).kind} />
+                  </div>
+                  {applicationEmailBadge(applicationEmail).note && (
+                    <p className="mt-3 text-xs leading-5 text-warn">{applicationEmailBadge(applicationEmail).note}</p>
+                  )}
+                  <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+                    <div>
+                      {/* "Address", not "domain": the value the backend sends here is a full mailbox
+                          (applications@trylitos.com), and the aliases minted off it are
+                          applications+app-<id>@trylitos.com. Calling it a domain invited the reading that
+                          aliases live on a subdomain, which they do not. */}
+                      <p className="text-xs font-medium text-muted">Address on your applications</p>
+                      <p className="mt-1 break-words text-sm text-ink">
+                        {applicationEmailAddressInUse(applicationEmail, me.email)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted">Forwarding</p>
+                      <p className="mt-1 text-sm text-ink">
+                        {applicationEmail?.forward_to ?? applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-inner border border-border bg-surface-alt p-4">
+                  <div className="flex items-start justify-between gap-5">
+                    <label htmlFor="automatic-email-verification">
+                      <span className="block text-sm font-medium text-ink">Use my connected inbox as a fallback</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted">Allow Litos to read an application code from Gmail or Outlook only when a company sends it to that personal inbox.</span>
+                    </label>
+                    <input
+                      id="automatic-email-verification"
+                      aria-label="Use my connected inbox as a fallback"
+                      type="checkbox"
+                      checked={automaticVerification}
+                      disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
+                      onChange={(event) => changeAutomaticVerification(event.target.checked)}
+                      className="mt-1 size-4 accent-brand disabled:opacity-40"
+                    />
+                  </div>
+                  {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
+                    <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
+                  )}
+                  {verificationAvailability === "personal_inbox_disconnected" && (
+                    <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until one verification inbox is available.</p>
+                  )}
+                  {verificationAvailability === "litos_inbox" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">The Litos application inbox is active. Codes sent to its packet-specific address do not require access to Gmail or Outlook.</p>
+                  )}
+                  {verificationAvailability === "personal_inbox" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">Your connected personal inbox is available as a fallback.</p>
+                  )}
+                  {verificationAvailability === "none" && (
+                    <p className="mt-3 text-xs leading-5 text-warn">No verification inbox is active. Litos will stop and ask you for the code.</p>
+                  )}
+                  <div className="mt-4 border-t border-border pt-4">
+                    <p className="text-xs font-medium text-muted">Inbox access</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">Your provider shows exactly what Litos can access before you approve it.</p>
+                    <p className="mt-2 text-xs leading-5 text-muted">Litos requests access only to find a recent application verification code while a form is waiting. It does not use this connection to send mail or read unrelated messages. Connection time and the latest provider state appear below; Litos does not currently keep a user-visible sync activity log.</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {(["gmail", "outlook"] as const).map((provider) => {
+                        const connection = emailConnections.connections.find((item) => item.provider === provider);
+                        const connected = connection?.connected === true;
+                        const label = provider === "gmail" ? "Gmail" : "Outlook";
+                        return (
+                          <div key={provider} className="flex items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3">
+                            <div>
+                              <p className="text-sm font-medium text-ink">{label}</p>
+                              <p className="mt-0.5 text-xs text-muted">
+                                {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
+                              </p>
+                              {connection?.connected_at && <p className="mt-1 text-xs text-muted">Connected {new Date(connection.connected_at).toLocaleDateString()}</p>}
+                            </div>
+                            <Button
+                              type="button"
+                              disabled={!emailConnections.configured || connectionBusy !== null}
+                              onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, verificationConnectionPrompt))}
+                              variant={connected ? "secondary" : "primary"}
+                              size="sm"
+                            >
+                              {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-3 text-xs text-muted">Need another provider? <a href="/contact" className="font-medium text-brand-ink underline underline-offset-4">Request an integration through Contact.</a></p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* THE TWO NOTIFICATION PERMISSIONS, and this is their only re-grant path.
+                The unsubscribe link in every message turns one off without signing in, which is the
+                half that has to work for somebody who cannot log in at all. Turning one back ON is the
+                half that cannot live in an email, because there is no email to click once the mail has
+                stopped. So it lives here, next to the other standing permissions, rather than only on
+                the setup screen that asked the question once and is never shown again.
+
+                Rendered only when the server answered. A backend that predates the endpoint gives null
+                and draws nothing, which is the honest state: two switches that silently write nowhere
+                would be worse than no switches. */}
+            {notifications && (
+              <Card className="p-5 sm:p-6 xl:col-span-2">
+                <h3 className="text-base font-medium text-ink">Email notifications</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">Two things, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  {([
+                    {
+                      kind: "strong_match" as const,
+                      label: "Tell me when a strong match opens",
+                      detail: "One posting, at most once a day, and only when it clears the same match score your board ranks by.",
+                    },
+                    {
+                      kind: "employer_reply" as const,
+                      label: "Tell me when an employer replies",
+                      detail: "Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said.",
+                    },
+                  ]).map((permission) => (
+                    <label key={permission.kind} className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+                      <span>
+                        <span className="block text-sm font-medium text-ink">{permission.label}</span>
+                        <span className="mt-1 block text-xs leading-5 text-muted">{permission.detail}</span>
+                        {/* The grant date, shown for the same reason every other permission on this
+                            screen shows one: a permission with no date beside it cannot be checked
+                            against what the student remembers agreeing to. */}
+                        {notifications[permission.kind].enabled && notifications[permission.kind].granted_at && (
+                          <span className="mt-2 block text-xs leading-5 text-muted">
+                            On since {new Date(notifications[permission.kind].granted_at as string).toLocaleDateString()}
+                          </span>
+                        )}
+                      </span>
+                      <input
+                        aria-label={permission.label}
+                        type="checkbox"
+                        checked={notifications[permission.kind].enabled}
+                        disabled={savingNotification !== null}
+                        onChange={(event) => void changeNotification(permission.kind, event.target.checked)}
+                        className="mt-1 size-4 accent-brand disabled:opacity-40"
+                      />
+                    </label>
+                  ))}
+                </div>
+                {!notifications.deliverable && (
+                  <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
+                )}
+                <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
+                <p className="mt-3 text-xs leading-5 text-muted">Apart from the two above, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
+              </Card>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Application profile.
           id="application-details" is load-bearing: /dashboard/profile's "Edit
