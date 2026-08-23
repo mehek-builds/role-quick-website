@@ -45,24 +45,27 @@ export default function NetworkPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const statusRequestGenerationRef = useRef(0);
   const tabRefs = useRef<Record<NetworkTab, HTMLButtonElement | null>>({
     people: null,
     companies: null,
     linkedin: null,
   });
-  const premium = canUse("networking_discovery") === true;
+  const networkAccess = canUse("networking_discovery");
+  const premium = networkAccess === true;
   const disconnectedWithRetainedData = status?.connected === false && (status.retained_people_count ?? 0) > 0;
 
   useEffect(() => {
     let cancelled = false;
+    const generation = ++statusRequestGenerationRef.current;
     api<LinkedInStatus>("/network/linkedin/status")
       .then((next) => {
-        if (cancelled) return;
+        if (cancelled || generation !== statusRequestGenerationRef.current) return;
         setStatus(next);
         setStatusError(null);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || generation !== statusRequestGenerationRef.current) return;
         setStatusError("Litos could not check your LinkedIn import just now.");
       });
     return () => { cancelled = true; };
@@ -70,7 +73,7 @@ export default function NetworkPage() {
 
   useEffect(() => {
     let cancelled = false;
-    if (!premium || status?.connected === false) {
+    if (networkAccess === false || status?.connected === false) {
       queueMicrotask(() => {
         if (cancelled) return;
         setPeople([]);
@@ -78,7 +81,7 @@ export default function NetworkPage() {
       });
       return () => { cancelled = true; };
     }
-    if (status?.connected !== true) return () => { cancelled = true; };
+    if (networkAccess !== true || status?.connected !== true) return () => { cancelled = true; };
     queueMicrotask(() => {
       if (cancelled) return;
       setPeople(null);
@@ -95,11 +98,11 @@ export default function NetworkPage() {
         setPeopleError("Litos could not load your imported people just now.");
       });
     return () => { cancelled = true; };
-  }, [peopleReload, premium, status?.connected]);
+  }, [networkAccess, peopleReload, status?.connected]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!premium || status?.connected === false) {
+    if (networkAccess === false || status?.connected === false) {
       queueMicrotask(() => {
         if (cancelled) return;
         setCompanies([]);
@@ -107,7 +110,7 @@ export default function NetworkPage() {
       });
       return () => { cancelled = true; };
     }
-    if (status?.connected !== true) return () => { cancelled = true; };
+    if (networkAccess !== true || status?.connected !== true) return () => { cancelled = true; };
     queueMicrotask(() => {
       if (cancelled) return;
       setCompanies(null);
@@ -124,9 +127,10 @@ export default function NetworkPage() {
         setCompaniesError("Litos could not load company matches just now.");
       });
     return () => { cancelled = true; };
-  }, [companiesReload, premium, status?.connected]);
+  }, [companiesReload, networkAccess, status?.connected]);
 
   function retryStatus() {
+    statusRequestGenerationRef.current += 1;
     setStatus(null);
     setStatusError(null);
     setStatusReload((value) => value + 1);
@@ -216,6 +220,7 @@ export default function NetworkPage() {
     setError(null);
     try {
       const next = await api<LinkedInStatus>("/network/linkedin/import/commit", { method: "POST", body: JSON.stringify({ import_id: preview.import_id }) });
+      statusRequestGenerationRef.current += 1;
       setStatus(next);
       setStatusError(null);
       refreshNetworkLists();
@@ -236,6 +241,7 @@ export default function NetworkPage() {
     setError(null);
     try {
       const next = await api<LinkedInStatus>(removeData ? "/network/linkedin/data" : "/network/linkedin/disconnect", { method: removeData ? "DELETE" : "POST" });
+      statusRequestGenerationRef.current += 1;
       setStatus(next);
       setPeople([]);
       setCompanies([]);
@@ -288,12 +294,16 @@ export default function NetworkPage() {
       <div id={`network-panel-${tab}`} role="tabpanel" aria-labelledby={`network-tab-${tab}`} tabIndex={0}>
       {tab === "people" && (
         <section>
-          {premium && statusError ? (
+          {networkAccess === null ? (
+            <ShimmerRows rows={3} />
+          ) : premium && statusError ? (
             <NetworkRequestError title="Could not check your network" body="Litos cannot tell whether your import is connected. Retry before treating this as an empty network." onRetry={retryStatus} />
           ) : disconnectedWithRetainedData ? (
             <EmptyState visual="profile" title="Network use is disconnected" body="Disconnect stops future use. Your imported data is retained only so you can delete it later from LinkedIn settings."><Button type="button" variant="secondary" onClick={() => chooseTab("linkedin")}>Review retained data</Button></EmptyState>
-          ) : !premium ? (
+          ) : networkAccess === false ? (
             <LockedInsight title="People you may know at target companies" body="Litos+ matches your imported first-degree connections to the companies in your search." onOpen={() => requestPremium("referral_paths", "people_list")} />
+          ) : status === null ? (
+            <ShimmerRows rows={3} />
           ) : peopleError ? (
             <NetworkRequestError title="Could not load imported people" body="Your saved connections may still be there. Retry before treating this as an empty network." onRetry={retryPeople} />
           ) : people === null ? <ShimmerRows rows={3} /> : people.length === 0 ? (
@@ -308,9 +318,11 @@ export default function NetworkPage() {
       )}
 
       {tab === "companies" && (
-        premium && statusError ? <NetworkRequestError title="Could not check your network" body="Litos cannot tell whether your import is connected. Retry before treating this as an empty network." onRetry={retryStatus} />
+        networkAccess === null ? <ShimmerRows rows={3} />
+          : premium && statusError ? <NetworkRequestError title="Could not check your network" body="Litos cannot tell whether your import is connected. Retry before treating this as an empty network." onRetry={retryStatus} />
           : disconnectedWithRetainedData ? <EmptyState visual="jobs" title="Network use is disconnected" body="Company matches are hidden because disconnect stops future use. Delete the retained import from LinkedIn settings whenever you choose." />
-          : !premium ? <LockedInsight title="Companies where you have a path" body="Litos+ groups real imported connections by company and never invents a second-degree relationship." onOpen={() => requestPremium("networking_discovery", "company_matches")} />
+          : networkAccess === false ? <LockedInsight title="Companies where you have a path" body="Litos+ groups real imported connections by company and never invents a second-degree relationship." onOpen={() => requestPremium("networking_discovery", "company_matches")} />
+          : status === null ? <ShimmerRows rows={3} />
           : companiesError ? <NetworkRequestError title="Could not load company matches" body="Your imported network may still have company matches. Retry before treating this as an empty result." onRetry={retryCompanies} />
           : companies === null ? <ShimmerRows rows={3} /> : companies.length === 0 ? <EmptyState visual="jobs" title="No company matches yet" body="Import LinkedIn connections, then Litos can match their current companies to your search." />
             : <div className="grid gap-3 sm:grid-cols-2">{companies.map((company) => <Card key={company.id ?? company.name} className="p-5"><h2 className="text-heading font-[450] text-ink">{company.name}</h2><p className="mt-3 font-mono text-label text-coral-ink">{company.connection_count ?? 0} imported connection{company.connection_count === 1 ? "" : "s"}</p>{typeof company.open_role_count === "number" && <p className="mt-1 text-small text-muted">{company.open_role_count} open role{company.open_role_count === 1 ? "" : "s"}</p>}</Card>)}</div>
@@ -343,7 +355,7 @@ export default function NetworkPage() {
 }
 
 function NetworkRequestError({ title, body, onRetry }: { title: string; body: string; onRetry: () => void }) {
-  return <div role="alert"><DataErrorState title={title} body={body} headingLevel="h2" onRetry={onRetry} /></div>;
+  return <DataErrorState title={title} body={body} headingLevel="h2" onRetry={onRetry} />;
 }
 
 function LockedInsight({ title, body, onOpen }: { title: string; body: string; onOpen: () => void }) {
