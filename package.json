@@ -11,6 +11,7 @@
     "test": "node --experimental-strip-types --test 'app/**/*.test.mts' 'features/**/*.test.mts' 'lib/**/*.test.mts' tests/**/*.test.mjs",
     "test:partial-payload": "node tests/e2e/partial-payload.spec.mjs",
     "test:click-path": "node --test tests/e2e/dashboard-click-path.spec.mjs",
+    "test:quality-refactor": "node --test tests/e2e/quality-refactor-regressions.spec.mjs",
     "test:narrow-viewport": "node --test tests/e2e/narrow-viewport-actions.spec.mjs",
     "test:tracker-row": "node --test tests/e2e/tracker-row-opens-detail.spec.mjs",
     "test:start-checklist": "node --test tests/e2e/start-onboarding-checklist.spec.mjs",

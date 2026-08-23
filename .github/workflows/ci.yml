@@ -136,6 +136,9 @@ jobs:
       - name: Click path spec
         run: npm run test:click-path
 
+      - name: Quality refactor regression spec
+        run: npm run test:quality-refactor
+
       # Same job on purpose: it reuses the build and the Chromium installed
       # above rather than paying for either twice. This spec is the ONLY thing
       # that can observe the per-band error boundaries actually containing a
