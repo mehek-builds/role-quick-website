@@ -18,7 +18,7 @@
  * which of the two was at fault.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BoardContactFields, type Board } from "./portal-form";
 import { ReactSelectFixture } from "./react-select-fixture";
 import {
@@ -30,6 +30,7 @@ import {
   type PortalShape,
 } from "./shapes";
 import { QA_LOG_ELEMENT_ID, qaMirror, qaRecord, qaReady } from "./qa-instrument";
+import type { RipplingFieldNames } from "./rippling-fixture";
 
 /* THE ONE ELEMENT THE REAL RUNNER CAN READ.
  *
@@ -68,11 +69,13 @@ export function ShapeForm({
   caseId,
   shape,
   answered,
+  ripplingFieldNames,
 }: {
   board: Board;
   caseId: string;
   shape: PortalShape;
   answered: boolean;
+  ripplingFieldNames: RipplingFieldNames;
 }) {
   /* Paylocity and BambooHR have no contact block of their own here: PortalForm returns early for
      both before the block is rendered, so the extracted component cannot accept them. A shape page
@@ -88,10 +91,11 @@ export function ShapeForm({
   const [phase, setPhase] = useState<"form" | "security" | "done">("form");
   const [formError, setFormError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
-  /* Flipped by an effect, so it is only ever "1" once React has hydrated and the handlers are live.
+  /* Updated by an effect, so it is only ever "1" once React has hydrated and the handlers are live.
      It lives on the FORM rather than on the log element because the managed runner's waitForSelector
-     is Playwright's default, which waits for VISIBLE, and the log element is hidden. */
-  const [hydrated, setHydrated] = useState(false);
+     is Playwright's default, which waits for VISIBLE, and the log element is hidden. A ref avoids a
+     second render whose only purpose would be changing this instrumentation attribute. */
+  const formRef = useRef<HTMLFormElement>(null);
 
   /* THE HYDRATION MARKER, AND WHY THE HARNESS NEEDS ONE.
      The managed runner navigates with waitUntil "domcontentloaded" and starts acting immediately.
@@ -102,7 +106,11 @@ export function ShapeForm({
      (pushGreenhouseManagedPreflightActions); the harness publishes the flag that makes one possible.
      Kept on the log element rather than the form so it survives the form being replaced by the
      receipt. */
-  useEffect(() => { qaReady(shape); qaMirror("ready", "1"); setHydrated(true); }, [shape]);
+  useEffect(() => {
+    qaReady(shape);
+    qaMirror("ready", "1");
+    formRef.current?.setAttribute("data-litos-qa-ready", "1");
+  }, [shape]);
   useEffect(() => { qaMirror("submit-attempts", String(attempts)); }, [attempts]);
 
   /* ASHBY'S OWN SUCCESS STATE, not the harness's generic receipt.
@@ -195,11 +203,12 @@ export function ShapeForm({
   return (
     <main className="min-h-screen bg-[#f7f7f3] px-6 py-12">
       <form
+        ref={formRef}
         data-litos-controlled-portal
         data-board={board}
         data-litos-qa-shape={shape}
         data-litos-qa-phase={phase}
-        data-litos-qa-ready={hydrated ? "1" : "0"}
+        data-litos-qa-ready="0"
         onSubmit={onSubmit}
         className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"
       >
@@ -227,7 +236,7 @@ export function ShapeForm({
 
         <QaLog />
         <div className="relative mt-8 grid gap-5 sm:grid-cols-2">
-          <BoardContactFields board={contactBoard} omitPhone={shape === "phone-country"} />
+          <BoardContactFields board={contactBoard} omitPhone={shape === "phone-country"} ripplingFieldNames={ripplingFieldNames} />
           <ShapeControls shape={shape} answered={answered} />
         </div>
 

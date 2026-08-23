@@ -3,6 +3,7 @@ import { PortalForm } from "./portal-form";
 import { ShapeForm } from "./shape-form";
 import { toBoard } from "./boards";
 import { normalizeCaseId, toShape } from "./shapes";
+import { newRipplingFieldNames } from "./rippling-fixture";
 
 /* A gate that a build could prerender past is not a gate. See app/qa/gate.ts. */
 export const dynamic = "force-dynamic";
@@ -21,13 +22,14 @@ export default async function ControlledPortalSubmission({
   // backend resolved the url to controlled_workable.
   const board = toBoard(params.board);
   const caseId = normalizeCaseId(params.case, `${board}-01`);
+  const ripplingFieldNames = newRipplingFieldNames();
   // ?shape= names one measured defect (see shapes.ts). The case id is accepted as a shape name too,
   // so the path route /qa/portal-submission/<board>/<shape> addresses the same page without needing
   // a second parameter. Anything unrecognised falls through to the original board form, which is
   // what keeps every pre-existing case working unchanged.
   const shape = toShape(params.shape) ?? toShape(params.case);
   if (shape) {
-    return <ShapeForm board={board} caseId={caseId} shape={shape} answered={params.answered === "1"} />;
+    return <ShapeForm board={board} caseId={caseId} shape={shape} answered={params.answered === "1"} ripplingFieldNames={ripplingFieldNames} />;
   }
-  return <PortalForm board={board} caseId={caseId} />;
+  return <PortalForm board={board} caseId={caseId} ripplingFieldNames={ripplingFieldNames} />;
 }

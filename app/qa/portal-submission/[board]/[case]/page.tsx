@@ -3,6 +3,7 @@ import { PortalForm } from "../../portal-form";
 import { ShapeForm } from "../../shape-form";
 import { toBoard } from "../../boards";
 import { normalizeCaseId, toShape } from "../../shapes";
+import { newRipplingFieldNames } from "../../rippling-fixture";
 
 /* A gate that a build could prerender past is not a gate. See app/qa/gate.ts. */
 export const dynamic = "force-dynamic";
@@ -22,13 +23,14 @@ export default async function ControlledPortalCase({
   // Shared with the ?board= route via toBoard, so the two entry points into the harness cannot drift.
   const board = toBoard(route.board);
   const caseId = normalizeCaseId(route.case, `${board}-01`);
+  const ripplingFieldNames = newRipplingFieldNames();
   // The path segment doubles as the shape name, so /qa/portal-submission/greenhouse/select-jd-decoy
   // and /qa/portal-submission?board=greenhouse&shape=select-jd-decoy are the same page. Both routes
   // resolve the shape through toShape for the same reason they both resolve the board through
   // toBoard: two entry points that disagree is the drift this harness already had once.
   const shape = toShape(query.shape) ?? toShape(route.case);
   if (shape) {
-    return <ShapeForm board={board} caseId={caseId} shape={shape} answered={query.answered === "1"} />;
+    return <ShapeForm board={board} caseId={caseId} shape={shape} answered={query.answered === "1"} ripplingFieldNames={ripplingFieldNames} />;
   }
-  return <PortalForm board={board} caseId={caseId} />;
+  return <PortalForm board={board} caseId={caseId} ripplingFieldNames={ripplingFieldNames} />;
 }
