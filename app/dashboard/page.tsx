@@ -689,10 +689,10 @@ export default function Home() {
             <Funnel stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
           </SectionBoundary>
           {applicationTotal > 0 && (
-            <SectionBoundary band="tracker-summary" title="Tracker">
+            <SectionBoundary band="tracker-summary" title="Applications">
             <OverviewColumn
               id="applications-summary"
-              title="Tracker"
+              title="Applications"
               href="/dashboard/applications"
               tone="applications"
               metrics={[
@@ -709,10 +709,10 @@ export default function Home() {
             </SectionBoundary>
           )}
           {outreach.length > 0 && (
-            <SectionBoundary band="outreach-summary" title="Emails">
+            <SectionBoundary band="outreach-summary" title="Outreach">
             <OverviewColumn
               id="outreach-summary"
-              title="Emails"
+              title="Outreach"
               href="/dashboard/outreach"
               tone="emails"
               metrics={[

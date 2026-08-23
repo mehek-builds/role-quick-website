@@ -230,7 +230,7 @@ export default function TargetingCard() {
             }}
             placeholder="Add a city, country or region"
             aria-label="Add a preferred location"
-            className="min-h-11 w-64 rounded-full border border-control-border bg-surface px-4 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+            className="rq-field min-h-11 w-64 rounded-inner px-4 text-[13px] outline-none placeholder:text-faint focus:border-brand"
           />
           {/* The board's own cities first, then hubs on every continent. The facets alone are
               US-heavy, which told a student in Bangalore or Dubai that their city was not an
@@ -312,7 +312,7 @@ export default function TargetingCard() {
           }}
           placeholder="Add a title"
           aria-label="Add a title"
-          className="mt-3 w-56 rounded-full border border-control-border bg-surface px-4 py-2 text-[13px] text-ink outline-none placeholder:text-faint focus:border-brand"
+          className="rq-field mt-3 w-56 rounded-inner px-4 py-2 text-[13px] outline-none placeholder:text-faint focus:border-brand"
         />
       </div>
 

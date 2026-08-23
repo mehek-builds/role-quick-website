@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { Button } from "@/components/app/Button";
 import { Card, EmptyState, ErrorNote, PendingLabel, ShimmerRows } from "@/components/app/ui";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 import { useBilling } from "@/components/billing/BillingProvider";
 
 type NetworkTab = "people" | "companies" | "linkedin";
@@ -73,6 +74,11 @@ export default function NetworkPage() {
       manualLabel: "Keep managing my connections",
       explanation: "Importing, disconnecting, and deleting your own LinkedIn data stay available. Litos+ adds company matches and referral paths.",
     });
+  }
+
+  function chooseTab(next: NetworkTab) {
+    if (next === tab) return;
+    runDashboardTransition(() => setTab(next));
   }
 
   function chooseFile(next: File | undefined) {
@@ -145,18 +151,19 @@ export default function NetworkPage() {
       </header>
 
       <nav aria-label="Network sections" className="flex gap-2 border-b border-border pb-3">
-        {(["people", "companies", "linkedin"] as const).map((value) => <button key={value} type="button" aria-current={tab === value ? "page" : undefined} onClick={() => setTab(value)} className={`min-h-11 rounded-control px-4 text-small capitalize ${tab === value ? "bg-coral-soft font-medium text-coral-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}>{value === "linkedin" ? "LinkedIn" : value}</button>)}
+        {(["people", "companies", "linkedin"] as const).map((value) => <button key={value} type="button" aria-current={tab === value ? "page" : undefined} onClick={() => chooseTab(value)} className={`min-h-11 rounded-control px-4 text-small capitalize ${tab === value ? "bg-coral-soft font-medium text-coral-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}>{value === "linkedin" ? "LinkedIn" : value}</button>)}
       </nav>
       {error && <ErrorNote message={error} />}
 
+      <MotionPanel key={tab} name="dashboard-network-panel">
       {tab === "people" && (
         <section>
           {disconnectedWithRetainedData ? (
-            <EmptyState visual="profile" title="Network use is disconnected" body="Disconnect stops future use. Your imported data is retained only so you can delete it later from LinkedIn settings."><Button type="button" variant="secondary" onClick={() => setTab("linkedin")}>Review retained data</Button></EmptyState>
+            <EmptyState visual="profile" title="Network use is disconnected" body="Disconnect stops future use. Your imported data is retained only so you can delete it later from LinkedIn settings."><Button type="button" variant="secondary" onClick={() => chooseTab("linkedin")}>Review retained data</Button></EmptyState>
           ) : !premium ? (
             <LockedInsight title="People you may know at target companies" body="Litos+ matches your imported first-degree connections to the companies in your search." onOpen={() => requestPremium("referral_paths", "people_list")} />
           ) : people === null ? <ShimmerRows rows={3} /> : people.length === 0 ? (
-            <EmptyState visual="profile" title="No imported people yet" body="Import your own LinkedIn connections, or add a contact from Outreach."><Button type="button" variant="secondary" onClick={() => setTab("linkedin")}>Import connections</Button></EmptyState>
+            <EmptyState visual="profile" title="No imported people yet" body="Import your own LinkedIn connections, or add a contact from Outreach."><Button type="button" variant="secondary" onClick={() => chooseTab("linkedin")}>Import connections</Button></EmptyState>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {people.map((person) => <Card key={person.id} className="p-5"><h2 className="text-heading font-[450] text-ink">{person.full_name ?? person.name ?? "Connection"}</h2><p className="mt-1 text-small text-muted">{[person.title, person.company].filter(Boolean).join(" at ") || "Details not included in the export"}</p><p className="mt-3 font-mono text-label text-coral-ink">{person.relationship ?? "First-degree connection"}</p></Card>)}
@@ -193,6 +200,7 @@ export default function NetworkPage() {
           </Card>
         </div>
       )}
+      </MotionPanel>
     </div>
   );
 }

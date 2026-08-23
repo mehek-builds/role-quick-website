@@ -79,6 +79,7 @@ import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "@/lib/work-eligibility-limit";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { PlanStatus } from "@/components/billing/PlanStatus";
 import { accessLabel } from "@/features/billing";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 
 /* Application profile: exactly the fields the backend stores, including legacy
    fields retained only so a full-profile save cannot erase them. Rendering a
@@ -191,7 +192,7 @@ export default function Settings() {
   const deleteConfirmed = deleteConfirmation === DELETE_CONFIRMATION_PHRASE;
 
   useEffect(() => {
-    const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
+    const syncTab = () => runDashboardTransition(() => setActiveTab(tabFromHash(window.location.hash)));
     syncTab();
     window.addEventListener("hashchange", syncTab);
     window.addEventListener("popstate", syncTab);
@@ -202,8 +203,11 @@ export default function Settings() {
   }, []);
 
   function selectTab(tab: AccountTab) {
-    setActiveTab(tab);
-    window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
+    if (tab === activeTab) return;
+    runDashboardTransition(() => {
+      setActiveTab(tab);
+      window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
+    });
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   }
@@ -767,6 +771,7 @@ export default function Settings() {
         </div>
       )}
 
+      <MotionPanel key={activeTab} name="dashboard-account-panel">
       {activeTab === "job-search" && (
         <section id="job-search" role="tabpanel" aria-labelledby="tab-job-search" className="space-y-4">
           <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
@@ -937,7 +942,7 @@ export default function Settings() {
                   onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
                   placeholder="Current password"
                   aria-label="Current password"
-                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field rounded-inner px-4 py-2.5 text-sm outline-none focus:border-brand"
                 />
                 <input
                   type="password"
@@ -947,7 +952,7 @@ export default function Settings() {
                   onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
                   placeholder="New password"
                   aria-label="New password"
-                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field rounded-inner px-4 py-2.5 text-sm outline-none focus:border-brand"
                 />
                 <input
                   type="password"
@@ -957,7 +962,7 @@ export default function Settings() {
                   onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
                   placeholder="Confirm new password"
                   aria-label="Confirm new password"
-                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field rounded-inner px-4 py-2.5 text-sm outline-none focus:border-brand"
                 />
               </div>
               {passwordError && (
@@ -995,7 +1000,7 @@ export default function Settings() {
             <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
           </div>
         </Card>
-        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={(event) => { if (dataBusy === "delete") event.preventDefault(); }} onClose={() => deleteTriggerRef.current?.focus()} className="m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
+        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={(event) => { if (dataBusy === "delete") event.preventDefault(); }} onClose={() => deleteTriggerRef.current?.focus()} className="rq-dashboard-dialog m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
           {deleteComplete ? (
             <div className="p-6" role="status">
               <p className="text-label text-positive">Complete</p>
@@ -1410,6 +1415,7 @@ export default function Settings() {
         )}
         </Card>
       </section>}
+      </MotionPanel>
     </div>
   );
 }
@@ -1451,7 +1457,7 @@ function Input({
         onChange={(e) => onChange(editableProfileText(e.target.value))}
         onBlur={(e) => onChange(nullableProfileText(e.target.value))}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="rq-field mt-1.5 w-full rounded-inner px-3.5 py-2 text-sm outline-none placeholder:text-faint focus:border-brand"
       />
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
@@ -1492,7 +1498,7 @@ function StringListInput({
           onChange(nullableProfileList(e.target.value));
         }}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="rq-field mt-1.5 w-full rounded-inner px-3.5 py-2 text-sm outline-none placeholder:text-faint focus:border-brand"
       />
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
@@ -1523,7 +1529,7 @@ function Select({
         onChange={(e) =>
           onChange(e.target.value === "" ? null : e.target.value === "yes")
         }
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
+        className="rq-field mt-1.5 w-full rounded-inner bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
       >
         {TRI.map((o) => (
           <option key={o.value} value={o.value}>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, OutreachEvent, ParsedProfile } from "@/lib/api";
 import { Button } from "@/components/app/Button";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 import { Card, Chip, EmptyState, ErrorNote, PageHeader, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
@@ -165,7 +166,7 @@ const QA_EVENTS: OutreachEvent[] = [
 ];
 
 export default function Outreach() {
-  const { canUse, openUpgrade } = useBilling();
+  const { openUpgrade } = useBilling();
   const [events, setEvents] = useState<DisplayedOutreachEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -191,6 +192,28 @@ export default function Outreach() {
   const [resolveBusy, setResolveBusy] = useState(false);
   const contactOperationIds = useRef(new Map<string, string>());
   const draftOperationIds = useRef(new Map<string, string>());
+  const focusDraftOnOpen = useRef(false);
+  const focusComposerTitleOnOpen = useRef(false);
+  const focusStartAfterClose = useRef(false);
+  const composerTitleRef = useRef<HTMLHeadingElement>(null);
+
+  function openComposer(focusTarget: "title" | "draft" = "title") {
+    focusDraftOnOpen.current = focusTarget === "draft";
+    focusComposerTitleOnOpen.current = focusTarget === "title";
+    if (composeOpen) {
+      window.requestAnimationFrame(() => {
+        if (focusTarget === "draft") document.getElementById("outreach-draft-body")?.focus();
+        else composerTitleRef.current?.focus();
+      });
+      return;
+    }
+    runDashboardTransition(() => setComposeOpen(true));
+  }
+
+  function closeComposer() {
+    focusStartAfterClose.current = true;
+    runDashboardTransition(() => setComposeOpen(false));
+  }
 
   function currentCheckoutState(applicationOverride: string | null = applicationId): OutreachCheckoutState {
     return {
@@ -263,8 +286,7 @@ export default function Outreach() {
     });
     setResolvedContacts(null);
     setComposeError(null);
-    setComposeOpen(true);
-    window.requestAnimationFrame(() => document.getElementById("outreach-draft-body")?.focus());
+    openComposer("draft");
   }
 
   async function saveEditedDraft() {
@@ -338,6 +360,24 @@ export default function Outreach() {
   }
 
   useEffect(() => {
+    let frame: number | null = null;
+    if (composeOpen && focusDraftOnOpen.current) {
+      focusDraftOnOpen.current = false;
+      focusComposerTitleOnOpen.current = false;
+      frame = window.requestAnimationFrame(() => document.getElementById("outreach-draft-body")?.focus());
+    } else if (composeOpen && focusComposerTitleOnOpen.current) {
+      focusComposerTitleOnOpen.current = false;
+      frame = window.requestAnimationFrame(() => composerTitleRef.current?.focus());
+    } else if (!composeOpen && focusStartAfterClose.current) {
+      focusStartAfterClose.current = false;
+      frame = window.requestAnimationFrame(() => document.getElementById("outreach-start-button")?.focus());
+    }
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [composeOpen]);
+
+  useEffect(() => {
     // Same localhost-only QA bypass Home and Applications already use, so this page can be
     // reviewed without a live account. It was the one dashboard view with no fixture.
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
@@ -406,20 +446,22 @@ export default function Outreach() {
     const restored = readOutreachCheckoutState();
     if (!restored) return;
     queueMicrotask(() => {
-      setContactName(restored.contactName);
-      setContactTitle(restored.contactTitle);
-      setContactEmail(restored.contactEmail);
-      setCompany(restored.company);
-      setCompanyDomain(restored.companyDomain);
-      setTargetRole(restored.targetRole);
-      setSubject(restored.subject);
-      setDraft(restored.draft);
-      setDraftType(restored.draftType);
-      setEditingDraftId(restored.editingDraftId);
-      setResolvedContacts(restored.resolvedContacts);
-      setSelectedContact(restored.selectedContact);
-      setApplicationId(restored.applicationId ?? null);
-      setComposeOpen(true);
+      runDashboardTransition(() => {
+        setContactName(restored.contactName);
+        setContactTitle(restored.contactTitle);
+        setContactEmail(restored.contactEmail);
+        setCompany(restored.company);
+        setCompanyDomain(restored.companyDomain);
+        setTargetRole(restored.targetRole);
+        setSubject(restored.subject);
+        setDraft(restored.draft);
+        setDraftType(restored.draftType);
+        setEditingDraftId(restored.editingDraftId);
+        setResolvedContacts(restored.resolvedContacts);
+        setSelectedContact(restored.selectedContact);
+        setApplicationId(restored.applicationId ?? null);
+        setComposeOpen(true);
+      });
     });
   }, []);
 
@@ -449,30 +491,35 @@ export default function Outreach() {
         </Card>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="border-coral/35 bg-coral-soft/30 p-5">
-          <p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">People</p>
-          <h2 className="mt-2 text-heading font-[450] text-ink">Find people at a company.</h2>
-          <p className="mt-2 text-small text-muted">Use real company and network data to choose someone relevant. Litos never guesses an address.</p>
-          <Button type="button" variant="secondary" className="mt-5 border-coral text-coral-ink" onClick={() => {
-            if (canUse("contact_discovery") === true) setComposeOpen(true);
-            else openUpgrade({ feature: "contact_discovery", placement: "outreach", trigger: "find_people", manualLabel: "Add contact manually", returnRoute: "/dashboard/outreach", onManual: () => setComposeOpen(true) });
-          }}>Find people</Button>
-        </Card>
-        <Card className="border-coral/35 bg-coral-soft/30 p-5">
-          <p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Draft</p>
-          <h2 className="mt-2 text-heading font-[450] text-ink">Write outreach.</h2>
-          <p className="mt-2 text-small text-muted">Create a grounded first note, follow-up, thank-you, referral ask, or offer-stage message.</p>
-          <Button type="button" variant="secondary" className="mt-5 border-coral text-coral-ink" onClick={() => {
-            if (canUse("outreach_email_generation") === true) setComposeOpen(true);
-            else openUpgrade({ feature: "outreach_email_generation", placement: "outreach", trigger: "write_outreach", manualLabel: "Write it myself", returnRoute: "/dashboard/outreach", onManual: () => setComposeOpen(true) });
-          }}>Write outreach</Button>
-        </Card>
-      </div>
+      {!composeOpen && (
+        <MotionPanel name="dashboard-outreach-start">
+          <Card className="border-coral/35 bg-coral-soft/25 px-5 py-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Start here</p>
+                <h2 className="mt-1 text-body font-medium text-ink">Find someone relevant, then write a grounded note.</h2>
+                <p className="mt-1 text-small text-muted">Discover a verified contact or add someone you already know.</p>
+              </div>
+              <Button
+                id="outreach-start-button"
+                type="button"
+                variant="secondary"
+                className="shrink-0 border-coral text-coral-ink"
+                aria-controls="outreach-composer"
+                aria-expanded="false"
+                onClick={() => openComposer()}
+              >
+                Start outreach
+              </Button>
+            </div>
+          </Card>
+        </MotionPanel>
+      )}
 
       {composeOpen && (
-        <Card className="p-6">
-          <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Compose</p><h2 className="mt-2 text-heading font-[450] text-ink">A note you choose to send.</h2></div><button type="button" onClick={() => setComposeOpen(false)} className="min-h-11 px-3 text-small text-muted">Close</button></div>
+        <MotionPanel name="dashboard-outreach-composer">
+        <Card id="outreach-composer" role="region" aria-labelledby="outreach-composer-title" className="p-6">
+          <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Compose</p><h2 ref={composerTitleRef} id="outreach-composer-title" tabIndex={-1} className="mt-2 text-heading font-[450] text-ink outline-none">A note you choose to send.</h2></div><button type="button" onClick={closeComposer} className="min-h-11 px-3 text-small text-muted transition-colors hover:text-ink">Close</button></div>
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <label className="text-small text-muted">Name<input value={contactName} onChange={(event) => { setContactName(event.target.value); setSelectedContact(null); }} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
             <label className="text-small text-muted">Contact title<input value={contactTitle} onChange={(event) => { setContactTitle(event.target.value); setSelectedContact(null); }} placeholder="Software engineer" className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
@@ -620,6 +667,7 @@ export default function Outreach() {
           </div>
           <p className="mt-3 text-label text-muted">Opening your email app never sends the message. You review the recipient and press Send there.</p>
         </Card>
+        </MotionPanel>
       )}
 
       <div className="flex flex-wrap gap-2">
@@ -648,13 +696,11 @@ export default function Outreach() {
             ? "Litos finds someone worth writing to and drafts the email. Every one you send shows up here, with whether they wrote back."
             : `There are no emails in the ${FILTER_LABELS[filter].toLowerCase()} view. Clear the filter to see every email.`}
         >
-          {filter === "all" ? (
-            <Button type="button" variant="secondary" onClick={() => setComposeOpen(true)}>Write a message</Button>
-          ) : (
+          {filter !== "all" ? (
             <Button type="button" variant="secondary" onClick={() => setFilter("all")}>
               Clear filter
             </Button>
-          )}
+          ) : null}
         </EmptyState>
       ) : (
         <div className="space-y-3">

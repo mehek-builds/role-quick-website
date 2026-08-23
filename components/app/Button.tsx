@@ -31,7 +31,7 @@ type Variant = "primary" | "secondary" | "quiet" | "danger";
 type Size = "sm" | "md" | "lg";
 
 const BASE =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full font-medium transition-[background-color,border-color,opacity,color] disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full font-medium transition-[background-color,border-color,opacity,color,box-shadow,transform,scale] active:scale-[0.985] motion-reduce:transform-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-action text-action-ink hover:bg-brand-ink",

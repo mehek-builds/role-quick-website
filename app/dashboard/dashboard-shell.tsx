@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, ViewTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { api, getOnboardingState, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
@@ -19,11 +19,8 @@ import {
 } from "@/components/app/NavIcons";
 import { BillingProvider } from "@/components/billing/BillingProvider";
 
-/* One noun per destination, and the two that a student kept confusing are now told apart by the
-   word itself rather than by a subtitle they have to find: "Jobs" is everything we found, and
-   "Tracker" is the subset you are actually working on. "Outreach" was the brand's word for
-   sending an email to a human, so it says Emails. The route stays /applications: the label is
-   what a student reads, and changing the URL would break every link already sent out. */
+/* One familiar noun per destination. Route paths stay stable while the labels match the page
+   titles, so the rail and the content never ask the student to translate between two names. */
 const NAV = [
   { href: "/dashboard", label: "Home", Icon: HomeIcon },
   { href: "/dashboard/jobs", label: "Jobs", Icon: SearchIcon },
@@ -33,12 +30,8 @@ const NAV = [
   { href: "/dashboard/outreach", label: "Outreach", Icon: MailIcon },
 ];
 
-/* Pinned below the work destinations because Account is visited occasionally. */
-const UTILITY = [
-  { href: "/dashboard/settings", label: "Account", Icon: GearIcon },
-];
-
 const MOBILE_NAV = NAV.slice(0, 4);
+const MORE_EXIT_MS = 130;
 
 function isActive(href: string, pathname: string): boolean {
   // /dashboard prefix-matches every child, so it alone is compared exactly.
@@ -63,12 +56,36 @@ export function DashboardShell({
   const [ready, setReady] = useState(false);
   const [qaMode, setQaMode] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [moreClosing, setMoreClosing] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const moreDialogRef = useRef<HTMLElement>(null);
+  const moreCloseTimer = useRef<number | null>(null);
 
   const closeMore = useCallback((restoreFocus = false) => {
-    setMoreOpen(false);
-    if (restoreFocus) window.setTimeout(() => moreButtonRef.current?.focus(), 0);
+    const finish = () => {
+      moreCloseTimer.current = null;
+      setMoreOpen(false);
+      setMoreClosing(false);
+      if (restoreFocus) window.requestAnimationFrame(() => moreButtonRef.current?.focus());
+    };
+    if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      finish();
+      return;
+    }
+    setMoreClosing(true);
+    moreCloseTimer.current = window.setTimeout(finish, MORE_EXIT_MS);
+  }, []);
+
+  const openMore = useCallback(() => {
+    if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
+    moreCloseTimer.current = null;
+    setMoreClosing(false);
+    setMoreOpen(true);
+  }, []);
+
+  useEffect(() => () => {
+    if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
   }, []);
 
   useEffect(() => {
@@ -76,10 +93,11 @@ export function DashboardShell({
     const dialog = moreDialogRef.current;
     if (!dialog) return;
     const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>("button, a[href]"));
-    focusable()[0]?.focus();
+    if (!moreClosing) focusable()[0]?.focus();
     const priorOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
+      if (moreClosing) return;
       if (event.key === "Escape") {
         event.preventDefault();
         closeMore(true);
@@ -103,7 +121,7 @@ export function DashboardShell({
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = priorOverflow;
     };
-  }, [closeMore, moreOpen]);
+  }, [closeMore, moreClosing, moreOpen]);
 
   /**
    * Publish the software keyboard's height as a CSS variable.
@@ -210,6 +228,8 @@ export function DashboardShell({
   }
 
   const href = (to: string) => (qaMode ? `${to}?qa=1` : to);
+  const moreActive = ["/dashboard/network", "/dashboard/outreach", "/dashboard/settings"]
+    .some((destination) => isActive(destination, pathname));
 
   return (
     <BillingProvider>
@@ -236,17 +256,7 @@ export function DashboardShell({
           </ul>
         </nav>
 
-        <div className="px-3 pb-3">
-          <ul className="space-y-0.5">
-            {UTILITY.map((item) => (
-              <li key={item.href}>
-                <RailLink item={item} href={href(item.href)} active={isActive(item.href, pathname)} />
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <AccountFooter qaMode={qaMode} />
+        <AccountFooter qaMode={qaMode} active={isActive("/dashboard/settings", pathname)} />
       </aside>
 
       <div className="flex min-h-screen flex-col">
@@ -277,35 +287,52 @@ export function DashboardShell({
             href={href(item.href)}
             /* 12px, not 11px, and the active item gets a surface rather than relying on a
                colour difference two shades apart at the smallest size in the product. */
-            className={`min-h-11 rounded-full px-0.5 py-2 text-center text-xs ${
-              isActive(item.href, pathname) ? "bg-surface-alt font-medium text-ink" : "text-muted"
+            className={`relative min-h-11 rounded-full px-0.5 py-2 text-center text-xs ${
+              isActive(item.href, pathname) ? "font-medium text-ink" : "text-muted"
             }`}
           >
-            {item.label}
+            {isActive(item.href, pathname) && (
+              <ViewTransition name="dashboard-mobile-route-trace" share="rq-dashboard-route-trace" default="none">
+                <span aria-hidden="true" className="absolute inset-0 rounded-full bg-surface-alt" />
+              </ViewTransition>
+            )}
+            <span className="relative">{item.label}</span>
           </Link>
         ))}
         <button
           ref={moreButtonRef}
           type="button"
           aria-haspopup="dialog"
-          aria-expanded={moreOpen}
+          aria-expanded={moreOpen && !moreClosing}
           aria-controls="dashboard-more-dialog"
-          onClick={() => setMoreOpen(true)}
-          className="min-h-11 rounded-full px-0.5 py-2 text-center text-xs text-muted"
+          onClick={openMore}
+          className={`relative min-h-11 rounded-full px-0.5 py-2 text-center text-xs ${moreActive ? "font-medium text-ink" : "text-muted"}`}
         >
-          More
+          {moreActive && (
+            <ViewTransition name="dashboard-mobile-route-trace" share="rq-dashboard-route-trace" default="none">
+              <span aria-hidden="true" className="absolute inset-0 rounded-full bg-surface-alt" />
+            </ViewTransition>
+          )}
+          <span className="relative">More</span>
         </button>
       </nav>
       {moreOpen && (
-        <div className="fixed inset-0 z-50 flex items-end bg-ink/35 lg:hidden" onClick={() => closeMore(true)}>
+        <div
+          aria-hidden="true"
+          className={`rq-dashboard-backdrop fixed inset-0 z-40 bg-ink/35 lg:hidden ${moreClosing ? "rq-dashboard-backdrop-exit" : ""}`}
+          onClick={() => closeMore(true)}
+        />
+      )}
+      {moreOpen && (
           <section
             ref={moreDialogRef}
             id="dashboard-more-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="dashboard-more-title"
-            className="w-full rounded-t-card border border-border bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 shadow-overlay"
-            onClick={(event) => event.stopPropagation()}
+            aria-hidden={moreClosing || undefined}
+            inert={moreClosing || undefined}
+            className={`rq-dashboard-dialog fixed inset-x-0 bottom-0 z-50 rounded-t-card border border-border bg-surface px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5 shadow-overlay lg:hidden ${moreClosing ? "rq-dashboard-dialog-exit" : ""}`}
           >
             <div className="flex items-center justify-between">
               <h2 id="dashboard-more-title" className="text-heading font-[450] text-ink">More</h2>
@@ -321,7 +348,7 @@ export function DashboardShell({
                   key={item.href}
                   href={href(item.href)}
                   onClick={() => closeMore()}
-                  className="flex min-h-12 items-center gap-3 rounded-control border border-border px-4 text-small font-medium text-ink"
+                  className="flex min-h-12 items-center gap-3 rounded-control border border-border px-4 text-small font-medium text-ink transition-colors hover:border-control-border hover:bg-surface-alt"
                 >
                   <item.Icon className="text-brand-ink" />
                   {item.label}
@@ -329,7 +356,6 @@ export function DashboardShell({
               ))}
             </nav>
           </section>
-        </div>
       )}
       {/* No marketing footer inside the product. Linear, Notion and Stripe (the stated
           references) all drop it once you are logged in; Privacy lives in Account. */}
@@ -364,7 +390,9 @@ function RailLink({
       {/* The one place in the rail colour marks position. It sits in the gutter outside the pill,
           so it reads as an edge marker against the rail's border rather than as a filled control. */}
       {active && (
-        <span aria-hidden="true" className="absolute -left-3 top-1.5 bottom-1.5 w-[3px] rounded-full bg-brand" />
+        <ViewTransition name="dashboard-route-trace" share="rq-dashboard-route-trace" default="none">
+          <span aria-hidden="true" className="absolute -left-3 top-1.5 bottom-1.5 w-[3px] rounded-full bg-brand" />
+        </ViewTransition>
       )}
       <Icon className={active ? "text-brand-ink" : "text-muted"} />
       {label}
@@ -383,7 +411,7 @@ function RailLink({
  * Momentum panel already reports that number labelled and in context. Say it once, where it means
  * something. The rail's job is identity and plan.
  */
-function AccountFooter({ qaMode }: { qaMode: boolean }) {
+function AccountFooter({ qaMode, active }: { qaMode: boolean; active: boolean }) {
   const [me, setMe] = useState<Me | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
@@ -420,9 +448,15 @@ function AccountFooter({ qaMode }: { qaMode: boolean }) {
 
   return (
     <Link
-      href="/dashboard/settings"
-      className="flex items-center gap-3 border-t border-border px-4 py-3.5 transition-colors hover:bg-surface-alt"
+      href={qaMode ? "/dashboard/settings?qa=1" : "/dashboard/settings"}
+      aria-current={active ? "page" : undefined}
+      className={`relative flex items-center gap-3 border-t border-border px-4 py-3.5 transition-colors hover:bg-surface-alt ${active ? "bg-surface-alt" : ""}`}
     >
+      {active && (
+        <ViewTransition name="dashboard-route-trace" share="rq-dashboard-route-trace" default="none">
+          <span aria-hidden="true" className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full bg-brand" />
+        </ViewTransition>
+      )}
       <span
         aria-hidden="true"
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-soft font-mono text-[13px] font-medium text-brand-ink"

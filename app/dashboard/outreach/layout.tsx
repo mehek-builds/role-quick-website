@@ -7,12 +7,11 @@ import type { Metadata } from "next";
  * the client layout above cannot export metadata, and the effect it used instead was overwritten
  * on a hard load by the root layout's marketing title.
  *
- * "Emails", the word in the NAV table. Outreach was the brand's word for sending an email to a
- * human, and the nav stopped using it; the tab should not go back to it. No brand suffix: the
- * root layout templates it.
+ * "Outreach" matches both the navigation label and the visible page heading. The root layout adds
+ * the Litos suffix through its title template.
  */
 export const metadata: Metadata = {
-  title: "Emails",
+  title: "Outreach",
 };
 
 export default function OutreachLayout({

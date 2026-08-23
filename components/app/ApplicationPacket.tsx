@@ -470,7 +470,8 @@ export function ApplicationPacket({
   function jump(id: string) {
     /* packet-resume routes to the top anchor; see the comment on #packet-top. */
     const target = id === "packet-resume" ? "packet-top" : id;
-    dialog.current?.querySelector(`#${target}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+    dialog.current?.querySelector(`#${target}`)?.scrollIntoView({ behavior, block: "start" });
   }
 
   return (
@@ -479,14 +480,14 @@ export function ApplicationPacket({
         aria-hidden="true"
         tabIndex={-1}
         onClick={onClose}
-        className="absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px]"
+        className="rq-dashboard-backdrop absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px]"
       />
       <div
         ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label={`Application packet: ${role} at ${company}`}
-        className="relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay"
+        className="rq-dashboard-dialog relative flex h-full max-h-[92svh] w-full max-w-6xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay"
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
           <div className="min-w-0">

@@ -3518,7 +3518,7 @@ function Applications() {
     <div className={applicationTaskOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${applicationTaskOpen ? "text-heading" : "text-section"}`}>Applications</h1>
+          <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Applications</h1>
           {/* Every selected screen needs a way back to the mobile list. Desktop keeps the compact
               switcher beside the detail, so this control would only repeat it there. */}
           {applicationTaskOpen && (
@@ -3537,15 +3537,17 @@ function Applications() {
             beside the list the sending draws from. This page still READS the same server field,
             because the lock note and the cancel window below are that setting's consequence, and
             the consequence stays where the applications are. */}
-        {!applicationTaskOpen && <div className="flex flex-wrap items-center gap-4">
-          <Button
-            type="button"
-            variant={showNewApplication ? "quiet" : "primary"}
-            onClick={showNewApplication ? closeNewApplication : () => setShowNewApplication(true)}
-          >
-            {showNewApplication ? "Close" : "Fill application"}
-          </Button>
-        </div>}
+        {!applicationTaskOpen && (showNewApplication || packets === null || reviewablePackets.length > 0) && (
+          <div className="flex flex-wrap items-center gap-4">
+            <Button
+              type="button"
+              variant={showNewApplication ? "quiet" : "primary"}
+              onClick={showNewApplication ? closeNewApplication : () => setShowNewApplication(true)}
+            >
+              {showNewApplication ? "Close" : "Fill application"}
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* No autopilot.error row here any more. That error is only ever set by the toggle's own
@@ -3879,9 +3881,11 @@ function Applications() {
           onOpenPacket={() => canonicalEnvelopePacket && setRevisitingId(canonicalEnvelopePacket.id)}
         />
       ) : reviewablePackets.length === 0 ? (
-        <EmptyState visual="applications" title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to fill the form or prepare a tailored packet." : "Add a job URL. Filling is unlimited, and tailoring is available with Litos+."}>
-          <Button type="button" onClick={() => setShowNewApplication(true)}>Fill application</Button>
-        </EmptyState>
+        showNewApplication ? null : (
+          <EmptyState visual="applications" title={legacyCount > 0 ? `${legacyCount} resumes saved` : "No applications yet"} body={legacyCount > 0 ? "Add a job URL to fill the form or prepare a tailored packet." : "Add a job URL. Filling is unlimited, and tailoring is available with Litos+."}>
+            <Button type="button" onClick={() => setShowNewApplication(true)}>Fill application</Button>
+          </EmptyState>
+        )
       ) : selectedId && (!selected || !spec || !review) ? (
         /* A ROW WAS CLICKED AND THE PACKET WILL NOT OPEN, so say which piece is missing.
          *
