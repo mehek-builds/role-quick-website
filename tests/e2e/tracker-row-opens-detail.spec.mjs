@@ -471,6 +471,7 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_A.role }).click();
     await page.waitForURL((url) => url.searchParams.get("application") === CANONICAL_A.id, { timeout: 10_000 });
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByRole("button", { name: /All applications/ }).count(), 1, "a canonical detail must not repeat the page-level application escape");
 
     await page.getByRole("button", { name: "Switch applications", exact: true }).click();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: CANONICAL_B.role }).click();
