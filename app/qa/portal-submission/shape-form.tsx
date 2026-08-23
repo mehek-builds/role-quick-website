@@ -30,7 +30,7 @@ import {
   type PortalShape,
 } from "./shapes";
 import { QA_LOG_ELEMENT_ID, qaMirror, qaRecord, qaReady } from "./qa-instrument";
-import type { RipplingFieldNames } from "./rippling-fixture";
+import type { RipplingFieldIdentities } from "./rippling-fixture";
 
 /* THE ONE ELEMENT THE REAL RUNNER CAN READ.
  *
@@ -69,13 +69,13 @@ export function ShapeForm({
   caseId,
   shape,
   answered,
-  ripplingFieldNames,
+  ripplingFieldIdentities,
 }: {
   board: Board;
   caseId: string;
   shape: PortalShape;
   answered: boolean;
-  ripplingFieldNames: RipplingFieldNames;
+  ripplingFieldIdentities: RipplingFieldIdentities;
 }) {
   /* Paylocity and BambooHR have no contact block of their own here: PortalForm returns early for
      both before the block is rendered, so the extracted component cannot accept them. A shape page
@@ -236,7 +236,7 @@ export function ShapeForm({
 
         <QaLog />
         <div className="relative mt-8 grid gap-5 sm:grid-cols-2">
-          <BoardContactFields board={contactBoard} omitPhone={shape === "phone-country"} ripplingFieldNames={ripplingFieldNames} />
+          <BoardContactFields board={contactBoard} omitPhone={shape === "phone-country"} ripplingFieldIdentities={ripplingFieldIdentities} />
           <ShapeControls shape={shape} answered={answered} />
         </div>
 

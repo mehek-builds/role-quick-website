@@ -16,7 +16,16 @@ import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
 
-const RIPPLING_FIELD_NUMBERS = [8, 12, 16, 20, 27, 31, 34, 61];
+const RIPPLING_FIELD_TEST_IDS = [
+  "input-first_name",
+  "input-last_name",
+  "input-email",
+  "input-phone_number",
+  "input-current_company",
+  "input-select-search-input",
+  "input-select-search-input",
+  "input-select-search-input",
+];
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -54,13 +63,19 @@ async function stopChild(child) {
   }
 }
 
-function ripplingNamesFromHtml(html) {
-  return RIPPLING_FIELD_NUMBERS.map((fieldNumber) => {
-    const tag = html.match(new RegExp(`<input[^>]*id="field-${fieldNumber}"[^>]*>`))?.[0];
-    assert.ok(tag, `SSR omitted Rippling field-${fieldNumber}`);
+function ripplingIdentitiesFromHtml(html) {
+  const inputTags = html.match(/<input\b[^>]*>/g) ?? [];
+  const seen = new Map();
+  return RIPPLING_FIELD_TEST_IDS.map((testId) => {
+    const ordinal = seen.get(testId) ?? 0;
+    seen.set(testId, ordinal + 1);
+    const tag = inputTags.filter((candidate) => candidate.includes(`data-testid="${testId}"`))[ordinal];
+    assert.ok(tag, `SSR omitted Rippling ${testId} occurrence ${ordinal}`);
+    const id = tag.match(/\bid="(field-\d+)"/)?.[1];
     const name = tag.match(/\bname="([a-f0-9]{10})"/)?.[1];
-    assert.ok(name, `SSR field-${fieldNumber} did not carry a ten-character opaque name`);
-    return name;
+    assert.ok(id, `SSR ${testId} occurrence ${ordinal} did not carry an opaque field id`);
+    assert.ok(name, `SSR ${testId} occurrence ${ordinal} did not carry a ten-character opaque name`);
+    return { id, name };
   });
 }
 
@@ -113,11 +128,12 @@ test.after(async () => {
 });
 
 test("the quality refactor preserves hydrated behavior", async (suite) => {
-  await suite.test("Rippling names are stable through hydration and fresh across every route form", async () => {
+  await suite.test("Rippling ids and names are stable through hydration and fresh across every route form", async () => {
     const context = await browser.newContext();
     const unexpected = await blockExternalTraffic(context);
     const page = await context.newPage();
     const browserErrors = watchBrowserErrors(page);
+    const idSets = [];
     const nameSets = [];
     const routes = [
       { path: "/qa/portal-submission?board=rippling&case=query-case", shape: false },
@@ -133,8 +149,9 @@ test("the quality refactor preserves hydrated behavior", async (suite) => {
           timeout: 30_000,
         });
         assert.equal(response?.status(), 200, `${route.path} did not render`);
-        const serverNames = ripplingNamesFromHtml(await response.text());
-        assert.equal(new Set(serverNames).size, RIPPLING_FIELD_NUMBERS.length);
+        const serverIdentities = ripplingIdentitiesFromHtml(await response.text());
+        assert.equal(new Set(serverIdentities.map(({ id }) => id)).size, RIPPLING_FIELD_TEST_IDS.length);
+        assert.equal(new Set(serverIdentities.map(({ name }) => name)).size, RIPPLING_FIELD_TEST_IDS.length);
 
         const form = page.locator("form[data-litos-controlled-portal]");
         await form.waitFor({ state: "visible", timeout: 15_000 });
@@ -147,15 +164,22 @@ test("the quality refactor preserves hydrated behavior", async (suite) => {
           });
         }
 
-        const hydratedNames = await page.evaluate((fieldNumbers) =>
-          fieldNumbers.map((fieldNumber) =>
-            document.querySelector(`#field-${fieldNumber}`)?.getAttribute("name"),
-          ), RIPPLING_FIELD_NUMBERS);
-        assert.deepEqual(hydratedNames, serverNames, `${route.path} changed opaque names during hydration`);
-        nameSets.push(serverNames.join(":"));
+        const hydratedIdentities = await page.evaluate((testIds) => {
+          const seen = new Map();
+          return testIds.map((testId) => {
+            const ordinal = seen.get(testId) ?? 0;
+            seen.set(testId, ordinal + 1);
+            const input = document.querySelectorAll(`[data-testid="${testId}"]`)[ordinal];
+            return { id: input?.getAttribute("id"), name: input?.getAttribute("name") };
+          });
+        }, RIPPLING_FIELD_TEST_IDS);
+        assert.deepEqual(hydratedIdentities, serverIdentities, `${route.path} changed opaque identities during hydration`);
+        idSets.push(JSON.stringify(serverIdentities.map(({ id }) => id)));
+        nameSets.push(JSON.stringify(serverIdentities.map(({ name }) => name)));
 
       }
 
+      assert.equal(new Set(idSets).size, routes.length, "independent SSR renders reused opaque ids");
       assert.equal(new Set(nameSets).size, routes.length, "independent SSR renders reused opaque names");
       assert.equal(
         browserErrors.some((message) => /hydration|server rendered html|did not match/i.test(message)),

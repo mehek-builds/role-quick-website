@@ -1,7 +1,7 @@
 "use client";
 
 import { createElement, useState } from "react";
-import type { RipplingFieldNames } from "./rippling-fixture";
+import type { RipplingFieldIdentities } from "./rippling-fixture";
 
 // The board union comes from ./boards, which is the single list both route files also read. Keeping
 // one source is what stops the drift that already happened once: the ?board= route was never updated
@@ -13,7 +13,7 @@ import type { BoardName as Board } from "./boards";
 export type { Board };
 
 
-export function PortalForm({ board, caseId, ripplingFieldNames }: { board: Board; caseId: string; ripplingFieldNames: RipplingFieldNames }) {
+export function PortalForm({ board, caseId, ripplingFieldIdentities }: { board: Board; caseId: string; ripplingFieldIdentities: RipplingFieldIdentities }) {
   const confirmationId = `LITOS-QA-${caseId.toUpperCase()}`;
   const [submitted, setSubmitted] = useState(false);
   const [step, setStep] = useState(1);
@@ -54,7 +54,7 @@ export function PortalForm({ board, caseId, ripplingFieldNames }: { board: Board
     return <main className="min-h-screen bg-[#f7f7f3] px-6 py-16"><section className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-10 text-center"><div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f5e9] text-2xl text-[#24713b]">✓</div><h1 className="mt-5 text-3xl font-semibold text-[#151512]">Thank you. Your application was received.</h1><p className="mt-3 text-[#63635d]">This is a Litos test page. No employer got this application.</p><p className="mt-5 font-mono text-sm text-[#24713b]">Confirmation ID: {confirmationId}</p></section></main>;
   }
 
-  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2"><BoardContactFields board={board} ripplingFieldNames={ripplingFieldNames} /></div><button type="submit" data-testid={board === "rippling" ? "Apply" : undefined} className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
+  return <main className="min-h-screen bg-[#f7f7f3] px-6 py-12"><form data-litos-controlled-portal data-board={board} onSubmit={(event) => { event.preventDefault(); setSubmitted(true); }} className="mx-auto max-w-2xl rounded-2xl border border-[#d8d8d0] bg-white p-8"><p className="font-mono text-xs uppercase tracking-wider text-[#4267d5]">Controlled {board} verification portal</p><h1 className="mt-2 text-3xl font-semibold text-[#151512]">Software Engineering Intern, Summer 2027</h1><p className="mt-2 text-sm text-[#63635d]">This form exercises the production {board} adapter without contacting an employer.</p><div className="mt-8 grid gap-5 sm:grid-cols-2"><BoardContactFields board={board} ripplingFieldIdentities={ripplingFieldIdentities} /></div><button type="submit" data-testid={board === "rippling" ? "Apply" : undefined} className="mt-8 rounded-full bg-[#4267d5] px-6 py-3 font-medium text-white">Submit application</button></form></main>;
 }
 
 /* The per-board contact block, extracted so the shape pages (shape-form.tsx) render the SAME fields
@@ -72,8 +72,8 @@ export function PortalForm({ board, caseId, ripplingFieldNames }: { board: Board
 // the contact block's own #phone matches before anything a shape page adds. So the phone-country
 // shape - the one whose entire subject is what gets written into a phone field that has a separate
 // country selector - would never be reached, and the case would pass by never running.
-export function BoardContactFields({ board, omitPhone = false, ripplingFieldNames }: { board: Exclude<Board, "paylocity" | "bamboohr">; omitPhone?: boolean; ripplingFieldNames: RipplingFieldNames }) {
-  return <>{board === "greenhouse" && <GreenhouseFields omitPhone={omitPhone} />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields omitPhone={omitPhone} />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}{board === "rippling" && <RipplingFields fieldNames={ripplingFieldNames} />}{board === "breezy" && <BreezyFields />}</>;
+export function BoardContactFields({ board, omitPhone = false, ripplingFieldIdentities }: { board: Exclude<Board, "paylocity" | "bamboohr">; omitPhone?: boolean; ripplingFieldIdentities: RipplingFieldIdentities }) {
+  return <>{board === "greenhouse" && <GreenhouseFields omitPhone={omitPhone} />}{board === "lever" && <LeverFields />}{board === "ashby" && <AshbyFields omitPhone={omitPhone} />}{board === "smartrecruiters" && <SmartRecruitersFields />}{board === "workable" && <WorkableFields />}{board === "jazzhr" && <JazzHrFields />}{board === "rippling" && <RipplingFields fieldIdentities={ripplingFieldIdentities} />}{board === "breezy" && <BreezyFields />}</>;
 }
 
 function GreenhouseFields({ omitPhone = false }: { omitPhone?: boolean }) {
@@ -222,11 +222,11 @@ function PaylocityFields() {
 // Rippling (ats.rippling.com). THE trap: both `name` and `id` are randomised per render, so the
 // fixture randomises them too. An adapter that matches either passes on one render and fails on the
 // next, and only a fixture that actually randomises can catch that.
-function RipplingFields({ fieldNames }: { fieldNames: RipplingFieldNames }) {
+function RipplingFields({ fieldIdentities }: { fieldIdentities: RipplingFieldIdentities }) {
   // Deliberately opaque, in the shape Rippling emits (name="Z9gMtYRYFO", id="field-8").
   // The server creates a fresh set for every dynamic fixture render, then passes that exact set
-  // through hydration so random names never create a client mismatch.
-  const junk = (n: number) => ({ id: `field-${n}`, name: fieldNames[n] });
+  // through hydration so random ids and names never create a client mismatch.
+  const junk = (n: number) => fieldIdentities[n];
   return <>
     <TestIdField testId="input-first_name" label="First name" {...junk(8)} />
     <TestIdField testId="input-last_name" label="Last name" {...junk(12)} />
