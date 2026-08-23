@@ -1,12 +1,12 @@
 "use client";
 
 import { Button } from "@/components/app/Button";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
 import { litosClientHeaders } from "@/lib/product";
-import { Card, Chip, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
+import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
 import {
   courseworkLine,
@@ -23,6 +23,9 @@ export default function ResumeWorkspace() {
   const embedded = usePathname() === "/dashboard/documents";
   const [profile, setProfile] = useState<ParsedProfile | null | "missing">(null);
   const [entries, setEntries] = useState<ExperienceEntry[] | null>(null);
+  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
+  const [bankLoadError, setBankLoadError] = useState<string | null>(null);
+  const [targetingRefreshError, setTargetingRefreshError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -32,32 +35,91 @@ export default function ResumeWorkspace() {
   const [savedEntriesJson, setSavedEntriesJson] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const uploadedProfileRef = useRef<ParsedProfile | null>(null);
+
+  const loadProfile = useCallback(async () => {
+    try {
+      const profileRes = await api<ParsedProfile>("/profile").catch((reason) => {
+        if (reason instanceof ApiError && reason.status === 404) return "missing" as const;
+        throw reason;
+      });
+      if (profileRes === "missing") {
+        setProfile("missing");
+        setProfileLoadError(null);
+        setTargetingRefreshError(null);
+        return;
+      }
+      let targetingRes;
+      try {
+        targetingRes = await getTargeting();
+      } catch (reason) {
+        const profileWithoutTargetRoles = { ...profileRes };
+        delete profileWithoutTargetRoles.target_roles;
+        setProfile(profileWithoutTargetRoles);
+        setProfileLoadError(null);
+        setTargetingRefreshError(userFacingError(reason, "Your resume loaded, but target roles could not load."));
+        return;
+      }
+      setProfile(
+        targetingRes.titles?.length
+          ? { ...profileRes, target_roles: targetingRes.titles }
+          : profileRes,
+      );
+      setProfileLoadError(null);
+      setTargetingRefreshError(null);
+    } catch (reason) {
+      setProfileLoadError(userFacingError(reason, "Your resume could not load."));
+    }
+  }, []);
+
+  const loadBank = useCallback(async (failureMessage = "Your work history could not load.") => {
+    try {
+      const bank = await api<{ entries: ExperienceEntry[] }>("/profile/experience-bank");
+      setEntries(bank.entries);
+      setSavedEntriesJson(JSON.stringify(bank.entries));
+      setBankLoadError(null);
+    } catch (reason) {
+      setBankLoadError(userFacingError(reason, failureMessage));
+    }
+  }, []);
+
+  const loadTargeting = useCallback(async (failureMessage: string, useUploadedFallback = false) => {
+    try {
+      const targeting = await getTargeting();
+      if (targeting.titles?.length) {
+        setProfile((current) => {
+          const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
+          return base ? { ...base, target_roles: targeting.titles } : current;
+        });
+      } else if (useUploadedFallback && uploadedProfileRef.current) {
+        const inferredRoles = Array.isArray(uploadedProfileRef.current.target_roles)
+          ? uploadedProfileRef.current.target_roles
+          : [];
+        if (inferredRoles.length > 0) {
+          setProfile((current) => {
+            const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
+            return base ? { ...base, target_roles: inferredRoles } : current;
+          });
+        }
+      }
+      setTargetingRefreshError(null);
+    } catch (reason) {
+      setTargetingRefreshError(userFacingError(reason, failureMessage));
+    }
+  }, []);
+
+  const refreshUploadedProfile = useCallback(async () => {
+    await Promise.allSettled([
+      loadBank("Your resume uploaded, but its refreshed work history could not load."),
+      loadTargeting("Your resume uploaded, but target roles could not refresh.", true),
+    ]);
+  }, [loadBank, loadTargeting]);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const [profileRes, bankRes, targetingRes] = await Promise.all([
-        api<ParsedProfile>("/profile").catch((err) =>
-          err instanceof ApiError && err.status === 404 ? ("missing" as const) : null,
-        ),
-        api<{ entries: ExperienceEntry[] }>("/profile/experience-bank").catch(
-          () => ({ entries: [] as ExperienceEntry[] }),
-        ),
-        getTargeting().catch(() => null),
-      ]);
-      if (cancelled) return;
-      setProfile(
-        profileRes && profileRes !== "missing" && targetingRes?.titles?.length
-          ? { ...profileRes, target_roles: targetingRes.titles }
-          : profileRes ?? "missing",
-      );
-      setEntries(bankRes.entries);
-      setSavedEntriesJson(JSON.stringify(bankRes.entries));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    queueMicrotask(() => {
+      void Promise.allSettled([loadProfile(), loadBank()]);
+    });
+  }, [loadBank, loadProfile]);
 
   async function upload(file: File) {
     if (uploadInFlightRef.current) return;
@@ -78,21 +140,20 @@ export default function ResumeWorkspace() {
       if (!res.ok) {
         setError(data?.error ?? "Upload failed. Is it a PDF under 10 MB?");
       } else {
-        // Re-pull the bank and targeting. Existing targeting is authoritative and intentionally
-        // survives a replacement PDF, so do not display the parser's fresh guesses over it.
-        const [bank, targeting] = await Promise.all([
-          api<{ entries: ExperienceEntry[] }>("/profile/experience-bank").catch(() => null),
-          getTargeting().catch(() => null),
-        ]);
+        const parsedProfile = data as ParsedProfile;
+        uploadedProfileRef.current = parsedProfile;
+        const parsedProfileWithoutTargetRoles = { ...parsedProfile };
+        delete parsedProfileWithoutTargetRoles.target_roles;
+        const currentRoles = profile && profile !== "missing" && Array.isArray(profile.target_roles)
+          ? profile.target_roles
+          : [];
         setProfile(
-          targeting?.titles?.length
-            ? { ...(data as ParsedProfile), target_roles: targeting.titles }
-            : data as ParsedProfile,
+          currentRoles.length > 0
+            ? { ...parsedProfileWithoutTargetRoles, target_roles: currentRoles }
+            : parsedProfileWithoutTargetRoles,
         );
-        if (bank) {
-          setEntries(bank.entries);
-          setSavedEntriesJson(JSON.stringify(bank.entries));
-        }
+        setEntries(null);
+        await refreshUploadedProfile();
       }
     } catch {
       setError("Network error during upload. You can retry the same file.");
@@ -179,7 +240,7 @@ export default function ResumeWorkspace() {
      would write the wrong row as soon as the two categories interleave. */
   const { work: workEntries, leadership: leadershipEntries } = splitBankByCategory(entries ?? []);
   const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesJson;
-  const uploadReady = profile !== null && entries !== null;
+  const uploadReady = profile !== null && entries !== null && profileLoadError === null && bankLoadError === null;
 
   function chooseUpload(file: File | undefined) {
     if (!file || !uploadReady || uploadInFlightRef.current) return;
@@ -209,6 +270,14 @@ export default function ResumeWorkspace() {
 
       {/* Base resume */}
       <Card className="p-6">
+        {profileLoadError ? (
+          <DataErrorState
+            headingLevel="h2"
+            title="Your resume did not load."
+            body={profileLoadError}
+            onRetry={() => void loadProfile()}
+          />
+        ) : <>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h2 className="text-base font-medium text-ink">Your resume</h2>
@@ -262,9 +331,18 @@ export default function ResumeWorkspace() {
           {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploading ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} className="font-medium text-brand-ink underline underline-offset-4">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
-        {profile !== null && profile !== "missing" && (
+        {profile !== null && profile !== "missing" && !uploading && targetingRefreshError === null && (
           <ProfilePreview profile={profile} onProfileChange={(next) => setProfile(next as ParsedProfile)} />
         )}
+        {targetingRefreshError && (
+          <div className="mt-5 space-y-3">
+            <ErrorNote message={targetingRefreshError} />
+            <Button type="button" variant="secondary" onClick={() => void loadTargeting("Target roles could not load.", true)}>
+              Try refresh again
+            </Button>
+          </div>
+        )}
+        </>}
       </Card>
 
       {/* Everything you have done */}
@@ -285,13 +363,23 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={saveBank}
-              disabled={saving || entries === null || !entriesDirty} >
+              disabled={saving || entries === null || bankLoadError !== null || !entriesDirty} >
               {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
         </div>
 
+        {bankLoadError && (
+          <DataErrorState
+            headingLevel="h3"
+            title="Work history did not load."
+            body={bankLoadError}
+            onRetry={() => void loadBank()}
+          />
+        )}
+
         {entries === null ? (
+          bankLoadError ? null :
           <ShimmerRows rows={3} />
         ) : (
           /* Two groups, one bank. The split is by the `type` the parser already assigns, so a

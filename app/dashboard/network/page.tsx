@@ -9,6 +9,11 @@ import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 import { useBilling } from "@/components/billing/BillingProvider";
 
 type NetworkTab = "people" | "companies" | "linkedin";
+const NETWORK_TABS: Array<{ id: NetworkTab; label: string }> = [
+  { id: "people", label: "People" },
+  { id: "companies", label: "Companies" },
+  { id: "linkedin", label: "LinkedIn" },
+];
 type LinkedInStatus = {
   source?: "csv" | "oauth" | null;
   connected?: boolean;
@@ -40,6 +45,11 @@ export default function NetworkPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const tabRefs = useRef<Record<NetworkTab, HTMLButtonElement | null>>({
+    people: null,
+    companies: null,
+    linkedin: null,
+  });
   const premium = canUse("networking_discovery") === true;
   const disconnectedWithRetainedData = status?.connected === false && (status.retained_people_count ?? 0) > 0;
 
@@ -158,6 +168,20 @@ export default function NetworkPage() {
     runDashboardTransition(() => setTab(next));
   }
 
+  function moveTab(current: NetworkTab, key: string) {
+    const currentIndex = NETWORK_TABS.findIndex((item) => item.id === current);
+    const nextIndex = key === "Home"
+      ? 0
+      : key === "End"
+        ? NETWORK_TABS.length - 1
+        : key === "ArrowRight"
+          ? (currentIndex + 1) % NETWORK_TABS.length
+          : (currentIndex - 1 + NETWORK_TABS.length) % NETWORK_TABS.length;
+    const next = NETWORK_TABS[nextIndex].id;
+    chooseTab(next);
+    requestAnimationFrame(() => tabRefs.current[next]?.focus());
+  }
+
   function chooseFile(next: File | undefined) {
     setPreview(null);
     setError(null);
@@ -234,12 +258,34 @@ export default function NetworkPage() {
         <p className="mt-2 max-w-2xl text-body text-muted">Bring connections you already own into Litos, then see where a real path into a company exists.</p>
       </header>
 
-      <nav aria-label="Network sections" className="flex gap-2 border-b border-border pb-3">
-        {(["people", "companies", "linkedin"] as const).map((value) => <button key={value} type="button" aria-current={tab === value ? "page" : undefined} onClick={() => chooseTab(value)} className={`min-h-11 rounded-control px-4 text-small capitalize ${tab === value ? "bg-coral-soft font-medium text-coral-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}>{value === "linkedin" ? "LinkedIn" : value}</button>)}
-      </nav>
+      <div role="tablist" aria-label="Network sections" className="flex gap-2 border-b border-border pb-3">
+        {NETWORK_TABS.map(({ id, label }) => (
+          <button
+            key={id}
+            ref={(node) => { tabRefs.current[id] = node; }}
+            type="button"
+            role="tab"
+            id={`network-tab-${id}`}
+            aria-selected={tab === id}
+            aria-controls={`network-panel-${id}`}
+            tabIndex={tab === id ? 0 : -1}
+            onClick={() => chooseTab(id)}
+            onKeyDown={(event) => {
+              if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                event.preventDefault();
+                moveTab(id, event.key);
+              }
+            }}
+            className={`min-h-11 rounded-control px-4 text-small ${tab === id ? "bg-coral-soft font-medium text-coral-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {error && <ErrorNote message={error} />}
 
       <MotionPanel key={tab} name="dashboard-network-panel">
+      <div id={`network-panel-${tab}`} role="tabpanel" aria-labelledby={`network-tab-${tab}`} tabIndex={0}>
       {tab === "people" && (
         <section>
           {premium && statusError ? (
@@ -290,6 +336,7 @@ export default function NetworkPage() {
           </Card>
         </div>
       )}
+      </div>
       </MotionPanel>
     </div>
   );
