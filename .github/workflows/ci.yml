@@ -66,6 +66,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Vendored browser bundles are excluded explicitly, so lint output now reflects first-party
+      # code. Errors fail immediately and the measured warning budget cannot grow silently.
+      - name: Lint
+        run: npm run lint -- --max-warnings 25
+
       - name: Build
         run: npm run build
         env:
