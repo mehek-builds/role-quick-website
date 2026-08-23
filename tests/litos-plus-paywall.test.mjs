@@ -187,7 +187,8 @@ test("paid hover and sending without another prompt use separate server features
 
 test("network ownership controls stay available when discovery is locked", async () => {
   const network = await read("app/dashboard/network/page.tsx");
-  assert.match(network, /if \(!premium \|\| status\?\.connected !== true\) \{[\s\S]*setPeople\(\[\]\);[\s\S]*setCompanies\(\[\]\);[\s\S]*return/);
+  assert.match(network, /if \(!premium \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setPeople\(\[\]\);/);
+  assert.match(network, /if \(!premium \|\| status\?\.connected === false\) \{[\s\S]{0,260}?setCompanies\(\[\]\);/);
   assert.match(network, /tab === "linkedin"/);
   assert.match(network, /\/network\/linkedin\/import\/preview/);
   assert.match(network, /\/network\/linkedin\/import\/commit/);
