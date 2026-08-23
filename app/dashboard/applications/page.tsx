@@ -3849,7 +3849,6 @@ function Applications() {
           coverLetterEditorOpen={canonicalCoverLetterEditorOpen}
           coverLetterDownloadUrl={canonicalCoverLetter?.download_url ?? canonicalGeneratedPacket?.cover_letter_download_url ?? null}
           error={canonicalFillError}
-          onBack={closeApplication}
           onFill={() => void fillApplication({
             company: canonicalSelected.company,
             role: canonicalSelected.role,
@@ -4336,7 +4335,6 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen,
   coverLetterDownloadUrl,
   error,
-  onBack,
   onFill,
   onTailor,
   onOpenCoverLetterEditor,
@@ -4375,7 +4373,6 @@ function CanonicalApplicationDetail({
   coverLetterEditorOpen: boolean;
   coverLetterDownloadUrl: string | null;
   error: string | null;
-  onBack: () => void;
   onFill: () => void;
   onTailor: () => void;
   onOpenCoverLetterEditor: () => void;
@@ -4393,8 +4390,7 @@ function CanonicalApplicationDetail({
     <Card className="overflow-hidden">
       <div className="grid h-1 grid-cols-3" aria-hidden="true"><span className="bg-teal" /><span className="bg-brand" /><span className="bg-coral" /></div>
       <div className="p-6">
-        <button type="button" onClick={onBack} className="min-h-11 text-small text-muted hover:text-ink">← All applications</button>
-        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="font-mono text-label uppercase tracking-[0.08em] text-teal-ink">Free application fill</p>
             <h2 className="mt-2 text-heading font-[450] text-ink">{application.role}</h2>
