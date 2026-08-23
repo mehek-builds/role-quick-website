@@ -280,11 +280,12 @@ export function DashboardShell({
         <main className="mx-auto w-full max-w-5xl flex-1 px-4 pt-7 pb-[var(--dashboard-action-offset)] sm:px-6 sm:pt-10">{children}</main>
       </div>
 
-      <nav aria-label="Dashboard" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
+      <nav aria-label="Dashboard" className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-[0.8fr_0.8fr_1.35fr_1.2fr_0.85fr] border-t border-border bg-bg/95 px-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden">
         {MOBILE_NAV.map((item) => (
           <Link
             key={item.href}
             href={href(item.href)}
+            aria-current={isActive(item.href, pathname) ? "page" : undefined}
             /* 12px, not 11px, and the active item gets a surface rather than relying on a
                colour difference two shades apart at the smallest size in the product. */
             className={`relative min-h-11 rounded-full px-0.5 py-2 text-center text-xs ${
@@ -296,7 +297,7 @@ export function DashboardShell({
                 <span aria-hidden="true" className="absolute inset-0 rounded-full bg-surface-alt" />
               </ViewTransition>
             )}
-            <span className="relative">{item.label}</span>
+            <span className="relative whitespace-nowrap">{item.label}</span>
           </Link>
         ))}
         <button
