@@ -306,6 +306,8 @@ export function DashboardShell({
           aria-haspopup="dialog"
           aria-expanded={moreOpen && !moreClosing}
           aria-controls="dashboard-more-dialog"
+          aria-current={moreActive ? "page" : undefined}
+          aria-label={moreActive ? "More, current section" : "More"}
           onClick={openMore}
           className={`relative min-h-11 rounded-full px-0.5 py-2 text-center text-xs ${moreActive ? "font-medium text-ink" : "text-muted"}`}
         >
@@ -348,6 +350,7 @@ export function DashboardShell({
                 <Link
                   key={item.href}
                   href={href(item.href)}
+                  aria-current={isActive(item.href, pathname) ? "page" : undefined}
                   onClick={() => closeMore()}
                   className="flex min-h-12 items-center gap-3 rounded-control border border-border px-4 text-small font-medium text-ink transition-colors hover:border-control-border hover:bg-surface-alt"
                 >
