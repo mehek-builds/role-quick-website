@@ -21,9 +21,9 @@ describe("selectedPacketForRequest", () => {
     assert.equal(selectedPacketForRequest(packets, "packet-b", "packet-b", "apply", "packet-b")?.id, "packet-b");
   });
 
-  test("allows ledger switching after the direct-link request has settled", () => {
+  test("allows a restored packet id after its canonical request identity settles", () => {
     assert.equal(
-      selectedPacketForRequest(packets, "packet-b", "packet-a", "apply", "packet-a")?.id,
+      selectedPacketForRequest(packets, "packet-b", "canonical-b", "apply", "canonical-b")?.id,
       "packet-b",
     );
   });

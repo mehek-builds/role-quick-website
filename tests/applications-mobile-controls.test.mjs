@@ -91,7 +91,7 @@ test("the packet switcher has a phone shape and a desktop shape, and exactly one
   /* Both branches answer the empty filter, or filtering to "Sent" with nothing sent renders a
      silent blank box on whichever width lacks the message. */
   assert.equal(
-    (ledgerSection.match(/No applications in this view\./g) ?? []).length,
+    (ledgerSection.match(/No applications match this view\./g) ?? []).length,
     2,
     "expected both the phone strip and the desktop table to state an empty filter",
   );
@@ -107,10 +107,10 @@ test("every switcher chip is a 44px target that reports which packet is open", (
      the open packet is announced and not only coloured. */
   assert.match(
     chip,
-    /aria-pressed=\{packet\.id === selected\?\.id \|\| packet\.id === canonicalSelected\?\.id\}/,
+    /aria-pressed=\{packet\.id === selectedApplicationRowId\}/,
     "which legacy or canonical application is open has to be announced, not only coloured",
   );
-  assert.match(chip, /onClick=\{\(\) => selectPacket\(packet\)\}/, "the chip is the in-context switch");
+  assert.match(chip, /onClick=\{\(\) => openApplication\(packet\)\}/, "the chip is the URL-bound in-context switch");
 });
 
 const editableLine = applications.slice(applications.indexOf("function EditableLine("));

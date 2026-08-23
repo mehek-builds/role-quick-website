@@ -203,7 +203,7 @@ describe("page-level facts stay in the page banner", () => {
     );
     const effect = code.slice(code.indexOf("const resolvedJobParam = useRef"));
     assert.doesNotMatch(
-      effect.slice(0, effect.indexOf("}, [packets, qaMode, selectPacket]")),
+      effect.slice(0, effect.indexOf("}, [openApplication, packets, qaMode]")),
       /refuseInComposer/,
       "nobody pressed a composer button to get here",
     );

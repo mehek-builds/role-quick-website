@@ -96,7 +96,7 @@ describe("the row itself", () => {
     const start = applications.indexOf('<section aria-labelledby="application-ledger-heading"');
     assert.notEqual(start, -1, "expected the ledger section to still be labelled by its heading id");
     const ledger = applications.slice(start, applications.indexOf("</section>", start));
-    const rows = [...ledger.matchAll(/<button([^>]*?)onClick=\{\(\) => selectPacket\(packet\)\}/g)];
+    const rows = [...ledger.matchAll(/<button([^>]*?)onClick=\{\(\) => openApplication\(packet\)\}/g)];
     assert.ok(rows.length >= 2, `expected both ledger layouts to open a packet, found ${rows.length}`);
     for (const [, attributes] of rows) {
       assert.match(attributes, /type="button"/, "every row that opens a packet has to declare its type");
@@ -105,8 +105,8 @@ describe("the row itself", () => {
 });
 
 describe("a ?job= link that is really an application", () => {
-  const start = applications.indexOf("const resolvedJobParam = useRef");
-  const effect = applications.slice(start, applications.indexOf("}, [packets, qaMode, selectPacket]", start));
+  const start = applications.indexOf("useEffect(() => {\n    if (qaMode !== false || packets === null) return;");
+  const effect = applications.slice(start, applications.indexOf("}, [openApplication, packets, qaMode]", start));
 
   test("the packets already on the page are consulted before the postings endpoint", () => {
     /* THE DEFECT. /dashboard/applications?job=<generated_resume_id> asked /jobs/<id>, got a 404,
@@ -119,12 +119,11 @@ describe("a ?job= link that is really an application", () => {
     assert.notEqual(lookup, -1, "the id has to be checked against the applications this page already holds");
     assert.notEqual(fetched, -1, "a real posting id must still be fetched");
     assert.ok(lookup < fetched, "the local check has to come first, or the 404 happens anyway");
-    assert.match(effect, /selectPacket\(packet\)/, "a hit opens that application rather than reporting an error");
-    assert.match(effect, /replaceClosedComposerUrl\(/, "and the parameter comes out of the URL so a reload does not ask again");
+    assert.match(effect, /openApplication\(packet, \{ history: "replace" \}\)/, "a hit opens that application and replaces the job parameter with its reload-safe application id");
   });
 
   test("the effect re-runs when the packets arrive, and asks once", () => {
-    assert.match(applications, /\}, \[packets, qaMode, selectPacket\]\)/, "the answer depends on the packets, so it has to wait for them");
+    assert.match(applications, /\}, \[openApplication, packets, qaMode\]\)/, "the answer depends on the packets, so it has to wait for them");
     assert.match(effect, /resolvedJobParam\.current === jobId/, "and must not re-ask on every poll that rewrites the packets");
   });
 

@@ -72,8 +72,8 @@ describe("an application deep link loads the exact packet", () => {
     );
     assert.match(
       historyEffect,
-      /else if \(requested && \(requestedApplicationIntent === null \|\| requestedApplicationIntent === "apply"\)\)[\s\S]{0,180}selectPacket\(requested\)/,
-      "only apply and historical bare links enter the actionable flow through the normal packet selection gate",
+      /else if \(requested && \(requestedApplicationIntent === null \|\| requestedApplicationIntent === "apply"\)\)[\s\S]{0,1100}if \(!alreadySelectedLocally \|\| localOpen\.revision !== applicationWorkflowRevision\(requested\)\) \{\s*selectPacket\(requested\);\s*\}/,
+      "only apply and historical bare links enter the actionable flow, and fresh server workflow state supersedes a stale local selection",
     );
     assert.match(
       historyEffect,
@@ -104,7 +104,7 @@ describe("an application deep link loads the exact packet", () => {
     );
     assert.match(
       applications,
-      /setResolvedActionableRequestId\(requestedApplicationId\);\s*selectPacket\(requested\);/,
+      /setResolvedActionableRequestId\(requestedApplicationId\);\s*setOpeningApplicationId\(null\);[\s\S]{0,500}if \(!alreadySelectedLocally \|\| localOpen\.revision !== applicationWorkflowRevision\(requested\)\) \{\s*selectPacket\(requested\);\s*\}/,
       // NOT `requested.id`: a canonical row can carry its own id, distinct from the legacy id the
       // URL named (Databricks, measured live 2026-08-20: legacy f9a270b7 resolved through canonical
       // 2d5e38f6). Pinning requested.id here made the gate compare requestedApplicationId against a
@@ -114,7 +114,24 @@ describe("an application deep link loads the exact packet", () => {
     );
   });
 
-  test("a settled direct link does not permanently pin ledger selection to its URL", () => {
+  test("a ledger selection writes the same application into local state and the URL", () => {
+    assert.match(
+      applications,
+      /const openApplication = useCallback\(\(packet: GeneratedResume[\s\S]{0,700}setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);[\s\S]{0,400}const nextPath = applicationSelectionPath\(window\.location, packet\.id\);\s*const navigate = options\.history === "replace" \? router\.replace : router\.push;\s*navigate\(nextPath, \{ scroll: false \}\)/,
+      "one callback must bind the selected packet and route, while normal row opens create usable browser history",
+    );
+    assert.match(applications, /onClick=\{\(\) => openApplication\(packet\)\}/, "ledger rows must use the URL-bound selection callback");
+  });
+
+  test("browser history retires a mismatched canonical workflow before it can paint", () => {
+    assert.match(
+      applications,
+      /useLayoutEffect\(\(\) => \{[\s\S]{0,1000}const canonicalMatchesRequest =[\s\S]{0,900}if \(!canonicalMatchesRequest && !pendingLocalCanonical\) \{[\s\S]{0,300}resetApplicationWorkflow\(\);\s*setOpeningApplicationId\(requestedApplicationId\);/,
+      "a canonical-only application has to be route-gated before its Fill and Tailor controls render under another id",
+    );
+  });
+
+  test("a settled canonical request can resolve through its restored packet id", () => {
     assert.match(
       applications,
       /const \[resolvedActionableRequestId, setResolvedActionableRequestId\] = useState<string \| null>\(null\)/,
@@ -122,7 +139,7 @@ describe("an application deep link loads the exact packet", () => {
     assert.doesNotMatch(
       applications,
       /requestedApplicationId && requestedApplicationId !== selectedId/,
-      "strict permanent id equality would make every later ledger row disappear",
+      "raw id equality would reject a canonical request whose actionable packet uses its restored legacy id",
     );
   });
 });

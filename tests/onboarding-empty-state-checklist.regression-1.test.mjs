@@ -120,8 +120,8 @@ test("load failures are separate from empty data and offer retry actions", async
 test("an empty Tracker filter can always return to all applications", async () => {
   const applications = await read("app/dashboard/applications/page.tsx");
 
-  assert.match(applications, /No applications in this view\./);
-  assert.match(applications, /onClick=\{\(\) => setApplicationFilter\("all"\)\}/);
+  assert.match(applications, /No applications match this view\./);
+  assert.match(applications, /setApplicationQuery\(""\);\s*setApplicationFilter\("all"\);/);
   assert.match(applications, /Show all applications/);
 });
 
