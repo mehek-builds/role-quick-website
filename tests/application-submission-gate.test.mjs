@@ -77,7 +77,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // once ("Submit application" -> "Send it", "Retry preparation" -> "Try again") and broke this
   // test rather than the product. Bounded spans, so a match cannot span half the file.
   assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
-  assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
+  assert.match(dashboard, /const failedPacketAuditStale = review\.status === "failed" && historicalPacketAuditStaleMessage\(review\)/);
+  assert.match(dashboard, /review\.status === "failed" && \(failedPacketAuditStale[\s\S]{0,180}onClick=\{onReviewPacket\}[\s\S]{0,120}onClick=\{onRetry\}/);
   assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
   assert.match(dashboard, /const packetAuditStillGuardsSend = result\.review\.status === "ready_for_final_approval"[\s\S]{0,260}"submission_claimed"/);
   assert.match(dashboard, /if \(!packetAuditStillGuardsSend\) \{[\s\S]{0,180}setPollError\(null\);[\s\S]{0,80}setNotice\(null\);/);

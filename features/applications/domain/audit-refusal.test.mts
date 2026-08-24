@@ -87,6 +87,22 @@ test("the exact historical stale report enters review recovery without becoming 
   });
 });
 
+test("a persisted employer-delivery drift failure returns to exact packet review", () => {
+  const review = {
+    status: "failed",
+    submission_error: "The employer-bound packet changed after approval: browser employer-delivery payload changed after packet approval",
+  };
+
+  assert.equal(historicalPacketAuditStaleMessage(review), true);
+  assert.equal(packetAuditReviewRecoveryRequired(review), true);
+  assert.equal(
+    historicalPacketAuditStaleMessage({
+      submission_error: "The employer page failed after approval: browser employer-delivery payload changed",
+    }),
+    false,
+  );
+});
+
 test("historical compatibility is exact and preserves unrelated employer blockers", () => {
   const forbidden = "This application changed after you approved the exact packet Litos prepared, so it was not sent.";
   const employerBlocker = "\"Phone number\" is required and is still empty";

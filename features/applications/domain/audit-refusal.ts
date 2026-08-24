@@ -34,15 +34,16 @@ const REVIEW_RECOVERY_REQUIRED = new Set([
  * attention_reason. They are not applicant tasks. They are an invalidation signal that must clear
  * the old browser proof and open a new, unacknowledged packet review.
  *
- * Exact equality is deliberate. The ordinary refusal path remains code-only, and text that merely
- * resembles this copy is still treated as a real employer-form blocker. This compatibility list is
- * only for the finite wire values already written to stored applications. */
+ * Exact equality is deliberate for the authored historical sentences. The one anchored prefix is
+ * the backend's untyped employer-delivery drift error, which is emitted only after the exact packet
+ * verifier rejects a changed delivery binding. Ordinary refusal handling remains code-only. */
 const HISTORICAL_PACKET_AUDIT_STALE_MESSAGES = new Set([
   "PACKET_AUDIT_STALE",
   "packet_stale",
   "This application changed after you approved the exact packet Litos prepared, so it was not sent.",
   "This application changed after you approved the exact packet Litos prepared, so it was not sent. Open it to review the current one and send from there.",
 ]);
+const PERSISTED_EMPLOYER_DELIVERY_STALE_PREFIX = "The employer-bound packet changed after approval:";
 
 function normalizedHistoricalMessage(value: string): string {
   return value.normalize("NFKC").replace(/\s+/g, " ").trim();
@@ -57,12 +58,16 @@ function historicalMessageValue(value: unknown): string | null {
   }
   const attentionReason = (value as { attention_reason?: unknown }).attention_reason;
   if (typeof attentionReason === "string") return attentionReason;
+  const submissionError = (value as { submission_error?: unknown }).submission_error;
+  if (typeof submissionError === "string") return submissionError;
   const message = (value as { message?: unknown }).message;
   return typeof message === "string" ? message : null;
 }
 
 function isHistoricalPacketAuditStaleLine(value: string): boolean {
-  return HISTORICAL_PACKET_AUDIT_STALE_MESSAGES.has(normalizedHistoricalMessage(value));
+  const normalized = normalizedHistoricalMessage(value);
+  return HISTORICAL_PACKET_AUDIT_STALE_MESSAGES.has(normalized)
+    || normalized.startsWith(`${PERSISTED_EMPLOYER_DELIVERY_STALE_PREFIX} `);
 }
 
 /** True only for a historical packet-stale value that was persisted or thrown without a code. */
