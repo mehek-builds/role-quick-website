@@ -530,6 +530,30 @@ browserTest("browser Back returns from an application to the ledger and Forward 
   await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
 });
 
+browserTest("closing one application and immediately opening another keeps the URL and workspace together", async () => {
+  await openTracker();
+  await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: NEEDS_YOU.job_context.role }).click();
+  await page.waitForURL((url) => url.searchParams.get("application") === NEEDS_YOU.id, { timeout: 10_000 });
+  await page.getByRole("heading", { name: NEEDS_YOU.job_context.role, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+
+  /* Production repro, Celerant after Truveta: the close paints the ledger synchronously, before its
+     query-only navigation has necessarily settled. The next row is therefore pressable while the
+     prior application id can still be in the address bar. Opening that row must replace the route
+     immediately instead of leaving the new controls under the previous employer's id. */
+  await page.getByRole("button", { name: /All applications/, exact: true }).click();
+  await page.locator(LEDGER).waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).searchParams.get("application"), null, "the ledger became interactive while the prior application id still named the page");
+  await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
+
+  await page.waitForURL((url) => (
+    url.searchParams.get("application") === READY.id
+    && url.searchParams.get("intent") === "apply"
+  ), { timeout: 10_000 });
+  await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).searchParams.get("application"), READY.id);
+  assert.equal(await page.getByRole("heading", { name: NEEDS_YOU.job_context.role, exact: true }).count(), 0, "the prior application's identity survived under the new URL");
+});
+
 browserTest("a failed canonical Back load never leaves the prior application's controls under the new URL", async () => {
   canonicalApplicationsOverride = [CANONICAL_A, CANONICAL_B];
   try {

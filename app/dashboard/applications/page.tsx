@@ -893,9 +893,14 @@ function Applications() {
     setResolvedActionableRequestId(packet.id);
     selectPacket(packet);
     const nextPath = applicationSelectionPath(window.location, packet.id);
-    const navigate = options.history === "replace" ? router.replace : router.push;
-    navigate(nextPath, { scroll: false });
-  }, [router, selectPacket]);
+    /* The local workspace is already interactive at this point, so its route must change in the
+       same event. An asynchronous router navigation left the old Truveta id in the address bar
+       while the Celerant workspace was visible and pressable, and a second row press could race
+       that pending close. Next observes native history writes and updates useSearchParams, while
+       the synchronous URL commit keeps reload and employer identity coherent immediately. */
+    if (options.history === "replace") window.history.replaceState(null, "", nextPath);
+    else window.history.pushState(null, "", nextPath);
+  }, [selectPacket]);
 
   const resetApplicationWorkflow = useCallback(() => {
     pendingApplicationFocusRef.current = false;
@@ -923,8 +928,8 @@ function Applications() {
     resolvedJobParam.current = null;
     setPendingJob(null);
     resetApplicationWorkflow();
-    router.push(applicationSelectionPath(window.location, null), { scroll: false });
-  }, [resetApplicationWorkflow, router]);
+    window.history.pushState(null, "", applicationSelectionPath(window.location, null));
+  }, [resetApplicationWorkflow]);
 
   /* Back and Forward change the route without calling the row or close handlers. When the route
      stops naming an application, retire the local workflow immediately instead of waiting for the
