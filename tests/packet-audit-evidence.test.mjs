@@ -260,7 +260,7 @@ test("the next acknowledged poll requires an exact action-time server audit", ()
 
 test("the ACK continuation commits the poll ref before state and portal routing", async () => {
   const source = await readFile(dashboardUrl, "utf8");
-  const start = source.indexOf("async function continueFromVerifiedPacket()");
+  const start = source.indexOf("async function continueFromVerifiedPacket(");
   const end = source.indexOf("async function prepareApplication(", start);
   const continuation = source.slice(start, end);
   const refWrite = continuation.indexOf("packetEvidenceRef.current = acknowledgedEvidence");

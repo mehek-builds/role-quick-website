@@ -194,9 +194,26 @@ const SENT = {
  * @param approveRefusal   {status, body} to answer the approve with instead of SENT, for the cases
  *                         where the interesting behaviour is what the screen does with a REFUSAL
  */
-async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, approveRefusal = null } = {}) {
+async function openApproval(hidden, {
+  holdApproveMs = 0,
+  pollAnswer = AWAITING,
+  approveRefusal = null,
+  staleStoredStatus = null,
+} = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const approveCalls = [];
+  const submitRequestCalls = [];
+  const storedResumes = staleStoredStatus
+    ? RESUMES.map((resume) => resume.id === APPROVABLE.id
+      ? {
+        ...resume,
+        spec: {
+          ...resume.spec,
+          _review: { ...resume.spec._review, status: staleStoredStatus, questions: [] },
+        },
+      }
+      : resume)
+    : RESUMES;
   await context.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
@@ -224,12 +241,35 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, 
         await json(pollAnswer);
         return;
       }
+      if (p.endsWith("/submit-request")) {
+        submitRequestCalls.push(1);
+        await route.fulfill({
+          status: 409,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: "PREPARED_RUN_RESTARTABLE",
+            error: "This application is already filled and waiting for review.",
+          }),
+        });
+        return;
+      }
       if (p.endsWith("/packet-audit/acknowledge")) {
         await json({ acknowledged: true });
         return;
       }
       if (p.endsWith("/packet-audit")) {
         await json(PACKET_AUDIT_RESPONSE);
+        return;
+      }
+      if (staleStoredStatus && p === "/dashboard/bootstrap") {
+        await json({
+          ...STUB[p],
+          resume_history: { ...STUB[p].resume_history, resumes: storedResumes },
+        });
+        return;
+      }
+      if (staleStoredStatus && p === "/resume/history") {
+        await json({ resumes: storedResumes });
         return;
       }
       await json(STUB[p] ?? {});
@@ -260,6 +300,11 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, 
 
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/dashboard/applications?application=${APPROVABLE.id}&intent=apply`, { waitUntil: "domcontentloaded" });
+  if (staleStoredStatus) {
+    const checkPacket = page.getByRole("button", { name: "Check packet", exact: true });
+    await checkPacket.waitFor({ state: "visible", timeout: 25_000 });
+    await checkPacket.click();
+  }
   const reviewAndSend = page.getByRole("button", { name: "Review and send", exact: true });
   await reviewAndSend.waitFor({ state: "visible", timeout: 25_000 });
   await reviewAndSend.click();
@@ -271,7 +316,7 @@ async function openApproval(hidden, { holdApproveMs = 0, pollAnswer = AWAITING, 
   const sendIt = page.getByRole("button", { name: "Send application" });
   await sendIt.waitFor({ state: "visible", timeout: 25_000 });
 
-  return { context, page, sendIt, approveCalls };
+  return { context, page, sendIt, approveCalls, submitRequestCalls };
 }
 
 function browserTest(name, body) {
@@ -325,6 +370,20 @@ browserTest("a visible tab is still rescued by the submission poll", async () =>
   await sendIt.click();
   await page.getByText("Thank you. Your application was received.").waitFor({ state: "visible", timeout: 20_000 });
   assert.equal(await page.evaluate(() => document.visibilityState), "visible");
+  await context.close();
+  return page;
+});
+
+browserTest("an authoritative filled submission outranks a stale packet-list status", async () => {
+  const { context, page, sendIt, submitRequestCalls } = await openApproval(false, {
+    staleStoredStatus: "needs_attention",
+  });
+  assert.equal(
+    submitRequestCalls.length,
+    0,
+    "packet review tried to discard and refill a form the submission endpoint already marked ready",
+  );
+  assert.equal(await sendIt.isEnabled(), true, "the existing filled form must remain reviewable");
   await context.close();
   return page;
 });

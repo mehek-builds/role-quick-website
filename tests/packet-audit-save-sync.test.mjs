@@ -10,7 +10,7 @@ const source = fs.readFileSync(
 
 const saveStart = source.indexOf("async function saveResume()");
 const continueStart = source.indexOf("async function continueFromResume()", saveStart);
-const verifiedStart = source.indexOf("async function continueFromVerifiedPacket()", continueStart);
+const verifiedStart = source.indexOf("async function continueFromVerifiedPacket(", continueStart);
 const saveResume = source.slice(saveStart, continueStart);
 const continueFromResume = source.slice(continueStart, verifiedStart);
 const coverLetterStart = source.indexOf("async function saveCoverLetter()");
