@@ -130,6 +130,11 @@ test("application task screens use one keyed peer-panel transition", () => {
   const routeResetStart = applications.indexOf("useLayoutEffect(() => {", routeResetComment);
   const routeResetEnd = applications.indexOf("/* The acknowledged branch", routeResetStart);
   const routeReset = applications.slice(routeResetStart, routeResetEnd);
+  assert.match(
+    routeReset,
+    /const browserApplicationId = new URLSearchParams\(window\.location\.search\)\.get\("application"\);[\s\S]{0,700}?const pendingLocalCanonical = Boolean\([\s\S]{0,260}?browserApplicationId === localOpen\.id/,
+    "an uncommitted local canonical selection may survive only while the browser address still names it",
+  );
   const canonicalMismatch = routeReset.indexOf("if (!canonicalMatchesRequest && !pendingLocalCanonical)");
   const localOpenRetirement = routeReset.indexOf("if (localOpen) locallyOpenedRequestRef.current = null;", canonicalMismatch);
   const mismatchBootstrapInvalidation = routeReset.indexOf("applicationBootstrapGenerationRef.current += 1;", canonicalMismatch);

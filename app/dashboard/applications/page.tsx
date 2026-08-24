@@ -1105,6 +1105,11 @@ function Applications() {
   useLayoutEffect(() => {
     if (qaMode === true) return;
     const localOpen = locallyOpenedRequestRef.current;
+    /* Native history writes update the browser address before Next publishes useSearchParams.
+       That narrow gap is the only reason an uncommitted local selection may survive a router
+       mismatch. If Back has already moved the browser to another application, the local token is
+       stale even when React has not yet committed the intermediate route. */
+    const browserApplicationId = new URLSearchParams(window.location.search).get("application");
     if (requestedApplicationId !== null) {
       const canonicalMatchesRequest = canonicalSelected === null
         || canonicalSelected.id === requestedApplicationId
@@ -1113,6 +1118,7 @@ function Applications() {
         canonicalSelected
         && localOpen
         && !localOpen.routeCommitted
+        && browserApplicationId === localOpen.id
         && (localOpen.id === canonicalSelected.id || localOpen.id === canonicalSelected.legacy_generated_resume_id),
       );
       /* A canonical-only detail has no selectedId for selectedPacketForRequest to gate. Clear the

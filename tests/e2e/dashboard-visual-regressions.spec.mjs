@@ -2263,7 +2263,7 @@ test("Application task steps replace sequentially without exposing two readable 
     await finishDashboardAnimations(page);
     await startAnimationLog(page);
     await answer.click();
-    await page.getByRole("button", { name: "Save and continue", exact: true }).waitFor({ state: "visible" });
+    await page.getByRole("button", { name: /^Save (?:and continue|available answers)$/ }).waitFor({ state: "visible" });
     await finishDashboardAnimations(page);
     const samples = await stopAnimationLog(page);
     const exit = samples.find((sample) => sample.name === "rq-dashboard-panel-exit");
