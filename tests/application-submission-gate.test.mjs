@@ -61,7 +61,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   );
 
   assert.match(dashboard, /await prepareApplication\(questions\)/);
-  assert.match(dashboard, /function routeMissingRequiredAnswers\([\s\S]{0,420}reviewPortalQuestions\(firstMissing\.id, "answer"\)[\s\S]{0,260}moveToScreen\("questions", \{ scrollToTop: false \}\)/);
+  assert.match(dashboard, /function routeMissingRequiredAnswers\([\s\S]{0,620}questionReviewPresentation\([\s\S]{0,420}requiredMetadataMissing[\s\S]{0,320}reviewPortalQuestions\(firstMissing\?\.id, "answer"\)[\s\S]{0,320}moveToScreen\("questions", \{ scrollToTop: !firstMissing \}\)/);
   const verifiedPacketStart = dashboard.indexOf("async function continueFromVerifiedPacket()");
   const verifiedPacketEnd = dashboard.indexOf("function reviewPacketAgain()", verifiedPacketStart);
   const verifiedPacket = dashboard.slice(verifiedPacketStart, verifiedPacketEnd);
@@ -488,7 +488,8 @@ test("the review screen gates and performs the submission", async () => {
   ]);
 
   // A required question with no answer opens the screen that can collect it before any request.
-  assert.match(review, /candidateQuestions\.find\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
+  assert.match(review, /presentation\.editableQuestions\.find\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
+  assert.match(review, /presentation\.metadataBlockers\.some\(\(blocker\) => blocker\.required\)/);
   assert.match(review, /allowServerAnswerRefresh\?: boolean/);
   assert.match(review, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(finalQuestions\)/);
   assert.match(review, /prepareApplication\(currentQuestions, \{ allowServerAnswerRefresh: true \}\)/);
