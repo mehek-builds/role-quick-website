@@ -1,7 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { normalizedScrollProgress } from "@/lib/scroll-progress";
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
+
+function subscribeToReducedMotion(onStoreChange: () => void) {
+  const query = window.matchMedia(REDUCED_MOTION_QUERY);
+  query.addEventListener("change", onStoreChange);
+  return () => query.removeEventListener("change", onStoreChange);
+}
+
+function reducedMotionSnapshot() {
+  return window.matchMedia(REDUCED_MOTION_QUERY).matches;
+}
+
+function reducedMotionServerSnapshot() {
+  // The progress bar stays absent until the browser can report the user's preference.
+  return true;
+}
 
 /* Three consecutive pinned acts (documents, autofill, outreach) each hold
    the viewport for roughly two screens of scrolling. Pinning is the point,
@@ -13,14 +30,15 @@ import { normalizedScrollProgress } from "@/lib/scroll-progress";
    that loop. It is the same ink as the section rail, and it hides under
    reduced motion, where the pins collapse anyway. */
 export function ScrollProgress() {
-  const [reduced, setReduced] = useState(false);
+  const reduced = useSyncExternalStore(
+    subscribeToReducedMotion,
+    reducedMotionSnapshot,
+    reducedMotionServerSnapshot,
+  );
   const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduced(mq.matches);
-    const onMq = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener("change", onMq);
+    if (reduced) return;
 
     let raf = 0;
     const paint = () => {
@@ -40,11 +58,10 @@ export function ScrollProgress() {
     window.addEventListener("resize", onScroll);
     return () => {
       if (raf) cancelAnimationFrame(raf);
-      mq.removeEventListener("change", onMq);
       window.removeEventListener("scroll", onScroll);
       window.removeEventListener("resize", onScroll);
     };
-  }, []);
+  }, [reduced]);
 
   if (reduced) return null;
 

@@ -79,7 +79,6 @@ function CompanyMark({
   boardUrl?: string | null;
   eager?: boolean;
 }) {
-  /* eslint-disable-next-line @next/next/no-img-element */
   return (
     <img
       src={logoSrc(company, boardUrl)}

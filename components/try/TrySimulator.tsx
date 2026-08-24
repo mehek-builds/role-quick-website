@@ -70,10 +70,11 @@ export function TrySimulator({
   const [generating, setGenerating] = useState(false);
   const [filledCount, setFilledCount] = useState(deepLink && after(deepLink, "resume") ? CANNED_FIELDS.length : 0);
   const [elapsed, setElapsed] = useState(0);
-  const t0 = useRef<number | null>(deepLink ? Date.now() : null);
+  const t0 = useRef<number | null>(null);
   const [stamps, setStamps] = useState<Partial<Record<Step, string>>>({});
 
   useEffect(() => {
+    if (deepLink) t0.current = Date.now();
     track("try_start", { entry: deepLink ?? "top" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

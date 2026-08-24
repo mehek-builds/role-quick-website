@@ -155,6 +155,37 @@ const UNVERIFIED = {
     },
   },
 };
+const METADATA_BLOCKED_BASE = thinPacket("question-metadata", "needs_attention", {
+  role: "Question Metadata Engineer",
+  company: "Fixture Choices",
+});
+const METADATA_BLOCKED = {
+  ...METADATA_BLOCKED_BASE,
+  spec: {
+    ...METADATA_BLOCKED_BASE.spec,
+    _review: {
+      ...METADATA_BLOCKED_BASE.spec._review,
+      edited_terms: [],
+      skipped_reasons: [],
+      filled_fields: ["name", "email", "resume"],
+      questions: [{
+        id: "internship-dates",
+        question: "What dates are you available for an internship?",
+        answer: "",
+        kind: "required",
+        required: true,
+      }],
+      question_metadata_blockers: [{
+        kind: "missing_exact_options",
+        required: true,
+        portal_input_type: "select-one",
+        control_id: "location_preference",
+        portal_selector: "#location_preference",
+        question: "What is your top location preference?",
+      }],
+    },
+  },
+};
 
 const RESUMES = [NEEDS_YOU, READY, SENT];
 let resumeHistoryOverride = null;
@@ -440,6 +471,41 @@ browserTest("mobile unverified-send choices appear only after the filled-form pr
   }
 });
 
+browserTest("mobile question review shows unread choice lists before editable answers", async () => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  resumeHistoryOverride = [METADATA_BLOCKED];
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: METADATA_BLOCKED.job_context.role }).click();
+    await page.getByRole("button", { name: "Check the answers", exact: true }).click();
+    const screenHeading = page.getByRole("heading", { name: "1 answer needs you.", exact: true });
+    const metadataHeading = page.getByRole("heading", { name: "1 employer field stayed untouched.", exact: true });
+    const editableAnswer = page.getByRole("textbox", { name: "What dates are you available for an internship?", exact: true });
+    await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await editableAnswer.waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "1 answer needs you.", undefined, { timeout: 1_000 });
+    await assertInsideViewport(screenHeading, "the answer screen heading");
+    const screenHeadingBox = await screenHeading.boundingBox();
+    const layoutState = await page.evaluate(() => ({
+      scrollY: window.scrollY,
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+      activeText: document.activeElement?.textContent?.trim(),
+      headers: [...document.querySelectorAll("header")].map((header) => header.getBoundingClientRect().toJSON()),
+    }));
+    await captureVisual("applications-question-metadata-mobile-375x812.png");
+    assert.ok(screenHeadingBox && screenHeadingBox.y >= 56, `the fixed mobile header must not cover the answer screen heading: ${JSON.stringify({ screenHeadingBox, layoutState })}`);
+    assert.equal(await page.getByRole("textbox", { name: "What is your top location preference?", exact: true }).count(), 0, "an unread closed choice list must not become a free-text field");
+    const metadataBox = await metadataHeading.boundingBox();
+    const answerBox = await editableAnswer.boundingBox();
+    assert.ok(metadataBox && answerBox && metadataBox.y < answerBox.y, "the unread employer field must be explained before editable answers");
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "the metadata card must not create horizontal scrolling");
+  } finally {
+    resumeHistoryOverride = null;
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
 browserTest("fresh server state replaces an immediately opened stale row", async () => {
   await openTracker();
   resumeHistoryOverride = [NEEDS_YOU, FRESHLY_SENT_READY, SENT];
@@ -462,6 +528,30 @@ browserTest("browser Back returns from an application to the ledger and Forward 
   await page.goForward();
   await page.waitForURL((url) => url.searchParams.get("application") === READY.id, { timeout: 10_000 });
   await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+});
+
+browserTest("closing one application and immediately opening another keeps the URL and workspace together", async () => {
+  await openTracker();
+  await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: NEEDS_YOU.job_context.role }).click();
+  await page.waitForURL((url) => url.searchParams.get("application") === NEEDS_YOU.id, { timeout: 10_000 });
+  await page.getByRole("heading", { name: NEEDS_YOU.job_context.role, exact: true }).first().waitFor({ state: "visible", timeout: 10_000 });
+
+  /* Production repro, Celerant after Truveta: the close paints the ledger synchronously, before its
+     query-only navigation has necessarily settled. The next row is therefore pressable while the
+     prior application id can still be in the address bar. Opening that row must replace the route
+     immediately instead of leaving the new controls under the previous employer's id. */
+  await page.getByRole("button", { name: /All applications/, exact: true }).click();
+  await page.locator(LEDGER).waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).searchParams.get("application"), null, "the ledger became interactive while the prior application id still named the page");
+  await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: READY.job_context.role }).click();
+
+  await page.waitForURL((url) => (
+    url.searchParams.get("application") === READY.id
+    && url.searchParams.get("intent") === "apply"
+  ), { timeout: 10_000 });
+  await page.getByRole("button", { name: "Review and send", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  assert.equal(new URL(page.url()).searchParams.get("application"), READY.id);
+  assert.equal(await page.getByRole("heading", { name: NEEDS_YOU.job_context.role, exact: true }).count(), 0, "the prior application's identity survived under the new URL");
 });
 
 browserTest("a failed canonical Back load never leaves the prior application's controls under the new URL", async () => {
@@ -557,7 +647,7 @@ browserTest("the switcher still moves between the rows after each has been opene
     await page.waitForURL((url) => url.searchParams.get("application") === item.id && url.searchParams.get("intent") === "apply", { timeout: 10_000 });
     assert.equal(new URL(page.url()).pathname, "/dashboard/applications");
     const selectedHeading = page.getByRole("heading", { name: item.job_context.role, exact: true }).first();
-    assert.equal(await selectedHeading.isVisible(), true, `${item.job_context.role} did not become the compact selected row`);
+    await selectedHeading.waitFor({ state: "visible", timeout: 10_000 });
     await page.waitForFunction(
       (role) => document.activeElement?.tagName === "H2" && document.activeElement.textContent?.trim() === role,
       item.job_context.role,

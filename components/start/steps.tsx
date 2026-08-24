@@ -34,7 +34,7 @@ import {
   defaultPrimary,
   periodsFor,
 } from "@/lib/periods";
-import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, STEPS, StartShell, flowSteps } from "./ui";
+import { Chip, LaterLink, PrimaryButton, Receipt, SkipLink, StartShell, flowSteps } from "./ui";
 import { Highlights, WelcomeNote } from "./Welcome";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
@@ -261,8 +261,6 @@ function FocusForm({
     setFields((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
   }
 
-  useEffect(() => setActiveMatchIndex(0), [newTitle]);
-
   function toggleTitle(title: string) {
     setSelectedTitles((current) =>
       current.includes(title)
@@ -279,6 +277,7 @@ function FocusForm({
         ? current
         : [...current, clean],
     );
+    setActiveMatchIndex(0);
     setNewTitle("");
     setRoleMenuOpen(false);
   }
@@ -391,6 +390,7 @@ function FocusForm({
               id="additional-role"
               value={newTitle}
               onChange={(event) => {
+                setActiveMatchIndex(0);
                 setNewTitle(event.target.value);
                 setRoleMenuOpen(true);
               }}

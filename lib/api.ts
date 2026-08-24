@@ -650,6 +650,16 @@ export type ApplicationQuestion = {
   answer_reviewed_at?: string;
 };
 
+/** Exact employer-question metadata Litos could not prove during the latest complete form read. */
+export type ApplicationQuestionMetadataBlocker = {
+  kind: "missing_question_text" | "missing_exact_options";
+  required: boolean;
+  portal_input_type: string;
+  control_id?: string;
+  portal_selector?: string;
+  question?: string;
+};
+
 /** One question from GET /postings/:jobId/questions that needs the applicant. */
 export type PostingPrescriptQuestion = {
   question: string;
@@ -810,6 +820,8 @@ export type ApplicationReview = {
     | "failed";
   edited_terms: string[];
   questions: ApplicationQuestion[];
+  /** Empty means the latest complete form read proved every surfaced question's label and choices. */
+  question_metadata_blockers?: ApplicationQuestionMetadataBlocker[];
   /** The review round every per-question answer_reviewed_at is keyed to. A claim whose timestamp
    *  does not equal this round is stale, and the server's own readers discard it; the checklist
    *  applies the same test rather than inventing a looser one. */

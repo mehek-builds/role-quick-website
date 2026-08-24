@@ -122,7 +122,7 @@ test("application task screens use one keyed peer-panel transition", () => {
   );
   assert.match(
     openApplication,
-    /if \(routeAlreadyCommitted\) return;\s*const navigate = options\.history === "replace" \? router\.replace : router\.push;/,
+    /runDashboardTransition\(\(\) => \{[\s\S]{0,800}?if \(routeAlreadyCommitted\) return;[\s\S]{0,400}?if \(options\.history === "replace"\) window\.history\.replaceState\(null, "", nextPath\);\s*else window\.history\.pushState\(null, "", nextPath\);\s*\}\);/,
     "re-selecting the committed row must not invalidate its only bootstrap or add a duplicate history entry",
   );
 
@@ -130,10 +130,16 @@ test("application task screens use one keyed peer-panel transition", () => {
   const routeResetStart = applications.indexOf("useLayoutEffect(() => {", routeResetComment);
   const routeResetEnd = applications.indexOf("/* The acknowledged branch", routeResetStart);
   const routeReset = applications.slice(routeResetStart, routeResetEnd);
-  assert.match(
-    routeReset,
-    /!canonicalMatchesRequest && !pendingLocalCanonical[\s\S]{0,300}?applicationBootstrapGenerationRef\.current \+= 1;[\s\S]{0,140}?resetApplicationWorkflow/,
-    "a route mismatch must invalidate the prior bootstrap before clearing its task",
+  const canonicalMismatch = routeReset.indexOf("if (!canonicalMatchesRequest && !pendingLocalCanonical)");
+  const localOpenRetirement = routeReset.indexOf("if (localOpen) locallyOpenedRequestRef.current = null;", canonicalMismatch);
+  const mismatchBootstrapInvalidation = routeReset.indexOf("applicationBootstrapGenerationRef.current += 1;", canonicalMismatch);
+  const mismatchWorkflowReset = routeReset.indexOf("resetApplicationWorkflow({", canonicalMismatch);
+  assert.ok(
+    canonicalMismatch >= 0
+      && localOpenRetirement > canonicalMismatch
+      && mismatchBootstrapInvalidation > localOpenRetirement
+      && mismatchWorkflowReset > mismatchBootstrapInvalidation,
+    "a route mismatch must retire the discarded local selection and invalidate its bootstrap before clearing the task",
   );
   assert.match(
     routeReset,
@@ -189,6 +195,8 @@ test("application task screens use one keyed peer-panel transition", () => {
 });
 
 test("local QA application tasks are not retired by URL reconciliation", () => {
+  assert.match(applications, /if \(initializedQaScenarioRef\.current === qaScenario\) return;\s*initializedQaScenarioRef\.current = qaScenario;/);
+  assert.match(applications, /return;\s*\}\s*initializedQaScenarioRef\.current = null;\s*let cancelled = false;/);
   assert.match(
     applications,
     /useLayoutEffect\(\(\) => \{\s*if \(qaMode === true\) return;[\s\S]{0,220}?const localOpen = locallyOpenedRequestRef\.current/,

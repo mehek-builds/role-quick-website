@@ -51,7 +51,6 @@ export default async function OgImage() {
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={MARK} width={72} height={72} alt="" />
           <div style={{ fontSize: 44, fontWeight: 450, color: "#12120f" }}>
             Litos

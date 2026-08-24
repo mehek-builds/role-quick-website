@@ -44,10 +44,13 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
     // and the overwhelming majority have nothing stalled - re-rendered this component once a minute
     // forever to produce nothing.
     if (waiting === 0) return;
-    setNow(Date.now());
+    const initial = window.setTimeout(() => setNow(Date.now()), 0);
     // A wait that reads "3 hours" for the rest of the session is worse than no duration at all.
-    const timer = setInterval(() => setNow(Date.now()), 60_000);
-    return () => clearInterval(timer);
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+    };
   }, [waiting]);
 
   /* Arms the fallback link, not the primary one. The primary control navigates inside Litos, where

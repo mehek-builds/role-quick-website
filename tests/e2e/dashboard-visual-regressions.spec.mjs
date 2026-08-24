@@ -1055,6 +1055,29 @@ async function capturePass(page, name, fullPage = false) {
   });
 }
 
+async function resetPageScroll(page, { blurActive = true } = {}) {
+  const scroll = await page.evaluate(async ({ blurActive }) => {
+    document.documentElement.style.scrollBehavior = "auto";
+    document.body.style.scrollBehavior = "auto";
+    const main = document.querySelector("main");
+    if (blurActive && document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    const reset = () => {
+      window.scrollTo(0, 0);
+      if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+      if (main instanceof HTMLElement) main.scrollTop = 0;
+    };
+    reset();
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    reset();
+    return {
+      window: window.scrollY,
+      document: document.scrollingElement?.scrollTop ?? 0,
+      main: main instanceof HTMLElement ? main.scrollTop : 0,
+    };
+  }, { blurActive });
+  assert.deepEqual(scroll, { window: 0, document: 0, main: 0 }, `page did not reset before capture: ${JSON.stringify(scroll)}`);
+}
+
 async function waitForStableGeometry(locator, label) {
   const stable = await locator.evaluate(async (node) => {
     const deadline = performance.now() + 2_000;
@@ -1446,8 +1469,10 @@ test("hand-built application overlays retain an inert exit and restore their exa
     });
     await transcriptDialog.waitFor({ state: "visible" });
     await finishDashboardAnimations(page);
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "transcript-overlay-open");
     await resizeForCapture(page, 390, 844);
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "transcript-overlay-mobile");
     await assertContained(page, "Transcript overlay at 390px");
     await resizeForCapture(page, 1280, 900);
@@ -1485,6 +1510,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
       ariaDisabled: node.getAttribute("aria-disabled"),
       ariaBusy: node.getAttribute("aria-busy"),
     })), { focused: true, ariaDisabled: "false", ariaBusy: "false" });
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "transcript-upload-failure-focus");
 
     const successfulAttach = state.holdNextTranscriptAttach({ status: 200, body: TRANSCRIPT_ATTACH_RESPONSE });
@@ -1495,6 +1521,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
     await successfulAttach.settled;
     await transcriptDialog.getByRole("heading", { name: "Transcript attached" }).waitFor({ state: "visible" });
     await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "Close");
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "transcript-upload-success-focus");
     await transcriptDialog.getByRole("button", { name: "Remove this file", exact: true }).click();
     const keepFile = transcriptDialog.getByRole("button", { name: "Keep this file", exact: true });
@@ -1534,6 +1561,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
     await officialDialog.getByRole("heading", { name: "This one wants an official transcript" }).waitFor({ state: "visible" });
     await finishDashboardAnimations(page);
     await waitForStableGeometry(officialDialog, "Official transcript request stage");
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "transcript-official-request");
     await officialDialog.getByRole("button", { name: "Attach an unofficial copy anyway", exact: true }).click();
     await page.waitForFunction(() => {
@@ -1545,6 +1573,7 @@ test("hand-built application overlays retain an inert exit and restore their exa
     await officialDialog.getByRole("heading", { name: "Fixture University asks for your transcript" }).waitFor({ state: "visible" });
     await finishDashboardAnimations(page);
     await waitForStableGeometry(officialDialog, "Official transcript upload stage");
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "transcript-official-to-upload-focus");
     await officialDialog.getByRole("button", { name: "Close", exact: true }).click();
     await officialDialog.waitFor({ state: "detached" });
@@ -1970,6 +1999,7 @@ test("Outreach restores focus to the async control after a server-denied upgrade
     await dialog.waitFor({ state: "visible" });
     await dialog.evaluate((node) => node.setAttribute("data-overlay-probe", "outreach-upgrade"));
     await finishDashboardAnimations(page);
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "outreach-server-denial-upgrade-open");
     await armOverlayExitCapture(page, 'dialog[data-overlay-probe="outreach-upgrade"]', { nativeBackdrop: true });
     await dialog.getByRole("button", { name: "Close Litos+ options" }).click();
@@ -2229,6 +2259,7 @@ test("Application task steps replace sequentially without exposing two readable 
     assert.ok(enter, `Application task change had no panel entry: ${JSON.stringify(samples)}`);
     assert.ok(enter.delay >= exit.duration, `Application task screens overlapped: ${JSON.stringify({ exit, enter })}`);
     assert.equal(await page.getByRole("button", { name: /^Answer:/ }).count(), 0);
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "applications-task-question-handoff");
     await assertContained(page, "Application question handoff");
     assertNoPageErrors(state, "Application task handoff");
@@ -2494,6 +2525,7 @@ test("Outreach ignores contact and draft responses after their composer scope ch
     });
     assert.equal(await page.getByLabel("Subject", { exact: true }).inputValue(), "Globex introduction");
     assert.equal(await page.locator("#outreach-draft-body").inputValue(), "This is the current Globex draft.");
+    await resetPageScroll(page);
     await capturePass(page, "outreach-current-scope-wins-stale-responses");
     assertNoPageErrors(state, "Outreach stale request protection");
   } finally {
@@ -3063,6 +3095,12 @@ test("Network distinguishes a request failure from empty data and retries", asyn
     assert.equal(await consent.isDisabled(), true, "consent could be revoked while its import commit was active");
     assert.equal(await fileInput.isDisabled(), true, "the CSV could be replaced while its import commit was active");
     assert.equal(await chooseFile.isDisabled(), true, "the visible file chooser remained active during commit");
+    await importCard.evaluate(async (node) => {
+      document.documentElement.style.scrollBehavior = "auto";
+      node.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
+    await waitForStableGeometry(importCard, "Network import lock");
     await capturePass(page, "network-320-commit-locked");
     heldCommit.release();
     await heldCommit.settled;

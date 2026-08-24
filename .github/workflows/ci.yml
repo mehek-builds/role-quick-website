@@ -66,6 +66,11 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Vendored browser bundles are excluded explicitly, so lint output now reflects first-party
+      # code. Errors fail immediately and the measured warning budget cannot grow silently.
+      - name: Lint
+        run: npm run lint -- --max-warnings 25
+
       - name: Build
         run: npm run build
         env:
@@ -141,6 +146,9 @@ jobs:
       # established by the dashboard visual QA pass. The spec keeps screenshots for every green run.
       - name: Dashboard visual regressions spec
         run: npm run test:dashboard-visual-regressions
+
+      - name: Quality refactor regression spec
+        run: npm run test:quality-refactor
 
       # Same job on purpose: it reuses the build and the Chromium installed
       # above rather than paying for either twice. This spec is the ONLY thing

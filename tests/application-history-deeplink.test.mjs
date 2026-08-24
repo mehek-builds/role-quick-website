@@ -118,8 +118,12 @@ describe("an application deep link loads the exact packet", () => {
     const openStart = applications.indexOf("const openApplication = useCallback");
     const openApplication = applications.slice(openStart, applications.indexOf("const resetApplicationWorkflow", openStart));
     assert.match(openApplication, /const nextPath = applicationSelectionPath\(window\.location, packet\.id\)/);
-    assert.match(openApplication, /setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);/);
-    assert.match(openApplication, /if \(routeAlreadyCommitted\) return;\s*const navigate = options\.history === "replace" \? router\.replace : router\.push;\s*navigate\(nextPath, \{ scroll: false \}\)/);
+    assert.match(openApplication, /runDashboardTransition\(\(\) => \{[\s\S]{0,500}setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);[\s\S]{0,500}window\.history\.pushState\(null, "", nextPath\);\s*\}\)/);
+    assert.match(
+      openApplication,
+      /runDashboardTransition\(\(\) => \{[\s\S]{0,800}if \(routeAlreadyCommitted\) return;[\s\S]{0,400}if \(options\.history === "replace"\) window\.history\.replaceState\(null, "", nextPath\);\s*else window\.history\.pushState\(null, "", nextPath\);\s*\}\)/,
+      "one transition must publish the selected packet and bind the route synchronously while normal row opens create browser history",
+    );
     assert.match(applications, /onClick=\{\(\) => openApplication\(packet\)\}/, "ledger rows must use the URL-bound selection callback");
   });
 

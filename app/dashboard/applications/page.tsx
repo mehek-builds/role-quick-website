@@ -11,6 +11,7 @@ import {
   isGuestSession,
   type ApplicationFillHandoff,
   type ApplicationQuestion,
+  type ApplicationQuestionMetadataBlocker,
   type ApplicationProfile,
   type ApplicationReview,
   type AttachedDocument,
@@ -704,6 +705,7 @@ function Applications() {
      row a second time and reset the screen after the student has already started working. */
   const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean } | null>(null);
   const applicationBootstrapGenerationRef = useRef(0);
+  const initializedQaScenarioRef = useRef<string | null>(null);
   const applicationsMountedRef = useRef(true);
   const committedApplicationRequestKeyRef = useRef(applicationRequestKey);
   const pendingApplicationFocusRef = useRef(false);
@@ -1029,11 +1031,14 @@ function Applications() {
       setComposerRefusal(null);
       setResolvedActionableRequestId(packet.id);
       selectPacket(packet);
+      if (routeAlreadyCommitted) return;
+      /* Next patches native history writes into its own transition. Keeping that write inside the
+         same dashboard transition prevents the router restore from retiring the local selection
+         before its keyed task panel commits. */
+      if (options.history === "replace") window.history.replaceState(null, "", nextPath);
+      else window.history.pushState(null, "", nextPath);
     });
-    if (routeAlreadyCommitted) return;
-    const navigate = options.history === "replace" ? router.replace : router.push;
-    navigate(nextPath, { scroll: false });
-  }, [router, selectPacket]);
+  }, [selectPacket]);
 
   const resetApplicationWorkflow = useCallback((options: { afterReset?: () => void; animate?: boolean } = {}) => {
     pendingApplicationFocusRef.current = false;
@@ -1077,8 +1082,8 @@ function Applications() {
     locallyOpenedRequestRef.current = null;
     resolvedJobParam.current = null;
     resetApplicationWorkflow();
-    router.push(applicationSelectionPath(window.location, null), { scroll: false });
-  }, [canonicalIdByPacketId, canonicalSelected?.id, openingApplicationId, resetApplicationWorkflow, router]);
+    window.history.pushState(null, "", applicationSelectionPath(window.location, null));
+  }, [canonicalIdByPacketId, canonicalSelected?.id, openingApplicationId, resetApplicationWorkflow]);
 
   /* Route changes commit in a layout phase before the passive bootstrap effect for the new URL can
      cancel its predecessor. Invalidate that predecessor here for every request-key change, even
@@ -1113,7 +1118,10 @@ function Applications() {
          prior detail before paint when browser history names a different application, or its Fill
          and Tailor controls survive under the new URL while that request loads or after it fails. */
       if (!canonicalMatchesRequest && !pendingLocalCanonical) {
-        if (localOpen?.routeCommitted) locallyOpenedRequestRef.current = null;
+        /* This reset cancels the optimistic selection whether its route flag settled or not. The
+           authoritative bootstrap must therefore select the requested application again instead
+           of mistaking a discarded local transition for committed UI. */
+        if (localOpen) locallyOpenedRequestRef.current = null;
         applicationBootstrapGenerationRef.current += 1;
         resetApplicationWorkflow({
           afterReset: () => setOpeningApplicationId(requestedApplicationId),
@@ -1427,6 +1435,11 @@ function Applications() {
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
     const localQa = window.location.hostname === "localhost" && qaScenario !== null;
     if (localQa) {
+      /* Selecting a fixture packet adds an application id to the same URL. Next reflects that
+         native history write through useSearchParams, so this shared bootstrap effect runs again.
+         Keep the selected packet instead of reinstalling the original scenario on every row click. */
+      if (initializedQaScenarioRef.current === qaScenario) return;
+      initializedQaScenarioRef.current = qaScenario;
       queueMicrotask(async () => {
         if (bootstrapIsStale()) return;
         if (qaScenario === "error") {
@@ -1454,6 +1467,7 @@ function Applications() {
       });
       return;
     }
+    initializedQaScenarioRef.current = null;
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled && !bootstrapIsStale()) setQaMode(false);
@@ -3026,6 +3040,26 @@ function Applications() {
     }
   }
 
+  /* A live employer read can discover required questions after the applicant has already opened
+     packet review. Every route that notices those blanks must lead to the answer controls, not
+     leave a red sentence above a packet whose only primary action repeats the same refusal. A
+     stopped managed run uses the server-backed question editor so Save persists the answers. A
+     pre-fill packet keeps the answers locally until its submit request, as before. */
+  function routeMissingRequiredAnswers(candidateQuestions: ApplicationQuestion[] = questions): boolean {
+    const firstMissing = candidateQuestions.find((question) => question.required && !question.answer.trim());
+    if (!firstMissing) return false;
+    setError(null);
+    setPrescriptNote("");
+    if (selectedSubmission?.review.status === "needs_attention") {
+      reviewPortalQuestions(firstMissing.id, "answer");
+      return true;
+    }
+    setQuestions(candidateQuestions);
+    setFocusQuestion({ id: firstMissing.id, token: Date.now() });
+    moveToScreen("questions", { scrollToTop: false });
+    return true;
+  }
+
   async function continueFromResume() {
     if (coverLetterBusy) {
       setError("Wait for the cover letter check to finish before preparing the application.");
@@ -3044,11 +3078,7 @@ function Applications() {
     const alreadyFilled = canonicalReview.status === "ready_for_final_approval";
     if (!alreadyFilled && !qaMode && !(await saveCoverLetter())) return;
     if (selectedIdRef.current !== applicationId) return;
-    const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
-    if (missingRequiredAnswers.length > 0) {
-      moveToScreen("questions");
-      return;
-    }
+    if (routeMissingRequiredAnswers(questions)) return;
     if (qaMode) {
       setError("Packet auditing is unavailable in fixture mode.");
       return;
@@ -3169,6 +3199,10 @@ function Applications() {
       setError(packetEvidenceBlocker ?? "Audit and load the exact packet before continuing.");
       return;
     }
+    /* Questions can arrive from the live form after the audit that put this packet on screen. Do
+       not spend the approval on a packet that cannot proceed, and do not make the applicant press
+       the same button again to discover where those answers live. */
+    if (routeMissingRequiredAnswers(questions)) return;
     const applicationId = activePacketEvidence.applicationId;
     if (packetAuditInFlight.current === applicationId) return;
     packetAuditInFlight.current = applicationId;
@@ -3241,10 +3275,7 @@ function Applications() {
   ) {
     if (!selected) return;
     const applicationId = selected.id;
-    if (!options.allowServerAnswerRefresh && finalQuestions.some((question) => question.required && !question.answer.trim())) {
-      setError("Some answers are missing. Add them first.");
-      return;
-    }
+    if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(finalQuestions)) return;
     setPrepareStartedAt(new Date().toISOString());
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
@@ -4289,6 +4320,7 @@ function Applications() {
           applicationRole={selected.job_context.role ?? "Application"}
           applicationCompany={selected.job_context.company ?? "Company"}
           questions={questions}
+          metadataBlockers={selectedSubmission?.review.question_metadata_blockers ?? []}
           actionableQuestionIds={actionableQuestionIds}
           onChange={setQuestions}
           onBack={() => {
@@ -5250,10 +5282,11 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, actionableQuestionIds = [], onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
+  metadataBlockers?: ApplicationQuestionMetadataBlocker[];
   actionableQuestionIds?: string[];
   onChange: (questions: ApplicationQuestion[]) => void;
   onBack: () => void;
@@ -5264,6 +5297,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
   prescriptNote?: string;
 }) {
   const [showAllAnswers, setShowAllAnswers] = useState(false);
+  const screenHeadingRef = useRef<HTMLHeadingElement>(null);
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
@@ -5278,12 +5312,25 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
      answer. Without this the screen opens at the top of a list of every question the form asked and
      the row she pressed can be several screens down, which is close enough to nothing happening.
 
-     Done in the effect body rather than in a requestAnimationFrame: the element exists as soon as
-     this runs, and rAF does not fire in a hidden tab, which made the behaviour differ between a
-     real browser and a driven one. The caller suppresses moveToScreen's scroll to the top of the
-     page for exactly this navigation, so there is nothing left to race. */
+     A focused question is handled in the effect body because the caller suppresses the page-level
+     scroll for exactly that route. A whole-screen review lands on its heading in the next task,
+     after browser scroll anchoring has finished replacing the prior tall screen. Neither path uses
+     requestAnimationFrame, which does not fire in a hidden tab. */
   useEffect(() => {
-    if (!focusQuestionId) return;
+    if (!focusQuestionId) {
+      const timer = window.setTimeout(() => {
+        const heading = screenHeadingRef.current;
+        if (heading) {
+          /* Focus can move the viewport in browser and assistive-technology combinations that do
+             not honor preventScroll consistently. Put focus first, then establish the visible
+             landing position so the sticky mobile shell cannot cover the screen title. */
+          heading.focus({ preventScroll: true });
+          const documentTop = heading.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({ top: Math.max(0, documentTop - 128), behavior: "auto" });
+        }
+      }, 150);
+      return () => window.clearTimeout(timer);
+    }
     const field = document.getElementById(`question-${focusQuestionId}`);
     // A short closed list renders as a radio group, which is a container rather than a form
     // control, so the branch below would refuse it. Scroll to it and put focus on the chosen
@@ -5306,7 +5353,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
       <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Back</button>
       <div>
         <p className="text-small text-muted">{applicationRole} · {applicationCompany}</p>
-        <h2 className="mt-2 text-heading font-medium tracking-tight text-ink">
+        <h2 ref={screenHeadingRef} tabIndex={-1} className="mt-2 scroll-mt-20 text-heading font-medium tracking-tight text-ink outline-none">
           {reviewDiscovered && actionableQuestions.length > 0
             ? `${actionableQuestions.length} ${actionableQuestions.length === 1 ? "answer needs" : "answers need"} you.`
             : reviewDiscovered ? "Review answers" : "Answer these"}
@@ -5331,6 +5378,34 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
           </button>
         )}
       </div>
+      {reviewDiscovered && metadataBlockers.length > 0 && (
+        <section aria-labelledby="question-metadata-heading" className="space-y-3">
+          <div>
+            <p className="text-label text-warn">Needs a fresh read</p>
+            <h3 id="question-metadata-heading" className="mt-2 text-heading font-medium tracking-tight text-ink">
+              {metadataBlockers.length} employer {metadataBlockers.length === 1 ? "field" : "fields"} stayed untouched.
+            </h3>
+            <p className="mt-1 text-small leading-6 text-muted">
+              Litos must read the employer&apos;s exact wording and choices before presenting an answer.
+            </p>
+          </div>
+          {metadataBlockers.map((blocker, index) => (
+            <Card key={`${blocker.kind}:${blocker.control_id ?? blocker.portal_selector ?? blocker.question ?? index}`} className="p-6">
+              <p className="text-sm font-medium leading-6 text-ink">
+                {blocker.question ? displayQuestionLabel(blocker.question) : "Employer question not readable"}
+              </p>
+              <p className="mt-1 text-label text-warn">
+                {blocker.kind === "missing_exact_options" ? "Exact choices not read" : "Exact question not read"}
+              </p>
+              <p className="mt-3 text-small leading-6 text-muted">
+                {blocker.kind === "missing_exact_options"
+                  ? "The employer's current options were not readable, so Litos did not guess or fill this field."
+                  : "The employer's question was not readable, so Litos did not guess or fill this field."}
+              </p>
+            </Card>
+          ))}
+        </section>
+      )}
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           {/* An employer's question can be a whole consent paragraph. At that length bold stops
@@ -5546,6 +5621,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
+  const failedPacketAuditStale = review.status === "failed" && historicalPacketAuditStaleMessage(review);
   /* A run may have reached the employer and stopped before it could say so. Gated on the resolution
      being absent, not just the field's presence: once she has answered, the record stays on the
      review as history (the same reason `stall` is closed with `resolved_at` rather than deleted),
@@ -5867,7 +5943,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
-              ? userFacingError(review.submission_error, "Try again in a minute.")
+              ? failedPacketAuditStale
+                ? "The exact company form changed. Review the current packet before Litos tries again."
+                : userFacingError(review.submission_error, "Try again in a minute.")
               /* NOT "Check the preview, then send." This application has already been sent once, and
                  offering a send is what the three measured packets of 2026-08-08 did wrong. */
               : awaitingSecurityCode
@@ -6087,7 +6165,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           )}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
-          {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
+          {review.status === "failed" && (failedPacketAuditStale
+            ? <Button onClick={onReviewPacket}>Open packet review</Button>
+            : <Button onClick={onRetry}>Try again</Button>)}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
           {/* A REAL <button>, from the shared component, and that is not a stylistic preference on
               this screen. Seventy-nine prepared resumes and zero sent applications came out of pills

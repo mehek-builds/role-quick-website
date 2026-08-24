@@ -61,7 +61,24 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   );
 
   assert.match(dashboard, /await prepareApplication\(questions\)/);
-  assert.match(dashboard, /missingRequiredAnswers\.length > 0/);
+  assert.match(dashboard, /function routeMissingRequiredAnswers\([\s\S]{0,420}reviewPortalQuestions\(firstMissing\.id, "answer"\)[\s\S]{0,260}moveToScreen\("questions", \{ scrollToTop: false \}\)/);
+  const verifiedPacketStart = dashboard.indexOf("async function continueFromVerifiedPacket()");
+  const verifiedPacketEnd = dashboard.indexOf("function reviewPacketAgain()", verifiedPacketStart);
+  const verifiedPacket = dashboard.slice(verifiedPacketStart, verifiedPacketEnd);
+  assert.ok(verifiedPacketStart > 0 && verifiedPacketEnd > verifiedPacketStart);
+  assert.ok(
+    verifiedPacket.indexOf("routeMissingRequiredAnswers(questions)")
+      < verifiedPacket.indexOf("/packet-audit/acknowledge"),
+    "newly discovered questions must open before the packet approval is spent",
+  );
+  const prepareStart = dashboard.indexOf("async function prepareApplication(");
+  const prepareEnd = dashboard.indexOf("async function completeHandoff", prepareStart);
+  const prepare = dashboard.slice(prepareStart, prepareEnd);
+  assert.match(prepare, /routeMissingRequiredAnswers\(finalQuestions\)/);
+  assert.ok(
+    prepare.indexOf("routeMissingRequiredAnswers(finalQuestions)") < prepare.indexOf("/submit-request"),
+    "every preparation path must route blanks to their controls before a backend request",
+  );
   assert.match(dashboard, /reviewDiscovered \? "Review answers" : "Answer these"/);
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
@@ -77,7 +94,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // once ("Submit application" -> "Send it", "Retry preparation" -> "Try again") and broke this
   // test rather than the product. Bounded spans, so a match cannot span half the file.
   assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
-  assert.match(dashboard, /review\.status === "failed"[\s\S]{0,200}onClick=\{onRetry\}/);
+  assert.match(dashboard, /const failedPacketAuditStale = review\.status === "failed" && historicalPacketAuditStaleMessage\(review\)/);
+  assert.match(dashboard, /review\.status === "failed" && \(failedPacketAuditStale[\s\S]{0,180}onClick=\{onReviewPacket\}[\s\S]{0,120}onClick=\{onRetry\}/);
   assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
   assert.match(dashboard, /const packetAuditStillGuardsSend = result\.review\.status === "ready_for_final_approval"[\s\S]{0,260}"submission_claimed"/);
   assert.match(dashboard, /if \(!packetAuditStillGuardsSend\) \{[\s\S]{0,180}setPollError\(null\);[\s\S]{0,80}setNotice\(null\);/);
@@ -469,10 +487,10 @@ test("the review screen gates and performs the submission", async () => {
     readFile(new URL("../features/applications/domain/packet-evidence-session.ts", import.meta.url), "utf8"),
   ]);
 
-  // A required question with no answer stops the send, on the screen that can also collect it.
-  assert.match(review, /questions\.filter\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
+  // A required question with no answer opens the screen that can collect it before any request.
+  assert.match(review, /candidateQuestions\.find\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
   assert.match(review, /allowServerAnswerRefresh\?: boolean/);
-  assert.match(review, /!options\.allowServerAnswerRefresh && finalQuestions\.some/);
+  assert.match(review, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(finalQuestions\)/);
   assert.match(review, /prepareApplication\(currentQuestions, \{ allowServerAnswerRefresh: true \}\)/);
   // Both endpoints: the first request, and the approval of a run already waiting on the student.
   assert.match(review, /\/submit-request/);
@@ -649,9 +667,11 @@ test("the controlled portal mirrors every supported adapter without an employer 
   const page = await readFile(new URL("../app/qa/portal-submission/page.tsx", import.meta.url), "utf8");
   const casePage = await readFile(new URL("../app/qa/portal-submission/[board]/[case]/page.tsx", import.meta.url), "utf8");
   const portal = await readFile(new URL("../app/qa/portal-submission/portal-form.tsx", import.meta.url), "utf8");
-  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
+  assert.match(page, /const ripplingFieldIdentities = newRipplingFieldIdentities\(\)/);
+  assert.match(page, /return <PortalForm board=\{board\} caseId=\{caseId\} ripplingFieldIdentities=\{ripplingFieldIdentities\} \/>/);
   assert.doesNotMatch(page, /useSearchParams|Suspense/);
-  assert.match(casePage, /return <PortalForm board=\{board\} caseId=\{caseId\} \/>/);
+  assert.match(casePage, /const ripplingFieldIdentities = newRipplingFieldIdentities\(\)/);
+  assert.match(casePage, /return <PortalForm board=\{board\} caseId=\{caseId\} ripplingFieldIdentities=\{ripplingFieldIdentities\} \/>/);
   /* The board union moved OUT of portal-form.tsx into boards.ts on 2026-07-28,
      so that the two route files and the form could not disagree about which
      board a URL means. This assertion followed it. Reading the shared module is
