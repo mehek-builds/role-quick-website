@@ -1279,6 +1279,7 @@ function Applications() {
   const refreshSubmission = useCallback(async () => {
     if (!selectedId || qaMode) return;
     const requestedId = selectedId;
+    const requestedSelectionRevision = editorRevisionRef.current;
     const requestedMutationGeneration = submissionMutationGenerationRef.current;
     const raw = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
     let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
@@ -1291,6 +1292,7 @@ function Applications() {
     // the packet the user is looking at. The ref, not the closure, is the current truth.
     if (
       selectedIdRef.current !== requestedId
+      || editorRevisionRef.current !== requestedSelectionRevision
       || submissionMutationGenerationRef.current !== requestedMutationGeneration
     ) return;
 
@@ -1348,7 +1350,9 @@ function Applications() {
        later server revision while this one was waiting. Never roll status, questions or packet
        state backward from that provably older snapshot. */
     if (
-      submissionMutationGenerationRef.current !== requestedMutationGeneration
+      selectedIdRef.current !== requestedId
+      || submissionMutationGenerationRef.current !== requestedMutationGeneration
+      || editorRevisionRef.current !== requestedSelectionRevision
       || submissionSnapshotIsOlder(submissionRef.current, result)
     ) return;
     const submissionBeforePoll = submissionRef.current;
@@ -6347,9 +6351,21 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     role: packet.job_context.role,
     documents: submission.documents,
   });
-  const [lastDirectSavedQuestionId, setLastDirectSavedQuestionId] = useState<string | null>(null);
-  const [directSavedCount, setDirectSavedCount] = useState(0);
-  const [initialDirectQuestionCount] = useState(directTaskPlan.questionTasks.length);
+  const directProgressKey = directAnswerPassKey(review);
+  const [storedDirectProgress, setStoredDirectProgress] = useState(() => ({
+    key: directProgressKey,
+    lastSavedQuestionId: null as string | null,
+    savedCount: 0,
+    initialQuestionCount: directTaskPlan.questionTasks.length,
+  }));
+  const directProgress = storedDirectProgress.key === directProgressKey
+    ? storedDirectProgress
+    : {
+      key: directProgressKey,
+      lastSavedQuestionId: null,
+      savedCount: 0,
+      initialQuestionCount: directTaskPlan.questionTasks.length,
+    };
   const remainingDirectQuestions = directTaskPlan.questionTasks.filter((task) => (
     !answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))
   ));
@@ -6364,12 +6380,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const currentNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
   const currentMetadataBlocker = directTaskPlan.metadataBlockers[0] ?? null;
   const directQuestionTotal = Math.max(
-    initialDirectQuestionCount,
-    directSavedCount + remainingDirectQuestions.length,
+    directProgress.initialQuestionCount,
+    directProgress.savedCount + remainingDirectQuestions.length,
   );
   const directQuestionPosition = Math.min(
     Math.max(1, directQuestionTotal),
-    directSavedCount + 1,
+    directProgress.savedCount + 1,
   );
 
   async function saveCurrentDirectQuestion(questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string): Promise<DirectAnswerSaveResult> {
@@ -6388,8 +6404,16 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
       role: packet.job_context.role,
       documents: submission.documents,
     });
-    setLastDirectSavedQuestionId(questionId);
-    setDirectSavedCount((current) => current + 1);
+    const nextProgressKey = directAnswerPassKey(result.review);
+    setStoredDirectProgress({
+      key: nextProgressKey,
+      lastSavedQuestionId: questionId,
+      savedCount: directProgress.savedCount + 1,
+      initialQuestionCount: Math.max(
+        directProgress.initialQuestionCount,
+        directProgress.savedCount + nextTaskPlan.questionTasks.length,
+      ),
+    });
     const anotherQuestionRemains = nextTaskPlan.questionTasks.some((task) => (
       !savedQuestionFingerprints.has(directQuestionPromptFingerprint(task))
     ));
@@ -6555,7 +6579,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             position={directQuestionPosition}
             total={Math.max(1, directQuestionTotal)}
             saving={savingAnswer}
-            savedRecently={lastDirectSavedQuestionId !== null}
+            savedRecently={directProgress.lastSavedQuestionId !== null}
             preservedDraft={directAnswerDraft}
             externalFailure={directAnswerFailure}
             onDraftChange={onDirectAnswerDraftChange}
@@ -6564,12 +6588,12 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           />
         ) : (
           <>
-            {lastDirectSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission && (
+            {directProgress.lastSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission && (
               <p role="status" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-teal-ink">
                 Answer saved to this application
               </p>
             )}
-            <h2 className={`${lastDirectSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission ? "mt-3" : ""} text-heading font-medium text-ink`}>
+            <h2 className={`${directProgress.lastSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission ? "mt-3" : ""} text-heading font-medium text-ink`}>
               {awaitingSecurityCode
                 ? "One code away"
                 : awaitingUnverifiedSubmission

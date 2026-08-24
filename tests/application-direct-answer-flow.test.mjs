@@ -233,13 +233,35 @@ test("a landed answer advances the local prompt queue without starting a submiss
   assert.doesNotMatch(saveCurrent, /prepareApplication|submit-request|approveFinalSubmission/);
 });
 
+test("direct answer progress resets when the authoritative review pass changes", () => {
+  const screen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
+  const key = requiredIndex(screen, "const directProgressKey = directAnswerPassKey(review)", "direct progress pass key");
+  const stored = requiredIndex(screen, "const [storedDirectProgress, setStoredDirectProgress]", "stored direct progress", key);
+  const scoped = requiredIndex(screen, "storedDirectProgress.key === directProgressKey", "pass-scoped progress read", stored);
+  const resetReceipt = requiredIndex(screen, "lastSavedQuestionId: null", "fresh-pass receipt reset", scoped);
+  const resetCount = requiredIndex(screen, "savedCount: 0", "fresh-pass count reset", resetReceipt);
+  const nextKey = requiredIndex(screen, "const nextProgressKey = directAnswerPassKey(result.review)", "accepted response progress key", resetCount);
+  const publish = requiredIndex(screen, "setStoredDirectProgress({", "accepted response progress publish", nextKey);
+
+  assertOrdered(
+    [key, stored, scoped, resetReceipt, resetCount, nextKey, publish],
+    "progress and saved copy must belong to the exact review pass",
+  );
+  assert.match(screen.slice(nextKey, publish + 220), /key: nextProgressKey,[\s\S]*?lastSavedQuestionId: questionId,[\s\S]*?savedCount: directProgress\.savedCount \+ 1/);
+});
+
 test("a direct answer owns the screen and invalidates an older poll snapshot", () => {
   const poll = functionBody("  const refreshSubmission = useCallback(async () => {");
   const save = functionBody("  async function saveReviewedAnswers(");
   const screen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
 
   assert.match(page, /const submissionMutationGenerationRef = useRef\(0\)/);
+  assert.match(poll, /const requestedSelectionRevision = editorRevisionRef\.current/);
   assert.match(poll, /const requestedMutationGeneration = submissionMutationGenerationRef\.current/);
+  const firstRevisionGuard = poll.indexOf("editorRevisionRef.current !== requestedSelectionRevision");
+  const secondRevisionGuard = poll.indexOf("editorRevisionRef.current !== requestedSelectionRevision", firstRevisionGuard + 1);
+  assert.ok(firstRevisionGuard >= 0, "the first poll publication boundary must guard the selection revision");
+  assert.ok(secondRevisionGuard > firstRevisionGuard, "the post-revalidation poll boundary must guard the selection revision again");
   assert.match(poll, /submissionMutationGenerationRef\.current !== requestedMutationGeneration/);
   assert.match(save, /if \(!result\.saved\)[\s\S]*?const refusalStillOwnsApplication[\s\S]*?if \(result\.review && refusalStillOwnsApplication\) \{[\s\S]*?submissionMutationGenerationRef\.current \+= 1;[\s\S]*?publishSubmissionEnvelope\(submissionRef, reconciled, "direct"\)/);
   assert.match(save, /submissionMutationGenerationRef\.current \+= 1;[\s\S]*?const saved: SubmissionResponse/);
