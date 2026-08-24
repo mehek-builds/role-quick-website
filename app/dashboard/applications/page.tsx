@@ -2130,7 +2130,8 @@ function Applications() {
     ?? canonicalEnvelopePacket;
   const applicationTaskRole = applicationTaskPacket?.job_context.role ?? canonicalSelected?.role ?? "Application";
   const applicationTaskCompany = applicationTaskPacket?.job_context.company ?? canonicalSelected?.company ?? "Company";
-  const applicationTaskReview = applicationTaskPacket?.spec._review;
+  const applicationTaskReview = selectedSubmission?.review
+    ?? applicationTaskPacket?.spec._review;
   const applicationTaskStatus = applicationTaskReview
     ? statusLabel(false, applicationTaskReview.status)
     : canonicalSelected?.review_state.replaceAll("_", " ") ?? "Opening";

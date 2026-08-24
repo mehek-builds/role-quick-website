@@ -217,6 +217,14 @@ describe("the chosen view is visible on the page it lands on", () => {
     );
   });
 
+  test("the compact task identity reports the live review before stored packet history", () => {
+    assert.match(
+      applications,
+      /const applicationTaskReview = selectedSubmission\?\.review\s*\?\? applicationTaskPacket\?\.spec\._review;/,
+      "the task header must use the same authoritative live review as its actions",
+    );
+  });
+
   test("the gate opens on exactly the arrivals that need it", () => {
     /* The truth table the wiring above delegates to. Every one of these was a surviving mutant. */
     for (const filter of ["action", "ready", "submitted"]) {
