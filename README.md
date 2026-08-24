@@ -17,17 +17,23 @@ tailors your resume, fills the application, and drafts the outreach.
 | doc | what it owns |
 | --- | --- |
 | `DESIGN.md` | every visual law + the decision log. Non-negotiable. |
+| `ACCESSIBILITY.md` | WCAG target, contrast contracts, interaction annotations, and smoke-test checklist |
 | `FILM.md` | the scroll film: layer model, all generated clips, exact Higgsfield prompts + job ids, regeneration pipeline, the blend-isolation gotcha |
 | `PLAN.md` | the phased product plan (marketing site → account → workspace → billing) |
 | `ARCHITECTURE.md` | feature boundaries, dependency direction, and extension rules |
 | `AGENTS.md` | agent ground rules (Next.js 16 caveats, DESIGN.md supremacy) |
+| `CHANGELOG.md` | user-facing release history |
+| `CHECKLIST-EXTERNAL-VERIFICATION.md` | claims that still require infrastructure, provider, paid-account, or assistive-technology evidence |
 
 ## Map
 
 ```
 app/
   page.tsx            the homepage: one continuous scroll film (see FILM.md)
-  login/ dashboard/   passwordless auth + 7-view product dashboard (real backend)
+  login/              passwordless authentication
+  dashboard/          7-view product dashboard backed by the live API
+    applications/     packet review + one employer question at a time,
+                      with Previous/Next navigation that preserves drafts
   privacy/            dated privacy policy
 components/
   cinema/             the film system: CinematicHero (fixed stage + scrub +
