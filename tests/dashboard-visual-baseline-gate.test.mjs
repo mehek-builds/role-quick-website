@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import sharp from "sharp";
 
 import { compareNormalizedDashboardVisuals, normalizeDashboardVisual } from "./e2e/dashboard-visual-comparator.mjs";
 
-const [packageSource, browserSource, updaterSource, comparatorSource] = await Promise.all([
+const [packageSource, browserSource, updaterSource, comparatorSource, pathsSource, workflowSource] = await Promise.all([
   readFile(new URL("../package.json", import.meta.url), "utf8"),
   readFile(new URL("e2e/dashboard-visual-regressions.spec.mjs", import.meta.url), "utf8"),
   readFile(new URL("../scripts/update-dashboard-visual-baselines.mjs", import.meta.url), "utf8"),
   readFile(new URL("e2e/dashboard-visual-comparator.mjs", import.meta.url), "utf8"),
+  readFile(new URL("e2e/dashboard-visual-paths.mjs", import.meta.url), "utf8"),
+  readFile(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8"),
 ]);
 
 test("visual baseline approval runs only after a successful browser process", () => {
@@ -21,6 +23,23 @@ test("visual baseline approval runs only after a successful browser process", ()
   assert.match(browserSource, /if \(CAPTURE_VISUAL_BASELINES\) return;/);
   assert.doesNotMatch(browserSource, /if \(CAPTURE_VISUAL_BASELINES\)[\s\S]{0,300}(?:writeFile|toFile)/);
   assert.match(updaterSource, /screenshotNames\.length >= 70/);
+});
+
+test("visual evidence uses an approved baseline from the rendering platform", async () => {
+  assert.match(browserSource, /dashboardVisualBaselineDirectory\(\)/);
+  assert.match(updaterSource, /dashboardVisualBaselineDirectory\(\)/);
+  assert.match(pathsSource, /dashboardVisualBaselinePlatform\(\) === "linux" \? "dashboard-linux" : "dashboard"/);
+  assert.match(workflowSource, /name: Dashboard visual regressions spec[\s\S]{0,180}DASHBOARD_VISUAL_BASELINE_PLATFORM: linux/);
+
+  const approvedNames = async (directory) => (await readdir(new URL(`visual-baselines/${directory}/`, import.meta.url)))
+    .filter((name) => name.endsWith(".png"))
+    .sort();
+  const [macNames, linuxNames] = await Promise.all([
+    approvedNames("dashboard"),
+    approvedNames("dashboard-linux"),
+  ]);
+  assert.equal(macNames.length, 70);
+  assert.deepEqual(linuxNames, macNames, "macOS and Linux must approve the same visual evidence set");
 });
 
 test("visual comparison catches both broad drift and a localized missing control", () => {

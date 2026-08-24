@@ -146,6 +146,8 @@ jobs:
       # established by the dashboard visual QA pass. The spec keeps screenshots for every green run.
       - name: Dashboard visual regressions spec
         run: npm run test:dashboard-visual-regressions
+        env:
+          DASHBOARD_VISUAL_BASELINE_PLATFORM: linux
 
       - name: Quality refactor regression spec
         run: npm run test:quality-refactor

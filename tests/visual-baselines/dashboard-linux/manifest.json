@@ -1,0 +1,282 @@
+{
+  "account-320-overflow.png": {
+    "width": 320,
+    "height": 780
+  },
+  "account-640-tab-overflow-cue.png": {
+    "width": 640,
+    "height": 900
+  },
+  "account-automation-density.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "account-native-dialog-history-focus.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "account-plan-tab-motion.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "account-tabs-640-to-320.png": {
+    "width": 320,
+    "height": 780
+  },
+  "account-upgrade-history-focus-fallback.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "application-packet-overlay-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "application-packet-overlay-open.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "applications-320-landing.png": {
+    "width": 320,
+    "height": 780
+  },
+  "applications-320-task.png": {
+    "width": 320,
+    "height": 780
+  },
+  "applications-close-focus-landing.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "applications-delayed-denial-upgrade.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "applications-needs-input-desktop.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "applications-needs-input-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "applications-packet-switch-atomic.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "applications-reduced-motion-focus.png": {
+    "width": 640,
+    "height": 900
+  },
+  "applications-task-question-handoff.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "delete-account-dialog-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "delete-account-dialog-open.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "documents-320-attachments-deeplink.png": {
+    "width": 320,
+    "height": 780
+  },
+  "documents-320-error-recovered-tabs.png": {
+    "width": 320,
+    "height": 780
+  },
+  "documents-320-work-history-error.png": {
+    "width": 320,
+    "height": 780
+  },
+  "documents-320-work-history-recovered.png": {
+    "width": 320,
+    "height": 780
+  },
+  "documents-640-tab-overflow-cue.png": {
+    "width": 640,
+    "height": 900
+  },
+  "documents-tabs-640-to-320.png": {
+    "width": 320,
+    "height": 780
+  },
+  "home-action-hierarchy.png": {
+    "width": 1440,
+    "height": 1000
+  },
+  "home-delayed-denial-upgrade.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "home-skip-status.png": {
+    "width": 1440,
+    "height": 1000
+  },
+  "home-undo-restored.png": {
+    "width": 1440,
+    "height": 1000
+  },
+  "jobs-320.png": {
+    "width": 320,
+    "height": 780
+  },
+  "jobs-desktop.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "more-sheet-open.png": {
+    "width": 390,
+    "height": 844
+  },
+  "network-320-commit-locked.png": {
+    "width": 320,
+    "height": 780
+  },
+  "network-320-error-recovered.png": {
+    "width": 320,
+    "height": 780
+  },
+  "network-320-retained-data-linkedin.png": {
+    "width": 320,
+    "height": 780
+  },
+  "network-320-retained-data.png": {
+    "width": 320,
+    "height": 780
+  },
+  "network-320-status-error.png": {
+    "width": 320,
+    "height": 780
+  },
+  "network-after-retired-home-denial.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "network-billing-access-recovered.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "network-plan-access-error.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-checkout-restored-focus.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-composer-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "outreach-composer-sequential.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-contact-operation-locked.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-current-scope-wins-stale-responses.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-held-manual-save-route-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-held-patch-route-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-saved-draft-edit-focus.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-saved-draft-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "outreach-saved-draft-newer-edit-during-save.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "outreach-server-denial-upgrade-open.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "reduced-motion-640-reflow.png": {
+    "width": 640,
+    "height": 900
+  },
+  "reduced-motion-application-packet-static.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "remove-document-dialog-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "remove-document-dialog-open.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "resume-held-profile-save-tab-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "resume-held-save-tab-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "resume-held-upload-route-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "resume-held-upload-tab-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "resume-newer-edits-survive-held-saves.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "resume-upload-settled-after-tab-remount.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "transcript-official-request.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "transcript-official-to-upload-focus.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "transcript-overlay-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "transcript-overlay-open.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "transcript-upload-failure-focus.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "transcript-upload-success-focus.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "upgrade-dialog-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
+  "upgrade-dialog-open.png": {
+    "width": 1280,
+    "height": 900
+  }
+}

@@ -3,9 +3,10 @@ import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import sharp from "sharp";
+import { dashboardVisualArtifactDirectory, dashboardVisualBaselineDirectory } from "../tests/e2e/dashboard-visual-paths.mjs";
 
-const artifactDir = path.join(process.cwd(), "test-results", "dashboard-visual-regressions");
-const baselineDir = path.join(process.cwd(), "tests", "visual-baselines", "dashboard");
+const artifactDir = dashboardVisualArtifactDirectory();
+const baselineDir = dashboardVisualBaselineDirectory();
 const manifestPath = path.join(baselineDir, "manifest.json");
 
 const screenshotNames = (await readdir(artifactDir))

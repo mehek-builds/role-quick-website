@@ -20,10 +20,11 @@ import sharp from "sharp";
 
 import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
 import { compareNormalizedDashboardVisuals, normalizeDashboardVisual } from "./dashboard-visual-comparator.mjs";
+import { dashboardVisualArtifactDirectory, dashboardVisualBaselineDirectory } from "./dashboard-visual-paths.mjs";
 import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
-const ARTIFACT_DIR = path.join(process.cwd(), "test-results", "dashboard-visual-regressions");
-const VISUAL_BASELINE_DIR = path.join(process.cwd(), "tests", "visual-baselines", "dashboard");
+const ARTIFACT_DIR = dashboardVisualArtifactDirectory();
+const VISUAL_BASELINE_DIR = dashboardVisualBaselineDirectory();
 const VISUAL_BASELINE_MANIFEST = path.join(VISUAL_BASELINE_DIR, "manifest.json");
 const CAPTURE_VISUAL_BASELINES = process.env.DASHBOARD_VISUAL_BASELINE_MODE === "capture";
 const contexts = [];
