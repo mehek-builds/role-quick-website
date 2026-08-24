@@ -155,6 +155,37 @@ const UNVERIFIED = {
     },
   },
 };
+const METADATA_BLOCKED_BASE = thinPacket("question-metadata", "needs_attention", {
+  role: "Question Metadata Engineer",
+  company: "Fixture Choices",
+});
+const METADATA_BLOCKED = {
+  ...METADATA_BLOCKED_BASE,
+  spec: {
+    ...METADATA_BLOCKED_BASE.spec,
+    _review: {
+      ...METADATA_BLOCKED_BASE.spec._review,
+      edited_terms: [],
+      skipped_reasons: [],
+      filled_fields: ["name", "email", "resume"],
+      questions: [{
+        id: "internship-dates",
+        question: "What dates are you available for an internship?",
+        answer: "",
+        kind: "required",
+        required: true,
+      }],
+      question_metadata_blockers: [{
+        kind: "missing_exact_options",
+        required: true,
+        portal_input_type: "select-one",
+        control_id: "location_preference",
+        portal_selector: "#location_preference",
+        question: "What is your top location preference?",
+      }],
+    },
+  },
+};
 
 const RESUMES = [NEEDS_YOU, READY, SENT];
 let resumeHistoryOverride = null;
@@ -434,6 +465,41 @@ browserTest("mobile unverified-send choices appear only after the filled-form pr
     const proofBox = await proofHeading.boundingBox();
     const decisionBox = await decision.boundingBox();
     assert.ok(proofBox && decisionBox && proofBox.y < decisionBox.y, "the outcome controls appeared before the proof they ask the applicant to inspect");
+  } finally {
+    resumeHistoryOverride = null;
+    await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
+browserTest("mobile question review shows unread choice lists before editable answers", async () => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  resumeHistoryOverride = [METADATA_BLOCKED];
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: METADATA_BLOCKED.job_context.role }).click();
+    await page.getByRole("button", { name: "Check the answers", exact: true }).click();
+    const screenHeading = page.getByRole("heading", { name: "1 answer needs you.", exact: true });
+    const metadataHeading = page.getByRole("heading", { name: "1 employer field stayed untouched.", exact: true });
+    const editableAnswer = page.getByRole("textbox", { name: "What dates are you available for an internship?", exact: true });
+    await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await editableAnswer.waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "1 answer needs you.", undefined, { timeout: 1_000 });
+    await assertInsideViewport(screenHeading, "the answer screen heading");
+    const screenHeadingBox = await screenHeading.boundingBox();
+    const layoutState = await page.evaluate(() => ({
+      scrollY: window.scrollY,
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+      activeText: document.activeElement?.textContent?.trim(),
+      headers: [...document.querySelectorAll("header")].map((header) => header.getBoundingClientRect().toJSON()),
+    }));
+    await captureVisual("applications-question-metadata-mobile-375x812.png");
+    assert.ok(screenHeadingBox && screenHeadingBox.y >= 56, `the fixed mobile header must not cover the answer screen heading: ${JSON.stringify({ screenHeadingBox, layoutState })}`);
+    assert.equal(await page.getByRole("textbox", { name: "What is your top location preference?", exact: true }).count(), 0, "an unread closed choice list must not become a free-text field");
+    const metadataBox = await metadataHeading.boundingBox();
+    const answerBox = await editableAnswer.boundingBox();
+    assert.ok(metadataBox && answerBox && metadataBox.y < answerBox.y, "the unread employer field must be explained before editable answers");
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "the metadata card must not create horizontal scrolling");
   } finally {
     resumeHistoryOverride = null;
     await page.setViewportSize({ width: 1280, height: 900 });

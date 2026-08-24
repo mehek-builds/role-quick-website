@@ -255,6 +255,14 @@ export const QA_SCENARIOS: Record<string, GeneratedResume> = {
       "question:linkedin profile",
       "question:u.s. work authorization",
     ],
+    questionMetadataBlockers: [{
+      kind: "missing_exact_options",
+      required: true,
+      portal_input_type: "select-one",
+      control_id: "question_location_preference",
+      portal_selector: "#question_location_preference",
+      question: "What is your top location preference?",
+    }],
     questions: [
       {
         id: "anduril-in-person",
@@ -340,6 +348,7 @@ function qaVariant(packet: GeneratedResume, options: {
   status?: ApplicationReview["status"];
   attentionReason?: string;
   filledFields?: string[];
+  questionMetadataBlockers?: ApplicationReview["question_metadata_blockers"];
   unverifiedSubmission?: ApplicationReview["unverified_submission"];
 }): GeneratedResume {
   const review = packet.spec._review;
@@ -365,6 +374,7 @@ function qaVariant(packet: GeneratedResume, options: {
         status: options.status ?? (options.questions.length > 0 ? "questions_ready" : "ready_to_submit"),
         edited_terms: options.editedTerms,
         questions: options.questions,
+        question_metadata_blockers: options.questionMetadataBlockers,
         attention_reason: options.attentionReason,
         filled_fields: options.filledFields,
         unverified_submission: options.unverifiedSubmission,
