@@ -621,6 +621,10 @@ export type ApplicationQuestion = {
   answer: string;
   kind: "essay" | "required";
   required: boolean;
+  /** Employer control identity measured by the managed browser. Never inferred by the client. */
+  portal_selector?: string;
+  /** Native input type or ARIA control role measured on the employer form. */
+  portal_input_type?: string;
   /* ---- discovery's word on what the form offers and why the question is hers ----
    *
    * All three are display-only and none of them is sent back: submit-request accepts
