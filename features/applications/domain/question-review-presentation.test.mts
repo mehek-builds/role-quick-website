@@ -68,6 +68,30 @@ test("an open textarea remains editable and closed options discard blank entries
   assert.deepEqual(result.editableQuestions[1]?.options, ["Yes", "No"]);
 });
 
+test("multi-value employer controls stay out of the single-answer editor", () => {
+  const result = questionReviewPresentation([
+    question({
+      question: "Select every location where you can work",
+      portal_input_type: "select-multiple",
+      portal_selector: "#locations",
+      options: ["New York", "San Francisco"],
+    }),
+    question({
+      id: "languages",
+      question: "Select every language you speak",
+      portal_input_type: "checkbox",
+      portal_selector: "#languages",
+      options: ["English", "Spanish"],
+    }),
+  ]);
+
+  assert.deepEqual(result.editableQuestions, []);
+  assert.deepEqual(result.metadataBlockers.map((blocker) => blocker.kind), [
+    "unsupported_multi_value",
+    "unsupported_multi_value",
+  ]);
+});
+
 test("a server blocker suppresses the matching historical question without duplicating the card", () => {
   const stored = question({
     question: "What is your location preference?",

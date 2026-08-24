@@ -1,6 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { checklistRowControl, completedSubmissionGroups, completedSubmissionItems, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT } from "./submission-checklist.ts";
+import {
+  checklistRowControl,
+  completedSubmissionGroups,
+  completedSubmissionItems,
+  directInputTaskPlan,
+  directQuestionPromptFingerprint,
+  directQuestionTaskFingerprint,
+  displayQuestionLabel,
+  documentAsksByKind,
+  documentControls,
+  humanInputItems,
+  QUESTION_CHOICE_LIST_LIMIT,
+} from "./submission-checklist.ts";
 
 test("displayQuestionLabel restores sentence case and common application acronyms", () => {
   assert.equal(displayQuestionLabel("select your standardized test score type"), "Select your standardized test score type");
@@ -975,4 +987,264 @@ test("the settled open-page link stops promising work and still opens the page",
   assert.equal(control?.element, "link", "the way back to the page survives the tick");
   assert.match(control?.element === "link" ? control.name : "", /You marked this handled/);
   assert.doesNotMatch(control?.element === "link" ? control.name : "", /to handle:/);
+});
+
+test("the direct input plan keeps safe open and closed questions in employer order with their intent", () => {
+  const employerOptions = ["New York, NY", "San Francisco, CA", "Remote"];
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    attention_reason: "Complete the laboratory access check on the company page",
+    questions: [
+      {
+        id: "why-role",
+        question: "Why are you interested in this role?",
+        answer: "The work joins product judgment with systems thinking.",
+        kind: "essay",
+        required: true,
+        portal_input_type: "textarea",
+      },
+      {
+        id: "location",
+        question: "Which office would you work from?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "radio",
+        options: employerOptions,
+      },
+      {
+        id: "salary",
+        question: "What are your compensation expectations?",
+        answer: "USD 150,000",
+        kind: "required",
+        required: true,
+        portal_input_type: "text",
+      },
+      {
+        id: "start",
+        question: "When can you start?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "textarea",
+      },
+    ],
+  });
+
+  assert.deepEqual(plan.questionTasks.map((task) => task.question.id), [
+    "why-role",
+    "location",
+    "salary",
+    "start",
+  ]);
+  assert.deepEqual(plan.questionTasks.map((task) => task.intent), [
+    "review",
+    "answer",
+    "confirm",
+    "answer",
+  ]);
+  assert.deepEqual(plan.questionTasks[1]?.question.options, employerOptions, "closed options stay in the employer's order");
+  assert.equal(plan.current?.kind, "question", "the first direct question takes precedence over external work");
+  assert.equal(plan.current?.id, "review-why-role");
+  assert.deepEqual(plan.nonQuestionTasks.map((task) => task.item.label), [
+    "Complete the laboratory access check on the company page",
+  ]);
+  assert.equal(plan.remaining, 5);
+});
+
+test("a closed question without exact options cannot become a direct text prompt", () => {
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    questions: [{
+      id: "relocation",
+      question: "Are you willing to relocate?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "select-one",
+      options: null,
+    }],
+  });
+
+  assert.deepEqual(plan.questionTasks, []);
+  assert.deepEqual(plan.nonQuestionTasks, [], "an unsafe question is not relabeled as generic external work");
+  assert.equal(plan.metadataBlockers[0]?.kind, "missing_exact_options");
+  assert.equal(plan.metadataBlockers[0]?.question, "Are you willing to relocate?");
+  assert.equal(plan.current, null);
+  assert.equal(plan.remaining, 0);
+});
+
+test("a multi-value employer field cannot become a direct single-answer prompt", () => {
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    questions: [{
+      id: "locations",
+      question: "Select every location where you can work",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "select-multiple",
+      options: ["New York", "San Francisco"],
+    }],
+  });
+
+  assert.deepEqual(plan.questionTasks, []);
+  assert.equal(plan.metadataBlockers[0]?.kind, "unsupported_multi_value");
+});
+
+test("direct question fingerprints separate the prompt from the current answer state", () => {
+  const first = directInputTaskPlan({
+    status: "needs_attention",
+    questions: [{
+      id: "location",
+      question: "Where are you currently located?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+      portal_selector: "#location",
+    }],
+  }).questionTasks[0]!;
+  const answered = {
+    ...first,
+    intent: "review" as const,
+    question: { ...first.question, answer: "Los Angeles, CA" },
+  };
+  const changed = {
+    ...first,
+    question: { ...first.question, question: "Which city and country are you based in?" },
+  };
+
+  assert.equal(directQuestionPromptFingerprint(first), directQuestionPromptFingerprint(answered));
+  assert.notEqual(directQuestionTaskFingerprint(first), directQuestionTaskFingerprint(answered));
+  assert.notEqual(directQuestionPromptFingerprint(first), directQuestionPromptFingerprint(changed));
+});
+
+test("an authoritative metadata blocker excludes its matching question while other questions remain direct", () => {
+  const blocker = {
+    kind: "missing_exact_options" as const,
+    required: true,
+    portal_input_type: "radio",
+    portal_selector: "#work-location",
+    question: "Where would you work?",
+  };
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    question_metadata_blockers: [blocker],
+    questions: [
+      {
+        id: "work-location",
+        question: "Where would you work?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "radio",
+        portal_selector: "#work-location",
+        options: ["Office", "Remote"],
+      },
+      {
+        id: "start-date",
+        question: "What date can you start?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "text",
+      },
+    ],
+  });
+
+  assert.deepEqual(plan.questionTasks.map((task) => task.question.id), ["start-date"]);
+  assert.deepEqual(plan.metadataBlockers, [blocker]);
+});
+
+test("raw attention lines remain non-question work rather than becoming answer controls", () => {
+  const line = "Bring the company page to the foreground to complete the background check";
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    attention_reason: line,
+    questions: [],
+  });
+
+  assert.equal(plan.questionTasks.length, 0);
+  assert.equal(plan.nonQuestionTasks.length, 1);
+  assert.equal(plan.nonQuestionTasks[0]?.item.label, line);
+  assert.equal(plan.nonQuestionTasks[0]?.item.actionKind, "open-page");
+  assert.equal(plan.current?.kind, "non-question");
+});
+
+test("CAPTCHA stops the direct question queue and remains the only current input task", () => {
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    attention_reason: "reCAPTCHA requires your attention",
+    attention_categories: ["captcha"],
+    questions: [{
+      id: "start-date",
+      question: "When can you start?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+    }],
+  });
+
+  assert.deepEqual(plan.questionTasks, []);
+  assert.deepEqual(plan.nonQuestionTasks.map((task) => task.item.id), [
+    "blocker-captcha-requires-your-attention",
+  ]);
+  assert.equal(plan.current?.kind, "non-question");
+  assert.equal(plan.remaining, 1);
+});
+
+test("document work remains outside the answer queue and attached files become settled", () => {
+  const ask = { kind: "transcript", label: "Unofficial transcript", official_requested: false };
+  const unanswered = directInputTaskPlan({
+    status: "needs_attention",
+    questions: [],
+    required_documents: [ask],
+    transcript_supported: true,
+  }, { company: "Databricks" });
+
+  assert.deepEqual(unanswered.questionTasks, []);
+  assert.deepEqual(unanswered.nonQuestionTasks.map((task) => task.item.documentKind), ["transcript"]);
+  assert.equal(unanswered.nonQuestionTasks[0]?.item.actionKind, "attach");
+
+  const attached = directInputTaskPlan({
+    status: "needs_attention",
+    questions: [],
+    required_documents: [ask],
+    transcript_supported: true,
+  }, {
+    company: "Databricks",
+    documents: { transcript: { file_name: "transcript.pdf", attached_at: "2026-08-24T10:00:00.000Z" } },
+  });
+
+  assert.deepEqual(attached.nonQuestionTasks, []);
+  assert.deepEqual(attached.settled.map((item) => item.id), ["document-attached-transcript"]);
+  assert.equal(attached.remaining, 0);
+});
+
+test("settled confirmations and ambiguous question identities never enter the direct queue", () => {
+  const round = "2026-08-24T10:00:00.000Z";
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    questions_reviewed_at: round,
+    questions: [
+      {
+        id: "authorization",
+        question: "Are you legally authorized to work in Canada?",
+        answer: "Yes",
+        kind: "required",
+        required: true,
+        answer_source: "applicant_review",
+        answer_reviewed_at: round,
+      },
+      { id: "duplicate", question: "First duplicate prompt", answer: "", kind: "required", required: true },
+      { id: "duplicate", question: "Second duplicate prompt", answer: "", kind: "required", required: true },
+      { id: "blank-label", question: "   ", answer: "", kind: "required", required: true },
+    ],
+  });
+
+  assert.deepEqual(plan.questionTasks, []);
+  assert.deepEqual(plan.settled.map((item) => item.questionId), ["authorization"]);
+  assert.equal(plan.remaining, 0);
 });

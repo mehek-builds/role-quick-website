@@ -72,7 +72,7 @@ function syntheticMetadataBlocker(
     required: question.required,
     portal_input_type: normalizedControlType(question.portal_input_type) || "unknown",
     ...(question.portal_selector?.trim() ? { portal_selector: question.portal_selector.trim() } : {}),
-    ...(kind === "missing_exact_options" && questionLabel ? { question: questionLabel } : {}),
+    ...(kind !== "missing_question_text" && questionLabel ? { question: questionLabel } : {}),
   };
 }
 
@@ -110,7 +110,13 @@ export function questionReviewPresentation(
       continue;
     }
     const controlType = normalizedControlType(question.portal_input_type);
-    if (CLOSED_QUESTION_CONTROL.test(controlType) && usableQuestionOptions(question.options).length === 0) {
+    const options = usableQuestionOptions(question.options);
+    if (controlType === "select-multiple" || (controlType === "checkbox" && options.length > 1)) {
+      blockedQuestionIds.add(question.id);
+      addBlocker(syntheticMetadataBlocker(question, "unsupported_multi_value"));
+      continue;
+    }
+    if (CLOSED_QUESTION_CONTROL.test(controlType) && options.length === 0) {
       blockedQuestionIds.add(question.id);
       addBlocker(syntheticMetadataBlocker(question, "missing_exact_options"));
     }

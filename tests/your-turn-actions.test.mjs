@@ -82,7 +82,7 @@ test("OPEN PAGE is a real link and the question actions are real buttons, each w
   assert.match(button, /aria-label=\{control\.name\}/, "read_page found these as bare buttons with no accessible name");
 });
 
-test("the panel hands the row everything a control needs, and the page hands the panel a handler", () => {
+test("non-question work stays actionable while trusted questions render as a direct prompt", () => {
   const list = functionBody(page, "BlockerList");
   assert.match(list, /portalUrl=\{portalUrl\}/);
   assert.match(list, /onRestartInLitos=\{onRestartInLitos\}/);
@@ -93,7 +93,9 @@ test("the panel hands the row everything a control needs, and the page hands the
      tests/question-choice-list.test.mjs pins what pressing one does. onToggleAcknowledged joined it
      when the row's checkbox stopped being scenery and started writing a stored tick. The
      whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onRestartInLitos=\{onReviewPacket\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{attentionTicking\} \/>/);
+  assert.match(page, /<DirectApplicationQuestion[\s\S]*?task=\{currentDirectQuestion\}[\s\S]*?onSave=\{saveCurrentDirectQuestion\}/);
+  assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\}/);
+  assert.match(page, /onSaveQuestion=\{\(questionId, answer, intent, taskFingerprint\) => saveReviewedAnswers\(\{ questionId, answer, intent, taskFingerprint \}\)\}/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
   assert.match(page, /onToggleAcknowledged=\{\(item, acknowledged\) => void toggleAttentionAcknowledgement\(item, acknowledged\)\}/);
@@ -199,7 +201,7 @@ test("the row's one checkbox is live, shows the stored tick, and rows the server
 
   // The live box exists only where a tick can be stored; everything else gets a status dot.
   assert.match(row, /item\.acknowledgeable === true \? onToggleAcknowledged : undefined/);
-  assert.match(row, /<span aria-hidden className="ml-1 mt-1\.5 h-2 w-2 rounded-full bg-warn" \/>/,
+  assert.match(row, /<span aria-hidden className="ml-1 mt-1\.5 h-2 w-2 rounded-full bg-brand" \/>/,
     "the status dot keeps the marker column aligned without pretending to be a checkbox");
   assert.equal(/aria-label=\{`Mark \$\{item\.label\} done`\}(?![\s\S]{0,200}onChange)/.test(row), false,
     "the dead 'Mark ... done' checkbox must not come back without a handler");

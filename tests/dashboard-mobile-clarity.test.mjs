@@ -42,18 +42,20 @@ test("Applications folds completed checks behind a readable disclosure while inp
 });
 
 test("Applications input tasks use the named Litos type, spacing, and control tokens", () => {
-  const rowStart = applications.indexOf("const CHECKLIST_ACTION_CLASS");
-  const rowEnd = applications.indexOf("\n// A real portal run", rowStart);
-  assert.notEqual(rowStart, -1);
-  assert.notEqual(rowEnd, -1);
-  const taskQueue = applications.slice(rowStart, rowEnd);
+  const promptStart = applications.indexOf("function DirectApplicationQuestion(");
+  const promptEnd = applications.indexOf("\nfunction SubmissionScreen(", promptStart);
+  assert.notEqual(promptStart, -1);
+  assert.notEqual(promptEnd, -1);
+  const directPrompt = applications.slice(promptStart, promptEnd);
 
   assert.match(applications, /needsAttention && !awaitingUnverifiedSubmission \? "p-4 sm:p-6" : "p-7"/);
-  assert.match(applications, /Finish these steps to keep going\./);
-  assert.match(taskQueue, /CHECKLIST_ACTION_CLASS = "[^"]*rounded-control[^"]*px-4[^"]*text-small/);
-  assert.match(taskQueue, /font-mono text-label font-medium uppercase/);
-  assert.match(taskQueue, /\[&>li\]:py-2 md:\[&>li\]:py-4/);
-  assert.doesNotMatch(taskQueue, /text-\[(?:10|11)px\]/);
-  assert.doesNotMatch(taskQueue, /rounded-full border border-control-border/);
-  assert.doesNotMatch(taskQueue, /px-3\.5/);
+  assert.match(directPrompt, /font-mono text-label font-medium uppercase/);
+  assert.match(directPrompt, /text-heading font-medium leading-tight/);
+  assert.match(directPrompt, /rounded-inner border border-control-border/);
+  assert.match(directPrompt, /<Button type="submit" block className="sm:w-auto"/);
+  assert.match(directPrompt, /Save to application/);
+  assert.match(directPrompt, /Saved to this application\./);
+  assert.match(directPrompt, /Litos saves this answer to this application before showing the next one\./);
+  assert.doesNotMatch(directPrompt, /bg-warn|border-warn|text-warn/);
+  assert.doesNotMatch(directPrompt, /text-\[(?:10|11)px\]/);
 });

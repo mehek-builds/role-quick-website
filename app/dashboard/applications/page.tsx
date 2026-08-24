@@ -60,7 +60,7 @@ import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
 import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
-import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
+import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { questionReviewPresentation } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
@@ -95,6 +95,32 @@ type PrepareApplicationOptions = {
   failureScreen?: "questions" | "portal" | "review";
   source?: "metadata_refresh";
 };
+
+type DirectAnswerSaveResult = {
+  saved: true;
+  review: SubmissionResponse["review"];
+  promptFingerprint?: string;
+  mayAdvance: boolean;
+} | { saved: false; message: string; review?: SubmissionResponse["review"] };
+
+type DirectAnswerPass = {
+  key: string;
+  promptFingerprints: ReadonlySet<string>;
+};
+
+type DirectAnswerFailure = {
+  taskFingerprint: string;
+  message: string;
+};
+
+type DirectAnswerDraft = {
+  taskFingerprint: string;
+  answer: string;
+};
+
+function directAnswerPassKey(review: ApplicationReview): string {
+  return review.questions_reviewed_at ?? review.submission_run_id ?? "unversioned";
+}
 
 /* These guards are deliberately pure. Both callers resume after a network await, so the screen
    and evidence captured when the request started are already historical. Read the synchronous
@@ -426,6 +452,9 @@ function Applications() {
   /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
      poll callback does not have to re-subscribe on every submission update. */
   const submissionRef = useRef<SubmissionResponse | null>(null);
+  /* A response can keep the same updated_at even after an accepted answer mutation. A poll that
+     started before that write must not restore its blank question snapshot afterward. */
+  const submissionMutationGenerationRef = useRef(0);
   const actionStartedFor = useRef<string | null>(null);
   const capturedSubmissionIds = useRef(new Set<string>());
   /* One browser proof for one immutable server audit. Application ID alone is not enough: a resume,
@@ -510,8 +539,11 @@ function Applications() {
      approvingId is: saving on A must not grey out the button on B. A ref beside the state because a
      second click can land in the same tick, before any re-render, and two writes of the same answers
      race each other's optimistic row check for no gain. */
-  const savingAnswersRef = useRef<string | null>(null);
-  const [savingAnswersId, setSavingAnswersId] = useState<string | null>(null);
+  const savingAnswersRef = useRef<Set<string>>(new Set());
+  const [savingAnswerIds, setSavingAnswerIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [directAnswerPasses, setDirectAnswerPasses] = useState<ReadonlyMap<string, DirectAnswerPass>>(() => new Map());
+  const [directAnswerFailures, setDirectAnswerFailures] = useState<ReadonlyMap<string, DirectAnswerFailure>>(() => new Map());
+  const [directAnswerDrafts, setDirectAnswerDrafts] = useState<ReadonlyMap<string, DirectAnswerDraft>>(() => new Map());
   /* Ticks in flight on the Your turn panel, keyed application:row. The ref is the synchronous
      guard (a double click lands before any re-render, exactly the reason savingAnswersRef exists)
      and the state is its visible half, the same ref+state pairing savingAnswersId documents: the
@@ -1226,6 +1258,7 @@ function Applications() {
   const refreshSubmission = useCallback(async () => {
     if (!selectedId || qaMode) return;
     const requestedId = selectedId;
+    const requestedMutationGeneration = submissionMutationGenerationRef.current;
     const raw = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
     let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
 
@@ -1235,7 +1268,10 @@ function Applications() {
     // filled fields and blockers on screen belong to A while the Submit button approves B. That is
     // an application sent to the wrong employer, so the response is discarded unless it is still
     // the packet the user is looking at. The ref, not the closure, is the current truth.
-    if (selectedIdRef.current !== requestedId) return;
+    if (
+      selectedIdRef.current !== requestedId
+      || submissionMutationGenerationRef.current !== requestedMutationGeneration
+    ) return;
 
     /* Never go backwards off a finished send. A poll issued BEFORE the approve returned can land
        after it, carrying the pre-send `ready_for_final_approval`; installing it would replace the
@@ -1290,7 +1326,10 @@ function Applications() {
     /* The GET began before the audit await. A run response or a newer poll may have installed a
        later server revision while this one was waiting. Never roll status, questions or packet
        state backward from that provably older snapshot. */
-    if (submissionSnapshotIsOlder(submissionRef.current, result)) return;
+    if (
+      submissionMutationGenerationRef.current !== requestedMutationGeneration
+      || submissionSnapshotIsOlder(submissionRef.current, result)
+    ) return;
     result = publishSubmissionEnvelope(submissionRef, result, "poll");
     const incomingCoverLetter = submissionCoverLetterField(result);
     if (incomingCoverLetter.included) {
@@ -1746,6 +1785,16 @@ function Applications() {
   );
   const storedReview = selected?.spec._review;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
+  const selectedDirectAnswerPass = selected && selectedSubmission
+    ? directAnswerPasses.get(selected.id)
+    : undefined;
+  const selectedAnsweredPromptFingerprints = selectedDirectAnswerPass
+    && selectedSubmission
+    && selectedDirectAnswerPass.key === directAnswerPassKey(selectedSubmission.review)
+    ? selectedDirectAnswerPass.promptFingerprints
+    : new Set<string>();
+  const selectedDirectAnswerDraft = selected ? directAnswerDrafts.get(selected.id) ?? null : null;
+  const selectedDirectAnswerFailure = selected ? directAnswerFailures.get(selected.id) ?? null : null;
   /* The submission endpoint is the authority for the live workflow state. The packet list can
      still carry the state from before a fill, especially after a blocker is repaired while the
      filled browser session remains reviewable. Reading status from that older packet made a
@@ -3613,12 +3662,72 @@ function Applications() {
    * The banner is the RESPONSE's, and a refusal leaves her on this screen with everything she typed
    * still in the boxes: the answers exist only here until the server says otherwise, so navigating
    * away from a failed save would destroy them a second time. */
-  async function saveReviewedAnswers() {
-    if (!selected || !submission || submission.application_id !== selected.id) return;
+  async function saveReviewedAnswers(direct?: {
+    questionId: string;
+    answer: string;
+    intent: DirectQuestionTaskIntent;
+    taskFingerprint: string;
+  }): Promise<DirectAnswerSaveResult> {
+    if (!selected || !submission || submission.application_id !== selected.id) {
+      return { saved: false, message: "This application is no longer open." };
+    }
     const applicationId = selected.id;
-    if (savingAnswersRef.current === applicationId) return;
-    savingAnswersRef.current = applicationId;
-    setSavingAnswersId(applicationId);
+    const selectionRevision = editorRevisionRef.current;
+    const rememberDirectFailure = (message: string) => {
+      if (!direct || !applicationsMountedRef.current) return;
+      setDirectAnswerFailures((current) => {
+        const next = new Map(current);
+        next.set(applicationId, { taskFingerprint: direct.taskFingerprint, message });
+        return next;
+      });
+    };
+    if (savingAnswersRef.current.has(applicationId)) {
+      return { saved: false, message: "Litos is already saving an answer for this application." };
+    }
+    const activeSubmission = submissionRef.current?.application_id === applicationId
+      ? submissionRef.current
+      : submission;
+    const safeDirectTask = direct
+      ? directInputTaskPlan(activeSubmission.review, {
+        company: selected.job_context.company,
+        role: selected.job_context.role,
+        documents: activeSubmission.documents,
+      }).questionTasks.find((task) => task.question.id === direct.questionId)
+      : null;
+    const safeDirectPromptFingerprint = safeDirectTask
+      ? directQuestionPromptFingerprint(safeDirectTask)
+      : null;
+    if (direct && (
+      !safeDirectTask
+      || safeDirectTask.intent !== direct.intent
+      || directQuestionTaskFingerprint(safeDirectTask) !== direct.taskFingerprint
+      || (safeDirectTask.question.options?.length
+        && !safeDirectTask.question.options.includes(direct.answer))
+    )) {
+      const message = "The employer's question changed while you were answering. Your answer is still here. Review the current field and try again.";
+      rememberDirectFailure(message);
+      return { saved: false, message };
+    }
+    const answerDraftQuestions = direct
+      ? activeSubmission.review.questions.map((question) => (
+        question.id === direct.questionId ? { ...question, answer: direct.answer } : question
+      ))
+      : questions;
+    if (direct && !answerDraftQuestions.some((question) => question.id === direct.questionId)) {
+      const message = "Litos could not match this answer to the employer's question. Review the packet and try again.";
+      rememberDirectFailure(message);
+      return { saved: false, message };
+    }
+    savingAnswersRef.current.add(applicationId);
+    setSavingAnswerIds((current) => new Set(current).add(applicationId));
+    if (direct) {
+      setDirectAnswerFailures((current) => {
+        if (!current.has(applicationId)) return current;
+        const next = new Map(current);
+        next.delete(applicationId);
+        return next;
+      });
+    }
     setError(null);
     setNotice(null);
     try {
@@ -3628,11 +3737,15 @@ function Applications() {
       const confirmedIds = confirmIntentsRef.current.get(applicationId) ?? null;
       const result = await saveReviewAnswers<SubmissionResponse["review"]>({
         applicationId,
-        questions: confirmedIds
-          ? questions.map((question) => confirmedIds.has(question.id) && question.answer.trim()
+        questions: answerDraftQuestions.map((question) => {
+          const directlyConfirmed = direct?.intent === "confirm"
+            && question.id === direct.questionId
+            && question.answer.trim();
+          const previouslyConfirmed = confirmedIds?.has(question.id) && question.answer.trim();
+          return directlyConfirmed || previouslyConfirmed
             ? { ...question, confirmed: true }
-            : question)
-          : questions,
+            : question;
+        }),
         /* `saved` is the 202's own word for "a run wrote to this packet and your answers did not
            land". api() resolves on any res.ok and hands back the body with the status gone, so this
            key is the only thing that survives the transport to distinguish it from a 200. */
@@ -3644,24 +3757,93 @@ function Applications() {
          may have since edited. A refused or raced save keeps the intents, exactly as it keeps her
          typing: nothing was minted, so nothing was spent. */
       if (result.saved) confirmIntentsRef.current.delete(applicationId);
-      // The switcher renders above this screen, so tapping another row mid-save is a single tap.
-      // Same guard, same reason, as approveFinalSubmission.
-      if (selectedIdRef.current !== applicationId) return;
       if (!result.saved) {
-        setError(result.message);
-        return;
+        if (direct) rememberDirectFailure(result.message);
+        if (result.review) {
+          submissionMutationGenerationRef.current += 1;
+          const latestSubmission = submissionRef.current?.application_id === applicationId
+            ? submissionRef.current
+            : activeSubmission;
+          const refreshed: SubmissionResponse = { ...latestSubmission, application_id: applicationId, review: result.review };
+          setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, refreshed) : packet) ?? current);
+          if (selectedIdRef.current === applicationId) {
+            const published = publishSubmissionEnvelope(submissionRef, refreshed, "direct");
+            setSubmission(published);
+          }
+        }
+        if (!direct) setError(result.message);
+        return { saved: false, message: result.message, ...(result.review ? { review: result.review } : {}) };
       }
-      const saved: SubmissionResponse = { ...submission, application_id: applicationId, review: result.review };
-      submissionRef.current = saved;
-      setSubmission(saved);
-      setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithSubmission(packet, saved) : packet) ?? current);
-      setQuestions(mergeDiscoveredQuestions(questions, result.review.questions));
-      setFocusQuestion(null);
-      moveToScreen(screenForStatus(result.review.status, "portal"));
-      setNotice(result.notice);
+      submissionMutationGenerationRef.current += 1;
+      const latestSubmission = submissionRef.current?.application_id === applicationId
+        ? submissionRef.current
+        : activeSubmission;
+      const saved: SubmissionResponse = { ...latestSubmission, application_id: applicationId, review: result.review };
+      setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, saved) : packet) ?? current);
+      if (direct && safeDirectPromptFingerprint) {
+        setDirectAnswerPasses((current) => {
+          const next = new Map(current);
+          const passKey = directAnswerPassKey(result.review);
+          const currentPass = current.get(applicationId);
+          const promptFingerprints = currentPass?.key === passKey
+            ? new Set(currentPass.promptFingerprints)
+            : new Set<string>();
+          promptFingerprints.add(safeDirectPromptFingerprint);
+          next.set(applicationId, { key: passKey, promptFingerprints });
+          return next;
+        });
+        setDirectAnswerDrafts((current) => {
+          if (!current.has(applicationId)) return current;
+          const next = new Map(current);
+          next.delete(applicationId);
+          return next;
+        });
+        setDirectAnswerFailures((current) => {
+          if (!current.has(applicationId)) return current;
+          const next = new Map(current);
+          next.delete(applicationId);
+          return next;
+        });
+      }
+      // The application id alone is not enough. A to B to A can put the same id back on screen
+      // while this request is still in flight, so selection revision owns the visible publish.
+      if (
+        !applicationsMountedRef.current
+        || selectedIdRef.current !== applicationId
+        || editorRevisionRef.current !== selectionRevision
+      ) return {
+        saved: true,
+        review: result.review,
+        mayAdvance: false,
+        ...(safeDirectPromptFingerprint ? { promptFingerprint: safeDirectPromptFingerprint } : {}),
+      };
+      const publishSavedAnswer = () => {
+        const published = publishSubmissionEnvelope(submissionRef, saved, "direct");
+        if (direct) {
+          packetEvidenceRef.current = null;
+          setPacketEvidence(null);
+        }
+        setSubmission(published);
+        setQuestions(mergeDiscoveredQuestions(answerDraftQuestions, published.review.questions));
+        setFocusQuestion(null);
+        moveToScreen(screenForStatus(published.review.status, "portal"));
+        if (!direct) setNotice(result.notice);
+      };
+      if (direct) runDashboardTransition(publishSavedAnswer);
+      else publishSavedAnswer();
+      return {
+        saved: true,
+        review: result.review,
+        mayAdvance: true,
+        ...(safeDirectPromptFingerprint ? { promptFingerprint: safeDirectPromptFingerprint } : {}),
+      };
     } finally {
-      if (savingAnswersRef.current === applicationId) savingAnswersRef.current = null;
-      setSavingAnswersId((current) => current === applicationId ? null : current);
+      savingAnswersRef.current.delete(applicationId);
+      setSavingAnswerIds((current) => {
+        const next = new Set(current);
+        next.delete(applicationId);
+        return next;
+      });
     }
   }
 
@@ -4440,7 +4622,7 @@ function Applications() {
             if (selectedSubmission?.review.status === "needs_attention") void saveReviewedAnswers();
             else saveApplyAnswers();
           }}
-          saving={savingAnswersId === selected?.id}
+          saving={selected ? savingAnswerIds.has(selected.id) : false}
           onRefreshMetadata={() => void refreshEmployerQuestionMetadata()}
           refreshingMetadata={metadataRefreshId === selected?.id}
           metadataRefreshDisabled={questionEditsUnsaved}
@@ -4488,6 +4670,35 @@ function Applications() {
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
           onChooseOption={chooseBlockerOption}
+          onSaveQuestion={(questionId, answer, intent, taskFingerprint) => saveReviewedAnswers({ questionId, answer, intent, taskFingerprint })}
+          savingAnswer={savingAnswerIds.has(selected.id)}
+          answeredQuestionFingerprints={selectedAnsweredPromptFingerprints}
+          directAnswerDraft={selectedDirectAnswerDraft}
+          directAnswerFailure={selectedDirectAnswerFailure}
+          onDirectAnswerDraftChange={(taskFingerprint, answer) => {
+            setDirectAnswerDrafts((current) => {
+              const next = new Map(current);
+              next.set(selected.id, { taskFingerprint, answer });
+              return next;
+            });
+          }}
+          onClearDirectAnswerFailure={(taskFingerprint) => {
+            setDirectAnswerFailures((current) => {
+              if (current.get(selected.id)?.taskFingerprint !== taskFingerprint) return current;
+              const next = new Map(current);
+              next.delete(selected.id);
+              return next;
+            });
+          }}
+          onRefreshQuestionMetadata={() => void refreshEmployerQuestionMetadata()}
+          questionMetadataRefreshing={metadataRefreshId === selected.id}
+          questionMetadataRefreshDisabled={questionEditsUnsaved}
+          questionMetadataNeedsPacketReview={!packetEvidenceReady}
+          questionMetadataRefreshError={metadataRefreshError?.applicationId === selected.id ? metadataRefreshError.message : null}
+          onQuestionsFinished={() => {
+            setNotice("Your answers are saved. Review the updated packet before Litos fills the company form again.");
+            moveToScreen("review");
+          }}
           onToggleAcknowledged={(item, acknowledged) => void toggleAttentionAcknowledgement(item, acknowledged)}
           attentionTicking={attentionTicking}
           onAddDocument={askForDocument}
@@ -5529,12 +5740,18 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                 {blocker.question ? displayQuestionLabel(blocker.question) : "Employer question not readable"}
               </p>
               <p className="mt-1 text-label text-warn">
-                {blocker.kind === "missing_exact_options" ? "Exact choices not read" : "Exact question not read"}
+                {blocker.kind === "unsupported_multi_value"
+                  ? "Multiple answers need the company form"
+                  : blocker.kind === "missing_exact_options"
+                    ? "Exact choices not read"
+                    : "Exact question not read"}
               </p>
               <p className="mt-3 text-small leading-6 text-muted">
-                {blocker.kind === "missing_exact_options"
-                  ? "The employer's current options were not readable, so Litos did not guess or fill this field."
-                  : "The employer's question was not readable, so Litos did not guess or fill this field."}
+                {blocker.kind === "unsupported_multi_value"
+                  ? "This employer accepts more than one selection. Litos will not reduce it to one answer, so review it on the company form."
+                  : blocker.kind === "missing_exact_options"
+                    ? "The employer's current options were not readable, so Litos did not guess or fill this field."
+                    : "The employer's question was not readable, so Litos did not guess or fill this field."}
               </p>
             </Card>
           ))}
@@ -5757,7 +5974,163 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function DirectApplicationQuestion({ task, position, total, saving, savedRecently, preservedDraft, externalFailure, onDraftChange, onClearFailure, onSave }: {
+  task: DirectQuestionTask;
+  position: number;
+  total: number;
+  saving: boolean;
+  savedRecently: boolean;
+  preservedDraft: DirectAnswerDraft | null;
+  externalFailure: DirectAnswerFailure | null;
+  onDraftChange: (taskFingerprint: string, answer: string) => void;
+  onClearFailure: (taskFingerprint: string) => void;
+  onSave: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, taskFingerprint: string) => Promise<DirectAnswerSaveResult>;
+}) {
+  const [taskFingerprint] = useState(() => directQuestionTaskFingerprint(task));
+  const [answer, setAnswer] = useState(
+    preservedDraft?.taskFingerprint === taskFingerprint
+      ? preservedDraft.answer
+      : task.question.answer ?? "",
+  );
+  const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const busy = saving || submitting;
+  const requiredBlank = task.question.required && !answer.trim();
+  const headingId = `direct-application-question-${encodeURIComponent(task.question.id)}`;
+  const progressId = `${headingId}-progress`;
+  const helperId = `${headingId}-helper`;
+
+  useEffect(() => {
+    if (!savedRecently) return;
+    const timer = window.setTimeout(() => {
+      const section = sectionRef.current;
+      const control = section?.querySelector<HTMLElement>("input:checked, input, select, textarea");
+      control?.focus({ preventScroll: true });
+      section?.scrollIntoView({ block: "nearest", behavior: "auto" });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [savedRecently, task.id]);
+
+  async function submitAnswer(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy || requiredBlank) return;
+    setSubmitting(true);
+    setSaveError(null);
+    onClearFailure(taskFingerprint);
+    onDraftChange(taskFingerprint, answer);
+    const result = await onSave(task.question.id, answer, task.intent, taskFingerprint);
+    setSubmitting(false);
+    if (!result.saved) {
+      setSaveError(result.message);
+    }
+  }
+
+  const actionLabel = task.intent === "confirm"
+    ? "Confirm and save"
+    : "Save to application";
+
+  function updateAnswer(next: string) {
+    if (busy) return;
+    setAnswer(next);
+    setSaveError(null);
+    onClearFailure(taskFingerprint);
+    onDraftChange(taskFingerprint, next);
+  }
+
+  return (
+    <MotionPanel key={task.id} name="dashboard-application-answer">
+      <section ref={sectionRef} aria-labelledby={headingId} className="py-1">
+        <div className="flex items-center justify-between gap-4">
+          <p className={`font-mono text-label font-medium uppercase tracking-[0.08em] ${savedRecently ? "text-teal-ink" : "text-muted"}`}>
+            {savedRecently ? "Answer saved" : "Application answer"}
+          </p>
+          <p id={progressId} className="shrink-0 font-mono text-label tabular-nums text-muted">
+            {position} of {total}
+          </p>
+        </div>
+        {savedRecently && (
+          <p role="status" className="mt-2 text-small text-teal-ink">Saved to this application.</p>
+        )}
+        <h2 id={headingId} className={`mt-4 text-ink ${task.question.question.trim().length > 140 ? "text-body leading-7" : "text-heading font-medium leading-tight"}`}>
+          {displayQuestionLabel(task.question.question)}
+        </h2>
+        <p id={helperId} className="mt-2 text-small leading-6 text-muted">
+          {task.question.required ? "Required. " : ""}Litos saves this answer to this application before showing the next one.
+        </p>
+        {task.question.explanation && (
+          <p className="mt-2 text-small leading-6 text-muted">{task.question.explanation}</p>
+        )}
+
+        <form onSubmit={submitAnswer} aria-busy={busy} className="mt-6">
+          {task.question.options && task.question.options.length > 0 ? (
+            task.question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
+              <fieldset aria-labelledby={headingId} aria-describedby={`${progressId} ${helperId}`} className="space-y-2">
+                {task.question.options.map((option) => (
+                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border px-4 py-3 text-small leading-6 text-ink transition-colors ${answer === option ? "border-brand bg-brand-soft" : "border-control-border bg-surface hover:border-ink"} ${busy ? "cursor-not-allowed opacity-60" : ""}`}>
+                    <input
+                      type="radio"
+                      name={`direct-question-choice-${task.question.id}`}
+                      value={option}
+                      checked={answer === option}
+                      aria-disabled={busy}
+                      required={task.question.required}
+                      onChange={() => updateAnswer(option)}
+                      className="mt-1 h-4 w-4 shrink-0 border-control-border text-brand-ink focus:ring-brand/30"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : (
+              <select
+                value={answer}
+                aria-disabled={busy}
+                required={task.question.required}
+                aria-labelledby={headingId}
+                aria-describedby={`${progressId} ${helperId}`}
+                onChange={(event) => updateAnswer(event.target.value)}
+                className={`min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-small leading-6 text-ink outline-none focus:border-brand ${busy ? "cursor-not-allowed opacity-60" : ""}`}
+              >
+                <option value="">Choose an answer</option>
+                {task.question.options.map((option) => <option key={option} value={option}>{option}</option>)}
+              </select>
+            )
+          ) : (
+            <textarea
+              value={answer}
+              readOnly={busy}
+              aria-disabled={busy}
+              required={task.question.required}
+              rows={4}
+              aria-labelledby={headingId}
+              aria-describedby={`${progressId} ${helperId}`}
+              onChange={(event) => updateAnswer(event.target.value)}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit();
+              }}
+              className={`min-h-28 w-full resize-y rounded-inner border border-control-border bg-surface px-4 py-3 text-body leading-6 text-ink outline-none placeholder:text-muted focus:border-brand ${busy ? "cursor-not-allowed opacity-60" : ""}`}
+              placeholder="Type your answer"
+            />
+          )}
+          {(saveError ?? (externalFailure?.taskFingerprint === taskFingerprint ? externalFailure.message : null)) && (
+            <p role="alert" className="mt-3 text-small leading-6 text-danger">
+              {saveError ?? externalFailure?.message}
+            </p>
+          )}
+          <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+            <Button type="submit" block className="sm:w-auto" disabled={requiredBlank} aria-disabled={busy || requiredBlank}>
+              {busy ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
+            </Button>
+            <p className="text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
+          </div>
+        </form>
+      </section>
+    </MotionPanel>
+  );
+}
+
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerDraft, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, taskFingerprint: string) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerDraft: DirectAnswerDraft | null; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (taskFingerprint: string, answer: string) => void; onClearDirectAnswerFailure: (taskFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -5919,11 +6292,56 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     ? userFacingError(review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
     : undefined;
   const attentionReview = { ...review, attention_reason: safeAttentionReason };
-  const needsInputItems = humanInputItems(attentionReview, {
+  const directTaskPlan = directInputTaskPlan(attentionReview, {
     company: packet.job_context.company,
     role: packet.job_context.role,
     documents: submission.documents,
   });
+  const [lastDirectSavedQuestionId, setLastDirectSavedQuestionId] = useState<string | null>(null);
+  const [directSavedCount, setDirectSavedCount] = useState(0);
+  const [initialDirectQuestionCount] = useState(directTaskPlan.questionTasks.length);
+  const remainingDirectQuestions = directTaskPlan.questionTasks.filter((task) => (
+    !answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))
+  ));
+  const currentDirectQuestion = remainingDirectQuestions[0] ?? null;
+  const directAnswerActive = needsAttention && !awaitingUnverifiedSubmission && currentDirectQuestion !== null;
+  const currentNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
+  const currentMetadataBlocker = directTaskPlan.metadataBlockers[0] ?? null;
+  const directQuestionTotal = Math.max(
+    initialDirectQuestionCount,
+    directSavedCount + remainingDirectQuestions.length,
+  );
+  const directQuestionPosition = Math.min(
+    Math.max(1, directQuestionTotal),
+    directSavedCount + 1,
+  );
+
+  async function saveCurrentDirectQuestion(questionId: string, answer: string, intent: DirectQuestionTaskIntent, taskFingerprint: string): Promise<DirectAnswerSaveResult> {
+    const result = await onSaveQuestion(questionId, answer, intent, taskFingerprint);
+    if (!result.saved) return result;
+    if (!result.mayAdvance) return result;
+    if (!result.promptFingerprint) {
+      return { saved: false as const, message: "Litos saved the answer but could not match the next employer field. Review the updated application packet." };
+    }
+    const savedQuestionFingerprints = new Set(answeredQuestionFingerprints).add(result.promptFingerprint);
+    const nextAttentionReason = result.review.attention_reason
+      ? userFacingError(result.review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
+      : undefined;
+    const nextTaskPlan = directInputTaskPlan({ ...result.review, attention_reason: nextAttentionReason }, {
+      company: packet.job_context.company,
+      role: packet.job_context.role,
+      documents: submission.documents,
+    });
+    setLastDirectSavedQuestionId(questionId);
+    setDirectSavedCount((current) => current + 1);
+    const anotherQuestionRemains = nextTaskPlan.questionTasks.some((task) => (
+      !savedQuestionFingerprints.has(directQuestionPromptFingerprint(task))
+    ));
+    if (!anotherQuestionRemains && nextTaskPlan.nonQuestionTasks.length === 0 && nextTaskPlan.metadataBlockers.length === 0) {
+      onQuestionsFinished();
+    }
+    return result;
+  }
   const completedItems = completedSubmissionGroups(review);
   /* What this application already carries, as far as the snapshot on screen knows.
    *
@@ -6060,39 +6478,119 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
       {awaitingUnverifiedSubmission && filledFormEvidence}
       <Card className={`${needsAttention && !awaitingUnverifiedSubmission ? "p-4 sm:p-6" : "p-7"} ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
-        {needsAttention && !awaitingUnverifiedSubmission && (
-          <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-warn">Action required</p>
-        )}
-        <h2 className={`${needsAttention && !awaitingUnverifiedSubmission ? "mt-2" : ""} text-heading font-medium text-ink`}>{awaitingSecurityCode ? "One code away" : awaitingUnverifiedSubmission ? "Waiting on you to look" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
-        {needsAttention && !awaitingUnverifiedSubmission && (
-          <p className="mt-2 max-w-2xl text-body text-muted">Finish these steps to keep going.</p>
-        )}
-        {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
-            HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
-            is how "CAPTCHA requires your attention ... is required required field is required ..."
-            reached the screen. Each blocker is its own item, because each is its own task.
-
-            awaitingUnverifiedSubmission is pulled out of this branch for the same reason
-            awaitingSecurityCode already was: BlockerList's controls (Open page, answer a question,
-            attach a document) all assume the fix is something Litos can rerun once she has acted.
-            The only fix here is the yes/no in UnverifiedSubmissionCard below, and that card renders
-            attention_reason itself, so showing it twice would say the same thing in two different
-            voices. */}
-        {awaitingUnverifiedSubmission ? null : needsAttention ? (
-          <BlockerList items={needsInputItems} portalUrl={staysInsideLitos || attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
+        {directAnswerActive ? (
+          <DirectApplicationQuestion
+            key={directQuestionTaskFingerprint(currentDirectQuestion)}
+            task={currentDirectQuestion}
+            position={directQuestionPosition}
+            total={Math.max(1, directQuestionTotal)}
+            saving={savingAnswer}
+            savedRecently={lastDirectSavedQuestionId !== null}
+            preservedDraft={directAnswerDraft}
+            externalFailure={directAnswerFailure}
+            onDraftChange={onDirectAnswerDraftChange}
+            onClearFailure={onClearDirectAnswerFailure}
+            onSave={saveCurrentDirectQuestion}
+          />
         ) : (
-          <p className="mt-2 text-sm leading-6 text-muted">
-            {review.status === "failed"
-              ? failedPacketAuditStale
-                ? "The exact company form changed. Review the current packet before Litos tries again."
-                : userFacingError(review.submission_error, "Try again in a minute.")
-              /* NOT "Check the preview, then send." This application has already been sent once, and
-                 offering a send is what the three measured packets of 2026-08-08 did wrong. */
-              : awaitingSecurityCode
-                ? "This one is with the employer already. It needs the code they emailed before it counts as filed."
-                : "Check the preview, then send."}
-          </p>
+          <>
+            {lastDirectSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission && (
+              <p role="status" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-teal-ink">
+                Answer saved to this application
+              </p>
+            )}
+            <h2 className={`${lastDirectSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission ? "mt-3" : ""} text-heading font-medium text-ink`}>
+              {awaitingSecurityCode
+                ? "One code away"
+                : awaitingUnverifiedSubmission
+                  ? "Waiting on you to look"
+                  : needsAttention
+                    ? currentNonQuestionTask
+                      ? "One thing to finish"
+                      : directTaskPlan.metadataBlockers.length > 0
+                      ? "One field needs a fresh read"
+                      : "One thing to finish"
+                    : review.status === "failed" ? "Stopped" : "Review"}
+            </h2>
+            {needsAttention && !awaitingUnverifiedSubmission && (
+              <p className="mt-2 max-w-2xl text-body text-muted">
+                {!currentNonQuestionTask && directTaskPlan.metadataBlockers.length > 0
+                  ? "Litos needs the employer's exact wording or choices before it can ask you for a safe answer."
+                  : "Complete this step to keep the application moving."}
+              </p>
+            )}
+            {awaitingUnverifiedSubmission ? null : needsAttention ? (
+              currentNonQuestionTask ? (
+                <BlockerList items={[currentNonQuestionTask]} portalUrl={staysInsideLitos || attendedHandoffUrl ? undefined : handoffUrl ?? portalUrl} onRestartInLitos={onReviewPacket} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={attentionTicking} />
+              ) : directTaskPlan.metadataBlockers.length > 0 ? (
+                <div className="mt-6 border-t border-border pt-6">
+                  <p className="text-small font-medium text-ink">
+                    {directTaskPlan.metadataBlockers[0]?.question
+                      ? displayQuestionLabel(directTaskPlan.metadataBlockers[0].question)
+                      : "Employer question not readable"}
+                  </p>
+                  {currentMetadataBlocker?.kind === "unsupported_multi_value" ? (
+                    <>
+                      <p className="mt-2 text-small leading-6 text-muted">
+                        This employer accepts more than one selection. Litos will not reduce it to one answer.
+                      </p>
+                      <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                        {handoffUrl ?? portalUrl ? (
+                          <ButtonLink href={(handoffUrl ?? portalUrl)!} target="_blank" rel="noreferrer" block className="sm:w-auto">
+                            Answer on company page
+                          </ButtonLink>
+                        ) : (
+                          <Button onClick={onReviewPacket} block className="sm:w-auto">Review application</Button>
+                        )}
+                        <p className="text-label leading-5 text-muted">Your other answers stay saved in Litos.</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <p className="mt-2 text-small leading-6 text-muted">
+                        Litos will reread the current company form and only show an answer control when it knows what the employer accepts.
+                      </p>
+                      <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
+                        <Button
+                          onClick={onRefreshQuestionMetadata}
+                          disabled={questionMetadataRefreshing || questionMetadataRefreshDisabled}
+                          aria-busy={questionMetadataRefreshing}
+                          block
+                          className="sm:w-auto"
+                        >
+                          {questionMetadataNeedsPacketReview
+                            ? "Review packet first"
+                            : questionMetadataRefreshing
+                              ? <PendingLabel onColor>Reading company form...</PendingLabel>
+                              : "Review and fill again"}
+                        </Button>
+                        <p className="text-label leading-5 text-muted">
+                          Litos never turns an unread employer field into a guessed text box.
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  {questionMetadataRefreshError && (
+                    <p role="alert" className="mt-3 text-small leading-6 text-danger">{questionMetadataRefreshError}</p>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-4 text-small leading-6 text-muted">Review the application packet before Litos fills the company form again.</p>
+              )
+            ) : (
+              <p className="mt-2 text-sm leading-6 text-muted">
+                {review.status === "failed"
+                  ? failedPacketAuditStale
+                    ? "The exact company form changed. Review the current packet before Litos tries again."
+                    : userFacingError(review.submission_error, "Try again in a minute.")
+                  : awaitingSecurityCode
+                    ? "This one is with the employer already. It needs the code they emailed before it counts as filed."
+                    : "Check the preview, then send."}
+              </p>
+            )}
+          </>
         )}
+        {!directAnswerActive && <>
         {awaitingSecurityCode && (
           <SecurityCodeCard
             review={review}
@@ -6464,8 +6962,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           </p>
         ))}
         <p className="mt-5 text-xs leading-5 text-muted">Litos will never pretend to be you. It will not get past the puzzle that checks you are human, a code on your phone, a login, or anything you have to swear to. It only says an application is sent once the company confirms it.</p>
+        </>}
       </Card>
-      {!awaitingUnverifiedSubmission && filledFormEvidence}
+      {!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence}
     </div>
   );
 }
@@ -6575,14 +7074,14 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
       ) : (
         /* Not a checkbox. This row's "done" is measured by the product, so the honest marker is a
            status dot. The row's own control is the way to act on it. */
-        <span aria-hidden className="ml-1 mt-1.5 h-2 w-2 rounded-full bg-warn" />
+        <span aria-hidden className="ml-1 mt-1.5 h-2 w-2 rounded-full bg-brand" />
       )}
       <span className="block min-w-0 sm:col-start-2">
         <span className="block min-w-0 break-words">
           <span className="text-ink">{item.label}</span>
           {/* The state word rides beside the label rather than inside the sentence, so the row still
               reads as a sentence about the employer and the pill stays scannable down a column. */}
-          {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
+          {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="ready" /></span>}
         </span>
         {item.detail && <span className="block text-small text-muted">{item.detail}</span>}
         {choices && (
@@ -6664,7 +7163,7 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
         <div className="mt-4">
           <div className="flex items-center justify-between gap-4">
             <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">{outstanding.length === 1 ? "Your next step" : "Your next steps"}</p>
-            <p aria-live="polite" className="font-mono text-label text-warn">{outstanding.length} remaining</p>
+            <p aria-live="polite" className="font-mono text-label text-muted">{outstanding.length} remaining</p>
           </div>
           <ul className="mt-2 divide-y divide-border border-y border-border [&>li]:py-2 md:[&>li]:py-4">
           {outstanding.map((item) => (

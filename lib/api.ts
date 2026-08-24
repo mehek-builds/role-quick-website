@@ -656,7 +656,7 @@ export type ApplicationQuestion = {
 
 /** Exact employer-question metadata Litos could not prove during the latest complete form read. */
 export type ApplicationQuestionMetadataBlocker = {
-  kind: "missing_question_text" | "missing_exact_options";
+  kind: "missing_question_text" | "missing_exact_options" | "unsupported_multi_value";
   required: boolean;
   portal_input_type: string;
   control_id?: string;
