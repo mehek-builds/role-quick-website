@@ -16,10 +16,10 @@ const applicationsUrl = new URL("../app/dashboard/applications/page.tsx", import
 test("a card with no packet offers a control that starts one", async () => {
   const home = await readFile(homeUrl, "utf8");
 
-  assert.match(home, /async function preparePacket\(jobId: string, initiation: ResumeGenerationInitiation\)/);
-  assert.match(home, /onPrepare=\{\(\) => void preparePacket\(job\.id, "explicit_click"\)\}/);
+  assert.match(home, /async function preparePacket\([\s\S]*?jobId: string,[\s\S]*?initiation: ResumeGenerationInitiation,[\s\S]*?upgradeTrigger: HTMLElement \| null = null/);
+  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
   // The idle branch is a real button carrying the handler, not text.
-  assert.match(home, /onClick=\{status === "failed" \? onRetry : onPrepare\}/);
+  assert.match(home, /onClick=\{\(event\) => \{\s*const upgradeTrigger = event\.currentTarget;\s*if \(status === "failed"\) onRetry\(upgradeTrigger\);\s*else onPrepare\(upgradeTrigger\);/);
   assert.match(home, /\{status === "failed" \? "Try tailoring again" : "Tailor resume"\}/);
   assert.match(home, /intent=fill[\s\S]{0,250}>Fill application<\/Link>/);
 });
@@ -42,7 +42,7 @@ test("the four card states stay distinct and only one claims work is happening",
 test("retry reissues the request instead of nudging a loop that may not be running", async () => {
   const home = await readFile(homeUrl, "utf8");
 
-  assert.match(home, /function retryPreparation\(jobId: string\) \{[\s\S]*?void preparePacket\(jobId, "explicit_click"\);/);
+  assert.match(home, /function retryPreparation\(jobId: string, upgradeTrigger: HTMLElement \| null\) \{[\s\S]*?void preparePacket\(jobId, "explicit_click", upgradeTrigger\);/);
   // The old retry bumped a counter so the prewarm effect would re-run. That effect returns early
   // for every student without automatic submission, so retry did nothing at all for them.
   assert.doesNotMatch(home, /setPrewarmRetry/);
@@ -62,7 +62,7 @@ test("explicit and paid-hover tailoring share one lock so a job is never built t
   assert.match(home, /preparingJobs\.includes\(jobId\) \|\| \(!qaMode && prewarmLockHeld\(jobId\)\)/);
   assert.match(home, /async function preparePacket[\s\S]*?claimPrewarmLock\(jobId\);/);
   assert.match(home, /\} finally \{\s*releasePrewarmLock\(jobId\);/);
-  assert.match(home, /function retryPreparation\(jobId: string\) \{\s*releasePrewarmLock\(jobId\);/);
+  assert.match(home, /function retryPreparation\(jobId: string, upgradeTrigger: HTMLElement \| null\) \{\s*releasePrewarmLock\(jobId\);/);
 });
 
 test("the in-flight mark is always cleared", async () => {
@@ -70,7 +70,7 @@ test("the in-flight mark is always cleared", async () => {
 
   const finallies = home.match(/\} finally \{\s*[\s\S]*?setPreparingJobs\(\(current\) => current\.filter/g) ?? [];
   assert.equal(finallies.length, 2, "both paid background and explicit tailoring paths must clear in finally");
-  assert.match(home, /\} finally \{\s*releasePrewarmLock\(jobId\);\s*setPreparingJobs/);
+  assert.match(home, /\} finally \{\s*releasePrewarmLock\(jobId\);\s*if \(requestIsCurrent\(\)\) \{\s*setPreparingJobs/);
 });
 
 test("Paused says what stopped, and never says it in jargon", async () => {
@@ -100,7 +100,7 @@ test("only paid opt-in accounts generate from hover or background work", async (
   assert.doesNotMatch(home, /autoSubmitEnabled \? rankedJobs\.slice/);
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, "hover_prewarm", operationId\)/);
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, initiation, operationId\)/);
-  assert.match(home, /onPrepare=\{\(\) => void preparePacket\(job\.id, "explicit_click"\)\}/);
+  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
   assert.match(home, /onHoverPrepare=\{\(\) => void preparePacket\(job\.id, "hover_prewarm"\)\}/);
 });
 
@@ -116,7 +116,7 @@ test("every website resume generation request declares its initiation", async ()
   );
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, "hover_prewarm", operationId\)/);
   assert.match(home, /resumeGenerationBody\(completeJob, identity, applicationProfile, initiation, operationId\)/);
-  assert.match(home, /onPrepare=\{\(\) => void preparePacket\(job\.id, "explicit_click"\)\}/);
+  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
   assert.match(home, /onHoverPrepare=\{\(\) => void preparePacket\(job\.id, "hover_prewarm"\)\}/);
   assert.match(applications, /"\/resume\/generate", \{[\s\S]*?initiation: "explicit_click"/);
 });

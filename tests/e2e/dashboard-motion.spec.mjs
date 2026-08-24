@@ -224,9 +224,12 @@ test("reduced motion completes the same route with no running dashboard animatio
   await page.goto(`${ORIGIN}/dashboard`, { waitUntil: "domcontentloaded" });
   assert.equal(await page.evaluate(() => window.matchMedia("(prefers-reduced-motion: reduce)").matches), true);
 
+  await startMotionSampler(page);
   await page.locator('aside a[href="/dashboard/applications"]').click();
   await page.waitForURL(`${ORIGIN}/dashboard/applications`);
   await page.getByRole("heading", { name: "Applications", exact: true }).waitFor();
+  const samples = await finishSampledMotion(page);
+  assert.deepEqual(samples, [], `reduced-motion route created dashboard animation samples: ${JSON.stringify(samples)}`);
   const state = await page.evaluate(() => ({
     scrollBehavior: getComputedStyle(document.documentElement).scrollBehavior,
     running: document.getAnimations()

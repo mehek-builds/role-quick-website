@@ -27,7 +27,8 @@ test("job search and account settings share one tabbed account destination", asy
   assert.match(layout, /aria-controls=\{moreOpen \? "dashboard-more-dialog" : undefined\}/);
   assert.match(layout, /matchMedia\("\(min-width: 64rem\)"\)/);
   assert.match(layout, /moreDialogRef\.current\.contains\(document\.activeElement\)/);
-  assert.match(layout, /\.dashboard-shell aside \[aria-current="page"\]/);
+  assert.match(layout, /const shouldRestoreFocus = moreCloseTimer\.current !== null\s*\|\| moreDialogRef\.current\.contains\(document\.activeElement\)/);
+  assert.match(layout, /\.dashboard-shell aside \[aria-current="page"\], \.dashboard-shell aside nav a\[href\^="\/dashboard"\]/);
   assert.match(layout, /role="dialog"/);
   assert.match(layout, /href: "\/dashboard\/network", label: "Network"/);
   assert.match(layout, /href: "\/dashboard\/outreach", label: "Outreach"/);
@@ -47,7 +48,88 @@ test("job search and account settings share one tabbed account destination", asy
   assert.match(settings, /querySelector<HTMLElement>\(`#tab-\$\{activeTab\}`\)/);
   assert.match(settings, /selected\.scrollIntoView\(\{[\s\S]{0,180}?inline: "nearest"/);
   assert.match(settings, /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches \? "auto" : "smooth"/);
+  assert.match(settings, /const safeRight = viewportRect\.right - \(showAccountTabOverflowCue \? 48 : 0\)/);
+  assert.match(settings, /\[scroll-padding-inline-end:3rem\]/);
+  assert.match(settings, /setAccountTabsViewportWidth\(viewport\.clientWidth\)/);
+  assert.match(settings, /\[accountTabsViewport, accountTabsViewportWidth, activeTab, showAccountTabOverflowCue\]/);
   assert.match(oldProfileRoute, /redirect\("\/dashboard\/settings#job-search"\)/);
+});
+
+test("Account history waits for an open native dialog to finish exiting before changing tabs", async () => {
+  const [settings, documents, overlayExit] = await Promise.all([
+    readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/app/DocumentsCard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/app/useDashboardOverlayExit.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(
+    settings,
+    /if \(closingDialog !== null\) \{\s*pendingHistoryTabRef\.current = nextTab;\s*return;\s*\}\s*const openDialog = document\.querySelector<HTMLDialogElement>/,
+    "a duplicate history event must stay owned by the close listener even after reduced motion closes the dialog",
+  );
+  assert.match(settings, /querySelector<HTMLDialogElement>\("#account-panel dialog\[open\]"\)/);
+  assert.match(settings, /pendingHistoryTabRef\.current = nextTab;/);
+  assert.match(
+    settings,
+    /onDialogClose = \(\) => \{[\s\S]{0,500}commitHistoryTab\(pendingTab, true\);[\s\S]{0,180}openDialog\.addEventListener\("close", onDialogClose, \{ once: true \}\);\s*openDialog\.dispatchEvent\(new Event\("cancel", \{ cancelable: true \}\)\);/,
+    "the close listener must exist before cancel starts a synchronous reduced-motion close",
+  );
+  assert.match(
+    settings,
+    /if \(pendingHistoryTabFocusRef\.current !== activeTab\) return;[\s\S]{0,300}getElementById\(`tab-\$\{activeTab\}`\)\?\.focus\(\{ preventScroll: true \}\)/,
+    "a history-selected tab must receive focus after the outgoing dialog closes",
+  );
+  assert.match(
+    settings,
+    /onCancel=\{\(event\) => \{\s*event\.preventDefault\(\);\s*if \(dataBusy !== "delete"\) requestDeleteDialogClose\(\);/,
+  );
+  assert.match(
+    documents,
+    /onCancel=\{\(event\) => \{\s*event\.preventDefault\(\);\s*if \(!deleting\) requestDocumentDialogClose\(\);/,
+  );
+  assert.match(
+    overlayExit,
+    /matchMedia\("\(prefers-reduced-motion: reduce\)"\)\.matches\) \{\s*finish\(\);\s*return true;/,
+    "reduced motion must emit the same native close event without waiting on a timer",
+  );
+});
+
+test("Account callback-selected tabs keep the synchronous tab guard current", async () => {
+  const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
+
+  assert.match(
+    settings,
+    /if \(billingReturn === "success"[\s\S]{0,360}activeTabRef\.current = "plan";\s*pendingHistoryTabFocusRef\.current = null;\s*setActiveTab\("plan"\);/,
+    "a billing return must publish Plan to the click guard before React commits it",
+  );
+  assert.match(
+    settings,
+    /if \(callbackProvider && callbackStatus\)[\s\S]{0,1700}activeTabRef\.current = "automation";\s*pendingHistoryTabFocusRef\.current = null;\s*setActiveTab\("automation"\);/,
+    "an inbox callback must publish Automation to the click guard before React commits it",
+  );
+  assert.match(
+    settings,
+    /function selectTab\(tab: AccountTab\) \{\s*if \(tab === activeTabRef\.current\) return;\s*activeTabRef\.current = tab;[\s\S]{0,180}setActiveTab\(tab\);/,
+    "clicking Job search after either callback must compare with the callback-selected tab, then commit the click",
+  );
+});
+
+test("canonical billing access overrides a stale legacy account tier", async () => {
+  const settings = await readFile(new URL("../app/dashboard/settings/page.tsx", import.meta.url), "utf8");
+
+  assert.match(settings, /import \{ accessLabel, isPaidAccess \} from "@\/features\/billing"/);
+  assert.match(
+    settings,
+    /const paidPlan = access\s*\? isPaidAccess\(access\)\s*:\s*me\.tier === "pro" \|\| me\.tier === "plus"/,
+    "legacy tier is a fallback only while canonical access is unavailable",
+  );
+  assert.match(settings, /label=\{access \? accessLabel\(access\) : paidPlan \? "Litos\+"/);
+  assert.match(settings, /kind=\{paidPlan \? "ready" : "draft"\}/);
+  assert.match(settings, /\{paidPlan \? \(\s*<div className="mt-6 space-y-3 border-t border-border pt-5 text-sm text-muted">/);
+  assert.doesNotMatch(
+    settings,
+    /access\?\.access_class === "plus_paid" \|\| access\?\.access_class === "legacy_paid" \|\| me\.tier === "pro"/,
+  );
 });
 
 const ACCOUNT_TAB_IDS = ["job-search", "application-details", "automation", "plan", "sign-in"];

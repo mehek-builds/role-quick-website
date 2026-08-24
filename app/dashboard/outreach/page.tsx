@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, OutreachEvent, ParsedProfile } from "@/lib/api";
 import { Button } from "@/components/app/Button";
 import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
-import { Card, Chip, EmptyState, ErrorNote, PageHeader, PendingLabel, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, PageHeader, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { isStructuredUpgradeDenial } from "@/features/billing";
 import { completeOperationId, operationIdFor } from "@/lib/operation-id";
+import { useOutreachOperationOwner } from "./operation-owner";
 
 const FILTERS = ["all", "drafted", "sent", "replied", "bounced"] as const;
 type Filter = (typeof FILTERS)[number];
@@ -167,6 +168,7 @@ const QA_EVENTS: OutreachEvent[] = [
 
 export default function Outreach() {
   const { openUpgrade } = useBilling();
+  const { activeOperation, draftsSettledRevision, owner: operationOwner } = useOutreachOperationOwner();
   const [events, setEvents] = useState<DisplayedOutreachEvent[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -174,7 +176,6 @@ export default function Outreach() {
   const [open, setOpen] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [composeOpen, setComposeOpen] = useState(false);
-  const [composeBusy, setComposeBusy] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
   const [contactName, setContactName] = useState("");
   const [contactTitle, setContactTitle] = useState("");
@@ -189,20 +190,30 @@ export default function Outreach() {
   const [resolvedContacts, setResolvedContacts] = useState<ResolvedContact[] | null>(null);
   const [selectedContact, setSelectedContact] = useState<ResolvedContact | null>(null);
   const [applicationId, setApplicationId] = useState<string | null>(null);
-  const [resolveBusy, setResolveBusy] = useState(false);
-  const contactOperationIds = useRef(new Map<string, string>());
-  const draftOperationIds = useRef(new Map<string, string>());
+  const contactRequestGenerationRef = useRef(0);
+  const draftRequestGenerationRef = useRef(0);
+  const saveRequestGenerationRef = useRef(0);
   const focusDraftOnOpen = useRef(false);
   const focusComposerTitleOnOpen = useRef(false);
   const focusTriggerAfterClose = useRef(false);
   const composerTriggerRef = useRef<HTMLElement | null>(null);
+  const composerLogicalTriggerIdRef = useRef<string | null>(null);
   const composerTitleRef = useRef<HTMLHeadingElement>(null);
+  const mutationBusy = activeOperation !== null;
+  const resolveBusy = activeOperation === "contact-discovery";
+  const draftBusy = activeOperation === "draft-generation";
+  const saveBusy = activeOperation === "edited-save" || activeOperation === "manual-save";
 
-  function openComposer(focusTarget: "title" | "draft" = "title", explicitTrigger?: HTMLElement) {
+  function openComposer(
+    focusTarget: "title" | "draft" = "title",
+    explicitTrigger?: HTMLElement,
+    logicalTriggerId: string | null = null,
+  ) {
     const trigger = explicitTrigger ?? document.activeElement;
     if (trigger instanceof HTMLElement && trigger !== document.body) {
       composerTriggerRef.current = trigger;
     }
+    composerLogicalTriggerIdRef.current = logicalTriggerId;
     focusDraftOnOpen.current = focusTarget === "draft";
     focusComposerTitleOnOpen.current = focusTarget === "title";
     if (composeOpen) {
@@ -216,8 +227,88 @@ export default function Outreach() {
   }
 
   function closeComposer() {
+    invalidateComposerRequests();
     focusTriggerAfterClose.current = true;
     runDashboardTransition(() => setComposeOpen(false));
+  }
+
+  function invalidateContactRequest() {
+    contactRequestGenerationRef.current += 1;
+  }
+
+  function invalidateDraftRequest() {
+    draftRequestGenerationRef.current += 1;
+    saveRequestGenerationRef.current += 1;
+  }
+
+  function invalidateComposerRequests() {
+    invalidateContactRequest();
+    invalidateDraftRequest();
+  }
+
+  function changeContactName(value: string) {
+    invalidateDraftRequest();
+    setContactName(value);
+    setSelectedContact(null);
+  }
+
+  function changeContactTitle(value: string) {
+    invalidateDraftRequest();
+    setContactTitle(value);
+    setSelectedContact(null);
+  }
+
+  function changeContactEmail(value: string) {
+    invalidateDraftRequest();
+    setContactEmail(value);
+  }
+
+  function changeCompany(value: string) {
+    invalidateComposerRequests();
+    setCompany(value);
+    setApplicationId(null);
+    setSelectedContact(null);
+    setResolvedContacts(null);
+  }
+
+  function changeCompanyDomain(value: string) {
+    invalidateComposerRequests();
+    setCompanyDomain(value);
+    setApplicationId(null);
+    setSelectedContact(null);
+    setResolvedContacts(null);
+  }
+
+  function changeTargetRole(value: string) {
+    invalidateComposerRequests();
+    setTargetRole(value);
+    setApplicationId(null);
+    setSelectedContact(null);
+    setResolvedContacts(null);
+  }
+
+  function changeDraftType(value: DraftType) {
+    invalidateDraftRequest();
+    setDraftType(value);
+  }
+
+  function changeSubject(value: string) {
+    invalidateDraftRequest();
+    setSubject(value);
+  }
+
+  function changeDraft(value: string) {
+    invalidateDraftRequest();
+    setDraft(value);
+  }
+
+  function chooseResolvedContact(resolved: ResolvedContact) {
+    invalidateDraftRequest();
+    setSelectedContact(resolved);
+    setContactName(resolved.contact.full_name);
+    setContactTitle(resolved.contact.title);
+    setContactEmail(resolved.email_resolution.email ?? "");
+    setCompanyDomain(resolved.contact.company_domain);
   }
 
   function currentCheckoutState(applicationOverride: string | null = applicationId): OutreachCheckoutState {
@@ -238,19 +329,191 @@ export default function Outreach() {
     };
   }
 
-  async function ensureOutreachApplication(): Promise<string> {
-    if (applicationId) return applicationId;
+  async function ensureOutreachApplication({
+    company: requestedCompany = company,
+    companyDomain: requestedCompanyDomain = companyDomain,
+    targetRole: requestedTargetRole = targetRole,
+    isCurrent,
+  }: {
+    company?: string;
+    companyDomain?: string;
+    targetRole?: string;
+    isCurrent?: () => boolean;
+  } = {}): Promise<string> {
+    const scopeKey = outreachApplicationScopeKey(requestedCompany, requestedCompanyDomain, requestedTargetRole);
+    const ownedApplicationId = operationOwner.applicationIds.get(scopeKey);
+    if (ownedApplicationId) {
+      if (isCurrent?.() ?? true) setApplicationId(ownedApplicationId);
+      return ownedApplicationId;
+    }
+    if (applicationId) {
+      operationOwner.applicationIds.set(scopeKey, applicationId);
+      return applicationId;
+    }
     const result = await api<{ application: { id: string } }>("/applications", {
       method: "POST",
       body: JSON.stringify({
-        company: company.trim(),
-        ...(companyDomain.trim() ? { company_domain: companyDomain.trim() } : {}),
-        role: targetRole.trim(),
+        company: requestedCompany.trim(),
+        ...(requestedCompanyDomain.trim() ? { company_domain: requestedCompanyDomain.trim() } : {}),
+        role: requestedTargetRole.trim(),
         source_surface: "dashboard",
       }),
     });
-    setApplicationId(result.application.id);
+    operationOwner.applicationIds.set(scopeKey, result.application.id);
+    if (isCurrent?.() ?? true) setApplicationId(result.application.id);
     return result.application.id;
+  }
+
+  function findContacts(upgradeTrigger: HTMLButtonElement) {
+    const lease = operationOwner.acquire("contact-discovery");
+    if (!lease) return;
+    const generation = ++contactRequestGenerationRef.current;
+    const request = {
+      company: company.trim(),
+      companyDomain: companyDomain.trim(),
+      targetRole: targetRole.trim(),
+    };
+    const operationKey = `contact:${request.companyDomain.toLowerCase()}:${request.targetRole.toLowerCase()}`;
+    const operationId = operationIdFor(operationOwner.contactOperationIds, operationKey);
+    let canonicalApplicationId = applicationId;
+
+    setComposeError(null);
+    void (async () => {
+      try {
+        canonicalApplicationId = await ensureOutreachApplication({
+          ...request,
+          isCurrent: () => generation === contactRequestGenerationRef.current,
+        });
+        if (generation !== contactRequestGenerationRef.current) return;
+        const result = await api<{ contacts?: ResolvedContact[] }>("/resolve", {
+          method: "POST",
+          body: JSON.stringify({
+            company: request.company,
+            domain: request.companyDomain,
+            role: request.targetRole,
+            application_id: canonicalApplicationId,
+            operation_id: operationId,
+          }),
+        });
+        completeOperationId(operationOwner.contactOperationIds, operationKey);
+        if (generation !== contactRequestGenerationRef.current) return;
+        setResolvedContacts(result.contacts ?? []);
+      } catch (reason) {
+        if (generation !== contactRequestGenerationRef.current) return;
+        if (isStructuredUpgradeDenial(reason, "contact_discovery")) {
+          openUpgrade({
+            feature: "contact_discovery",
+            placement: "outreach_compose",
+            trigger: "server_entitlement_denial",
+            manualLabel: "Add contact manually",
+            returnRoute: "/dashboard/outreach?checkout_action=resolve_contacts",
+            applicationId: canonicalApplicationId ?? undefined,
+            onBeforeCheckout: () => rememberOutreachCheckoutState(currentCheckoutState(canonicalApplicationId)),
+          }, { source: "server_denial", trigger: upgradeTrigger });
+          return;
+        }
+        setComposeError(reason instanceof Error ? reason.message : "Litos could not find contacts for this company.");
+      } finally {
+        lease.settle();
+      }
+    })();
+  }
+
+  async function draftWithLitos(upgradeTrigger: HTMLButtonElement) {
+    const lease = operationOwner.acquire("draft-generation");
+    if (!lease) return;
+    const generation = ++draftRequestGenerationRef.current;
+    const request = {
+      contactName: contactName.trim(),
+      contactTitle: contactTitle.trim(),
+      contactEmail: contactEmail.trim(),
+      company: company.trim(),
+      companyDomain: companyDomain.trim(),
+      targetRole: targetRole.trim(),
+      draftType,
+      selectedContact,
+    };
+    let canonicalApplicationId = applicationId;
+
+    setComposeError(null);
+    try {
+      const operationKey = `draft:${request.draftType}:${request.selectedContact?.contact.id ?? `${request.contactName.toLowerCase()}:${request.contactTitle.toLowerCase()}`}:${request.companyDomain.toLowerCase() || request.company.toLowerCase()}:${request.targetRole.toLowerCase()}`;
+      const operationId = operationIdFor(operationOwner.draftOperationIds, operationKey);
+      canonicalApplicationId = await ensureOutreachApplication({
+        company: request.company,
+        companyDomain: request.companyDomain,
+        targetRole: request.targetRole,
+        isCurrent: () => generation === draftRequestGenerationRef.current,
+      });
+      if (generation !== draftRequestGenerationRef.current) return;
+      const profile = await api<ParsedProfile>("/profile");
+      if (generation !== draftRequestGenerationRef.current) return;
+      const result = await api<{
+        subject: string;
+        body: string;
+        contact_id: string;
+        draft_id: string;
+        draft_type: DraftType;
+      }>("/draft", {
+        method: "POST",
+        body: JSON.stringify({
+          operation_id: operationId,
+          application_id: canonicalApplicationId,
+          draft_type: request.draftType,
+          contact: {
+            ...(request.selectedContact?.contact.id ? { id: request.selectedContact.contact.id } : {}),
+            full_name: request.contactName,
+            title: request.contactTitle,
+            persona: request.selectedContact?.contact.persona ?? "near_peer",
+            company: request.company,
+            school_match: request.selectedContact?.contact.school_match ?? false,
+            ...(request.selectedContact?.contact.linkedin_url ? { linkedin_url: request.selectedContact.contact.linkedin_url } : {}),
+            ...(request.companyDomain ? { company_domain: request.companyDomain } : {}),
+            ...(request.contactEmail ? { email: request.contactEmail } : {}),
+          },
+          role: request.targetRole,
+          company: request.company,
+          ...(request.companyDomain ? { company_domain: request.companyDomain } : {}),
+          user_profile: {
+            experience: profile.experience,
+            skills: profile.skills,
+            school: profile.school,
+            grad_year: profile.grad_year,
+          },
+        }),
+      });
+      completeOperationId(operationOwner.draftOperationIds, operationKey);
+      if (generation !== draftRequestGenerationRef.current) return;
+      setSubject(result.subject);
+      setDraft(result.body);
+      setDraftType(result.draft_type);
+      setEditingDraftId(result.draft_id);
+      window.sessionStorage.removeItem(OUTREACH_CHECKOUT_KEY);
+    } catch (reason) {
+      if (generation !== draftRequestGenerationRef.current) return;
+      if (isStructuredUpgradeDenial(reason, "outreach_email_generation")) {
+        const denial = reason instanceof ApiError && reason.data && typeof reason.data === "object"
+          ? reason.data as { contact_id?: unknown }
+          : null;
+        const canonicalContactId = typeof denial?.contact_id === "string"
+          ? denial.contact_id
+          : request.selectedContact?.contact.id;
+        openUpgrade({
+          feature: "outreach_email_generation",
+          placement: "outreach_compose",
+          trigger: "server_entitlement_denial",
+          manualLabel: "Write it myself",
+          returnRoute: "/dashboard/outreach?checkout_action=write_outreach",
+          applicationId: canonicalApplicationId ?? undefined,
+          contactId: canonicalContactId,
+          onBeforeCheckout: () => rememberOutreachCheckoutState(currentCheckoutState(canonicalApplicationId)),
+        }, { source: "server_denial", trigger: upgradeTrigger });
+      } else {
+        setComposeError(reason instanceof Error ? reason.message : "Litos could not draft this message.");
+      }
+    } finally {
+      lease.settle();
+    }
   }
 
   async function copyDraft(id: string, text: string) {
@@ -264,6 +527,7 @@ export default function Outreach() {
   }
 
   function editSavedDraft(saved: DurableOutreachDraft, trigger?: HTMLElement) {
+    invalidateComposerRequests();
     const savedDomain = saved.contact.company_domain
       ?? (saved.company_scope_key.startsWith("domain:") ? saved.company_scope_key.slice("domain:".length) : "");
     setApplicationId(saved.application_id);
@@ -291,19 +555,33 @@ export default function Outreach() {
     });
     setResolvedContacts(null);
     setComposeError(null);
-    openComposer("draft", trigger);
+    openComposer("draft", trigger, outreachDraftEditTriggerId(saved.draft_id));
   }
 
   async function saveEditedDraft() {
     if (!editingDraftId) return;
-    setComposeBusy(true);
+    const lease = operationOwner.acquire("edited-save");
+    if (!lease) return;
+    const generation = ++saveRequestGenerationRef.current;
+    const request = {
+      editingDraftId,
+      subject,
+      draft,
+      contactEmail: contactEmail.trim(),
+    };
+
     setComposeError(null);
     try {
-      const result = await api<{ draft: DurableOutreachDraft }>(`/drafts/${encodeURIComponent(editingDraftId)}`, {
+      const result = await api<{ draft: DurableOutreachDraft }>(`/drafts/${encodeURIComponent(request.editingDraftId)}`, {
         method: "PATCH",
-        body: JSON.stringify({ subject, body: draft, contact_email: contactEmail.trim() || null }),
+        body: JSON.stringify({
+          subject: request.subject,
+          body: request.draft,
+          contact_email: request.contactEmail || null,
+        }),
       });
-      setEvents((current) => current?.map((event) => event.id === editingDraftId ? {
+      if (generation !== saveRequestGenerationRef.current) return;
+      setEvents((current) => current?.map((event) => event.id === request.editingDraftId ? {
         ...event,
         subject: result.draft.subject,
         draft_text: result.draft.body,
@@ -312,57 +590,103 @@ export default function Outreach() {
       setSubject(result.draft.subject);
       setDraft(result.draft.body);
     } catch (reason) {
+      if (generation !== saveRequestGenerationRef.current) return;
       setComposeError(reason instanceof Error ? reason.message : "Litos could not save this draft.");
     } finally {
-      setComposeBusy(false);
+      lease.settle();
     }
   }
 
   async function saveManualDraft() {
-    if (editingDraftId || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim() || !subject.trim() || !draft.trim()) return;
-    setComposeBusy(true);
+    if (
+      editingDraftId
+      || !contactName.trim()
+      || !contactTitle.trim()
+      || !company.trim()
+      || !targetRole.trim()
+      || !subject.trim()
+      || !draft.trim()
+    ) return;
+    const lease = operationOwner.acquire("manual-save");
+    if (!lease) return;
+    const generation = ++saveRequestGenerationRef.current;
+    const request = {
+      applicationId,
+      contactName: contactName.trim(),
+      contactTitle: contactTitle.trim(),
+      contactEmail: contactEmail.trim(),
+      company: company.trim(),
+      companyDomain: companyDomain.trim(),
+      targetRole: targetRole.trim(),
+      subject: subject.trim(),
+      draft: draft.trim(),
+      draftType,
+      selectedContact,
+    };
+
     setComposeError(null);
     try {
-      const canonicalApplicationId = await ensureOutreachApplication();
-      const contactKey = selectedContact?.contact.id
-        ?? `${contactName.trim().toLowerCase()}:${contactTitle.trim().toLowerCase()}`;
-      const operationKey = `manual-draft:${canonicalApplicationId}:${draftType}:${contactKey}`;
-      const operationId = operationIdFor(draftOperationIds.current, operationKey);
+      const canonicalApplicationId = request.applicationId ?? await ensureOutreachApplication({
+        company: request.company,
+        companyDomain: request.companyDomain,
+        targetRole: request.targetRole,
+        isCurrent: () => generation === saveRequestGenerationRef.current,
+      });
+      if (generation !== saveRequestGenerationRef.current) return;
+      const contactKey = request.selectedContact?.contact.id
+        ?? `${request.contactName.toLowerCase()}:${request.contactTitle.toLowerCase()}`;
+      const operationKey = [
+        "manual-draft",
+        canonicalApplicationId,
+        request.draftType,
+        contactKey,
+        request.contactEmail.toLowerCase(),
+        request.subject,
+        request.draft,
+      ].join(":");
+      const operationId = operationIdFor(operationOwner.draftOperationIds, operationKey);
       const saved = await api<DurableOutreachDraft>("/drafts/manual", {
         method: "POST",
         body: JSON.stringify({
           application_id: canonicalApplicationId,
           operation_id: operationId,
-          draft_type: draftType,
+          draft_type: request.draftType,
           contact: {
-            ...(selectedContact?.contact.id ? { id: selectedContact.contact.id } : {}),
-            full_name: contactName.trim(),
-            title: contactTitle.trim(),
-            persona: selectedContact?.contact.persona ?? "near_peer",
-            company: company.trim(),
-            school_match: selectedContact?.contact.school_match ?? false,
-            ...(selectedContact?.contact.linkedin_url ? { linkedin_url: selectedContact.contact.linkedin_url } : {}),
-            ...(companyDomain.trim() ? { company_domain: companyDomain.trim() } : {}),
-            ...(contactEmail.trim() ? { email: contactEmail.trim() } : {}),
+            ...(request.selectedContact?.contact.id ? { id: request.selectedContact.contact.id } : {}),
+            full_name: request.contactName,
+            title: request.contactTitle,
+            persona: request.selectedContact?.contact.persona ?? "near_peer",
+            company: request.company,
+            school_match: request.selectedContact?.contact.school_match ?? false,
+            ...(request.selectedContact?.contact.linkedin_url ? { linkedin_url: request.selectedContact.contact.linkedin_url } : {}),
+            ...(request.companyDomain ? { company_domain: request.companyDomain } : {}),
+            ...(request.contactEmail ? { email: request.contactEmail } : {}),
           },
-          subject: subject.trim(),
-          body: draft.trim(),
+          subject: request.subject,
+          body: request.draft,
         }),
       });
-      completeOperationId(draftOperationIds.current, operationKey);
+      completeOperationId(operationOwner.draftOperationIds, operationKey);
+      if (generation !== saveRequestGenerationRef.current) return;
       setApplicationId(saved.application_id);
       setEditingDraftId(saved.draft_id);
       setSubject(saved.subject);
       setDraft(saved.body);
       setDraftType(saved.draft_type);
       setContactEmail(saved.contact.email ?? saved.contact_email ?? "");
-      setLoadAttempt((attempt) => attempt + 1);
     } catch (reason) {
+      if (generation !== saveRequestGenerationRef.current) return;
       setComposeError(reason instanceof Error ? reason.message : "Litos could not save this draft.");
     } finally {
-      setComposeBusy(false);
+      lease.settle();
     }
   }
+
+  useLayoutEffect(() => () => {
+    contactRequestGenerationRef.current += 1;
+    draftRequestGenerationRef.current += 1;
+    saveRequestGenerationRef.current += 1;
+  }, []);
 
   useEffect(() => {
     let frame: number | null = null;
@@ -376,10 +700,16 @@ export default function Outreach() {
     } else if (!composeOpen && focusTriggerAfterClose.current) {
       focusTriggerAfterClose.current = false;
       const trigger = composerTriggerRef.current;
+      const logicalTriggerId = composerLogicalTriggerIdRef.current;
       composerTriggerRef.current = null;
+      composerLogicalTriggerIdRef.current = null;
       frame = window.requestAnimationFrame(() => {
         if (trigger?.isConnected) trigger.focus();
-        else document.getElementById("outreach-start-button")?.focus();
+        else {
+          const logicalTrigger = logicalTriggerId ? document.getElementById(logicalTriggerId) : null;
+          if (logicalTrigger) logicalTrigger.focus();
+          else document.getElementById("outreach-start-button")?.focus();
+        }
       });
     }
     return () => {
@@ -449,7 +779,7 @@ export default function Outreach() {
     return () => {
       cancelled = true;
     };
-  }, [loadAttempt]);
+  }, [draftsSettledRevision, loadAttempt]);
 
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has("checkout_action")) return;
@@ -530,154 +860,57 @@ export default function Outreach() {
         <MotionPanel name="dashboard-outreach-composer">
         <Card id="outreach-composer" role="region" aria-labelledby="outreach-composer-title" className="p-6">
           <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-label uppercase tracking-[0.08em] text-coral-ink">Compose</p><h2 ref={composerTitleRef} id="outreach-composer-title" tabIndex={-1} className="mt-2 text-heading font-[450] text-ink outline-none">A note you choose to send.</h2></div><button type="button" onClick={closeComposer} className="min-h-11 px-3 text-small text-muted transition-colors hover:text-ink">Close</button></div>
+          {/* This reserve is the tray's parking space. The negative margin below places the tray
+              inside it at rest, while the remaining gap and scroll margins keep the last fields
+              clear when the tray is parked against the viewport. */}
+          <div className="pb-44 sm:pb-24">
           <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="text-small text-muted">Name<input value={contactName} onChange={(event) => { setContactName(event.target.value); setSelectedContact(null); }} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
-            <label className="text-small text-muted">Contact title<input value={contactTitle} onChange={(event) => { setContactTitle(event.target.value); setSelectedContact(null); }} placeholder="Software engineer" className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
-            <label className="text-small text-muted">Email<input type="email" value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
-            <label className="text-small text-muted">Company<input value={company} onChange={(event) => { setCompany(event.target.value); setApplicationId(null); setSelectedContact(null); setResolvedContacts(null); }} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
-            <label className="text-small text-muted">Company domain<input value={companyDomain} onChange={(event) => { setCompanyDomain(event.target.value); setApplicationId(null); setSelectedContact(null); setResolvedContacts(null); }} placeholder="acme.com" className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
-            <label className="text-small text-muted">Role you want<input value={targetRole} onChange={(event) => { setTargetRole(event.target.value); setApplicationId(null); }} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
+            <label className="text-small text-muted">Name<input value={contactName} onChange={(event) => changeContactName(event.target.value)} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
+            <label className="text-small text-muted">Contact title<input value={contactTitle} onChange={(event) => changeContactTitle(event.target.value)} placeholder="Software engineer" className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
+            <label className="text-small text-muted">Email<input type="email" value={contactEmail} onChange={(event) => changeContactEmail(event.target.value)} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
+            <label className="text-small text-muted">Company<input value={company} onChange={(event) => changeCompany(event.target.value)} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
+            <label className="text-small text-muted">Company domain<input value={companyDomain} onChange={(event) => changeCompanyDomain(event.target.value)} placeholder="acme.com" className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
+            <label className="text-small text-muted">Role you want<input value={targetRole} onChange={(event) => changeTargetRole(event.target.value)} className="rq-field mt-1.5 w-full rounded-inner px-3 py-2.5 text-ink" /></label>
           </div>
           <div className="mt-4 rounded-inner border border-coral/30 bg-coral-soft/25 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div><p className="text-small font-medium text-ink">Find a verified contact</p><p className="mt-1 text-label text-muted">Litos uses the exact company domain you enter to keep contact and draft usage together.</p></div>
-              <Button type="button" variant="secondary" className="border-coral text-coral-ink" disabled={resolveBusy || !company.trim() || !companyDomain.trim() || !targetRole.trim()} onClick={(event) => {
+              <Button type="button" variant="secondary" className="border-coral text-coral-ink" disabled={mutationBusy || !company.trim() || !companyDomain.trim() || !targetRole.trim()} onClick={(event) => {
                 const upgradeTrigger = event.currentTarget;
-                setResolveBusy(true);
-                setComposeError(null);
-                const operationKey = `contact:${companyDomain.trim().toLowerCase()}:${targetRole.trim().toLowerCase()}`;
-                const operationId = operationIdFor(contactOperationIds.current, operationKey);
-                let canonicalApplicationId = applicationId;
-                void (async () => {
-                  canonicalApplicationId = await ensureOutreachApplication();
-                  return api<{ contacts?: ResolvedContact[] }>("/resolve", {
-                    method: "POST",
-                    body: JSON.stringify({
-                      company: company.trim(),
-                      domain: companyDomain.trim(),
-                      role: targetRole.trim(),
-                      application_id: canonicalApplicationId,
-                      operation_id: operationId,
-                    }),
-                  });
-                })().then((result) => {
-                  completeOperationId(contactOperationIds.current, operationKey);
-                  setResolvedContacts(result.contacts ?? []);
-                })
-                  .catch((reason) => {
-                    if (isStructuredUpgradeDenial(reason, "contact_discovery")) {
-                      openUpgrade({
-                        feature: "contact_discovery",
-                        placement: "outreach_compose",
-                        trigger: "server_entitlement_denial",
-                        manualLabel: "Add contact manually",
-                        returnRoute: "/dashboard/outreach?checkout_action=resolve_contacts",
-                        applicationId: canonicalApplicationId ?? undefined,
-                        onBeforeCheckout: () => rememberOutreachCheckoutState(currentCheckoutState(canonicalApplicationId)),
-                      }, { source: "server_denial", trigger: upgradeTrigger });
-                      return;
-                    }
-                    setComposeError(reason instanceof Error ? reason.message : "Litos could not find contacts for this company.");
-                  })
-                  .finally(() => setResolveBusy(false));
+                findContacts(upgradeTrigger);
               }}>{resolveBusy ? <PendingLabel>Finding contacts</PendingLabel> : "Find contacts"}</Button>
             </div>
             {resolvedContacts && resolvedContacts.length === 0 && <p className="mt-4 text-small text-muted">No verified contacts were found. You can still add someone manually and write the message yourself.</p>}
             {resolvedContacts && resolvedContacts.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2">{resolvedContacts.map((resolved) => {
               const active = selectedContact?.contact.id === resolved.contact.id;
               return <button key={resolved.contact.id} type="button" aria-pressed={active} onClick={() => {
-                setSelectedContact(resolved);
-                setContactName(resolved.contact.full_name);
-                setContactTitle(resolved.contact.title);
-                setContactEmail(resolved.email_resolution.email ?? "");
-                setCompanyDomain(resolved.contact.company_domain);
+                chooseResolvedContact(resolved);
               }} className={`rounded-inner border px-4 py-3 text-left ${active ? "border-coral bg-coral-soft" : "border-border bg-surface hover:border-coral/50"}`}><span className="block text-small font-medium text-ink">{resolved.contact.full_name}</span><span className="mt-1 block text-label text-muted">{resolved.contact.title || "Role not listed"} · {resolved.email_resolution.tier}</span></button>;
             })}</div>}
           </div>
-          <label className="mt-4 block text-small text-muted">Message type<select value={draftType} onChange={(event) => setDraftType(event.target.value as DraftType)} className="rq-field mt-1.5 w-full rounded-inner px-4 py-3 text-ink">{DRAFT_TYPES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
-          <label className="mt-4 block text-small text-muted">Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} className="rq-field mt-1.5 w-full rounded-inner px-4 py-3 text-ink" /></label>
-          <label className="mt-4 block text-small text-muted">Message<textarea id="outreach-draft-body" rows={8} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Write your note here, or ask Litos+ for a first draft." className="rq-field mt-1.5 w-full rounded-inner px-4 py-3 text-ink" /></label>
-          {composeError && <div className="mt-4"><ErrorNote message={composeError} /></div>}
-          <div className="mt-5 flex flex-wrap gap-3">
-            {editingDraftId && <Button type="button" variant="secondary" disabled={composeBusy || !subject.trim() || !draft.trim()} onClick={() => void saveEditedDraft()}>{composeBusy ? <PendingLabel>Saving draft</PendingLabel> : "Save changes"}</Button>}
-            {!editingDraftId && <Button type="button" variant="secondary" disabled={composeBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim() || !subject.trim() || !draft.trim()} onClick={() => void saveManualDraft()}>{composeBusy ? <PendingLabel>Saving draft</PendingLabel> : "Save draft"}</Button>}
-            <Button type="button" variant="secondary" disabled={composeBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim()} onClick={async (event) => {
-              const upgradeTrigger = event.currentTarget;
-              setComposeBusy(true); setComposeError(null);
-              let canonicalApplicationId = applicationId;
-              try {
-                const operationKey = `draft:${draftType}:${selectedContact?.contact.id ?? `${contactName.trim().toLowerCase()}:${contactTitle.trim().toLowerCase()}`}:${companyDomain.trim().toLowerCase() || company.trim().toLowerCase()}:${targetRole.trim().toLowerCase()}`;
-                const operationId = operationIdFor(draftOperationIds.current, operationKey);
-                canonicalApplicationId = await ensureOutreachApplication();
-                const profile = await api<ParsedProfile>("/profile");
-                const result = await api<{
-                  subject: string;
-                  body: string;
-                  contact_id: string;
-                  draft_id: string;
-                  draft_type: DraftType;
-                }>("/draft", {
-                  method: "POST",
-                  body: JSON.stringify({
-                    operation_id: operationId,
-                    application_id: canonicalApplicationId,
-                    draft_type: draftType,
-                    contact: {
-                      ...(selectedContact?.contact.id ? { id: selectedContact.contact.id } : {}),
-                      full_name: contactName.trim(),
-                      title: contactTitle.trim(),
-                      persona: selectedContact?.contact.persona ?? "near_peer",
-                      company: company.trim(),
-                      school_match: selectedContact?.contact.school_match ?? false,
-                      ...(selectedContact?.contact.linkedin_url ? { linkedin_url: selectedContact.contact.linkedin_url } : {}),
-                      ...(companyDomain.trim() ? { company_domain: companyDomain.trim() } : {}),
-                      ...(contactEmail.trim() ? { email: contactEmail.trim() } : {}),
-                    },
-                    role: targetRole.trim(),
-                    company: company.trim(),
-                    ...(companyDomain.trim() ? { company_domain: companyDomain.trim() } : {}),
-                    user_profile: {
-                      experience: profile.experience,
-                      skills: profile.skills,
-                      school: profile.school,
-                      grad_year: profile.grad_year,
-                    },
-                  }),
-                });
-                setSubject(result.subject);
-                setDraft(result.body);
-                setDraftType(result.draft_type);
-                setEditingDraftId(result.draft_id);
-                completeOperationId(draftOperationIds.current, operationKey);
-                window.sessionStorage.removeItem(OUTREACH_CHECKOUT_KEY);
-                setLoadAttempt((attempt) => attempt + 1);
-              } catch (reason) {
-                if (isStructuredUpgradeDenial(reason, "outreach_email_generation")) {
-                  const denial = reason instanceof ApiError && reason.data && typeof reason.data === "object"
-                    ? reason.data as { contact_id?: unknown }
-                    : null;
-                  const canonicalContactId = typeof denial?.contact_id === "string"
-                    ? denial.contact_id
-                    : selectedContact?.contact.id;
-                  openUpgrade({
-                    feature: "outreach_email_generation",
-                    placement: "outreach_compose",
-                    trigger: "server_entitlement_denial",
-                    manualLabel: "Write it myself",
-                    returnRoute: "/dashboard/outreach?checkout_action=write_outreach",
-                    applicationId: canonicalApplicationId ?? undefined,
-                    contactId: canonicalContactId,
-                    onBeforeCheckout: () => rememberOutreachCheckoutState(currentCheckoutState(canonicalApplicationId)),
-                  }, { source: "server_denial", trigger: upgradeTrigger });
-                } else {
-                  setComposeError(reason instanceof Error ? reason.message : "Litos could not draft this message.");
-                }
-              }
-              finally { setComposeBusy(false); }
-            }}>{composeBusy ? <PendingLabel>Writing draft</PendingLabel> : "Draft with Litos+"}</Button>
-            <a href={contactEmail && draft ? `mailto:${encodeURIComponent(contactEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(draft)}` : undefined} aria-disabled={!contactEmail || !draft} className="inline-flex min-h-11 items-center rounded-control border border-coral px-5 text-small font-medium text-coral-ink aria-disabled:pointer-events-none aria-disabled:opacity-50">Open in email</a>
+          <label className="mt-4 block text-small text-muted">Message type<select value={draftType} onChange={(event) => changeDraftType(event.target.value as DraftType)} className="rq-field mt-1.5 w-full scroll-mb-52 rounded-inner px-4 py-3 text-ink sm:scroll-mb-32">{DRAFT_TYPES.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+          <label className="mt-4 block text-small text-muted">Subject<input value={subject} onChange={(event) => changeSubject(event.target.value)} className="rq-field mt-1.5 w-full scroll-mb-52 rounded-inner px-4 py-3 text-ink sm:scroll-mb-32" /></label>
+          <label className="mt-4 block text-small text-muted">Message<textarea id="outreach-draft-body" rows={6} value={draft} onChange={(event) => changeDraft(event.target.value)} placeholder="Write your note here, or ask Litos+ for a first draft." className="rq-field mt-1.5 w-full scroll-mb-52 rounded-inner px-4 py-3 text-ink sm:scroll-mb-32" /></label>
           </div>
-          <p className="mt-3 text-label text-muted">Opening your email app never sends the message. You review the recipient and press Send there.</p>
+          <TerminalActionBar className="-mt-40 !rounded-inner !bg-surface !p-3 motion-reduce:transition-none sm:-mt-20 lg:!sticky lg:!bottom-[var(--dashboard-action-sticky-offset,2.5rem)] lg:!shadow-raised">
+            <div data-outreach-terminal-actions className="w-full">
+              {composeError && <div className="mb-3"><ErrorNote message={composeError} /></div>}
+              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+                <p id="outreach-email-handoff-note" className="order-2 text-label leading-5 text-muted sm:order-1 sm:max-w-[18rem]">
+                  Your email app opens a draft. You still review it and press Send.
+                </p>
+                <div className="order-1 grid w-full grid-cols-2 gap-2 sm:order-2 sm:flex sm:w-auto sm:items-center">
+                  {editingDraftId && <Button type="button" variant="primary" className="col-span-2 w-full motion-reduce:transition-none sm:order-3 sm:w-auto" disabled={mutationBusy || !subject.trim() || !draft.trim()} onClick={() => void saveEditedDraft()}>{saveBusy ? <PendingLabel onColor>Saving draft</PendingLabel> : "Save changes"}</Button>}
+                  {!editingDraftId && <Button type="button" variant="primary" className="col-span-2 w-full motion-reduce:transition-none sm:order-3 sm:w-auto" disabled={mutationBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim() || !subject.trim() || !draft.trim()} onClick={() => void saveManualDraft()}>{saveBusy ? <PendingLabel onColor>Saving draft</PendingLabel> : "Save draft"}</Button>}
+                  <Button type="button" variant="secondary" className="w-full motion-reduce:transition-none sm:order-1 sm:w-auto" disabled={mutationBusy || !contactName.trim() || !contactTitle.trim() || !company.trim() || !targetRole.trim()} onClick={async (event) => {
+                    const upgradeTrigger = event.currentTarget;
+                    await draftWithLitos(upgradeTrigger);
+                  }}>{draftBusy ? <PendingLabel>Writing draft</PendingLabel> : "Draft with Litos+"}</Button>
+                  <a href={contactEmail && draft ? `mailto:${encodeURIComponent(contactEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(draft)}` : undefined} aria-disabled={!contactEmail || !draft} aria-describedby="outreach-email-handoff-note" className="inline-flex min-h-11 w-full items-center justify-center rounded-full px-3.5 text-[13px] font-medium text-muted transition-colors hover:bg-surface-alt hover:text-ink motion-reduce:transition-none aria-disabled:pointer-events-none aria-disabled:opacity-50 sm:order-2 sm:w-auto">Open in email</a>
+                </div>
+              </div>
+            </div>
+          </TerminalActionBar>
         </Card>
         </MotionPanel>
       )}
@@ -781,6 +1014,7 @@ export default function Outreach() {
                   <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-4">
                     {e.durableDraft && (
                       <button
+                        id={outreachDraftEditTriggerId(e.durableDraft.draft_id)}
                         type="button"
                         onClick={(event) => editSavedDraft(e.durableDraft!, event.currentTarget)}
                         className="flex min-h-11 items-center rounded-full border border-border px-5 text-sm font-medium text-ink transition-colors hover:border-ink"
@@ -816,4 +1050,14 @@ function outreachContentKey(event: Pick<OutreachEvent, "contact" | "subject" | "
     event.subject?.trim() ?? "",
     event.draft_text?.trim() ?? "",
   ].join("\n");
+}
+
+function outreachApplicationScopeKey(company: string, domain: string, role: string): string {
+  return [company, domain, role]
+    .map((value) => value.trim().toLowerCase())
+    .join("\n");
+}
+
+function outreachDraftEditTriggerId(draftId: string): string {
+  return `outreach-draft-edit-${encodeURIComponent(draftId)}`;
 }

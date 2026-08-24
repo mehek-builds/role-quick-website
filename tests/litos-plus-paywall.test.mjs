@@ -16,12 +16,13 @@ test("the shared Litos+ modal preserves context and a manual way forward", async
   assert.match(modal, /onCloseRef\.current\(\)/);
   assert.match(modal, /LITOS_PLUS_PLANS\.map/);
   assert.match(modal, /Most popular/);
+  assert.match(modal, /Current plan: \{accessLabel\(access\)\}/);
   assert.match(modal, /href="\/terms"/);
   assert.match(modal, /href="\/privacy"/);
   assert.match(provider, /triggerRef\.current/);
   assert.match(provider, /trigger\?: HTMLElement \| null/);
   assert.match(provider, /options\?\.trigger\?\.isConnected[\s\S]*\? options\.trigger[\s\S]*: document\.activeElement/);
-  assert.match(provider, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(provider, /const trigger = triggerRef\.current;[\s\S]*restoreUpgradeFocus\(trigger\)/);
   assert.match(provider, /createPendingBillingAction/);
   assert.match(provider, /actionNonce: action\.action_nonce/);
   assert.match(provider, /rememberBillingReturnContext/);
@@ -66,14 +67,46 @@ test("authoritative exhausted-meter denials bypass cached trial feature grants",
     assert.match(paywall, new RegExp(`"${feature}"`));
   }
 
-  assert.equal((applications.match(/\{ source: "server_denial" \}/g) ?? []).length, 2);
+  assert.equal((applications.match(/\{ source: "server_denial", trigger \}/g) ?? []).length, 2);
   assert.match(applications, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)/);
   assert.match(applications, /isStructuredUpgradeDenial\(reason, "ai_cover_letter_generation"\)/);
   assert.equal((outreach.match(/\{ source: "server_denial", trigger: upgradeTrigger \}/g) ?? []).length, 2);
   assert.equal((outreach.match(/const upgradeTrigger = event\.currentTarget;/g) ?? []).length, 2);
   assert.match(outreach, /isStructuredUpgradeDenial\(reason, "contact_discovery"\)/);
   assert.match(outreach, /isStructuredUpgradeDenial\(reason, "outreach_email_generation"\)/);
-  assert.match(home, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)[\s\S]*\{ source: "server_denial" \}/);
+  assert.match(home, /isStructuredUpgradeDenial\(reason, "ai_resume_tailoring"\)[\s\S]*source: "server_denial",[\s\S]*trigger: homeUpgradeFocusTarget\(jobId, upgradeTrigger\)/);
+});
+
+test("delayed dashboard denials retain their activation target or a stable local fallback", async () => {
+  const [provider, applications, home] = await Promise.all([
+    read("components/billing/BillingProvider.tsx"),
+    read("app/dashboard/applications/page.tsx"),
+    read("app/dashboard/page.tsx"),
+  ]);
+
+  assert.match(provider, /options\?\.trigger\?\.isConnected[\s\S]*\? options\.trigger/);
+  assert.match(provider, /function restoreUpgradeFocus\(trigger: HTMLElement \| null\)/);
+  assert.match(provider, /main \[role="tab"\]\[aria-selected="true"\]/);
+  assert.match(provider, /nav \[aria-current="page"\][\s\S]*aside \[aria-current="page"\]/);
+  assert.match(provider, /\.dashboard-shell main h1/);
+  assert.match(provider, /candidate\.focus\(\{ preventScroll: true \}\)[\s\S]*document\.activeElement === candidate/);
+  assert.match(provider, /const trigger = triggerRef\.current;[\s\S]*restoreUpgradeFocus\(trigger\)/);
+
+  assert.match(home, /const upgradeTrigger = event\.currentTarget;[\s\S]*onPrepare\(upgradeTrigger\)/);
+  assert.match(home, /onPrepare=\{\(upgradeTrigger\) => void preparePacket\(job\.id, "explicit_click", upgradeTrigger\)\}/);
+  assert.match(home, /if \(trigger\?\.isConnected\) return trigger;[\s\S]*data-dashboard-job-focus-id[\s\S]*getElementById\("matches-heading"\)/);
+  assert.match(home, /tabIndex=\{-1\}[\s\S]*data-dashboard-job-focus-id=\{job\.id\}/);
+  assert.match(home, /id="matches-heading" tabIndex=\{-1\}/);
+  assert.match(home, /source: "server_denial",[\s\S]*trigger: homeUpgradeFocusTarget\(jobId, upgradeTrigger\)/);
+
+  assert.match(applications, /function applicationUpgradeFocusTarget\([\s\S]*if \(trigger\?\.isConnected\) return trigger/);
+  assert.match(applications, /"application-ledger-heading", "new-application-heading", "applications-heading"/);
+  assert.match(applications, /async function createApplication\([\s\S]*upgradeTrigger: HTMLElement \| null = null/);
+  assert.match(applications, /onTailor=\{\(upgradeTrigger\) => void createApplication\(newApplication, upgradeTrigger\)\}/);
+  assert.match(applications, /onTailor=\{\(upgradeTrigger\) => void tailorCanonicalApplication\(canonicalSelected, upgradeTrigger\)\}/);
+  assert.match(applications, /upgradeTrigger\?: HTMLElement \| null/);
+  assert.match(applications, /generateCoverLetter\(undefined, \{ upgradeTrigger: event\.currentTarget \}\)/);
+  assert.match(applications, /source === "server_denial"[\s\S]*\{ source: "server_denial", trigger \}/);
 });
 
 test("explicit plan entry points open for grandfathered accounts with preserved feature allowances", async () => {
@@ -114,7 +147,7 @@ test("Free filling uses canonical application seams and never generation", async
   assert.doesNotMatch(bridge.slice(bridge.indexOf("export async function startFreeFillThroughExtension"), bridge.indexOf("export async function armHandoffs")), /fill_data_url/);
   assert.doesNotMatch(applications, /Factual fields prepared/);
   assert.match(applications, /Click Fill in the Litos extension card/);
-  assert.match(applications, /variant="secondary" onClick=\{onTailor\}[\s\S]*"Tailor resume"/);
+  assert.match(applications, /variant="secondary"[\s\S]*onClick=\{\(event\) => onTailor\(event\.currentTarget\)\}[\s\S]*"Tailor resume"/);
   assert.match(applications, /onClick=\{onFill\}[\s\S]*"Fill application"/);
   const routedJob = applications.slice(
     applications.indexOf("if (!pendingJob || packets === null) return;"),
@@ -254,16 +287,18 @@ test("resolved contacts and drafts share the exact company domain", async () => 
   ]);
   assert.match(outreach, /api<\{ contacts\?: ResolvedContact\[\] \}>\("\/resolve"/);
   assert.match(outreach, /setCompanyDomain\(resolved\.contact\.company_domain\)/);
-  assert.equal((outreach.match(/company_domain: companyDomain\.trim\(\)/g) ?? []).length, 4);
+  assert.match(outreach, /company_domain: requestedCompanyDomain\.trim\(\)/);
+  assert.match(outreach, /domain: request\.companyDomain/);
+  assert.equal((outreach.match(/company_domain: request\.companyDomain/g) ?? []).length, 3);
   assert.match(outreach, /company_scope_conflict|company domain you enter to keep contact and draft usage together/i);
   assert.match(outreach, /api<\{ application: \{ id: string \} \}>\("\/applications"/);
   assert.equal((outreach.match(/application_id: canonicalApplicationId/g) ?? []).length, 3);
-  assert.match(outreach, /draft_type: draftType/);
+  assert.match(outreach, /draft_type: request\.draftType/);
   for (const draftType of ["first_note", "follow_up", "thank_you", "referral_ask", "offer_stage"]) {
     assert.match(outreach, new RegExp(`\\["${draftType}",`));
   }
   assert.match(outreach, /contactTitle/);
-  assert.match(outreach, /title: contactTitle\.trim\(\)/);
+  assert.match(outreach, /title: request\.contactTitle/);
   assert.match(outreach, /contactId: canonicalContactId/);
   assert.match(provider, /contactId: request\.contactId/);
   assert.match(billingApi, /contact_id: input\.contactId/);
@@ -274,12 +309,12 @@ test("durable outreach drafts survive reload and remain editable", async () => {
   assert.match(outreach, /api<\{ drafts\?: DurableOutreachDraft\[\] \}>\("\/drafts\?limit=100"/);
   assert.match(outreach, /durableDraft: saved/);
   assert.match(outreach, /editSavedDraft\(e\.durableDraft!, event\.currentTarget\)/);
-  assert.match(outreach, /`\/drafts\/\$\{encodeURIComponent\(editingDraftId\)\}`/);
+  assert.match(outreach, /`\/drafts\/\$\{encodeURIComponent\(request\.editingDraftId\)\}`/);
   assert.match(outreach, /method: "PATCH"/);
   assert.match(outreach, /"Save changes"/);
   assert.match(outreach, /api<DurableOutreachDraft>\("\/drafts\/manual"/);
   assert.match(outreach, /generation_source: "ai_generated" \| "user_written"/);
-  assert.match(outreach, /contact_email: contactEmail\.trim\(\) \|\| null/);
+  assert.match(outreach, /contact_email: request\.contactEmail \|\| null/);
   assert.match(outreach, /saved\.contact\.email \?\? saved\.contact_email/);
   assert.match(outreach, /"Save draft"/);
 });

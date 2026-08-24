@@ -198,7 +198,7 @@ test("a reused file can be taken off one application without being deleted from 
   const modal = shippedCode(await readFile(new URL("../components/app/TranscriptModal.tsx", import.meta.url), "utf8"));
 
   assert.match(modal, /async function detach\(\) \{[\s\S]{0,400}?await detachApplicationDocument\(applicationId, kind\)/);
-  assert.match(modal, /onClick=\{\(\) => void detach\(\)\} variant="secondary"/);
+  assert.match(modal, /data-transcript-action="detach"\s*onClick=\{\(\) => void detach\(\)\}\s*variant="secondary"/);
   assert.match(modal, /Not for \$\{company\}/, "the control has to name the employer it is about");
   // It clears this application's mark and nothing else: no deleteUserDocument on this path.
   const detach = modal.slice(modal.indexOf("async function detach()"), modal.indexOf("async function remove()"));

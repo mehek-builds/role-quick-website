@@ -16,7 +16,11 @@ import test from "node:test";
  */
 const read = (p) => readFile(p, "utf8");
 const LIST = "tests/e2e/sanctioned-third-parties.mjs";
-const GUARDS = ["tests/e2e/audited-state-contracts.spec.mjs", "tests/e2e/dashboard-click-path.spec.mjs"];
+const GUARDS = [
+  "tests/e2e/audited-state-contracts.spec.mjs",
+  "tests/e2e/captcha-consent-toggle.spec.mjs",
+  "tests/e2e/dashboard-click-path.spec.mjs",
+];
 
 test("exactly one third-party origin is sanctioned, and it is the pixel", async () => {
   const list = await read(LIST);
@@ -45,9 +49,15 @@ test("a sanctioned request is aborted, never fulfilled", async () => {
      analytics endpoint, whatever it thinks of the pixel. */
   for (const path of GUARDS) {
     const spec = await read(path);
-    for (const match of spec.matchAll(/if \(isSanctionedThirdParty\(url\)\) return ([a-z.]+)\(\)/g)) {
-      assert.equal(match[1], "route.abort", `${path} fulfils a sanctioned third party rather than aborting it`);
-    }
+    const guards = [...spec.matchAll(/if \(isSanctionedThirdParty\(url\)\)/g)].length;
+    const oneLineAborts = [...spec.matchAll(/if \(isSanctionedThirdParty\(url\)\) return route\.abort\(\);/g)].length;
+    const blockAborts = [...spec.matchAll(/if \(isSanctionedThirdParty\(url\)\) \{\s*await route\.abort\(\);\s*return;\s*\}/g)].length;
+    assert.ok(guards > 0, `${path} has no sanctioned-origin guard to audit`);
+    assert.equal(
+      oneLineAborts + blockAborts,
+      guards,
+      `${path} has a sanctioned-origin branch that does not abort exactly once`,
+    );
     assert.doesNotMatch(spec, /route\.fulfill[^\n]*isSanctionedThirdParty/, `${path} fulfils the sanctioned origin`);
   }
 });

@@ -13,6 +13,7 @@
     "test:click-path": "node --test tests/e2e/dashboard-click-path.spec.mjs",
     "test:dashboard-motion": "node --test tests/e2e/dashboard-motion.spec.mjs",
     "test:dashboard-visual-regressions": "node --test tests/e2e/dashboard-visual-regressions.spec.mjs",
+    "update:dashboard-visual-baselines": "npm run build && DASHBOARD_VISUAL_BASELINE_MODE=capture node --test tests/e2e/dashboard-visual-regressions.spec.mjs && node scripts/update-dashboard-visual-baselines.mjs",
     "test:narrow-viewport": "node --test tests/e2e/narrow-viewport-actions.spec.mjs",
     "test:tracker-row": "node --test tests/e2e/tracker-row-opens-detail.spec.mjs",
     "test:start-checklist": "node --test tests/e2e/start-onboarding-checklist.spec.mjs",

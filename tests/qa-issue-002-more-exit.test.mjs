@@ -43,3 +43,10 @@ test("an interrupted More entry hands its live state to the exit", () => {
   assert.match(shell, /getComputedStyle\(backdrop\)\.opacity/);
   assert.match(shell, /--rq-dashboard-backdrop-exit-from/);
 });
+
+test("the More exit retains a full-viewport pointer shield until detach", () => {
+  assert.match(shell, /moreOpen && moreClosing && \(/);
+  assert.match(shell, /data-dashboard-exit-shield/);
+  assert.match(shell, /fixed inset-0 z-\[60\]/);
+  assert.match(shell, /if \(moreClosing\) \{\s*if \(event\.key === "Tab"\) event\.preventDefault\(\);\s*return;/);
+});

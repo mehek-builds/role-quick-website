@@ -5,7 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { api, ApiError, ExperienceEntry, getTargeting, getToken } from "@/lib/api";
 import { API_URL } from "@/lib/config";
-import { createExclusiveMutationCoordinator, createLatestRequestCoordinator, restoreFocusAfterRetry } from "@/lib/latest-request";
+import { restoreFocusAfterRetry } from "@/lib/latest-request";
 import { litosClientHeaders } from "@/lib/product";
 import { Card, Chip, DataErrorState, PendingLabel, ShimmerRows, ErrorNote } from "@/components/app/ui";
 import { userFacingError } from "@/lib/user-facing-error";
@@ -17,107 +17,149 @@ import {
   splitBankByCategory,
   targetRolesChanged,
 } from "@/lib/profile-editor";
+import {
+  useResumeMutationController,
+  type ResumeMutationController,
+  type ResumeParsedProfile,
+  type ResumeParsedProfileDraft,
+  type ResumeResource,
+} from "./mutation-controller";
 
-type ParsedProfile = Record<string, unknown>;
-type ResumeResource = "profile" | "bank" | "targeting";
-type ResumeResourcePending = Partial<Record<ResumeResource, boolean>>;
 type ProfileLoadResult =
   | { kind: "missing" }
-  | { kind: "ready"; profile: ParsedProfile; targetingError: string | null };
+  | { kind: "ready"; profile: ResumeParsedProfile; targetingError: string | null };
 
 export default function ResumeWorkspace() {
   const embedded = usePathname() === "/dashboard/documents";
-  const [profile, setProfile] = useState<ParsedProfile | null | "missing">(null);
-  const [entries, setEntries] = useState<ExperienceEntry[] | null>(null);
-  const [profileLoadError, setProfileLoadError] = useState<string | null>(null);
-  const [bankLoadError, setBankLoadError] = useState<string | null>(null);
-  const [targetingRefreshError, setTargetingRefreshError] = useState<string | null>(null);
-  const [pendingResources, setPendingResources] = useState<ResumeResourcePending>({});
-  const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [savedAt, setSavedAt] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const [savedEntriesJson, setSavedEntriesJson] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
-  const uploadedProfileRef = useRef<ParsedProfile | null>(null);
-  const [resourceRequests] = useState(() => createLatestRequestCoordinator<ResumeResource>());
-  const [mutations] = useState(() => createExclusiveMutationCoordinator<"upload" | "save">());
+  const mutations = useResumeMutationController();
+  const {
+    bankLoadError,
+    entries,
+    entriesRevisionRef,
+    error,
+    parsedProfileEditing,
+    parsedProfileSaving,
+    pendingResources,
+    profile,
+    profileLoadError,
+    profileRevisionRef,
+    resourceRequests,
+    savedAt,
+    savedEntriesJson,
+    saving,
+    selectedFile,
+    setBankLoadError,
+    setEntries,
+    setError,
+    setParsedProfileSaving,
+    setPendingResources,
+    setProfile,
+    setProfileLoadError,
+    setSavedAt,
+    setSavedEntriesJson,
+    setSaving,
+    setSelectedFile,
+    setTargetingRefreshError,
+    setUploading,
+    targetingRefreshError,
+    uploadedProfileRef,
+    uploading,
+  } = mutations;
+  const shouldLoadProfileOnMount = useRef(
+    profile === null && !pendingResources.profile && profileLoadError === null && !mutations.isActive(),
+  );
+  const shouldLoadBankOnMount = useRef(
+    entries === null && !pendingResources.bank && bankLoadError === null && !mutations.isActive(),
+  );
 
   const setResourcePending = useCallback((resource: ResumeResource, pending: boolean) => {
     setPendingResources((current) => ({ ...current, [resource]: pending }));
-  }, []);
+  }, [setPendingResources]);
 
-  const loadProfile = useCallback((supersede = false) => resourceRequests.run<ProfileLoadResult>(
-    "profile",
-    async () => {
-      const profileRes = await api<ParsedProfile>("/profile").catch((reason) => {
-        if (reason instanceof ApiError && reason.status === 404) return "missing" as const;
-        throw reason;
-      });
-      if (profileRes === "missing") return { kind: "missing" };
+  const loadProfile = useCallback((supersede = false) => {
+    const requestRevision = profileRevisionRef.current;
+    return resourceRequests.run<ProfileLoadResult>(
+      "profile",
+      async () => {
+        const profileRes = await api<ResumeParsedProfile>("/profile").catch((reason) => {
+          if (reason instanceof ApiError && reason.status === 404) return "missing" as const;
+          throw reason;
+        });
+        if (profileRes === "missing") return { kind: "missing" };
 
-      try {
-        const targetingRes = await getTargeting();
-        return {
-          kind: "ready",
-          profile: targetingRes.titles?.length
-            ? { ...profileRes, target_roles: targetingRes.titles }
-            : profileRes,
-          targetingError: null,
-        };
-      } catch (reason) {
-        const profileWithoutTargetRoles = { ...profileRes };
-        delete profileWithoutTargetRoles.target_roles;
-        return {
-          kind: "ready",
-          profile: profileWithoutTargetRoles,
-          targetingError: userFacingError(reason, "Your resume loaded, but target roles could not load."),
-        };
-      }
-    },
-    {
-      onStart: () => {
-        setResourcePending("profile", true);
-        setProfileLoadError(null);
-        setTargetingRefreshError(null);
-      },
-      onSuccess: (result) => {
-        if (result.kind === "missing") {
-          setProfile("missing");
-          setTargetingRefreshError(null);
-          return;
+        try {
+          const targetingRes = await getTargeting();
+          return {
+            kind: "ready",
+            profile: targetingRes.titles?.length
+              ? { ...profileRes, target_roles: targetingRes.titles }
+              : profileRes,
+            targetingError: null,
+          };
+        } catch (reason) {
+          const profileWithoutTargetRoles = { ...profileRes };
+          delete profileWithoutTargetRoles.target_roles;
+          return {
+            kind: "ready",
+            profile: profileWithoutTargetRoles,
+            targetingError: userFacingError(reason, "Your resume loaded, but target roles could not load."),
+          };
         }
-        setProfile(result.profile);
-        setTargetingRefreshError(result.targetingError);
       },
-      onError: (reason) => setProfileLoadError(userFacingError(reason, "Your resume could not load.")),
-      onSettled: () => setResourcePending("profile", false),
-    },
-    { supersede },
-  ), [resourceRequests, setResourcePending]);
+      {
+        onStart: () => {
+          setResourcePending("profile", true);
+          setProfileLoadError(null);
+          setTargetingRefreshError(null);
+        },
+        onSuccess: (result) => {
+          if (profileRevisionRef.current !== requestRevision) return;
+          profileRevisionRef.current += 1;
+          if (result.kind === "missing") {
+            setProfile("missing");
+            setTargetingRefreshError(null);
+            return;
+          }
+          setProfile(result.profile);
+          setTargetingRefreshError(result.targetingError);
+        },
+        onError: (reason) => {
+          if (profileRevisionRef.current !== requestRevision) return;
+          setProfileLoadError(userFacingError(reason, "Your resume could not load."));
+        },
+        onSettled: () => setResourcePending("profile", false),
+      },
+      { supersede },
+    );
+  }, [profileRevisionRef, resourceRequests, setProfile, setProfileLoadError, setResourcePending, setTargetingRefreshError]);
 
   const loadBank = useCallback((
     failureMessage = "Your work history could not load.",
     supersede = false,
-  ) => resourceRequests.run(
-    "bank",
-    () => api<{ entries: ExperienceEntry[] }>("/profile/experience-bank"),
-    {
-      onStart: () => {
-        setResourcePending("bank", true);
-        setBankLoadError(null);
+  ) => {
+    const requestRevision = entriesRevisionRef.current;
+    return resourceRequests.run(
+      "bank",
+      () => api<{ entries: ExperienceEntry[] }>("/profile/experience-bank"),
+      {
+        onStart: () => {
+          setResourcePending("bank", true);
+          setBankLoadError(null);
+        },
+        onSuccess: (bank) => {
+          if (entriesRevisionRef.current !== requestRevision) return;
+          entriesRevisionRef.current += 1;
+          setEntries(bank.entries);
+          setSavedEntriesJson(JSON.stringify(bank.entries));
+        },
+        onError: (reason) => setBankLoadError(userFacingError(reason, failureMessage)),
+        onSettled: () => setResourcePending("bank", false),
       },
-      onSuccess: (bank) => {
-        setEntries(bank.entries);
-        setSavedEntriesJson(JSON.stringify(bank.entries));
-      },
-      onError: (reason) => setBankLoadError(userFacingError(reason, failureMessage)),
-      onSettled: () => setResourcePending("bank", false),
-    },
-    { supersede },
-  ), [resourceRequests, setResourcePending]);
+      { supersede },
+    );
+  }, [entriesRevisionRef, resourceRequests, setBankLoadError, setEntries, setResourcePending, setSavedEntriesJson]);
 
   const loadTargeting = useCallback((
     failureMessage: string,
@@ -133,6 +175,7 @@ export default function ResumeWorkspace() {
       },
       onSuccess: (targeting) => {
         if (targeting.titles?.length) {
+          profileRevisionRef.current += 1;
           setProfile((current) => {
             const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
             return base ? { ...base, target_roles: targeting.titles } : current;
@@ -142,6 +185,7 @@ export default function ResumeWorkspace() {
             ? uploadedProfileRef.current.target_roles
             : [];
           if (inferredRoles.length > 0) {
+            profileRevisionRef.current += 1;
             setProfile((current) => {
               const base = current === null || current === "missing" ? uploadedProfileRef.current : current;
               return base ? { ...base, target_roles: inferredRoles } : current;
@@ -153,7 +197,7 @@ export default function ResumeWorkspace() {
       onSettled: () => setResourcePending("targeting", false),
     },
     { supersede },
-  ), [resourceRequests, setResourcePending]);
+  ), [profileRevisionRef, resourceRequests, setProfile, setResourcePending, setTargetingRefreshError, uploadedProfileRef]);
 
   const refreshUploadedProfile = useCallback(async () => {
     await Promise.allSettled([
@@ -164,7 +208,10 @@ export default function ResumeWorkspace() {
 
   useEffect(() => {
     queueMicrotask(() => {
-      void Promise.allSettled([loadProfile(), loadBank()]);
+      const requests: Promise<unknown>[] = [];
+      if (shouldLoadProfileOnMount.current) requests.push(loadProfile());
+      if (shouldLoadBankOnMount.current) requests.push(loadBank());
+      void Promise.allSettled(requests);
     });
   }, [loadBank, loadProfile]);
 
@@ -201,18 +248,20 @@ export default function ResumeWorkspace() {
         if (!res.ok) {
           setError(data?.error ?? "Upload failed. Is it a PDF under 10 MB?");
         } else {
-          const parsedProfile = data as ParsedProfile;
+          const parsedProfile = data as ResumeParsedProfile;
           uploadedProfileRef.current = parsedProfile;
           const parsedProfileWithoutTargetRoles = { ...parsedProfile };
           delete parsedProfileWithoutTargetRoles.target_roles;
           const currentRoles = profile && profile !== "missing" && Array.isArray(profile.target_roles)
             ? profile.target_roles
             : [];
+          profileRevisionRef.current += 1;
           setProfile(
             currentRoles.length > 0
               ? { ...parsedProfileWithoutTargetRoles, target_roles: currentRoles }
               : parsedProfileWithoutTargetRoles,
           );
+          entriesRevisionRef.current += 1;
           setEntries(null);
           await refreshUploadedProfile();
         }
@@ -226,11 +275,13 @@ export default function ResumeWorkspace() {
 
   async function saveBank() {
     if (!entries || mutations.isActive()) return;
+    const editorRevision = entriesRevisionRef.current;
+    const submittedEntries = entries;
     await mutations.run("save", async () => {
       setSaving(true);
       setError(null);
       try {
-        const cleaned = entries
+        const cleaned = submittedEntries
           .map((e) => ({
             ...(e.id ? { id: e.id } : {}),
             type: e.type,
@@ -268,10 +319,13 @@ export default function ResumeWorkspace() {
           "/profile/experience-bank",
           { method: "PUT", body: JSON.stringify({ entries: complete }) },
         );
+        if (entriesRevisionRef.current !== editorRevision) return;
+        entriesRevisionRef.current += 1;
         setEntries(res.entries);
         setSavedEntriesJson(JSON.stringify(res.entries));
         setSavedAt(Date.now());
       } catch (err) {
+        if (entriesRevisionRef.current !== editorRevision) return;
         setError(err instanceof Error ? err.message : "Could not save.");
       } finally {
         setSaving(false);
@@ -280,16 +334,19 @@ export default function ResumeWorkspace() {
   }
 
   function patchEntry(i: number, patch: Partial<ExperienceEntry>) {
+    entriesRevisionRef.current += 1;
     setEntries((prev) =>
       prev ? prev.map((e, j) => (j === i ? { ...e, ...patch } : e)) : prev,
     );
   }
 
   function removeEntry(i: number) {
+    entriesRevisionRef.current += 1;
     setEntries((prev) => prev?.filter((_, j) => j !== i) ?? prev);
   }
 
   function addEntry(type: ExperienceEntry["type"]) {
+    entriesRevisionRef.current += 1;
     setEntries((prev) => [
       ...(prev ?? []),
       { type, org: "", title: "", date_range: "", location: "", bullet_variants: [""], tags: [] },
@@ -304,13 +361,31 @@ export default function ResumeWorkspace() {
   const entriesDirty = entries !== null && JSON.stringify(entries) !== savedEntriesJson;
   const profileRefreshing = Boolean(pendingResources.profile || pendingResources.targeting);
   const bankRefreshing = Boolean(pendingResources.bank);
+  const uploadPending = uploading || mutations.activeMutation === "upload";
+  const bankSavePending = saving || mutations.activeMutation === "save";
+  const parsedProfileSavePending = parsedProfileSaving || mutations.activeMutation === "parsed-profile";
+  const mutationBusy = uploadPending || bankSavePending || parsedProfileSavePending;
+  const uploadBlockedReason = parsedProfileEditing && entriesDirty
+    ? "Save or cancel profile edits, and save work history, before replacing your resume."
+    : parsedProfileEditing
+      ? "Save or cancel profile edits before replacing your resume."
+      : entriesDirty
+        ? "Save work history changes before replacing your resume."
+        : null;
   const uploadReady = profile !== null
     && entries !== null
     && profileLoadError === null
     && bankLoadError === null
-    && !saving
+    && !parsedProfileEditing
+    && !entriesDirty
+    && !mutationBusy
     && !profileRefreshing
     && !bankRefreshing;
+
+  const runParsedProfileMutation = useCallback(
+    (operation: () => Promise<void>) => mutations.run("parsed-profile", operation),
+    [mutations],
+  );
 
   function chooseUpload(file: File | undefined) {
     if (!file || !uploadReady || mutations.isActive()) return;
@@ -339,7 +414,7 @@ export default function ResumeWorkspace() {
       {error && <ErrorNote message={error} />}
 
       {/* Base resume */}
-      <Card className="p-6" aria-busy={profileRefreshing}>
+      <Card className="p-6" aria-busy={profileRefreshing || uploadPending || parsedProfileSavePending}>
         {profileLoadError ? (
           <DataErrorState
             headingLevel="h2"
@@ -365,8 +440,9 @@ export default function ResumeWorkspace() {
             )}
             <Button
               onClick={() => fileRef.current?.click()}
-              disabled={uploading || saving || !uploadReady} >
-              {uploading
+              aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined}
+              disabled={mutationBusy || !uploadReady} >
+              {uploadPending
                 ? <PendingLabel state="composing" onColor>Reading...</PendingLabel>
                 : profile === "missing"
                   ? "Upload resume PDF"
@@ -376,7 +452,7 @@ export default function ResumeWorkspace() {
               ref={fileRef}
               type="file"
               accept="application/pdf"
-              disabled={uploading || saving || !uploadReady}
+              disabled={mutationBusy || !uploadReady}
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -387,27 +463,49 @@ export default function ResumeWorkspace() {
           </div>
         </div>
 
+        {uploadBlockedReason && (
+          <p id="resume-upload-blocked-reason" className="mt-3 text-xs text-muted">
+            {uploadBlockedReason}
+          </p>
+        )}
+
         <div
-          onDragEnter={(event) => { event.preventDefault(); if (uploadReady && !uploading && !saving) setDragActive(true); }}
+          onDragEnter={(event) => { event.preventDefault(); if (uploadReady && !mutationBusy) setDragActive(true); }}
           onDragOver={(event) => event.preventDefault()}
           onDragLeave={(event) => { if (event.currentTarget === event.target) setDragActive(false); }}
           onDrop={(event) => { event.preventDefault(); setDragActive(false); chooseUpload(event.dataTransfer.files[0]); }}
           className={`mt-5 rounded-inner border border-dashed px-5 py-4 text-sm ${dragActive ? "border-brand bg-brand-soft text-brand-ink" : "border-border bg-surface-alt text-muted"}`}
           aria-label="Resume PDF upload drop zone"
+          aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined}
           aria-disabled={!uploadReady}
-          aria-busy={uploading}
+          aria-busy={uploadPending}
         >
           <p><span className="font-medium text-ink">Drop one PDF here</span>, or use the upload button. Maximum 10 MB.</p>
-          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploading ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} className="font-medium text-brand-ink underline underline-offset-4">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
+          {selectedFile && <div className="mt-3 flex flex-wrap items-center gap-3"><span className="font-mono text-xs text-ink">{selectedFile.name}</span>{uploadPending ? <span role="status" aria-live="polite" className="inline-flex items-center gap-2"><progress aria-label="Uploading and reading resume" className="h-1.5 w-24 accent-brand" />Reading the PDF...</span> : error ? <button type="button" onClick={() => chooseUpload(selectedFile)} aria-describedby={uploadBlockedReason ? "resume-upload-blocked-reason" : undefined} disabled={!uploadReady} className="font-medium text-brand-ink underline underline-offset-4 disabled:text-muted disabled:no-underline">Retry</button> : <span role="status" className="text-positive">Upload complete</span>}</div>}
         </div>
 
-        {profileRefreshing && profile !== null && profile !== "missing" && !uploading && (
+        {profileRefreshing && profile !== null && profile !== "missing" && !uploadPending && (
           <p role="status" className="mt-5 text-small text-muted">
             <PendingLabel>Refreshing resume details...</PendingLabel>
           </p>
         )}
-        {profile !== null && profile !== "missing" && !uploading && !profileRefreshing && targetingRefreshError === null && (
-          <ProfilePreview profile={profile} onProfileChange={(next) => setProfile(next as ParsedProfile)} />
+        {profile !== null && profile !== "missing" && !uploadPending && !profileRefreshing && targetingRefreshError === null && (
+          <ProfilePreview
+            profile={profile}
+            onProfileChange={(next) => {
+              profileRevisionRef.current += 1;
+              setProfile(next);
+            }}
+            otherMutationBusy={mutationBusy}
+            onParsedProfileSavingChange={setParsedProfileSaving}
+            runParsedProfileMutation={runParsedProfileMutation}
+            resumeSession={mutations}
+          />
+        )}
+        {parsedProfileSavePending && !parsedProfileSaving && (
+          <p role="status" aria-live="polite" className="mt-5 text-small text-muted">
+            <PendingLabel>Saving profile changes...</PendingLabel>
+          </p>
         )}
         {targetingRefreshError && (
           <div className="mt-5 space-y-3">
@@ -421,7 +519,7 @@ export default function ResumeWorkspace() {
       </Card>
 
       {/* Everything you have done */}
-      <section aria-busy={bankRefreshing}>
+      <section aria-busy={bankRefreshing || bankSavePending}>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 id="resume-bank-heading" tabIndex={-1} className="text-base font-medium text-ink">Work history</h2>
@@ -433,13 +531,13 @@ export default function ResumeWorkspace() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            {savedAt && !saving && (
+            {savedAt && !bankSavePending && !entriesDirty && (
               <span className="text-xs text-positive">Saved</span>
             )}
             <Button
               onClick={saveBank}
-              disabled={saving || uploading || bankRefreshing || entries === null || bankLoadError !== null || !entriesDirty} >
-              {saving ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
+              disabled={mutationBusy || bankRefreshing || entries === null || bankLoadError !== null || !entriesDirty} >
+              {bankSavePending ? <PendingLabel onColor>Saving...</PendingLabel> : "Save changes"}
             </Button>
           </div>
         </div>
@@ -729,7 +827,21 @@ function LinesField({
 
 /* The parse shape has evolved. The common profile facts are reviewable here, while structured work
    history stays in its purpose-built editor below. */
-function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, unknown>; onProfileChange: (profile: Record<string, unknown>) => void }) {
+function ProfilePreview({
+  profile,
+  onProfileChange,
+  otherMutationBusy,
+  onParsedProfileSavingChange,
+  runParsedProfileMutation,
+  resumeSession,
+}: {
+  profile: Record<string, unknown>;
+  onProfileChange: (profile: Record<string, unknown>) => void;
+  otherMutationBusy: boolean;
+  onParsedProfileSavingChange: (saving: boolean) => void;
+  runParsedProfileMutation: (operation: () => Promise<void>) => Promise<"blocked" | "settled">;
+  resumeSession: ResumeMutationController;
+}) {
   const str = (k: string) =>
     typeof profile[k] === "string" ? (profile[k] as string) : null;
   const list = (k: string) =>
@@ -757,6 +869,10 @@ function ProfilePreview({ profile, onProfileChange }: { profile: Record<string, 
         languages={languages}
         targetRoles={targetRoles}
         onSaved={onProfileChange}
+        otherMutationBusy={otherMutationBusy}
+        onSavingChange={onParsedProfileSavingChange}
+        runMutation={runParsedProfileMutation}
+        resumeSession={resumeSession}
       />
       <details className="mt-4">
         <summary className="cursor-pointer text-xs text-muted hover:text-ink">
@@ -781,20 +897,6 @@ function KV({ label, value }: { label: string; value: string }) {
   );
 }
 
-type ParsedProfileDraft = {
-  full_name: string;
-  resume_email: string;
-  phone: string;
-  school: string;
-  degree: string;
-  grad_date: string;
-  coursework: string;
-  objective: string;
-  skills: string;
-  languages: string;
-  target_roles: string;
-};
-
 function ParsedProfileEditor({
   name,
   email,
@@ -809,6 +911,10 @@ function ParsedProfileEditor({
   languages,
   targetRoles,
   onSaved,
+  otherMutationBusy,
+  onSavingChange,
+  runMutation,
+  resumeSession,
 }: {
   name: string;
   email: string;
@@ -823,9 +929,22 @@ function ParsedProfileEditor({
   languages: string[];
   targetRoles: string[];
   onSaved: (profile: Record<string, unknown>) => void;
+  otherMutationBusy: boolean;
+  onSavingChange: (saving: boolean) => void;
+  runMutation: (operation: () => Promise<void>) => Promise<"blocked" | "settled">;
+  resumeSession: ResumeMutationController;
 }) {
-  const [editing, setEditing] = useState(false);
-  const initialDraft = (): ParsedProfileDraft => ({
+  const {
+    parsedProfileDraft: draft,
+    parsedProfileDraftRevisionRef: draftRevisionRef,
+    parsedProfileEditing: editing,
+    parsedProfileError: error,
+    parsedProfileSaving: saving,
+    setParsedProfileDraft: setDraft,
+    setParsedProfileEditing: setEditing,
+    setParsedProfileError: setError,
+  } = resumeSession;
+  const initialDraft = (): ResumeParsedProfileDraft => ({
     full_name: name,
     resume_email: resumeEmail,
     phone,
@@ -838,76 +957,86 @@ function ParsedProfileEditor({
     languages: languages.join(", "),
     target_roles: targetRoles.join("\n"),
   });
-  const [draft, setDraft] = useState<ParsedProfileDraft>(initialDraft);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+
+  function changeDraft(patch: Partial<ResumeParsedProfileDraft>) {
+    draftRevisionRef.current += 1;
+    setDraft((current) => ({ ...current, ...patch }));
+  }
 
   function startEditing() {
+    draftRevisionRef.current += 1;
     setDraft(initialDraft());
     setError(null);
     setEditing(true);
   }
 
   async function save() {
-    if (!draft.full_name.trim()) {
+    const editorRevision = draftRevisionRef.current;
+    const submittedDraft = { ...draft };
+    if (!submittedDraft.full_name.trim()) {
       setError("Name cannot be empty. Autofill has no fallback for it.");
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.resume_email.trim())) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(submittedDraft.resume_email.trim())) {
       setError("Add the personal email that should appear on your resume.");
       return;
     }
-    if (school && !draft.school.trim()) {
+    if (school && !submittedDraft.school.trim()) {
       setError("School cannot be empty. You can replace a parsed school, but not erase it.");
       return;
     }
-    const roles = parseEditableLines(draft.target_roles);
+    const roles = parseEditableLines(submittedDraft.target_roles);
     if (!hasCompleteTargetRoleSet(roles, targetRoles)) {
       setError("Keep five target roles so Litos has a complete search set.");
       return;
     }
-    setSaving(true);
-    setError(null);
-    try {
-      const rolesChanged = roles.length > 0 && targetRolesChanged(roles, targetRoles);
-      const updated = await api<Record<string, unknown>>("/profile/parsed", {
-        method: "PATCH",
-        body: JSON.stringify({
-          full_name: draft.full_name,
-          resume_email: draft.resume_email,
-          phone: draft.phone,
-          ...(draft.school.trim() || school ? { school: draft.school } : {}),
-          degree: draft.degree,
-          grad_date: draft.grad_date,
-          /* Sent ONLY when it changed, which makes this screen work against a backend that does not
-             know the field yet. parsedProfilePatchSchema is .strict(), so an unknown key is a 400 on
-             the whole save, not a partial one: shipping this page ahead of the matching backend
-             would break every profile save rather than just the coursework part of one. Same shape
-             as target_roles below, for the same reason. */
-          ...(draft.coursework !== coursework ? { coursework: draft.coursework } : {}),
-          objective: draft.objective,
-          skills: parseEditableList(draft.skills),
-          languages: parseEditableList(draft.languages),
-          ...(rolesChanged ? { target_roles: roles } : {}),
-        }),
-      });
-      // Targeting is stored separately from the parse and is authoritative. When this save did not
-      // change roles, keep the titles already loaded from /profile/targeting instead of letting an
-      // older parser guess in parsed_json flash back into the card until the next page load.
-      onSaved({ ...updated, target_roles: rolesChanged ? roles : targetRoles });
-      setEditing(false);
-    } catch (reason) {
-      setError(userFacingError(reason, "Could not save your profile changes."));
-    } finally {
-      setSaving(false);
-    }
+    const result = await runMutation(async () => {
+      onSavingChange(true);
+      setError(null);
+      try {
+        const rolesChanged = roles.length > 0 && targetRolesChanged(roles, targetRoles);
+        const updated = await api<Record<string, unknown>>("/profile/parsed", {
+          method: "PATCH",
+          body: JSON.stringify({
+            full_name: submittedDraft.full_name,
+            resume_email: submittedDraft.resume_email,
+            phone: submittedDraft.phone,
+            ...(submittedDraft.school.trim() || school ? { school: submittedDraft.school } : {}),
+            degree: submittedDraft.degree,
+            grad_date: submittedDraft.grad_date,
+            /* Sent ONLY when it changed, which makes this screen work against a backend that does not
+               know the field yet. parsedProfilePatchSchema is .strict(), so an unknown key is a 400 on
+               the whole save, not a partial one: shipping this page ahead of the matching backend
+               would break every profile save rather than just the coursework part of one. Same shape
+               as target_roles below, for the same reason. */
+            ...(submittedDraft.coursework !== coursework ? { coursework: submittedDraft.coursework } : {}),
+            objective: submittedDraft.objective,
+            skills: parseEditableList(submittedDraft.skills),
+            languages: parseEditableList(submittedDraft.languages),
+            ...(rolesChanged ? { target_roles: roles } : {}),
+          }),
+        });
+        if (draftRevisionRef.current !== editorRevision) return;
+        // Targeting is stored separately from the parse and is authoritative. When this save did not
+        // change roles, keep the titles already loaded from /profile/targeting instead of letting an
+        // older parser guess in parsed_json flash back into the card until the next page load.
+        onSaved({ ...updated, target_roles: rolesChanged ? roles : targetRoles });
+        setEditing(false);
+      } catch (reason) {
+        if (draftRevisionRef.current !== editorRevision) return;
+        setError(userFacingError(reason, "Could not save your profile changes."));
+      } finally {
+        onSavingChange(false);
+      }
+    });
+    if (result === "blocked") setError("Wait for the current resume update to finish, then save again.");
   }
 
   if (!editing) {
     return (
       <div>
         <div className="flex justify-end">
-          <button type="button" onClick={startEditing} className="text-xs text-brand-ink underline underline-offset-2">
+          <button type="button" onClick={startEditing} disabled={otherMutationBusy} className="text-xs text-brand-ink underline underline-offset-2 disabled:text-muted disabled:no-underline">
             Edit parsed details
           </button>
         </div>
@@ -934,31 +1063,31 @@ function ParsedProfileEditor({
   }
 
   return (
-    <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="rounded-inner border border-border bg-surface-alt p-4">
+    <form onSubmit={(event) => { event.preventDefault(); void save(); }} aria-busy={saving} className="rounded-inner border border-border bg-surface-alt p-4">
       <div>
         <p className="text-sm font-medium text-ink">Review parsed details</p>
         <p className="mt-1 text-xs text-muted">Correct what the PDF reader got wrong. Your resume email is separate from the Litos address used inside application portals.</p>
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="Name" value={draft.full_name} onChange={(full_name) => setDraft({ ...draft, full_name })} placeholder="Your full name" />
-        <Field label="Resume email" value={draft.resume_email} onChange={(resume_email) => setDraft({ ...draft, resume_email })} placeholder="you@school.edu" />
-        <Field label="Phone" value={draft.phone} onChange={(phone) => setDraft({ ...draft, phone })} placeholder="Optional" />
+        <Field label="Name" value={draft.full_name} onChange={(full_name) => changeDraft({ full_name })} placeholder="Your full name" />
+        <Field label="Resume email" value={draft.resume_email} onChange={(resume_email) => changeDraft({ resume_email })} placeholder="you@school.edu" />
+        <Field label="Phone" value={draft.phone} onChange={(phone) => changeDraft({ phone })} placeholder="Optional" />
       </div>
       {email && <p className="mt-2 text-xs text-muted">Litos login email: {email}</p>}
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Field label="School" value={draft.school} onChange={(nextSchool) => setDraft({ ...draft, school: nextSchool })} placeholder="University of Southern California" />
-        <Field label="Degree" value={draft.degree} onChange={(nextDegree) => setDraft({ ...draft, degree: nextDegree })} placeholder="Bachelor of Science in Computer Science" />
-        <Field label="Graduation" value={draft.grad_date} onChange={(grad_date) => setDraft({ ...draft, grad_date })} placeholder="May 2028" />
+        <Field label="School" value={draft.school} onChange={(school) => changeDraft({ school })} placeholder="University of Southern California" />
+        <Field label="Degree" value={draft.degree} onChange={(degree) => changeDraft({ degree })} placeholder="Bachelor of Science in Computer Science" />
+        <Field label="Graduation" value={draft.grad_date} onChange={(grad_date) => changeDraft({ grad_date })} placeholder="May 2028" />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <TextAreaField label="Skills" value={draft.skills} onChange={(nextSkills) => setDraft({ ...draft, skills: nextSkills })} rows={4} hint="Separate skills with commas or new lines." />
-        <TextAreaField label="Target roles" value={draft.target_roles} onChange={(target_roles) => setDraft({ ...draft, target_roles })} rows={4} hint="Keep five roles, one per line. Any real job title is valid." />
+        <TextAreaField label="Skills" value={draft.skills} onChange={(skills) => changeDraft({ skills })} rows={4} hint="Separate skills with commas or new lines." />
+        <TextAreaField label="Target roles" value={draft.target_roles} onChange={(target_roles) => changeDraft({ target_roles })} rows={4} hint="Keep five roles, one per line. Any real job title is valid." />
       </div>
       <div className="mt-4">
         <TextAreaField
           label="Languages"
           value={draft.languages}
-          onChange={(nextLanguages) => setDraft({ ...draft, languages: nextLanguages })}
+          onChange={(languages) => changeDraft({ languages })}
           rows={2}
           hint="Spoken languages your resume lists. Keep these out of Skills. To tell employers which ones you are fluent in, use Settings."
         />
@@ -967,18 +1096,18 @@ function ParsedProfileEditor({
         <TextAreaField
           label="Relevant coursework"
           value={draft.coursework}
-          onChange={(nextCoursework) => setDraft({ ...draft, coursework: nextCoursework })}
+          onChange={(coursework) => changeDraft({ coursework })}
           rows={2}
           hint="Course names, separated by commas. This prints on your generated resume."
         />
       </div>
       <div className="mt-4">
-        <TextAreaField label="Objective or summary" value={draft.objective} onChange={(nextObjective) => setDraft({ ...draft, objective: nextObjective })} rows={3} hint="Optional. Keep this true to your experience." />
+        <TextAreaField label="Objective or summary" value={draft.objective} onChange={(objective) => changeDraft({ objective })} rows={3} hint="Optional. Keep this true to your experience." />
       </div>
       {error && <p role="alert" className="mt-3 text-xs text-warn">{userFacingError(error)}</p>}
       <div className="mt-4 flex gap-2">
-        <Button type="submit" disabled={saving || JSON.stringify(draft) === JSON.stringify(initialDraft())}>{saving ? "Saving..." : "Save changes"}</Button>
-        <button type="button" onClick={() => setEditing(false)} disabled={saving} className="rounded-full border border-border px-4 py-2 text-xs text-ink">Cancel</button>
+        <Button type="submit" disabled={saving || otherMutationBusy || JSON.stringify(draft) === JSON.stringify(initialDraft())}>{saving ? "Saving..." : "Save changes"}</Button>
+        <button type="button" onClick={() => setEditing(false)} disabled={saving || otherMutationBusy} className="rounded-full border border-border px-4 py-2 text-xs text-ink">Cancel</button>
       </div>
     </form>
   );

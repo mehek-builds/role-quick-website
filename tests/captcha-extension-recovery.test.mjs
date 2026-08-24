@@ -90,7 +90,7 @@ describe("a managed run stopped by a rendered CAPTCHA can be finished through th
      * link). Both its branches already reset canonicalFillError for the exact same reason - without
      * this, failing the extension button on application A and then opening application B would show
      * A's error message as if it belonged to B. */
-    const selectPacket = applications.match(/const selectPacket = useCallback\(\(incoming: GeneratedResume\) => \{[\s\S]*?\n {2}\}, \[moveToScreen\]\);/)?.[0];
+    const selectPacket = applications.match(/const selectPacket = useCallback\(\(incoming: GeneratedResume\) => \{[\s\S]*?\n {2}\}, \[[^\]]*moveToScreen[^\]]*\]\);/)?.[0];
     assert.ok(selectPacket, "could not find the selectPacket body");
     const resets = [...selectPacket.matchAll(/setCanonicalFillError\(null\);\n\s*setSubmissionFillError\(null\);/g)];
     assert.equal(resets.length, 2, "both selectPacket branches (canonical and sendable) must reset submissionFillError alongside canonicalFillError");

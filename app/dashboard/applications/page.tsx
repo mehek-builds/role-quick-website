@@ -76,6 +76,17 @@ import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
+type CanonicalRequestScope = {
+  applicationId: string;
+  editorRevision: number;
+  requestGeneration: number;
+  channel: "cover-letter" | "tailoring";
+};
+type PacketCoverLetterRequestScope = {
+  applicationId: string;
+  editorRevision: number;
+  requestGeneration: number;
+};
 
 /* These guards are deliberately pure. Both callers resume after a network await, so the screen
    and evidence captured when the request started are already historical. Read the synchronous
@@ -208,6 +219,18 @@ const EMPTY_APPLICATION_DRAFT: NewApplicationDraft = {
   canonicalApplicationId: null,
 };
 
+function applicationUpgradeFocusTarget(
+  trigger: HTMLElement | null,
+  preferredFallbackId: "application-ledger-heading" | "new-application-heading",
+): HTMLElement | null {
+  if (trigger?.isConnected) return trigger;
+  for (const id of [preferredFallbackId, "application-ledger-heading", "new-application-heading", "applications-heading"]) {
+    const candidate = document.getElementById(id);
+    if (candidate instanceof HTMLElement && candidate.isConnected) return candidate;
+  }
+  return null;
+}
+
 const CHECKOUT_DRAFT_KEY = "litos_application_checkout_draft_v1";
 
 function rememberCheckoutDraft(draft: NewApplicationDraft): void {
@@ -275,6 +298,16 @@ function Applications() {
   const { canUse, openUpgrade } = useBilling();
   const [packets, setPackets] = useState<GeneratedResume[] | null>(null);
   const [canonicalSelected, setCanonicalSelected] = useState<CanonicalApplication | null>(null);
+  /* The canonical editor has its own identity because selectedIdRef deliberately names only the
+     legacy packet workflow. A generated cover letter can resolve after the student edits its text,
+     switches to another canonical application, or switches A -> B -> A. The id plus monotonically
+     increasing draft revision distinguishes all three cases before any delayed response publishes. */
+  const canonicalSelectedIdRef = useRef<string | null>(null);
+  const canonicalCoverLetterEditorRevisionRef = useRef(0);
+  const canonicalCoverLetterEditorDirtyRef = useRef(false);
+  const canonicalCoverLetterHydrationApplicationRef = useRef<string | null>(null);
+  const coverLetterRequestGenerationRef = useRef(0);
+  const canonicalTailoringRequestGenerationRef = useRef(0);
   const [canonicalIdByPacketId, setCanonicalIdByPacketId] = useState<Record<string, string>>({});
   const resumeOperationIds = useRef(new Map<string, string>());
   const coverLetterOperationIds = useRef(new Map<string, string>());
@@ -288,8 +321,34 @@ function Applications() {
   const [canonicalCoverLetter, setCanonicalCoverLetter] = useState<CanonicalCoverLetterResponse | null>(null);
   const [canonicalCoverLetterBody, setCanonicalCoverLetterBody] = useState("");
   const [canonicalCoverLetterJd, setCanonicalCoverLetterJd] = useState("");
+  const editCanonicalCoverLetterBody = useCallback((body: string) => {
+    canonicalCoverLetterEditorRevisionRef.current += 1;
+    canonicalCoverLetterEditorDirtyRef.current = true;
+    setCanonicalCoverLetterBody(body);
+  }, []);
+  const editCanonicalCoverLetterJd = useCallback((jobDescription: string) => {
+    canonicalCoverLetterEditorRevisionRef.current += 1;
+    canonicalCoverLetterEditorDirtyRef.current = true;
+    setCanonicalCoverLetterJd(jobDescription);
+  }, []);
   const [canonicalCoverLetterEditorOpen, setCanonicalCoverLetterEditorOpen] = useState(false);
   const [canonicalCoverLetterLoading, setCanonicalCoverLetterLoading] = useState(false);
+  const commitCanonicalSelection = useCallback((next: CanonicalApplication | null) => {
+    const nextId = next?.id ?? null;
+    if (canonicalSelectedIdRef.current !== nextId) {
+      canonicalSelectedIdRef.current = nextId;
+      canonicalCoverLetterEditorRevisionRef.current += 1;
+      canonicalCoverLetterEditorDirtyRef.current = false;
+      /* Selection and editor content commit atomically. Otherwise B renders A's textarea until
+         B's cover-letter GET resolves, and Save can persist A's text under B in that window. */
+      setCanonicalCoverLetter(null);
+      setCanonicalCoverLetterBody("");
+      setCanonicalCoverLetterJd("");
+      setCanonicalCoverLetterEditorOpen(false);
+      setCanonicalCoverLetterLoading(nextId !== null);
+    }
+    setCanonicalSelected(next);
+  }, []);
   /* Keyed by canonical application id, the same shape as ApplicationPacket's STUB HYDRATION state,
      and for the same reason: canonicalSelected carries no key, so switching straight from one
      unmatched row to another must not show the previous row's hydration outcome while the new
@@ -314,13 +373,21 @@ function Applications() {
      insisting "Built ..., not sent" about an application that had just gone out. Deriving means the
      viewer follows the same data as the page, and closes itself if the packet leaves the window. */
   const [revisitingId, setRevisitingId] = useState<string | null>(null);
+  const locallyRevisitingIdRef = useRef<string | null>(null);
   const revisitingPacket = revisitingId ? (packets ?? []).find((item) => item.id === revisitingId) ?? null : null;
   /* Stable identity. The viewer's focus-trap effect keys on its onClose, and an inline arrow here
      gave it a new one on every render of this page: each parent commit tore the effect down and
      rebuilt it, which ran the cleanup's `previous?.focus?.()` and threw focus out of an open
      aria-modal dialog back onto the board behind it, then re-locked body scroll. A keyboard user
      reading the answers got yanked back to Close every time the autopilot ticked. */
-  const closeRevisit = useCallback(() => setRevisitingId(null), []);
+  const openRevisit = useCallback((id: string) => {
+    locallyRevisitingIdRef.current = id;
+    setRevisitingId(id);
+  }, []);
+  const closeRevisit = useCallback(() => {
+    locallyRevisitingIdRef.current = null;
+    setRevisitingId(null);
+  }, []);
   /* Which document ask the upload modal is open on, held as a KIND and resolved against the current
      submission at render, for the same reason revisitingId holds an id rather than a packet: the
      2.5s poll replaces `submission` wholesale, and a captured ask object would go stale under an
@@ -591,6 +658,11 @@ function Applications() {
     });
   }, []);
   const [coverLetterBody, setCoverLetterBody] = useState("");
+  const packetCoverLetterEditorRevisionRef = useRef(0);
+  const editPacketCoverLetterBody = useCallback((body: string) => {
+    packetCoverLetterEditorRevisionRef.current += 1;
+    setCoverLetterBody(body);
+  }, []);
   const [coverLetterDownloadUrl, setCoverLetterDownloadUrl] = useState<string | null>(null);
   const [coverLetterBusy, setCoverLetterBusy] = useState(false);
   /* ?state= IS the filter. Not a seed for it, the thing itself.
@@ -622,6 +694,7 @@ function Applications() {
   const applicationFilter = applicationFilterFromSearch(searchParams.toString());
   const requestedApplicationId = searchParams.get("application");
   const requestedApplicationIntent = searchParams.get("intent");
+  const applicationRequestKey = JSON.stringify([requestedApplicationId, requestedApplicationIntent]);
   /* The actionable direct-link request that has actually loaded and selected. This deliberately
      trails requestedApplicationId during a query-only navigation, which is the short window where
      the prior packet's controls must disappear. It does not pin later ledger switching to the URL. */
@@ -630,11 +703,66 @@ function Applications() {
      The history effect still refreshes that packet, but this ref tells it not to select the same
      row a second time and reset the screen after the student has already started working. */
   const locallyOpenedRequestRef = useRef<{ id: string; revision: string; routeCommitted: boolean } | null>(null);
+  const applicationBootstrapGenerationRef = useRef(0);
+  const applicationsMountedRef = useRef(true);
+  const committedApplicationRequestKeyRef = useRef(applicationRequestKey);
   const pendingApplicationFocusRef = useRef(false);
+  const pendingApplicationLandingFocusRef = useRef<{ rowId: string | null } | null>(null);
   const applicationTaskHeadingRef = useRef<HTMLHeadingElement | null>(null);
   const [openingApplicationId, setOpeningApplicationId] = useState<string | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [applicationQuery, setApplicationQuery] = useState("");
+
+  useLayoutEffect(() => {
+    applicationsMountedRef.current = true;
+    return () => {
+      applicationsMountedRef.current = false;
+    };
+  }, []);
+
+  function beginCanonicalRequest(applicationId: string, channel: CanonicalRequestScope["channel"]): CanonicalRequestScope {
+    const generationRef = channel === "cover-letter"
+      ? coverLetterRequestGenerationRef
+      : canonicalTailoringRequestGenerationRef;
+    return {
+      applicationId,
+      editorRevision: canonicalCoverLetterEditorRevisionRef.current,
+      requestGeneration: ++generationRef.current,
+      channel,
+    };
+  }
+
+  function canonicalRequestOwnsLifecycle(scope: CanonicalRequestScope): boolean {
+    const generation = scope.channel === "cover-letter"
+      ? coverLetterRequestGenerationRef.current
+      : canonicalTailoringRequestGenerationRef.current;
+    return applicationsMountedRef.current && generation === scope.requestGeneration;
+  }
+
+  function canonicalRequestMayPublish(scope: CanonicalRequestScope): boolean {
+    return canonicalRequestOwnsLifecycle(scope)
+      && canonicalSelectedIdRef.current === scope.applicationId
+      && canonicalCoverLetterEditorRevisionRef.current === scope.editorRevision;
+  }
+
+  function beginPacketCoverLetterRequest(applicationId: string): PacketCoverLetterRequestScope {
+    return {
+      applicationId,
+      editorRevision: packetCoverLetterEditorRevisionRef.current,
+      requestGeneration: ++coverLetterRequestGenerationRef.current,
+    };
+  }
+
+  function packetCoverLetterRequestOwnsLifecycle(scope: PacketCoverLetterRequestScope): boolean {
+    return applicationsMountedRef.current
+      && coverLetterRequestGenerationRef.current === scope.requestGeneration;
+  }
+
+  function packetCoverLetterRequestMayPublish(scope: PacketCoverLetterRequestScope): boolean {
+    return packetCoverLetterRequestOwnsLifecycle(scope)
+      && selectedIdRef.current === scope.applicationId
+      && packetCoverLetterEditorRevisionRef.current === scope.editorRevision;
+  }
   /* Writes the choice back to the URL, so the select and the deep link move the same thing.
      Everything removes the parameter rather than writing state=all: a URL that says nothing is
      what a plain visit looks like, and this is also what closes the ledger section.
@@ -807,124 +935,161 @@ function Applications() {
       // explicit packet action first restores the linked packet's legacy route id.
       selectedIdRef.current = null;
       editorRevisionRef.current += 1;
-      setSelectedId(null);
-      setCanonicalSelected(canonical);
-      setCanonicalFillError(null);
-      setSubmissionFillError(null);
-      setSpec(null);
-      setQuestions([]);
-      setSubmission(null);
-      setPacketEvidence(null);
-      setMatchResult(null);
-      setError(null);
-      setPollError(null);
-      setSendRefusal(null);
-      setNotice(null);
+      packetCoverLetterEditorRevisionRef.current += 1;
+      runDashboardTransition(() => {
+        setSelectedId(null);
+        commitCanonicalSelection(canonical);
+        setCanonicalFillError(null);
+        setSubmissionFillError(null);
+        setSpec(null);
+        setQuestions([]);
+        setSubmission(null);
+        setPacketEvidence(null);
+        setMatchResult(null);
+        setError(null);
+        setPollError(null);
+        setSendRefusal(null);
+        setNotice(null);
+      });
       return;
     }
-    setCanonicalSelected(null);
-    setCanonicalFillError(null);
-    setSubmissionFillError(null);
     // Updated synchronously, before any state commit, so an in-flight poll comparing against it
     // sees the new selection immediately rather than one render later.
     selectedIdRef.current = packet.id;
     editorRevisionRef.current += 1;
-    setSelectedId(packet.id);
-    // Highlighting is per (resume, posting). Carrying the previous packet's result over marks the
-    // new JD against a resume and a posting that are no longer on screen.
-    setMatchResult(null);
-    setPacketEvidence(null);
-    setSpec(stripMetadata(packet.spec));
-    setQuestions(packet.spec._review?.questions ?? []);
-    setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
-    setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
+    packetCoverLetterEditorRevisionRef.current += 1;
     const status = packet.spec._review?.status;
     const historicalPacketAuditStale = historicalPacketAuditStaleMessage(packet.spec._review);
-    /* A different packet, so any "sending" flag belongs to the one we are leaving. Without this,
-       switching to a packet whose stored status is `filling` captioned it "You told Litos to send
-       this" for an application the student never authorised. */
-    setPrepareStartedAt(null);
-    setApproveStartedAt(null);
-    setSubmittingPhase("preparing");
-    /* A ready packet still has one mandatory stop before the employer send: the posting, exact
-       resume, evidence colours and gap list. Routing it straight to the portal screen is how the
-       Cresta packet reached Send it without that audit. */
-    moveToScreen(historicalPacketAuditStale || status === "ready_for_final_approval" ? "review" : screenForStatus(status, "review"));
-    /* Seeded from the board row so the portal screen has something to draw before the first poll
-       answers, and marked `partial` because that is exactly what it is. The cover letter is carried
-       across too: /resume/history already sends `spec._cover_letter` on every row, and leaving it
-       out was half of why the send stayed disabled.
-
-       The document marks are carried for the same reason and off the same row. The first poll is
-       2.5 seconds behind this seed, and without them re-entering an application whose transcript is
-       already stored drew no manage control for that whole window: an attached file looked
-       unattached, and the one route to "Remove this file" was missing from the screen while
-       /privacy promises removal. `spec._documents` is not a guess about the envelope, it is the
-       same stored record the server reads to build it.
-
-       Absent stays absent. documentsFromSpecMarks returns undefined for a packet with no marks,
-       which is the honest answer and the one the send gate needs: an empty object would claim this
-       application had been measured and block a send on an ask the seed cannot confirm. */
-    setSubmission(status
-      ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
-      : null);
-    setError(null);
-    setPollError(null);
     /* Entering a packet starts its story over, and that includes a standing revalidation refusal:
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
     packetRevalidationRefusal.current = null;
-    setSendRefusal(null);
-    setNotice(null);
-  }, [moveToScreen]);
+    /* A ready packet still has one mandatory stop before the employer send: the posting, exact
+       resume, evidence colours and gap list. Routing it straight to the portal screen is how the
+       Cresta packet reached Send it without that audit. The packet and this route commit in the
+       same transition, so the new packet never renders inside the previous packet's screen. */
+    runDashboardTransition(() => {
+      commitCanonicalSelection(null);
+      setCanonicalFillError(null);
+      setSubmissionFillError(null);
+      setSelectedId(packet.id);
+      // Highlighting is per (resume, posting). Carrying the previous packet's result over marks the
+      // new JD against a resume and a posting that are no longer on screen.
+      setMatchResult(null);
+      setPacketEvidence(null);
+      setSpec(stripMetadata(packet.spec));
+      setQuestions(packet.spec._review?.questions ?? []);
+      setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
+      setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
+      /* A different packet, so any "sending" flag belongs to the one we are leaving. Without
+         this, switching to a packet whose stored status is `filling` captioned it "You told Litos
+         to send this" for an application the student never authorised. */
+      setPrepareStartedAt(null);
+      setApproveStartedAt(null);
+      setSubmittingPhase("preparing");
+      /* Seeded from the board row so the portal screen has something to draw before the first
+         poll answers, and marked `partial` because that is exactly what it is. The cover letter
+         and document marks come from that same stored packet. Absent document marks stay absent:
+         an empty object would claim the application had been measured and could block a send on
+         an ask this seed cannot confirm. */
+      setSubmission(status
+        ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
+        : null);
+      setError(null);
+      setPollError(null);
+      setSendRefusal(null);
+      setNotice(null);
+      moveToScreen(historicalPacketAuditStale || status === "ready_for_final_approval" ? "review" : screenForStatus(status, "review"));
+    });
+  }, [commitCanonicalSelection, moveToScreen]);
 
   /* User navigation writes local state and route state as one action. The local write makes the
      switch feel immediate; the URL makes reload, sharing, and browser history reopen the same
      application instead of whichever packet happened to be selected before it. */
   const openApplication = useCallback((packet: GeneratedResume, options: { history?: "push" | "replace" } = {}) => {
-    locallyOpenedRequestRef.current = { id: packet.id, revision: applicationWorkflowRevision(packet), routeCommitted: false };
+    const nextPath = applicationSelectionPath(window.location, packet.id);
+    const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const routeAlreadyCommitted = nextPath === currentPath;
+    /* Re-selecting the current row can happen while its authoritative history request is still in
+       flight. A same-URL push starts no replacement bootstrap, so keep that request valid and mark
+       the local route settled. Real route changes still invalidate the request they replace. */
+    if (!routeAlreadyCommitted) applicationBootstrapGenerationRef.current += 1;
+    locallyOpenedRequestRef.current = {
+      id: packet.id,
+      revision: applicationWorkflowRevision(packet),
+      routeCommitted: routeAlreadyCommitted,
+    };
     pendingApplicationFocusRef.current = true;
     resolvedJobParam.current = null;
-    setPendingJob(null);
-    setOpeningApplicationId(packet.id);
-    setSwitcherOpen(false);
-    setShowNewApplication(false);
-    setComposerRefusal(null);
-    setResolvedActionableRequestId(packet.id);
-    selectPacket(packet);
-    const nextPath = applicationSelectionPath(window.location, packet.id);
+    runDashboardTransition(() => {
+      setPendingJob(null);
+      setOpeningApplicationId(packet.id);
+      setSwitcherOpen(false);
+      setShowNewApplication(false);
+      setComposerRefusal(null);
+      setResolvedActionableRequestId(packet.id);
+      selectPacket(packet);
+    });
+    if (routeAlreadyCommitted) return;
     const navigate = options.history === "replace" ? router.replace : router.push;
     navigate(nextPath, { scroll: false });
   }, [router, selectPacket]);
 
-  const resetApplicationWorkflow = useCallback(() => {
+  const resetApplicationWorkflow = useCallback((options: { afterReset?: () => void; animate?: boolean } = {}) => {
     pendingApplicationFocusRef.current = false;
+    locallyRevisitingIdRef.current = null;
     selectedIdRef.current = null;
     editorRevisionRef.current += 1;
-    setOpeningApplicationId(null);
-    setSwitcherOpen(false);
-    setResolvedActionableRequestId(null);
-    setSelectedId(null);
-    setCanonicalSelected(null);
-    setRevisitingId(null);
-    setCanonicalFillError(null);
-    setSubmissionFillError(null);
-    setMatchResult(null);
-    setPacketEvidence(null);
-    setSpec(null);
-    setQuestions([]);
-    setSubmission(null);
-    setSendRefusal(null);
-    setNotice(null);
-  }, [setSubmission]);
+    packetCoverLetterEditorRevisionRef.current += 1;
+    const commitReset = () => {
+      setPendingJob(null);
+      setOpeningApplicationId(null);
+      setSwitcherOpen(false);
+      setResolvedActionableRequestId(null);
+      setSelectedId(null);
+      commitCanonicalSelection(null);
+      setRevisitingId(null);
+      setCanonicalFillError(null);
+      setSubmissionFillError(null);
+      setMatchResult(null);
+      setPacketEvidence(null);
+      setSpec(null);
+      setQuestions([]);
+      setSubmission(null);
+      setSendRefusal(null);
+      setNotice(null);
+      options.afterReset?.();
+    };
+    /* Browser history reconciliation runs in a layout effect because stale application controls
+       must disappear before paint. An explicit Close may animate, but deferring the layout-effect
+       reset to a transition lane would violate that before-paint guarantee. */
+    if (options.animate === false) commitReset();
+    else runDashboardTransition(commitReset);
+  }, [commitCanonicalSelection, setSubmission]);
 
   const closeApplication = useCallback(() => {
+    const selectedPacketId = selectedIdRef.current;
+    pendingApplicationLandingFocusRef.current = {
+      rowId: canonicalSelected?.id
+        ?? (selectedPacketId ? canonicalIdByPacketId[selectedPacketId] ?? selectedPacketId : openingApplicationId),
+    };
+    applicationBootstrapGenerationRef.current += 1;
     locallyOpenedRequestRef.current = null;
     resolvedJobParam.current = null;
-    setPendingJob(null);
     resetApplicationWorkflow();
     router.push(applicationSelectionPath(window.location, null), { scroll: false });
-  }, [resetApplicationWorkflow, router]);
+  }, [canonicalIdByPacketId, canonicalSelected?.id, openingApplicationId, resetApplicationWorkflow, router]);
+
+  /* Route changes commit in a layout phase before the passive bootstrap effect for the new URL can
+     cancel its predecessor. Invalidate that predecessor here for every request-key change, even
+     when neither route has selected enough state for the reconciliation effect below to reset.
+     This closes both direct-link A to B races and Back-to-ledger races before either can paint. */
+  useLayoutEffect(() => {
+    if (committedApplicationRequestKeyRef.current === applicationRequestKey) return;
+    committedApplicationRequestKeyRef.current = applicationRequestKey;
+    locallyRevisitingIdRef.current = null;
+    applicationBootstrapGenerationRef.current += 1;
+  }, [applicationRequestKey]);
 
   /* Back and Forward change the route without calling the row or close handlers. When the route
      stops naming an application, retire the local workflow immediately instead of waiting for the
@@ -932,6 +1097,7 @@ function Applications() {
      frame before router.push updates useSearchParams, and the ref keeps that intentional handoff
      from being mistaken for Back. */
   useLayoutEffect(() => {
+    if (qaMode === true) return;
     const localOpen = locallyOpenedRequestRef.current;
     if (requestedApplicationId !== null) {
       const canonicalMatchesRequest = canonicalSelected === null
@@ -948,8 +1114,11 @@ function Applications() {
          and Tailor controls survive under the new URL while that request loads or after it fails. */
       if (!canonicalMatchesRequest && !pendingLocalCanonical) {
         if (localOpen?.routeCommitted) locallyOpenedRequestRef.current = null;
-        resetApplicationWorkflow();
-        setOpeningApplicationId(requestedApplicationId);
+        applicationBootstrapGenerationRef.current += 1;
+        resetApplicationWorkflow({
+          afterReset: () => setOpeningApplicationId(requestedApplicationId),
+          animate: false,
+        });
         return;
       }
       if (localOpen?.id === requestedApplicationId) localOpen.routeCommitted = true;
@@ -958,6 +1127,13 @@ function Applications() {
     }
     if (localOpen && !localOpen.routeCommitted) return;
     if (localOpen) locallyOpenedRequestRef.current = null;
+    const localRevisitOnly = revisitingId !== null
+      && locallyRevisitingIdRef.current === revisitingId
+      && selectedIdRef.current === null
+      && openingApplicationId === null
+      && canonicalSelected === null
+      && resolvedActionableRequestId === null;
+    if (localRevisitOnly) return;
     if (
       selectedIdRef.current === null
       && openingApplicationId === null
@@ -965,8 +1141,9 @@ function Applications() {
       && revisitingId === null
       && resolvedActionableRequestId === null
     ) return;
-    resetApplicationWorkflow();
-  }, [canonicalSelected, openingApplicationId, requestedApplicationId, resetApplicationWorkflow, resolvedActionableRequestId, revisitingId]);
+    applicationBootstrapGenerationRef.current += 1;
+    resetApplicationWorkflow({ animate: false });
+  }, [canonicalSelected, openingApplicationId, qaMode, requestedApplicationId, resetApplicationWorkflow, resolvedActionableRequestId, revisitingId]);
 
   /* The acknowledged branch of the poll's evidence upkeep, out of refreshSubmission for the same
      reason its comments are: tests/submission-terminal-state.test.mjs bounds the fetch-to-route
@@ -1245,10 +1422,13 @@ function Applications() {
   }, [qaMode, refreshSubmission, screen, selectedId]);
 
   useEffect(() => {
+    const bootstrapGeneration = ++applicationBootstrapGenerationRef.current;
+    const bootstrapIsStale = () => bootstrapGeneration !== applicationBootstrapGenerationRef.current;
     const qaScenario = new URLSearchParams(window.location.search).get("qa");
     const localQa = window.location.hostname === "localhost" && qaScenario !== null;
     if (localQa) {
       queueMicrotask(async () => {
+        if (bootstrapIsStale()) return;
         if (qaScenario === "error") {
           setQaMode(true);
           setEducationProfileStatus("failed");
@@ -1262,18 +1442,21 @@ function Applications() {
           return;
         }
         const { QA_PACKET, QA_SCENARIOS } = await import("./qa-data");
+        if (bootstrapIsStale()) return;
         const scenario = qaScenario === "1" ? "acme" : qaScenario === "no-questions" ? "stripe" : qaScenario;
         const packet = QA_SCENARIOS[scenario ?? "acme"] ?? QA_PACKET;
-        setQaMode(true);
-        setEducationProfileStatus("ready");
-        setPackets(Object.values(QA_SCENARIOS));
-        selectPacket(packet);
+        runDashboardTransition(() => {
+          setQaMode(true);
+          setEducationProfileStatus("ready");
+          setPackets(Object.values(QA_SCENARIOS));
+          selectPacket(packet);
+        });
       });
       return;
     }
     let cancelled = false;
     queueMicrotask(() => {
-      if (!cancelled) setQaMode(false);
+      if (!cancelled && !bootstrapIsStale()) setQaMode(false);
     });
     /* The ordinary history response is deliberately capped at fifty full packet specs. A direct
        link may point to an older packet, so name that one packet explicitly instead of widening
@@ -1286,7 +1469,7 @@ function Applications() {
       api<{ applications: CanonicalApplication[] }>("/applications?limit=100"),
     ])
       .then(async ([historyResult, canonicalResult]) => {
-        if (cancelled) return;
+        if (cancelled || bootstrapIsStale()) return;
         // During a rolling deploy, keep legacy history usable before the canonical list route is
         // present. The inverse matters for a direct canonical link: that id has no generated
         // resume, so an older history route may reject it even though the canonical ledger owns it.
@@ -1307,98 +1490,106 @@ function Applications() {
         const linkedPacketId = requestedCanonicalApplication?.legacy_generated_resume_id ?? null;
         if (linkedPacketId && !legacy.some((packet) => packet.id === linkedPacketId)) {
           const linkedHistory = await api<{ resumes: GeneratedResume[] }>(`/resume/history?application=${encodeURIComponent(linkedPacketId)}`);
-          if (cancelled) return;
+          if (cancelled || bootstrapIsStale()) return;
           legacy = [...linkedHistory.resumes, ...legacy.filter((packet) => !linkedHistory.resumes.some((linked) => linked.id === packet.id))];
         }
         const merged = mergeCanonicalApplicationHistory(legacy, canonical);
         const reviewable = onlyReviewablePackets(merged);
-        setPackets(merged);
         const requestedPacketId = requestedCanonicalApplication?.id ?? requestedApplicationId;
         const requested = reviewable.find((packet) => packet.id === requestedPacketId);
-        if (requestedCanonicalApplication && requestedApplicationIntent === "detail") {
-          setRevisitingId(null);
-          setResolvedActionableRequestId(null);
-          setCanonicalSelected(requestedCanonicalApplication);
-          return;
-        }
-        if (requested && requestedApplicationIntent === "detail") {
-          const canonicalApplication = canonicalApplicationFromPacket(requested);
-          if (canonicalApplication) {
+        /* Publish the ledger and the route-selected task as one visual state. Otherwise the packet
+           list can reveal the landing ledger for a frame before a direct link selects its task. */
+        runDashboardTransition(() => {
+          setPackets(merged);
+          if (requestedCanonicalApplication && requestedApplicationIntent === "detail") {
+            selectedIdRef.current = null;
+            editorRevisionRef.current += 1;
+            packetCoverLetterEditorRevisionRef.current += 1;
+            setSelectedId(null);
             setRevisitingId(null);
             setResolvedActionableRequestId(null);
-            selectPacket(requested);
+            commitCanonicalSelection(requestedCanonicalApplication);
             return;
           }
-          /* Detail is deliberately read-only. It opens the packet viewer without selecting the
-             actionable workflow, so viewing a role can never prepare or approve an application. */
-          setResolvedActionableRequestId(null);
-          setRevisitingId(requested.id);
-        } else if (requested && (requestedApplicationIntent === null || requestedApplicationIntent === "apply")) {
-          /* `intent=apply` is the explicit continuation from Jobs. Bare application links keep
-             their historical actionable behavior, while both paths still enter through
-             selectPacket and therefore retain the exact-packet audit gate. */
-          setRevisitingId(null);
-          /* Echo back the id the URL actually asked for, not `requested.id`. A Jobs-page link built
-             from a legacy packet id resolves through a canonical row minted with its OWN id
-             (Databricks: legacy f9a270b7 -> canonical 2d5e38f6), and selectedPacketForRequest's race
-             guard compares this value against `requestedApplicationId` verbatim. Storing the
-             canonical id there made every such deep link fail that comparison permanently, not just
-             during the in-flight window the guard exists for: "the saved list does not contain a
-             packet with this id" fired even though the packet was found and selected. */
-          const localOpen = locallyOpenedRequestRef.current;
-          const alreadySelectedLocally = localOpen?.id === requestedApplicationId;
-          if (alreadySelectedLocally) locallyOpenedRequestRef.current = null;
-          setResolvedActionableRequestId(requestedApplicationId);
-          setOpeningApplicationId(null);
-          /* A local click renders immediately, then this request returns the authoritative packet.
-             Reusing the local workflow is safe only when those server-owned bytes are identical.
-             If another tab advanced or submitted the application, the fresh selection replaces
-             every action, answer, document, and screen state before the user can continue. */
-          if (!alreadySelectedLocally || localOpen.revision !== applicationWorkflowRevision(requested)) {
-            selectPacket(requested);
+          if (requested && requestedApplicationIntent === "detail") {
+            const canonicalApplication = canonicalApplicationFromPacket(requested);
+            if (canonicalApplication) {
+              setRevisitingId(null);
+              setResolvedActionableRequestId(null);
+              selectPacket(requested);
+              return;
+            }
+            /* Detail is deliberately read-only. It opens the packet viewer without selecting the
+               actionable workflow, so viewing a role can never prepare or approve an application. */
+            setResolvedActionableRequestId(null);
+            setRevisitingId(requested.id);
+          } else if (requested && (requestedApplicationIntent === null || requestedApplicationIntent === "apply")) {
+            /* `intent=apply` is the explicit continuation from Jobs. Bare application links keep
+               their historical actionable behavior, while both paths still enter through
+               selectPacket and therefore retain the exact-packet audit gate. */
+            setRevisitingId(null);
+            /* Echo back the id the URL actually asked for, not `requested.id`. A Jobs-page link built
+               from a legacy packet id resolves through a canonical row minted with its OWN id
+               (Databricks: legacy f9a270b7 -> canonical 2d5e38f6), and selectedPacketForRequest's race
+               guard compares this value against `requestedApplicationId` verbatim. Storing the
+               canonical id there made every such deep link fail that comparison permanently, not just
+               during the in-flight window the guard exists for: "the saved list does not contain a
+               packet with this id" fired even though the packet was found and selected. */
+            const localOpen = locallyOpenedRequestRef.current;
+            const alreadySelectedLocally = localOpen?.id === requestedApplicationId;
+            if (alreadySelectedLocally) locallyOpenedRequestRef.current = null;
+            setResolvedActionableRequestId(requestedApplicationId);
+            setOpeningApplicationId(null);
+            /* A local click renders immediately, then this request returns the authoritative packet.
+               Reusing the local workflow is safe only when those server-owned bytes are identical.
+               If another tab advanced or submitted the application, the fresh selection replaces
+               every action, answer, document, and screen state before the user can continue. */
+            if (!alreadySelectedLocally || localOpen.revision !== applicationWorkflowRevision(requested)) {
+              selectPacket(requested);
+            }
+          } else {
+            setResolvedActionableRequestId(null);
+            setOpeningApplicationId(null);
+            if (requestedApplicationIntent !== "detail") setRevisitingId(null);
           }
-        } else {
-          setResolvedActionableRequestId(null);
-          setOpeningApplicationId(null);
-          if (requestedApplicationIntent !== "detail") setRevisitingId(null);
-        }
+        });
       })
       .catch((reason) => {
-        if (cancelled) return;
+        if (cancelled || bootstrapIsStale()) return;
         setOpeningApplicationId(null);
         setError(reason instanceof Error ? reason.message : "We could not load your applications. Reload the page.");
       });
     /* The education block as it stands NOW, to check the frozen packet against. Failure is not the
        same as agreement: sending stays blocked until the comparison succeeds. */
     queueMicrotask(() => {
-      if (!cancelled) setEducationProfileStatus("loading");
+      if (!cancelled && !bootstrapIsStale()) setEducationProfileStatus("loading");
     });
     api<EducationProfile>("/profile")
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled || bootstrapIsStale()) return;
         setEducationProfile(result);
         setEducationProfileStatus("ready");
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || bootstrapIsStale()) return;
         setEducationProfile(null);
         setEducationProfileStatus("failed");
       });
     api<JobsPage>("/jobs?offset=0")
       .then((result) => {
-        if (cancelled) return;
+        if (cancelled || bootstrapIsStale()) return;
         setCurrentMatches(result.jobs);
         setPreferenceError(null);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || bootstrapIsStale()) return;
         setCurrentMatches([]);
         setPreferenceError("We could not check your current job preferences. Automatic sending is paused.");
       });
     return () => {
       cancelled = true;
     };
-  }, [requestedApplicationId, requestedApplicationIntent, selectPacket]);
+  }, [commitCanonicalSelection, requestedApplicationId, requestedApplicationIntent, selectPacket]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -1581,26 +1772,41 @@ function Applications() {
   }, [recoverPacketAuditReview, selected, storedReview]);
   useEffect(() => {
     const applicationId = canonicalSelected?.id;
-    queueMicrotask(() => setCanonicalCoverLetterJd(""));
+    const editorRevision = canonicalCoverLetterEditorRevisionRef.current;
+    let cancelled = false;
+    const requestOwnsSurface = () => !cancelled && canonicalSelectedIdRef.current === (applicationId ?? null);
+    const requestMayPublish = () => requestOwnsSurface()
+      && canonicalCoverLetterEditorRevisionRef.current === editorRevision
+      && !canonicalCoverLetterEditorDirtyRef.current;
+    if (canonicalCoverLetterHydrationApplicationRef.current !== (applicationId ?? null)) {
+      canonicalCoverLetterHydrationApplicationRef.current = applicationId ?? null;
+      queueMicrotask(() => {
+        if (requestMayPublish()) setCanonicalCoverLetterJd("");
+      });
+    }
     if (!applicationId || qaMode !== false) {
       queueMicrotask(() => {
+        if (!requestMayPublish()) return;
         setCanonicalCoverLetter(null);
         setCanonicalCoverLetterBody("");
         setCanonicalCoverLetterEditorOpen(false);
         setCanonicalCoverLetterLoading(false);
       });
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
-    let cancelled = false;
-    queueMicrotask(() => setCanonicalCoverLetterLoading(true));
+    queueMicrotask(() => {
+      if (requestOwnsSurface()) setCanonicalCoverLetterLoading(true);
+    });
     void api<CanonicalCoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { cache: "no-store" })
       .then((result) => {
-        if (cancelled) return;
+        if (!requestMayPublish()) return;
         setCanonicalCoverLetter(result);
         setCanonicalCoverLetterBody(result.cover_letter.body ?? "");
       })
       .catch((reason) => {
-        if (cancelled) return;
+        if (!requestMayPublish()) return;
         if (reason instanceof ApiError && reason.status === 404) {
           setCanonicalCoverLetter(null);
           setCanonicalCoverLetterBody(canonicalGeneratedPacket?.spec._cover_letter?.body ?? "");
@@ -1609,7 +1815,7 @@ function Applications() {
         setCanonicalFillError(reason instanceof Error ? reason.message : "Cover letter could not load.");
       })
       .finally(() => {
-        if (!cancelled) setCanonicalCoverLetterLoading(false);
+        if (requestOwnsSurface()) setCanonicalCoverLetterLoading(false);
       });
     return () => {
       cancelled = true;
@@ -1906,7 +2112,20 @@ function Applications() {
       pendingApplicationFocusRef.current = false;
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [applicationTaskOpen, selectedApplicationRowId]);
+  }, [applicationTaskOpen, applicationTaskPanelKey, switcherOpen]);
+  useEffect(() => {
+    const pending = pendingApplicationLandingFocusRef.current;
+    if (applicationTaskOpen || !pending) return;
+    const frame = window.requestAnimationFrame(() => {
+      const row = [...document.querySelectorAll<HTMLButtonElement>("[data-application-row-id]")]
+        .find((button) => button.dataset.applicationRowId === pending.rowId && button.getClientRects().length > 0);
+      const ledgerHeading = document.getElementById("application-ledger-heading");
+      const target = row ?? (ledgerHeading instanceof HTMLElement ? ledgerHeading : null);
+      target?.focus({ preventScroll: true });
+      pendingApplicationLandingFocusRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [applicationTaskOpen, visiblePackets]);
   const educationDriftBanner = useMemo(
     () => (spec ? educationDriftMessage(educationDrift(spec, educationProfile)) : null),
     [educationProfile, spec],
@@ -2059,7 +2278,11 @@ function Applications() {
     }
   }
 
-  async function tailorCanonicalApplication(application: CanonicalApplication) {
+  async function tailorCanonicalApplication(
+    application: CanonicalApplication,
+    upgradeTrigger: HTMLElement | null,
+  ) {
+    const requestScope = beginCanonicalRequest(application.id, "tailoring");
     const draft: NewApplicationDraft = {
       company: application.company,
       role: application.role,
@@ -2071,7 +2294,7 @@ function Applications() {
     // Check access before loading or extracting the posting. A locked action should open the
     // shared continuation modal immediately, with unlimited Free filling still available.
     if (canUse("ai_resume_tailoring") !== true) {
-      await createApplication(draft);
+      await createApplication(draft, upgradeTrigger, requestScope);
       return;
     }
     setCreating("tailor");
@@ -2084,12 +2307,14 @@ function Applications() {
           method: "POST",
           body: JSON.stringify({ job_url: application.portal_url }),
         })).jd_text;
+      if (!canonicalRequestMayPublish(requestScope)) return;
       if (jobDescription.trim().length < 20) throw new Error("The saved job description is incomplete.");
-      await createApplication({ ...draft, jobDescription });
+      await createApplication({ ...draft, jobDescription }, upgradeTrigger, requestScope);
     } catch (reason) {
+      if (!canonicalRequestMayPublish(requestScope)) return;
       setNewApplication(draft);
       setShowNewApplication(true);
-      setCanonicalSelected(null);
+      commitCanonicalSelection(null);
       refuseInComposer(
         "action",
         reason instanceof Error
@@ -2098,7 +2323,7 @@ function Applications() {
         ["jobDescription"],
       );
     } finally {
-      setCreating(null);
+      if (canonicalRequestOwnsLifecycle(requestScope)) setCreating(null);
     }
   }
 
@@ -2297,22 +2522,44 @@ function Applications() {
     }
   }
 
-  async function createApplication(draft: NewApplicationDraft = newApplication) {
+  async function createApplication(
+    draft: NewApplicationDraft = newApplication,
+    upgradeTrigger: HTMLElement | null = null,
+    inheritedCanonicalRequestScope: CanonicalRequestScope | null = null,
+  ) {
+    const requestIsCurrent = () => applicationsMountedRef.current;
+    const canonicalRequestScope = draft.canonicalApplicationId
+      ? inheritedCanonicalRequestScope ?? beginCanonicalRequest(draft.canonicalApplicationId, "tailoring")
+      : null;
+    const requestMayPublish = () => canonicalRequestScope
+      ? canonicalRequestMayPublish(canonicalRequestScope)
+      : requestIsCurrent();
+    const requestOwnsLifecycle = () => canonicalRequestScope
+      ? canonicalRequestOwnsLifecycle(canonicalRequestScope)
+      : requestIsCurrent();
     const canonicalReturnRoute = draft.canonicalApplicationId
       ? `/dashboard/applications?application=${encodeURIComponent(draft.canonicalApplicationId)}&intent=detail&checkout_action=tailor`
       : "/dashboard/applications?new=1&checkout_action=tailor";
-    const openTailoringUpgrade = (source: "proactive" | "server_denial") => openUpgrade({
-      feature: "ai_resume_tailoring",
-      placement: draft.canonicalApplicationId ? "canonical_application_detail" : "application_composer",
-      trigger: source === "server_denial" ? "server_entitlement_denial" : "tailor_resume",
-      manualLabel: "Fill with my main resume",
-      applicationId: draft.canonicalApplicationId ?? undefined,
-      returnRoute: canonicalReturnRoute,
-      onBeforeCheckout: () => rememberCheckoutDraft(draft),
-      onManual: () => void fillApplication(draft, draft.canonicalApplicationId ? "tracker" : "composer"),
-    }, source === "server_denial" ? { source: "server_denial" } : undefined);
+    const openTailoringUpgrade = (source: "proactive" | "server_denial") => {
+      const trigger = applicationUpgradeFocusTarget(
+        upgradeTrigger,
+        draft.canonicalApplicationId ? "application-ledger-heading" : "new-application-heading",
+      );
+      openUpgrade({
+        feature: "ai_resume_tailoring",
+        placement: draft.canonicalApplicationId ? "canonical_application_detail" : "application_composer",
+        trigger: source === "server_denial" ? "server_entitlement_denial" : "tailor_resume",
+        manualLabel: "Fill with my main resume",
+        applicationId: draft.canonicalApplicationId ?? undefined,
+        returnRoute: canonicalReturnRoute,
+        onBeforeCheckout: () => rememberCheckoutDraft(draft),
+        onManual: () => void fillApplication(draft, draft.canonicalApplicationId ? "tracker" : "composer"),
+      }, source === "server_denial"
+        ? { source: "server_denial", trigger }
+        : { trigger });
+    };
     if (canUse("ai_resume_tailoring") !== true) {
-      openTailoringUpgrade("proactive");
+      if (requestMayPublish()) openTailoringUpgrade("proactive");
       return;
     }
     const company = draft.company.trim();
@@ -2320,6 +2567,7 @@ function Applications() {
     const portalUrl = draft.portalUrl.trim();
     const jobDescription = draft.jobDescription.trim();
     const reportGenerationFailure = (message: string, fields: ApplicationDraftField[] = []) => {
+      if (!requestMayPublish()) return;
       if (draft.canonicalApplicationId && canonicalSelected?.id === draft.canonicalApplicationId) {
         setCanonicalFillError(message);
       } else {
@@ -2350,6 +2598,7 @@ function Applications() {
         api<ProfileIdentity>("/profile"),
         api<ApplicationProfile>("/profile/application"),
       ]);
+      if (!requestMayPublish()) return;
       const fullName = identity.full_name?.trim();
       if (!fullName) throw new Error("Your main resume is missing your name. Replace it on the Resume page first.");
       const resumeEmail = identity.resume_email?.trim();
@@ -2390,6 +2639,7 @@ function Applications() {
           },
         }),
       });
+      if (!requestIsCurrent()) return;
 
       const created = generated.application;
       if (created?.spec._review) {
@@ -2426,8 +2676,12 @@ function Applications() {
             ? upsertCanonicalApplicationHistory(withCreated, updatedCanonical)
             : withCreated;
         });
+        /* The generated packet is durable and may safely join the ledger after the user leaves A.
+           Everything below this line is task-surface state and still belongs to the original
+           selection and editor revision. */
+        if (!requestMayPublish()) return;
         if (updatedCanonical) {
-          setCanonicalSelected(updatedCanonical);
+          commitCanonicalSelection(updatedCanonical);
         } else {
           openApplication(created, { history: "replace" });
         }
@@ -2438,7 +2692,10 @@ function Applications() {
         setNotice(keepCanonicalDetail
           ? "Tailored resume ready. You can write the cover letter without creating another Tracker row."
           : "Your resume is ready. We will check whether this employer wants a cover letter.");
-        if (draft.jobId && !keepCanonicalDetail) await askPrescriptQuestions(draft.jobId);
+        if (draft.jobId && !keepCanonicalDetail) {
+          await askPrescriptQuestions(draft.jobId);
+          if (!requestMayPublish()) return;
+        }
         return;
       }
 
@@ -2456,8 +2713,10 @@ function Applications() {
           skipped_reasons: [],
         }),
       });
+      if (!requestMayPublish()) return;
 
       const history = await api<{ resumes: GeneratedResume[] }>("/resume/history");
+      if (!requestMayPublish()) return;
       const fallbackCreated = history.resumes.find((packet) => packet.id === generated.resume_id);
       setPackets(history.resumes);
       if (!fallbackCreated?.spec._review) throw new Error("Your resume was made, but we could not open it. Reload the page.");
@@ -2469,6 +2728,7 @@ function Applications() {
       track("application_generation_completed", { source: draft.jobId ? "monitored_job" : "manual" });
       setNotice("Your resume is ready. We will check whether this employer wants a cover letter.");
     } catch (reason) {
+      if (!requestMayPublish()) return;
       if (isStructuredUpgradeDenial(reason, "ai_resume_tailoring")) {
         openTailoringUpgrade("server_denial");
         return;
@@ -2479,7 +2739,7 @@ function Applications() {
          back to retype input that was already fine. */
       reportGenerationFailure(reason instanceof Error ? reason.message : "We could not build this application. Check the job description and try again.", []);
     } finally {
-      setCreating(null);
+      if (requestOwnsLifecycle()) setCreating(null);
     }
   }
 
@@ -2490,12 +2750,30 @@ function Applications() {
       errorSurface?: "page" | "canonical";
       jdText?: string;
       onManual?: () => void;
+      upgradeTrigger?: HTMLElement | null;
     } = {},
   ) {
     if (!applicationId) return;
+    const requestIsCurrent = () => applicationsMountedRef.current;
     const targetApplicationId = options.canonicalApplicationId
       ?? canonicalIdByPacketId[applicationId]
       ?? applicationId;
+    const canonicalRequestScope = options.canonicalApplicationId
+      ? beginCanonicalRequest(targetApplicationId, "cover-letter")
+      : null;
+    const packetRequestScope = options.canonicalApplicationId
+      ? null
+      : beginPacketCoverLetterRequest(applicationId);
+    const requestMayPublish = () => canonicalRequestScope
+      ? canonicalRequestMayPublish(canonicalRequestScope)
+      : packetRequestScope
+        ? packetCoverLetterRequestMayPublish(packetRequestScope)
+        : requestIsCurrent();
+    const requestOwnsLifecycle = () => canonicalRequestScope
+      ? canonicalRequestOwnsLifecycle(canonicalRequestScope)
+      : packetRequestScope
+        ? packetCoverLetterRequestOwnsLifecycle(packetRequestScope)
+        : requestIsCurrent();
     const returnRoute = options.canonicalApplicationId
       ? `/dashboard/applications?application=${encodeURIComponent(targetApplicationId)}&intent=detail&checkout_action=cover-letter`
       : `/dashboard/applications?application=${encodeURIComponent(applicationId)}&intent=apply&checkout_action=cover-letter`;
@@ -2503,15 +2781,20 @@ function Applications() {
       if (options.errorSurface === "canonical") setCanonicalFillError(message);
       else setError(message);
     };
-    const openCoverLetterUpgrade = (source: "proactive" | "server_denial") => openUpgrade({
-      feature: "ai_cover_letter_generation",
-      placement: options.canonicalApplicationId ? "canonical_application_detail" : "application_cover_letter",
-      trigger: source === "server_denial" ? "server_entitlement_denial" : "generate_cover_letter",
-      manualLabel: "Write it myself",
-      applicationId: targetApplicationId,
-      returnRoute,
-      onManual: options.onManual,
-    }, source === "server_denial" ? { source: "server_denial" } : undefined);
+    const openCoverLetterUpgrade = (source: "proactive" | "server_denial") => {
+      const trigger = applicationUpgradeFocusTarget(options.upgradeTrigger ?? null, "application-ledger-heading");
+      openUpgrade({
+        feature: "ai_cover_letter_generation",
+        placement: options.canonicalApplicationId ? "canonical_application_detail" : "application_cover_letter",
+        trigger: source === "server_denial" ? "server_entitlement_denial" : "generate_cover_letter",
+        manualLabel: "Write it myself",
+        applicationId: targetApplicationId,
+        returnRoute,
+        onManual: options.onManual,
+      }, source === "server_denial"
+        ? { source: "server_denial", trigger }
+        : { trigger });
+    };
     if (canUse("ai_cover_letter_generation") !== true) {
       openCoverLetterUpgrade("proactive");
       return;
@@ -2522,6 +2805,7 @@ function Applications() {
     try {
       if (qaMode) {
         const body = `I am excited to apply for the ${selected?.job_context.role ?? "role"} position at ${selected?.job_context.company ?? "your company"}. My experience building production software and working across product requirements aligns closely with this opportunity.\n\nI would bring a practical, evidence-led approach to the team, with attention to reliable implementation, clear communication, and measurable outcomes. I am especially interested in applying these strengths to the priorities described in this role.\n\nThank you for considering my application. I would welcome the opportunity to discuss how my background can support the team.`;
+        if (!requestMayPublish()) return;
         setCoverLetterBody(body);
         return;
       }
@@ -2534,6 +2818,11 @@ function Applications() {
           ...(options.jdText?.trim() ? { jd_text: options.jdText.trim() } : {}),
         }),
       });
+      if (!requestIsCurrent()) return;
+      if (!requestMayPublish()) {
+        completeOperationId(coverLetterOperationIds.current, operationKey);
+        return;
+      }
       if (options.canonicalApplicationId
         && (result.application_id !== targetApplicationId
           || (result.packet_id && canonicalGeneratedPacket && result.packet_id !== canonicalGeneratedPacket.id))) {
@@ -2547,6 +2836,7 @@ function Applications() {
           : packet) ?? current);
       applyCoverLetterToSubmission(applicationId, result.cover_letter);
       if (options.canonicalApplicationId) {
+        canonicalCoverLetterEditorDirtyRef.current = false;
         setCanonicalCoverLetter(result as CanonicalCoverLetterResponse);
         setCanonicalCoverLetterBody(result.cover_letter.body);
         setCanonicalCoverLetterEditorOpen(true);
@@ -2557,39 +2847,46 @@ function Applications() {
       }
       setNotice("Cover letter written and checked against the work you told us about.");
     } catch (reason) {
+      if (!requestMayPublish()) return;
       if (isStructuredUpgradeDenial(reason, "ai_cover_letter_generation")) {
         openCoverLetterUpgrade("server_denial");
         return;
       }
       reportCoverLetterFailure(reason instanceof Error ? reason.message : "Could not generate the tailored cover letter.");
     } finally {
-      setCoverLetterBusy(false);
+      if (requestOwnsLifecycle()) setCoverLetterBusy(false);
     }
   }
 
   async function saveCanonicalCoverLetter(): Promise<void> {
     const applicationId = canonicalSelected?.id;
     if (!applicationId || !canonicalCoverLetterBody.trim()) return;
+    const requestScope = beginCanonicalRequest(applicationId, "cover-letter");
+    const submittedBody = canonicalCoverLetterBody;
     setCoverLetterBusy(true);
     setCanonicalFillError(null);
     try {
       const result = await api<CanonicalCoverLetterResponse>(`/applications/${applicationId}/cover-letter`, {
         method: "PATCH",
-        body: JSON.stringify({ body: canonicalCoverLetterBody }),
+        body: JSON.stringify({ body: submittedBody }),
       });
+      if (!canonicalRequestMayPublish(requestScope)) return;
+      canonicalCoverLetterEditorDirtyRef.current = false;
       setCanonicalCoverLetter(result);
       setCanonicalCoverLetterBody(result.cover_letter.body ?? "");
       setNotice("Cover letter saved to this Tracker application.");
     } catch (reason) {
+      if (!canonicalRequestMayPublish(requestScope)) return;
       setCanonicalFillError(reason instanceof Error ? reason.message : "We could not save this cover letter.");
     } finally {
-      setCoverLetterBusy(false);
+      if (canonicalRequestOwnsLifecycle(requestScope)) setCoverLetterBusy(false);
     }
   }
 
   async function uploadCanonicalCoverLetter(file: File): Promise<void> {
     const applicationId = canonicalSelected?.id;
     if (!applicationId) return;
+    const requestScope = beginCanonicalRequest(applicationId, "cover-letter");
     setCoverLetterBusy(true);
     setCanonicalFillError(null);
     try {
@@ -2599,74 +2896,80 @@ function Applications() {
         method: "POST",
         body: form,
       });
+      if (!canonicalRequestMayPublish(requestScope)) return;
+      canonicalCoverLetterEditorDirtyRef.current = false;
       setCanonicalCoverLetter(result);
       setCanonicalCoverLetterBody(result.cover_letter.body ?? "");
       setCanonicalCoverLetterEditorOpen(true);
       setNotice("Cover letter uploaded to this Tracker application.");
     } catch (reason) {
+      if (!canonicalRequestMayPublish(requestScope)) return;
       setCanonicalFillError(reason instanceof Error ? reason.message : "We could not upload this cover letter.");
     } finally {
-      setCoverLetterBusy(false);
+      if (canonicalRequestOwnsLifecycle(requestScope)) setCoverLetterBusy(false);
     }
   }
 
   async function deleteCanonicalCoverLetter(): Promise<void> {
     const applicationId = canonicalSelected?.id;
     if (!applicationId || !canonicalCoverLetter) return;
+    const requestScope = beginCanonicalRequest(applicationId, "cover-letter");
     setCoverLetterBusy(true);
     setCanonicalFillError(null);
     try {
       await api(`/applications/${applicationId}/cover-letter`, { method: "DELETE" });
+      if (!canonicalRequestMayPublish(requestScope)) return;
+      canonicalCoverLetterEditorDirtyRef.current = false;
       setCanonicalCoverLetter(null);
       setCanonicalCoverLetterBody("");
       setNotice("Cover letter removed from this application.");
     } catch (reason) {
+      if (!canonicalRequestMayPublish(requestScope)) return;
       setCanonicalFillError(reason instanceof Error ? reason.message : "We could not remove this cover letter.");
     } finally {
-      setCoverLetterBusy(false);
+      if (canonicalRequestOwnsLifecycle(requestScope)) setCoverLetterBusy(false);
     }
   }
 
   async function saveCoverLetter(): Promise<boolean> {
     if (!selected) return false;
     const applicationId = selected.id;
+    if (selectedIdRef.current !== applicationId) return false;
+    const requestScope = beginPacketCoverLetterRequest(applicationId);
+    const submittedBody = coverLetterBody;
     setCoverLetterBusy(true);
     setError(null);
     try {
       if (!qaMode) {
-        if (!coverLetterBody.trim()) {
+        if (!submittedBody.trim()) {
           if (selected.spec._cover_letter) {
             await api(`/applications/${applicationId}/cover-letter`, { method: "DELETE" });
+            if (!packetCoverLetterRequestMayPublish(requestScope)) return false;
             setPackets((current) => current?.map((packet) => packet.id === applicationId
               ? { ...packet, cover_letter_download_url: undefined, spec: { ...packet.spec, _cover_letter: undefined } }
               : packet) ?? current);
             applyCoverLetterToSubmission(applicationId, null);
-            if (selectedIdRef.current === applicationId) setCoverLetterDownloadUrl(null);
-            if (selectedIdRef.current === applicationId) {
-              setNotice("Cover letter removed from this application.");
-            }
+            setCoverLetterDownloadUrl(null);
+            setNotice("Cover letter removed from this application.");
           }
           return true;
         }
-        const result = await api<CoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: coverLetterBody }) });
+        const result = await api<CoverLetterResponse>(`/applications/${applicationId}/cover-letter`, { method: "PATCH", body: JSON.stringify({ body: submittedBody }) });
+        if (!packetCoverLetterRequestMayPublish(requestScope)) return false;
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? { ...packet, cover_letter_download_url: result.download_url, spec: { ...packet.spec, _cover_letter: result.cover_letter } } : packet) ?? current);
         applyCoverLetterToSubmission(applicationId, result.cover_letter);
-        if (selectedIdRef.current === applicationId) {
-          setCoverLetterBody(result.cover_letter.body);
-          setCoverLetterDownloadUrl(result.download_url);
-        }
+        setCoverLetterBody(result.cover_letter.body);
+        setCoverLetterDownloadUrl(result.download_url);
       }
-      if (selectedIdRef.current === applicationId) {
-        setNotice("Cover letter saved. Every line checks out against your real work.");
-      }
+      if (!packetCoverLetterRequestMayPublish(requestScope)) return false;
+      setNotice("Cover letter saved. Every line checks out against your real work.");
       return true;
     } catch (reason) {
-      if (selectedIdRef.current === applicationId) {
-        setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
-      }
+      if (!packetCoverLetterRequestMayPublish(requestScope)) return false;
+      setError(reason instanceof Error ? reason.message : "We could not save your cover letter. Try again.");
       return false;
     } finally {
-      setCoverLetterBusy(false);
+      if (packetCoverLetterRequestOwnsLifecycle(requestScope)) setCoverLetterBusy(false);
     }
   }
 
@@ -3532,7 +3835,7 @@ function Applications() {
     <div className={applicationTaskOpen ? "space-y-4" : "space-y-6"}>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink">Applications</h1>
+          <h1 id="applications-heading" tabIndex={-1} className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink outline-none">Applications</h1>
           {/* Every selected screen needs a way back to the mobile list. Desktop keeps the compact
               switcher beside the detail, so this control would only repeat it there. */}
           {applicationTaskOpen && (
@@ -3616,7 +3919,7 @@ function Applications() {
              that event replace the optional draft argument, so the first .trim() crashed in
              production instead of generating the application. */
           onFill={() => void fillApplication()}
-          onTailor={() => void createApplication()}
+          onTailor={(upgradeTrigger) => void createApplication(newApplication, upgradeTrigger)}
           creating={creating}
           onFetchJobDescription={fetchJobDescription}
           extractingJd={extractingJd}
@@ -3648,7 +3951,7 @@ function Applications() {
                 type="button"
                 onClick={() => setSwitcherOpen((current) => !current)}
                 aria-expanded={switcherOpen}
-                aria-controls="application-switcher-list"
+                aria-controls={switcherOpen ? "application-switcher-list" : undefined}
                 className="min-h-11 shrink-0 rounded-full border border-control-border px-4 text-xs font-medium text-ink transition-colors hover:border-ink"
               >
                 {switcherOpen ? "Done" : "Switch applications"}
@@ -3656,7 +3959,7 @@ function Applications() {
             </div>
           ) : (
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 py-3">
-              <h2 id="application-ledger-heading" className="text-sm font-medium text-ink">{applicationFilterHeading(applicationFilter)}</h2>
+              <h2 id="application-ledger-heading" tabIndex={-1} className="text-sm font-medium text-ink outline-none">{applicationFilterHeading(applicationFilter)}</h2>
               <span data-testid="application-ledger-count" className="shrink-0 whitespace-nowrap font-mono text-[11px] text-muted">{visiblePackets.length} of {reviewablePackets.length}</span>
               {duplicatePostingNote(duplicateMarks) && (
                 <span className="basis-full text-xs text-muted">{duplicatePostingNote(duplicateMarks)}</span>
@@ -3713,6 +4016,7 @@ function Applications() {
                   <button
                     key={packet.id}
                     type="button"
+                    data-application-row-id={packet.id}
                     onClick={() => openApplication(packet)}
                     aria-pressed={packet.id === selectedApplicationRowId}
                     className={`flex min-h-11 max-w-[15rem] shrink-0 flex-col justify-center rounded-inner border px-3 py-2 text-left ${packet.id === selectedApplicationRowId ? "border-brand bg-brand-soft" : "border-border"}`}
@@ -3760,7 +4064,7 @@ function Applications() {
                 </div>
                 <div className="divide-y divide-border">
                   {visiblePackets.map((packet) => (
-                    <button key={packet.id} type="button" onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
+                    <button key={packet.id} type="button" data-application-row-id={packet.id} onClick={() => openApplication(packet)} aria-pressed={packet.id === selectedApplicationRowId} className={`grid min-h-14 w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-2 text-left transition-colors sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] ${packet.id === selectedApplicationRowId ? "bg-brand-soft/55" : "hover:bg-surface-alt"}`}>
                       <span className="truncate text-sm font-medium text-ink">{packet.job_context.role || "Role"}</span>
                       <span className="hidden truncate text-xs text-muted sm:block">{packet.job_context.company || "Company"}</span>
                       <time className="hidden text-xs text-muted sm:block">{formatRelativeDate(packetTimestamp(packet))}</time>
@@ -3784,6 +4088,7 @@ function Applications() {
       <MotionPanel
         key={applicationTaskPanelKey}
         name="dashboard-applications-task"
+        id="application-task-panel"
         className={applicationTaskOpen ? "space-y-4" : "space-y-6"}
       >
       {packets === null ? (
@@ -3798,6 +4103,7 @@ function Applications() {
             // same navigation an ordinary Jobs-page deep link performs, and that branch is what
             // actually calls selectPacket, from the SAME place every other apply-intent link does.
             if (!canonicalEnvelopePacket) return;
+            pendingApplicationFocusRef.current = true;
             /* `intent=detail` is deliberately read-only (see the branch above that sets
                resolvedActionableRequestId to null for it), but this button can still render on a
                detail view when canonicalReadyToSend is non-null. selectPacket alone leaves the URL
@@ -3878,25 +4184,26 @@ function Applications() {
             jobId: canonicalSelected.job_id ?? null,
             canonicalApplicationId: canonicalSelected.id,
           }, "tracker")}
-          onTailor={() => void tailorCanonicalApplication(canonicalSelected)}
+          onTailor={(upgradeTrigger) => void tailorCanonicalApplication(canonicalSelected, upgradeTrigger)}
           onOpenCoverLetterEditor={() => {
             setCanonicalCoverLetterEditorOpen(true);
             setCanonicalCoverLetterBody((current) => current || canonicalGeneratedPacket?.spec._cover_letter?.body || "");
           }}
-          onGenerateCoverLetter={() => {
+          onGenerateCoverLetter={(upgradeTrigger) => {
             void generateCoverLetter(canonicalGeneratedPacket?.id ?? canonicalSelected.id, {
               canonicalApplicationId: canonicalSelected.id,
               errorSurface: "canonical",
               jdText: canonicalCoverLetterJd,
               onManual: () => setCanonicalCoverLetterEditorOpen(true),
+              upgradeTrigger,
             });
           }}
-          onCoverLetterBodyChange={setCanonicalCoverLetterBody}
-          onCoverLetterJdChange={setCanonicalCoverLetterJd}
+          onCoverLetterBodyChange={editCanonicalCoverLetterBody}
+          onCoverLetterJdChange={editCanonicalCoverLetterJd}
           onSaveCoverLetter={() => void saveCanonicalCoverLetter()}
           onUploadCoverLetter={(file) => void uploadCanonicalCoverLetter(file)}
           onDeleteCoverLetter={() => void deleteCanonicalCoverLetter()}
-          onOpenPacket={() => canonicalEnvelopePacket && setRevisitingId(canonicalEnvelopePacket.id)}
+          onOpenPacket={() => canonicalEnvelopePacket && openRevisit(canonicalEnvelopePacket.id)}
         />
       ) : reviewablePackets.length === 0 ? (
         showNewApplication ? null : (
@@ -3965,7 +4272,7 @@ function Applications() {
              whole page onto a screen for that packet; looking at what was already sent should
              leave the board exactly where it was, so this opens over the top and closes back to
              the same scroll position. */
-          onRevisit={setRevisitingId}
+          onRevisit={openRevisit}
           /* The ids the viewer can actually open, which is NOT the same set as openableIds.
              `_review` is optional on the spec, and the mark used to render for every packet in
              history while the handler quietly did nothing for the ones without a review: a fully
@@ -4219,11 +4526,11 @@ function Applications() {
               </div>
               <div className="flex gap-2">
                 {coverLetterDownloadUrl && <a href={coverLetterDownloadUrl} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink transition-colors hover:border-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">View PDF</a>}
-                <Button type="button" onClick={() => void generateCoverLetter()} disabled={coverLetterBusy} variant="secondary" className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBody ? "Regenerate" : "Generate"}</Button>
+                <Button type="button" onClick={(event) => void generateCoverLetter(undefined, { upgradeTrigger: event.currentTarget })} disabled={coverLetterBusy} variant="secondary" className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBody ? "Regenerate" : "Generate"}</Button>
                 <Button type="button" onClick={saveCoverLetter} disabled={coverLetterBusy || (!coverLetterBody.trim() && !selected.spec._cover_letter)} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">{coverLetterBusy ? "Checking..." : coverLetterBody.trim() ? "Save cover letter" : "Remove cover letter"}</Button>
               </div>
             </div>
-            <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => setCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
+            <textarea aria-label="Tailored cover letter" value={coverLetterBody} onChange={(event) => editPacketCoverLetterBody(event.target.value)} rows={12} placeholder="Generate a cover letter tailored to this job description" className="mt-5 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-sm leading-7 text-ink outline-none focus:border-brand" />
             {(selected.spec._cover_letter?.warnings?.length ?? 0) > 0 && (
               <ul className="mt-3 list-disc space-y-1 pl-5 text-xs leading-5 text-warn">
                 {selected.spec._cover_letter!.warnings.map((warning) => <li key={warning}>{warning}</li>)}
@@ -4398,9 +4705,9 @@ function CanonicalApplicationDetail({
   coverLetterDownloadUrl: string | null;
   error: string | null;
   onFill: () => void;
-  onTailor: () => void;
+  onTailor: (upgradeTrigger: HTMLButtonElement) => void;
   onOpenCoverLetterEditor: () => void;
-  onGenerateCoverLetter: () => void;
+  onGenerateCoverLetter: (upgradeTrigger: HTMLButtonElement) => void;
   onCoverLetterBodyChange: (body: string) => void;
   onCoverLetterJdChange: (body: string) => void;
   onSaveCoverLetter: () => void;
@@ -4454,7 +4761,7 @@ function CanonicalApplicationDetail({
               : "Write or upload a cover letter now, or use Litos+ to create one from your saved facts. A tailored resume is optional."}
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Button type="button" variant="secondary" disabled={tailorBusy || fillBusy || coverLetterBusy} onClick={onTailor}>
+            <Button type="button" variant="secondary" disabled={tailorBusy || fillBusy || coverLetterBusy} onClick={(event) => onTailor(event.currentTarget)}>
               {tailorBusy ? "Tailoring..." : "Tailor resume"}
             </Button>
             <Button type="button" variant="secondary" disabled={tailorBusy || coverLetterBusy || coverLetterLoading} onClick={onOpenCoverLetterEditor}>
@@ -4487,10 +4794,10 @@ function CanonicalApplicationDetail({
                 </label>
               )}
               <div className="mt-4 flex flex-wrap gap-3">
-                <Button type="button" disabled={coverLetterBusy || !coverLetterBody.trim()} onClick={onSaveCoverLetter}>
+                <Button type="button" disabled={coverLetterBusy || coverLetterLoading || !coverLetterBody.trim()} onClick={onSaveCoverLetter}>
                   {coverLetterBusy ? "Saving..." : "Save cover letter"}
                 </Button>
-                <Button type="button" variant="secondary" disabled={coverLetterBusy || (!hasTailoredResume && !coverLetterJd.trim())} onClick={onGenerateCoverLetter}>
+                <Button type="button" variant="secondary" disabled={coverLetterBusy || coverLetterLoading || (!hasTailoredResume && !coverLetterJd.trim())} onClick={(event) => onGenerateCoverLetter(event.currentTarget)}>
                   Draft with Litos+
                 </Button>
                 <label className="inline-flex min-h-11 cursor-pointer items-center rounded-control border border-control-border px-5 text-small font-medium text-ink hover:border-ink">
@@ -4499,7 +4806,7 @@ function CanonicalApplicationDetail({
                     type="file"
                     accept="application/pdf,text/plain,.pdf,.txt"
                     className="sr-only"
-                    disabled={coverLetterBusy}
+                    disabled={coverLetterBusy || coverLetterLoading}
                     onChange={(event) => {
                       const file = event.currentTarget.files?.[0];
                       if (file) onUploadCoverLetter(file);
@@ -4508,7 +4815,7 @@ function CanonicalApplicationDetail({
                   />
                 </label>
                 {coverLetter && (
-                  <Button type="button" variant="quiet" disabled={coverLetterBusy} onClick={onDeleteCoverLetter}>
+                  <Button type="button" variant="quiet" disabled={coverLetterBusy || coverLetterLoading} onClick={onDeleteCoverLetter}>
                     Remove cover letter
                   </Button>
                 )}
@@ -4590,7 +4897,7 @@ function NewApplicationPanel({
   value: NewApplicationDraft;
   onChange: (value: NewApplicationDraft) => void;
   onFill: () => void;
-  onTailor: () => void;
+  onTailor: (upgradeTrigger: HTMLButtonElement) => void;
   creating: "fill" | "tailor" | null;
   onFetchJobDescription: () => void;
   extractingJd: boolean;
@@ -4604,7 +4911,7 @@ function NewApplicationPanel({
     <Card className="p-6">
       <div className="max-w-2xl">
         <p className="text-xs text-muted">New application</p>
-        <h2 className="mt-2 text-xl font-medium text-ink">Fill an application.</h2>
+        <h2 id="new-application-heading" tabIndex={-1} className="mt-2 text-xl font-medium text-ink outline-none">Fill an application.</h2>
         <p className="mt-1 text-sm leading-6 text-muted">Factual filling is unlimited. Add the job description only when you want a tailored resume too.</p>
       </div>
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
@@ -4635,7 +4942,7 @@ function NewApplicationPanel({
           reader still hears it exactly once. */}
       <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
         <ComposerRefusalNote refusal={refusal} at="action" />
-        <Button type="button" variant="secondary" onClick={onTailor} disabled={creating !== null} className="border-brand text-brand-ink">
+        <Button type="button" variant="secondary" onClick={(event) => onTailor(event.currentTarget)} disabled={creating !== null} className="border-brand text-brand-ink">
           {creating === "tailor" ? <PendingLabel state="composing">Tailoring</PendingLabel> : "Tailor resume"}
         </Button>
         <Button type="button" onClick={onFill} disabled={creating !== null}>
@@ -6025,11 +6332,13 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
            aligned. The row's own control, below, is the way to act on it. */
         <span aria-hidden className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border border-warn/40 bg-surface" />
       )}
-      <span>
-        <span className={done ? "text-ink" : "text-warn"}>{item.label}</span>
-        {/* The state word rides beside the label rather than inside the sentence, so the row still
-            reads as a sentence about the employer and the pill stays scannable down a column. */}
-        {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
+      <span className="block min-w-0">
+        <span className="block min-w-0 break-words">
+          <span className={done ? "text-ink" : "text-warn"}>{item.label}</span>
+          {/* The state word rides beside the label rather than inside the sentence, so the row still
+              reads as a sentence about the employer and the pill stays scannable down a column. */}
+          {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
+        </span>
         {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}
         {choices && (
           <span role="radiogroup" aria-label={`Choose an answer to: ${item.label}`} className="mt-2 block space-y-1.5">

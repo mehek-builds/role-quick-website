@@ -30,8 +30,8 @@ test("every website generation call sends a stable operation id", async () => {
   assert.match(applications, /operation_id: operationId,[\s\S]*initiation: "explicit_click"/);
   assert.match(applications, /operationIdFor\(coverLetterOperationIds\.current, operationKey\)/);
   assert.match(applications, /\/cover-letter`, \{[\s\S]*operation_id: operationId,[\s\S]*options\.jdText/);
-  assert.match(outreach, /operationIdFor\(draftOperationIds\.current, operationKey\)/);
+  assert.match(outreach, /operationIdFor\(operationOwner\.draftOperationIds, operationKey\)/);
   assert.match(outreach, /operation_id: operationId/);
-  assert.match(outreach, /operationIdFor\(contactOperationIds\.current, operationKey\)/);
+  assert.match(outreach, /operationIdFor\(operationOwner\.contactOperationIds, operationKey\)/);
   assert.doesNotMatch(outreach, /operation_id: crypto\.randomUUID\(\)/);
 });

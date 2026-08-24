@@ -6,10 +6,13 @@ const outreach = await readFile(new URL("../app/dashboard/outreach/page.tsx", im
 
 test("the outreach composer returns focus to the control that opened it", () => {
   assert.match(outreach, /const composerTriggerRef = useRef<HTMLElement \| null>\(null\)/);
+  assert.match(outreach, /const composerLogicalTriggerIdRef = useRef<string \| null>\(null\)/);
   assert.match(outreach, /const trigger = explicitTrigger \?\? document\.activeElement/);
   assert.match(outreach, /trigger instanceof HTMLElement && trigger !== document\.body/);
   assert.match(outreach, /composerTriggerRef\.current = trigger/);
   assert.match(outreach, /if \(trigger\?\.isConnected\) trigger\.focus\(\)/);
+  assert.match(outreach, /const logicalTrigger = logicalTriggerId \? document\.getElementById\(logicalTriggerId\) : null/);
+  assert.match(outreach, /if \(logicalTrigger\) logicalTrigger\.focus\(\)/);
   assert.match(outreach, /else document\.getElementById\("outreach-start-button"\)\?\.focus\(\)/);
 });
 
@@ -28,8 +31,17 @@ test("editing a saved draft uses the same trigger-aware composer path", () => {
   const end = outreach.indexOf("async function saveEditedDraft", start);
   const editFlow = outreach.slice(start, end);
 
-  assert.match(editFlow, /openComposer\("draft", trigger\)/);
+  assert.match(editFlow, /openComposer\("draft", trigger, outreachDraftEditTriggerId\(saved\.draft_id\)\)/);
   assert.doesNotMatch(editFlow, /\.focus\(\)/);
+});
+
+test("a refreshed saved draft exposes the stable logical Edit trigger used for focus return", () => {
+  assert.match(outreach, /function outreachDraftEditTriggerId\(draftId: string\): string/);
+  assert.match(outreach, /return `outreach-draft-edit-\$\{encodeURIComponent\(draftId\)\}`/);
+  assert.match(outreach, /id=\{outreachDraftEditTriggerId\(e\.durableDraft\.draft_id\)\}/);
+  assert.match(outreach, /composerLogicalTriggerIdRef\.current = logicalTriggerId/);
+  assert.match(outreach, /const logicalTriggerId = composerLogicalTriggerIdRef\.current/);
+  assert.match(outreach, /composerLogicalTriggerIdRef\.current = null/);
 });
 
 test("pointer activation passes the exact clicked controls into the focus path", () => {

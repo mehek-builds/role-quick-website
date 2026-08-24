@@ -79,7 +79,7 @@ import {
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "@/lib/work-eligibility-limit";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { PlanStatus } from "@/components/billing/PlanStatus";
-import { accessLabel } from "@/features/billing";
+import { accessLabel, isPaidAccess } from "@/features/billing";
 import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 
 /* Application profile: exactly the fields the backend stores, including legacy
@@ -184,7 +184,11 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
+  const activeTabRef = useRef<AccountTab>("job-search");
+  const pendingHistoryTabRef = useRef<AccountTab | null>(null);
+  const pendingHistoryTabFocusRef = useRef<AccountTab | null>(null);
   const [accountTabsViewport, setAccountTabsViewport] = useState<HTMLDivElement | null>(null);
+  const [accountTabsViewportWidth, setAccountTabsViewportWidth] = useState(0);
   const [showAccountTabOverflowCue, setShowAccountTabOverflowCue] = useState(false);
   const [savedProfileJson, setSavedProfileJson] = useState("");
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
@@ -208,15 +212,67 @@ export default function Settings() {
   });
 
   useEffect(() => {
-    const syncTab = () => runDashboardTransition(() => setActiveTab(tabFromHash(window.location.hash)));
+    let closingDialog: HTMLDialogElement | null = null;
+    let onDialogClose: (() => void) | null = null;
+
+    const commitHistoryTab = (nextTab: AccountTab, focusTab: boolean) => {
+      activeTabRef.current = nextTab;
+      pendingHistoryTabFocusRef.current = focusTab ? nextTab : null;
+      runDashboardTransition(() => setActiveTab(nextTab));
+    };
+
+    const syncTab = () => {
+      const nextTab = tabFromHash(window.location.hash);
+      if (nextTab === activeTabRef.current && closingDialog === null) return;
+      if (closingDialog !== null) {
+        pendingHistoryTabRef.current = nextTab;
+        return;
+      }
+      const openDialog = document.querySelector<HTMLDialogElement>("#account-panel dialog[open]");
+      if (!openDialog) {
+        pendingHistoryTabRef.current = null;
+        if (nextTab !== activeTabRef.current) commitHistoryTab(nextTab, false);
+        return;
+      }
+
+      /* Back and Forward update the hash before React can retain the current panel. Ask the open
+         native dialog to close through its own cancel path, then commit the tab only after its
+         close event. This lets DocumentsCard and account deletion finish the same exit animation
+         as Escape and their explicit Keep controls. A second history event while that exit is in
+         flight replaces the destination without adding another close listener. */
+      pendingHistoryTabRef.current = nextTab;
+      if (closingDialog === openDialog) return;
+      closingDialog = openDialog;
+      onDialogClose = () => {
+        closingDialog = null;
+        onDialogClose = null;
+        const pendingTab = pendingHistoryTabRef.current;
+        pendingHistoryTabRef.current = null;
+        if (pendingTab === null || pendingTab === activeTabRef.current) return;
+        commitHistoryTab(pendingTab, true);
+      };
+      openDialog.addEventListener("close", onDialogClose, { once: true });
+      openDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    };
+
     syncTab();
     window.addEventListener("hashchange", syncTab);
     window.addEventListener("popstate", syncTab);
     return () => {
       window.removeEventListener("hashchange", syncTab);
       window.removeEventListener("popstate", syncTab);
+      if (closingDialog && onDialogClose) closingDialog.removeEventListener("close", onDialogClose);
     };
   }, []);
+
+  useEffect(() => {
+    if (pendingHistoryTabFocusRef.current !== activeTab) return;
+    pendingHistoryTabFocusRef.current = null;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`tab-${activeTab}`)?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab]);
 
   useEffect(() => {
     const viewport = accountTabsViewport;
@@ -224,6 +280,7 @@ export default function Settings() {
 
     const updateOverflowCue = () => {
       const remaining = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft;
+      setAccountTabsViewportWidth(viewport.clientWidth);
       setShowAccountTabOverflowCue(remaining > 2);
     };
 
@@ -248,16 +305,19 @@ export default function Settings() {
     if (!viewport || !selected) return;
     const viewportRect = viewport.getBoundingClientRect();
     const selectedRect = selected.getBoundingClientRect();
-    if (selectedRect.left >= viewportRect.left && selectedRect.right <= viewportRect.right) return;
+    const safeRight = viewportRect.right - (showAccountTabOverflowCue ? 48 : 0);
+    if (selectedRect.left >= viewportRect.left && selectedRect.right <= safeRight) return;
     selected.scrollIntoView({
       block: "nearest",
       inline: "nearest",
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
-  }, [accountTabsViewport, activeTab]);
+  }, [accountTabsViewport, accountTabsViewportWidth, activeTab, showAccountTabOverflowCue]);
 
   function selectTab(tab: AccountTab) {
-    if (tab === activeTab) return;
+    if (tab === activeTabRef.current) return;
+    activeTabRef.current = tab;
+    pendingHistoryTabFocusRef.current = null;
     runDashboardTransition(() => {
       setActiveTab(tab);
       window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
@@ -293,6 +353,8 @@ export default function Settings() {
         const billingReturn = query.get("billing") ?? query.get("checkout");
         if (billingReturn === "success" || billingReturn === "cancelled" || billingReturn === "cancel") {
           setBillingNotice(billingReturn === "success" ? "success" : "cancelled");
+          activeTabRef.current = "plan";
+          pendingHistoryTabFocusRef.current = null;
           setActiveTab("plan");
           window.history.replaceState({}, "", `${window.location.pathname}#plan`);
           if (billingReturn === "success") void refreshBilling();
@@ -388,6 +450,8 @@ export default function Settings() {
                     ? `${label} connection was not completed. Personal inbox fallback still needs a connected inbox.`
                     : `${label} connection was not completed. No verification inbox is active.`,
           );
+          activeTabRef.current = "automation";
+          pendingHistoryTabFocusRef.current = null;
           setActiveTab("automation");
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete("connection");
@@ -775,6 +839,9 @@ export default function Settings() {
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
+  const paidPlan = access
+    ? isPaidAccess(access)
+    : me.tier === "pro" || me.tier === "plus";
   const profileDirty = eligibilityTouched || JSON.stringify(profile) !== savedProfileJson;
 
   return (
@@ -785,7 +852,7 @@ export default function Settings() {
       </div>
 
       <div className="relative -mx-4 sm:mx-0">
-        <div ref={setAccountTabsViewport} className="overflow-x-auto px-4 sm:px-0">
+        <div ref={setAccountTabsViewport} className="overflow-x-auto px-4 [scroll-padding-inline-end:3rem] sm:px-0">
           <div
             className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
             role="tablist"
@@ -980,8 +1047,8 @@ export default function Settings() {
               <p className="text-xs text-muted">Plan</p>
               <div className="mt-1">
                 <Chip
-                  label={access ? accessLabel(access) : me.tier === "pro" ? "Litos+" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
-                  kind={access?.access_class === "plus_paid" || access?.access_class === "legacy_paid" || me.tier === "pro" ? "ready" : "draft"}
+                  label={access ? accessLabel(access) : paidPlan ? "Litos+" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
+                  kind={paidPlan ? "ready" : "draft"}
                 />
                 {trialActive && (
                   <span className="ml-2 text-xs text-muted">
@@ -1497,7 +1564,7 @@ export default function Settings() {
         {billingNotice === "success" && <p role="status" className="mt-4 rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">Payment received. Stripe is confirming your Litos+ access now.</p>}
         {billingNotice === "cancelled" && <p role="status" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm text-warn">Checkout was canceled. Nothing was charged. Your work is saved.</p>}
         <p className="mt-4 text-sm text-muted"><span className="font-medium text-ink">Application filling is unlimited.</span> Use it from the dashboard or on supported employer sites in every plan state.</p>
-        {access?.access_class === "plus_paid" || access?.access_class === "legacy_paid" || me.tier === "pro" ? (
+        {paidPlan ? (
           <div className="mt-6 space-y-3 border-t border-border pt-5 text-sm text-muted">
             <p>{access?.access_class === "legacy_paid" ? "Your original paid access is preserved." : "You are on Litos+."}</p>
             <p>{me.billing_portal_available ? <button type="button" disabled={portalBusy} onClick={() => void openBillingPortal()} className="font-medium text-brand-ink underline-offset-4 hover:underline disabled:opacity-50">{portalBusy ? "Opening billing portal..." : "Open secure billing portal"}</button> : storedBillingPortalUrl ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={storedBillingPortalUrl}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_available || storedBillingPortalUrl ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>

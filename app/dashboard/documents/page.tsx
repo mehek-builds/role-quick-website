@@ -26,7 +26,9 @@ type DocumentResourcePending = Partial<Record<DocumentResource, boolean>>;
 export default function DocumentsPage() {
   const router = useRouter();
   const { canUse, openUpgrade } = useBilling();
-  const [tab, setTab] = useState<Tab>("base-resume");
+  /* Server markup cannot read the query string. Start without a selected panel, then reconcile the
+     requested tab after hydration, so an Attachments deep link never flashes Main resume first. */
+  const [tab, setTab] = useState<Tab | null>(null);
   const [resumes, setResumes] = useState<GeneratedResume[] | null>(null);
   const [coverLetters, setCoverLetters] = useState<CanonicalCoverLetterResponse[] | null>(null);
   const [applications, setApplications] = useState<CanonicalApplication[] | null>(null);
@@ -35,6 +37,8 @@ export default function DocumentsPage() {
   const [resourceErrors, setResourceErrors] = useState<DocumentResourceErrors>({});
   const [pendingResources, setPendingResources] = useState<DocumentResourcePending>({});
   const [documentsTabsViewport, setDocumentsTabsViewport] = useState<HTMLDivElement | null>(null);
+  const [documentsTabsViewportWidth, setDocumentsTabsViewportWidth] = useState(0);
+  const [showDocumentsTabLeftOverflowCue, setShowDocumentsTabLeftOverflowCue] = useState(false);
   const [showDocumentsTabOverflowCue, setShowDocumentsTabOverflowCue] = useState(false);
   const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
   const [resourceRequests] = useState(() => createLatestRequestCoordinator<DocumentResource>());
@@ -110,7 +114,7 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    if (TABS.some(([value]) => value === requested)) queueMicrotask(() => setTab(requested as Tab));
+    queueMicrotask(() => setTab(TABS.some(([value]) => value === requested) ? requested as Tab : "base-resume"));
     queueMicrotask(() => {
       void Promise.allSettled([
         loadResumes(),
@@ -128,6 +132,8 @@ export default function DocumentsPage() {
 
     const updateOverflowCue = () => {
       const remaining = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft;
+      setDocumentsTabsViewportWidth(viewport.clientWidth);
+      setShowDocumentsTabLeftOverflowCue(viewport.scrollLeft > 2);
       setShowDocumentsTabOverflowCue(remaining > 2);
     };
 
@@ -148,17 +154,22 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     const viewport = documentsTabsViewport;
+    if (!viewport || !tab) return;
     const selected = tabRefs.current[tab];
-    if (!viewport || !selected) return;
+    if (!selected) return;
     const viewportRect = viewport.getBoundingClientRect();
     const selectedRect = selected.getBoundingClientRect();
-    if (selectedRect.left >= viewportRect.left && selectedRect.right <= viewportRect.right) return;
+    const hasLeftOverflow = viewport.scrollLeft > 2;
+    const hasRightOverflow = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft > 2;
+    const safeLeft = viewportRect.left + (hasLeftOverflow ? 48 : 0);
+    const safeRight = viewportRect.right - (hasRightOverflow ? 48 : 0);
+    if (selectedRect.left >= safeLeft && selectedRect.right <= safeRight) return;
     selected.scrollIntoView({
       block: "nearest",
-      inline: "nearest",
+      inline: "center",
       behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
     });
-  }, [documentsTabsViewport, tab]);
+  }, [documentsTabsViewport, documentsTabsViewportWidth, tab]);
 
   function choose(next: Tab) {
     if (next === tab) return;
@@ -250,7 +261,7 @@ export default function DocumentsPage() {
           ref={setDocumentsTabsViewport}
           role="tablist"
           aria-label="Document sections"
-          className="flex gap-2 overflow-x-auto border-b border-border pb-3"
+          className="flex snap-x snap-proximity gap-2 overflow-x-auto border-b border-border pb-3 [scroll-padding-inline-start:3rem] [scroll-padding-inline-end:3rem]"
         >
           {TABS.map(([value, label]) => (
             <button
@@ -269,12 +280,22 @@ export default function DocumentsPage() {
                   moveTab(value, event.key);
                 }
               }}
-              className={`min-h-11 shrink-0 rounded-control px-4 text-small ${tab === value ? "bg-brand-soft font-medium text-brand-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}
+              className={`min-h-11 shrink-0 snap-start rounded-control px-4 text-small ${tab === value ? "bg-brand-soft font-medium text-brand-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}
             >
               {label}
             </button>
           ))}
         </div>
+        {showDocumentsTabLeftOverflowCue && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 flex w-12 items-center bg-gradient-to-r from-bg via-bg/95 to-transparent pl-2"
+          >
+            <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
+              ‹
+            </span>
+          </div>
+        )}
         {showDocumentsTabOverflowCue && (
           <div
             aria-hidden="true"
@@ -287,8 +308,16 @@ export default function DocumentsPage() {
         )}
       </div>
 
-      <MotionPanel key={tab} name="dashboard-documents-panel">
-        <div id="documents-panel" role="tabpanel" aria-labelledby={`documents-tab-${tab}`} aria-busy={activeTabPending} tabIndex={0}>
+      <MotionPanel key={tab ?? "loading"} name="dashboard-documents-panel">
+        <div
+          id="documents-panel"
+          role="tabpanel"
+          aria-label={tab === null ? "Loading document section" : undefined}
+          aria-labelledby={tab === null ? undefined : `documents-tab-${tab}`}
+          aria-busy={tab === null || activeTabPending}
+          tabIndex={0}
+        >
+        {tab === null && <ShimmerRows rows={3} />}
         {activeTabPending && activeTabHasData && (
           <p role="status" className="mb-4 text-small text-muted">
             <PendingLabel>Refreshing...</PendingLabel>

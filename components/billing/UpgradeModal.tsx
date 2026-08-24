@@ -269,7 +269,11 @@ export function UpgradeModal({
                   <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Choose a term</p>
                   <p className="mt-1 text-small text-muted">Every term includes the same Litos+ tools.</p>
                 </div>
-                {access && <span className="rounded-control bg-surface px-3 py-1 font-mono text-label text-muted">{accessLabel(access)}</span>}
+                {access && (
+                  <span className="rounded-control bg-surface px-3 py-1 font-mono text-label text-muted">
+                    Current plan: {accessLabel(access)}
+                  </span>
+                )}
               </div>
 
               <fieldset className="mt-5 space-y-3">

@@ -23,7 +23,7 @@ describe("personal resume email and portal routing email stay separate", () => {
 
   test("the resume screen edits the personal address without relabeling the login", () => {
     assert.match(resumePage, /resumeEmail=\{str\("resume_email"\) \?\? ""\}/);
-    assert.match(resumePage, /resume_email: draft\.resume_email/);
+    assert.match(resumePage, /resume_email: submittedDraft\.resume_email/);
     assert.match(resumePage, /label="Resume email"/);
     assert.match(resumePage, /Litos login email:/);
   });

@@ -413,7 +413,10 @@ export function ApplicationPacket({
     closeButton.current?.focus();
 
     function onKey(event: KeyboardEvent) {
-      if (dialog.current?.hasAttribute("inert")) return;
+      if (dialog.current?.hasAttribute("inert")) {
+        if (event.key === "Tab") event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") {
         event.stopPropagation();
         requestClose();
@@ -440,7 +443,19 @@ export function ApplicationPacket({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = overflow;
       window.requestAnimationFrame(() => {
-        if (previous?.isConnected) previous?.focus?.();
+        previous?.focus?.();
+        if (previous?.isConnected && document.activeElement === previous) return;
+        const candidates = [
+          document.getElementById("application-ledger-heading"),
+          document.querySelector<HTMLElement>("[data-dashboard-job-focus-id]"),
+          document.querySelector<HTMLElement>("main h1"),
+        ];
+        for (const candidate of candidates) {
+          if (!(candidate instanceof HTMLElement) || !candidate.isConnected) continue;
+          if (candidate.matches("h1") && !candidate.hasAttribute("tabindex")) candidate.tabIndex = -1;
+          candidate.focus({ preventScroll: true });
+          if (document.activeElement === candidate) return;
+        }
       });
     };
   }, [requestClose]);
@@ -486,7 +501,7 @@ export function ApplicationPacket({
   }
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 ${closing ? "pointer-events-none" : ""}`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <button
         ref={backdrop}
         aria-hidden="true"

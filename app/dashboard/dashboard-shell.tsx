@@ -18,6 +18,8 @@ import {
   SearchIcon,
 } from "@/components/app/NavIcons";
 import { BillingProvider } from "@/components/billing/BillingProvider";
+import { OutreachOperationProvider } from "@/app/dashboard/outreach/operation-owner";
+import { ResumeMutationProvider } from "@/app/dashboard/resume/mutation-controller";
 
 /* One familiar noun per destination. Route paths stay stable while the labels match the page
    titles, so the rail and the content never ask the student to translate between two names. */
@@ -103,14 +105,18 @@ export function DashboardShell({
     const desktop = window.matchMedia("(min-width: 64rem)");
     const closeAtDesktop = () => {
       if (!desktop.matches || !moreDialogRef.current) return;
-      const focusWasInside = moreDialogRef.current.contains(document.activeElement);
+      const shouldRestoreFocus = moreCloseTimer.current !== null
+        || moreDialogRef.current.contains(document.activeElement);
       if (moreCloseTimer.current !== null) window.clearTimeout(moreCloseTimer.current);
       moreCloseTimer.current = null;
       setMoreOpen(false);
       setMoreClosing(false);
-      if (focusWasInside) {
+      if (shouldRestoreFocus) {
         window.requestAnimationFrame(() => {
-          document.querySelector<HTMLElement>('.dashboard-shell aside [aria-current="page"]')?.focus();
+          const railDestination = document.querySelector<HTMLElement>(
+            '.dashboard-shell aside [aria-current="page"], .dashboard-shell aside nav a[href^="/dashboard"]',
+          );
+          railDestination?.focus();
         });
       }
     };
@@ -128,7 +134,10 @@ export function DashboardShell({
     const priorOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (moreClosing) return;
+      if (moreClosing) {
+        if (event.key === "Tab") event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         closeMore(true);
@@ -264,6 +273,8 @@ export function DashboardShell({
 
   return (
     <BillingProvider>
+    <OutreachOperationProvider>
+    <ResumeMutationProvider>
     {/* The rail is a real grid column, not a fixed overlay, so the page's own scrollbar belongs to
         the content and the two never fight over it. Below lg the column collapses and the bottom bar
         takes over: a 272px rail on a laptop is orientation, on a phone it is the whole screen. */}
@@ -394,9 +405,14 @@ export function DashboardShell({
             </nav>
           </section>
       )}
+      {moreOpen && moreClosing && (
+        <div data-dashboard-exit-shield aria-hidden="true" className="fixed inset-0 z-[60] lg:hidden" />
+      )}
       {/* No marketing footer inside the product. Linear, Notion and Stripe (the stated
           references) all drop it once you are logged in; Privacy lives in Account. */}
     </div>
+    </ResumeMutationProvider>
+    </OutreachOperationProvider>
     </BillingProvider>
   );
 }

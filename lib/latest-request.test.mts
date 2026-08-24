@@ -139,3 +139,38 @@ test("a pending bank save blocks a resume upload until the save settles", async 
   assert.equal(laterUpload, "settled");
   assert.equal(uploadCalls, 1);
 });
+
+test("a parsed-profile save blocks replacement upload until its callback has settled", async () => {
+  const mutations = createExclusiveMutationCoordinator<"parsed-profile" | "upload">();
+  const profilePatch = deferred<void>();
+  let uploadedProfile = "original upload";
+  let parsedCommitCalls = 0;
+  let uploadCalls = 0;
+
+  const savingParsedProfile = mutations.run("parsed-profile", async () => {
+    await profilePatch.promise;
+    parsedCommitCalls += 1;
+  });
+  assert.equal(mutations.activeMutation(), "parsed-profile");
+
+  const blockedUpload = await mutations.run("upload", async () => {
+    uploadCalls += 1;
+    uploadedProfile = "replacement upload";
+  });
+  assert.equal(blockedUpload, "blocked");
+  assert.equal(uploadCalls, 0);
+  assert.equal(uploadedProfile, "original upload");
+
+  profilePatch.resolve();
+  await savingParsedProfile;
+  assert.equal(parsedCommitCalls, 1);
+  assert.equal(mutations.isActive(), false);
+
+  const laterUpload = await mutations.run("upload", async () => {
+    uploadCalls += 1;
+    uploadedProfile = "replacement upload";
+  });
+  assert.equal(laterUpload, "settled");
+  assert.equal(uploadCalls, 1);
+  assert.equal(uploadedProfile, "replacement upload");
+});

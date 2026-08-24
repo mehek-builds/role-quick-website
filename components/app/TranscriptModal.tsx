@@ -131,7 +131,10 @@ export function TranscriptModal({
     closeButton.current?.focus();
 
     function onKey(event: KeyboardEvent) {
-      if (dialog.current?.hasAttribute("inert")) return;
+      if (dialog.current?.hasAttribute("inert")) {
+        if (event.key === "Tab") event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") {
         event.stopPropagation();
         requestClose();
@@ -143,9 +146,16 @@ export function TranscriptModal({
          file input and a checkbox, and a ring computed from a selector that cannot see them puts the
          real last focusable element outside the ring, so Tab walks straight out into the page behind
          an aria-modal dialog. */
-      const focusable = dialog.current.querySelectorAll<HTMLElement>(
-        'button, a[href], input:not([type="hidden"]), [tabindex]:not([tabindex="-1"])',
-      );
+      const focusable = [...dialog.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([type="hidden"]):not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none"
+          && style.visibility !== "hidden"
+          && rect.width > 0
+          && rect.height > 0;
+      });
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first || !last) return;
@@ -163,7 +173,12 @@ export function TranscriptModal({
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = overflow;
       window.requestAnimationFrame(() => {
-        if (previous?.isConnected) previous?.focus?.();
+        previous?.focus?.();
+        if (previous?.isConnected && document.activeElement === previous) return;
+        const taskHeading = document.getElementById("application-ledger-heading");
+        const pageHeading = document.querySelector<HTMLElement>("main h1");
+        const fallback = taskHeading instanceof HTMLElement ? taskHeading : pageHeading;
+        fallback?.focus({ preventScroll: true });
       });
     };
   }, [requestClose]);
@@ -235,6 +250,10 @@ export function TranscriptModal({
         reuse,
         employerLabel: wording || null,
       });
+      /* The attach control disappears when this commit changes the stage. Move focus to the one
+         control shared by every stage before React removes the initiator, so Chromium never has a
+         frame where the aria-modal dialog is open while document.body owns focus. */
+      closeButton.current?.focus();
       setLocalAttachment(result.attachment);
       setLocalSize(result.document.byte_size);
       onAttachmentChange(kind, result.attachment);
@@ -336,7 +355,7 @@ export function TranscriptModal({
   }
 
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 ${closing ? "pointer-events-none" : ""}`}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <button
         ref={backdrop}
         aria-hidden="true"
@@ -535,7 +554,17 @@ export function TranscriptModal({
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4 sm:px-6">
           {stage === "ask" && (
             <>
-              <Button onClick={() => void attach()} disabled={!chosen || busy !== null}>
+              {/* Keep the live initiator focusable while its request is pending. Native disabled on
+                  a focused button makes Chromium move focus to body, outside this dialog's trap.
+                  No-file is still a real disabled state; once a file exists, aria-disabled plus
+                  attach()'s synchronous busy guard blocks repeats without removing the focus stop. */}
+              <Button
+                data-transcript-action="attach"
+                onClick={() => void attach()}
+                disabled={!chosen}
+                aria-disabled={busy !== null}
+                aria-busy={busy === "attaching"}
+              >
                 {busy === "attaching" ? "Attaching..." : "Attach and continue"}
               </Button>
               {/* Closes and does nothing else, and the nothing is the point. This application stays
@@ -549,10 +578,22 @@ export function TranscriptModal({
               {/* Records the acknowledgement and NOTHING ELSE. It does not unblock the send: Litos
                   cannot produce a sealed transcript, so offering to send after this would be offering
                   to send an application the employer is going to reject. */}
-              <Button onClick={() => void recordOrdered()} disabled={busy !== null}>
+              <Button
+                data-transcript-action="order"
+                onClick={() => void recordOrdered()}
+                aria-disabled={busy !== null}
+                aria-busy={busy === "ordering"}
+              >
                 {busy === "ordering" ? "Saving..." : "I’ve ordered it"}
               </Button>
-              <Button onClick={() => setUnofficialChosen(true)} variant="secondary" disabled={busy !== null}>
+              <Button
+                onClick={() => {
+                  closeButton.current?.focus();
+                  setUnofficialChosen(true);
+                }}
+                variant="secondary"
+                disabled={busy !== null}
+              >
                 Attach an unofficial copy anyway
               </Button>
             </>
@@ -567,7 +608,13 @@ export function TranscriptModal({
                   have it" has to be answerable without also meaning "and forget the file". Secondary
                   rather than quiet: on a screen where a file arrived without her choosing it, taking
                   it off again is an ordinary thing to want, not a destructive one. */}
-              <Button onClick={() => void detach()} variant="secondary" disabled={busy !== null}>
+              <Button
+                data-transcript-action="detach"
+                onClick={() => void detach()}
+                variant="secondary"
+                aria-disabled={busy !== null}
+                aria-busy={busy === "detaching"}
+              >
                 {busy === "detaching" ? "Removing..." : `Not for ${company}`}
               </Button>
               {/* The control that makes the privacy sentence true. "We keep it until you remove it"
@@ -596,6 +643,7 @@ export function TranscriptModal({
                 variant="secondary"
                 onClick={() => {
                   if (busy) return;
+                  closeButton.current?.focus();
                   setConfirmingRemoval(false);
                 }}
                 aria-disabled={busy !== null}

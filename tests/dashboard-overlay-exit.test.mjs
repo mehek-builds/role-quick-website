@@ -37,10 +37,12 @@ for (const [name, source] of [["packet", packet], ["transcript", transcript]]) {
     assert.match(source, /useDashboardOverlayExit\(\{/);
     assert.match(source, /aria-hidden=\{closing \|\| undefined\}/);
     assert.match(source, /inert=\{closing \|\| undefined\}/);
-    assert.match(source, /closing \? "pointer-events-none"/);
+    assert.doesNotMatch(source, /fixed inset-0[^\n]+closing \? "pointer-events-none"/);
+    assert.match(source, /rq-dashboard-dialog[^\n]+closing \? "rq-dashboard-dialog-exit"/);
     assert.match(source, /closing \? "rq-dashboard-backdrop-exit"/);
     assert.match(source, /closing \? "rq-dashboard-dialog-exit"/);
     assert.match(source, /event\.key === "Escape"[\s\S]*?requestClose\(\)/);
+    assert.match(source, /hasAttribute\("inert"\)[\s\S]{0,120}?event\.key === "Tab"[\s\S]{0,60}?event\.preventDefault\(\)/);
     assert.match(source, /window\.requestAnimationFrame\(\(\) => \{[\s\S]*?previous\?\.focus\?\.\(\)/);
   });
 }

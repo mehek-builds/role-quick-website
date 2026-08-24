@@ -280,7 +280,7 @@ describe("the chosen view is visible on the page it lands on", () => {
     );
     assert.match(
       ledger.body,
-      /<h2 id="application-ledger-heading" className="text-sm font-medium text-ink">\{applicationFilterHeading\(applicationFilter\)\}<\/h2>/,
+      /<h2[^>]*id="application-ledger-heading"[^>]*className="[^"]*text-ink[^"]*"[^>]*>\{applicationFilterHeading\(applicationFilter\)\}<\/h2>/,
       "the landing heading is visible text, not a screen-reader-only label",
     );
   });

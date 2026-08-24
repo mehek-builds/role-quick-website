@@ -18,10 +18,12 @@ export function MotionPanel({
   name,
   children,
   className = "",
+  id,
 }: {
   name: string;
   children: React.ReactNode;
   className?: string;
+  id?: string;
 }) {
   return (
     <ViewTransition
@@ -31,7 +33,7 @@ export function MotionPanel({
       exit="rq-dashboard-panel"
       default="none"
     >
-      <div className={className}>{children}</div>
+      <div id={id} className={className}>{children}</div>
     </ViewTransition>
   );
 }

@@ -4,6 +4,8 @@ import test from "node:test";
 
 const documents = await readFile(new URL("../app/dashboard/documents/page.tsx", import.meta.url), "utf8");
 const resume = await readFile(new URL("../app/dashboard/resume/page.tsx", import.meta.url), "utf8");
+const dashboardShell = await readFile(new URL("../app/dashboard/dashboard-shell.tsx", import.meta.url), "utf8");
+const resumeMutations = await readFile(new URL("../app/dashboard/resume/mutation-controller.tsx", import.meta.url), "utf8");
 const api = await readFile(new URL("../lib/api.ts", import.meta.url), "utf8");
 
 function shippedCode(source) {
@@ -71,40 +73,62 @@ test("A failed authoritative targeting read cannot expose parser guesses for edi
 
   assert.match(shipped, /delete profileWithoutTargetRoles\.target_roles/);
   assert.match(shipped, /targetingError: userFacingError\(reason, "Your resume loaded, but target roles could not load\."\)/);
-  assert.match(shipped, /profile !== null && profile !== "missing" && !uploading && !profileRefreshing && targetingRefreshError === null/);
+  assert.match(shipped, /profile !== null && profile !== "missing" && !uploadPending && !profileRefreshing && targetingRefreshError === null/);
 });
 
 test("all retryable document reads share pending and latest-response coordination", () => {
   const shippedDocuments = shippedCode(documents);
   const shippedResume = shippedCode(resume);
+  const mutationBoundary = shippedCode(resumeMutations);
 
   assert.match(shippedDocuments, /createLatestRequestCoordinator<DocumentResource>\(\)/);
   assert.match(shippedDocuments, /resourceRequests\.run\(resource, request/);
   assert.match(shippedDocuments, /setResourcePending\(resource, true\);\s*setResourceError\(resource, null\)/);
   assert.match(shippedDocuments, /onSettled: \(\) => setResourcePending\(resource, false\)/);
   assert.match(shippedDocuments, /onChanged=\{\(\) => void loadCoverLetters\(true\)\}/);
-  assert.match(shippedDocuments, /aria-busy=\{activeTabPending\}/);
+  assert.match(shippedDocuments, /aria-busy=\{tab === null \|\| activeTabPending\}/);
 
-  assert.match(shippedResume, /type ResumeResource = "profile" \| "bank" \| "targeting"/);
-  assert.match(shippedResume, /createLatestRequestCoordinator<ResumeResource>\(\)/);
+  assert.match(mutationBoundary, /type ResumeResource = "profile" \| "bank" \| "targeting"/);
+  assert.match(mutationBoundary, /createLatestRequestCoordinator<ResumeResource>\(\)/);
+  assert.match(mutationBoundary, /resourceRequests:/);
   for (const resource of ["profile", "bank", "targeting"]) {
     assert.match(shippedResume, new RegExp(`resourceRequests\\.run(?:<ProfileLoadResult>)?\\(\\s*"${resource}"`));
     assert.match(shippedResume, new RegExp(`setResourcePending\\("${resource}", true\\)`));
     assert.match(shippedResume, new RegExp(`onSettled: \\(\\) => setResourcePending\\("${resource}", false\\)`));
   }
   assert.match(shippedResume, /const uploadReady = [\s\S]{0,260}?&& !profileRefreshing\s*&& !bankRefreshing/);
-  assert.match(shippedResume, /disabled=\{saving \|\| uploading \|\| bankRefreshing \|\| entries === null/);
+  assert.match(shippedResume, /disabled=\{mutationBusy \|\| bankRefreshing \|\| entries === null/);
 });
 
-test("resume upload and bank save cannot replace each other concurrently", () => {
+test("resume upload, bank save, and parsed-profile save cannot replace each other concurrently", () => {
   const shipped = shippedCode(resume);
+  const mutationBoundary = shippedCode(resumeMutations);
 
-  assert.match(shipped, /createExclusiveMutationCoordinator<"upload" \| "save">\(\)/);
+  assert.match(mutationBoundary, /createExclusiveMutationCoordinator<ResumeMutation>\(\)/);
+  assert.match(mutationBoundary, /if \(coordinator\.isActive\(\)\) return "blocked";/);
+  assert.match(mutationBoundary, /const \[profile, setProfile\] = useState<ResumeParsedProfile \| null \| "missing">\(null\)/);
+  assert.match(mutationBoundary, /const \[uploading, setUploading\] = useState\(false\)/);
+  assert.match(mutationBoundary, /const \[parsedProfileEditing, setParsedProfileEditing\] = useState\(false\)/);
+  assert.match(mutationBoundary, /const parsedProfileDraftRevisionRef = useRef\(0\)/);
+  assert.match(mutationBoundary, /const \[entries, setEntries\] = useState<ExperienceEntry\[\] \| null>\(null\)/);
+  assert.match(dashboardShell, /<OutreachOperationProvider>[\s\S]*<ResumeMutationProvider>/);
+  assert.match(dashboardShell, /<main[^>]*>\{children\}<\/main>[\s\S]*<\/ResumeMutationProvider>/);
+  assert.doesNotMatch(documents, /ResumeMutationProvider/);
+  assert.match(documents, /<MotionPanel key=\{tab \?\? "loading"\}/);
+  assert.match(shipped, /const shouldLoadProfileOnMount = useRef\([\s\S]{0,180}?profile === null[\s\S]{0,180}?!mutations\.isActive\(\)/);
+  assert.match(shipped, /const shouldLoadBankOnMount = useRef\([\s\S]{0,180}?entries === null[\s\S]{0,180}?!mutations\.isActive\(\)/);
+  assert.match(shipped, /if \(shouldLoadProfileOnMount\.current\) requests\.push\(loadProfile\(\)\)/);
+  assert.match(shipped, /if \(shouldLoadBankOnMount\.current\) requests\.push\(loadBank\(\)\)/);
   assert.match(shipped, /mutations\.run\("upload", async \(\) =>/);
-  assert.match(shipped, /if \(!entries \|\| mutations\.isActive\(\)\) return;\s*await mutations\.run\("save", async \(\) =>/);
+  assert.match(shipped, /if \(!entries \|\| mutations\.isActive\(\)\) return;[\s\S]{0,180}?await mutations\.run\("save", async \(\) =>/);
+  assert.match(shipped, /mutations\.run\("parsed-profile", operation\)/);
+  assert.match(shipped, /runMutation\(async \(\) =>[\s\S]{0,160}?onSavingChange\(true\)/);
+  const parsedMutation = shipped.slice(shipped.indexOf("const result = await runMutation"), shipped.indexOf('if (result === "blocked")'));
+  assert.ok(parsedMutation.indexOf("onSaved({ ...updated") >= 0);
+  assert.ok(parsedMutation.indexOf("onSavingChange(false)") > parsedMutation.indexOf("onSaved({ ...updated"));
   assert.match(shipped, /function chooseUpload[\s\S]{0,140}?mutations\.isActive\(\)/);
-  assert.match(shipped, /disabled=\{uploading \|\| saving \|\| !uploadReady\}/);
-  assert.match(shipped, /disabled=\{saving \|\| uploading \|\| bankRefreshing/);
+  assert.match(shipped, /disabled=\{mutationBusy \|\| !uploadReady\}/);
+  assert.match(shipped, /disabled=\{mutationBusy \|\| bankRefreshing/);
 });
 
 test("retries move focus away from controls that unmount for pending state", () => {
@@ -113,7 +137,7 @@ test("retries move focus away from controls that unmount for pending state", () 
 
   assert.match(shippedDocuments, /function retryDocumentResource[\s\S]{0,180}?restoreFocusAfterRetry\("documents-panel"\)/);
   assert.match(shippedDocuments, /function retryCoverLetterResources[\s\S]{0,420}?restoreFocusAfterRetry\("documents-panel"\)/);
-  assert.match(shippedDocuments, /id="documents-panel" role="tabpanel"[\s\S]{0,160}?tabIndex=\{0\}/);
+  assert.match(shippedDocuments, /id="documents-panel"[\s\S]{0,300}?role="tabpanel"[\s\S]{0,300}?tabIndex=\{0\}/);
 
   assert.match(shippedResume, /function retryProfile[\s\S]{0,160}?restoreFocusAfterRetry\("resume-profile-heading"\)/);
   assert.match(shippedResume, /function retryBank[\s\S]{0,160}?restoreFocusAfterRetry\("resume-bank-heading"\)/);

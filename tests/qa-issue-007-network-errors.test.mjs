@@ -102,3 +102,61 @@ test("an older status request cannot overwrite a successful mutation", () => {
     assert.ok(invalidate < apply, "status reads must be invalidated before mutation state is applied");
   }
 });
+
+test("in-panel routes to LinkedIn restore focus to the persistent selected tab", () => {
+  assert.match(source, /const pendingTabFocusRef = useRef<NetworkTab \| null>\(null\)/);
+  assert.match(source, /function chooseTab\(next: NetworkTab, options: \{ focusTab\?: boolean \} = \{\}\)/);
+  assert.match(source, /if \(pendingTabFocusRef\.current !== tab\) return;\s*pendingTabFocusRef\.current = null;\s*tabRefs\.current\[tab\]\?\.focus\(\);/);
+  assert.equal(
+    source.match(/chooseTab\("linkedin", \{ focusTab: true \}\)/g)?.length,
+    2,
+    "both retained-data and empty-state actions must hand focus to LinkedIn",
+  );
+});
+
+test("LinkedIn import consent stays authoritative and the visible chooser owns keyboard focus", () => {
+  const commit = functionBody("commitImport", "disconnect");
+  assert.match(commit, /if \(!preview \|\| !consent \|\| !consentRef\.current\) return/);
+  assert.match(source, /const previewRequestGenerationRef = useRef\(0\)/);
+  assert.match(source, /const consentRef = useRef\(false\)/);
+  assert.match(source, /if \(generation !== previewRequestGenerationRef\.current \|\| !consentRef\.current\) return/);
+  assert.match(source, /function changeConsent\(nextConsent: boolean\)[\s\S]*if \(!nextConsent\) \{\s*previewRequestGenerationRef\.current \+= 1;[\s\S]{0,160}setPreview\(null\)/);
+  assert.match(source, /type="file"[^>]*hidden/);
+  const previewPanel = source.slice(source.indexOf("{preview &&"), source.indexOf("</Card>", source.indexOf("{preview &&")));
+  assert.match(previewPanel, /disabled=\{!consent \|\| busy\}/);
+});
+
+test("a held network mutation keeps exclusive ownership of its busy state", () => {
+  assert.match(source, /type NetworkOperationKind = "preview" \| "commit" \| "disconnect" \| "delete"/);
+  assert.match(source, /const operationRef = useRef<NetworkOperation \| null>\(null\)/);
+  assert.match(source, /function beginOperation\(kind: NetworkOperationKind\)[\s\S]*if \(operationRef\.current\) return null;[\s\S]*operationRef\.current = owner;[\s\S]*setOperation\(owner\)/);
+  assert.match(source, /function finishOperation\(owner: NetworkOperation\)[\s\S]*if \(operationRef\.current !== owner\) return;[\s\S]*operationRef\.current = null;[\s\S]*setOperation\(null\)/);
+
+  const commit = functionBody("commitImport", "disconnect");
+  const disconnect = source.slice(source.indexOf("  async function disconnect"), source.indexOf("\n\n  return (", source.indexOf("  async function disconnect")));
+  assert.match(commit, /const owner = beginOperation\("commit"\);\s*if \(!owner\) return/);
+  assert.match(commit, /finally \{\s*finishOperation\(owner\)/);
+  assert.match(disconnect, /if \(operationRef\.current\) return/);
+  assert.match(disconnect, /const owner = beginOperation\(removeData \? "delete" : "disconnect"\);\s*if \(!owner\) return/);
+  assert.match(disconnect, /finally \{\s*finishOperation\(owner\)/);
+});
+
+test("preview revocation cannot release a held commit, disconnect, or delete", () => {
+  const consentChange = source.slice(source.indexOf("  function changeConsent"), source.indexOf("  function chooseFile"));
+  assert.match(consentChange, /if \(activeOperation && activeOperation\.kind !== "preview"\) return/);
+  assert.match(consentChange, /if \(activeOperation\?\.kind === "preview"\) finishOperation\(activeOperation\)/);
+  assert.doesNotMatch(consentChange, /setOperation\(null\)/);
+
+  assert.match(source, /const mutationBusy = operationKind !== null && operationKind !== "preview"/);
+  assert.match(source, /type="checkbox" checked=\{consent\} disabled=\{mutationBusy\}/);
+  assert.match(source, /type="file" accept="\.csv,text\/csv" hidden disabled=\{busy\}/);
+  assert.match(source, /data-network-operation=\{operationKind \?\? "idle"\}/);
+  assert.match(source, /aria-busy=\{busy\}/);
+});
+
+test("an old preview completion cannot release a newer operation", () => {
+  const previewImport = functionBody("previewImport", "commitImport");
+  assert.match(previewImport, /const owner = beginOperation\("preview"\)/);
+  assert.match(previewImport, /if \(generation === previewRequestGenerationRef\.current\) finishOperation\(owner\)/);
+  assert.match(source, /if \(operationRef\.current !== owner\) return/);
+});

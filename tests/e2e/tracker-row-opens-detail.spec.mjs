@@ -508,6 +508,14 @@ browserTest("a ?job= link carrying an application id opens the application, and 
   backendPaths = [];
   await page.goto(`${ORIGIN}/dashboard/applications?job=${NEEDS_YOU.id}`, { waitUntil: "domcontentloaded" });
   await page.getByRole("heading", { name: "Needs your input", exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
+  /* `openApplication` publishes its local selection immediately, while the App Router commits the
+     query-only replacement asynchronously. Wait for that navigation itself before reading the URL,
+     rather than treating the task heading as a router-settlement signal. */
+  await page.waitForURL((url) => (
+    !url.searchParams.has("job")
+    && url.searchParams.get("application") === NEEDS_YOU.id
+    && url.searchParams.get("intent") === "apply"
+  ), { timeout: 10_000 });
 
   const alerts = (await page.locator('[role="alert"]').allInnerTexts()).filter((text) => text.trim());
   assert.deepEqual(alerts, [], `the page contradicted itself: it opened the application and reported a failure. ${JSON.stringify(alerts)}`);

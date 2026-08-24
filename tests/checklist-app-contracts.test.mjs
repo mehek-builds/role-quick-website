@@ -18,7 +18,7 @@ test("account deletion uses an accessible dialog and completion state", () => {
 
 test("profile and resume saves remain disabled while pristine", () => {
   assert.match(read("app/dashboard/settings/page.tsx"), /disabled=\{saving \|\| !profileDirty\}/);
-  assert.match(read("app/dashboard/resume/page.tsx"), /disabled=\{saving \|\| uploading \|\| bankRefreshing \|\| entries === null \|\| bankLoadError !== null \|\| !entriesDirty\}/);
+  assert.match(read("app/dashboard/resume/page.tsx"), /disabled=\{mutationBusy \|\| bankRefreshing \|\| entries === null \|\| bankLoadError !== null \|\| !entriesDirty\}/);
 });
 
 test("billing exposes truthful failed and canceled return states", () => {

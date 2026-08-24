@@ -45,6 +45,26 @@ type OpenUpgradeOptions = {
 
 const BillingContext = createContext<BillingContextValue | null>(null);
 
+function restoreUpgradeFocus(trigger: HTMLElement | null): void {
+  const candidates: HTMLElement[] = [];
+  if (trigger?.isConnected) candidates.push(trigger);
+  for (const selector of [
+    '.dashboard-shell main [role="tab"][aria-selected="true"]',
+    '.dashboard-shell nav [aria-current="page"], .dashboard-shell aside [aria-current="page"]',
+    ".dashboard-shell main h1",
+  ]) {
+    for (const candidate of document.querySelectorAll<HTMLElement>(selector)) {
+      if (!candidates.includes(candidate)) candidates.push(candidate);
+    }
+  }
+  for (const candidate of candidates) {
+    if (!candidate.isConnected) continue;
+    if (candidate.matches("h1") && !candidate.hasAttribute("tabindex")) candidate.tabIndex = -1;
+    candidate.focus({ preventScroll: true });
+    if (document.activeElement === candidate) return;
+  }
+}
+
 export function BillingProvider({ children }: { children: React.ReactNode }) {
   const [access, setAccess] = useState<EntitlementSnapshot | null>(null);
   const [catalog, setCatalog] = useState<PlanCatalog | null>(null);
@@ -137,7 +157,11 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     checkoutRequestIdRef.current = null;
     checkoutAttemptRef.current = null;
     setRequest(null);
-    window.setTimeout(() => triggerRef.current?.focus(), 0);
+    const trigger = triggerRef.current;
+    window.setTimeout(() => {
+      restoreUpgradeFocus(trigger);
+      if (triggerRef.current === trigger) triggerRef.current = null;
+    }, 0);
   }, [request]);
 
   async function checkout(planId: LitosPlusPlanId) {

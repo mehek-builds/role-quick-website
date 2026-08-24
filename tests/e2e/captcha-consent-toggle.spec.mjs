@@ -23,6 +23,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 const BACKEND = "https://student-outreach-backend.vercel.app";
 const TOKEN = "captcha-consent-fixture-token";
@@ -114,6 +115,10 @@ await context.route("**/*", async (route) => {
     return;
   }
   if (!url.startsWith(BACKEND)) {
+    if (isSanctionedThirdParty(url)) {
+      await route.abort();
+      return;
+    }
     unknownRequests.push(`${request.method()} ${url}`);
     await route.abort();
     return;
@@ -307,7 +312,12 @@ test("revoking sends an explicit false for that column only", async () => {
   const page = await openSettings();
   assert.equal(await page.getByText(/^Granted /).count(), 1);
   await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).uncheck();
-  await page.waitForFunction(() => !/Granted /.test(document.body.innerText));
+  await page.waitForFunction(() => {
+    const checkbox = document.getElementById("settings-captcha-consent");
+    return checkbox instanceof HTMLInputElement
+      && !checkbox.checked
+      && !checkbox.parentElement?.textContent?.includes("Granted ");
+  });
   assert.deepEqual(scenario.automationWrites, [{ automatic_captcha_enabled: false }]);
   assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), false);
   await page.close();
@@ -324,8 +334,13 @@ test("a refused write rolls the box and its date back, and says so", async () =>
   );
   const page = await openSettings();
   assert.equal(await page.getByText(/^Granted /).count(), 1);
-  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).uncheck();
+  // `uncheck()` requires the box to remain unchecked after its click. This fixture rejects the
+  // request immediately, so the correct rollback can finish before Playwright checks that
+  // intermediate state. A plain click still exercises the real control without misclassifying the
+  // deliberately fast rollback as a failed interaction.
+  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).click();
   await page.getByText(/fixture refused the write/).waitFor();
+  assert.deepEqual(scenario.automationWrites, [{ automatic_captcha_enabled: false }]);
   // Back to granted, date and all: the server never accepted the revocation.
   assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), true);
   assert.equal(await page.getByText(/^Granted /).count(), 1);
@@ -340,9 +355,19 @@ test("a write response that omits the column changes nothing on screen", async (
     { omitCaptchaFieldsOnWrite: true },
   );
   const page = await openSettings();
-  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).uncheck();
-  await page.waitForFunction(() => true);
+  const writeResponse = page.waitForResponse((response) => (
+    response.request().method() === "PUT"
+    && new URL(response.url()).pathname.endsWith("/onboarding/automation")
+  ));
+  await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).click();
+  await writeResponse;
+  assert.deepEqual(scenario.automationWrites, [{ automatic_captcha_enabled: false }]);
   // The optimistic uncheck is reconciled back to what the screen already held, date included.
+  await page.waitForFunction((label) => {
+    const control = [...document.querySelectorAll('input[type="checkbox"]')]
+      .find((node) => node.getAttribute("aria-label") === label);
+    return control instanceof HTMLInputElement && control.checked;
+  }, CAPTCHA_LABEL);
   assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), true);
   assert.equal(await page.getByText(/^Granted /).count(), 1);
   await page.close();
@@ -351,12 +376,22 @@ test("a write response that omits the column changes nothing on screen", async (
 test("the boundary is on the screen that grants the permission", async () => {
   scenario = freshScenario();
   const page = await openSettings();
-  await page.getByText(/Litos never solves it: you clear it yourself, in your own browser\./).waitFor();
-  await page.getByText(/never solves the check, never reads its token, and never answers it for you/).waitFor();
-  await page.getByText(/whether an application is ever submitted is a separate permission/).waitFor();
+  await page.getByText(
+    /Litos never solves it: you clear it yourself, in your own browser\./,
+  ).waitFor();
+  await page.locator("#settings-captcha-consent-boundary").filter({
+    hasText: /never solves the check, never reads its token, and never answers it for you/,
+  }).waitFor();
+  await page.locator("#settings-captcha-consent-boundary").filter({
+    hasText: /whether an application is ever submitted is a separate permission/,
+  }).waitFor();
   // Off is not silence, and the screen says so.
-  await page.getByText(/still tells you the check is there and what is left to do/).waitFor();
-  await page.getByText(/You can turn this off at any time in Settings\./).waitFor();
+  await page.locator("#settings-captcha-consent-off").filter({
+    hasText: /still tells you the check is there and what is left to do/,
+  }).waitFor();
+  await page.locator("#settings-captcha-consent-revocable").filter({
+    hasText: /You can turn this off at any time in Settings\./,
+  }).waitFor();
   await page.close();
 });
 
@@ -365,8 +400,8 @@ test("onboarding asks once and sends the answer through onboarding complete", as
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/start`);
   await page.getByRole("heading", { name: "Setup complete." }).waitFor();
-  assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), false);
   await page.getByText("Optional permissions", { exact: true }).click();
+  assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), false);
   await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).check();
   await page.getByRole("button", { name: "See my jobs" }).click();
   await page.waitForFunction(() => window.location.pathname !== "/start");
@@ -377,16 +412,16 @@ test("onboarding asks once and sends the answer through onboarding complete", as
   await page.close();
 });
 
-test("onboarding starts unticked and sends an explicit false when left alone", async () => {
+test("onboarding leaves an unchanged false permission untouched", async () => {
   scenario = freshScenario();
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/start`);
   await page.getByRole("heading", { name: "Setup complete." }).waitFor();
   await page.getByRole("button", { name: "See my jobs" }).click();
   await page.waitForFunction(() => window.location.pathname !== "/start");
-  // Explicit, not omitted: the server reads an omitted field as "leave it alone", which would let a
-  // stored grant stand while this screen showed the box off.
-  assert.equal(scenario.completeWrites[0].automatic_captcha_enabled, false);
+  // The server already reported false. An untouched control writes nothing and leaves that verdict
+  // unchanged, just as an untouched true permission must remain granted.
+  assert.equal("automatic_captcha_enabled" in scenario.completeWrites[0], false);
   await page.close();
 });
 
@@ -401,6 +436,7 @@ test("setup omits the field entirely when the server never reported it", async (
   const page = await context.newPage();
   await page.goto(`${ORIGIN}/start`);
   await page.getByRole("heading", { name: "Setup complete." }).waitFor();
+  await page.getByText("Optional permissions", { exact: true }).click();
   assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), false);
   await page.getByRole("button", { name: "See my jobs" }).click();
   await page.waitForFunction(() => window.location.pathname !== "/start");
@@ -451,7 +487,8 @@ test("onboarding seeds from a permission already granted in Settings", async () 
   assert.equal(await page.getByRole("checkbox", { name: CAPTCHA_LABEL }).isChecked(), true);
   await page.getByRole("button", { name: "See my jobs" }).click();
   await page.waitForFunction(() => window.location.pathname !== "/start");
-  assert.equal(scenario.completeWrites[0].automatic_captcha_enabled, true);
+  assert.equal("automatic_captcha_enabled" in scenario.completeWrites[0], false);
+  assert.equal(scenario.state.automatic_captcha_enabled, true);
   await page.close();
 });
 

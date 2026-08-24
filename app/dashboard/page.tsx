@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ensureExtensionSession } from "@/lib/extension-bridge";
 import {
@@ -280,6 +280,14 @@ export default function Home() {
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
   const resumeOperationIds = useRef(new Map<string, string>());
+  const homeMountedRef = useRef(true);
+
+  useLayoutEffect(() => {
+    homeMountedRef.current = true;
+    return () => {
+      homeMountedRef.current = false;
+    };
+  }, []);
 
   /* Hand this session to the extension.
    *
@@ -534,7 +542,22 @@ export default function Home() {
    * It takes the same two steps as a prewarm worker (fetch the complete job, then generate), and
    * it writes the same day-scoped lock first, so the prewarm loop skips any job already being
    * built here and a student on automatic submission cannot spend the quota twice for one job. */
-  async function preparePacket(jobId: string, initiation: ResumeGenerationInitiation) {
+  function homeUpgradeFocusTarget(jobId: string, trigger: HTMLElement | null): HTMLElement | null {
+    if (trigger?.isConnected) return trigger;
+    const jobHeading = [...document.querySelectorAll<HTMLElement>("[data-dashboard-job-focus-id]")]
+      .find((candidate) => candidate.dataset.dashboardJobFocusId === jobId && candidate.isConnected)
+      ?? null;
+    if (jobHeading) return jobHeading;
+    const matchesHeading = document.getElementById("matches-heading");
+    return matchesHeading instanceof HTMLElement && matchesHeading.isConnected ? matchesHeading : null;
+  }
+
+  async function preparePacket(
+    jobId: string,
+    initiation: ResumeGenerationInitiation,
+    upgradeTrigger: HTMLElement | null = null,
+  ) {
+    const requestIsCurrent = () => homeMountedRef.current;
     if (!qaMode && canUse("ai_resume_tailoring") !== true) {
       if (canUse("ai_resume_tailoring") === false) {
         openUpgrade({
@@ -545,7 +568,7 @@ export default function Home() {
           jobId,
           returnRoute: `/dashboard/applications?job=${encodeURIComponent(jobId)}&checkout_action=tailor`,
           onManual: () => window.location.assign(`/dashboard/applications?job=${jobId}&intent=fill`),
-        });
+        }, { trigger: homeUpgradeFocusTarget(jobId, upgradeTrigger) });
       }
       return;
     }
@@ -590,16 +613,19 @@ export default function Home() {
 
     try {
       const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${jobId}`);
+      if (!requestIsCurrent()) return;
       const operationId = operationIdFor(resumeOperationIds.current, jobId);
       const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
         method: "POST",
         body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, initiation, operationId)),
       });
+      if (!requestIsCurrent()) return;
       if (generated.application) {
         completeOperationId(resumeOperationIds.current, jobId);
         setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
       }
     } catch (reason) {
+      if (!requestIsCurrent()) return;
       if (isStructuredUpgradeDenial(reason, "ai_resume_tailoring")) {
         openUpgrade({
           feature: "ai_resume_tailoring",
@@ -609,7 +635,10 @@ export default function Home() {
           jobId,
           returnRoute: `/dashboard/applications?job=${encodeURIComponent(jobId)}&checkout_action=tailor`,
           onManual: () => window.location.assign(`/dashboard/applications?job=${jobId}&intent=fill`),
-        }, { source: "server_denial" });
+        }, {
+          source: "server_denial",
+          trigger: homeUpgradeFocusTarget(jobId, upgradeTrigger),
+        });
         return;
       }
       /* The lock comes off so the next attempt is allowed to run at all. Quota and rate limits are
@@ -624,7 +653,9 @@ export default function Home() {
       setPreparationErrors((current) => ({ ...current, [jobId]: userFacingError(reason) }));
     } finally {
       releasePrewarmLock(jobId);
-      setPreparingJobs((current) => current.filter((id) => id !== jobId));
+      if (requestIsCurrent()) {
+        setPreparingJobs((current) => current.filter((id) => id !== jobId));
+      }
     }
   }
 
@@ -639,9 +670,9 @@ export default function Home() {
   /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
      a counter so the effect would re-run, which does nothing at all for the students who never had
      that effect running in the first place. */
-  function retryPreparation(jobId: string) {
+  function retryPreparation(jobId: string, upgradeTrigger: HTMLElement | null) {
     releasePrewarmLock(jobId);
-    void preparePacket(jobId, "explicit_click");
+    void preparePacket(jobId, "explicit_click", upgradeTrigger);
   }
 
   /* Saved targeting only, and only the parts the "Change what you want" link below can edit. This
@@ -773,7 +804,7 @@ export default function Home() {
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 id="matches-heading" className="text-base font-medium text-ink">Your top jobs today</h2>
+            <h2 id="matches-heading" tabIndex={-1} className="text-base font-medium text-ink outline-none">Your top jobs today</h2>
           </div>
           <Link href="/dashboard/jobs" className="inline-flex min-h-6 items-center text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
         </div>
@@ -827,9 +858,9 @@ export default function Home() {
               tailoringAccess={qaMode ? true : tailoringAccess}
               hoverGenerationEnabled={canUse("hover_generation") === true}
               onDismiss={() => dismiss(job.id)}
-              onPrepare={() => void preparePacket(job.id, "explicit_click")}
+              onPrepare={(upgradeTrigger) => void preparePacket(job.id, "explicit_click", upgradeTrigger)}
               onHoverPrepare={() => void preparePacket(job.id, "hover_prewarm")}
-              onRetry={() => retryPreparation(job.id)}
+              onRetry={(upgradeTrigger) => retryPreparation(job.id, upgradeTrigger)}
             />
           ))}
         </div>
@@ -992,9 +1023,9 @@ function JobMatchCard({
   hoverGenerationEnabled: boolean;
   canPrepare: boolean;
   onDismiss: () => void;
-  onPrepare: () => void;
+  onPrepare: (upgradeTrigger: HTMLButtonElement) => void;
   onHoverPrepare: () => void;
-  onRetry: () => void;
+  onRetry: (upgradeTrigger: HTMLButtonElement) => void;
 }) {
   const status = reviewHref ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
@@ -1041,7 +1072,13 @@ function JobMatchCard({
           )}
         </div>
 
-        <h2 className="mt-4 text-heading font-medium text-ink">{job.title}</h2>
+        <h2
+          tabIndex={-1}
+          data-dashboard-job-focus-id={job.id}
+          className="mt-4 text-heading font-medium text-ink outline-none"
+        >
+          {job.title}
+        </h2>
         <p className="mt-1 truncate text-small text-muted">
           {job.location ?? (job.remote ? "Remote" : "Location not listed")}
           {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
@@ -1087,7 +1124,16 @@ function JobMatchCard({
               Complete profile
             </Link>
           ) : (
-            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try tailoring again for" : "Tailor a resume for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">
+            <button
+              type="button"
+              onClick={(event) => {
+                const upgradeTrigger = event.currentTarget;
+                if (status === "failed") onRetry(upgradeTrigger);
+                else onPrepare(upgradeTrigger);
+              }}
+              aria-label={`${status === "failed" ? "Try tailoring again for" : "Tailor a resume for"} ${job.title} at ${job.company_name}`}
+              className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft"
+            >
               {status === "failed" ? "Try tailoring again" : "Tailor resume"}
             </button>
           )}
