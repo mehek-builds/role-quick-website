@@ -22,12 +22,22 @@ test("stale employer metadata can start one fresh managed read with only saved a
 
   assert.match(refresh, /metadataRefreshRef\.current === applicationId/);
   assert.match(refresh, /packetQuestionsSnapshot\(questions\) !== packetQuestionsSnapshot\(selectedSubmission\.review\.questions\)/);
-  assert.match(refresh, /prepareApplication\(selectedSubmission\.review\.questions, \{/);
+  assert.match(refresh, /continueFromVerifiedPacket\(\{/);
   assert.match(refresh, /allowServerAnswerRefresh: true/);
   assert.match(refresh, /failureScreen: "questions"/);
   assert.match(refresh, /source: "metadata_refresh"/);
   assert.doesNotMatch(refresh, /api<|submit-request/,
-    "metadata refresh must reuse the single guarded preparation path");
+    "metadata refresh must reuse the exact-packet approval and guarded preparation path");
+});
+
+test("metadata recovery spends the exact packet acknowledgement before preparation", () => {
+  const continuation = functionBody(PAGE, "async function continueFromVerifiedPacket(");
+  const acknowledgement = continuation.indexOf("/packet-audit/acknowledge");
+  const preparation = continuation.indexOf("prepareApplication(questions, options)");
+
+  assert.match(continuation, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(questions\)/);
+  assert.ok(acknowledgement >= 0, "the exact packet acknowledgement is missing");
+  assert.ok(preparation > acknowledgement, "preparation started before exact packet acknowledgement");
 });
 
 test("the metadata recovery action is explicit, accessible, and stays beside its failure", () => {
@@ -45,6 +55,8 @@ test("the metadata recovery action is explicit, accessible, and stays beside its
   assert.match(metadata, /aria-describedby="question-metadata-refresh-help"/);
   assert.match(metadata, /role="alert"/);
   assert.match(metadata, /metadataRefreshError/);
+  assert.match(metadata, /"Review packet first"/);
+  assert.match(metadata, /Litos needs your exact packet review before it can fill the employer form\./);
 });
 
 test("unsaved edits cannot ride a metadata refresh and the refresh is the blocker screen primary", () => {

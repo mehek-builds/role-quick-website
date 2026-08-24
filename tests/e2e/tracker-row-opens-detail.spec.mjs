@@ -524,7 +524,7 @@ browserTest("mobile question review shows unread choice lists before editable an
     await page.getByRole("button", { name: "Check the answers", exact: true }).click();
     const screenHeading = page.getByRole("heading", { name: "1 answer needs you.", exact: true });
     const metadataHeading = page.getByRole("heading", { name: "1 employer field stayed untouched.", exact: true });
-    const refreshAction = page.getByRole("button", { name: "Review and fill again", exact: true });
+    const refreshAction = page.getByRole("button", { name: "Review packet first", exact: true });
     const editableAnswer = page.getByRole("textbox", { name: "What dates are you available for an internship?", exact: true });
     await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
     await refreshAction.waitFor({ state: "visible", timeout: 10_000 });
@@ -533,7 +533,7 @@ browserTest("mobile question review shows unread choice lists before editable an
     await assertInsideViewport(screenHeading, "the answer screen heading");
     await assertInsideViewport(refreshAction, "the fresh employer-form action");
     assert.equal(await refreshAction.isEnabled(), true, "a clean stale-metadata screen must have a way forward");
-    await page.getByText("Litos opens the employer form, reads its current fields, and fills only your saved answers. Unsaved edits on this page are not used.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByText("Litos needs your exact packet review before it can fill the employer form.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     const screenHeadingBox = await screenHeading.boundingBox();
     const layoutState = await page.evaluate(() => ({
       scrollY: window.scrollY,
