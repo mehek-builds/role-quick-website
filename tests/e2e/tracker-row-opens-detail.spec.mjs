@@ -186,6 +186,50 @@ const METADATA_BLOCKED = {
     },
   },
 };
+const LEGACY_METADATA_BLOCKED_BASE = thinPacket("legacy-question-metadata", "needs_attention", {
+  role: "Legacy Question Contract Engineer",
+  company: "Fixture Historical Choices",
+});
+const LEGACY_METADATA_BLOCKED = {
+  ...LEGACY_METADATA_BLOCKED_BASE,
+  spec: {
+    ...LEGACY_METADATA_BLOCKED_BASE.spec,
+    _review: {
+      ...LEGACY_METADATA_BLOCKED_BASE.spec._review,
+      edited_terms: [],
+      skipped_reasons: [],
+      filled_fields: ["name", "email", "resume"],
+      questions: [{
+        id: "prior-application",
+        question: "Have you applied here before?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "select-one",
+        portal_selector: "#prior_application",
+        options: null,
+      }, {
+        id: "generic-control-label",
+        question: "Type your response",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "textarea",
+        portal_selector: "#unread_question",
+        options: null,
+      }, {
+        id: "open-question",
+        question: "Why this role?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "textarea",
+        portal_selector: "#why_this_role",
+        options: null,
+      }],
+    },
+  },
+};
 
 const RESUMES = [NEEDS_YOU, READY, SENT];
 let resumeHistoryOverride = null;
@@ -503,6 +547,29 @@ browserTest("mobile question review shows unread choice lists before editable an
   } finally {
     resumeHistoryOverride = null;
     await page.setViewportSize({ width: 1280, height: 900 });
+  }
+});
+
+browserTest("historical closed questions fail closed instead of rendering as textareas", async () => {
+  resumeHistoryOverride = [LEGACY_METADATA_BLOCKED];
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: LEGACY_METADATA_BLOCKED.job_context.role }).click();
+    await page.getByRole("button", { name: "Check the answers", exact: true }).click();
+
+    const metadataHeading = page.getByRole("heading", { name: "2 employer fields stayed untouched.", exact: true });
+    const openAnswer = page.getByRole("textbox", { name: "Why this role?", exact: true });
+    await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await openAnswer.waitFor({ state: "visible", timeout: 10_000 });
+
+    assert.equal(await page.getByRole("textbox", { name: "Have you applied here before?", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("textbox", { name: "Type your response", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "Save available answers", exact: true }).count(), 1);
+    const metadataBox = await metadataHeading.boundingBox();
+    const answerBox = await openAnswer.boundingBox();
+    assert.ok(metadataBox && answerBox && metadataBox.y < answerBox.y, "metadata blockers must render before the remaining genuine open answer");
+  } finally {
+    resumeHistoryOverride = null;
   }
 });
 

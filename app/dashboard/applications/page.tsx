@@ -61,6 +61,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/appli
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
+import { questionReviewPresentation } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -2721,17 +2722,22 @@ function Applications() {
      stopped managed run uses the server-backed question editor so Save persists the answers. A
      pre-fill packet keeps the answers locally until its submit request, as before. */
   function routeMissingRequiredAnswers(candidateQuestions: ApplicationQuestion[] = questions): boolean {
-    const firstMissing = candidateQuestions.find((question) => question.required && !question.answer.trim());
-    if (!firstMissing) return false;
+    const presentation = questionReviewPresentation(
+      candidateQuestions,
+      selectedSubmission?.review.question_metadata_blockers ?? [],
+    );
+    const firstMissing = presentation.editableQuestions.find((question) => question.required && !question.answer.trim());
+    const requiredMetadataMissing = presentation.metadataBlockers.some((blocker) => blocker.required);
+    if (!firstMissing && !requiredMetadataMissing) return false;
     setError(null);
     setPrescriptNote("");
     if (selectedSubmission?.review.status === "needs_attention") {
-      reviewPortalQuestions(firstMissing.id, "answer");
+      reviewPortalQuestions(firstMissing?.id, "answer");
       return true;
     }
     setQuestions(candidateQuestions);
-    setFocusQuestion({ id: firstMissing.id, token: Date.now() });
-    moveToScreen("questions", { scrollToTop: false });
+    setFocusQuestion(firstMissing ? { id: firstMissing.id, token: Date.now() } : null);
+    moveToScreen("questions", { scrollToTop: !firstMissing });
     return true;
   }
 
@@ -4959,15 +4965,19 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
 }) {
   const [showAllAnswers, setShowAllAnswers] = useState(false);
   const screenHeadingRef = useRef<HTMLHeadingElement>(null);
-  const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
+  const presentation = questionReviewPresentation(questions, metadataBlockers);
+  const editableQuestions = presentation.editableQuestions;
+  const effectiveMetadataBlockers = presentation.metadataBlockers;
+  const requiredMetadataBlocked = effectiveMetadataBlockers.some((blocker) => blocker.required);
+  const missingQuestions = editableQuestions.filter((question) => question.required && !question.answer.trim());
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
   const actionableIds = new Set(actionableQuestionIds);
   if (focusQuestionId) actionableIds.add(focusQuestionId);
-  const actionableQuestions = questions.filter((question) => actionableIds.has(question.id));
+  const actionableQuestions = editableQuestions.filter((question) => actionableIds.has(question.id));
   const focusedReview = reviewDiscovered && actionableQuestions.length > 0 && !showAllAnswers;
   const visibleQuestions = reviewDiscovered
-    ? (focusedReview ? actionableQuestions : questions)
+    ? (focusedReview ? actionableQuestions : editableQuestions)
     : missingQuestions;
   /* Arriving from a Your turn row means the student pressed ONE thing, so the caret belongs in that
      answer. Without this the screen opens at the top of a list of every question the form asked and
@@ -5029,28 +5039,28 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
         {!reviewDiscovered && prescriptNote && (
           <p className="mt-1 text-sm leading-6 text-muted">{prescriptNote}</p>
         )}
-        {reviewDiscovered && actionableQuestions.length > 0 && actionableQuestions.length < questions.length && (
+        {reviewDiscovered && actionableQuestions.length > 0 && actionableQuestions.length < editableQuestions.length && (
           <button
             type="button"
             onClick={() => setShowAllAnswers((current) => !current)}
             className="mt-3 min-h-11 text-sm font-medium text-brand-ink hover:text-ink"
           >
-            {showAllAnswers ? `Focus on ${actionableQuestions.length} that need you` : `Review all ${questions.length} saved answers`}
+            {showAllAnswers ? `Focus on ${actionableQuestions.length} that need you` : `Review all ${editableQuestions.length} saved answers`}
           </button>
         )}
       </div>
-      {reviewDiscovered && metadataBlockers.length > 0 && (
+      {effectiveMetadataBlockers.length > 0 && (
         <section aria-labelledby="question-metadata-heading" className="space-y-3">
           <div>
             <p className="text-label text-warn">Needs a fresh read</p>
             <h3 id="question-metadata-heading" className="mt-2 text-heading font-medium tracking-tight text-ink">
-              {metadataBlockers.length} employer {metadataBlockers.length === 1 ? "field" : "fields"} stayed untouched.
+              {effectiveMetadataBlockers.length} employer {effectiveMetadataBlockers.length === 1 ? "field" : "fields"} stayed untouched.
             </h3>
             <p className="mt-1 text-small leading-6 text-muted">
               Litos must read the employer&apos;s exact wording and choices before presenting an answer.
             </p>
           </div>
-          {metadataBlockers.map((blocker, index) => (
+          {effectiveMetadataBlockers.map((blocker, index) => (
             <Card key={`${blocker.kind}:${blocker.control_id ?? blocker.portal_selector ?? blocker.question ?? index}`} className="p-6">
               <p className="text-sm font-medium leading-6 text-ink">
                 {blocker.question ? displayQuestionLabel(blocker.question) : "Employer question not readable"}
@@ -5136,7 +5146,13 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
           screen this is a request to the server, and a button that reads "Save" throughout a write
           it does not acknowledge is how the old handler got away with saving nothing. */}
       <TerminalActionBar className="justify-end">
-        <Button onClick={onSubmit} disabled={saving}>{saving ? "Saving..." : "Save and continue"}</Button>
+        <Button onClick={onSubmit} disabled={saving || (editableQuestions.length === 0 && requiredMetadataBlocked)}>
+          {saving
+            ? "Saving..."
+            : requiredMetadataBlocked
+              ? editableQuestions.length > 0 ? "Save available answers" : "Waiting for a fresh read"
+              : "Save and continue"}
+        </Button>
       </TerminalActionBar>
     </div>
   );

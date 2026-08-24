@@ -19,6 +19,7 @@ export * from "./domain/packet-audit-display";
 export * from "./domain/packet-evidence-session";
 export * from "./domain/packet-pdf-verification";
 export * from "./domain/prescript";
+export * from "./domain/question-review-presentation";
 export {
   AUTO_SUBMIT_PREPARED_LIMIT,
   HOME_MATCH_WINDOW,
