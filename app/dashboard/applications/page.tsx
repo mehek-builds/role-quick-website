@@ -11,6 +11,7 @@ import {
   isGuestSession,
   type ApplicationFillHandoff,
   type ApplicationQuestion,
+  type ApplicationQuestionMetadataBlocker,
   type ApplicationProfile,
   type ApplicationReview,
   type AttachedDocument,
@@ -3959,6 +3960,7 @@ function Applications() {
           applicationRole={selected.job_context.role ?? "Application"}
           applicationCompany={selected.job_context.company ?? "Company"}
           questions={questions}
+          metadataBlockers={selectedSubmission?.review.question_metadata_blockers ?? []}
           actionableQuestionIds={actionableQuestionIds}
           onChange={setQuestions}
           onBack={() => {
@@ -4919,10 +4921,11 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, actionableQuestionIds = [], onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
+  metadataBlockers?: ApplicationQuestionMetadataBlocker[];
   actionableQuestionIds?: string[];
   onChange: (questions: ApplicationQuestion[]) => void;
   onBack: () => void;
@@ -4933,6 +4936,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
   prescriptNote?: string;
 }) {
   const [showAllAnswers, setShowAllAnswers] = useState(false);
+  const screenHeadingRef = useRef<HTMLHeadingElement>(null);
   const missingQuestions = questions.filter((question) => question.required && !question.answer.trim());
   const focusQuestionId = focusQuestion?.id ?? null;
   const focusToken = focusQuestion?.token ?? 0;
@@ -4947,12 +4951,25 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
      answer. Without this the screen opens at the top of a list of every question the form asked and
      the row she pressed can be several screens down, which is close enough to nothing happening.
 
-     Done in the effect body rather than in a requestAnimationFrame: the element exists as soon as
-     this runs, and rAF does not fire in a hidden tab, which made the behaviour differ between a
-     real browser and a driven one. The caller suppresses moveToScreen's scroll to the top of the
-     page for exactly this navigation, so there is nothing left to race. */
+     A focused question is handled in the effect body because the caller suppresses the page-level
+     scroll for exactly that route. A whole-screen review lands on its heading in the next task,
+     after browser scroll anchoring has finished replacing the prior tall screen. Neither path uses
+     requestAnimationFrame, which does not fire in a hidden tab. */
   useEffect(() => {
-    if (!focusQuestionId) return;
+    if (!focusQuestionId) {
+      const timer = window.setTimeout(() => {
+        const heading = screenHeadingRef.current;
+        if (heading) {
+          /* Focus can move the viewport in browser and assistive-technology combinations that do
+             not honor preventScroll consistently. Put focus first, then establish the visible
+             landing position so the sticky mobile shell cannot cover the screen title. */
+          heading.focus({ preventScroll: true });
+          const documentTop = heading.getBoundingClientRect().top + window.scrollY;
+          window.scrollTo({ top: Math.max(0, documentTop - 128), behavior: "auto" });
+        }
+      }, 150);
+      return () => window.clearTimeout(timer);
+    }
     const field = document.getElementById(`question-${focusQuestionId}`);
     // A short closed list renders as a radio group, which is a container rather than a form
     // control, so the branch below would refuse it. Scroll to it and put focus on the chosen
@@ -4975,7 +4992,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
       <button onClick={onBack} className="text-sm text-muted hover:text-ink">Back</button>
       <div>
         <p className="text-small text-muted">{applicationRole} · {applicationCompany}</p>
-        <h2 className="mt-2 text-heading font-medium tracking-tight text-ink">
+        <h2 ref={screenHeadingRef} tabIndex={-1} className="mt-2 scroll-mt-20 text-heading font-medium tracking-tight text-ink outline-none">
           {reviewDiscovered && actionableQuestions.length > 0
             ? `${actionableQuestions.length} ${actionableQuestions.length === 1 ? "answer needs" : "answers need"} you.`
             : reviewDiscovered ? "Review answers" : "Answer these"}
@@ -5000,6 +5017,34 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, actio
           </button>
         )}
       </div>
+      {reviewDiscovered && metadataBlockers.length > 0 && (
+        <section aria-labelledby="question-metadata-heading" className="space-y-3">
+          <div>
+            <p className="text-label text-warn">Needs a fresh read</p>
+            <h3 id="question-metadata-heading" className="mt-2 text-heading font-medium tracking-tight text-ink">
+              {metadataBlockers.length} employer {metadataBlockers.length === 1 ? "field" : "fields"} stayed untouched.
+            </h3>
+            <p className="mt-1 text-small leading-6 text-muted">
+              Litos must read the employer&apos;s exact wording and choices before presenting an answer.
+            </p>
+          </div>
+          {metadataBlockers.map((blocker, index) => (
+            <Card key={`${blocker.kind}:${blocker.control_id ?? blocker.portal_selector ?? blocker.question ?? index}`} className="p-6">
+              <p className="text-sm font-medium leading-6 text-ink">
+                {blocker.question ? displayQuestionLabel(blocker.question) : "Employer question not readable"}
+              </p>
+              <p className="mt-1 text-label text-warn">
+                {blocker.kind === "missing_exact_options" ? "Exact choices not read" : "Exact question not read"}
+              </p>
+              <p className="mt-3 text-small leading-6 text-muted">
+                {blocker.kind === "missing_exact_options"
+                  ? "The employer's current options were not readable, so Litos did not guess or fill this field."
+                  : "The employer's question was not readable, so Litos did not guess or fill this field."}
+              </p>
+            </Card>
+          ))}
+        </section>
+      )}
       {visibleQuestions.map((question) => (
         <Card key={question.id} className="p-6">
           {/* An employer's question can be a whole consent paragraph. At that length bold stops
