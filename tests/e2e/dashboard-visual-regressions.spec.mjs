@@ -1156,10 +1156,16 @@ async function newDashboardPage(options) {
 }
 
 async function finishDashboardAnimations(page) {
-  await page.waitForFunction(() => !document.getAnimations().some((animation) => {
-    const name = animation.animationName ?? "";
-    return name.startsWith("rq-dashboard") && ["running", "pending"].includes(animation.playState);
-  }), null, { timeout: 4_000 });
+  await page.waitForFunction(() => {
+    if (document.activeViewTransition) return false;
+    return !document.getAnimations().some((animation) => {
+      const name = animation.animationName ?? "";
+      const pseudoElement = animation.effect?.pseudoElement ?? "";
+      const belongsToDashboard = name.startsWith("rq-dashboard")
+        || pseudoElement.startsWith("::view-transition");
+      return belongsToDashboard && ["running", "pending"].includes(animation.playState);
+    });
+  }, null, { timeout: 4_000 });
 }
 
 async function startAnimationLog(page) {
