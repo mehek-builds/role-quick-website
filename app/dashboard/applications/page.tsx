@@ -1533,8 +1533,19 @@ function Applications() {
     resolvedActionableRequestId,
   );
   const storedReview = selected?.spec._review;
-  const review = storedReview ? reviewWithLists(storedReview) : undefined;
   const selectedSubmission = selected && submission?.application_id === selected.id ? submission : null;
+  /* The submission endpoint is the authority for the live workflow state. The packet list can
+     still carry the state from before a fill, especially after a blocker is repaired while the
+     filled browser session remains reviewable. Reading status from that older packet made a
+     ready_for_final_approval form look like needs_attention: the exact-packet button then called
+     submit-request instead of returning to the filled preview, and the server correctly refused
+     to discard the existing form without an explicit restart. Keep the packet copy only as the
+     loading fallback; once the owned submission arrives, every review action uses its state. */
+  const review = selectedSubmission
+    ? reviewWithLists(selectedSubmission.review)
+    : storedReview
+      ? reviewWithLists(storedReview)
+      : undefined;
   const actionableQuestionIds = useMemo(() => {
     if (!selected || !selectedSubmission) return [];
     return humanInputItems(selectedSubmission.review, {
