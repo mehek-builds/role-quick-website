@@ -43,7 +43,7 @@ test("application task screens use one keyed peer-panel transition", () => {
   const atomicPacketUpdate = selectPacket.slice(transitionStart, transitionEnd);
   assert.match(atomicPacketUpdate, /setSelectedId\(packet\.id\);/);
   assert.match(atomicPacketUpdate, /setSpec\(stripMetadata\(packet\.spec\)\);/);
-  assert.match(atomicPacketUpdate, /setSubmission\(status/);
+  assert.match(atomicPacketUpdate, /setSubmission\(rememberedSubmission \?\? \(status/);
   assert.match(atomicPacketUpdate, /moveToScreen\(historicalPacketAuditStale \|\| status === "ready_for_final_approval" \? "review" : screenForStatus\(status, "review"\)\);/);
   assert.match(
     applications,

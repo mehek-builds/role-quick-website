@@ -953,7 +953,11 @@ export function directInputTaskPlan(
     item.settled === true && (!item.questionId || editableQuestionIds.has(item.questionId))
   ));
   const nonQuestionTasks = items.flatMap((item): DirectNonQuestionTask[] => (
-    item.settled !== true && !item.questionId
+    item.settled !== true
+      && !item.questionId
+      && item.actionKind !== "answer"
+      && item.actionKind !== "review"
+      && item.actionKind !== "confirm"
       ? [{ kind: "non-question", id: item.id, item }]
       : []
   ));

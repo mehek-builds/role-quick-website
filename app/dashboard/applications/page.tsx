@@ -120,6 +120,13 @@ type DirectAnswerDraft = {
   answer: string;
 };
 
+type DirectAnswerProgress = {
+  key: string;
+  lastSavedQuestionId: string | null;
+  savedCount: number;
+  total: number;
+};
+
 function directAnswerPassKey(review: ApplicationReview): string {
   return review.questions_reviewed_at ?? review.submission_run_id ?? review.updated_at;
 }
@@ -468,6 +475,12 @@ function Applications() {
   /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
      poll callback does not have to re-subscribe on every submission update. */
   const submissionRef = useRef<SubmissionResponse | null>(null);
+  /* `submissionRef` follows the selected application, so switching A -> B necessarily replaces
+     it. Keep the latest full envelope for each application separately as well. This is the
+     ordering source for a delayed answer response: an older response for A must not overwrite a
+     newer A poll merely because B is selected, and returning to A must not reduce that full
+     snapshot to the partial board seed. */
+  const submissionSnapshotsRef = useRef<Map<string, SubmissionResponse>>(new Map());
   /* A response can keep the same updated_at even after an accepted answer mutation. A poll that
      started before that write must not restore its blank question snapshot afterward. */
   const submissionMutationGenerationRef = useRef(0);
@@ -563,8 +576,15 @@ function Applications() {
   const savingAnswersRef = useRef<Set<string>>(new Set());
   const [savingAnswerIds, setSavingAnswerIds] = useState<ReadonlySet<string>>(() => new Set());
   const [directAnswerPasses, setDirectAnswerPasses] = useState<ReadonlyMap<string, DirectAnswerPass>>(() => new Map());
+  const [directAnswerProgresses, setDirectAnswerProgresses] = useState<ReadonlyMap<string, DirectAnswerProgress>>(() => new Map());
   const [directAnswerFailures, setDirectAnswerFailures] = useState<ReadonlyMap<string, DirectAnswerFailure>>(() => new Map());
   const [directAnswerDrafts, setDirectAnswerDrafts] = useState<ReadonlyMap<string, DirectAnswerDraft>>(() => new Map());
+  const [directAnswerAnnouncement, setDirectAnswerAnnouncement] = useState<{ token: number; message: string } | null>(null);
+  useEffect(() => {
+    if (!directAnswerAnnouncement) return;
+    const timer = window.setTimeout(() => setDirectAnswerAnnouncement(null), 1_200);
+    return () => window.clearTimeout(timer);
+  }, [directAnswerAnnouncement]);
   /* Ticks in flight on the Your turn panel, keyed application:row. The ref is the synchronous
      guard (a double click lands before any re-render, exactly the reason savingAnswersRef exists)
      and the state is its visible half, the same ref+state pairing savingAnswersId documents: the
@@ -862,6 +882,12 @@ function Applications() {
      between the approve resolving and this effect running, and a poll can land inside it. */
   useEffect(() => {
     submissionRef.current = submission;
+    if (!submission || submission.partial) return;
+    const remembered = submissionSnapshotsRef.current.get(submission.application_id);
+    submissionSnapshotsRef.current.set(
+      submission.application_id,
+      nextSubmissionState(remembered, submission),
+    );
   }, [submission]);
 
   useEffect(() => {
@@ -1026,8 +1052,10 @@ function Applications() {
     selectedIdRef.current = packet.id;
     editorRevisionRef.current += 1;
     packetCoverLetterEditorRevisionRef.current += 1;
-    const status = packet.spec._review?.status;
-    const historicalPacketAuditStale = historicalPacketAuditStaleMessage(packet.spec._review);
+    const rememberedSubmission = submissionSnapshotsRef.current.get(packet.id) ?? null;
+    const selectedReview = rememberedSubmission?.review ?? packet.spec._review;
+    const status = selectedReview?.status;
+    const historicalPacketAuditStale = historicalPacketAuditStaleMessage(selectedReview);
     /* Entering a packet starts its story over, and that includes a standing revalidation refusal:
        the sentence described evidence this entry no longer holds, and left in the ref it would
        re-pin itself onto the banner at the next poll tick. */
@@ -1046,7 +1074,7 @@ function Applications() {
       setMatchResult(null);
       setPacketEvidence(null);
       setSpec(stripMetadata(packet.spec));
-      setQuestions(packet.spec._review?.questions ?? []);
+      setQuestions(selectedReview?.questions ?? []);
       setCoverLetterBody(packet.spec._cover_letter?.body ?? "");
       setCoverLetterDownloadUrl(packet.cover_letter_download_url ?? null);
       /* A different packet, so any "sending" flag belongs to the one we are leaving. Without
@@ -1060,9 +1088,9 @@ function Applications() {
          and document marks come from that same stored packet. Absent document marks stay absent:
          an empty object would claim the application had been measured and could block a send on
          an ask this seed cannot confirm. */
-      setSubmission(status
-        ? { application_id: packet.id, review: packet.spec._review!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
-        : null);
+      setSubmission(rememberedSubmission ?? (status
+        ? { application_id: packet.id, review: selectedReview!, cover_letter: packet.spec._cover_letter ?? null, documents: documentsFromSpecMarks(packet.spec._documents), partial: true }
+        : null));
       setError(null);
       setPollError(null);
       setSendRefusal(null);
@@ -1283,6 +1311,20 @@ function Applications() {
     const requestedMutationGeneration = submissionMutationGenerationRef.current;
     const raw = await api<SubmissionResponse>(`/applications/${requestedId}/submission`);
     let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) };
+    if (result.application_id !== requestedId) return;
+
+    /* Selection owns only the visible screen. The full response still belongs to the application
+       it names, so retain it before a switch can end visual publication. Otherwise a newer A read
+       discarded after switching to B leaves an older delayed A mutation response with nothing to
+       compare against. The mutation generation still rejects a read that began before an already
+       accepted write. */
+    if (submissionMutationGenerationRef.current !== requestedMutationGeneration) return;
+    const rememberedBeforeRead = submissionSnapshotsRef.current.get(requestedId);
+    const rememberedAfterRead = nextSubmissionState(rememberedBeforeRead, result);
+    if (rememberedAfterRead !== rememberedBeforeRead) {
+      submissionSnapshotsRef.current.set(requestedId, rememberedAfterRead);
+      advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId);
+    }
 
     // A poll for packet A can land after the user has switched to packet B: the fetch closes over
     // the id it asked for, but the poll effect's cleanup cannot reach inside an in-flight request.
@@ -1355,6 +1397,9 @@ function Applications() {
       || editorRevisionRef.current !== requestedSelectionRevision
       || submissionSnapshotIsOlder(submissionRef.current, result)
     ) return;
+    const rememberedBeforePoll = submissionSnapshotsRef.current.get(requestedId);
+    result = nextSubmissionState(rememberedBeforePoll, result);
+    submissionSnapshotsRef.current.set(requestedId, result);
     const submissionBeforePoll = submissionRef.current;
     result = publishSubmissionEnvelope(submissionRef, result, "poll");
     if (result !== submissionBeforePoll) {
@@ -1824,6 +1869,7 @@ function Applications() {
     : new Set<string>();
   const selectedDirectAnswerDraft = selected ? directAnswerDrafts.get(selected.id) ?? null : null;
   const selectedDirectAnswerFailure = selected ? directAnswerFailures.get(selected.id) ?? null : null;
+  const selectedDirectAnswerProgress = selected ? directAnswerProgresses.get(selected.id) ?? null : null;
   /* The submission endpoint is the authority for the live workflow state. The packet list can
      still carry the state from before a fill, especially after a blocker is repaired while the
      filled browser session remains reviewable. Reading status from that older packet made a
@@ -3718,19 +3764,21 @@ function Applications() {
     if (savingAnswersRef.current.has(applicationId)) {
       return { saved: false, message: "Litos is already saving an answer for this application." };
     }
-    const activeSubmission = submissionRef.current?.application_id === applicationId
-      ? submissionRef.current
-      : submission;
+    const activeSubmission = submissionSnapshotsRef.current.get(applicationId)
+      ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : submission);
     const requestedPublicationGeneration = submissionPublicationGeneration(
       submissionPublicationGenerationsRef.current,
       applicationId,
     );
-    const safeDirectTask = direct
+    const activeDirectTaskPlan = direct
       ? directInputTaskPlan(activeSubmission.review, {
         company: selected.job_context.company,
         role: selected.job_context.role,
         documents: activeSubmission.documents,
-      }).questionTasks.find((task) => task.question.id === direct.questionId)
+      })
+      : null;
+    const safeDirectTask = direct
+      ? activeDirectTaskPlan?.questionTasks.find((task) => task.question.id === direct.questionId) ?? null
       : null;
     const safeDirectPromptFingerprint = safeDirectTask
       ? directQuestionPromptFingerprint(safeDirectTask)
@@ -3757,6 +3805,22 @@ function Applications() {
       rememberDirectFailure(message);
       return { saved: false, message };
     }
+    const activeDirectPassKey = direct ? directAnswerPassKey(activeSubmission.review) : null;
+    const activeDirectPass = direct ? directAnswerPasses.get(applicationId) : null;
+    const completedDirectPromptFingerprints = new Set(
+      activeDirectPassKey && activeDirectPass?.key === activeDirectPassKey
+        ? activeDirectPass.promptFingerprints
+        : [],
+    );
+    const activeDirectProgress = direct ? directAnswerProgresses.get(applicationId) : null;
+    const activeDirectQuestionTotal = direct && activeDirectTaskPlan
+      ? Math.max(
+        activeDirectProgress?.key === activeDirectPassKey ? activeDirectProgress.total : 0,
+        completedDirectPromptFingerprints.size + activeDirectTaskPlan.questionTasks.filter((task) => (
+          !completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))
+        )).length,
+      )
+      : 0;
     savingAnswersRef.current.add(applicationId);
     setSavingAnswerIds((current) => new Set(current).add(applicationId));
     if (direct) {
@@ -3807,11 +3871,11 @@ function Applications() {
           ) === requestedPublicationGeneration;
         if (result.review && refusalStillOwnsApplication) {
           submissionMutationGenerationRef.current += 1;
-          const latestSubmission = submissionRef.current?.application_id === applicationId
-            ? submissionRef.current
-            : activeSubmission;
+          const latestSubmission = submissionSnapshotsRef.current.get(applicationId)
+            ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : activeSubmission);
           const refreshed: SubmissionResponse = { ...latestSubmission, application_id: applicationId, review: result.review };
           const reconciled = nextSubmissionState(latestSubmission, refreshed);
+          submissionSnapshotsRef.current.set(applicationId, reconciled);
           setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, reconciled) : packet) ?? current);
           const submissionBeforeRefusal = submissionRef.current;
           const published = publishSubmissionEnvelope(submissionRef, reconciled, "direct");
@@ -3824,21 +3888,77 @@ function Applications() {
         return { saved: false, message: result.message, ...(result.review ? { review: result.review } : {}) };
       }
       submissionMutationGenerationRef.current += 1;
-      const latestSubmission = submissionRef.current?.application_id === applicationId
-        ? submissionRef.current
-        : activeSubmission;
-      const saved: SubmissionResponse = { ...latestSubmission, application_id: applicationId, review: result.review };
-      setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, saved) : packet) ?? current);
-      if (direct && safeDirectPromptFingerprint) {
+      const latestSubmission = submissionSnapshotsRef.current.get(applicationId)
+        ?? (submissionRef.current?.application_id === applicationId ? submissionRef.current : activeSubmission);
+      const acceptedCandidate: SubmissionResponse = { ...latestSubmission, application_id: applicationId, review: result.review };
+      const acceptedPublicationChanged = direct && submissionPublicationGeneration(
+        submissionPublicationGenerationsRef.current,
+        applicationId,
+      ) !== requestedPublicationGeneration;
+      const acceptedResponseIsOlder = direct && submissionSnapshotIsOlder(latestSubmission, acceptedCandidate);
+      const latestDirectTask = direct
+        ? directInputTaskPlan(latestSubmission.review, {
+          company: selected.job_context.company,
+          role: selected.job_context.role,
+          documents: latestSubmission.documents,
+        }).questionTasks.find((task) => task.question.id === direct.questionId) ?? null
+        : null;
+      const latestStillHasSubmittedTask = direct && latestDirectTask
+        ? directQuestionPromptFingerprint(latestDirectTask) === direct.promptFingerprint
+          && directQuestionTaskFingerprint(latestDirectTask) === direct.taskFingerprint
+        : false;
+      /* A changed publication with the same timestamp cannot be ordered by the clock. The direct
+         response wins only while the latest snapshot still carries the exact task the applicant
+         answered. If the latest snapshot already holds that answer, changed the prompt, or removed
+         it, retain the latest application instead of restoring the older response body. */
+      const acceptedResponseOwnsSnapshot = !direct
+        || !acceptedPublicationChanged
+        || (!acceptedResponseIsOlder && (
+          latestSubmission.review.updated_at !== acceptedCandidate.review.updated_at
+          || latestStillHasSubmittedTask
+        ));
+      const saved = acceptedResponseOwnsSnapshot
+        ? acceptedPublicationChanged
+          ? nextSubmissionState(latestSubmission, acceptedCandidate)
+          : acceptedCandidate
+        : latestSubmission;
+      if (acceptedResponseOwnsSnapshot) {
+        if (saved !== latestSubmission) {
+          advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId);
+        }
+        submissionSnapshotsRef.current.set(applicationId, saved);
+        setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, saved) : packet) ?? current);
+      }
+      if (direct && safeDirectPromptFingerprint && acceptedResponseOwnsSnapshot) {
+        completedDirectPromptFingerprints.add(safeDirectPromptFingerprint);
+        const savedDirectTaskPlan = directInputTaskPlan(saved.review, {
+          company: selected.job_context.company,
+          role: selected.job_context.role,
+          documents: saved.documents,
+        });
+        const remainingDirectQuestionCount = savedDirectTaskPlan.questionTasks.filter((task) => (
+          !completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))
+        )).length;
+        const savedPassKey = directAnswerPassKey(saved.review);
         setDirectAnswerPasses((current) => {
           const next = new Map(current);
-          const passKey = directAnswerPassKey(result.review);
-          const currentPass = current.get(applicationId);
-          const promptFingerprints = currentPass?.key === passKey
-            ? new Set(currentPass.promptFingerprints)
-            : new Set<string>();
-          promptFingerprints.add(safeDirectPromptFingerprint);
-          next.set(applicationId, { key: passKey, promptFingerprints });
+          next.set(applicationId, {
+            key: savedPassKey,
+            promptFingerprints: new Set(completedDirectPromptFingerprints),
+          });
+          return next;
+        });
+        setDirectAnswerProgresses((current) => {
+          const next = new Map(current);
+          next.set(applicationId, {
+            key: savedPassKey,
+            lastSavedQuestionId: direct.questionId,
+            savedCount: completedDirectPromptFingerprints.size,
+            total: Math.max(
+              activeDirectQuestionTotal,
+              completedDirectPromptFingerprints.size + remainingDirectQuestionCount,
+            ),
+          });
           return next;
         });
         setDirectAnswerDrafts((current) => {
@@ -3854,12 +3974,13 @@ function Applications() {
           return next;
         });
       }
-      // The application id alone is not enough. A to B to A can put the same id back on screen
-      // while this request is still in flight, so selection revision owns the visible publish.
+      // A direct response can safely reconcile after A to B to A. An intervening publication is
+      // compared by actual review recency, so an older hydration cannot defeat the accepted answer
+      // and a genuinely newer snapshot still wins. The selected id keeps A from navigating B.
       if (
-        !applicationsMountedRef.current
+        !acceptedResponseOwnsSnapshot
+        || !applicationsMountedRef.current
         || selectedIdRef.current !== applicationId
-        || editorRevisionRef.current !== selectionRevision
       ) return {
         saved: true,
         review: result.review,
@@ -3875,6 +3996,7 @@ function Applications() {
         if (direct) {
           packetEvidenceRef.current = null;
           setPacketEvidence(null);
+          setDirectAnswerAnnouncement({ token: Date.now(), message: "Saved to this application." });
         }
         setSubmission(published);
         setQuestions(mergeDiscoveredQuestions(answerDraftQuestions, published.review.questions));
@@ -3886,7 +4008,7 @@ function Applications() {
       else publishSavedAnswer();
       return {
         saved: true,
-        review: result.review,
+        review: saved.review,
         mayAdvance: true,
         ...(safeDirectPromptFingerprint ? { promptFingerprint: safeDirectPromptFingerprint } : {}),
       };
@@ -4191,6 +4313,9 @@ function Applications() {
 
   return (
     <div className={applicationTaskOpen ? "space-y-4" : "space-y-6"}>
+      <p key={directAnswerAnnouncement?.token ?? "direct-answer-idle"} className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {directAnswerAnnouncement?.message ?? ""}
+      </p>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 id="applications-heading" tabIndex={-1} className="text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink outline-none">Applications</h1>
@@ -4726,6 +4851,7 @@ function Applications() {
           onSaveQuestion={(questionId, answer, intent, promptFingerprint, taskFingerprint) => saveReviewedAnswers({ questionId, answer, intent, promptFingerprint, taskFingerprint })}
           savingAnswer={savingAnswerIds.has(selected.id)}
           answeredQuestionFingerprints={selectedAnsweredPromptFingerprints}
+          directAnswerProgress={selectedDirectAnswerProgress}
           directAnswerDraft={selectedDirectAnswerDraft}
           directAnswerFailure={selectedDirectAnswerFailure}
           onDirectAnswerDraftChange={(promptFingerprint, taskFingerprint, answer) => {
@@ -6048,12 +6174,22 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
   );
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [choiceTouched, setChoiceTouched] = useState(false);
   const sectionRef = useRef<HTMLElement>(null);
   const busy = saving || submitting;
   const requiredBlank = task.question.required && !answer.trim();
+  const exactOptions = task.question.options ?? [];
+  const choiceMissing = exactOptions.length > 0 && !exactOptions.includes(answer);
+  const choiceErrorVisible = choiceMissing && (choiceTouched || Boolean(answer.trim()));
+  const answerBlocked = requiredBlank || choiceMissing;
   const headingId = `direct-application-question-${encodeURIComponent(task.question.id)}`;
   const progressId = `${headingId}-progress`;
   const helperId = `${headingId}-helper`;
+  const errorId = `${headingId}-error`;
+  const visibleError = saveError
+    ?? (externalFailure?.promptFingerprint === promptFingerprint ? externalFailure.message : null)
+    ?? (choiceErrorVisible ? "Choose one of the employer's current options before saving." : null);
+  const answerDescribedBy = `${progressId} ${helperId}${visibleError ? ` ${errorId}` : ""}`;
 
   useEffect(() => {
     if (!savedRecently) return;
@@ -6068,7 +6204,7 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
 
   async function submitAnswer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy || requiredBlank) return;
+    if (busy || answerBlocked) return;
     setSubmitting(true);
     setSaveError(null);
     onClearFailure(promptFingerprint);
@@ -6096,15 +6232,15 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
     <MotionPanel key={task.id} name="dashboard-application-answer">
       <section ref={sectionRef} aria-labelledby={headingId} className="py-1">
         <div className="flex items-center justify-between gap-4">
-          <p className={`font-mono text-label font-medium uppercase tracking-[0.08em] ${savedRecently ? "text-teal-ink" : "text-muted"}`}>
-            {savedRecently ? "Answer saved" : "Application answer"}
+          <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">
+            Application answer
           </p>
           <p id={progressId} className="shrink-0 font-mono text-label tabular-nums text-muted">
             {position} of {total}
           </p>
         </div>
         {savedRecently && (
-          <p role="status" className="mt-2 text-small text-teal-ink">Saved to this application.</p>
+          <p className="mt-2 text-small text-teal-ink">Saved to this application.</p>
         )}
         <h2 id={headingId} className={`mt-4 text-ink ${task.question.question.trim().length > 140 ? "text-body leading-7" : "text-heading font-medium leading-tight"}`}>
           {displayQuestionLabel(task.question.question)}
@@ -6119,7 +6255,7 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
         <form onSubmit={submitAnswer} aria-busy={busy} className="mt-6">
           {task.question.options && task.question.options.length > 0 ? (
             task.question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
-              <fieldset aria-labelledby={headingId} aria-describedby={`${progressId} ${helperId}`} className="space-y-2">
+              <fieldset aria-labelledby={headingId} aria-describedby={answerDescribedBy} aria-invalid={visibleError ? true : undefined} className="space-y-2">
                 {task.question.options.map((option) => (
                   <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border px-4 py-3 text-small leading-6 text-ink transition-colors ${answer === option ? "border-brand bg-brand-soft" : "border-control-border bg-surface hover:border-ink"} ${busy ? "cursor-not-allowed opacity-60" : ""}`}>
                     <input
@@ -6127,6 +6263,7 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
                       name={`direct-question-choice-${task.question.id}`}
                       value={option}
                       checked={answer === option}
+                      disabled={busy}
                       aria-disabled={busy}
                       required={task.question.required}
                       onChange={() => updateAnswer(option)}
@@ -6139,14 +6276,17 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
             ) : (
               <select
                 value={answer}
+                disabled={busy}
                 aria-disabled={busy}
                 required={task.question.required}
                 aria-labelledby={headingId}
-                aria-describedby={`${progressId} ${helperId}`}
+                aria-describedby={answerDescribedBy}
+                aria-invalid={visibleError ? true : undefined}
                 onChange={(event) => updateAnswer(event.target.value)}
+                onBlur={() => setChoiceTouched(true)}
                 className={`min-h-11 w-full rounded-inner border border-control-border bg-surface px-4 py-3 text-small leading-6 text-ink outline-none focus:border-brand ${busy ? "cursor-not-allowed opacity-60" : ""}`}
               >
-                <option value="">Choose an answer</option>
+                <option value="" disabled>Choose an answer</option>
                 {task.question.options.map((option) => <option key={option} value={option}>{option}</option>)}
               </select>
             )
@@ -6158,7 +6298,8 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
               required={task.question.required}
               rows={4}
               aria-labelledby={headingId}
-              aria-describedby={`${progressId} ${helperId}`}
+              aria-describedby={answerDescribedBy}
+              aria-invalid={visibleError ? true : undefined}
               onChange={(event) => updateAnswer(event.target.value)}
               onKeyDown={(event) => {
                 if ((event.metaKey || event.ctrlKey) && event.key === "Enter") event.currentTarget.form?.requestSubmit();
@@ -6167,13 +6308,13 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
               placeholder="Type your answer"
             />
           )}
-          {(saveError ?? (externalFailure?.promptFingerprint === promptFingerprint ? externalFailure.message : null)) && (
-            <p role="alert" className="mt-3 text-small leading-6 text-danger">
-              {saveError ?? externalFailure?.message}
+          {visibleError && (
+            <p id={errorId} role="alert" className="mt-3 text-small leading-6 text-danger">
+              {visibleError}
             </p>
           )}
           <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-            <Button type="submit" block className="sm:w-auto" disabled={requiredBlank} aria-disabled={busy || requiredBlank}>
+            <Button type="submit" block className="sm:w-auto" disabled={answerBlocked} aria-disabled={busy || answerBlocked}>
               {busy ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
             </Button>
             <p className="text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
@@ -6184,7 +6325,7 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerDraft, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerDraft: DirectAnswerDraft | null; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDraft, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDraft: DirectAnswerDraft | null; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -6352,19 +6493,13 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     documents: submission.documents,
   });
   const directProgressKey = directAnswerPassKey(review);
-  const [storedDirectProgress, setStoredDirectProgress] = useState(() => ({
-    key: directProgressKey,
-    lastSavedQuestionId: null as string | null,
-    savedCount: 0,
-    initialQuestionCount: directTaskPlan.questionTasks.length,
-  }));
-  const directProgress = storedDirectProgress.key === directProgressKey
-    ? storedDirectProgress
+  const directProgress = directAnswerProgress?.key === directProgressKey
+    ? directAnswerProgress
     : {
       key: directProgressKey,
       lastSavedQuestionId: null,
       savedCount: 0,
-      initialQuestionCount: directTaskPlan.questionTasks.length,
+      total: directTaskPlan.questionTasks.length,
     };
   const remainingDirectQuestions = directTaskPlan.questionTasks.filter((task) => (
     !answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))
@@ -6380,7 +6515,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const currentNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
   const currentMetadataBlocker = directTaskPlan.metadataBlockers[0] ?? null;
   const directQuestionTotal = Math.max(
-    directProgress.initialQuestionCount,
+    directProgress.total,
     directProgress.savedCount + remainingDirectQuestions.length,
   );
   const directQuestionPosition = Math.min(
@@ -6403,16 +6538,6 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
       company: packet.job_context.company,
       role: packet.job_context.role,
       documents: submission.documents,
-    });
-    const nextProgressKey = directAnswerPassKey(result.review);
-    setStoredDirectProgress({
-      key: nextProgressKey,
-      lastSavedQuestionId: questionId,
-      savedCount: directProgress.savedCount + 1,
-      initialQuestionCount: Math.max(
-        directProgress.initialQuestionCount,
-        directProgress.savedCount + nextTaskPlan.questionTasks.length,
-      ),
     });
     const anotherQuestionRemains = nextTaskPlan.questionTasks.some((task) => (
       !savedQuestionFingerprints.has(directQuestionPromptFingerprint(task))
@@ -6564,7 +6689,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             <p className="mt-2 text-small leading-6 text-danger">
               {directAnswerFailure?.message ?? "Review the current application state before using this answer."}
             </p>
-            <div className="mt-3 rounded-control border border-border bg-surface px-3 py-3">
+            <div className="mt-3 rounded-inner border border-border bg-surface px-3 py-3">
               <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">Unsaved answer</p>
               <p className="mt-1 whitespace-pre-wrap break-words text-small leading-6 text-ink">
                 {directAnswerDraft.answer || "No answer was entered."}
@@ -6589,7 +6714,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         ) : (
           <>
             {directProgress.lastSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission && (
-              <p role="status" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-teal-ink">
+              <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-teal-ink">
                 Answer saved to this application
               </p>
             )}
@@ -6629,7 +6754,15 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
                         This employer accepts more than one selection. Litos will not reduce it to one answer.
                       </p>
                       <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-                        {handoffUrl ?? portalUrl ? (
+                        {canFinishInDashboard ? (
+                          <ButtonLink href="#live-company-page" block className="sm:w-auto">
+                            Answer in this dashboard
+                          </ButtonLink>
+                        ) : attendedHandoffUrl ? (
+                          <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"} block className="sm:w-auto">
+                            {attendedHandoffState === "preparing" ? "Checking extension..." : "Open exact company form"}
+                          </Button>
+                        ) : !staysInsideLitos && (handoffUrl ?? portalUrl) ? (
                           <ButtonLink href={(handoffUrl ?? portalUrl)!} target="_blank" rel="noreferrer" block className="sm:w-auto">
                             Answer on company page
                           </ButtonLink>
@@ -6854,7 +6987,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           </div>
         )}
         <div className="mt-7 flex flex-wrap gap-2">
-          {canFinishInDashboard && <a href="#live-company-page" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Finish in this dashboard</a>}
+          {canFinishInDashboard && <ButtonLink href="#live-company-page">Finish in this dashboard</ButtonLink>}
           {attendedHandoffUrl && (
             <>
               <Button onClick={() => void openAttendedHandoff()} disabled={attendedHandoffState === "preparing"}>

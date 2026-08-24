@@ -1092,6 +1092,59 @@ test("a multi-value employer field cannot become a direct single-answer prompt",
   assert.equal(plan.metadataBlockers[0]?.kind, "unsupported_multi_value");
 });
 
+test("ambiguous or blank employer questions remain blockers after safe answers finish", () => {
+  const plan = directInputTaskPlan({
+    status: "needs_attention",
+    questions: [{
+      id: "start-date",
+      question: "When can you start?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+    }, {
+      id: "duplicate",
+      question: "Which office is your first choice?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+      portal_selector: "#first-office",
+    }, {
+      id: "duplicate",
+      question: "Which office is your second choice?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+      portal_selector: "#second-office",
+    }, {
+      id: "blank-label",
+      question: " ",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "text",
+      portal_selector: "#unknown-field",
+    }, {
+      id: "",
+      question: "Are you authorized to work here?",
+      answer: "",
+      kind: "required",
+      required: true,
+      portal_input_type: "radio",
+      portal_selector: "#work-authorization",
+      options: ["Yes", "No"],
+    }],
+  });
+
+  assert.deepEqual(plan.questionTasks.map((task) => task.question.id), ["start-date"]);
+  assert.ok(plan.metadataBlockers.some((blocker) => blocker.kind === "ambiguous_question_identity"));
+  assert.ok(plan.metadataBlockers.some((blocker) => blocker.kind === "missing_question_text"));
+  assert.equal(plan.current?.kind, "question");
+  assert.equal(plan.remaining, 1, "only the safe prompt counts as a direct task");
+});
+
 test("direct question fingerprints separate the prompt from the current answer state", () => {
   const first = directInputTaskPlan({
     status: "needs_attention",

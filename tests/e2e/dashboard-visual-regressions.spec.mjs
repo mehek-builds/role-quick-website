@@ -478,6 +478,7 @@ async function dashboardContext({
   contexts.push(context);
   let pendingResumeHistoryGate = null;
   let pendingReviewAnswerGate = null;
+  let pendingSubmissionReadGate = null;
   let pendingTranscriptAttachGate = null;
   let pendingResumeGenerateGate = null;
   let pendingBankSaveGate = null;
@@ -533,14 +534,38 @@ async function dashboardContext({
       pendingResumeHistoryGate = { markStarted, released, markSettled };
       return { started, release, settled };
     },
-    holdNextReviewAnswer({ status = 200, responseReview = null } = {}) {
+    holdNextReviewAnswer({ status = 200, responseReview = null, persistResponse = true } = {}) {
       let markStarted;
       let release;
       let markSettled;
       const started = new Promise((resolve) => { markStarted = resolve; });
       const released = new Promise((resolve) => { release = resolve; });
       const settled = new Promise((resolve) => { markSettled = resolve; });
-      pendingReviewAnswerGate = { markStarted, released, markSettled, status, responseReview };
+      pendingReviewAnswerGate = { markStarted, released, markSettled, status, responseReview, persistResponse };
+      return { started, release, settled };
+    },
+    setSubmissionFixture(applicationId, submission) {
+      liveSubmissionFixtures = {
+        ...liveSubmissionFixtures,
+        [applicationId]: submission,
+      };
+    },
+    waitForNextSubmissionRead(applicationId) {
+      let markStarted;
+      let markSettled;
+      const started = new Promise((resolve) => { markStarted = resolve; });
+      const settled = new Promise((resolve) => { markSettled = resolve; });
+      pendingSubmissionReadGate = { applicationId, markStarted, markSettled };
+      return { started, settled };
+    },
+    holdNextSubmissionRead(applicationId, response) {
+      let markStarted;
+      let release;
+      let markSettled;
+      const started = new Promise((resolve) => { markStarted = resolve; });
+      const released = new Promise((resolve) => { release = resolve; });
+      const settled = new Promise((resolve) => { markSettled = resolve; });
+      pendingSubmissionReadGate = { applicationId, response, markStarted, released, markSettled };
       return { started, release, settled };
     },
     holdNextTranscriptAttach(response) {
@@ -718,7 +743,7 @@ async function dashboardContext({
         };
         const status = gate?.status ?? 200;
         const responseReview = gate?.responseReview ?? (status === 202 ? current.review : updatedReview);
-        if (status !== 202 || gate?.responseReview) {
+        if ((status !== 202 || gate?.responseReview) && gate?.persistResponse !== false) {
           liveSubmissionFixtures = {
             ...liveSubmissionFixtures,
             [applicationId]: { ...current, review: responseReview },
@@ -1063,7 +1088,16 @@ async function dashboardContext({
         ? pathname.match(/^\/applications\/([^/]+)\/submission$/)
         : null;
       if (submissionMatch && liveSubmissionFixtures[submissionMatch[1]]) {
-        await fulfillJson(route, liveSubmissionFixtures[submissionMatch[1]]);
+        const readGate = pendingSubmissionReadGate?.applicationId === submissionMatch[1]
+          ? pendingSubmissionReadGate
+          : null;
+        if (readGate) {
+          pendingSubmissionReadGate = null;
+          readGate.markStarted();
+          if (readGate.released) await readGate.released;
+        }
+        await fulfillJson(route, readGate?.response ?? liveSubmissionFixtures[submissionMatch[1]]);
+        readGate?.markSettled();
         return;
       }
 
@@ -2430,7 +2464,10 @@ test("Application answers save one direct prompt and advance only after the serv
     await save.click();
     await gate.started;
 
-    await page.getByRole("button", { name: "Saving...", exact: true }).waitFor({ state: "visible" });
+    const savingAction = directPrompt.locator('button[type="submit"]');
+    await savingAction.waitFor({ state: "visible" });
+    assert.match(await savingAction.innerText(), /Saving/);
+    assert.equal(await savingAction.getAttribute("aria-disabled"), "true", "the direct answer action stayed operable while its write was pending");
     assert.equal(await openAnswer.inputValue(), savedAnswer, "the in-flight save erased the draft");
     assert.equal(await page.getByRole("heading", { name: closedQuestion, exact: true }).count(), 0, "the next question appeared before the write returned 200");
     assert.equal(await page.getByText("Saved to this application.", { exact: true }).count(), 0, "the receipt appeared before the write returned 200");
@@ -2443,7 +2480,7 @@ test("Application answers save one direct prompt and advance only after the serv
     await closedHeading.waitFor({ state: "visible", timeout: 10_000 });
     await closedChoices.waitFor({ state: "visible" });
     await page.waitForFunction(() => document.activeElement?.getAttribute("value") === "Yes");
-    await page.getByText("Saved to this application.", { exact: true }).waitFor({ state: "visible" });
+    await closedHeading.locator("xpath=ancestor::section[1]").getByText("Saved to this application.", { exact: true }).waitFor({ state: "visible" });
     await finishDashboardAnimations(page);
     const samples = await stopAnimationLog(page);
     const exit = samples.find((sample) => sample.name === "rq-dashboard-panel-exit");
@@ -2629,16 +2666,99 @@ test("An accepted answer cannot move a different selected application", async ()
     await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET_B.id}"]:visible`).click();
     const secondHeading = page.getByRole("heading", { name: secondApplicationQuestion, exact: true });
     await secondHeading.waitFor({ state: "visible" });
+    assert.equal(await page.getByText("Saved to this application.", { exact: true }).count(), 0, "application A published its receipt onto application B");
+
+    const interveningPoll = state.waitForNextSubmissionRead(DIRECT_ANSWER_PACKET.id);
+    await page.getByRole("button", { name: "Switch applications", exact: true }).click();
+    await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET.id}"]:visible`).click();
+    await page.getByRole("heading", { name: firstQuestion, exact: true }).waitFor({ state: "visible" });
+    await interveningPoll.started;
+    await interveningPoll.settled;
     gate.release();
     await gate.settled;
-    await secondHeading.waitFor({ state: "visible" });
-    assert.equal(await page.getByText("Saved to this application.", { exact: true }).count(), 0, "application A published its receipt onto application B");
+    const returnedQuestion = page.getByRole("heading", { name: nextQuestion, exact: true });
+    await returnedQuestion.waitFor({ state: "visible" });
+    assert.match(await returnedQuestion.locator("xpath=ancestor::section[1]").innerText(), /2 of 2/);
+    assert.equal(await page.getByRole("heading", { name: firstQuestion, exact: true }).count(), 0, "the accepted answer did not advance its own application");
+    assertNoPageErrors(state, "Cross-application direct answer ownership");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A newer application poll outranks an older accepted answer response", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [DIRECT_ANSWER_PACKET, DIRECT_ANSWER_PACKET_B],
+    submissionFixtures: {
+      [DIRECT_ANSWER_PACKET.id]: DIRECT_ANSWER_SUBMISSION,
+      [DIRECT_ANSWER_PACKET_B.id]: DIRECT_ANSWER_SUBMISSION_B,
+    },
+  });
+  const firstQuestion = "Where will you be based during this internship?";
+  const secondApplicationQuestion = "Which city would you work from?";
+  const newestQuestion = "Which working hours can you reliably cover?";
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET.id}"]:visible`).click();
+    const answer = page.getByRole("textbox", { name: firstQuestion, exact: true });
+    await answer.waitFor({ state: "visible", timeout: 10_000 });
+    await answer.fill("Dubai, United Arab Emirates");
+
+    const acceptedReview = {
+      ...DIRECT_ANSWER_PACKET.spec._review,
+      attention_reason: '"Are you willing to relocate for this role?" is required and is still empty',
+      questions: DIRECT_ANSWER_PACKET.spec._review.questions.map((question) => question.id === "direct-location"
+        ? { ...question, answer: "Dubai, United Arab Emirates" }
+        : question),
+      updated_at: "2026-08-24T12:02:00.000Z",
+    };
+    const newerReview = {
+      ...acceptedReview,
+      attention_reason: `"${newestQuestion}" is required and is still empty`,
+      questions: [
+        ...acceptedReview.questions.map((question) => question.id === "direct-relocation"
+          ? { ...question, answer: "Yes" }
+          : question),
+        {
+          id: "direct-working-hours",
+          question: newestQuestion,
+          answer: "",
+          kind: "required",
+          required: true,
+          portal_input_type: "text",
+          portal_selector: "#working_hours",
+        },
+      ],
+      updated_at: "2026-08-24T12:02:00.000Z",
+    };
+    const gate = state.holdNextReviewAnswer({ responseReview: acceptedReview, persistResponse: false });
+    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await gate.started;
+
+    const newerSubmission = {
+      ...DIRECT_ANSWER_SUBMISSION,
+      review: newerReview,
+    };
+    state.setSubmissionFixture(DIRECT_ANSWER_PACKET.id, newerSubmission);
+    const newerPoll = state.holdNextSubmissionRead(DIRECT_ANSWER_PACKET.id, newerSubmission);
+    await newerPoll.started;
+
+    await page.getByRole("button", { name: "Switch applications", exact: true }).click();
+    await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET_B.id}"]:visible`).click();
+    await page.getByRole("heading", { name: secondApplicationQuestion, exact: true }).waitFor({ state: "visible" });
+    newerPoll.release();
+    await newerPoll.settled;
+    gate.release();
+    await gate.settled;
+    assert.equal(await page.getByRole("heading", { name: newestQuestion, exact: true }).count(), 0, "application A replaced application B after its delayed response");
 
     await page.getByRole("button", { name: "Switch applications", exact: true }).click();
     await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET.id}"]:visible`).click();
-    await page.getByRole("heading", { name: nextQuestion, exact: true }).waitFor({ state: "visible" });
-    assert.equal(await page.getByRole("heading", { name: firstQuestion, exact: true }).count(), 0, "the accepted answer did not advance its own application");
-    assertNoPageErrors(state, "Cross-application direct answer ownership");
+    await page.getByRole("heading", { name: newestQuestion, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByRole("heading", { name: firstQuestion, exact: true }).count(), 0, "the delayed accepted response restored the older first question");
+    assert.equal(await page.getByRole("heading", { name: "Are you willing to relocate for this role?", exact: true }).count(), 0, "the delayed accepted response replaced the newer application snapshot");
+    assertNoPageErrors(state, "Newer application poll ownership");
   } finally {
     await context.close();
   }

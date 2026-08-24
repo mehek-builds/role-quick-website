@@ -97,11 +97,27 @@ export function questionReviewPresentation(
     metadataBlockers.push(blocker);
   };
   serverBlockers.forEach(addBlocker);
+  const questionIdCounts = new Map<string, number>();
+  for (const question of questions) {
+    const id = question.id.trim();
+    questionIdCounts.set(id, (questionIdCounts.get(id) ?? 0) + 1);
+  }
 
   const blockedQuestionIds = new Set<string>();
   for (const question of questions) {
     if (serverBlockers.some((blocker) => blockerMatchesQuestion(blocker, question))) {
       blockedQuestionIds.add(question.id);
+      continue;
+    }
+    if (!normalizedQuestionLabel(question.question)) {
+      blockedQuestionIds.add(question.id);
+      addBlocker(syntheticMetadataBlocker(question, "missing_question_text"));
+      continue;
+    }
+    const questionId = question.id.trim();
+    if (!questionId || questionIdCounts.get(questionId) !== 1) {
+      blockedQuestionIds.add(question.id);
+      addBlocker(syntheticMetadataBlocker(question, "ambiguous_question_identity"));
       continue;
     }
     if (questionLabelIsGenericAnswerControl(question.question)) {
