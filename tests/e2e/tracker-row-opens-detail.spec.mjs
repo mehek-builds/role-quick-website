@@ -233,6 +233,20 @@ const LEGACY_METADATA_BLOCKED = {
 
 const RESUMES = [NEEDS_YOU, READY, SENT];
 let resumeHistoryOverride = null;
+const HYDRATED_READY_BASE = thinPacket("hydrated-ready", "ready_to_submit", {
+  role: "Hydrated Application Engineer",
+  company: "Canonical Hydration",
+});
+const HYDRATED_READY = {
+  ...HYDRATED_READY_BASE,
+  spec: {
+    ...HYDRATED_READY_BASE.spec,
+    _review: {
+      ...HYDRATED_READY_BASE.spec._review,
+      portal_supported: true,
+    },
+  },
+};
 const CANONICAL_A = {
   id: "canonical-application-a",
   legacy_generated_resume_id: null,
@@ -252,8 +266,19 @@ const CANONICAL_B = {
   role: "Canonical Platform Engineer",
   portal_url: "https://jobs.example.invalid/canonical-b",
 };
+const CANONICAL_HYDRATED_READY = {
+  ...CANONICAL_A,
+  id: "canonical-hydrated-ready",
+  legacy_generated_resume_id: HYDRATED_READY.id,
+  company: HYDRATED_READY.job_context.company,
+  role: HYDRATED_READY.job_context.role,
+  portal_url: "https://jobs.example.invalid/hydrated-ready",
+  review_state: "ready_to_submit",
+  submission_state: "ready_to_submit",
+};
 let canonicalApplicationsOverride = null;
 let failApplicationHistory = false;
+let delayedExactHistory = null;
 
 /**
  * The rows under test, and the screen-specific control each must produce.
@@ -313,6 +338,12 @@ await context.route("**/*", async (route) => {
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ detail: "fixture history failure" }) });
         return;
       }
+      const exactApplicationId = parsedUrl.searchParams.get("application");
+      if (delayedExactHistory?.id === exactApplicationId) {
+        delayedExactHistory.reads += 1;
+        await json({ resumes: delayedExactHistory.reads > delayedExactHistory.emptyReads ? [delayedExactHistory.packet] : [] });
+        return;
+      }
       await json({ resumes: resumeHistoryOverride ?? RESUMES });
       return;
     }
@@ -333,7 +364,7 @@ await context.route("**/*", async (route) => {
          questions does not invent them 2.5 seconds later, and an answer that quietly filled the
          gap would let the poll paper over the very defect under test. */
       const id = pathname.split("/")[2];
-      const packet = RESUMES.find((item) => item.id === id) ?? NEEDS_YOU;
+      const packet = [...RESUMES, delayedExactHistory?.packet].find((item) => item?.id === id) ?? NEEDS_YOU;
       await json({ application_id: id, review: packet.spec._review, cover_letter: null });
       return;
     }
@@ -656,6 +687,40 @@ browserTest("a failed canonical Back load never leaves the prior application's c
     await page.getByRole("button", { name: "Open and fill application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   } finally {
     failApplicationHistory = false;
+    canonicalApplicationsOverride = null;
+  }
+});
+
+browserTest("Continue to send opens a packet when hydration finishes on its already-current URL", async () => {
+  canonicalApplicationsOverride = [CANONICAL_HYDRATED_READY];
+  resumeHistoryOverride = [];
+  delayedExactHistory = {
+    id: HYDRATED_READY.id,
+    packet: HYDRATED_READY,
+    /* The apply-route bootstrap performs the first two exact reads. Returning the packet on the
+       next routing-hydration read reproduces the production state: the canonical summary is still
+       open, the browser already names the restored packet id, and Continue to send appears later. */
+    emptyReads: 2,
+    reads: 0,
+  };
+  try {
+    pageErrors = [];
+    await page.goto(`${ORIGIN}/dashboard/applications?application=${HYDRATED_READY.id}&intent=apply`, { waitUntil: "domcontentloaded" });
+    const continueButton = page.getByRole("button", { name: "Continue to send", exact: true });
+    await continueButton.waitFor({ state: "visible", timeout: 20_000 });
+    assert.equal(new URL(page.url()).searchParams.get("application"), HYDRATED_READY.id);
+    assert.ok(delayedExactHistory.reads >= 3, "the row never reached the delayed routing-hydration state");
+
+    await continueButton.click();
+
+    await page.getByRole("button", { name: "Review and fill", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(new URL(page.url()).searchParams.get("application"), HYDRATED_READY.id, "the packet workspace and URL diverged");
+    assert.equal(await continueButton.count(), 0, "the canonical summary stayed open after the explicit handoff");
+    assert.deepEqual(pageErrors, []);
+    assert.deepEqual(blockedExternal, []);
+  } finally {
+    delayedExactHistory = null;
+    resumeHistoryOverride = null;
     canonicalApplicationsOverride = null;
   }
 });

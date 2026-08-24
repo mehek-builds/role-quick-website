@@ -193,10 +193,9 @@ test("application task screens use one keyed peer-panel transition", () => {
     continueStart,
     applications.indexOf("fillBusy={creating", continueStart),
   );
-  const pendingTaskFocus = continueToSend.indexOf("pendingApplicationFocusRef.current = true;");
-  const sameRouteBranch = continueToSend.indexOf("if (searchParams.get(\"application\")");
-  const newRouteBranch = continueToSend.indexOf("const params = new URLSearchParams", sameRouteBranch);
-  assert.ok(pendingTaskFocus > 0 && sameRouteBranch > pendingTaskFocus && newRouteBranch > sameRouteBranch);
+  assert.match(continueToSend, /if \(!canonicalReadyToSend\) return;/);
+  assert.match(continueToSend, /openApplication\(canonicalReadyToSend, \{ history: "replace" \}\);/);
+  assert.doesNotMatch(continueToSend, /router\.replace\(|selectPacket\(/);
 });
 
 test("local QA application tasks are not retired by URL reconciliation", () => {
