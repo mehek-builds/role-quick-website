@@ -61,7 +61,24 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   );
 
   assert.match(dashboard, /await prepareApplication\(questions\)/);
-  assert.match(dashboard, /missingRequiredAnswers\.length > 0/);
+  assert.match(dashboard, /function routeMissingRequiredAnswers\([\s\S]{0,420}reviewPortalQuestions\(firstMissing\.id, "answer"\)[\s\S]{0,260}moveToScreen\("questions", \{ scrollToTop: false \}\)/);
+  const verifiedPacketStart = dashboard.indexOf("async function continueFromVerifiedPacket()");
+  const verifiedPacketEnd = dashboard.indexOf("function reviewPacketAgain()", verifiedPacketStart);
+  const verifiedPacket = dashboard.slice(verifiedPacketStart, verifiedPacketEnd);
+  assert.ok(verifiedPacketStart > 0 && verifiedPacketEnd > verifiedPacketStart);
+  assert.ok(
+    verifiedPacket.indexOf("routeMissingRequiredAnswers(questions)")
+      < verifiedPacket.indexOf("/packet-audit/acknowledge"),
+    "newly discovered questions must open before the packet approval is spent",
+  );
+  const prepareStart = dashboard.indexOf("async function prepareApplication(");
+  const prepareEnd = dashboard.indexOf("async function completeHandoff", prepareStart);
+  const prepare = dashboard.slice(prepareStart, prepareEnd);
+  assert.match(prepare, /routeMissingRequiredAnswers\(finalQuestions\)/);
+  assert.ok(
+    prepare.indexOf("routeMissingRequiredAnswers(finalQuestions)") < prepare.indexOf("/submit-request"),
+    "every preparation path must route blanks to their controls before a backend request",
+  );
   assert.match(dashboard, /reviewDiscovered \? "Review answers" : "Answer these"/);
   // The button was "Prepare application" and the bar under it ran to nineteen words about
   // "automation permission". Both were rewritten in the 2026-07-26 UX pass; the gate they
@@ -470,10 +487,10 @@ test("the review screen gates and performs the submission", async () => {
     readFile(new URL("../features/applications/domain/packet-evidence-session.ts", import.meta.url), "utf8"),
   ]);
 
-  // A required question with no answer stops the send, on the screen that can also collect it.
-  assert.match(review, /questions\.filter\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
+  // A required question with no answer opens the screen that can collect it before any request.
+  assert.match(review, /candidateQuestions\.find\(\(question\) => question\.required && !question\.answer\.trim\(\)\)/);
   assert.match(review, /allowServerAnswerRefresh\?: boolean/);
-  assert.match(review, /!options\.allowServerAnswerRefresh && finalQuestions\.some/);
+  assert.match(review, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(finalQuestions\)/);
   assert.match(review, /prepareApplication\(currentQuestions, \{ allowServerAnswerRefresh: true \}\)/);
   // Both endpoints: the first request, and the approval of a run already waiting on the student.
   assert.match(review, /\/submit-request/);

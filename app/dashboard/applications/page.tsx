@@ -2715,6 +2715,26 @@ function Applications() {
     }
   }
 
+  /* A live employer read can discover required questions after the applicant has already opened
+     packet review. Every route that notices those blanks must lead to the answer controls, not
+     leave a red sentence above a packet whose only primary action repeats the same refusal. A
+     stopped managed run uses the server-backed question editor so Save persists the answers. A
+     pre-fill packet keeps the answers locally until its submit request, as before. */
+  function routeMissingRequiredAnswers(candidateQuestions: ApplicationQuestion[] = questions): boolean {
+    const firstMissing = candidateQuestions.find((question) => question.required && !question.answer.trim());
+    if (!firstMissing) return false;
+    setError(null);
+    setPrescriptNote("");
+    if (selectedSubmission?.review.status === "needs_attention") {
+      reviewPortalQuestions(firstMissing.id, "answer");
+      return true;
+    }
+    setQuestions(candidateQuestions);
+    setFocusQuestion({ id: firstMissing.id, token: Date.now() });
+    moveToScreen("questions", { scrollToTop: false });
+    return true;
+  }
+
   async function continueFromResume() {
     if (coverLetterBusy) {
       setError("Wait for the cover letter check to finish before preparing the application.");
@@ -2733,11 +2753,7 @@ function Applications() {
     const alreadyFilled = canonicalReview.status === "ready_for_final_approval";
     if (!alreadyFilled && !qaMode && !(await saveCoverLetter())) return;
     if (selectedIdRef.current !== applicationId) return;
-    const missingRequiredAnswers = questions.filter((question) => question.required && !question.answer.trim());
-    if (missingRequiredAnswers.length > 0) {
-      moveToScreen("questions");
-      return;
-    }
+    if (routeMissingRequiredAnswers(questions)) return;
     if (qaMode) {
       setError("Packet auditing is unavailable in fixture mode.");
       return;
@@ -2858,6 +2874,10 @@ function Applications() {
       setError(packetEvidenceBlocker ?? "Audit and load the exact packet before continuing.");
       return;
     }
+    /* Questions can arrive from the live form after the audit that put this packet on screen. Do
+       not spend the approval on a packet that cannot proceed, and do not make the applicant press
+       the same button again to discover where those answers live. */
+    if (routeMissingRequiredAnswers(questions)) return;
     const applicationId = activePacketEvidence.applicationId;
     if (packetAuditInFlight.current === applicationId) return;
     packetAuditInFlight.current = applicationId;
@@ -2930,10 +2950,7 @@ function Applications() {
   ) {
     if (!selected) return;
     const applicationId = selected.id;
-    if (!options.allowServerAnswerRefresh && finalQuestions.some((question) => question.required && !question.answer.trim())) {
-      setError("Some answers are missing. Add them first.");
-      return;
-    }
+    if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(finalQuestions)) return;
     setPrepareStartedAt(new Date().toISOString());
     setSubmittingPhase("preparing");
     moveToScreen("submitting");
