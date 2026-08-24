@@ -95,7 +95,7 @@ test("non-question work stays actionable while trusted questions render as a dir
      whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
   assert.match(page, /<DirectApplicationQuestion[\s\S]*?task=\{currentDirectQuestion\}[\s\S]*?onSave=\{saveCurrentDirectQuestion\}/);
   assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\}/);
-  assert.match(page, /onSaveQuestion=\{\(questionId, answer, intent, taskFingerprint\) => saveReviewedAnswers\(\{ questionId, answer, intent, taskFingerprint \}\)\}/);
+  assert.match(page, /onSaveQuestion=\{\(questionId, answer, intent, promptFingerprint, taskFingerprint\) => saveReviewedAnswers\(\{ questionId, answer, intent, promptFingerprint, taskFingerprint \}\)\}/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
   assert.match(page, /onToggleAcknowledged=\{\(item, acknowledged\) => void toggleAttentionAcknowledgement\(item, acknowledged\)\}/);

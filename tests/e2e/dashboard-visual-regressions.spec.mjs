@@ -533,14 +533,14 @@ async function dashboardContext({
       pendingResumeHistoryGate = { markStarted, released, markSettled };
       return { started, release, settled };
     },
-    holdNextReviewAnswer({ status = 200 } = {}) {
+    holdNextReviewAnswer({ status = 200, responseReview = null } = {}) {
       let markStarted;
       let release;
       let markSettled;
       const started = new Promise((resolve) => { markStarted = resolve; });
       const released = new Promise((resolve) => { release = resolve; });
       const settled = new Promise((resolve) => { markSettled = resolve; });
-      pendingReviewAnswerGate = { markStarted, released, markSettled, status };
+      pendingReviewAnswerGate = { markStarted, released, markSettled, status, responseReview };
       return { started, release, settled };
     },
     holdNextTranscriptAttach(response) {
@@ -717,8 +717,8 @@ async function dashboardContext({
           updated_at: "2026-08-24T12:00:00.000Z",
         };
         const status = gate?.status ?? 200;
-        const responseReview = status === 202 ? current.review : updatedReview;
-        if (status !== 202) {
+        const responseReview = gate?.responseReview ?? (status === 202 ? current.review : updatedReview);
+        if (status !== 202 || gate?.responseReview) {
           liveSubmissionFixtures = {
             ...liveSubmissionFixtures,
             [applicationId]: { ...current, review: responseReview },
@@ -2537,6 +2537,67 @@ test("A raced direct answer keeps the draft and current prompt", async () => {
     }]);
     await assertContained(page, "Raced direct answer at 390px");
     assertNoPageErrors(state, "Raced application answer");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A raced review preserves the same prompt draft and exposes a changed prompt recovery", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 390, height: 844 },
+    resumeHistoryFixture: [DIRECT_ANSWER_PACKET],
+    submissionFixtures: { [DIRECT_ANSWER_PACKET.id]: DIRECT_ANSWER_SUBMISSION },
+  });
+  const originalQuestion = "Where will you be based during this internship?";
+  const changedQuestion = "Which office location should Litos use for this application?";
+  const firstDraft = "Dubai, United Arab Emirates";
+  const changedPromptDraft = "Abu Dhabi, United Arab Emirates";
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET.id}"]:visible`).click();
+    const originalAnswer = page.getByRole("textbox", { name: originalQuestion, exact: true });
+    await originalAnswer.waitFor({ state: "visible", timeout: 10_000 });
+    await originalAnswer.fill(firstDraft);
+
+    const samePromptReview = {
+      ...DIRECT_ANSWER_PACKET.spec._review,
+      questions: DIRECT_ANSWER_PACKET.spec._review.questions.map((question) => question.id === "direct-location"
+        ? { ...question, answer_source: "runner", answer_reviewed_at: "2026-08-24T12:05:00.000Z" }
+        : question),
+      updated_at: "2026-08-24T12:05:00.000Z",
+    };
+    const samePromptGate = state.holdNextReviewAnswer({ status: 202, responseReview: samePromptReview });
+    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await samePromptGate.started;
+    samePromptGate.release();
+    await samePromptGate.settled;
+
+    await page.getByRole("alert").filter({ hasText: "were not saved" }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("heading", { name: originalQuestion, exact: true }).waitFor({ state: "visible" });
+    assert.equal(await originalAnswer.inputValue(), firstDraft, "a same-prompt task refresh discarded the held draft");
+
+    await originalAnswer.fill(changedPromptDraft);
+    const changedPromptReview = {
+      ...samePromptReview,
+      attention_reason: `"${changedQuestion}" is required and is still empty`,
+      questions: samePromptReview.questions.map((question) => question.id === "direct-location"
+        ? { ...question, question: changedQuestion, portal_selector: "#office_location" }
+        : question),
+      updated_at: "2026-08-24T12:06:00.000Z",
+    };
+    const changedPromptGate = state.holdNextReviewAnswer({ status: 202, responseReview: changedPromptReview });
+    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await changedPromptGate.started;
+    changedPromptGate.release();
+    await changedPromptGate.settled;
+
+    const recovery = page.getByRole("alert").filter({ hasText: "This employer field changed before your answer was saved." });
+    await recovery.waitFor({ state: "visible", timeout: 10_000 });
+    assert.match(await recovery.innerText(), new RegExp(changedPromptDraft), "the changed-prompt recovery hid the unsaved answer");
+    await page.getByRole("heading", { name: changedQuestion, exact: true }).waitFor({ state: "visible" });
+    assert.equal(await page.getByRole("heading", { name: originalQuestion, exact: true }).count(), 0, "the outdated employer prompt remained visible");
+    assert.equal(state.reviewAnswerWrites.length, 2, "the prompt-race fixture did not exercise both refused writes");
+    assertNoPageErrors(state, "Changed direct answer prompt recovery");
   } finally {
     await context.close();
   }
