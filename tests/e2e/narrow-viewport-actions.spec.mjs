@@ -342,18 +342,13 @@ for (const vp of VIEWPORTS) {
 
 
 /**
- * The OTHER screen this change touches.
- *
- * The review screen was the reported one, so it was the only one asserted, and a green suite read
- * as "the change is covered" when half of it was not. QuestionsScreen is the same trap one step
- * later: N six-row textareas and then the button that ends the screen. It also has a shape the
- * review screen does not, and it is the shape most likely to break a bottom-sticky element: when
- * few questions are unanswered the wrapper is SHORTER than the viewport, so the bar has no travel
- * and must simply sit in flow without floating over anything or clipping.
+ * A stopped application now asks one trusted employer question directly. The action must be
+ * reachable without first finding a checklist row, and the compact prompt must keep that action
+ * clear of the mobile navigation both before and after the user scrolls.
  */
 for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
   const label = `${vp.width}x${vp.height}`;
-  test(`the questions screen's terminal action is reachable at ${label}`, async () => {
+  test(`the direct answer action is reachable at ${label}`, async () => {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
     await context.route("**/*", async (route) => {
       const url = route.request().url();
@@ -394,44 +389,39 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
 
     const page = await context.newPage();
     try {
-      /* A needs_attention packet lands on the portal screen, and "Answer" is the
-         supported route into QuestionsScreen without pressing anything that sends. */
+      /* A needs_attention packet exposes its one safe question immediately. Filling the local
+         draft makes the primary action real without pressing anything that writes or sends. */
       await page.goto(`${ORIGIN}/dashboard/applications?state=action`, { waitUntil: "domcontentloaded" });
       const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
       await rows.first().waitFor({ state: "visible", timeout: 20_000 });
       await rows.first().click();
-      const check = page.getByRole("button", { name: /^Answer:/ });
-      await check.waitFor({ state: "visible", timeout: 20_000 });
-      await check.click();
+      const prompt = page.locator('main section[aria-labelledby^="direct-application-question-"]');
+      await prompt.waitFor({ state: "visible", timeout: 20_000 });
+      assert.equal(await prompt.count(), 1, "the application exposed more than one direct question");
+      assert.equal(await page.getByRole("button", { name: /^Answer:/ }).count(), 0, "the old checklist action returned");
+      await prompt.getByRole("textbox").fill("Dubai, United Arab Emirates");
 
-      const save = page.getByRole("button", { name: "Save" });
+      const save = prompt.getByRole("button", { name: "Save to application", exact: true });
       await save.waitFor({ state: "visible", timeout: 20_000 });
       await page.waitForTimeout(600);
 
-      const atRest = await page.evaluate(PROBE, { label: "questions, no scrolling", action: "Save" });
-      assert.equal(atRest.found, true, "the questions screen did not render its terminal action");
+      const atRest = await page.evaluate(PROBE, { label: "direct answer, no scrolling", action: "Save to application" });
+      assert.equal(atRest.found, true, "the direct prompt did not render its save action");
       assert.equal(atRest.visibility, "visible");
-      assert.ok(atRest.fullyInViewport, `the questions action was not on screen at ${label}: ${JSON.stringify(atRest)}`);
-      assert.deepEqual(atRest.misses, [], `something is painted over the questions action at ${label}: ${JSON.stringify(atRest.misses)}`);
-      assert.equal(atRest.occludedByNav, false, `the questions action overlaps the tab bar at ${label}: ${JSON.stringify(atRest)}`);
+      assert.ok(atRest.fullyInViewport, `the direct answer action was not on screen at ${label}: ${JSON.stringify(atRest)}`);
+      assert.deepEqual(atRest.misses, [], `something is painted over the direct answer action at ${label}: ${JSON.stringify(atRest.misses)}`);
+      assert.equal(atRest.occludedByNav, false, `the direct answer action overlaps the tab bar at ${label}: ${JSON.stringify(atRest)}`);
 
       await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
       await page.waitForTimeout(600);
-      const atEnd = await page.evaluate(PROBE, { label: "questions, scrolled to the end", action: "Save" });
-      assert.ok(atEnd.fullyInViewport, `at the end of the questions screen the action was off screen at ${label}: ${JSON.stringify(atEnd)}`);
+      const atEnd = await page.evaluate(PROBE, { label: "direct answer, scrolled to the end", action: "Save to application" });
+      assert.ok(atEnd.fullyInViewport, `at the end of the direct prompt the action was off screen at ${label}: ${JSON.stringify(atEnd)}`);
       assert.deepEqual(atEnd.misses, [], JSON.stringify(atEnd.misses));
       assert.equal(atEnd.occludedByNav, false, JSON.stringify(atEnd));
 
-      /* The stuck and settled positions must COINCIDE. They were 40px apart in the first cut, so
-         the button jumped upward on the last scroll increment. */
-      assert.ok(
-        Math.abs(atEnd.top - atRest.top) <= 2,
-        `the action moved ${Math.abs(atEnd.top - atRest.top)}px between its stuck and settled positions at ${label}. It must park where it rests.`,
-      );
-
       assert.deepEqual(blockedExternal, [], "a request tried to leave this machine");
     } catch (reason) {
-      await captureFailure(`questions-${label}`, page, reason);
+      await captureFailure(`direct-answer-${label}`, page, reason);
       throw reason;
     } finally {
       await context.close().catch(() => {});
