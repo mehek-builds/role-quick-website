@@ -395,7 +395,7 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
       const rows = page.locator('section[aria-labelledby="application-ledger-heading"] button[aria-pressed]:visible');
       await rows.first().waitFor({ state: "visible", timeout: 20_000 });
       await rows.first().click();
-      const prompt = page.locator('main section[aria-labelledby^="direct-application-question-"]');
+      const prompt = page.getByRole("region", { name: "Why do you want to work here?", exact: true });
       await prompt.waitFor({ state: "visible", timeout: 20_000 });
       assert.equal(await prompt.count(), 1, "the application exposed more than one direct question");
       assert.equal(await page.getByRole("button", { name: /^Answer:/ }).count(), 0, "the old checklist action returned");
@@ -403,6 +403,7 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
 
       const save = prompt.getByRole("button", { name: "Save to application", exact: true });
       await save.waitFor({ state: "visible", timeout: 20_000 });
+      assert.equal(await save.isEnabled(), true, "the completed direct answer could not be saved");
       await page.waitForTimeout(600);
 
       const atRest = await page.evaluate(PROBE, { label: "direct answer, no scrolling", action: "Save to application" });
