@@ -1,17 +1,16 @@
 import path from "node:path";
 
-export function dashboardVisualBaselinePlatform() {
-  const configured = process.env.DASHBOARD_VISUAL_BASELINE_PLATFORM?.trim();
-  const platform = configured || process.platform;
+export const DASHBOARD_VISUAL_CAPTURE_METADATA = "capture-platform.json";
+
+export function dashboardVisualBaselineRoot(cwd = process.cwd()) {
+  return path.join(cwd, "tests", "visual-baselines", "dashboard");
+}
+
+export function dashboardVisualBaselineDirectory(cwd = process.cwd(), platform = process.platform) {
   if (platform !== "darwin" && platform !== "linux") {
     throw new Error(`dashboard visual baselines do not support ${platform}`);
   }
-  return platform;
-}
-
-export function dashboardVisualBaselineDirectory(cwd = process.cwd()) {
-  const directory = dashboardVisualBaselinePlatform() === "linux" ? "dashboard-linux" : "dashboard";
-  return path.join(cwd, "tests", "visual-baselines", directory);
+  return path.join(dashboardVisualBaselineRoot(cwd), platform);
 }
 
 export function dashboardVisualArtifactDirectory(cwd = process.cwd()) {

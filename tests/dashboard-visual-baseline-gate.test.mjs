@@ -4,6 +4,7 @@ import test from "node:test";
 import sharp from "sharp";
 
 import { compareNormalizedDashboardVisuals, normalizeDashboardVisual } from "./e2e/dashboard-visual-comparator.mjs";
+import { dashboardVisualBaselineDirectory } from "./e2e/dashboard-visual-paths.mjs";
 
 const [packageSource, browserSource, updaterSource, comparatorSource, pathsSource, workflowSource] = await Promise.all([
   readFile(new URL("../package.json", import.meta.url), "utf8"),
@@ -26,25 +27,47 @@ test("visual baseline approval runs only after a successful browser process", ()
 });
 
 test("visual evidence uses an approved baseline from the rendering platform", async () => {
+  assert.match(dashboardVisualBaselineDirectory("/fixture", "darwin"), /dashboard\/darwin$/);
+  assert.match(dashboardVisualBaselineDirectory("/fixture", "linux"), /dashboard\/linux$/);
+  assert.throws(() => dashboardVisualBaselineDirectory("/fixture", "win32"), /do not support win32/);
   assert.match(browserSource, /dashboardVisualBaselineDirectory\(\)/);
-  assert.match(updaterSource, /dashboardVisualBaselineDirectory\(\)/);
-  assert.match(pathsSource, /dashboardVisualBaselinePlatform\(\) === "linux" \? "dashboard-linux" : "dashboard"/);
-  assert.match(workflowSource, /name: Dashboard visual regressions spec[\s\S]{0,180}DASHBOARD_VISUAL_BASELINE_PLATFORM: linux/);
+  assert.match(updaterSource, /dashboardVisualBaselineDirectory\(process\.cwd\(\), captureMetadata\.platform\)/);
+  assert.match(pathsSource, /platform = process\.platform/);
+  assert.match(pathsSource, /platform !== "darwin" && platform !== "linux"/);
+  assert.doesNotMatch(pathsSource, /DASHBOARD_VISUAL_BASELINE_PLATFORM/);
+  assert.doesNotMatch(workflowSource, /DASHBOARD_VISUAL_BASELINE_PLATFORM/);
+  assert.match(browserSource, /normalizedVisualBuffer\(currentPath\),\s*normalizedVisualBuffer\(baselinePath\)/);
+  assert.match(updaterSource, /await rm\(baselineDir, \{ recursive: true, force: true \}\)/);
+  assert.doesNotMatch(updaterSource, /await rm\(baselineRoot/);
+  assert.match(updaterSource, /approvedScreenshots\.push\(\{ name, source \}\)[\s\S]+await rm\(baselineDir/);
+  assert.match(updaterSource, /capture artifacts and approved baselines must be separate directories/);
+  assert.match(updaterSource, /await copyFile\(source, path\.join\(baselineDir, name\)\)/);
 
-  const approvedNames = async (directory) => (await readdir(new URL(`visual-baselines/${directory}/`, import.meta.url)))
+  const manifest = JSON.parse(await readFile(new URL("visual-baselines/dashboard/manifest.json", import.meta.url), "utf8"));
+  const manifestNames = Object.keys(manifest).sort();
+  const approvedNames = async (platform) => (await readdir(new URL(`visual-baselines/dashboard/${platform}/`, import.meta.url)))
     .filter((name) => name.endsWith(".png"))
     .sort();
   const [macNames, linuxNames] = await Promise.all([
-    approvedNames("dashboard"),
-    approvedNames("dashboard-linux"),
+    approvedNames("darwin"),
+    approvedNames("linux"),
   ]);
-  assert.equal(macNames.length, 70);
+  assert.deepEqual(macNames, manifestNames);
   assert.deepEqual(linuxNames, macNames, "macOS and Linux must approve the same visual evidence set");
+
+  for (const platform of ["darwin", "linux"]) {
+    const capture = JSON.parse(await readFile(new URL(`visual-baselines/dashboard/${platform}/capture-platform.json`, import.meta.url), "utf8"));
+    assert.equal(capture.platform, platform);
+    for (const name of manifestNames) {
+      const baseline = await readFile(new URL(`visual-baselines/dashboard/${platform}/${name}`, import.meta.url));
+      const metadata = await sharp(baseline).metadata();
+      assert.deepEqual({ width: metadata.width, height: metadata.height }, manifest[name], `${platform}/${name} lost its raw viewport dimensions`);
+    }
+  }
 });
 
 test("visual comparison catches both broad drift and a localized missing control", () => {
   assert.match(comparatorSource, /resize\(256, 256/);
-  assert.match(updaterSource, /resize\(256, 256/);
   assert.match(browserSource, /compareNormalizedDashboardVisuals\(current, baseline\)/);
   assert.match(browserSource, /assert\.deepEqual\(screenshotNames, baselineNames/);
   assert.match(browserSource, /changed viewport dimensions/);

@@ -10,7 +10,7 @@
 
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, readdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import test from "node:test";
@@ -20,12 +20,17 @@ import sharp from "sharp";
 
 import { BACKEND_ORIGIN, RESUMES, SESSION_TOKEN, STUB } from "./fixture-data.mjs";
 import { compareNormalizedDashboardVisuals, normalizeDashboardVisual } from "./dashboard-visual-comparator.mjs";
-import { dashboardVisualArtifactDirectory, dashboardVisualBaselineDirectory } from "./dashboard-visual-paths.mjs";
+import {
+  DASHBOARD_VISUAL_CAPTURE_METADATA,
+  dashboardVisualArtifactDirectory,
+  dashboardVisualBaselineDirectory,
+  dashboardVisualBaselineRoot,
+} from "./dashboard-visual-paths.mjs";
 import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 const ARTIFACT_DIR = dashboardVisualArtifactDirectory();
 const VISUAL_BASELINE_DIR = dashboardVisualBaselineDirectory();
-const VISUAL_BASELINE_MANIFEST = path.join(VISUAL_BASELINE_DIR, "manifest.json");
+const VISUAL_BASELINE_MANIFEST = path.join(dashboardVisualBaselineRoot(), "manifest.json");
 const CAPTURE_VISUAL_BASELINES = process.env.DASHBOARD_VISUAL_BASELINE_MODE === "capture";
 const contexts = [];
 const unknownExternal = [];
@@ -82,6 +87,13 @@ test.before(async () => {
   });
   await waitForServer(ORIGIN, server);
   browser = await chromium.launch();
+  const playwrightPackage = JSON.parse(await readFile(path.join(process.cwd(), "node_modules", "playwright-core", "package.json"), "utf8"));
+  await writeFile(path.join(ARTIFACT_DIR, DASHBOARD_VISUAL_CAPTURE_METADATA), `${JSON.stringify({
+    platform: process.platform,
+    arch: process.arch,
+    playwright: playwrightPackage.version,
+    browser: browser.version(),
+  }, null, 2)}\n`);
 });
 
 const ACCOUNT_FIXTURES = {
@@ -1024,7 +1036,7 @@ async function verifyVisualBaselines() {
     );
     const [current, baseline] = await Promise.all([
       normalizedVisualBuffer(currentPath),
-      sharp(baselinePath).removeAlpha().raw().toBuffer(),
+      normalizedVisualBuffer(baselinePath),
     ]);
     assert.equal(current.length, baseline.length, `${name} baseline shape changed`);
     const comparison = compareNormalizedDashboardVisuals(current, baseline);
@@ -2877,6 +2889,7 @@ test("Resume saves survive a Documents tab remount without overlap or stale repl
     );
     assert.equal(await remountedBankSave.isDisabled(), true, "the remounted workspace exposed a second save");
     assert.equal(state.bankSaveWrites, 1, "tab remount started a second experience-bank PUT");
+    await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "resume-held-save-tab-remount");
 
     heldBankSave.release();
