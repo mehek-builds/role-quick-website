@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/app/Button";
 import { Chip } from "@/components/app/ui";
+import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
   MAX_APPLICATION_DOCUMENT_BYTES,
   attachApplicationDocument,
@@ -81,16 +82,22 @@ export function TranscriptModal({
   onClose: () => void;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLButtonElement>(null);
   const closeButton = useRef<HTMLButtonElement>(null);
-  /* onClose read through a ref so the effect below can hold [] deps and run exactly once. The 2.5s
-     submission poll re-renders this modal's parent on every tick, and an effect keyed on onClose
-     would tear the focus trap down and rebuild it each time, running the cleanup's focus restore and
-     throwing a keyboard user out of an open dialog while she is reading it. */
+  /* onClose is read through a ref so the focus trap can depend only on the overlay lifecycle's
+     stable requestClose function. The 2.5s submission poll re-renders this modal's parent on every
+     tick, and an effect keyed on onClose would tear the focus trap down and rebuild it each time,
+     running the cleanup's focus restore and throwing a keyboard user out while she is reading. */
   const onCloseRef = useRef(onClose);
   /* Assigned in an effect, not during render: writing a ref during render is a React rule violation
      because it mutates state the renderer may discard. */
   useEffect(() => {
     onCloseRef.current = onClose;
+  });
+  const { closing, requestClose } = useDashboardOverlayExit({
+    dialogRef: dialog,
+    backdropRef: backdrop,
+    onExitComplete: () => onCloseRef.current(),
   });
 
   const [chosen, setChosen] = useState<File | null>(null);
@@ -124,9 +131,13 @@ export function TranscriptModal({
     closeButton.current?.focus();
 
     function onKey(event: KeyboardEvent) {
+      if (dialog.current?.hasAttribute("inert")) {
+        if (event.key === "Tab") event.preventDefault();
+        return;
+      }
       if (event.key === "Escape") {
         event.stopPropagation();
-        onCloseRef.current();
+        requestClose();
         return;
       }
       if (event.key !== "Tab" || !dialog.current) return;
@@ -135,9 +146,16 @@ export function TranscriptModal({
          file input and a checkbox, and a ring computed from a selector that cannot see them puts the
          real last focusable element outside the ring, so Tab walks straight out into the page behind
          an aria-modal dialog. */
-      const focusable = dialog.current.querySelectorAll<HTMLElement>(
-        'button, a[href], input:not([type="hidden"]), [tabindex]:not([tabindex="-1"])',
-      );
+      const focusable = [...dialog.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([type="hidden"]):not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )].filter((element) => {
+        const style = window.getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return style.display !== "none"
+          && style.visibility !== "hidden"
+          && rect.width > 0
+          && rect.height > 0;
+      });
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first || !last) return;
@@ -154,9 +172,16 @@ export function TranscriptModal({
     return () => {
       document.removeEventListener("keydown", onKey);
       document.body.style.overflow = overflow;
-      previous?.focus?.();
+      window.requestAnimationFrame(() => {
+        previous?.focus?.();
+        if (previous?.isConnected && document.activeElement === previous) return;
+        const taskHeading = document.getElementById("application-ledger-heading");
+        const pageHeading = document.querySelector<HTMLElement>("main h1");
+        const fallback = taskHeading instanceof HTMLElement ? taskHeading : pageHeading;
+        fallback?.focus({ preventScroll: true });
+      });
     };
-  }, []);
+  }, [requestClose]);
 
   /* Focus lands on Keep, never on Remove, exactly as it does in the account page's dialog. Left
      where it was, the destructive control appears under a finger already on Enter and the
@@ -225,6 +250,10 @@ export function TranscriptModal({
         reuse,
         employerLabel: wording || null,
       });
+      /* The attach control disappears when this commit changes the stage. Move focus to the one
+         control shared by every stage before React removes the initiator, so Chromium never has a
+         frame where the aria-modal dialog is open while document.body owns focus. */
+      closeButton.current?.focus();
       setLocalAttachment(result.attachment);
       setLocalSize(result.document.byte_size);
       onAttachmentChange(kind, result.attachment);
@@ -243,7 +272,7 @@ export function TranscriptModal({
       const result = await recordOrderedApplicationDocument(applicationId, kind);
       setLocalAttachment(result.attachment);
       onAttachmentChange(kind, result.attachment);
-      onClose();
+      requestClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Litos could not record that. Try it again.");
       setBusy(null);
@@ -328,17 +357,20 @@ export function TranscriptModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
       <button
+        ref={backdrop}
         aria-hidden="true"
         tabIndex={-1}
-        onClick={onClose}
-        className="absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px]"
+        onClick={() => requestClose()}
+        className={`rq-dashboard-backdrop absolute inset-0 cursor-default bg-ink/25 backdrop-blur-[2px] ${closing ? "rq-dashboard-backdrop-exit" : ""}`}
       />
       <div
         ref={dialog}
         role="dialog"
         aria-modal="true"
         aria-label={dialogName}
-        className="relative flex max-h-[92svh] w-full max-w-xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay"
+        aria-hidden={closing || undefined}
+        inert={closing || undefined}
+        className={`rq-dashboard-dialog relative flex max-h-[92svh] w-full max-w-xl flex-col overflow-hidden rounded-card border border-border bg-surface shadow-overlay ${closing ? "rq-dashboard-dialog-exit" : ""}`}
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
           <div className="min-w-0">
@@ -358,7 +390,7 @@ export function TranscriptModal({
             {stage === "attached" && <Chip label="Ready" kind="verified" />}
             <button
               ref={closeButton}
-              onClick={onClose}
+              onClick={() => requestClose()}
               className="rounded-full border border-border px-3 py-1.5 text-[12px] font-medium text-muted transition-colors hover:border-ink hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
             >
               Close
@@ -522,13 +554,23 @@ export function TranscriptModal({
         <div className="flex flex-wrap items-center gap-2 border-t border-border px-5 py-4 sm:px-6">
           {stage === "ask" && (
             <>
-              <Button onClick={() => void attach()} disabled={!chosen || busy !== null}>
+              {/* Keep the live initiator focusable while its request is pending. Native disabled on
+                  a focused button makes Chromium move focus to body, outside this dialog's trap.
+                  No-file is still a real disabled state; once a file exists, aria-disabled plus
+                  attach()'s synchronous busy guard blocks repeats without removing the focus stop. */}
+              <Button
+                data-transcript-action="attach"
+                onClick={() => void attach()}
+                disabled={!chosen}
+                aria-disabled={busy !== null}
+                aria-busy={busy === "attaching"}
+              >
                 {busy === "attaching" ? "Attaching..." : "Attach and continue"}
               </Button>
               {/* Closes and does nothing else, and the nothing is the point. This application stays
                   exactly where it is, waiting on her, rather than being cancelled or marked as
                   something she declined. The row on the screen behind is still there afterwards. */}
-              <Button onClick={onClose} variant="secondary" disabled={busy !== null}>Not for this one</Button>
+              <Button onClick={() => requestClose()} variant="secondary" disabled={busy !== null}>Not for this one</Button>
             </>
           )}
           {stage === "official" && (
@@ -536,10 +578,22 @@ export function TranscriptModal({
               {/* Records the acknowledgement and NOTHING ELSE. It does not unblock the send: Litos
                   cannot produce a sealed transcript, so offering to send after this would be offering
                   to send an application the employer is going to reject. */}
-              <Button onClick={() => void recordOrdered()} disabled={busy !== null}>
+              <Button
+                data-transcript-action="order"
+                onClick={() => void recordOrdered()}
+                aria-disabled={busy !== null}
+                aria-busy={busy === "ordering"}
+              >
                 {busy === "ordering" ? "Saving..." : "I’ve ordered it"}
               </Button>
-              <Button onClick={() => setUnofficialChosen(true)} variant="secondary" disabled={busy !== null}>
+              <Button
+                onClick={() => {
+                  closeButton.current?.focus();
+                  setUnofficialChosen(true);
+                }}
+                variant="secondary"
+                disabled={busy !== null}
+              >
                 Attach an unofficial copy anyway
               </Button>
             </>
@@ -548,13 +602,19 @@ export function TranscriptModal({
             <>
               {/* FORWARD, to the application this was blocking, not back to a list. She came here
                   from a blocked send and the only useful next thing is that send. */}
-              <Button onClick={onReviewApplication} disabled={busy !== null}>Review {company} application</Button>
+              <Button onClick={() => requestClose(onReviewApplication)} disabled={busy !== null}>Review {company} application</Button>
               {/* PER APPLICATION, and not the same decision as the one below it. Litos now attaches a
                   reusable file to later applications by itself, so "I do not want this employer to
                   have it" has to be answerable without also meaning "and forget the file". Secondary
                   rather than quiet: on a screen where a file arrived without her choosing it, taking
                   it off again is an ordinary thing to want, not a destructive one. */}
-              <Button onClick={() => void detach()} variant="secondary" disabled={busy !== null}>
+              <Button
+                data-transcript-action="detach"
+                onClick={() => void detach()}
+                variant="secondary"
+                aria-disabled={busy !== null}
+                aria-busy={busy === "detaching"}
+              >
                 {busy === "detaching" ? "Removing..." : `Not for ${company}`}
               </Button>
               {/* The control that makes the privacy sentence true. "We keep it until you remove it"
@@ -583,6 +643,7 @@ export function TranscriptModal({
                 variant="secondary"
                 onClick={() => {
                   if (busy) return;
+                  closeButton.current?.focus();
                   setConfirmingRemoval(false);
                 }}
                 aria-disabled={busy !== null}

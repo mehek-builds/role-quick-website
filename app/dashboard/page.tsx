@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ensureExtensionSession } from "@/lib/extension-bridge";
 import {
@@ -16,11 +16,12 @@ import {
   type Targeting,
 } from "@/lib/api";
 import { Card, Chip, EmptyState, Meter, PendingLabel, ScoreRing, ShimmerRows, formatRelativeDate } from "@/components/app/ui";
-import { Button } from "@/components/app/Button";
+import { Button, ButtonLink } from "@/components/app/Button";
 import { Funnel } from "@/components/app/Funnel";
 import { SectionBoundary } from "@/components/app/SectionBoundary";
 import { DailyMatchesComplete } from "@/components/app/DailyMatchesComplete";
 import { CompanyLogo } from "@/components/app/CompanyLogo";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 /* MatchScore, ResumePaper, contactName, contactLine and stripMetadata were all imported for the
    review drawer and went with it. The dashboard renders no resume and scores no packet against a
    posting now; the card's ScoreRing is a different, already-fetched number. */
@@ -266,6 +267,8 @@ export default function Home() {
   const [qaMode, setQaMode] = useState(false);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [lastDismissed, setLastDismissed] = useState<string | null>(null);
+  const focusUndoAfterDismissRef = useRef<string | null>(null);
+  const focusSkipAfterUndoRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [prewarmFailures, setPrewarmFailures] = useState<string[]>([]);
   /* Jobs whose packet is being built right now, by either path. This is what lets the card say
@@ -277,6 +280,14 @@ export default function Home() {
   const [loadedAt, setLoadedAt] = useState(0);
   const prewarmStarted = useRef(false);
   const resumeOperationIds = useRef(new Map<string, string>());
+  const homeMountedRef = useRef(true);
+
+  useLayoutEffect(() => {
+    homeMountedRef.current = true;
+    return () => {
+      homeMountedRef.current = false;
+    };
+  }, []);
 
   /* Hand this session to the extension.
    *
@@ -356,6 +367,36 @@ export default function Home() {
    * ways depending on which button got pressed. Finished is finished. The only state that is
    * genuinely different is having had no matches at all, and that is todayJobs.length === 0. */
   const dayQueueFinished = todayJobs.length > 0 && visibleJobs.length === 0;
+  const matchQueueKey = jobs === null
+    ? "loading"
+    : visibleJobs.length > 0
+      ? `jobs-${visibleJobs.map((job) => job.id).join(":")}`
+      : dayQueueFinished
+        ? "complete"
+        : "empty";
+  useEffect(() => {
+    const jobId = focusUndoAfterDismissRef.current;
+    if (!jobId || lastDismissed !== jobId) return;
+    const frame = window.requestAnimationFrame(() => {
+      const undo = document.getElementById("dashboard-skip-undo");
+      if (!(undo instanceof HTMLButtonElement)) return;
+      undo.focus();
+      focusUndoAfterDismissRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [lastDismissed]);
+  useEffect(() => {
+    const jobId = focusSkipAfterUndoRef.current;
+    if (!jobId || lastDismissed !== null || dismissed.includes(jobId)) return;
+    const frame = window.requestAnimationFrame(() => {
+      const restoredSkip = [...document.querySelectorAll<HTMLButtonElement>("[data-dashboard-skip-id]")]
+        .find((button) => button.dataset.dashboardSkipId === jobId);
+      if (!restoredSkip) return;
+      restoredSkip.focus();
+      focusSkipAfterUndoRef.current = null;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [dismissed, lastDismissed]);
   /* One definition of the number, shared with Jobs. See use-job-match-scores.ts. */
   const matches = useJobMatchScores(jobs === null ? null : visibleJobs, !qaMode);
   /* Applications stopped on a human-verification check, oldest first. Kept out of the summary
@@ -464,19 +505,30 @@ export default function Home() {
 
   function dismiss(jobId: string) {
     const next = [...new Set([...dismissed, jobId])];
-    setDismissed(next);
-    setLastDismissed(jobId);
+    focusUndoAfterDismissRef.current = jobId;
+    runDashboardTransition(() => {
+      setDismissed(next);
+      setLastDismissed(jobId);
+    });
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
     // Undo is a second chance, not furniture. It used to sit there until you skipped something
     // else, so a status message stayed on screen for the rest of the session.
-    window.setTimeout(() => setLastDismissed((current) => (current === jobId ? null : current)), 8000);
+    window.setTimeout(() => {
+      runDashboardTransition(() => setLastDismissed((current) => (
+        current === jobId && document.activeElement?.id !== "dashboard-skip-undo" ? null : current
+      )));
+    }, 8000);
   }
 
   function undoDismiss() {
     if (!lastDismissed) return;
-    const next = dismissed.filter((id) => id !== lastDismissed);
-    setDismissed(next);
-    setLastDismissed(null);
+    const restoredJobId = lastDismissed;
+    const next = dismissed.filter((id) => id !== restoredJobId);
+    focusSkipAfterUndoRef.current = restoredJobId;
+    runDashboardTransition(() => {
+      setDismissed(next);
+      setLastDismissed(null);
+    });
     window.localStorage.setItem(dailyDismissalKey(), JSON.stringify(next));
   }
 
@@ -490,7 +542,22 @@ export default function Home() {
    * It takes the same two steps as a prewarm worker (fetch the complete job, then generate), and
    * it writes the same day-scoped lock first, so the prewarm loop skips any job already being
    * built here and a student on automatic submission cannot spend the quota twice for one job. */
-  async function preparePacket(jobId: string, initiation: ResumeGenerationInitiation) {
+  function homeUpgradeFocusTarget(jobId: string, trigger: HTMLElement | null): HTMLElement | null {
+    if (trigger?.isConnected) return trigger;
+    const jobHeading = [...document.querySelectorAll<HTMLElement>("[data-dashboard-job-focus-id]")]
+      .find((candidate) => candidate.dataset.dashboardJobFocusId === jobId && candidate.isConnected)
+      ?? null;
+    if (jobHeading) return jobHeading;
+    const matchesHeading = document.getElementById("matches-heading");
+    return matchesHeading instanceof HTMLElement && matchesHeading.isConnected ? matchesHeading : null;
+  }
+
+  async function preparePacket(
+    jobId: string,
+    initiation: ResumeGenerationInitiation,
+    upgradeTrigger: HTMLElement | null = null,
+  ) {
+    const requestIsCurrent = () => homeMountedRef.current;
     if (!qaMode && canUse("ai_resume_tailoring") !== true) {
       if (canUse("ai_resume_tailoring") === false) {
         openUpgrade({
@@ -501,7 +568,7 @@ export default function Home() {
           jobId,
           returnRoute: `/dashboard/applications?job=${encodeURIComponent(jobId)}&checkout_action=tailor`,
           onManual: () => window.location.assign(`/dashboard/applications?job=${jobId}&intent=fill`),
-        });
+        }, { trigger: homeUpgradeFocusTarget(jobId, upgradeTrigger) });
       }
       return;
     }
@@ -546,16 +613,19 @@ export default function Home() {
 
     try {
       const { job: completeJob } = await api<{ job: MonitoredJob }>(`/jobs/${jobId}`);
+      if (!requestIsCurrent()) return;
       const operationId = operationIdFor(resumeOperationIds.current, jobId);
       const generated = await api<{ application?: GeneratedResume }>("/resume/generate", {
         method: "POST",
         body: JSON.stringify(resumeGenerationBody(completeJob, identity, applicationProfile, initiation, operationId)),
       });
+      if (!requestIsCurrent()) return;
       if (generated.application) {
         completeOperationId(resumeOperationIds.current, jobId);
         setPackets((current) => [generated.application!, ...current.filter((packet) => packet.id !== generated.application!.id)]);
       }
     } catch (reason) {
+      if (!requestIsCurrent()) return;
       if (isStructuredUpgradeDenial(reason, "ai_resume_tailoring")) {
         openUpgrade({
           feature: "ai_resume_tailoring",
@@ -565,7 +635,10 @@ export default function Home() {
           jobId,
           returnRoute: `/dashboard/applications?job=${encodeURIComponent(jobId)}&checkout_action=tailor`,
           onManual: () => window.location.assign(`/dashboard/applications?job=${jobId}&intent=fill`),
-        }, { source: "server_denial" });
+        }, {
+          source: "server_denial",
+          trigger: homeUpgradeFocusTarget(jobId, upgradeTrigger),
+        });
         return;
       }
       /* The lock comes off so the next attempt is allowed to run at all. Quota and rate limits are
@@ -580,7 +653,9 @@ export default function Home() {
       setPreparationErrors((current) => ({ ...current, [jobId]: userFacingError(reason) }));
     } finally {
       releasePrewarmLock(jobId);
-      setPreparingJobs((current) => current.filter((id) => id !== jobId));
+      if (requestIsCurrent()) {
+        setPreparingJobs((current) => current.filter((id) => id !== jobId));
+      }
     }
   }
 
@@ -595,9 +670,9 @@ export default function Home() {
   /* Retry is the same request, not a nudge to the prewarm loop. It used to clear the lock and bump
      a counter so the effect would re-run, which does nothing at all for the students who never had
      that effect running in the first place. */
-  function retryPreparation(jobId: string) {
+  function retryPreparation(jobId: string, upgradeTrigger: HTMLElement | null) {
     releasePrewarmLock(jobId);
-    void preparePacket(jobId, "explicit_click");
+    void preparePacket(jobId, "explicit_click", upgradeTrigger);
   }
 
   /* Saved targeting only, and only the parts the "Change what you want" link below can edit. This
@@ -639,14 +714,14 @@ export default function Home() {
           <p className="mt-1 text-sm text-muted">
             {targetLabel}
             <span aria-hidden="true" className="mx-2 text-faint">·</span>
-            <Link href="/dashboard/settings#job-search" className="text-muted underline decoration-border underline-offset-4 hover:text-ink">
+            <Link href="/dashboard/settings#job-search" className="inline-flex min-h-6 items-center text-muted underline decoration-border underline-offset-4 hover:text-ink">
               Change what you want
             </Link>
           </p>
         </div>
-        <Link href="/dashboard/applications?new=1&intent=fill" className="flex min-h-11 items-center rounded-full bg-action px-5 text-sm font-medium text-action-ink transition-colors hover:bg-brand-ink">
+        <ButtonLink href="/dashboard/applications?new=1&intent=fill" variant="secondary">
           Fill application
-        </Link>
+        </ButtonLink>
       </section>
 
       <PlanStatus compact />
@@ -689,10 +764,10 @@ export default function Home() {
             <Funnel stopped={{ count: applicationSummary.needsAction, href: "/dashboard/applications?state=action" }} />
           </SectionBoundary>
           {applicationTotal > 0 && (
-            <SectionBoundary band="tracker-summary" title="Tracker">
+            <SectionBoundary band="tracker-summary" title="Applications">
             <OverviewColumn
               id="applications-summary"
-              title="Tracker"
+              title="Applications"
               href="/dashboard/applications"
               tone="applications"
               metrics={[
@@ -709,10 +784,10 @@ export default function Home() {
             </SectionBoundary>
           )}
           {outreach.length > 0 && (
-            <SectionBoundary band="outreach-summary" title="Emails">
+            <SectionBoundary band="outreach-summary" title="Outreach">
             <OverviewColumn
               id="outreach-summary"
-              title="Emails"
+              title="Outreach"
               href="/dashboard/outreach"
               tone="emails"
               metrics={[
@@ -729,11 +804,12 @@ export default function Home() {
       <section aria-labelledby="matches-heading" className="space-y-3">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <h2 id="matches-heading" className="text-base font-medium text-ink">Your top jobs today</h2>
+            <h2 id="matches-heading" tabIndex={-1} className="text-base font-medium text-ink outline-none">Your top jobs today</h2>
           </div>
-          <Link href="/dashboard/jobs" className="text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
+          <Link href="/dashboard/jobs" className="inline-flex min-h-6 items-center text-sm font-medium text-brand-ink underline-offset-2 hover:underline">View all</Link>
         </div>
 
+      <MotionPanel key={matchQueueKey} name="dashboard-home-matches">
       {jobs === null ? (
         <ShimmerRows rows={4} />
       ) : visibleJobs.length === 0 ? (
@@ -782,20 +858,30 @@ export default function Home() {
               tailoringAccess={qaMode ? true : tailoringAccess}
               hoverGenerationEnabled={canUse("hover_generation") === true}
               onDismiss={() => dismiss(job.id)}
-              onPrepare={() => void preparePacket(job.id, "explicit_click")}
+              onPrepare={(upgradeTrigger) => void preparePacket(job.id, "explicit_click", upgradeTrigger)}
               onHoverPrepare={() => void preparePacket(job.id, "hover_prewarm")}
-              onRetry={() => retryPreparation(job.id)}
+              onRetry={(upgradeTrigger) => retryPreparation(job.id, upgradeTrigger)}
             />
           ))}
         </div>
       )}
+      </MotionPanel>
       </section>
 
       {lastDismissed && (
-        <div role="status" className="flex items-center justify-between rounded-inner bg-surface-alt px-4 py-3 text-sm text-muted">
-          <span>Skipped for today.</span>
-          <button type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
-        </div>
+        <MotionPanel key={lastDismissed} name="dashboard-home-skip-status">
+          <div
+            role="status"
+            onBlur={(event) => {
+              if (event.currentTarget.contains(event.relatedTarget)) return;
+              runDashboardTransition(() => setLastDismissed((current) => current === lastDismissed ? null : current));
+            }}
+            className="flex items-center justify-between rounded-inner bg-surface-alt px-4 py-3 text-sm text-muted"
+          >
+            <span>Skipped for today.</span>
+            <button id="dashboard-skip-undo" type="button" onClick={undoDismiss} className="font-medium text-ink">Undo</button>
+          </div>
+        </MotionPanel>
       )}
 
       {/* A quota readout at 0.7% is noise, and it was competing with the header for the page's one
@@ -845,7 +931,7 @@ function OverviewColumn({
     <section aria-labelledby={id} className="flex flex-col p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 id={id} className="text-base font-medium text-ink">{title}</h2>
-        <Link href={href} className={`text-small font-medium ${linkClass}`}>View all</Link>
+        <Link href={href} className={`inline-flex min-h-6 items-center text-small font-medium ${linkClass}`}>View all</Link>
       </div>
       {/* Plain markup, matching Momentum's Stat. The dl this replaces held anchors as direct
           children, which a description list may not have, and it printed the term above the
@@ -937,9 +1023,9 @@ function JobMatchCard({
   hoverGenerationEnabled: boolean;
   canPrepare: boolean;
   onDismiss: () => void;
-  onPrepare: () => void;
+  onPrepare: (upgradeTrigger: HTMLButtonElement) => void;
   onHoverPrepare: () => void;
-  onRetry: () => void;
+  onRetry: (upgradeTrigger: HTMLButtonElement) => void;
 }) {
   const status = reviewHref ? "ready" : preparing ? "preparing" : preparationFailed ? "failed" : "idle";
   return (
@@ -986,7 +1072,13 @@ function JobMatchCard({
           )}
         </div>
 
-        <h2 className="mt-4 text-heading font-medium text-ink">{job.title}</h2>
+        <h2
+          tabIndex={-1}
+          data-dashboard-job-focus-id={job.id}
+          className="mt-4 text-heading font-medium text-ink outline-none"
+        >
+          {job.title}
+        </h2>
         <p className="mt-1 truncate text-small text-muted">
           {job.location ?? (job.remote ? "Remote" : "Location not listed")}
           {job.remote && !/remote/i.test(job.location ?? "") ? " · Remote" : ""}
@@ -1005,8 +1097,8 @@ function JobMatchCard({
         {/* Only one state here has nothing to click, and it is the one where a request really is
             in flight. The chip and this slot use one name for each state, so a card never says
             two things at once. */}
-        <div className="mt-auto flex items-center justify-end gap-2 pt-4">
-          <button type="button" onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
+        <div className="mt-auto flex flex-wrap items-center justify-end gap-2 pt-4">
+          <button type="button" data-dashboard-skip-id={job.id} onClick={onDismiss} aria-label={`Skip ${job.title} at ${job.company_name}`} className="min-h-11 px-3 text-sm font-medium text-muted transition-colors hover:text-ink">
             Skip
           </button>
           {status === "preparing" ? (
@@ -1032,7 +1124,16 @@ function JobMatchCard({
               Complete profile
             </Link>
           ) : (
-            <button type="button" onClick={status === "failed" ? onRetry : onPrepare} aria-label={`${status === "failed" ? "Try tailoring again for" : "Tailor a resume for"} ${job.title} at ${job.company_name}`} className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft">
+            <button
+              type="button"
+              onClick={(event) => {
+                const upgradeTrigger = event.currentTarget;
+                if (status === "failed") onRetry(upgradeTrigger);
+                else onPrepare(upgradeTrigger);
+              }}
+              aria-label={`${status === "failed" ? "Try tailoring again for" : "Tailor a resume for"} ${job.title} at ${job.company_name}`}
+              className="flex min-h-11 items-center rounded-full border border-brand bg-surface px-4 text-center text-sm font-medium text-brand-ink transition-colors hover:bg-brand-soft"
+            >
               {status === "failed" ? "Try tailoring again" : "Tailor resume"}
             </button>
           )}

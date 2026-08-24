@@ -1,4 +1,5 @@
 import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from "@/lib/api";
+import { questionReviewPresentation } from "./question-review-presentation.ts";
 
 /**
  * What the row's control DOES, as opposed to what it says.
@@ -93,6 +94,76 @@ export type SubmissionChecklistItem = {
    */
   options?: readonly string[];
 };
+
+export type DirectQuestionTaskIntent = Extract<SubmissionChecklistAction, "answer" | "review" | "confirm">;
+
+export type DirectQuestionTask = {
+  kind: "question";
+  id: string;
+  item: SubmissionChecklistItem;
+  question: ApplicationQuestion;
+  intent: DirectQuestionTaskIntent;
+};
+
+export type DirectNonQuestionTask = {
+  kind: "non-question";
+  id: string;
+  item: SubmissionChecklistItem;
+};
+
+export type DirectInputTask = DirectQuestionTask | DirectNonQuestionTask;
+
+export type DirectInputTaskPlan = {
+  /** Safe employer questions that still need the applicant, in the employer's stored order. */
+  questionTasks: DirectQuestionTask[];
+  /** Outstanding work that cannot be completed by saving an answer in Litos. */
+  nonQuestionTasks: DirectNonQuestionTask[];
+  /** Server-settled rows kept outside the outstanding count, with their way back preserved. */
+  settled: SubmissionChecklistItem[];
+  /** Questions whose exact label or options cannot be trusted enough to render an answer control. */
+  metadataBlockers: ReturnType<typeof questionReviewPresentation>["metadataBlockers"];
+  /** The first safe prompt, with direct questions intentionally taking precedence. */
+  current: DirectInputTask | null;
+  /** Outstanding direct questions plus outstanding non-question work. */
+  remaining: number;
+};
+
+/**
+ * Stable identity for the employer prompt the applicant actually saw. It intentionally excludes
+ * the stored answer and task intent: after one accepted direct save, the same measured prompt is
+ * complete for this answer pass even if the runner relabels it from Answer to Review. A changed
+ * label, control, option order, or helper copy produces a new identity and must be shown again.
+ */
+export function directQuestionPromptFingerprint(
+  task: Pick<DirectQuestionTask, "question">,
+): string {
+  const { question } = task;
+  return JSON.stringify([
+    question.id,
+    question.question,
+    question.kind,
+    question.required,
+    question.portal_selector ?? null,
+    question.portal_input_type ?? null,
+    question.options ?? null,
+    question.explanation ?? null,
+  ]);
+}
+
+/**
+ * Exact save-boundary identity. The base answer and intent are included here because a poll may
+ * replace either while the applicant is typing. A response entered for yesterday's wording or an
+ * older stored answer must never be written to a newly measured employer field that reused an id.
+ */
+export function directQuestionTaskFingerprint(task: DirectQuestionTask): string {
+  return JSON.stringify([
+    directQuestionPromptFingerprint(task),
+    task.intent,
+    task.question.answer,
+    task.question.answer_source ?? null,
+    task.question.answer_reviewed_at ?? null,
+  ]);
+}
 
 /**
  * The control a row renders, decided in one place so no renderer can invent a third answer.
@@ -826,6 +897,80 @@ export function humanInputItems(
   }
 
   return items.map(withAcknowledgement);
+}
+
+/**
+ * Builds the one-question-at-a-time queue without turning uncertain employer metadata into a text
+ * box. `humanInputItems` decides whether a review row still needs the applicant, while
+ * `questionReviewPresentation` decides whether the employer's exact prompt and accepted answers are
+ * trustworthy enough to edit. A direct question must pass both decisions.
+ */
+export function directInputTaskPlan(
+  review: Pick<ApplicationReview, "attention_reason" | "attention_categories" | "attention_acknowledgements" | "cover_letter_supported" | "filled_fields" | "questions" | "question_metadata_blockers" | "questions_reviewed_at" | "required_documents" | "transcript_supported" | "stall" | "status">,
+  context: { company?: string; role?: string; documents?: ChecklistDocumentMarks } = {},
+): DirectInputTaskPlan {
+  const items = humanInputItems(review, context);
+  const presentation = questionReviewPresentation(
+    review.questions ?? [],
+    review.question_metadata_blockers ?? [],
+  );
+  const questionIdCounts = new Map<string, number>();
+  for (const question of review.questions ?? []) {
+    questionIdCounts.set(question.id, (questionIdCounts.get(question.id) ?? 0) + 1);
+  }
+
+  const questionItemsById = new Map<string, SubmissionChecklistItem>();
+  for (const item of items) {
+    if (!item.questionId || questionItemsById.has(item.questionId)) continue;
+    questionItemsById.set(item.questionId, item);
+  }
+
+  const questionTasks = presentation.editableQuestions.flatMap((question): DirectQuestionTask[] => {
+    const item = questionItemsById.get(question.id);
+    if (
+      !item
+      || item.settled === true
+      || !question.id.trim()
+      || !question.question.trim()
+      || questionIdCounts.get(question.id) !== 1
+      || (item.actionKind !== "answer" && item.actionKind !== "review" && item.actionKind !== "confirm")
+    ) return [];
+    return [{
+      kind: "question",
+      id: item.id,
+      item,
+      question,
+      intent: item.actionKind,
+    }];
+  });
+
+  const editableQuestionIds = new Set(
+    presentation.editableQuestions
+      .filter((question) => question.id.trim() && question.question.trim() && questionIdCounts.get(question.id) === 1)
+      .map((question) => question.id),
+  );
+  const settled = items.filter((item) => (
+    item.settled === true && (!item.questionId || editableQuestionIds.has(item.questionId))
+  ));
+  const nonQuestionTasks = items.flatMap((item): DirectNonQuestionTask[] => (
+    item.settled !== true
+      && !item.questionId
+      && item.actionKind !== "answer"
+      && item.actionKind !== "review"
+      && item.actionKind !== "confirm"
+      ? [{ kind: "non-question", id: item.id, item }]
+      : []
+  ));
+  const current = questionTasks[0] ?? nonQuestionTasks[0] ?? null;
+
+  return {
+    questionTasks,
+    nonQuestionTasks,
+    settled,
+    metadataBlockers: presentation.metadataBlockers,
+    current,
+    remaining: questionTasks.length + nonQuestionTasks.length,
+  };
 }
 
 export function completedSubmissionItems(review: Pick<ApplicationReview, "attention_reason" | "filled_fields" | "questions" | "receipt" | "status">): SubmissionChecklistItem[] {

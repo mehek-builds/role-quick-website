@@ -46,7 +46,7 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                   id={`${id}-cycle`}
                   value={value.cycle}
                   onChange={(event) => update("cycle", event.target.value)}
-                  className="w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field w-full rounded-inner px-3.5 py-2 text-sm outline-none focus:border-brand"
                 >
                   <option value="">Prefer not to answer now</option>
                   {availabilityCycleOptions().map((cycle) => (
@@ -66,7 +66,7 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                   type="date"
                   value={value.start}
                   onChange={(event) => update("start", event.target.value)}
-                  className="w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field w-full rounded-inner px-3.5 py-2 text-sm outline-none focus:border-brand"
                 />
               </td>
             </tr>
@@ -81,7 +81,7 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                   type="date"
                   value={value.end}
                   onChange={(event) => update("end", event.target.value)}
-                  className="w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field w-full rounded-inner px-3.5 py-2 text-sm outline-none focus:border-brand"
                 />
               </td>
             </tr>
@@ -96,7 +96,7 @@ export function AvailabilityWindowTable({ value, onChange }: AvailabilityWindowT
                   type="date"
                   value={value.validThrough}
                   onChange={(event) => update("validThrough", event.target.value)}
-                  className="w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field w-full rounded-inner px-3.5 py-2 text-sm outline-none focus:border-brand"
                 />
               </td>
             </tr>

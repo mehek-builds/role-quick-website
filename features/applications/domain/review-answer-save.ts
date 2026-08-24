@@ -60,7 +60,7 @@ export type ReviewAnswerSaveResponse<Review> = {
 
 export type ReviewAnswerSaveResult<Review> =
   | { saved: true; review: Review; notice: string }
-  | { saved: false; message: string };
+  | { saved: false; message: string; review?: Review };
 
 /** Said after the write landed, never before it. The review screen is reached from a stopped run,
  *  so this promises storage and the next fill, not a send the applicant has not asked for. */
@@ -191,7 +191,7 @@ export async function saveReviewAnswers<Review>(options: {
      * response whose whole purpose is to say the defect happened.
      *
      * Read as `=== false` rather than as falsy, so only the server SAYING so counts. */
-    if (response.saved === false) return { saved: false, message: REVIEW_ANSWERS_SAVE_RACED };
+    if (response.saved === false) return { saved: false, message: REVIEW_ANSWERS_SAVE_RACED, review: response.review };
     return { saved: true, review: response.review, notice: REVIEW_ANSWERS_SAVED_NOTICE };
   } catch (reason) {
     /* The server's own sentence when it has one. Its refusals name a state the applicant can act on

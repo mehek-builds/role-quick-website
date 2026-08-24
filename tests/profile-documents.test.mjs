@@ -198,7 +198,7 @@ test("a reused file can be taken off one application without being deleted from 
   const modal = shippedCode(await readFile(new URL("../components/app/TranscriptModal.tsx", import.meta.url), "utf8"));
 
   assert.match(modal, /async function detach\(\) \{[\s\S]{0,400}?await detachApplicationDocument\(applicationId, kind\)/);
-  assert.match(modal, /onClick=\{\(\) => void detach\(\)\} variant="secondary"/);
+  assert.match(modal, /data-transcript-action="detach"\s*onClick=\{\(\) => void detach\(\)\}\s*variant="secondary"/);
   assert.match(modal, /Not for \$\{company\}/, "the control has to name the employer it is about");
   // It clears this application's mark and nothing else: no deleteUserDocument on this path.
   const detach = modal.slice(modal.indexOf("async function detach()"), modal.indexOf("async function remove()"));
@@ -242,7 +242,7 @@ test("the confirmation is keyboard reachable, focus-managed, and announces its r
      The browser supplies the focus trap, the Escape handling and the inert background. This product
      already carries two hand-built traps with two different bugs. */
   assert.match(shipped, /<dialog/);
-  assert.match(shipped, /dialog\.current\?\.showModal\(\)/);
+  assert.match(shipped, /const node = dialog\.current;\s*if \(node && !node\.open\) node\.showModal\(\)/);
   assert.match(shipped, /aria-labelledby="remove-document-title"/);
   assert.match(shipped, /aria-describedby="remove-document-description"/);
   assert.match(shipped, /id="remove-document-title"/);
@@ -255,13 +255,14 @@ test("the confirmation is keyboard reachable, focus-managed, and announces its r
 
   // Escape is disarmed only while the request is in flight, so a half-finished delete cannot be
   // closed out from under its own error message.
-  assert.match(shipped, /onCancel=\{\(event\) => \{\s*if \(deleting\) event\.preventDefault\(\);/);
+  assert.match(shipped, /onCancel=\{\(event\) => \{\s*event\.preventDefault\(\);\s*if \(!deleting\) requestDocumentDialogClose\(\);/);
 
   /* Closing returns focus to the row's own trigger, and to the announcement when that trigger has
      just been deleted with its row. A dialog that closes onto nothing drops a keyboard user at the
      top of the document. */
   assert.match(shipped, /const trigger = closed \? removeButtons\.current\.get\(closed\.id\) : null/);
-  assert.match(shipped, /if \(trigger\) trigger\.focus\(\);\s*else status\.current\?\.focus\(\)/);
+  assert.match(shipped, /window\.requestAnimationFrame\(\(\) => \{\s*if \(trigger\?\.isConnected\) trigger\.focus\(\);\s*else status\.current\?\.focus\(\)/);
+  assert.match(shipped, /requestDocumentDialogClose\(\)/);
 
   /* The result is announced, and the live region is in the DOM before there is anything to say.
      Rendered only alongside its text, a live region is one a screen reader may never read. */

@@ -37,11 +37,11 @@ const dashboard = await readFile(new URL("../app/dashboard/page.tsx", import.met
 /* The dashboard component and the sandbox it is iterated in, held to the same
    contract on purpose: a sandbox that behaves differently stops being one. */
 const DIALOGS = [
-  ["ApplicationPacket", packet, /aria-label=\{`Application packet: \$\{role\} at \$\{company\}`\}/],
-  ["PacketViewer", sandbox, /aria-label=\{`Application packet: \$\{packet\.role\} at \$\{packet\.company\}`\}/],
+  ["ApplicationPacket", packet, /aria-label=\{`Application packet: \$\{role\} at \$\{company\}`\}/, /\}, \[requestClose\]\);/],
+  ["PacketViewer", sandbox, /aria-label=\{`Application packet: \$\{packet\.role\} at \$\{packet\.company\}`\}/, /\}, \[\]\);/],
 ];
 
-for (const [name, source, label] of DIALOGS) {
+for (const [name, source, label, trapDependencies] of DIALOGS) {
   test(`${name} names its dialog, and the name says which packet`, () => {
     assert.match(source, /role="dialog"/);
     assert.match(source, /aria-modal="true"/);
@@ -76,14 +76,23 @@ for (const [name, source, label] of DIALOGS) {
   });
 
   test(`${name} holds onClose in a ref, so the trap survives a parent render`, () => {
-    /* The trap effect runs on [] deps. If it keyed on onClose, a caller passing
-       an inline arrow would tear it down every parent commit, and the cleanup's
-       focus restore would throw focus out of an open dialog onto the page
-       behind it. Reading through a ref survives a caller that forgets. */
+    /* The production trap depends on the shared lifecycle's stable requestClose function, while
+       the sandbox has no lifecycle hook and still runs on an empty list. Neither keys on onClose:
+       an inline callback would otherwise tear the trap down every parent commit and restore focus
+       into the page behind the still-open dialog. */
     assert.match(source, /onCloseRef\.current\(\)/);
-    assert.match(source, /\}, \[\]\);/);
+    assert.match(source, trapDependencies);
   });
 }
+
+test("ApplicationPacket restores focus to a stable page heading when its trigger disappears", () => {
+  assert.match(packet, /previous\?\.focus\?\.\(\)/);
+  assert.match(packet, /previous\?\.isConnected && document\.activeElement === previous/);
+  assert.match(packet, /document\.getElementById\("application-ledger-heading"\)/);
+  assert.match(packet, /document\.querySelector<HTMLElement>\("\[data-dashboard-job-focus-id\]"\)/);
+  assert.match(packet, /document\.querySelector<HTMLElement>\("main h1"\)/);
+  assert.match(packet, /candidate\.focus\(\{ preventScroll: true \}\)/);
+});
 
 /* The upload modal is the third dialog on this surface and it takes the same shell,
    so the three tests above hold for it too. What is different is the name, and the
@@ -114,12 +123,58 @@ test("TranscriptModal keeps the trap, the Escape close and the ref that survives
   /* The 2.5s submission poll re-renders this modal's parent on every tick, which is
      exactly the caller the onCloseRef indirection exists for. */
   assert.match(transcript, /dialog\.current\.querySelectorAll<HTMLElement>\(/);
+  assert.match(transcript, /button:not\(\[disabled\]\)/);
+  assert.match(transcript, /input:not\(\[type="hidden"\]\):not\(\[disabled\]\)/);
+  assert.match(transcript, /style\.display !== "none"[\s\S]{0,180}?style\.visibility !== "hidden"[\s\S]{0,180}?rect\.width > 0[\s\S]{0,80}?rect\.height > 0/);
   assert.match(transcript, /const first = focusable\[0\]/);
   assert.match(transcript, /const last = focusable\[focusable\.length - 1\]/);
   assert.match(transcript, /event\.key === "Escape"/);
   assert.match(transcript, /previous\?\.focus\?\.\(\)/);
   assert.match(transcript, /onCloseRef\.current\(\)/);
-  assert.match(transcript, /\}, \[\]\);/);
+  assert.match(transcript, /\}, \[requestClose\]\);/);
+});
+
+test("TranscriptModal keeps async initiators focused through deferred success and failure", () => {
+  /* Native disabled is allowed only for the attach control's no-file state. Once a request starts,
+     all three initiators stay in the tab ring with aria-disabled while their handler-level busy
+     guard prevents a second request. A failed request therefore leaves focus on the same control;
+     a successful stage replacement first moves it to Close, which survives every modal stage. */
+  assert.match(
+    transcript,
+    /data-transcript-action="attach"[\s\S]{0,240}?disabled=\{!chosen\}[\s\S]{0,160}?aria-disabled=\{busy !== null\}[\s\S]{0,100}?aria-busy=\{busy === "attaching"\}/,
+  );
+  assert.match(
+    transcript,
+    /data-transcript-action="order"[\s\S]{0,240}?aria-disabled=\{busy !== null\}[\s\S]{0,100}?aria-busy=\{busy === "ordering"\}/,
+  );
+  assert.match(
+    transcript,
+    /data-transcript-action="detach"[\s\S]{0,280}?aria-disabled=\{busy !== null\}[\s\S]{0,100}?aria-busy=\{busy === "detaching"\}/,
+  );
+  assert.doesNotMatch(transcript, /data-transcript-action="(?:attach|order|detach)"[^>]*disabled=\{busy !== null\}/);
+  assert.match(transcript, /async function attach\(\) \{\s*if \(!chosen \|\| busy\) return;/);
+  assert.match(transcript, /async function recordOrdered\(\) \{\s*if \(busy\) return;/);
+  assert.match(transcript, /async function detach\(\) \{\s*if \(busy\) return;/);
+  assert.match(
+    transcript,
+    /const result = await attachApplicationDocument[\s\S]{0,420}?closeButton\.current\?\.focus\(\);[\s\S]{0,100}?setLocalAttachment\(result\.attachment\)/,
+    "attach success must focus a control that survives the stage replacement before committing it",
+  );
+  assert.match(
+    transcript,
+    /async function detach\(\)[\s\S]{0,280}?await detachApplicationDocument[\s\S]{0,500}?setLocalAttachment\(null\)[\s\S]{0,300}?closeButton\.current\?\.focus\(\)/,
+    "detach success must finish on a control that survives the stage replacement",
+  );
+  const unofficialAction = transcript.slice(
+    transcript.lastIndexOf("<Button", transcript.indexOf("Attach an unofficial copy anyway")),
+    transcript.indexOf("Attach an unofficial copy anyway") + "Attach an unofficial copy anyway".length,
+  );
+  assert.match(unofficialAction, /closeButton\.current\?\.focus\(\);\s*setUnofficialChosen\(true\)/);
+  const keepAction = transcript.slice(
+    transcript.indexOf('data-confirm-keep="true"'),
+    transcript.indexOf("aria-disabled={busy !== null}", transcript.indexOf('data-confirm-keep="true"')),
+  );
+  assert.match(keepAction, /closeButton\.current\?\.focus\(\);\s*setConfirmingRemoval\(false\)/);
 });
 
 /* Was "the review drawer keeps its own naming pattern, which is the one-per-page

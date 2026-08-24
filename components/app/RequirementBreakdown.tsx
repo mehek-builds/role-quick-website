@@ -62,7 +62,7 @@ export function RequirementBreakdown({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-xs font-medium text-brand-ink underline-offset-2 hover:underline"
+        className="inline-flex min-h-6 items-center text-xs font-medium text-brand-ink underline-offset-2 hover:underline"
       >
         What this job asks for
       </button>

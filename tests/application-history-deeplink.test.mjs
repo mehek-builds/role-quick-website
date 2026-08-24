@@ -115,10 +115,14 @@ describe("an application deep link loads the exact packet", () => {
   });
 
   test("a ledger selection writes the same application into local state and the URL", () => {
+    const openStart = applications.indexOf("const openApplication = useCallback");
+    const openApplication = applications.slice(openStart, applications.indexOf("const resetApplicationWorkflow", openStart));
+    assert.match(openApplication, /const nextPath = applicationSelectionPath\(window\.location, packet\.id\)/);
+    assert.match(openApplication, /runDashboardTransition\(\(\) => \{[\s\S]{0,500}setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);[\s\S]{0,500}window\.history\.pushState\(null, "", nextPath\);\s*\}\)/);
     assert.match(
-      applications,
-      /const openApplication = useCallback\(\(packet: GeneratedResume[\s\S]{0,700}setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);[\s\S]{0,800}const nextPath = applicationSelectionPath\(window\.location, packet\.id\);[\s\S]{0,800}if \(options\.history === "replace"\) window\.history\.replaceState\(null, "", nextPath\);\s*else window\.history\.pushState\(null, "", nextPath\)/,
-      "one callback must bind the selected packet and route synchronously, while normal row opens create usable browser history",
+      openApplication,
+      /runDashboardTransition\(\(\) => \{[\s\S]{0,800}if \(routeAlreadyCommitted\) return;[\s\S]{0,400}if \(options\.history === "replace"\) window\.history\.replaceState\(null, "", nextPath\);\s*else window\.history\.pushState\(null, "", nextPath\);\s*\}\)/,
+      "one transition must publish the selected packet and bind the route synchronously while normal row opens create browser history",
     );
     assert.match(applications, /onClick=\{\(\) => openApplication\(packet\)\}/, "ledger rows must use the URL-bound selection callback");
   });
@@ -126,7 +130,7 @@ describe("an application deep link loads the exact packet", () => {
   test("browser history retires a mismatched canonical workflow before it can paint", () => {
     assert.match(
       applications,
-      /useLayoutEffect\(\(\) => \{[\s\S]{0,1000}const canonicalMatchesRequest =[\s\S]{0,900}if \(!canonicalMatchesRequest && !pendingLocalCanonical\) \{[\s\S]{0,300}resetApplicationWorkflow\(\);\s*setOpeningApplicationId\(requestedApplicationId\);/,
+      /useLayoutEffect\(\(\) => \{[\s\S]{0,1000}const canonicalMatchesRequest =[\s\S]{0,900}if \(!canonicalMatchesRequest && !pendingLocalCanonical\) \{[\s\S]{0,360}resetApplicationWorkflow\(\{\s*afterReset: \(\) => setOpeningApplicationId\(requestedApplicationId\),\s*animate: false,\s*\}\);/,
       "a canonical-only application has to be route-gated before its Fill and Tailor controls render under another id",
     );
   });

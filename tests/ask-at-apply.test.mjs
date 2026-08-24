@@ -37,12 +37,12 @@ test("the extra questions are asked at Apply, not discovered mid-run", () => {
 });
 
 test("it runs after the packet exists, so a slow or missing scan costs her nothing", () => {
-  const create = functionBody(PAGE, "async function createApplication(draft: NewApplicationDraft = newApplication)");
+  const create = functionBody(PAGE, "async function createApplication(");
   const created = create.indexOf("openApplication(created");
   const asked = create.indexOf("await askPrescriptQuestions(draft.jobId)");
   assert.ok(created > 0 && asked > created, "the pre-script is fetched after the packet is built");
   // Only for a posting off the board. A hand-typed link has no posting to look ahead at.
-  assert.match(create, /if \(draft\.jobId && !keepCanonicalDetail\) await askPrescriptQuestions\(draft\.jobId\)/);
+  assert.match(create, /if \(draft\.jobId && !keepCanonicalDetail\) \{\s*await askPrescriptQuestions\(draft\.jobId\);\s*if \(!requestMayPublish\(\)\) return;\s*\}/);
   // Every failure means "nothing extra to ask", which is exactly today's behaviour.
   assert.match(API, /export function getPostingQuestions[\s\S]{0,400}?\.catch\(\(\) => null\)/);
 });

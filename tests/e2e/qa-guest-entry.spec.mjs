@@ -23,6 +23,7 @@ import { createServer } from "node:net";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 const BACKEND_ORIGIN = "https://backend.fixture.invalid";
 const GUEST_TOKEN = [
@@ -102,6 +103,10 @@ test("127.0.0.1 dev entry renders and clicks Guest mode", async () => {
     }
     if (requestUrl.startsWith("https://accounts.google.com/gsi/client")) {
       await route.fulfill({ status: 200, contentType: "application/javascript", body: "" });
+      return;
+    }
+    if (isSanctionedThirdParty(requestUrl)) {
+      await route.abort();
       return;
     }
     unexpectedOrigins.push(requestUrl);

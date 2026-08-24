@@ -55,6 +55,15 @@
   --shadow-rest: 0 1px 2px rgba(18, 18, 15, 0.04);
   --shadow-raised: 0 1px 2px rgba(18, 18, 15, 0.04), 0 12px 32px -16px rgba(18, 18, 15, 0.12);
   --shadow-overlay: 0 1px 2px rgba(18, 18, 15, 0.05), 0 24px 56px -24px rgba(18, 18, 15, 0.22);
+
+  /* Motion is another token system, not a collection of one-off timings. Old content leaves
+     quickly, new content gets one quiet beat to settle, and small state changes use the same
+     curve at the shorter duration. */
+  --motion-exit: 130ms;
+  --motion-state: 180ms;
+  --motion-enter: 240ms;
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
 }
 
 @theme inline {
@@ -149,6 +158,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
+summary:focus-visible,
 [tabindex]:not([tabindex="-1"]):focus-visible {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
@@ -417,10 +427,115 @@ html:has(.dashboard-shell) {
   }
 }
 
-/* The dashboard-drawer animations were removed with the review drawer itself. Reviewing a packet
-   is one screen now, /dashboard/applications, reached by a link rather than by a panel sliding in
-   over Home. Their reduced-motion overrides went with them: an animation that does not exist does
-   not need turning off. */
+/* Dashboard motion. The rail and mobile bar stay still while a route body leaves quickly and the
+   next one settles like a sheet placed on a desk. Peer panels replace one another in sequence so
+   two readable states never compete in the same space. */
+@keyframes rq-dashboard-page-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes rq-dashboard-page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes rq-dashboard-panel-exit {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(-2px); }
+}
+
+@keyframes rq-dashboard-panel-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+::view-transition-old(.rq-dashboard-page) {
+  animation: rq-dashboard-page-exit var(--motion-exit) var(--motion-ease-in) both;
+}
+
+::view-transition-new(.rq-dashboard-page) {
+  animation: rq-dashboard-page-enter var(--motion-enter) var(--motion-ease-out) 70ms both;
+}
+
+::view-transition-old(.rq-dashboard-panel) {
+  animation: rq-dashboard-panel-exit var(--motion-exit) var(--motion-ease-in) both;
+}
+
+::view-transition-new(.rq-dashboard-panel) {
+  animation: rq-dashboard-panel-enter var(--motion-state) var(--motion-ease-out) var(--motion-exit) both;
+}
+
+::view-transition-group(.rq-dashboard-route-trace) {
+  animation-duration: 300ms;
+  animation-timing-function: var(--motion-ease-out);
+  z-index: 40;
+}
+
+::view-transition-old(.rq-dashboard-backdrop-snapshot) {
+  animation: rq-dashboard-backdrop-enter var(--motion-exit) ease-in reverse both;
+}
+
+::view-transition-new(.rq-dashboard-backdrop-snapshot) {
+  animation: rq-dashboard-backdrop-enter var(--motion-state) ease-out both;
+}
+
+::view-transition-old(.rq-dashboard-dialog-snapshot) {
+  animation: rq-dashboard-dialog-enter var(--motion-exit) ease-in reverse both;
+}
+
+::view-transition-new(.rq-dashboard-dialog-snapshot) {
+  animation: rq-dashboard-dialog-enter var(--motion-enter) var(--motion-ease-out) both;
+}
+
+/* Entry is available even before a browser supports snapshot exits. The backdrop and panel use
+   different properties so the page darkens first and the object then settles into it. */
+@keyframes rq-dashboard-backdrop-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes rq-dashboard-dialog-enter {
+  from { transform: translateY(10px) scale(0.99); }
+  to { transform: none; }
+}
+
+@keyframes rq-dashboard-backdrop-exit {
+  from { opacity: var(--rq-dashboard-backdrop-exit-from, 1); }
+  to { opacity: 0; }
+}
+
+@keyframes rq-dashboard-dialog-exit {
+  from { transform: var(--rq-dashboard-dialog-exit-from, none); }
+  to { transform: translateY(8px) scale(0.99); }
+}
+
+.rq-dashboard-backdrop {
+  animation: rq-dashboard-backdrop-enter var(--motion-state) ease-out both;
+}
+
+.rq-dashboard-dialog {
+  animation: rq-dashboard-dialog-enter var(--motion-enter) var(--motion-ease-out) both;
+}
+
+dialog.rq-dashboard-dialog::backdrop {
+  animation: rq-dashboard-backdrop-enter var(--motion-state) ease-out both;
+}
+
+.rq-dashboard-backdrop-exit {
+  animation: rq-dashboard-backdrop-exit var(--motion-exit) ease-in both;
+  pointer-events: none;
+}
+
+.rq-dashboard-dialog-exit {
+  animation: rq-dashboard-dialog-exit var(--motion-exit) ease-in both;
+  pointer-events: none;
+}
+
+dialog.rq-dashboard-dialog-exit::backdrop {
+  animation: rq-dashboard-backdrop-exit var(--motion-exit) ease-in both;
+  pointer-events: none;
+}
 
 /* The reduced-motion product still is off under full motion: the film and
    the Application Roll own the opening, and a still underneath them would
@@ -511,6 +626,18 @@ html:has(.dashboard-shell) {
   }
   .rq-shimmer {
     animation: none;
+  }
+  .dashboard-shell .animate-pulse,
+  .rq-dashboard-backdrop,
+  .rq-dashboard-dialog,
+  dialog.rq-dashboard-dialog::backdrop {
+    animation: none;
+  }
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
   }
   /* The base resume still builds line by line under reduced motion - the lines just appear
      instead of rising. The information is the point; the movement was only ever the flourish. */

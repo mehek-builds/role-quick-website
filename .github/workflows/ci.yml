@@ -136,6 +136,17 @@ jobs:
       - name: Click path spec
         run: npm run test:click-path
 
+      # Proves route snapshots and the mobile sheet animate in a real browser, then reruns the
+      # route under the operating system reduced-motion preference. Source checks alone cannot
+      # observe the snapshot lifecycle or focus return.
+      - name: Dashboard motion spec
+        run: npm run test:dashboard-motion
+
+      # Locks the production geometry, focus, error recovery, tab semantics, and reflow contracts
+      # established by the dashboard visual QA pass. The spec keeps screenshots for every green run.
+      - name: Dashboard visual regressions spec
+        run: npm run test:dashboard-visual-regressions
+
       - name: Quality refactor regression spec
         run: npm run test:quality-refactor
 
@@ -193,6 +204,7 @@ jobs:
           path: |
             test-results/click-path/
             test-results/country-eligibility-flow/
+            test-results/dashboard-visual-regressions/
             test-results/narrow-viewport/
           if-no-files-found: ignore
           retention-days: 7

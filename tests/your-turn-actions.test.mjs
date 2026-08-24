@@ -82,7 +82,7 @@ test("OPEN PAGE is a real link and the question actions are real buttons, each w
   assert.match(button, /aria-label=\{control\.name\}/, "read_page found these as bare buttons with no accessible name");
 });
 
-test("the panel hands the row everything a control needs, and the page hands the panel a handler", () => {
+test("non-question work stays actionable while trusted questions render as a direct prompt", () => {
   const list = functionBody(page, "BlockerList");
   assert.match(list, /portalUrl=\{portalUrl\}/);
   assert.match(list, /onRestartInLitos=\{onRestartInLitos\}/);
@@ -93,7 +93,9 @@ test("the panel hands the row everything a control needs, and the page hands the
      tests/question-choice-list.test.mjs pins what pressing one does. onToggleAcknowledged joined it
      when the row's checkbox stopped being scenery and started writing a stored tick. The
      whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
-  assert.match(page, /<BlockerList items=\{needsInputItems\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\} onRestartInLitos=\{onReviewPacket\} onOpenQuestion=\{onOpenQuestion\} onChooseOption=\{onChooseOption\} onAddDocument=\{onAddDocument\} onToggleAcknowledged=\{onToggleAcknowledged\} tickingIds=\{attentionTicking\} \/>/);
+  assert.match(page, /<DirectApplicationQuestion[\s\S]*?task=\{currentDirectQuestion\}[\s\S]*?onSave=\{saveCurrentDirectQuestion\}/);
+  assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\}/);
+  assert.match(page, /onSaveQuestion=\{\(questionId, answer, intent, promptFingerprint, taskFingerprint\) => saveReviewedAnswers\(\{ questionId, answer, intent, promptFingerprint, taskFingerprint \}\)\}/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
   assert.match(page, /onToggleAcknowledged=\{\(item, acknowledged\) => void toggleAttentionAcknowledgement\(item, acknowledged\)\}/);
@@ -128,21 +130,21 @@ test("the document row draws a real button, below the question button that the p
  * promise of removal with nothing in the product that removes it is a promise that is not kept.
  *
  * The row therefore has to persist in a settled state, and it has to persist QUIETLY: a confirmation
- * counted in "N to check" inside an amber panel headed "Your turn" is how an application with
- * nothing outstanding goes on looking blocked.
+ * counted in the remaining-work queue is how an application with nothing outstanding goes on
+ * looking blocked.
  */
 test("a settled row keeps its control, and keeps it out of the panel that counts outstanding work", () => {
   const list = functionBody(page, "BlockerList");
 
   assert.match(list, /const outstanding = items\.filter\(\(item\) => !item\.settled\)/);
   assert.match(list, /const settled = items\.filter\(\(item\) => item\.settled\)/);
-  assert.match(list, /\{outstanding\.length\} to check/, "the count must read outstanding rows, never the settled confirmations");
-  assert.equal(/\{items\.length\} to check/.test(list), false);
+  assert.match(list, /\{outstanding\.length\} remaining/, "the count must read outstanding rows, never the settled confirmations");
+  assert.equal(/\{items\.length\} remaining/.test(list), false);
 
-  // The amber Your turn panel is for outstanding rows only.
-  const amber = list.indexOf("Your turn");
+  // The flat next-step queue is for outstanding rows only.
+  const queue = list.indexOf("Your next step");
   const settledStrip = list.indexOf("settled.length > 0");
-  assert.ok(amber !== -1 && settledStrip > amber, "the settled strip is drawn after the panel, outside it");
+  assert.ok(queue !== -1 && settledStrip > queue, "the settled strip is drawn after the queue, outside it");
   /* onToggleAcknowledged rides into the settled strip too: an acknowledged row's checkbox is the
      way the tick is taken back, and dropping the handler here would strand her ticks the way the
      pre-repair rows stranded "Remove this file". */
@@ -155,7 +157,7 @@ test("a settled row keeps its control, and keeps it out of the panel that counts
   assert.match(row, /const done = checked \|\| item\.settled === true/);
   assert.match(row, /className=\{done \? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS\}/);
   assert.match(row, /\{!done && item\.badge/, "a stored file must not go on wearing a REQUIRED pill");
-  assert.match(page, /const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 /, "quieter, and still a 44px target");
+  assert.match(page, /const CHECKLIST_SETTLED_ACTION_CLASS = "inline-flex min-h-11 /, "quieter, and still a 44px target");
 });
 
 /* THE CHECKBOX THAT CHECKED NOTHING.
@@ -197,10 +199,10 @@ test("the row's one checkbox is live, shows the stored tick, and rows the server
   const labelTag = row.slice(labelStart, row.indexOf(">", labelStart));
   assert.match(labelTag, /h-6 w-6/, "the tick target must not shrink back to the 14px decoration it was");
 
-  // The live box exists only where a tick can be stored; everything else gets a plain marker.
+  // The live box exists only where a tick can be stored; everything else gets a status dot.
   assert.match(row, /item\.acknowledgeable === true \? onToggleAcknowledged : undefined/);
-  assert.match(row, /<span aria-hidden className="mt-0\.5 h-\[14px\] w-\[14px\] rounded-\[3px\] border border-warn\/40 bg-surface" \/>/,
-    "the placeholder keeps the 18px column aligned for the rows whose done is the server's to say");
+  assert.match(row, /<span aria-hidden className="ml-1 mt-1\.5 h-2 w-2 rounded-full bg-brand" \/>/,
+    "the status dot keeps the marker column aligned without pretending to be a checkbox");
   assert.equal(/aria-label=\{`Mark \$\{item\.label\} done`\}(?![\s\S]{0,200}onChange)/.test(row), false,
     "the dead 'Mark ... done' checkbox must not come back without a handler");
 });

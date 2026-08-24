@@ -9,12 +9,11 @@ import type { Metadata } from "next";
  * metadata. Declaring the title on the segment makes the streamed answer correct at the source,
  * so it is right in the served HTML rather than written and then overwritten.
  *
- * "Tracker", the word in the NAV table, not the route noun. The route stays /applications because
- * links already sent out point at it; the label is the part a student reads. And "Tracker" alone,
- * not "Tracker: Litos": the root layout declares the template `%s: Litos` (app/layout.tsx).
+ * "Applications" matches both the navigation label and the visible page heading. The route stays
+ * /applications, and the root layout adds the Litos suffix through its title template.
  */
 export const metadata: Metadata = {
-  title: "Tracker",
+  title: "Applications",
 };
 
 export default function ApplicationsLayout({

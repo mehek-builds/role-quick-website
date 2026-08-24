@@ -524,6 +524,31 @@ test("resume upload controls stay disabled until the initial bank read settles",
   await context.close();
 });
 
+test("resume upload waits for work-history drafts, then keeps file retry available", async () => {
+  const context = await fixtureContext();
+  const traffic = await routeResume(context);
+  const page = await context.newPage();
+  await page.goto(`${ORIGIN}/dashboard/resume`, { waitUntil: "networkidle" });
+  const input = page.locator('input[type="file"]');
+  const uploadButton = page.getByRole("button", { name: "Upload resume PDF", exact: true });
+  await page.getByRole("button", { name: "Add work experience", exact: true }).click();
+  await page.getByLabel("Organization", { exact: true }).fill("Unsaved Fixture Labs");
+  await page.getByText("Save work history changes before replacing your resume.", { exact: true }).waitFor();
+  assert.equal(await input.isDisabled(), true);
+  assert.equal(await uploadButton.isDisabled(), true);
+  assert.equal(await page.getByLabel("Resume PDF upload drop zone").getAttribute("aria-describedby"), "resume-upload-blocked-reason");
+
+  await page.getByRole("button", { name: "Remove entry", exact: true }).click();
+  await page.waitForFunction(() => !document.querySelector('input[type="file"]')?.disabled);
+  await input.setInputFiles({ name: "resume.txt", mimeType: "text/plain", buffer: Buffer.from("not a pdf") });
+  const retry = page.getByRole("button", { name: "Retry", exact: true });
+  await retry.waitFor({ state: "visible" });
+  assert.equal(await retry.isDisabled(), false, "resolving the draft did not restore failed-file retry");
+  assert.equal(traffic.profileUploads, 0);
+  assert.deepEqual(traffic.unknown, []);
+  await context.close();
+});
+
 test("resume upload accepts a PDF filename with empty or generic MIME metadata", async () => {
   for (const mimeType of ["", "application/octet-stream"]) {
     const context = await fixtureContext();

@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ResumeWorkspace from "../resume/page";
-import { api, type ApplicationProfile, type CanonicalApplication, type CanonicalCoverLetterResponse, type DocumentSummary, type GeneratedResume } from "@/lib/api";
+import { api, getApplicationProfile, type ApplicationProfile, type CanonicalApplication, type CanonicalCoverLetterResponse, type DocumentSummary, type GeneratedResume } from "@/lib/api";
 import { Button, ButtonLink } from "@/components/app/Button";
-import { Card, EmptyState, ErrorNote, ShimmerRows } from "@/components/app/ui";
+import { Card, DataErrorState, EmptyState, ErrorNote, PendingLabel, ShimmerRows } from "@/components/app/ui";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 import { useBilling } from "@/components/billing/BillingProvider";
+import { createLatestRequestCoordinator, restoreFocusAfterRetry } from "@/lib/latest-request";
+import { userFacingError } from "@/lib/user-facing-error";
 
 const TABS = [
   ["base-resume", "Main resume"],
@@ -16,39 +19,178 @@ const TABS = [
   ["attachments", "Attachments"],
 ] as const;
 type Tab = typeof TABS[number][0];
+type DocumentResource = "resumes" | "coverLetters" | "applications" | "attachments" | "profile";
+type DocumentResourceErrors = Partial<Record<DocumentResource, string>>;
+type DocumentResourcePending = Partial<Record<DocumentResource, boolean>>;
 
 export default function DocumentsPage() {
   const router = useRouter();
   const { canUse, openUpgrade } = useBilling();
-  const [tab, setTab] = useState<Tab>("base-resume");
+  /* Server markup cannot read the query string. Start without a selected panel, then reconcile the
+     requested tab after hydration, so an Attachments deep link never flashes Main resume first. */
+  const [tab, setTab] = useState<Tab | null>(null);
   const [resumes, setResumes] = useState<GeneratedResume[] | null>(null);
   const [coverLetters, setCoverLetters] = useState<CanonicalCoverLetterResponse[] | null>(null);
-  const [applications, setApplications] = useState<CanonicalApplication[]>([]);
+  const [applications, setApplications] = useState<CanonicalApplication[] | null>(null);
   const [attachments, setAttachments] = useState<DocumentSummary[] | null>(null);
   const [profile, setProfile] = useState<ApplicationProfile | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [resourceErrors, setResourceErrors] = useState<DocumentResourceErrors>({});
+  const [pendingResources, setPendingResources] = useState<DocumentResourcePending>({});
+  const [documentsTabsViewport, setDocumentsTabsViewport] = useState<HTMLDivElement | null>(null);
+  const [documentsTabsViewportWidth, setDocumentsTabsViewportWidth] = useState(0);
+  const [showDocumentsTabLeftOverflowCue, setShowDocumentsTabLeftOverflowCue] = useState(false);
+  const [showDocumentsTabOverflowCue, setShowDocumentsTabOverflowCue] = useState(false);
+  const tabRefs = useRef<Partial<Record<Tab, HTMLButtonElement | null>>>({});
+  const [resourceRequests] = useState(() => createLatestRequestCoordinator<DocumentResource>());
+
+  const setResourceError = useCallback((resource: DocumentResource, message: string | null) => {
+    setResourceErrors((current) => {
+      const next = { ...current };
+      if (message) next[resource] = message;
+      else delete next[resource];
+      return next;
+    });
+  }, []);
+
+  const setResourcePending = useCallback((resource: DocumentResource, pending: boolean) => {
+    setPendingResources((current) => ({ ...current, [resource]: pending }));
+  }, []);
+
+  const runResourceLoad = useCallback(<Value,>(
+    resource: DocumentResource,
+    request: () => Promise<Value>,
+    onSuccess: (value: Value) => void,
+    failureMessage: string,
+    supersede = false,
+  ) => resourceRequests.run(resource, request, {
+    onStart: () => {
+      setResourcePending(resource, true);
+      setResourceError(resource, null);
+    },
+    onSuccess,
+    onError: (reason) => setResourceError(resource, userFacingError(reason, failureMessage)),
+    onSettled: () => setResourcePending(resource, false),
+  }, { supersede }), [resourceRequests, setResourceError, setResourcePending]);
+
+  const loadResumes = useCallback((supersede = false) => runResourceLoad(
+    "resumes",
+    () => api<{ resumes: GeneratedResume[] }>("/resume/history"),
+    (history) => setResumes(history.resumes),
+    "Your tailored resume history could not load.",
+    supersede,
+  ), [runResourceLoad]);
+
+  const loadCoverLetters = useCallback((supersede = false) => runResourceLoad(
+    "coverLetters",
+    () => api<{ cover_letters?: CanonicalCoverLetterResponse[] }>("/cover-letters", { cache: "no-store" }),
+    (result) => setCoverLetters(result.cover_letters ?? []),
+    "Your cover letters could not load.",
+    supersede,
+  ), [runResourceLoad]);
+
+  const loadApplications = useCallback((supersede = false) => runResourceLoad(
+    "applications",
+    () => api<{ applications?: CanonicalApplication[] }>("/applications?limit=200"),
+    (result) => setApplications(result.applications ?? []),
+    "Application details for your cover letters could not load.",
+    supersede,
+  ), [runResourceLoad]);
+
+  const loadAttachments = useCallback((supersede = false) => runResourceLoad(
+    "attachments",
+    () => api<{ documents?: DocumentSummary[] } | DocumentSummary[]>("/documents"),
+    (result) => setAttachments(Array.isArray(result) ? result : result.documents ?? []),
+    "Your reusable attachments could not load.",
+    supersede,
+  ), [runResourceLoad]);
+
+  const loadProfile = useCallback((supersede = false) => runResourceLoad(
+    "profile",
+    getApplicationProfile,
+    setProfile,
+    "Your saved application answers could not load.",
+    supersede,
+  ), [runResourceLoad]);
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    if (TABS.some(([value]) => value === requested)) queueMicrotask(() => setTab(requested as Tab));
-    Promise.all([
-      api<{ resumes: GeneratedResume[] }>("/resume/history").catch(() => ({ resumes: [] })),
-      api<{ cover_letters?: CanonicalCoverLetterResponse[] }>("/cover-letters").catch(() => ({ cover_letters: [] })),
-      api<{ applications?: CanonicalApplication[] }>("/applications?limit=200").catch(() => ({ applications: [] })),
-      api<{ documents?: DocumentSummary[] } | DocumentSummary[]>("/documents").catch(() => []),
-      api<ApplicationProfile>("/profile/application").catch(() => ({})),
-    ]).then(([history, canonicalLetters, canonicalApplications, documents, applicationProfile]) => {
-      setResumes(history.resumes);
-      setCoverLetters(canonicalLetters.cover_letters ?? []);
-      setApplications(canonicalApplications.applications ?? []);
-      setAttachments(Array.isArray(documents) ? documents : documents.documents ?? []);
-      setProfile(applicationProfile);
-    }).catch((reason) => setError(reason instanceof Error ? reason.message : "Documents could not load."));
-  }, []);
+    queueMicrotask(() => setTab(TABS.some(([value]) => value === requested) ? requested as Tab : "base-resume"));
+    queueMicrotask(() => {
+      void Promise.allSettled([
+        loadResumes(),
+        loadCoverLetters(),
+        loadApplications(),
+        loadAttachments(),
+        loadProfile(),
+      ]);
+    });
+  }, [loadApplications, loadAttachments, loadCoverLetters, loadProfile, loadResumes]);
+
+  useEffect(() => {
+    const viewport = documentsTabsViewport;
+    if (!viewport) return;
+
+    const updateOverflowCue = () => {
+      const remaining = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft;
+      setDocumentsTabsViewportWidth(viewport.clientWidth);
+      setShowDocumentsTabLeftOverflowCue(viewport.scrollLeft > 2);
+      setShowDocumentsTabOverflowCue(remaining > 2);
+    };
+
+    updateOverflowCue();
+    viewport.addEventListener("scroll", updateOverflowCue, { passive: true });
+    window.addEventListener("resize", updateOverflowCue);
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateOverflowCue);
+    observer?.observe(viewport);
+
+    return () => {
+      viewport.removeEventListener("scroll", updateOverflowCue);
+      window.removeEventListener("resize", updateOverflowCue);
+      observer?.disconnect();
+    };
+  }, [documentsTabsViewport]);
+
+  useEffect(() => {
+    const viewport = documentsTabsViewport;
+    if (!viewport || !tab) return;
+    const selected = tabRefs.current[tab];
+    if (!selected) return;
+    const viewportRect = viewport.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    const hasLeftOverflow = viewport.scrollLeft > 2;
+    const hasRightOverflow = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft > 2;
+    const safeLeft = viewportRect.left + (hasLeftOverflow ? 48 : 0);
+    const safeRight = viewportRect.right - (hasRightOverflow ? 48 : 0);
+    if (selectedRect.left >= safeLeft && selectedRect.right <= safeRight) return;
+    selected.scrollIntoView({
+      block: "nearest",
+      inline: "center",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [documentsTabsViewport, documentsTabsViewportWidth, tab]);
 
   function choose(next: Tab) {
-    setTab(next);
-    router.replace(`/dashboard/documents?tab=${next}`, { scroll: false });
+    if (next === tab) return;
+    runDashboardTransition(() => {
+      setTab(next);
+      router.replace(`/dashboard/documents?tab=${next}`, { scroll: false });
+    });
+  }
+
+  function moveTab(current: Tab, key: string) {
+    const currentIndex = TABS.findIndex(([value]) => value === current);
+    const nextIndex = key === "Home"
+      ? 0
+      : key === "End"
+        ? TABS.length - 1
+        : key === "ArrowRight"
+          ? (currentIndex + 1) % TABS.length
+          : (currentIndex - 1 + TABS.length) % TABS.length;
+    const next = TABS[nextIndex][0];
+    choose(next);
+    requestAnimationFrame(() => tabRefs.current[next]?.focus());
   }
 
   function tailor() {
@@ -67,6 +209,41 @@ export default function DocumentsPage() {
 
   const legacyCoverLetters = resumes?.filter((resume) => resume.spec._cover_letter) ?? null;
   const savedAnswerCount = profile ? Object.values(profile).filter((value) => typeof value === "string" && value.trim()).length : 0;
+  const coverLetterResourcesFailed = Boolean(resourceErrors.coverLetters || resourceErrors.resumes || resourceErrors.applications);
+  const hasCoverLetterContent = (coverLetters?.length ?? 0) > 0 || (legacyCoverLetters?.length ?? 0) > 0;
+  const coverLetterResourcesPending = Boolean(pendingResources.coverLetters || pendingResources.resumes || pendingResources.applications);
+  const activeTabPending = tab === "tailored-resumes"
+    ? Boolean(pendingResources.resumes)
+    : tab === "cover-letters"
+      ? coverLetterResourcesPending
+      : tab === "saved-answers"
+        ? Boolean(pendingResources.profile)
+        : tab === "attachments"
+          ? Boolean(pendingResources.attachments)
+          : false;
+  const activeTabHasData = tab === "tailored-resumes"
+    ? resumes !== null
+    : tab === "cover-letters"
+      ? coverLetters !== null || resumes !== null || applications !== null
+      : tab === "saved-answers"
+        ? profile !== null
+        : tab === "attachments"
+          ? attachments !== null
+          : false;
+
+  function retryDocumentResource(retry: () => Promise<unknown>) {
+    void retry();
+    restoreFocusAfterRetry("documents-panel");
+  }
+
+  function retryCoverLetterResources() {
+    const retries: Promise<unknown>[] = [];
+    if (resourceErrors.coverLetters) retries.push(loadCoverLetters());
+    if (resourceErrors.resumes) retries.push(loadResumes());
+    if (resourceErrors.applications) retries.push(loadApplications());
+    void Promise.all(retries);
+    restoreFocusAfterRetry("documents-panel");
+  }
 
   return (
     <div className="space-y-7">
@@ -79,50 +256,145 @@ export default function DocumentsPage() {
         <Button type="button" variant="secondary" onClick={tailor}>Tailor a resume</Button>
       </header>
 
-      <nav aria-label="Document sections" className="flex gap-2 overflow-x-auto border-b border-border pb-3">
-        {TABS.map(([value, label]) => (
-          <button key={value} type="button" aria-current={tab === value ? "page" : undefined} onClick={() => choose(value)} className={`min-h-11 shrink-0 rounded-control px-4 text-small ${tab === value ? "bg-brand-soft font-medium text-brand-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}>{label}</button>
-        ))}
-      </nav>
-
-      {error && <ErrorNote message={error} />}
-      {tab === "base-resume" && <ResumeWorkspace />}
-      {tab === "tailored-resumes" && <GeneratedLibrary kind="resume" items={resumes} />}
-      {tab === "cover-letters" && (
-        <CoverLetterLibrary
-          canonical={coverLetters}
-          legacy={legacyCoverLetters}
-          applications={applications}
-          onChanged={() => {
-            void api<{ cover_letters?: CanonicalCoverLetterResponse[] }>("/cover-letters", { cache: "no-store" })
-              .then((result) => setCoverLetters(result.cover_letters ?? []))
-              .catch((reason) => setError(reason instanceof Error ? reason.message : "Cover letters could not refresh."));
-          }}
-        />
-      )}
-      {tab === "saved-answers" && (
-        <Card className="p-6">
-          <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Reusable profile answers</p>
-          <h2 className="mt-2 text-heading font-[450] text-ink">{profile === null ? "Loading saved answers" : `${savedAnswerCount} saved answer${savedAnswerCount === 1 ? "" : "s"}`}</h2>
-          <p className="mt-2 text-small text-muted">Application facts remain editable in Account and are used only where the employer asks for them.</p>
-          <ButtonLink href="/dashboard/settings#application-details" variant="secondary" className="mt-5">Review saved answers</ButtonLink>
-        </Card>
-      )}
-      {tab === "attachments" && (
-        attachments === null ? <ShimmerRows rows={3} /> : attachments.length === 0 ? (
-          <EmptyState visual="applications" title="No reusable attachments" body="Employer documents you upload will stay available here when the application allows reuse." />
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {attachments.filter((item) => !item.deleted_at).map((item) => (
-              <Card key={item.id} className="p-5">
-                <p className="truncate text-small font-medium text-ink">{item.file_name}</p>
-                <p className="mt-2 font-mono text-label text-muted">{item.kind} · {Math.max(1, Math.round(item.byte_size / 1024))} KB</p>
-                <p className="mt-3 text-label text-muted">Uploaded {new Date(item.created_at).toLocaleDateString()}</p>
-              </Card>
-            ))}
+      <div className="relative">
+        <div
+          ref={setDocumentsTabsViewport}
+          role="tablist"
+          aria-label="Document sections"
+          className="flex snap-x snap-proximity gap-2 overflow-x-auto border-b border-border pb-3 [scroll-padding-inline-start:3rem] [scroll-padding-inline-end:3rem]"
+        >
+          {TABS.map(([value, label]) => (
+            <button
+              key={value}
+              ref={(node) => { tabRefs.current[value] = node; }}
+              type="button"
+              role="tab"
+              id={`documents-tab-${value}`}
+              aria-selected={tab === value}
+              aria-controls="documents-panel"
+              tabIndex={tab === value ? 0 : -1}
+              onClick={() => choose(value)}
+              onKeyDown={(event) => {
+                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                  event.preventDefault();
+                  moveTab(value, event.key);
+                }
+              }}
+              className={`min-h-11 shrink-0 snap-start rounded-control px-4 text-small ${tab === value ? "bg-brand-soft font-medium text-brand-ink" : "text-muted hover:bg-surface-alt hover:text-ink"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {showDocumentsTabLeftOverflowCue && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 left-0 flex w-12 items-center bg-gradient-to-r from-bg via-bg/95 to-transparent pl-2"
+          >
+            <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
+              ‹
+            </span>
           </div>
-        )
-      )}
+        )}
+        {showDocumentsTabOverflowCue && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2"
+          >
+            <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
+              ›
+            </span>
+          </div>
+        )}
+      </div>
+
+      <MotionPanel key={tab ?? "loading"} name="dashboard-documents-panel">
+        <div
+          id="documents-panel"
+          role="tabpanel"
+          aria-label={tab === null ? "Loading document section" : undefined}
+          aria-labelledby={tab === null ? undefined : `documents-tab-${tab}`}
+          aria-busy={tab === null || activeTabPending}
+          tabIndex={0}
+        >
+        {tab === null && <ShimmerRows rows={3} />}
+        {activeTabPending && activeTabHasData && (
+          <p role="status" className="mb-4 text-small text-muted">
+            <PendingLabel>Refreshing...</PendingLabel>
+          </p>
+        )}
+        {tab === "base-resume" && <ResumeWorkspace />}
+        {tab === "tailored-resumes" && (
+          resourceErrors.resumes ? (
+            <DataErrorState
+              headingLevel="h2"
+              title="Tailored resumes did not load."
+              body={resourceErrors.resumes}
+              onRetry={() => retryDocumentResource(loadResumes)}
+            />
+          ) : <GeneratedLibrary kind="resume" items={resumes} />
+        )}
+        {tab === "cover-letters" && (
+          <div className="space-y-6">
+            {coverLetterResourcesFailed && (
+              <DataErrorState
+                headingLevel="h2"
+                title="Cover letters did not fully load."
+                body="Your saved documents are unchanged. Try loading the missing details again."
+                onRetry={retryCoverLetterResources}
+              />
+            )}
+            {(!coverLetterResourcesFailed || hasCoverLetterContent) && (
+              <CoverLetterLibrary
+                canonical={resourceErrors.coverLetters ? [] : coverLetters}
+                legacy={resourceErrors.resumes ? [] : legacyCoverLetters}
+                applications={applications ?? []}
+                onChanged={() => void loadCoverLetters(true)}
+              />
+            )}
+          </div>
+        )}
+        {tab === "saved-answers" && (
+          resourceErrors.profile ? (
+            <DataErrorState
+              headingLevel="h2"
+              title="Saved answers did not load."
+              body={resourceErrors.profile}
+              onRetry={() => retryDocumentResource(loadProfile)}
+            />
+          ) : (
+            <Card className="p-6">
+              <p className="font-mono text-label uppercase tracking-[0.08em] text-brand-ink">Reusable profile answers</p>
+              <h2 className="mt-2 text-heading font-[450] text-ink">{profile === null ? "Loading saved answers" : `${savedAnswerCount} saved answer${savedAnswerCount === 1 ? "" : "s"}`}</h2>
+              <p className="mt-2 text-small text-muted">Application facts remain editable in Account and are used only where the employer asks for them.</p>
+              <ButtonLink href="/dashboard/settings#application-details" variant="secondary" className="mt-5">Review saved answers</ButtonLink>
+            </Card>
+          )
+        )}
+        {tab === "attachments" && (
+          resourceErrors.attachments ? (
+            <DataErrorState
+              headingLevel="h2"
+              title="Attachments did not load."
+              body={resourceErrors.attachments}
+              onRetry={() => retryDocumentResource(loadAttachments)}
+            />
+          ) : attachments === null ? <ShimmerRows rows={3} /> : attachments.length === 0 ? (
+            <EmptyState visual="applications" title="No reusable attachments" body="Employer documents you upload will stay available here when the application allows reuse." />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {attachments.filter((item) => !item.deleted_at).map((item) => (
+                <Card key={item.id} className="p-5">
+                  <p className="truncate text-small font-medium text-ink">{item.file_name}</p>
+                  <p className="mt-2 font-mono text-label text-muted">{item.kind} · {Math.max(1, Math.round(item.byte_size / 1024))} KB</p>
+                  <p className="mt-3 text-label text-muted">Uploaded {new Date(item.created_at).toLocaleDateString()}</p>
+                </Card>
+              ))}
+            </div>
+          )
+        )}
+        </div>
+      </MotionPanel>
     </div>
   );
 }

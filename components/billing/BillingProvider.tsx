@@ -35,10 +35,35 @@ type BillingContextValue = {
   error: string | null;
   canUse: (feature: PremiumFeatureKey) => boolean | null;
   refresh: () => Promise<void>;
-  openUpgrade: (request: UpgradeRequest, options?: { source?: UpgradeOpenSource }) => void;
+  openUpgrade: (request: UpgradeRequest, options?: OpenUpgradeOptions) => void;
+};
+
+type OpenUpgradeOptions = {
+  source?: UpgradeOpenSource;
+  trigger?: HTMLElement | null;
 };
 
 const BillingContext = createContext<BillingContextValue | null>(null);
+
+function restoreUpgradeFocus(trigger: HTMLElement | null): void {
+  const candidates: HTMLElement[] = [];
+  if (trigger?.isConnected) candidates.push(trigger);
+  for (const selector of [
+    '.dashboard-shell main [role="tab"][aria-selected="true"]',
+    '.dashboard-shell nav [aria-current="page"], .dashboard-shell aside [aria-current="page"]',
+    ".dashboard-shell main h1",
+  ]) {
+    for (const candidate of document.querySelectorAll<HTMLElement>(selector)) {
+      if (!candidates.includes(candidate)) candidates.push(candidate);
+    }
+  }
+  for (const candidate of candidates) {
+    if (!candidate.isConnected) continue;
+    if (candidate.matches("h1") && !candidate.hasAttribute("tabindex")) candidate.tabIndex = -1;
+    candidate.focus({ preventScroll: true });
+    if (document.activeElement === candidate) return;
+  }
+}
 
 export function BillingProvider({ children }: { children: React.ReactNode }) {
   const [access, setAccess] = useState<EntitlementSnapshot | null>(null);
@@ -101,11 +126,15 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  const openUpgrade = useCallback((next: UpgradeRequest, options?: { source?: UpgradeOpenSource }) => {
+  const openUpgrade = useCallback((next: UpgradeRequest, options?: OpenUpgradeOptions) => {
     if (!shouldOpenUpgrade(access, next.feature, options?.source)) return;
     checkoutRequestIdRef.current = crypto.randomUUID();
     checkoutAttemptRef.current = null;
-    triggerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    triggerRef.current = options?.trigger?.isConnected
+      ? options.trigger
+      : document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     setRequest({ ...next, returnRoute: next.returnRoute ?? currentBillingReturnRoute() });
     track("paywall_impression", { feature_key: next.feature, placement: next.placement, trigger: next.trigger });
     void emitBillingEvent("paywall_impression", {
@@ -128,7 +157,11 @@ export function BillingProvider({ children }: { children: React.ReactNode }) {
     checkoutRequestIdRef.current = null;
     checkoutAttemptRef.current = null;
     setRequest(null);
-    window.setTimeout(() => triggerRef.current?.focus(), 0);
+    const trigger = triggerRef.current;
+    window.setTimeout(() => {
+      restoreUpgradeFocus(trigger);
+      if (triggerRef.current === trigger) triggerRef.current = null;
+    }, 0);
   }, [request]);
 
   async function checkout(planId: LitosPlusPlanId) {

@@ -80,9 +80,16 @@ test("a selection change stops every post-save route from installing the wrong p
   assert.match(continueFromResume, /catch \(reason\) \{\s*if \(selectedIdRef\.current !== applicationId\) return;/s);
 });
 
-test("a stale cover-letter save cannot install errors or notices on another packet", () => {
+test("a stale cover-letter save cannot publish editor state, errors, notices, or busy cleanup", () => {
   assert.ok(coverLetterStart >= 0 && patchEntryStart > coverLetterStart, "cover-letter save must remain discoverable");
   assert.match(saveCoverLetter, /const applicationId = selected\.id;/);
-  assert.match(saveCoverLetter, /if \(selectedIdRef\.current === applicationId\) \{\s*setNotice\("Cover letter saved\./s);
-  assert.match(saveCoverLetter, /catch \(reason\) \{\s*if \(selectedIdRef\.current === applicationId\) \{\s*setError/s);
+  assert.match(saveCoverLetter, /const requestScope = beginPacketCoverLetterRequest\(applicationId\);/);
+  assert.match(saveCoverLetter, /const submittedBody = coverLetterBody;/);
+  assert.match(saveCoverLetter, /body: JSON\.stringify\(\{ body: submittedBody \}\)/);
+  assert.ok(
+    (saveCoverLetter.match(/if \(!packetCoverLetterRequestMayPublish\(requestScope\)\) return false;/g) ?? []).length >= 3,
+    "delete, save, and failure callbacks must each prove editor ownership",
+  );
+  assert.match(saveCoverLetter, /catch \(reason\) \{\s*if \(!packetCoverLetterRequestMayPublish\(requestScope\)\) return false;\s*setError/s);
+  assert.match(saveCoverLetter, /finally \{\s*if \(packetCoverLetterRequestOwnsLifecycle\(requestScope\)\) setCoverLetterBusy\(false\);/);
 });

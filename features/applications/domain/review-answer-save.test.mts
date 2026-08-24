@@ -177,6 +177,7 @@ describe("saving answers from the Review-answers screen", () => {
     assert.equal(result.saved, false, "the review that came back is the run's, not this save's");
     assert.equal("notice" in result, false, "and there is no success banner on it");
     assert.equal(result.saved === false && result.message, REVIEW_ANSWERS_SAVE_RACED);
+    assert.deepEqual(result.saved === false && result.review, { status: "needs_attention" }, "the caller can reconcile the winning server review without dropping the applicant's draft");
   });
 
   /* The other side of the same key: a save that DID land carries no `saved` at all, so an absent

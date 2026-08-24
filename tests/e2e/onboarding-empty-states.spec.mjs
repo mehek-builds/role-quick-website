@@ -98,7 +98,7 @@ test("every onboarding checkpoint renders with a progress indicator", async () =
 
 for (const state of [
   ["applications", "No applications yet", "Fill application"],
-  ["outreach", "No emails yet", "Write a message"],
+  ["outreach", "No emails yet", null],
   ["jobs", "No matching roles", "Change job preferences"],
 ]) {
   const [route, heading, action] = state;
@@ -109,6 +109,11 @@ for (const state of [
     const emptyState = title.locator("xpath=..");
     assert.equal(await emptyState.locator("svg").count(), 1);
     if (action) await emptyState.getByRole("link", { name: action }).or(emptyState.getByRole("button", { name: action })).waitFor({ state: "visible" });
+    if (route === "outreach") {
+      const startOutreach = page.getByRole("button", { name: "Start outreach", exact: true });
+      await startOutreach.waitFor({ state: "visible" });
+      assert.equal(await startOutreach.count(), 1, "Outreach should expose one clear first-use action");
+    }
     if (route === "applications") {
       await emptyState.getByRole("button", { name: "Fill application" }).click();
       await page.getByRole("heading", { name: "Fill an application." }).waitFor({ state: "visible" });

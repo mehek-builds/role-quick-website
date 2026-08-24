@@ -2,8 +2,9 @@
 
 import { Button, ButtonLink } from "@/components/app/Button";
 import { AvailabilityWindowTable } from "@/components/app/AvailabilityWindowTable";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 import {
   api,
   ApplicationProfile,
@@ -78,7 +79,8 @@ import {
 import { MAX_COUNTRY_ELIGIBILITY_RECORDS } from "@/lib/work-eligibility-limit";
 import { useBilling } from "@/components/billing/BillingProvider";
 import { PlanStatus } from "@/components/billing/PlanStatus";
-import { accessLabel } from "@/features/billing";
+import { accessLabel, isPaidAccess } from "@/features/billing";
+import { MotionPanel, runDashboardTransition } from "@/components/app/Motion";
 
 /* Application profile: exactly the fields the backend stores, including legacy
    fields retained only so a full-profile save cannot erase them. Rendering a
@@ -182,6 +184,12 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const passwordErrorRef = useRef<HTMLParagraphElement>(null);
   const [activeTab, setActiveTab] = useState<AccountTab>("job-search");
+  const activeTabRef = useRef<AccountTab>("job-search");
+  const pendingHistoryTabRef = useRef<AccountTab | null>(null);
+  const pendingHistoryTabFocusRef = useRef<AccountTab | null>(null);
+  const [accountTabsViewport, setAccountTabsViewport] = useState<HTMLDivElement | null>(null);
+  const [accountTabsViewportWidth, setAccountTabsViewportWidth] = useState(0);
+  const [showAccountTabOverflowCue, setShowAccountTabOverflowCue] = useState(false);
   const [savedProfileJson, setSavedProfileJson] = useState("");
   const deleteDialogRef = useRef<HTMLDialogElement>(null);
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
@@ -189,21 +197,131 @@ export default function Settings() {
   const [deleteComplete, setDeleteComplete] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteConfirmed = deleteConfirmation === DELETE_CONFIRMATION_PHRASE;
+  const finishDeleteDialogClose = useCallback(() => {
+    const dialog = deleteDialogRef.current;
+    if (dialog?.open) dialog.close();
+  }, []);
+  const {
+    closing: deleteDialogClosing,
+    requestClose: requestDeleteDialogClose,
+    resetExit: resetDeleteDialogExit,
+  } = useDashboardOverlayExit({
+    dialogRef: deleteDialogRef,
+    nativeBackdrop: true,
+    onExitComplete: finishDeleteDialogClose,
+  });
 
   useEffect(() => {
-    const syncTab = () => setActiveTab(tabFromHash(window.location.hash));
+    let closingDialog: HTMLDialogElement | null = null;
+    let onDialogClose: (() => void) | null = null;
+
+    const commitHistoryTab = (nextTab: AccountTab, focusTab: boolean) => {
+      activeTabRef.current = nextTab;
+      pendingHistoryTabFocusRef.current = focusTab ? nextTab : null;
+      runDashboardTransition(() => setActiveTab(nextTab));
+    };
+
+    const syncTab = () => {
+      const nextTab = tabFromHash(window.location.hash);
+      if (nextTab === activeTabRef.current && closingDialog === null) return;
+      if (closingDialog !== null) {
+        pendingHistoryTabRef.current = nextTab;
+        return;
+      }
+      const openDialog = document.querySelector<HTMLDialogElement>("#account-panel dialog[open]");
+      if (!openDialog) {
+        pendingHistoryTabRef.current = null;
+        if (nextTab !== activeTabRef.current) commitHistoryTab(nextTab, false);
+        return;
+      }
+
+      /* Back and Forward update the hash before React can retain the current panel. Ask the open
+         native dialog to close through its own cancel path, then commit the tab only after its
+         close event. This lets DocumentsCard and account deletion finish the same exit animation
+         as Escape and their explicit Keep controls. A second history event while that exit is in
+         flight replaces the destination without adding another close listener. */
+      pendingHistoryTabRef.current = nextTab;
+      if (closingDialog === openDialog) return;
+      closingDialog = openDialog;
+      onDialogClose = () => {
+        closingDialog = null;
+        onDialogClose = null;
+        const pendingTab = pendingHistoryTabRef.current;
+        pendingHistoryTabRef.current = null;
+        if (pendingTab === null || pendingTab === activeTabRef.current) return;
+        commitHistoryTab(pendingTab, true);
+      };
+      openDialog.addEventListener("close", onDialogClose, { once: true });
+      openDialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    };
+
     syncTab();
     window.addEventListener("hashchange", syncTab);
     window.addEventListener("popstate", syncTab);
     return () => {
       window.removeEventListener("hashchange", syncTab);
       window.removeEventListener("popstate", syncTab);
+      if (closingDialog && onDialogClose) closingDialog.removeEventListener("close", onDialogClose);
     };
   }, []);
 
+  useEffect(() => {
+    if (pendingHistoryTabFocusRef.current !== activeTab) return;
+    pendingHistoryTabFocusRef.current = null;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(`tab-${activeTab}`)?.focus({ preventScroll: true });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const viewport = accountTabsViewport;
+    if (!viewport) return;
+
+    const updateOverflowCue = () => {
+      const remaining = viewport.scrollWidth - viewport.clientWidth - viewport.scrollLeft;
+      setAccountTabsViewportWidth(viewport.clientWidth);
+      setShowAccountTabOverflowCue(remaining > 2);
+    };
+
+    updateOverflowCue();
+    viewport.addEventListener("scroll", updateOverflowCue, { passive: true });
+    window.addEventListener("resize", updateOverflowCue);
+    const observer = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(updateOverflowCue);
+    observer?.observe(viewport);
+
+    return () => {
+      viewport.removeEventListener("scroll", updateOverflowCue);
+      window.removeEventListener("resize", updateOverflowCue);
+      observer?.disconnect();
+    };
+  }, [accountTabsViewport]);
+
+  useEffect(() => {
+    const viewport = accountTabsViewport;
+    const selected = viewport?.querySelector<HTMLElement>(`#tab-${activeTab}`);
+    if (!viewport || !selected) return;
+    const viewportRect = viewport.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    const safeRight = viewportRect.right - (showAccountTabOverflowCue ? 48 : 0);
+    if (selectedRect.left >= viewportRect.left && selectedRect.right <= safeRight) return;
+    selected.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+    });
+  }, [accountTabsViewport, accountTabsViewportWidth, activeTab, showAccountTabOverflowCue]);
+
   function selectTab(tab: AccountTab) {
-    setActiveTab(tab);
-    window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
+    if (tab === activeTabRef.current) return;
+    activeTabRef.current = tab;
+    pendingHistoryTabFocusRef.current = null;
+    runDashboardTransition(() => {
+      setActiveTab(tab);
+      window.history.pushState({}, "", `${window.location.pathname}${window.location.search}#${tab}`);
+    });
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" });
   }
@@ -235,6 +353,8 @@ export default function Settings() {
         const billingReturn = query.get("billing") ?? query.get("checkout");
         if (billingReturn === "success" || billingReturn === "cancelled" || billingReturn === "cancel") {
           setBillingNotice(billingReturn === "success" ? "success" : "cancelled");
+          activeTabRef.current = "plan";
+          pendingHistoryTabFocusRef.current = null;
           setActiveTab("plan");
           window.history.replaceState({}, "", `${window.location.pathname}#plan`);
           if (billingReturn === "success") void refreshBilling();
@@ -330,6 +450,8 @@ export default function Settings() {
                     ? `${label} connection was not completed. Personal inbox fallback still needs a connected inbox.`
                     : `${label} connection was not completed. No verification inbox is active.`,
           );
+          activeTabRef.current = "automation";
+          pendingHistoryTabFocusRef.current = null;
           setActiveTab("automation");
           const cleanUrl = new URL(window.location.href);
           cleanUrl.searchParams.delete("connection");
@@ -717,6 +839,9 @@ export default function Settings() {
 
   const trialActive =
     me.trial_ends_at && new Date(me.trial_ends_at).getTime() > mountedAt;
+  const paidPlan = access
+    ? isPaidAccess(access)
+    : me.tier === "pro" || me.tier === "plus";
   const profileDirty = eligibilityTouched || JSON.stringify(profile) !== savedProfileJson;
 
   return (
@@ -726,38 +851,50 @@ export default function Settings() {
         <p className="mt-1 text-sm text-muted">Everything Litos uses for your job search, in one place.</p>
       </div>
 
-      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-        <div
-          className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
-          role="tablist"
-          aria-label="Account categories"
-        >
-          {ACCOUNT_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              id={`tab-${tab.id}`}
-              aria-selected={activeTab === tab.id}
-              aria-controls={tab.id === "job-search" ? "job-search" : `panel-${tab.id}`}
-              tabIndex={activeTab === tab.id ? 0 : -1}
-              onClick={() => selectTab(tab.id)}
-              onKeyDown={(event) => {
-                if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-                  event.preventDefault();
-                  moveTab(tab.id, event.key);
-                }
-              }}
-              className={`min-h-10 rounded-full px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
-                activeTab === tab.id
-                  ? "bg-surface font-medium text-ink shadow-rest"
-                  : "text-muted hover:text-ink"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+      <div className="relative -mx-4 sm:mx-0">
+        <div ref={setAccountTabsViewport} className="overflow-x-auto px-4 [scroll-padding-inline-end:3rem] sm:px-0">
+          <div
+            className="flex min-w-max gap-1 rounded-full border border-border bg-surface-alt p-1"
+            role="tablist"
+            aria-label="Account categories"
+          >
+            {ACCOUNT_TABS.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                id={`tab-${tab.id}`}
+                aria-selected={activeTab === tab.id}
+                aria-controls="account-panel"
+                tabIndex={activeTab === tab.id ? 0 : -1}
+                onClick={() => selectTab(tab.id)}
+                onKeyDown={(event) => {
+                  if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
+                    event.preventDefault();
+                    moveTab(tab.id, event.key);
+                  }
+                }}
+                className={`min-h-10 rounded-full px-4 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${
+                  activeTab === tab.id
+                    ? "bg-surface font-medium text-ink shadow-rest"
+                    : "text-muted hover:text-ink"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
+        {showAccountTabOverflowCue && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-12 items-center justify-end bg-gradient-to-l from-bg via-bg/95 to-transparent pr-2"
+          >
+            <span className="flex size-7 items-center justify-center rounded-full border border-border bg-surface text-base text-muted shadow-rest">
+              ›
+            </span>
+          </div>
+        )}
       </div>
 
       {error && <ErrorNote message={error} />}
@@ -767,8 +904,10 @@ export default function Settings() {
         </div>
       )}
 
+      <MotionPanel key={activeTab} name="dashboard-account-panel">
+      <div id="account-panel" role="tabpanel" aria-labelledby={`tab-${activeTab}`} tabIndex={0}>
       {activeTab === "job-search" && (
-        <section id="job-search" role="tabpanel" aria-labelledby="tab-job-search" className="space-y-4">
+        <section id="job-search" className="space-y-4">
           <Card className="flex flex-wrap items-center justify-between gap-4 p-6">
             <div>
               <h2 className="text-base font-medium text-ink">Main resume</h2>
@@ -887,15 +1026,13 @@ export default function Settings() {
 
       {/* Account, and the data controls under it.
 
-          One <section role="tabpanel"> around BOTH cards, matching the job-search panel above
-          (ISSUE-013b). "Your data" used to be its own top-level `activeTab === "sign-in"` block with
-          no id, no role and no aria-labelledby, which put Export data and Delete account - the two
-          most destructive controls in the product - outside the region the tab's aria-controls names.
-          A screen reader user moving by panel never reached them. The panel id stays "panel-sign-in"
-          so aria-controls on the tab still resolves; it is not a hash target ("#sign-in" is the tab
-          id, resolved by tabFromHash, not by scrolling). */}
+          Both cards stay in one conditional branch inside the shared account tabpanel (ISSUE-013b).
+          "Your data" used to be its own top-level `activeTab === "sign-in"` block, which put Export
+          data and Delete account outside the active panel. The inner id stays "panel-sign-in" for
+          existing source contracts; it is not a hash target ("#sign-in" is resolved by tabFromHash,
+          not by scrolling). */}
       {activeTab === "sign-in" && (
-        <section id="panel-sign-in" role="tabpanel" aria-labelledby="tab-sign-in" className="space-y-4">
+        <section id="panel-sign-in" className="space-y-4">
         <Card className="p-6">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-base font-medium text-ink">Account</h2>
@@ -910,8 +1047,8 @@ export default function Settings() {
               <p className="text-xs text-muted">Plan</p>
               <div className="mt-1">
                 <Chip
-                  label={access ? accessLabel(access) : me.tier === "pro" ? "Litos+" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
-                  kind={access?.access_class === "plus_paid" || access?.access_class === "legacy_paid" || me.tier === "pro" ? "ready" : "draft"}
+                  label={access ? accessLabel(access) : paidPlan ? "Litos+" : me.tier.charAt(0).toUpperCase() + me.tier.slice(1)}
+                  kind={paidPlan ? "ready" : "draft"}
                 />
                 {trialActive && (
                   <span className="ml-2 text-xs text-muted">
@@ -937,7 +1074,7 @@ export default function Settings() {
                   onChange={(event) => { setCurrentPassword(event.target.value); setPasswordError(null); }}
                   placeholder="Current password"
                   aria-label="Current password"
-                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field rounded-inner px-4 py-2.5 text-sm outline-none focus:border-brand"
                 />
                 <input
                   type="password"
@@ -947,7 +1084,7 @@ export default function Settings() {
                   onChange={(event) => { setNewPassword(event.target.value); setPasswordError(null); }}
                   placeholder="New password"
                   aria-label="New password"
-                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field rounded-inner px-4 py-2.5 text-sm outline-none focus:border-brand"
                 />
                 <input
                   type="password"
@@ -957,7 +1094,7 @@ export default function Settings() {
                   onChange={(event) => { setConfirmPassword(event.target.value); setPasswordError(null); }}
                   placeholder="Confirm new password"
                   aria-label="Confirm new password"
-                  className="rounded-full border border-control-border bg-surface px-4 py-2.5 text-sm text-ink outline-none focus:border-brand"
+                  className="rq-field rounded-inner px-4 py-2.5 text-sm outline-none focus:border-brand"
                 />
               </div>
               {passwordError && (
@@ -991,17 +1128,32 @@ export default function Settings() {
           <p className="mt-1 text-sm text-muted">Download your data or permanently remove your account.</p>
           <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-5">
             <Button variant="secondary" type="button" onClick={() => void exportAccount()} disabled={dataBusy !== null}>{dataBusy === "export" ? "Preparing..." : "Export data"}</Button>
-            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); setDeleteError(null); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
+            <button ref={deleteTriggerRef} type="button" onClick={() => { setDeleteConfirmation(""); setDeleteComplete(false); setDeleteError(null); resetDeleteDialogExit(); deleteDialogRef.current?.showModal(); }} disabled={dataBusy !== null} className="min-h-11 px-3 text-sm font-medium text-danger disabled:opacity-50">Delete account</button>
             <a href="/privacy" className="ml-auto inline-flex min-h-11 items-center text-sm text-muted hover:text-ink">Privacy</a>
           </div>
         </Card>
-        <dialog ref={deleteDialogRef} aria-labelledby="delete-title" aria-describedby="delete-description" onCancel={(event) => { if (dataBusy === "delete") event.preventDefault(); }} onClose={() => deleteTriggerRef.current?.focus()} className="m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35">
+        <dialog
+          ref={deleteDialogRef}
+          aria-labelledby="delete-title"
+          aria-describedby="delete-description"
+          aria-hidden={deleteDialogClosing || undefined}
+          inert={deleteDialogClosing || undefined}
+          onCancel={(event) => {
+            event.preventDefault();
+            if (dataBusy !== "delete") requestDeleteDialogClose();
+          }}
+          onClick={(event) => {
+            if (event.target === deleteDialogRef.current && dataBusy !== "delete") requestDeleteDialogClose();
+          }}
+          onClose={() => window.requestAnimationFrame(() => deleteTriggerRef.current?.focus())}
+          className={`rq-dashboard-dialog m-auto w-[min(92vw,560px)] rounded-card border border-border bg-surface p-0 text-ink shadow-overlay backdrop:bg-ink/35 ${deleteDialogClosing ? "rq-dashboard-dialog-exit" : ""}`}
+        >
           {deleteComplete ? (
             <div className="p-6" role="status">
               <p className="text-label text-positive">Complete</p>
               <h2 id="delete-title" className="mt-2 text-heading">Your Litos account was deleted.</h2>
               <p id="delete-description" className="mt-3 text-body text-muted">The account-linked data named in the Privacy policy was removed. This cannot be undone.</p>
-              <Button className="mt-6" onClick={() => { deleteDialogRef.current?.close(); router.replace("/"); }}>Continue to Litos</Button>
+              <Button className="mt-6" onClick={() => requestDeleteDialogClose(() => router.replace("/"))}>Continue to Litos</Button>
             </div>
           ) : (
             <form method="dialog" className="p-6" onSubmit={(event) => { event.preventDefault(); void deleteAccount(); }}>
@@ -1020,7 +1172,7 @@ export default function Settings() {
               <input id="delete-confirmation" aria-describedby="delete-confirmation-instructions delete-confirmation-phrase" autoComplete="off" value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} className="rq-field mt-3 w-full rounded-inner px-4 py-3 text-sm" />
               {deleteError && <div className="mt-3"><ErrorNote message={deleteError} /></div>}
               <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <Button variant="secondary" type="button" disabled={dataBusy === "delete"} onClick={() => deleteDialogRef.current?.close()}>Keep account</Button>
+                <Button variant="secondary" type="button" disabled={dataBusy === "delete"} onClick={() => requestDeleteDialogClose()}>Keep account</Button>
                 <Button variant="danger" type="submit" disabled={dataBusy !== null || !deleteConfirmed}>{dataBusy === "delete" ? "Deleting..." : "Delete account permanently"}</Button>
               </div>
             </form>
@@ -1029,229 +1181,244 @@ export default function Settings() {
         </section>
       )}
 
-      {activeTab === "automation" && <Card className="p-6" id="panel-automation" role="tabpanel" aria-labelledby="tab-automation">
-        <h2 className="text-base font-medium text-ink">Automation</h2>
-        <div className="pt-1">
-        <p className="text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
-        <div className="mt-5 space-y-4">
-          {/* Locked until the student has personally approved a few real submissions. LazyApply
-              sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
-              with users reporting permanently restricted LinkedIn accounts. The lock is enforced on
-              the server; this copy exists so the control is not an unexplained dead toggle. */}
-          <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
-            <span>
-              <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
-              {canUse("automatic_submission") === false && <span className="ml-2 inline-flex rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Litos+</span>}
-              <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
-              {canUse("automatic_submission") === false && <span className="mt-2 block text-xs leading-5 text-muted">Application filling remains unlimited. On Free, you review the form and press the employer&apos;s final submit control.</span>}
-              {consentEligibility && !consentEligibility.eligible && !automaticSubmission && (
-                <span className="mt-2 block text-xs leading-5 text-warn">
-                  Available after you have approved {consentEligibility.required} applications
-                  yourself. {consentEligibility.remaining} to go. That way you have seen what Litos
-                  fills in on a real form before it sends one without you.
-                </span>
-              )}
-            </span>
-            <input
-              aria-label="Send an application without asking me again"
-              type="checkbox"
-              checked={automaticSubmission}
-              // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
-              disabled={savingAutomation || (!automaticSubmission && canUse("automatic_submission") !== false && consentEligibility?.eligible === false)}
-              onChange={(event) => changeAutomaticSubmission(event.target.checked)}
-              className="mt-1 size-4 accent-brand disabled:opacity-40"
-            />
-          </label>
-          {/* Directly under the submission switch because it is the same moment on the same form,
-              and ungated unlike that switch, which is the server's rule rather than this screen's:
-              resuming a fill sends nothing to anybody. It re-reads a form that still stops at the
-              submit button, and whether anything is ever sent stays with the permission above.
-              Revoking is allowed from any state.
-
-              THIS CONTROL IS ALSO THE ONLY RE-CONSENT PATH. Accounts stamped with the superseded
-              version arrive here unticked with a real date on the row; ticking the box writes the
-              current version and makes the extension's resume path work for them again. */}
-          <ConsentAcknowledgementControl
-            idPrefix="settings"
-            values={consentGrants}
-            grantedAt={consentGrantedAt}
-            disabled={savingConsentGrant !== null}
-            onChange={(field, enabled) => void changeConsentGrant(field, enabled)}
-          />
-          <CaptchaConsentControl
-            idPrefix="settings"
-            value={captchaConsent}
-            grantedAt={captchaConsentGrantedAt}
-            disabled={savingCaptchaConsent}
-            onChange={(enabled) => void changeCaptchaConsent(enabled)}
-          />
-          <div className="rounded-inner border border-border p-4">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-ink">Use a Litos application email</p>
-                <p className="mt-1 text-xs leading-5 text-muted">
-                  New application packets use a Litos address when replies to it are arriving. Employer mail forwards to your account email.
-                </p>
-              </div>
-              {/* THE BADGE READS THE LIVE PROBE, NOT THE CONFIGURATION. It used to read
-                  `configured`, which is true whenever an environment variable is set. Measured on
-                  2026-08-08: configured was true, /health reported this subsystem degraded with
-                  deliverable false, every run that day fell back to the plain account address with
-                  tracked false, and this panel said the feature was on. See
-                  lib/application-email-status.ts. */}
-              <Chip label={applicationEmailBadge(applicationEmail).label} kind={applicationEmailBadge(applicationEmail).kind} />
-            </div>
-            {applicationEmailBadge(applicationEmail).note && (
-              <p className="mt-3 text-xs leading-5 text-warn">{applicationEmailBadge(applicationEmail).note}</p>
-            )}
-            <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
-              <div>
-                {/* "Address", not "domain": the value the backend sends here is a full mailbox
-                    (applications@trylitos.com), and the aliases minted off it are
-                    applications+app-<id>@trylitos.com. Calling it a domain invited the reading that
-                    aliases live on a subdomain, which they do not. */}
-                <p className="text-xs font-medium text-muted">Address on your applications</p>
-                <p className="mt-1 break-words text-sm text-ink">
-                  {applicationEmailAddressInUse(applicationEmail, me.email)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-muted">Forwarding</p>
-                <p className="mt-1 text-sm text-ink">
-                  {applicationEmail?.forward_to ?? applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
-                </p>
-              </div>
-            </div>
+      {activeTab === "automation" && (
+        <section className="space-y-4" id="panel-automation">
+          <div>
+            <h2 className="text-heading font-medium text-ink">Automation</h2>
+            <p className="mt-1 text-sm leading-6 text-muted">Choose what Litos can do for you.</p>
           </div>
-          <div className="rounded-inner border border-border p-4">
-            <div className="flex items-start justify-between gap-5">
-              <label htmlFor="automatic-email-verification">
-                <span className="block text-sm font-medium text-ink">Use my connected inbox as a fallback</span>
-                <span className="mt-1 block text-xs leading-5 text-muted">Allow Litos to read an application code from Gmail or Outlook only when a company sends it to that personal inbox.</span>
-              </label>
-              <input
-                id="automatic-email-verification"
-                aria-label="Use my connected inbox as a fallback"
-                type="checkbox"
-                checked={automaticVerification}
-                disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
-                onChange={(event) => changeAutomaticVerification(event.target.checked)}
-                className="mt-1 size-4 accent-brand disabled:opacity-40"
-              />
-            </div>
-            {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
-              <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
-            )}
-            {verificationAvailability === "personal_inbox_disconnected" && (
-              <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until one verification inbox is available.</p>
-            )}
-            {verificationAvailability === "litos_inbox" && (
-              <p className="mt-3 text-xs leading-5 text-muted">The Litos application inbox is active. Codes sent to its packet-specific address do not require access to Gmail or Outlook.</p>
-            )}
-            {verificationAvailability === "personal_inbox" && (
-              <p className="mt-3 text-xs leading-5 text-muted">Your connected personal inbox is available as a fallback.</p>
-            )}
-            {verificationAvailability === "none" && (
-              <p className="mt-3 text-xs leading-5 text-warn">No verification inbox is active. Litos will stop and ask you for the code.</p>
-            )}
-            <div className="mt-4 border-t border-border pt-4">
-              <p className="text-xs font-medium text-muted">Inbox access</p>
-              <p className="mt-1 text-xs leading-5 text-muted">Your provider shows exactly what Litos can access before you approve it.</p>
-              <p className="mt-2 text-xs leading-5 text-muted">Litos requests access only to find a recent application verification code while a form is waiting. It does not use this connection to send mail or read unrelated messages. Connection time and the latest provider state appear below; Litos does not currently keep a user-visible sync activity log.</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {(["gmail", "outlook"] as const).map((provider) => {
-                  const connection = emailConnections.connections.find((item) => item.provider === provider);
-                  const connected = connection?.connected === true;
-                  const label = provider === "gmail" ? "Gmail" : "Outlook";
-                  return (
-                    <div key={provider} className="flex items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3">
-                      <div>
-                        <p className="text-sm font-medium text-ink">{label}</p>
-                        <p className="mt-0.5 text-xs text-muted">
-                          {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
-                        </p>
-                        {connection?.connected_at && <p className="mt-1 text-xs text-muted">Connected {new Date(connection.connected_at).toLocaleDateString()}</p>}
-                      </div>
-                      <Button
-                        type="button"
-                        disabled={!emailConnections.configured || connectionBusy !== null}
-                        onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, verificationConnectionPrompt))}
-                        variant={connected ? "secondary" : "primary"}
-                        size="sm"
-                      >
-                        {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="mt-3 text-xs text-muted">Need another provider? <a href="/contact" className="font-medium text-brand-ink underline underline-offset-4">Request an integration through Contact.</a></p>
-            </div>
-          </div>
-        </div>
-        <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
 
-        {/* THE TWO NOTIFICATION PERMISSIONS, and this is their only re-grant path.
-            The unsubscribe link in every message turns one off without signing in, which is the
-            half that has to work for somebody who cannot log in at all. Turning one back ON is the
-            half that cannot live in an email, because there is no email to click once the mail has
-            stopped. So it lives here, next to the other standing permissions, rather than only on
-            the setup screen that asked the question once and is never shown again.
-
-            Rendered only when the server answered. A backend that predates the endpoint gives null
-            and draws nothing, which is the honest state: two switches that silently write nowhere
-            would be worse than no switches. */}
-        {notifications && (
-          <div className="mt-6 border-t border-border pt-5">
-            <h3 className="text-sm font-medium text-ink">What Litos emails you</h3>
-            <p className="mt-1 text-xs leading-5 text-muted">Two things, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
-            <div className="mt-4 space-y-4">
-              {([
-                {
-                  kind: "strong_match" as const,
-                  label: "Tell me when a strong match opens",
-                  detail: "One posting, at most once a day, and only when it clears the same match score your board ranks by.",
-                },
-                {
-                  kind: "employer_reply" as const,
-                  label: "Tell me when an employer replies",
-                  detail: "Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said.",
-                },
-              ]).map((permission) => (
-                <label key={permission.kind} className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+          <div className="grid items-start gap-4 xl:grid-cols-2">
+            <Card className="p-5 sm:p-6">
+              <h3 className="text-base font-medium text-ink">Sending permissions</h3>
+              <p className="mt-1 text-sm leading-6 text-muted">Control what Litos may prepare, resume, and send on your behalf.</p>
+              <div className="mt-5 space-y-4">
+                {/* Locked until the student has personally approved a few real submissions. LazyApply
+                    sells exactly this switch and its Trustpilot split is 44% five-star / 52% one-star,
+                    with users reporting permanently restricted LinkedIn accounts. The lock is enforced on
+                    the server; this copy exists so the control is not an unexplained dead toggle. */}
+                <label className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
                   <span>
-                    <span className="block text-sm font-medium text-ink">{permission.label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-muted">{permission.detail}</span>
-                    {/* The grant date, shown for the same reason every other permission on this
-                        screen shows one: a permission with no date beside it cannot be checked
-                        against what the student remembers agreeing to. */}
-                    {notifications[permission.kind].enabled && notifications[permission.kind].granted_at && (
-                      <span className="mt-2 block text-xs leading-5 text-muted">
-                        On since {new Date(notifications[permission.kind].granted_at as string).toLocaleDateString()}
+                    <span className="block text-sm font-medium text-ink">Send an application without asking me again</span>
+                    {canUse("automatic_submission") === false && <span className="ml-2 inline-flex rounded-control bg-brand-soft px-2 py-0.5 font-mono text-label text-brand-ink">Litos+</span>}
+                    <span className="mt-1 block text-xs leading-5 text-muted">Send the forms you start, but only when every answer is backed up and the site puts nothing in the way.</span>
+                    {canUse("automatic_submission") === false && <span className="mt-2 block text-xs leading-5 text-muted">Application filling remains unlimited. On Free, you review the form and press the employer&apos;s final submit control.</span>}
+                    {consentEligibility && !consentEligibility.eligible && !automaticSubmission && (
+                      <span className="mt-2 block text-xs leading-5 text-warn">
+                        Available after you have approved {consentEligibility.required} applications
+                        yourself. {consentEligibility.remaining} to go. That way you have seen what Litos
+                        fills in on a real form before it sends one without you.
                       </span>
                     )}
                   </span>
                   <input
-                    aria-label={permission.label}
+                    aria-label="Send an application without asking me again"
                     type="checkbox"
-                    checked={notifications[permission.kind].enabled}
-                    disabled={savingNotification !== null}
-                    onChange={(event) => void changeNotification(permission.kind, event.target.checked)}
+                    checked={automaticSubmission}
+                    // Never disabled while it is ON: a safety gate the student cannot re-arm is not one.
+                    disabled={savingAutomation || (!automaticSubmission && canUse("automatic_submission") !== false && consentEligibility?.eligible === false)}
+                    onChange={(event) => changeAutomaticSubmission(event.target.checked)}
                     className="mt-1 size-4 accent-brand disabled:opacity-40"
                   />
                 </label>
-              ))}
-            </div>
-            {!notifications.deliverable && (
-              <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
-            )}
-            <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
-          </div>
-        )}
+                {/* Directly under the submission switch because it is the same moment on the same form,
+                    and ungated unlike that switch, which is the server's rule rather than this screen's:
+                    resuming a fill sends nothing to anybody. It re-reads a form that still stops at the
+                    submit button, and whether anything is ever sent stays with the permission above.
+                    Revoking is allowed from any state.
 
-        <p className="mt-4 text-xs leading-5 text-muted">Apart from the two above, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
-        </div>
-      </Card>}
+                    THIS CONTROL IS ALSO THE ONLY RE-CONSENT PATH. Accounts stamped with the superseded
+                    version arrive here unticked with a real date on the row; ticking the box writes the
+                    current version and makes the extension's resume path work for them again. */}
+                <ConsentAcknowledgementControl
+                  idPrefix="settings"
+                  values={consentGrants}
+                  grantedAt={consentGrantedAt}
+                  disabled={savingConsentGrant !== null}
+                  onChange={(field, enabled) => void changeConsentGrant(field, enabled)}
+                />
+                <CaptchaConsentControl
+                  idPrefix="settings"
+                  value={captchaConsent}
+                  grantedAt={captchaConsentGrantedAt}
+                  disabled={savingCaptchaConsent}
+                  onChange={(enabled) => void changeCaptchaConsent(enabled)}
+                />
+              </div>
+              <p className="mt-4 text-xs leading-5 text-muted">Litos stops when an answer is missing or the site needs you.</p>
+            </Card>
+
+            <Card className="p-5 sm:p-6">
+              <h3 className="text-base font-medium text-ink">Application email and verification inbox</h3>
+              <p className="mt-1 text-sm leading-6 text-muted">See where employer messages arrive and control the personal inbox fallback.</p>
+              <div className="mt-5 space-y-4">
+                <div className="rounded-inner border border-border bg-surface-alt p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium text-ink">Use a Litos application email</p>
+                      <p className="mt-1 text-xs leading-5 text-muted">
+                        New application packets use a Litos address when replies to it are arriving. Employer mail forwards to your account email.
+                      </p>
+                    </div>
+                    {/* THE BADGE READS THE LIVE PROBE, NOT THE CONFIGURATION. It used to read
+                        `configured`, which is true whenever an environment variable is set. Measured on
+                        2026-08-08: configured was true, /health reported this subsystem degraded with
+                        deliverable false, every run that day fell back to the plain account address with
+                        tracked false, and this panel said the feature was on. See
+                        lib/application-email-status.ts. */}
+                    <Chip label={applicationEmailBadge(applicationEmail).label} kind={applicationEmailBadge(applicationEmail).kind} />
+                  </div>
+                  {applicationEmailBadge(applicationEmail).note && (
+                    <p className="mt-3 text-xs leading-5 text-warn">{applicationEmailBadge(applicationEmail).note}</p>
+                  )}
+                  <div className="mt-4 grid gap-3 border-t border-border pt-4 sm:grid-cols-2">
+                    <div>
+                      {/* "Address", not "domain": the value the backend sends here is a full mailbox
+                          (applications@trylitos.com), and the aliases minted off it are
+                          applications+app-<id>@trylitos.com. Calling it a domain invited the reading that
+                          aliases live on a subdomain, which they do not. */}
+                      <p className="text-xs font-medium text-muted">Address on your applications</p>
+                      <p className="mt-1 break-words text-sm text-ink">
+                        {applicationEmailAddressInUse(applicationEmail, me.email)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium text-muted">Forwarding</p>
+                      <p className="mt-1 text-sm text-ink">
+                        {applicationEmail?.forward_to ?? applicationEmail?.aliases[0]?.forward_to ?? me.email ?? "Your account email"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="rounded-inner border border-border bg-surface-alt p-4">
+                  <div className="flex items-start justify-between gap-5">
+                    <label htmlFor="automatic-email-verification">
+                      <span className="block text-sm font-medium text-ink">Use my connected inbox as a fallback</span>
+                      <span className="mt-1 block text-xs leading-5 text-muted">Allow Litos to read an application code from Gmail or Outlook only when a company sends it to that personal inbox.</span>
+                    </label>
+                    <input
+                      id="automatic-email-verification"
+                      aria-label="Use my connected inbox as a fallback"
+                      type="checkbox"
+                      checked={automaticVerification}
+                      disabled={savingAutomation || connectionBusy !== null || (!automaticVerification && !emailConnections.configured)}
+                      onChange={(event) => changeAutomaticVerification(event.target.checked)}
+                      className="mt-1 size-4 accent-brand disabled:opacity-40"
+                    />
+                  </div>
+                  {verificationConnectionPrompt && !hasActiveInbox(emailConnections) && (
+                    <p className="mt-3 text-xs leading-5 text-warn">Connect Gmail or Outlook below to turn this on.</p>
+                  )}
+                  {verificationAvailability === "personal_inbox_disconnected" && (
+                    <p className="mt-3 text-xs leading-5 text-warn">Reconnect Gmail or Outlook. Litos cannot read a code until one verification inbox is available.</p>
+                  )}
+                  {verificationAvailability === "litos_inbox" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">The Litos application inbox is active. Codes sent to its packet-specific address do not require access to Gmail or Outlook.</p>
+                  )}
+                  {verificationAvailability === "personal_inbox" && (
+                    <p className="mt-3 text-xs leading-5 text-muted">Your connected personal inbox is available as a fallback.</p>
+                  )}
+                  {verificationAvailability === "none" && (
+                    <p className="mt-3 text-xs leading-5 text-warn">No verification inbox is active. Litos will stop and ask you for the code.</p>
+                  )}
+                  <div className="mt-4 border-t border-border pt-4">
+                    <p className="text-xs font-medium text-muted">Inbox access</p>
+                    <p className="mt-1 text-xs leading-5 text-muted">Your provider shows exactly what Litos can access before you approve it.</p>
+                    <p className="mt-2 text-xs leading-5 text-muted">Litos requests access only to find a recent application verification code while a form is waiting. It does not use this connection to send mail or read unrelated messages. Connection time and the latest provider state appear below; Litos does not currently keep a user-visible sync activity log.</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      {(["gmail", "outlook"] as const).map((provider) => {
+                        const connection = emailConnections.connections.find((item) => item.provider === provider);
+                        const connected = connection?.connected === true;
+                        const label = provider === "gmail" ? "Gmail" : "Outlook";
+                        return (
+                          <div key={provider} className="flex items-center justify-between gap-3 rounded-inner border border-border bg-surface px-4 py-3">
+                            <div>
+                              <p className="text-sm font-medium text-ink">{label}</p>
+                              <p className="mt-0.5 text-xs text-muted">
+                                {!emailConnections.configured ? "Unavailable" : connected ? "Connected" : connection?.status === "EXPIRED" ? "Reconnect required" : "Not connected"}
+                              </p>
+                              {connection?.connected_at && <p className="mt-1 text-xs text-muted">Connected {new Date(connection.connected_at).toLocaleDateString()}</p>}
+                            </div>
+                            <Button
+                              type="button"
+                              disabled={!emailConnections.configured || connectionBusy !== null}
+                              onClick={() => void (connected ? disconnectProvider(provider) : connectProvider(provider, verificationConnectionPrompt))}
+                              variant={connected ? "secondary" : "primary"}
+                              size="sm"
+                            >
+                              {connectionBusy === provider ? "Working..." : connected ? "Disconnect" : connection?.status === "EXPIRED" ? "Reconnect" : "Connect"}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="mt-3 text-xs text-muted">Need another provider? <a href="/contact" className="font-medium text-brand-ink underline underline-offset-4">Request an integration through Contact.</a></p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            {/* THE TWO NOTIFICATION PERMISSIONS, and this is their only re-grant path.
+                The unsubscribe link in every message turns one off without signing in, which is the
+                half that has to work for somebody who cannot log in at all. Turning one back ON is the
+                half that cannot live in an email, because there is no email to click once the mail has
+                stopped. So it lives here, next to the other standing permissions, rather than only on
+                the setup screen that asked the question once and is never shown again.
+
+                Rendered only when the server answered. A backend that predates the endpoint gives null
+                and draws nothing, which is the honest state: two switches that silently write nowhere
+                would be worse than no switches. */}
+            {notifications && (
+              <Card className="p-5 sm:p-6 xl:col-span-2">
+                <h3 className="text-base font-medium text-ink">Email notifications</h3>
+                <p className="mt-1 text-sm leading-6 text-muted">Two things, and nothing else. No digests, no weekly roundups, no reminders to come back.</p>
+                <div className="mt-5 grid gap-4 md:grid-cols-2">
+                  {([
+                    {
+                      kind: "strong_match" as const,
+                      label: "Tell me when a strong match opens",
+                      detail: "One posting, at most once a day, and only when it clears the same match score your board ranks by.",
+                    },
+                    {
+                      kind: "employer_reply" as const,
+                      label: "Tell me when an employer replies",
+                      detail: "Once per reply, when it reaches your tracker. Litos tells you mail arrived and where to read it, never what it said.",
+                    },
+                  ]).map((permission) => (
+                    <label key={permission.kind} className="flex items-start justify-between gap-5 rounded-inner border border-border p-4">
+                      <span>
+                        <span className="block text-sm font-medium text-ink">{permission.label}</span>
+                        <span className="mt-1 block text-xs leading-5 text-muted">{permission.detail}</span>
+                        {/* The grant date, shown for the same reason every other permission on this
+                            screen shows one: a permission with no date beside it cannot be checked
+                            against what the student remembers agreeing to. */}
+                        {notifications[permission.kind].enabled && notifications[permission.kind].granted_at && (
+                          <span className="mt-2 block text-xs leading-5 text-muted">
+                            On since {new Date(notifications[permission.kind].granted_at as string).toLocaleDateString()}
+                          </span>
+                        )}
+                      </span>
+                      <input
+                        aria-label={permission.label}
+                        type="checkbox"
+                        checked={notifications[permission.kind].enabled}
+                        disabled={savingNotification !== null}
+                        onChange={(event) => void changeNotification(permission.kind, event.target.checked)}
+                        className="mt-1 size-4 accent-brand disabled:opacity-40"
+                      />
+                    </label>
+                  ))}
+                </div>
+                {!notifications.deliverable && (
+                  <p className="mt-3 text-xs leading-5 text-muted">Litos cannot send to this account yet. Your choice is saved and starts working once your email address is verified.</p>
+                )}
+                <p className="mt-3 text-xs leading-5 text-muted">Every message carries an unsubscribe link that works without signing in.</p>
+                <p className="mt-3 text-xs leading-5 text-muted">Apart from the two above, Litos sends transactional account, application, and billing messages only. There are no marketing subscriptions and no other notification channels.</p>
+              </Card>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* Application profile.
           id="application-details" is load-bearing: /dashboard/profile's "Edit
@@ -1267,7 +1434,7 @@ export default function Settings() {
           header. Every numeric check passed ("cardTop 0, inView true") while
           the thing the reader came for was invisible. Same scroll-margin the
           homepage sections use. */}
-      {activeTab === "application-details" && <Card className="p-6" id="panel-application-details" role="tabpanel" aria-labelledby="tab-application-details">
+      {activeTab === "application-details" && <Card className="p-6" id="panel-application-details">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-medium text-ink">Application details</h2>
@@ -1390,14 +1557,14 @@ export default function Settings() {
       </Card>}
 
       {/* Plan + usage */}
-      {activeTab === "plan" && <section className="space-y-4" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan">
+      {activeTab === "plan" && <section className="space-y-4" id="panel-plan">
         <PlanStatus showAction={false} />
         <Card className="p-6">
         <h2 className="text-base font-medium text-ink">Plan and usage</h2>
         {billingNotice === "success" && <p role="status" className="mt-4 rounded-inner bg-positive-soft px-4 py-3 text-sm text-positive">Payment received. Stripe is confirming your Litos+ access now.</p>}
         {billingNotice === "cancelled" && <p role="status" className="mt-4 rounded-inner bg-warn-soft px-4 py-3 text-sm text-warn">Checkout was canceled. Nothing was charged. Your work is saved.</p>}
         <p className="mt-4 text-sm text-muted"><span className="font-medium text-ink">Application filling is unlimited.</span> Use it from the dashboard or on supported employer sites in every plan state.</p>
-        {access?.access_class === "plus_paid" || access?.access_class === "legacy_paid" || me.tier === "pro" ? (
+        {paidPlan ? (
           <div className="mt-6 space-y-3 border-t border-border pt-5 text-sm text-muted">
             <p>{access?.access_class === "legacy_paid" ? "Your original paid access is preserved." : "You are on Litos+."}</p>
             <p>{me.billing_portal_available ? <button type="button" disabled={portalBusy} onClick={() => void openBillingPortal()} className="font-medium text-brand-ink underline-offset-4 hover:underline disabled:opacity-50">{portalBusy ? "Opening billing portal..." : "Open secure billing portal"}</button> : storedBillingPortalUrl ? <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href={storedBillingPortalUrl}>Open secure billing portal</a> : <a className="font-medium text-brand-ink underline-offset-4 hover:underline" href="/contact">Contact support about billing</a>} {me.billing_portal_available || storedBillingPortalUrl ? "Payment method, receipts, invoices, discounts, and cancellation are managed there." : "Litos cannot show a billing portal for this account."}</p>
@@ -1410,6 +1577,8 @@ export default function Settings() {
         )}
         </Card>
       </section>}
+      </div>
+      </MotionPanel>
     </div>
   );
 }
@@ -1451,7 +1620,7 @@ function Input({
         onChange={(e) => onChange(editableProfileText(e.target.value))}
         onBlur={(e) => onChange(nullableProfileText(e.target.value))}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="rq-field mt-1.5 w-full rounded-inner px-3.5 py-2 text-sm outline-none placeholder:text-faint focus:border-brand"
       />
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
@@ -1492,7 +1661,7 @@ function StringListInput({
           onChange(nullableProfileList(e.target.value));
         }}
         placeholder={placeholder}
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface px-3.5 py-2 text-sm text-ink outline-none placeholder:text-faint focus:border-brand"
+        className="rq-field mt-1.5 w-full rounded-inner px-3.5 py-2 text-sm outline-none placeholder:text-faint focus:border-brand"
       />
       {hint && <p id={hintId} className="mt-1 text-xs leading-5 text-muted">{hint}</p>}
     </div>
@@ -1523,7 +1692,7 @@ function Select({
         onChange={(e) =>
           onChange(e.target.value === "" ? null : e.target.value === "yes")
         }
-        className="mt-1.5 w-full rounded-full border border-control-border bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
+        className="rq-field mt-1.5 w-full rounded-inner bg-surface-alt px-3.5 py-2 text-sm text-muted outline-none disabled:cursor-not-allowed"
       >
         {TRI.map((o) => (
           <option key={o.value} value={o.value}>

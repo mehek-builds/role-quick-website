@@ -12,6 +12,7 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 import { chromium } from "playwright-core";
+import { isSanctionedThirdParty } from "./sanctioned-third-parties.mjs";
 
 const BACKEND = "https://student-outreach-backend.vercel.app";
 const TOKEN = "settings-verification-fixture-token";
@@ -102,6 +103,7 @@ await context.route("**/*", async (route) => {
     return;
   }
   if (!url.startsWith(BACKEND)) {
+    if (isSanctionedThirdParty(url)) return route.abort();
     unknownRequests.push(`${request.method()} ${url}`);
     await route.abort();
     return;
@@ -116,6 +118,35 @@ await context.route("**/*", async (route) => {
   }
   if (key === "GET /me") {
     await route.fulfill({ json: { email: "fixture@example.invalid", is_guest: false, tier: "free", trial_ends_at: null, checkout_available: false, usage: { contacts: { used: 0, limit: 10 }, drafts: { used: 0, limit: 10 }, resumes: { used: 0, limit: 10 } } } });
+    return;
+  }
+  if (key === "GET /billing/state") {
+    await route.fulfill({ json: {
+      account_id: "settings-verification-fixture-account",
+      entitlement: {
+        schema_version: 2,
+        policy_version: "litos-entitlements-v2",
+        revision: "settings-verification-fixture",
+        evaluated_at: "2026-08-14T00:00:00.000Z",
+        access_class: "free_new",
+        product: null,
+        term: null,
+        features: {},
+        trial: null,
+        subscription: null,
+      },
+    } });
+    return;
+  }
+  if (key === "GET /billing/plans") {
+    await route.fulfill({ json: {
+      checkout_available: true,
+      plans: [
+        { plan_id: "litos_plus_week", amount_cents: 1999, checkout_available: true },
+        { plan_id: "litos_plus_month", amount_cents: 3999, checkout_available: true },
+        { plan_id: "litos_plus_quarter", amount_cents: 8999, checkout_available: true },
+      ],
+    } });
     return;
   }
   if (key === "GET /profile/application") {
@@ -310,8 +341,11 @@ test("failed callback preserves another consented personal inbox as the active f
 });
 
 test.after(async () => {
-  assert.deepEqual(unknownRequests, []);
-  await context.close();
-  await browser.close();
-  server.kill("SIGTERM");
+  try {
+    assert.deepEqual(unknownRequests, []);
+  } finally {
+    await context.close();
+    await browser.close();
+    server.kill("SIGTERM");
+  }
 });

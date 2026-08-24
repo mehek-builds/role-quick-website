@@ -258,11 +258,13 @@ export function DataErrorState({
   headingLevel?: "h1" | "h2" | "h3";
 }) {
   return (
-    <EmptyState visual="error" title={title} body={body} headingLevel={headingLevel}>
-      <Button type="button" onClick={onRetry}>
-        Try again
-      </Button>
-    </EmptyState>
+    <div role="alert">
+      <EmptyState visual="error" title={title} body={body} headingLevel={headingLevel}>
+        <Button type="button" onClick={onRetry}>
+          Try again
+        </Button>
+      </EmptyState>
+    </div>
   );
 }
 

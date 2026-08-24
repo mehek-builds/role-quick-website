@@ -144,6 +144,12 @@ const extraControlledDevOrigins = controlledPortalOrigin
   : [];
 
 const nextConfig: NextConfig = {
+  /* Dashboard navigation uses React's ViewTransition boundary so the old page can leave before
+   * the next one settles in. The browser API is progressive enhancement: unsupported browsers
+   * keep the same instant navigation, and globals.css removes every duration for reduced motion. */
+  experimental: {
+    viewTransition: true,
+  },
   /* The controlled end-to-end harness opens the local development server through
    * 127.0.0.1 so its API, website, portal, and disposable database all use an
    * explicit loopback address. Next blocks development assets when that origin

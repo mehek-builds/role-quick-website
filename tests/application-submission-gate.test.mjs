@@ -262,7 +262,7 @@ test("a cleared packet audit cannot be resurrected by an older revalidation", as
   const refresh = dashboard.slice(revalidateEnd, refreshEnd);
   assert.match(refresh, /const revalidation = await revalidateAcknowledgedEvidence\(requestedId, currentEvidence\);/);
   assert.match(refresh, /const base = submissionSnapshotIsOlder\(submissionRef\.current, result\)[\s\S]{0,140}submissionRef\.current![\s\S]{0,80}: result;[\s\S]{0,120}result = submissionAfterPacketAudit\(base, submissionRef\.current, revalidation\.audit\);/);
-  assert.match(refresh, /if \(submissionSnapshotIsOlder\(submissionRef\.current, result\)\) return;/);
+  assert.match(refresh, /if \([\s\S]{0,160}submissionMutationGenerationRef\.current !== requestedMutationGeneration[\s\S]{0,100}\|\| submissionSnapshotIsOlder\(submissionRef\.current, result\)[\s\S]{0,30}\) return;/);
   assert.ok(
     refresh.indexOf("submissionAfterPacketAudit(base") < refresh.indexOf("setQuestions((current)"),
     "the audit's question snapshot must replace the earlier GET before any client copy commits",
@@ -402,12 +402,12 @@ test("unverified submission evidence precedes its outcome controls on narrow scr
   const screen = dashboard.slice(start, end);
   const evidenceBefore = screen.indexOf("{awaitingUnverifiedSubmission && filledFormEvidence}");
   const decision = screen.indexOf("<UnverifiedSubmissionCard");
-  const ordinaryEvidence = screen.indexOf("{!awaitingUnverifiedSubmission && filledFormEvidence}");
+  const ordinaryEvidence = screen.indexOf("{!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence}");
 
   assert.ok(evidenceBefore > 0 && decision > evidenceBefore, "the proof must be encountered before the consequential yes/no controls");
   assert.ok(ordinaryEvidence > decision, "other review states keep their action-first reading order");
   assert.match(screen, /filledFormEvidence =[\s\S]{0,160}<Card className=\{`overflow-hidden \$\{awaitingUnverifiedSubmission \? "lg:order-2" : ""\}`\}/);
-  assert.match(screen, /<Card className=\{`p-7 \$\{awaitingUnverifiedSubmission \? "lg:order-1" : ""\}`\}>/);
+  assert.match(screen, /<Card className=\{`\$\{needsAttention && !awaitingUnverifiedSubmission \? "p-4 sm:p-6" : "p-7"\} \$\{awaitingUnverifiedSubmission \? "lg:order-1" : ""\}`\}>/);
 });
 
 test("overview keeps three application states and sends matches to the review screen", async () => {
