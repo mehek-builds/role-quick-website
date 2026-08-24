@@ -3995,9 +3995,15 @@ function Applications() {
                 onClick={() => setSwitcherOpen((current) => !current)}
                 aria-expanded={switcherOpen}
                 aria-controls={switcherOpen ? "application-switcher-list" : undefined}
-                className="min-h-11 shrink-0 rounded-full border border-control-border px-4 text-xs font-medium text-ink transition-colors hover:border-ink"
+                aria-label={switcherOpen ? "Done" : "Switch applications"}
+                className="min-h-11 shrink-0 rounded-control border border-control-border px-4 text-small font-medium text-ink transition-colors hover:border-ink"
               >
-                {switcherOpen ? "Done" : "Switch applications"}
+                {switcherOpen ? "Done" : (
+                  <>
+                    <span aria-hidden="true" className="sm:hidden">Switch</span>
+                    <span aria-hidden="true" className="hidden sm:inline">Switch applications</span>
+                  </>
+                )}
               </button>
             </div>
           ) : (
@@ -5941,13 +5947,13 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   return (
     <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
       {awaitingUnverifiedSubmission && filledFormEvidence}
-      <Card className={`${needsAttention && !awaitingUnverifiedSubmission ? "p-5 sm:p-7" : "p-7"} ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
+      <Card className={`${needsAttention && !awaitingUnverifiedSubmission ? "p-4 sm:p-6" : "p-7"} ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
         {needsAttention && !awaitingUnverifiedSubmission && (
-          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Action required</p>
+          <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-warn">Action required</p>
         )}
         <h2 className={`${needsAttention && !awaitingUnverifiedSubmission ? "mt-2" : ""} text-heading font-medium text-ink`}>{awaitingSecurityCode ? "One code away" : awaitingUnverifiedSubmission ? "Waiting on you to look" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
         {needsAttention && !awaitingUnverifiedSubmission && (
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Litos paused this application. Complete what is listed below, then return here to keep going.</p>
+          <p className="mt-2 max-w-2xl text-body text-muted">Finish these steps to keep going.</p>
         )}
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
@@ -6012,20 +6018,20 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         )}
         {completedItems.length > 0 && (
           needsAttention && !awaitingUnverifiedSubmission ? (
-            <details className="group mt-5 border-t border-border pt-3">
-              <summary className="-mx-2 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-inner px-2 text-sm text-ink [&::-webkit-details-marker]:hidden">
+            <details className="group mt-4 border-t border-border pt-4">
+              <summary className="-mx-2 flex min-h-11 cursor-pointer list-none items-center justify-between gap-4 rounded-inner px-2 text-small text-ink [&::-webkit-details-marker]:hidden">
                 <span className="flex min-w-0 items-center gap-2">
-                  <span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-positive-soft text-positive">
-                    <svg viewBox="0 0 16 16" className="h-3 w-3">
+                  <span aria-hidden className="flex h-4 w-4 shrink-0 items-center justify-center text-positive">
+                    <svg viewBox="0 0 16 16" className="h-4 w-4">
                       <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </span>
                   <span className="font-medium">{completedItems.length} {completedItems.length === 1 ? "check" : "checks"} already complete</span>
                 </span>
-                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted group-open:hidden">Show</span>
-                <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted group-open:inline">Hide</span>
+                <span className="shrink-0 font-mono text-label uppercase tracking-[0.08em] text-muted group-open:hidden">Show</span>
+                <span className="hidden shrink-0 font-mono text-label uppercase tracking-[0.08em] text-muted group-open:inline">Hide</span>
               </summary>
-              <ul className="mt-2 grid gap-2 border-l border-border pl-7 sm:grid-cols-2">
+              <ul className="mt-2 grid gap-2 border-l border-border pl-8 sm:grid-cols-2">
                 {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
               </ul>
             </details>
@@ -6372,12 +6378,12 @@ function CenteredState({ title, body, loading = false }: { title: string; body?:
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2>{body && <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p>}</Card>;
 }
 
-const CHECKLIST_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center rounded-full border border-control-border bg-surface px-3.5 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-surface-alt";
+const CHECKLIST_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center rounded-control border border-control-border bg-surface px-4 text-small font-medium text-ink transition-colors hover:border-ink hover:bg-surface-alt";
 /* The same control on a row that is not asking for anything. Outlined rather than filled, because
    DESIGN.md's colour law is that weight says what a control IS and not how hard to press it, and a
    filled pill on a confirmation row puts the loudest thing on the panel next to the one item that
    needs nothing doing. Same 44px floor, same target, quieter voice. */
-const CHECKLIST_SETTLED_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center rounded-full border border-control-border bg-surface-alt px-3.5 text-sm font-medium text-muted transition-colors hover:border-ink hover:text-ink";
+const CHECKLIST_SETTLED_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center rounded-control border border-control-border bg-surface-alt px-4 text-small font-medium text-muted transition-colors hover:border-ink hover:text-ink";
 
 /* The action pill was a <span>. Not a disabled button, not a button with a missing handler: a span
    with button styling, sitting under a row that says an application is
@@ -6426,7 +6432,7 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
      of shouting in amber beside the work that is genuinely outstanding. */
   const done = checked || item.settled === true;
   return (
-    <li className="grid grid-cols-[18px_minmax(0,1fr)] gap-x-3 text-sm leading-5 text-muted sm:grid-cols-[18px_minmax(0,1fr)_auto]">
+    <li className="grid grid-cols-[18px_minmax(0,1fr)] gap-x-4 text-small leading-5 text-muted sm:grid-cols-[18px_minmax(0,1fr)_auto]">
       {toggleTick ? (
         /* One input for both directions. `checked` comes from the STORED item, never from local
            state, so the box shows what is actually on the row - the exact opposite of the dead
@@ -6466,11 +6472,11 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
               reads as a sentence about the employer and the pill stays scannable down a column. */}
           {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
         </span>
-        {item.detail && <span className="block text-xs text-muted">{item.detail}</span>}
+        {item.detail && <span className="block text-small text-muted">{item.detail}</span>}
         {choices && (
           <span role="radiogroup" aria-label={`Choose an answer to: ${item.label}`} className="mt-2 block space-y-1.5">
             {choices.options.map((option) => (
-              <label key={option} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-inner border border-control-border bg-surface px-3 py-2.5 text-xs leading-5 text-ink hover:border-ink">
+              <label key={option} className="flex min-h-11 cursor-pointer items-start gap-2 rounded-inner border border-control-border bg-surface px-4 py-2 text-small leading-5 text-ink hover:border-ink">
                 <input
                   type="radio"
                   name={`blocker-choice-${choices.questionId}`}
@@ -6485,7 +6491,7 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
             {/* Said here because the press does not save: it opens the editor with the pick made,
                 and the Save there is the write. A row that looked saved and was not is the exact
                 lie the review screen's own Save button copy exists to prevent. */}
-            <span className="block text-[11px] leading-4 text-muted">Pick one to open it in the editor, then save.</span>
+            <span className="block text-label text-muted">Pick one to open it in the editor, then save.</span>
           </span>
         )}
       </span>
@@ -6543,12 +6549,12 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
       {outstanding.length === 0 ? (
         <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>
       ) : (
-        <div className="mt-5">
-          <div className="flex items-center justify-between gap-3">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">{outstanding.length === 1 ? "Your next step" : "Your next steps"}</p>
-            <p aria-live="polite" className="font-mono text-[11px] text-warn">{outstanding.length} remaining</p>
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-4">
+            <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">{outstanding.length === 1 ? "Your next step" : "Your next steps"}</p>
+            <p aria-live="polite" className="font-mono text-label text-warn">{outstanding.length} remaining</p>
           </div>
-          <ul className="mt-2 divide-y divide-border border-y border-border [&>li]:py-4">
+          <ul className="mt-2 divide-y divide-border border-y border-border [&>li]:py-2 md:[&>li]:py-4">
           {outstanding.map((item) => (
             <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}
@@ -6556,7 +6562,7 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
         </div>
       )}
       {settled.length > 0 && (
-        <div className="mt-3 rounded-inner border border-border bg-surface-alt px-4 py-3">
+        <div className="mt-4 rounded-inner border border-border bg-surface-alt px-4 py-4">
           <ul className="space-y-2">
           {settled.map((item) => (
             /* onToggleAcknowledged rides into the settled box too: an acknowledged row's checkbox

@@ -4,6 +4,7 @@ import test from "node:test";
 
 const documents = await readFile(new URL("../app/dashboard/documents/page.tsx", import.meta.url), "utf8");
 const applications = await readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8");
+const globals = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
 test("Documents makes both directions of tab overflow deliberate on narrow screens", () => {
   assert.match(documents, /const \[showDocumentsTabLeftOverflowCue, setShowDocumentsTabLeftOverflowCue\] = useState\(false\)/);
@@ -32,9 +33,27 @@ test("Applications stacks task copy above its action and aligns actions beside t
 });
 
 test("Applications folds completed checks behind a readable disclosure while input is still needed", () => {
-  assert.match(applications, /needsAttention && !awaitingUnverifiedSubmission \? \(\s*<details className="group mt-5 border-t border-border pt-3">/);
+  assert.match(applications, /needsAttention && !awaitingUnverifiedSubmission \? \(\s*<details className="group mt-4 border-t border-border pt-4">/);
   assert.match(applications, /\{completedItems\.length\} \{completedItems\.length === 1 \? "check" : "checks"\} already complete/);
   assert.match(applications, /min-h-11 cursor-pointer/);
   assert.match(applications, /group-open:hidden">Show<\/span>/);
   assert.match(applications, /group-open:inline">Hide<\/span>/);
+  assert.match(globals, /summary:focus-visible,\s*\n\[tabindex\]:not/);
+});
+
+test("Applications input tasks use the named Litos type, spacing, and control tokens", () => {
+  const rowStart = applications.indexOf("const CHECKLIST_ACTION_CLASS");
+  const rowEnd = applications.indexOf("\n// A real portal run", rowStart);
+  assert.notEqual(rowStart, -1);
+  assert.notEqual(rowEnd, -1);
+  const taskQueue = applications.slice(rowStart, rowEnd);
+
+  assert.match(applications, /needsAttention && !awaitingUnverifiedSubmission \? "p-4 sm:p-6" : "p-7"/);
+  assert.match(applications, /Finish these steps to keep going\./);
+  assert.match(taskQueue, /CHECKLIST_ACTION_CLASS = "[^"]*rounded-control[^"]*px-4[^"]*text-small/);
+  assert.match(taskQueue, /font-mono text-label font-medium uppercase/);
+  assert.match(taskQueue, /\[&>li\]:py-2 md:\[&>li\]:py-4/);
+  assert.doesNotMatch(taskQueue, /text-\[(?:10|11)px\]/);
+  assert.doesNotMatch(taskQueue, /rounded-full border border-control-border/);
+  assert.doesNotMatch(taskQueue, /px-3\.5/);
 });

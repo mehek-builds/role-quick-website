@@ -405,7 +405,7 @@ test("unverified submission evidence precedes its outcome controls on narrow scr
   assert.ok(evidenceBefore > 0 && decision > evidenceBefore, "the proof must be encountered before the consequential yes/no controls");
   assert.ok(ordinaryEvidence > decision, "other review states keep their action-first reading order");
   assert.match(screen, /filledFormEvidence =[\s\S]{0,160}<Card className=\{`overflow-hidden \$\{awaitingUnverifiedSubmission \? "lg:order-2" : ""\}`\}/);
-  assert.match(screen, /<Card className=\{`\$\{needsAttention && !awaitingUnverifiedSubmission \? "p-5 sm:p-7" : "p-7"\} \$\{awaitingUnverifiedSubmission \? "lg:order-1" : ""\}`\}>/);
+  assert.match(screen, /<Card className=\{`\$\{needsAttention && !awaitingUnverifiedSubmission \? "p-4 sm:p-6" : "p-7"\} \$\{awaitingUnverifiedSubmission \? "lg:order-1" : ""\}`\}>/);
 });
 
 test("overview keeps three application states and sends matches to the review screen", async () => {
