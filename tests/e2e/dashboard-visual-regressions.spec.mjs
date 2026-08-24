@@ -3903,7 +3903,13 @@ test("reduced motion is static and 640px reflow stays contained", async () => {
     await accountCue.waitFor({ state: "visible" });
     await assertSelectedTabVisible(accountTabs, "Account Automation after 640px to 320px resize");
     await capturePass(page, "account-tabs-640-to-320");
-    await scrollTablistToEnd(accountTabs);
+    await accountTabs.getByRole("tab", { name: "Automation", exact: true }).press("End");
+    const finalAccountTab = accountTabs.getByRole("tab", { name: "Sign-in & data", exact: true });
+    await finalAccountTab.waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.getElementById("tab-sign-in")?.getAttribute("aria-selected") === "true");
+    assert.equal(await finalAccountTab.getAttribute("aria-selected"), "true");
+    await page.waitForFunction(() => document.activeElement?.id === "tab-sign-in");
+    await assertSelectedTabVisible(accountTabs, "Account final tab after keyboard navigation");
     await accountCue.waitFor({ state: "detached" });
     assertNoPageErrors(state, "Reduced motion and reflow");
   } finally {
