@@ -60,9 +60,9 @@ test("saved answers honor standing consent while retaining a manual fallback", a
     "utf8",
   );
 
-  assert.match(dashboard, /await prepareApplication\(questions\)/);
+  assert.match(dashboard, /await prepareApplication\(questions, options\)/);
   assert.match(dashboard, /function routeMissingRequiredAnswers\([\s\S]{0,620}questionReviewPresentation\([\s\S]{0,420}requiredMetadataMissing[\s\S]{0,320}reviewPortalQuestions\(firstMissing\?\.id, "answer"\)[\s\S]{0,320}moveToScreen\("questions", \{ scrollToTop: !firstMissing \}\)/);
-  const verifiedPacketStart = dashboard.indexOf("async function continueFromVerifiedPacket()");
+  const verifiedPacketStart = dashboard.indexOf("async function continueFromVerifiedPacket(");
   const verifiedPacketEnd = dashboard.indexOf("function reviewPacketAgain()", verifiedPacketStart);
   const verifiedPacket = dashboard.slice(verifiedPacketStart, verifiedPacketEnd);
   assert.ok(verifiedPacketStart > 0 && verifiedPacketEnd > verifiedPacketStart);
@@ -71,6 +71,8 @@ test("saved answers honor standing consent while retaining a manual fallback", a
       < verifiedPacket.indexOf("/packet-audit/acknowledge"),
     "newly discovered questions must open before the packet approval is spent",
   );
+  assert.match(verifiedPacket, /!options\.allowServerAnswerRefresh && routeMissingRequiredAnswers\(questions\)/,
+    "only the explicit stale-metadata recovery may continue through missing server-readable fields");
   const prepareStart = dashboard.indexOf("async function prepareApplication(");
   const prepareEnd = dashboard.indexOf("async function completeHandoff", prepareStart);
   const prepare = dashboard.slice(prepareStart, prepareEnd);

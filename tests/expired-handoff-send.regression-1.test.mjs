@@ -115,7 +115,8 @@ test("the way out the sentence promises is a real control bound to the restart f
   /* PR #375's flag, by name, through the ONE existing send path rather than a new one. There are
      two callers of submit-request on this screen and ask-at-apply.test.mjs counts them; a restart
      that opened a third would be a second route around every gate in prepareApplication. */
-  assert.match(dashboard, /options: \{[\s\S]{0,240}allowServerAnswerRefresh\?: boolean;[\s\S]{0,120}restart\?: boolean;[\s\S]{0,240}\} = \{\}/);
+  assert.match(dashboard, /type PrepareApplicationOptions = \{[\s\S]{0,240}allowServerAnswerRefresh\?: boolean;[\s\S]{0,120}restart\?: boolean;[\s\S]{0,240}\};/);
+  assert.match(dashboard, /options: PrepareApplicationOptions = \{\}/);
   assert.match(dashboard, /body: JSON\.stringify\(\{ questions: finalQuestions, \.\.\.\(options\.restart \? \{ restart: true \} : \{\}\) \}\)/);
   assert.match(dashboard, /await prepareApplication\(submission\.review\.questions, \{ allowServerAnswerRefresh: true, restart: true \}\)/);
   // A blank required answer must not block the run that is the only thing which can answer it.

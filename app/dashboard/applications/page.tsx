@@ -77,6 +77,12 @@ import { completeOperationId, operationIdFor } from "@/lib/operation-id";
 
 type Screen = "review" | "questions" | "submitting" | "portal" | "submitted";
 type ApplicationSort = "next" | "recent" | "company";
+type PrepareApplicationOptions = {
+  allowServerAnswerRefresh?: boolean;
+  restart?: boolean;
+  failureScreen?: "questions" | "portal" | "review";
+  source?: "metadata_refresh";
+};
 
 /* These guards are deliberately pure. Both callers resume after a network await, so the screen
    and evidence captured when the request started are already historical. Read the synchronous
@@ -2886,15 +2892,19 @@ function Applications() {
     }
   }
 
-  async function continueFromVerifiedPacket() {
+  async function continueFromVerifiedPacket(options: PrepareApplicationOptions = {}) {
     if (!packetEvidenceReady || !activePacketEvidence) {
-      setError(packetEvidenceBlocker ?? "Audit and load the exact packet before continuing.");
+      const message = packetEvidenceBlocker ?? "Audit and load the exact packet before continuing.";
+      if (options.failureScreen === "questions" && selected) {
+        setError(null);
+        setMetadataRefreshError({ applicationId: selected.id, message });
+      } else setError(message);
       return;
     }
     /* Questions can arrive from the live form after the audit that put this packet on screen. Do
        not spend the approval on a packet that cannot proceed, and do not make the applicant press
        the same button again to discover where those answers live. */
-    if (routeMissingRequiredAnswers(questions)) return;
+    if (!options.allowServerAnswerRefresh && routeMissingRequiredAnswers(questions)) return;
     const applicationId = activePacketEvidence.applicationId;
     if (packetAuditInFlight.current === applicationId) return;
     packetAuditInFlight.current = applicationId;
@@ -2925,10 +2935,15 @@ function Applications() {
         moveToScreen("portal");
         return;
       }
-      await prepareApplication(questions);
+      await prepareApplication(questions, options);
     } catch (reason) {
       if (!(await recoverPacketAuditReview(applicationId, reason))) {
-        setError(reason instanceof Error ? reason.message : "Litos could not record this exact packet review.");
+        const message = reason instanceof Error ? reason.message : "Litos could not record this exact packet review.";
+        if (options.failureScreen === "questions") {
+          setError(null);
+          setMetadataRefreshError({ applicationId, message });
+          moveToScreen("questions");
+        } else setError(message);
       }
     } finally {
       if (packetAuditInFlight.current === applicationId) packetAuditInFlight.current = null;
@@ -2963,12 +2978,7 @@ function Applications() {
        submit-request. There were two call sites of that route and there is a rule about it: a
        second send path is how a gate gets routed around. What a restart needs that a first
        preparation does not is one boolean in the body, so it is one boolean here. */
-    options: {
-      allowServerAnswerRefresh?: boolean;
-      restart?: boolean;
-      failureScreen?: "questions" | "portal" | "review";
-      source?: "metadata_refresh";
-    } = {},
+    options: PrepareApplicationOptions = {},
   ) {
     if (!selected) return;
     const applicationId = selected.id;
@@ -3561,12 +3571,18 @@ function Applications() {
       setError("Save or discard your answer edits before reading the employer fields again.");
       return;
     }
+    if (!packetEvidenceReady || !activePacketEvidence) {
+      setMetadataRefreshError(null);
+      reviewPacketAgain();
+      setNotice("Review the exact packet first, then Litos can read and fill the employer form again.");
+      return;
+    }
     metadataRefreshRef.current = applicationId;
     setMetadataRefreshId(applicationId);
     setMetadataRefreshError(null);
     setError(null);
     try {
-      await prepareApplication(selectedSubmission.review.questions, {
+      await continueFromVerifiedPacket({
         allowServerAnswerRefresh: true,
         failureScreen: "questions",
         source: "metadata_refresh",
@@ -4066,6 +4082,7 @@ function Applications() {
           onRefreshMetadata={() => void refreshEmployerQuestionMetadata()}
           refreshingMetadata={metadataRefreshId === selected?.id}
           metadataRefreshDisabled={questionEditsUnsaved}
+          metadataRefreshNeedsPacketReview={!packetEvidenceReady}
           metadataRefreshError={metadataRefreshError?.applicationId === selected?.id ? metadataRefreshError.message : null}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
@@ -4337,7 +4354,7 @@ function Applications() {
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
               {review.portal_supported === false
                 ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
-                : <Button onClick={packetEvidenceReady ? continueFromVerifiedPacket : packetEvidenceNeedsFreshAudit ? auditPacketAgain : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                    : <Button onClick={packetEvidenceReady ? () => void continueFromVerifiedPacket() : packetEvidenceNeedsFreshAudit ? auditPacketAgain : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
                     : reviewPrimaryLabel}
@@ -5005,7 +5022,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshError = null, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshNeedsPacketReview = false, metadataRefreshError = null, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
@@ -5018,6 +5035,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   saving?: boolean;
   refreshingMetadata?: boolean;
   metadataRefreshDisabled?: boolean;
+  metadataRefreshNeedsPacketReview?: boolean;
   metadataRefreshError?: string | null;
   reviewDiscovered?: boolean;
   focusQuestion?: { id: string; token: number } | null;
@@ -5126,11 +5144,15 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                 aria-busy={refreshingMetadata}
                 aria-describedby="question-metadata-refresh-help"
               >
-                {refreshingMetadata ? "Reviewing and filling..." : "Review and fill again"}
+                {metadataRefreshNeedsPacketReview
+                  ? "Review packet first"
+                  : refreshingMetadata ? "Reviewing and filling..." : "Review and fill again"}
               </Button>
               <p id="question-metadata-refresh-help" className="text-small leading-6 text-muted">
                 {metadataRefreshDisabled
                   ? "Save or go Back to discard your edits before refreshing."
+                  : metadataRefreshNeedsPacketReview
+                    ? "Litos needs your exact packet review before it can fill the employer form."
                   : "Litos opens the employer form, reads its current fields, and fills only your saved answers. Unsaved edits on this page are not used."}
               </p>
             </div>
