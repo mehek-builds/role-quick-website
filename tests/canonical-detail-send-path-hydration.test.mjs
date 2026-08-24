@@ -149,52 +149,25 @@ describe("send eligibility discovered by hydration is offered, never forced", ()
    * Measured on this account 2026-08-22 via intent=detail: Databricks, IMC Trading, and a
    * freshly-created Notion application (no prior edits, no stale state) all hit it identically.
    *
-   * THE FIRST VERSION OF THIS FIX called selectPacket and setResolvedActionableRequestId directly
-   * in the handler, alongside the same router.replace. Caught in review: requestedApplicationId and
-   * requestedApplicationIntent are read straight off useSearchParams, and the bootstrap effect a few
-   * hundred lines up depends on both, so the very router.replace that fixes the guards ALSO makes
-   * that effect re-run once the navigation lands - re-fetching /resume/history and /applications and
-   * calling selectPacket a SECOND time from its own apply branch, with no user gesture behind that
-   * second call. selectPacket unconditionally scrolls to top and can overwrite whatever the student
-   * did with the review screen during the round trip. The fix below is for THAT: the handler now
-   * performs the navigation only, and leaves resolving the id and calling selectPacket to the
-   * bootstrap effect's apply branch, the same one every ordinary Jobs-page deep link already goes
-   * through - one fetch, one selectPacket call, not two. */
-  test("the handler moves the URL off intent=detail when it still needs to, or calls selectPacket directly when it does not - never both for the same click", () => {
-    /* DRW, tested 2026-08-22: a normal list click can land on intent=apply with this exact restored
-       id BEFORE any legacy packet is linked - the ROUTING HYDRATION effect folds one in later, off a
-       background fetch. When that happens, router.replace with the SAME application/intent params is
-       a no-op: nothing the bootstrap effect depends on changes, so it never re-runs and selectPacket
-       is never called - "Continue to send" sits there doing nothing on every press. The handler now
-       calls selectPacket directly in exactly that case, which cannot reintroduce the double-fire this
-       test used to guard against: that regression needed the bootstrap effect to ALSO fire off a real
-       navigation, and this branch returns before router.replace ever runs. */
+   * A production Fully row exposed the remaining hole: hydration can finish after the URL is already
+   * the exact restored application=...&intent=apply pair. Replacing that URL is a no-op, so the
+   * bootstrap effect never reruns and the summary stays open forever. The click must use the existing
+   * openApplication transition, which records local intent, selects the packet, and synchronizes the
+   * URL as one operation. */
+  test("the handler opens the hydrated ready packet through the standard local transition", () => {
     const handler = applications.match(/onContinueToSend=\{\(\) => \{[\s\S]*?\n\s{10}\}\}/)?.[0];
     assert.ok(handler, "could not find the onContinueToSend handler body");
-
-    const selectPacketCalls = handler.match(/selectPacket\(/g) ?? [];
-    assert.strictEqual(
-      selectPacketCalls.length,
-      1,
-      "onContinueToSend must call selectPacket at most once per click: a second call risks double-firing " +
-      "alongside the bootstrap effect's own call once a real router.replace lands",
-    );
-
-    const noOpGuard = handler.match(/if \(searchParams\.get\("application"\) === restoredId && searchParams\.get\("intent"\) === "apply"\) \{[\s\S]*?\n\s{12}\}/)?.[0];
-    assert.ok(noOpGuard, "could not find the already-on-restored-url guard");
-    assert.match(
-      noOpGuard,
-      /selectPacket\(canonicalEnvelopePacket\);\s*\n\s*return;/,
-      "the direct selectPacket call must be immediately followed by return, so this branch can never also " +
-      "fall through to router.replace below and risk calling selectPacket a second time",
-    );
-
     assert.match(
       handler,
-      /params\.set\("intent", "apply"\);[\s\S]{0,200}router\.replace\(`\$\{pathname\}\?\$\{params\.toString\(\)\}`, \{ scroll: false \}\);/,
-      "onContinueToSend must still move intent to \"apply\" for the restored id when the URL has not already " +
-      "landed there, or selectedPacketForRequest refuses the row on a detail-view click",
+      /if \(!canonicalReadyToSend\) return;/,
+      "the transition must use the exact packet that passed the managed-send eligibility check",
     );
+    assert.match(
+      handler,
+      /openApplication\(canonicalReadyToSend, \{ history: "replace" \}\);/,
+      "Continue to send must use the standard local packet-open transition",
+    );
+    assert.doesNotMatch(handler, /router\.replace\(|selectPacket\(/);
   });
 
   test("a ready row gets an explicit button to press, not an automatic screen change", () => {
