@@ -101,6 +101,7 @@ type DirectAnswerSaveResult = {
   review: SubmissionResponse["review"];
   promptFingerprint?: string;
   mayAdvance: boolean;
+  retryMessage?: string;
 } | { saved: false; message: string; review?: SubmissionResponse["review"] };
 
 type DirectAnswerPass = {
@@ -115,6 +116,7 @@ type DirectAnswerFailure = {
 };
 
 type DirectAnswerDraft = {
+  questionId: string;
   promptFingerprint: string;
   taskFingerprint: string;
   answer: string;
@@ -122,13 +124,64 @@ type DirectAnswerDraft = {
 
 type DirectAnswerProgress = {
   key: string;
-  lastSavedQuestionId: string | null;
-  savedCount: number;
+  answeredTasks: readonly DirectQuestionTask[];
+  cursorPromptFingerprint: string | null;
+  lastSavedPromptFingerprint: string | null;
+  navigationToken: number;
   total: number;
 };
 
+const EMPTY_DIRECT_ANSWER_DRAFTS: ReadonlyMap<string, DirectAnswerDraft> = new Map();
+
+function directAnswerNavigationTasks(
+  review: Pick<ApplicationReview, "questions" | "question_metadata_blockers">,
+  outstandingTasks: readonly DirectQuestionTask[],
+  answeredTasks: readonly DirectQuestionTask[],
+): DirectQuestionTask[] {
+  const outstandingByPrompt = new Map(
+    outstandingTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
+  );
+  const answeredByPrompt = new Map(
+    answeredTasks.map((task) => [directQuestionPromptFingerprint(task), task]),
+  );
+  return questionReviewPresentation(
+    review.questions ?? [],
+    review.question_metadata_blockers ?? [],
+  ).editableQuestions.flatMap((question) => {
+    const promptFingerprint = directQuestionPromptFingerprint({ question });
+    const task = outstandingByPrompt.get(promptFingerprint) ?? answeredByPrompt.get(promptFingerprint);
+    return task ? [{ ...task, question }] : [];
+  });
+}
+
 function directAnswerPassKey(review: ApplicationReview): string {
   return review.questions_reviewed_at ?? review.submission_run_id ?? review.updated_at;
+}
+
+function directAnswerPassesAreCompatible(
+  current: ApplicationReview,
+  accepted: ApplicationReview,
+): boolean {
+  const currentQuestionPass = current.questions_reviewed_at?.trim() || null;
+  const acceptedQuestionPass = accepted.questions_reviewed_at?.trim() || null;
+  if (currentQuestionPass || acceptedQuestionPass) {
+    return currentQuestionPass !== null && currentQuestionPass === acceptedQuestionPass;
+  }
+  const currentRunPass = current.submission_run_id?.trim() || null;
+  const acceptedRunPass = accepted.submission_run_id?.trim() || null;
+  if (currentRunPass || acceptedRunPass) {
+    return currentRunPass !== null && currentRunPass === acceptedRunPass;
+  }
+  /* Older review payloads have no explicit question-pass identity. Their updated_at changes when
+     this answer write lands, so a timestamp mismatch alone cannot prove that two responses belong
+     to different employer reads. */
+  return true;
+}
+
+function directAnswerPassRetryMessage(intent: DirectQuestionTaskIntent): string {
+  return intent === "confirm"
+    ? "The company form was checked again while your confirmation was saving. Your answer is still here. Confirm it again for the latest check."
+    : "The company form was checked again while your answer was saving. Your answer is still here. Save it again for the latest check.";
 }
 
 function submissionPublicationGeneration(
@@ -578,7 +631,7 @@ function Applications() {
   const [directAnswerPasses, setDirectAnswerPasses] = useState<ReadonlyMap<string, DirectAnswerPass>>(() => new Map());
   const [directAnswerProgresses, setDirectAnswerProgresses] = useState<ReadonlyMap<string, DirectAnswerProgress>>(() => new Map());
   const [directAnswerFailures, setDirectAnswerFailures] = useState<ReadonlyMap<string, DirectAnswerFailure>>(() => new Map());
-  const [directAnswerDrafts, setDirectAnswerDrafts] = useState<ReadonlyMap<string, DirectAnswerDraft>>(() => new Map());
+  const [directAnswerDrafts, setDirectAnswerDrafts] = useState<ReadonlyMap<string, ReadonlyMap<string, DirectAnswerDraft>>>(() => new Map());
   const [directAnswerAnnouncement, setDirectAnswerAnnouncement] = useState<{ token: number; message: string } | null>(null);
   useEffect(() => {
     if (!directAnswerAnnouncement) return;
@@ -1867,7 +1920,9 @@ function Applications() {
     && selectedDirectAnswerPass.key === directAnswerPassKey(selectedSubmission.review)
     ? selectedDirectAnswerPass.promptFingerprints
     : new Set<string>();
-  const selectedDirectAnswerDraft = selected ? directAnswerDrafts.get(selected.id) ?? null : null;
+  const selectedDirectAnswerDrafts = selected
+    ? directAnswerDrafts.get(selected.id) ?? EMPTY_DIRECT_ANSWER_DRAFTS
+    : EMPTY_DIRECT_ANSWER_DRAFTS;
   const selectedDirectAnswerFailure = selected ? directAnswerFailures.get(selected.id) ?? null : null;
   const selectedDirectAnswerProgress = selected ? directAnswerProgresses.get(selected.id) ?? null : null;
   /* The submission endpoint is the authority for the live workflow state. The packet list can
@@ -3743,6 +3798,7 @@ function Applications() {
     intent: DirectQuestionTaskIntent;
     promptFingerprint: string;
     taskFingerprint: string;
+    task: DirectQuestionTask;
   }): Promise<DirectAnswerSaveResult> {
     if (!selected || !submission || submission.application_id !== selected.id) {
       return { saved: false, message: "This application is no longer open." };
@@ -3777,8 +3833,23 @@ function Applications() {
         documents: activeSubmission.documents,
       })
       : null;
+    const activeDirectPassKey = direct ? directAnswerPassKey(activeSubmission.review) : null;
+    const activeDirectPass = direct ? directAnswerPasses.get(applicationId) : null;
+    const activeDirectProgress = direct ? directAnswerProgresses.get(applicationId) : null;
+    const activeAnsweredTasks = direct
+      && activeDirectPassKey
+      && activeDirectProgress?.key === activeDirectPassKey
+      ? activeDirectProgress.answeredTasks
+      : [];
     const safeDirectTask = direct
-      ? activeDirectTaskPlan?.questionTasks.find((task) => task.question.id === direct.questionId) ?? null
+      ? directAnswerNavigationTasks(
+        activeSubmission.review,
+        activeDirectTaskPlan?.questionTasks ?? [],
+        activeAnsweredTasks,
+      ).find((task) => (
+        task.question.id === direct.questionId
+        && directQuestionPromptFingerprint(task) === direct.promptFingerprint
+      )) ?? null
       : null;
     const safeDirectPromptFingerprint = safeDirectTask
       ? directQuestionPromptFingerprint(safeDirectTask)
@@ -3805,14 +3876,11 @@ function Applications() {
       rememberDirectFailure(message);
       return { saved: false, message };
     }
-    const activeDirectPassKey = direct ? directAnswerPassKey(activeSubmission.review) : null;
-    const activeDirectPass = direct ? directAnswerPasses.get(applicationId) : null;
     const completedDirectPromptFingerprints = new Set(
       activeDirectPassKey && activeDirectPass?.key === activeDirectPassKey
         ? activeDirectPass.promptFingerprints
         : [],
     );
-    const activeDirectProgress = direct ? directAnswerProgresses.get(applicationId) : null;
     const activeDirectQuestionTotal = direct && activeDirectTaskPlan
       ? Math.max(
         activeDirectProgress?.key === activeDirectPassKey ? activeDirectProgress.total : 0,
@@ -3896,27 +3964,63 @@ function Applications() {
         applicationId,
       ) !== requestedPublicationGeneration;
       const acceptedResponseIsOlder = direct && submissionSnapshotIsOlder(latestSubmission, acceptedCandidate);
-      const latestDirectTask = direct
+      const latestDirectTaskPlan = direct
         ? directInputTaskPlan(latestSubmission.review, {
           company: selected.job_context.company,
           role: selected.job_context.role,
           documents: latestSubmission.documents,
-        }).questionTasks.find((task) => task.question.id === direct.questionId) ?? null
+        })
+        : null;
+      const latestDirectTask = direct
+        ? directAnswerNavigationTasks(
+          latestSubmission.review,
+          latestDirectTaskPlan?.questionTasks ?? [],
+          activeAnsweredTasks,
+        ).find((task) => task.question.id === direct.questionId) ?? null
         : null;
       const latestStillHasSubmittedTask = direct && latestDirectTask
         ? directQuestionPromptFingerprint(latestDirectTask) === direct.promptFingerprint
           && directQuestionTaskFingerprint(latestDirectTask) === direct.taskFingerprint
         : false;
+      const latestSnapshotMatchesAcceptedPass = !direct || directAnswerPassesAreCompatible(
+        latestSubmission.review,
+        acceptedCandidate.review,
+      );
+      /* The PUT can commit before its response reaches this tab. Under a slow connection, the 2.5s
+         submission poll can therefore publish the committed answer first. That newer publication
+         owns the canonical envelope, but it must not erase the local fact that this exact prompt was
+         the answer just accepted: reversible question navigation depends on that history.
+
+         Match every immutable boundary before treating the poll as confirmation. Application id
+         keeps packets separate, question id prevents an adjacent field from satisfying the check,
+         the prompt fingerprint proves the employer wording and control are unchanged, and the exact
+         answer plus compatible review-pass identity prove the poll observed this write rather than
+         an identical answer measured by a newer employer-form run. */
+      const latestSubmittedAnswerQuestion = direct
+        && latestSubmission.application_id === applicationId
+        ? questionReviewPresentation(
+          latestSubmission.review.questions ?? [],
+          latestSubmission.review.question_metadata_blockers ?? [],
+        ).editableQuestions.find((question) => (
+          question.id === direct.questionId
+          && directQuestionPromptFingerprint({ question }) === direct.promptFingerprint
+          && question.answer === direct.answer
+        )) ?? null
+        : null;
+      const latestSnapshotHasSubmittedAnswer = latestSnapshotMatchesAcceptedPass
+        && latestSubmittedAnswerQuestion !== null;
       /* A changed publication with the same timestamp cannot be ordered by the clock. The direct
          response wins only while the latest snapshot still carries the exact task the applicant
-         answered. If the latest snapshot already holds that answer, changed the prompt, or removed
-         it, retain the latest application instead of restoring the older response body. */
+         answered in the same question pass. If the latest snapshot already holds that answer in a
+         newer pass, changed the prompt, or removed it, retain the latest application instead of
+         restoring the older response body. */
       const acceptedResponseOwnsSnapshot = !direct
         || !acceptedPublicationChanged
-        || (!acceptedResponseIsOlder && (
+        || (latestSnapshotMatchesAcceptedPass && !acceptedResponseIsOlder && (
           latestSubmission.review.updated_at !== acceptedCandidate.review.updated_at
           || latestStillHasSubmittedTask
         ));
+      const acceptedAnswerOwnsProgress = acceptedResponseOwnsSnapshot || latestSnapshotHasSubmittedAnswer;
       const saved = acceptedResponseOwnsSnapshot
         ? acceptedPublicationChanged
           ? nextSubmissionState(latestSubmission, acceptedCandidate)
@@ -3929,16 +4033,39 @@ function Applications() {
         submissionSnapshotsRef.current.set(applicationId, saved);
         setPackets((current) => current?.map((packet) => packet.id === applicationId ? packetWithDirectSubmission(packet, saved) : packet) ?? current);
       }
-      if (direct && safeDirectPromptFingerprint && acceptedResponseOwnsSnapshot) {
+      if (direct && safeDirectTask && safeDirectPromptFingerprint && acceptedAnswerOwnsProgress) {
         completedDirectPromptFingerprints.add(safeDirectPromptFingerprint);
         const savedDirectTaskPlan = directInputTaskPlan(saved.review, {
           company: selected.job_context.company,
           role: selected.job_context.role,
           documents: saved.documents,
         });
-        const remainingDirectQuestionCount = savedDirectTaskPlan.questionTasks.filter((task) => (
+        const remainingDirectQuestions = savedDirectTaskPlan.questionTasks.filter((task) => (
           !completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))
-        )).length;
+        ));
+        const answeredQuestion = saved.review.questions.find((question) => (
+          question.id === direct.questionId
+          && directQuestionPromptFingerprint({ question }) === safeDirectPromptFingerprint
+        )) ?? { ...safeDirectTask.question, answer: direct.answer };
+        const answeredTask = { ...safeDirectTask, question: answeredQuestion };
+        const answeredTasks = activeAnsweredTasks.some((task) => (
+          directQuestionPromptFingerprint(task) === safeDirectPromptFingerprint
+        ))
+          ? activeAnsweredTasks.map((task) => (
+            directQuestionPromptFingerprint(task) === safeDirectPromptFingerprint ? answeredTask : task
+          ))
+          : [...activeAnsweredTasks, answeredTask];
+        const savedDirectNavigationTasks = directAnswerNavigationTasks(
+          saved.review,
+          savedDirectTaskPlan.questionTasks,
+          answeredTasks,
+        );
+        const savedDirectQuestionIndex = savedDirectNavigationTasks.findIndex((task) => (
+          directQuestionPromptFingerprint(task) === safeDirectPromptFingerprint
+        ));
+        const nextSavedDirectQuestion = savedDirectQuestionIndex >= 0
+          ? savedDirectNavigationTasks[savedDirectQuestionIndex + 1] ?? null
+          : remainingDirectQuestions[0] ?? null;
         const savedPassKey = directAnswerPassKey(saved.review);
         setDirectAnswerPasses((current) => {
           const next = new Map(current);
@@ -3952,19 +4079,35 @@ function Applications() {
           const next = new Map(current);
           next.set(applicationId, {
             key: savedPassKey,
-            lastSavedQuestionId: direct.questionId,
-            savedCount: completedDirectPromptFingerprints.size,
+            answeredTasks,
+            cursorPromptFingerprint: nextSavedDirectQuestion
+              ? directQuestionPromptFingerprint(nextSavedDirectQuestion)
+              : safeDirectPromptFingerprint,
+            lastSavedPromptFingerprint: safeDirectPromptFingerprint,
+            navigationToken: (activeDirectProgress?.key === activeDirectPassKey
+              ? activeDirectProgress.navigationToken
+              : 0) + 1,
             total: Math.max(
               activeDirectQuestionTotal,
-              completedDirectPromptFingerprints.size + remainingDirectQuestionCount,
+              completedDirectPromptFingerprints.size + remainingDirectQuestions.length,
             ),
           });
           return next;
         });
         setDirectAnswerDrafts((current) => {
-          if (!current.has(applicationId)) return current;
+          const applicationDrafts = current.get(applicationId);
+          if (!applicationDrafts) return current;
+          if (!applicationDrafts.has(safeDirectPromptFingerprint)
+            && ![...applicationDrafts.values()].some((draft) => draft.questionId === direct.questionId)) return current;
           const next = new Map(current);
-          next.delete(applicationId);
+          const nextApplicationDrafts = new Map(applicationDrafts);
+          for (const [promptFingerprint, draft] of nextApplicationDrafts) {
+            if (promptFingerprint === safeDirectPromptFingerprint || draft.questionId === direct.questionId) {
+              nextApplicationDrafts.delete(promptFingerprint);
+            }
+          }
+          if (nextApplicationDrafts.size > 0) next.set(applicationId, nextApplicationDrafts);
+          else next.delete(applicationId);
           return next;
         });
         setDirectAnswerFailures((current) => {
@@ -3978,7 +4121,7 @@ function Applications() {
       // compared by actual review recency, so an older hydration cannot defeat the accepted answer
       // and a genuinely newer snapshot still wins. The selected id keeps A from navigating B.
       if (
-        !acceptedResponseOwnsSnapshot
+        !acceptedAnswerOwnsProgress
         || !applicationsMountedRef.current
         || selectedIdRef.current !== applicationId
       ) return {
@@ -3986,6 +4129,9 @@ function Applications() {
         review: result.review,
         mayAdvance: false,
         ...(safeDirectPromptFingerprint ? { promptFingerprint: safeDirectPromptFingerprint } : {}),
+        ...(direct && !latestSnapshotMatchesAcceptedPass
+          ? { retryMessage: directAnswerPassRetryMessage(direct.intent) }
+          : {}),
       };
       const publishSavedAnswer = () => {
         const submissionBeforeAnswer = submissionRef.current;
@@ -4791,17 +4937,46 @@ function Applications() {
           onReviewQuestions={() => reviewPortalQuestions()}
           onOpenQuestion={(questionId, intent) => reviewPortalQuestions(questionId, intent)}
           onChooseOption={chooseBlockerOption}
-          onSaveQuestion={(questionId, answer, intent, promptFingerprint, taskFingerprint) => saveReviewedAnswers({ questionId, answer, intent, promptFingerprint, taskFingerprint })}
+          onSaveQuestion={(questionId, answer, intent, promptFingerprint, taskFingerprint, task) => saveReviewedAnswers({ questionId, answer, intent, promptFingerprint, taskFingerprint, task })}
           savingAnswer={savingAnswerIds.has(selected.id)}
           answeredQuestionFingerprints={selectedAnsweredPromptFingerprints}
           directAnswerProgress={selectedDirectAnswerProgress}
-          directAnswerDraft={selectedDirectAnswerDraft}
+          directAnswerDrafts={selectedDirectAnswerDrafts}
           directAnswerFailure={selectedDirectAnswerFailure}
-          onDirectAnswerDraftChange={(promptFingerprint, taskFingerprint, answer) => {
+          onDirectAnswerDraftChange={(questionId, promptFingerprint, taskFingerprint, answer) => {
             setDirectAnswerDrafts((current) => {
               const next = new Map(current);
-              next.set(selected.id, { promptFingerprint, taskFingerprint, answer });
+              const applicationDrafts = new Map(current.get(selected.id) ?? EMPTY_DIRECT_ANSWER_DRAFTS);
+              applicationDrafts.set(promptFingerprint, { questionId, promptFingerprint, taskFingerprint, answer });
+              next.set(selected.id, applicationDrafts);
               return next;
+            });
+          }}
+          onClearDirectAnswerDraft={(promptFingerprint) => {
+            setDirectAnswerDrafts((current) => {
+              const applicationDrafts = current.get(selected.id);
+              if (!applicationDrafts?.has(promptFingerprint)) return current;
+              const next = new Map(current);
+              const nextApplicationDrafts = new Map(applicationDrafts);
+              nextApplicationDrafts.delete(promptFingerprint);
+              if (nextApplicationDrafts.size > 0) next.set(selected.id, nextApplicationDrafts);
+              else next.delete(selected.id);
+              return next;
+            });
+          }}
+          onNavigateDirectQuestion={(promptFingerprint) => {
+            runDashboardTransition(() => {
+              setDirectAnswerProgresses((current) => {
+                const progress = current.get(selected.id);
+                if (!progress || progress.key !== directAnswerPassKey(selectedSubmission.review)) return current;
+                const next = new Map(current);
+                next.set(selected.id, {
+                  ...progress,
+                  cursorPromptFingerprint: promptFingerprint,
+                  navigationToken: progress.navigationToken + 1,
+                });
+                return next;
+              });
             });
           }}
           onClearDirectAnswerFailure={(promptFingerprint) => {
@@ -6096,17 +6271,24 @@ function UnverifiedSubmissionCard({ attentionReason, submitting, error, onSubmit
   );
 }
 
-function DirectApplicationQuestion({ task, position, total, saving, savedRecently, preservedDraft, externalFailure, onDraftChange, onClearFailure, onSave }: {
+function DirectApplicationQuestion({ task, position, total, saving, saved, focusToken, hasPrevious, hasNext, preservedDraft, externalFailure, onDraftChange, onClearDraft, onClearFailure, onPrevious, onNext, onReviewApplication, onSave }: {
   task: DirectQuestionTask;
   position: number;
   total: number;
   saving: boolean;
-  savedRecently: boolean;
+  saved: boolean;
+  focusToken: number;
+  hasPrevious: boolean;
+  hasNext: boolean;
   preservedDraft: DirectAnswerDraft | null;
   externalFailure: DirectAnswerFailure | null;
-  onDraftChange: (promptFingerprint: string, taskFingerprint: string, answer: string) => void;
+  onDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void;
+  onClearDraft: (promptFingerprint: string) => void;
   onClearFailure: (promptFingerprint: string) => void;
-  onSave: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string) => Promise<DirectAnswerSaveResult>;
+  onPrevious: () => void;
+  onNext: () => void;
+  onReviewApplication: () => void;
+  onSave: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>;
 }) {
   const [promptFingerprint] = useState(() => directQuestionPromptFingerprint(task));
   const [taskFingerprint] = useState(() => directQuestionTaskFingerprint(task));
@@ -6118,8 +6300,10 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [choiceTouched, setChoiceTouched] = useState(false);
-  const sectionRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const busy = saving || submitting;
+  const savedAnswer = task.question.answer ?? "";
+  const answerDirty = answer !== savedAnswer;
   const requiredBlank = task.question.required && !answer.trim();
   const exactOptions = task.question.options ?? [];
   const choiceMissing = exactOptions.length > 0 && !exactOptions.includes(answer);
@@ -6135,45 +6319,58 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
   const answerDescribedBy = `${progressId} ${helperId}${visibleError ? ` ${errorId}` : ""}`;
 
   useEffect(() => {
-    if (!savedRecently) return;
+    if (focusToken <= 0) return;
     const timer = window.setTimeout(() => {
-      const section = sectionRef.current;
-      const control = section?.querySelector<HTMLElement>("input:checked, input, select, textarea");
-      control?.focus({ preventScroll: true });
-      section?.scrollIntoView({ block: "nearest", behavior: "auto" });
+      const heading = headingRef.current;
+      heading?.focus({ preventScroll: true });
+      heading?.scrollIntoView({ block: "nearest", behavior: "auto" });
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [savedRecently, task.id]);
+  }, [focusToken, headingId]);
 
   async function submitAnswer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (saved && !answerDirty && hasNext) {
+      navigate(onNext);
+      return;
+    }
     if (busy || answerBlocked) return;
     setSubmitting(true);
     setSaveError(null);
     onClearFailure(promptFingerprint);
-    onDraftChange(promptFingerprint, taskFingerprint, answer);
-    const result = await onSave(task.question.id, answer, task.intent, promptFingerprint, taskFingerprint);
+    onDraftChange(task.question.id, promptFingerprint, taskFingerprint, answer);
+    const result = await onSave(task.question.id, answer, task.intent, promptFingerprint, taskFingerprint, task);
     setSubmitting(false);
     if (!result.saved) {
       setSaveError(result.message);
+    } else if (!result.mayAdvance && result.retryMessage) {
+      setSaveError(result.retryMessage);
     }
   }
 
   const actionLabel = task.intent === "confirm"
-    ? "Confirm and save"
-    : "Save to application";
+    ? hasNext ? "Confirm and next" : "Confirm answer"
+    : saved ? hasNext ? "Save changes and next" : "Save changes" : hasNext ? "Save and next" : "Save answer";
 
   function updateAnswer(next: string) {
     if (busy) return;
     setAnswer(next);
     setSaveError(null);
     onClearFailure(promptFingerprint);
-    onDraftChange(promptFingerprint, taskFingerprint, next);
+    if (next === savedAnswer) onClearDraft(promptFingerprint);
+    else onDraftChange(task.question.id, promptFingerprint, taskFingerprint, next);
+  }
+
+  function navigate(navigateToQuestion: () => void) {
+    if (busy) return;
+    if (answerDirty) onDraftChange(task.question.id, promptFingerprint, taskFingerprint, answer);
+    else onClearDraft(promptFingerprint);
+    navigateToQuestion();
   }
 
   return (
     <MotionPanel key={task.id} name="dashboard-application-answer">
-      <section ref={sectionRef} aria-labelledby={headingId} className="py-1">
+      <section aria-labelledby={headingId} className="py-1">
         <div className="flex items-center justify-between gap-4">
           <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">
             Application answer
@@ -6182,10 +6379,10 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
             {position} of {total}
           </p>
         </div>
-        {savedRecently && (
+        {saved && !answerDirty && (
           <p className="mt-2 text-small text-teal-ink">Saved to this application.</p>
         )}
-        <h2 id={headingId} className={`mt-4 text-ink ${task.question.question.trim().length > 140 ? "text-body leading-7" : "text-heading font-medium leading-tight"}`}>
+        <h2 ref={headingRef} id={headingId} tabIndex={-1} className={`mt-4 text-ink ${task.question.question.trim().length > 140 ? "text-body leading-7" : "text-heading font-medium leading-tight"}`}>
           {displayQuestionLabel(task.question.question)}
         </h2>
         <p id={helperId} className="mt-2 text-small leading-6 text-muted">
@@ -6256,19 +6453,43 @@ function DirectApplicationQuestion({ task, position, total, saving, savedRecentl
               {visibleError}
             </p>
           )}
-          <div className="mt-6 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
-            <Button type="submit" block className="sm:w-auto" disabled={answerBlocked} aria-disabled={busy || answerBlocked}>
-              {busy ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
-            </Button>
-            <p className="text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
+          <div className={`mt-6 grid gap-2 ${hasPrevious ? "grid-cols-[auto_minmax(0,1fr)]" : "grid-cols-1"} sm:flex sm:items-center`}>
+            {hasPrevious && (
+              <Button
+                type="button"
+                variant="secondary"
+                aria-label="Previous question"
+                disabled={busy}
+                onClick={() => navigate(onPrevious)}
+              >
+                Previous
+              </Button>
+            )}
+            {saved && !answerDirty ? (
+              <Button
+                type="button"
+                block
+                className="sm:w-auto"
+                aria-label={hasNext ? "Next question" : "Review application"}
+                disabled={busy}
+                onClick={() => hasNext ? navigate(onNext) : onReviewApplication()}
+              >
+                {hasNext ? "Next question" : "Review application"}
+              </Button>
+            ) : (
+              <Button type="submit" block className="sm:w-auto" disabled={busy || answerBlocked}>
+                {busy ? <PendingLabel onColor>Saving...</PendingLabel> : actionLabel}
+              </Button>
+            )}
           </div>
+          <p className="mt-3 text-label leading-5 text-muted">Nothing goes to the employer until you review the completed application.</p>
         </form>
       </section>
     </MotionPanel>
   );
 }
 
-function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDraft, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDraft: DirectAnswerDraft | null; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
+function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTrialPacket, approving, securityCodeSubmitting, securityCodeError, onSubmitSecurityCode, unverifiedSubmissionSubmitting, unverifiedSubmissionError, onSubmitUnverifiedOutcome, educationProfile, educationProfileStatus, onCheckResume, onReloadCoverLetter, onWriteCoverLetter, coverLetterReloading, onHandoffComplete, onApprove, sendRefusal, onRestart, restarting, onRetry, onReviewPacket, onReviewQuestions, onOpenQuestion, onChooseOption, onSaveQuestion, savingAnswer, answeredQuestionFingerprints, directAnswerProgress, directAnswerDrafts, directAnswerFailure, onDirectAnswerDraftChange, onClearDirectAnswerDraft, onNavigateDirectQuestion, onClearDirectAnswerFailure, onRefreshQuestionMetadata, questionMetadataRefreshing, questionMetadataRefreshDisabled, questionMetadataNeedsPacketReview, questionMetadataRefreshError, onQuestionsFinished, onAddDocument, onToggleAcknowledged, attentionTicking, onSelfSubmitted, onPacketAuditRefusal, onOpenWithExtension, extensionFillBusy, extensionFillError }: { packet: GeneratedResume; submission: SubmissionResponse; packetEvidenceReviewed: boolean; manualTrialPacket: PacketAuditResponse | null; approving: boolean; securityCodeSubmitting: boolean; securityCodeError: string | null; onSubmitSecurityCode: (code: string) => void; unverifiedSubmissionSubmitting: boolean; unverifiedSubmissionError: string | null; onSubmitUnverifiedOutcome: (found: boolean) => void; educationProfile: EducationProfile | null; educationProfileStatus: EducationProfileStatus; onCheckResume: () => void; onReloadCoverLetter: () => void; onWriteCoverLetter: () => void; coverLetterReloading: boolean; onHandoffComplete: (outcome?: "cleared" | "submitted") => void; onApprove: () => void; sendRefusal: { message: string; issues: string[] } | null; onRestart: () => void; restarting: boolean; onRetry: () => void; onReviewPacket: () => void; onReviewQuestions: () => void; onOpenQuestion: (questionId: string, intent?: SubmissionChecklistAction) => void; onChooseOption: (questionId: string, option: string) => void; onSaveQuestion: (questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask) => Promise<DirectAnswerSaveResult>; savingAnswer: boolean; answeredQuestionFingerprints: ReadonlySet<string>; directAnswerProgress: DirectAnswerProgress | null; directAnswerDrafts: ReadonlyMap<string, DirectAnswerDraft>; directAnswerFailure: DirectAnswerFailure | null; onDirectAnswerDraftChange: (questionId: string, promptFingerprint: string, taskFingerprint: string, answer: string) => void; onClearDirectAnswerDraft: (promptFingerprint: string) => void; onNavigateDirectQuestion: (promptFingerprint: string) => void; onClearDirectAnswerFailure: (promptFingerprint: string) => void; onRefreshQuestionMetadata: () => void; questionMetadataRefreshing: boolean; questionMetadataRefreshDisabled: boolean; questionMetadataNeedsPacketReview: boolean; questionMetadataRefreshError: string | null; onQuestionsFinished: () => void; onAddDocument: (kind: string) => void; onToggleAcknowledged: (item: SubmissionChecklistItem, acknowledged: boolean) => void; attentionTicking: ReadonlySet<string>; onSelfSubmitted: () => void; onPacketAuditRefusal: (reason: unknown) => Promise<boolean>; onOpenWithExtension: () => void; extensionFillBusy: boolean; extensionFillError: string | null }) {
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
@@ -6440,53 +6661,66 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
     ? directAnswerProgress
     : {
       key: directProgressKey,
-      lastSavedQuestionId: null,
-      savedCount: 0,
+      answeredTasks: [],
+      cursorPromptFingerprint: null,
+      lastSavedPromptFingerprint: null,
+      navigationToken: 0,
       total: directTaskPlan.questionTasks.length,
     };
   const remainingDirectQuestions = directTaskPlan.questionTasks.filter((task) => (
     !answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))
   ));
-  const currentDirectQuestion = remainingDirectQuestions[0] ?? null;
+  const directQuestionTasks = directAnswerNavigationTasks(
+    review,
+    remainingDirectQuestions,
+    directProgress.answeredTasks,
+  );
+  const directQuestionFingerprints = new Set(
+    directQuestionTasks.map((task) => directQuestionPromptFingerprint(task)),
+  );
+  const currentNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
+  const currentMetadataBlocker = directTaskPlan.metadataBlockers[0] ?? null;
+  const defaultDirectPromptFingerprint = remainingDirectQuestions[0]
+    ? directQuestionPromptFingerprint(remainingDirectQuestions[0])
+    : directQuestionTasks.at(-1)
+      ? directQuestionPromptFingerprint(directQuestionTasks.at(-1)!)
+      : null;
+  const requestedDirectPromptFingerprint = directProgress.cursorPromptFingerprint
+    && directQuestionFingerprints.has(directProgress.cursorPromptFingerprint)
+    ? directProgress.cursorPromptFingerprint
+    : defaultDirectPromptFingerprint;
+  const currentDirectQuestionIndex = directQuestionTasks.findIndex((task) => (
+    directQuestionPromptFingerprint(task) === requestedDirectPromptFingerprint
+  ));
+  /* Follow-up work never silently replaces the question navigator. The final accepted question is
+     still the applicant's place in this flow, including its Previous control; Review application is
+     the explicit transition to the existing packet and follow-up path. */
+  const currentDirectQuestion = directQuestionTasks[currentDirectQuestionIndex] ?? null;
   const currentDirectPromptFingerprint = currentDirectQuestion
     ? directQuestionPromptFingerprint(currentDirectQuestion)
     : null;
-  const directDraftMatchesCurrentPrompt = directAnswerDraft !== null
-    && directAnswerDraft.promptFingerprint === currentDirectPromptFingerprint;
-  const directRecoveryNeeded = directAnswerDraft !== null && !directDraftMatchesCurrentPrompt;
+  const currentDirectAnswerDraft = currentDirectPromptFingerprint
+    ? directAnswerDrafts.get(currentDirectPromptFingerprint) ?? null
+    : null;
+  const directRecoveryDraft = [...directAnswerDrafts.values()].find((draft) => (
+    !directQuestionFingerprints.has(draft.promptFingerprint)
+  )) ?? null;
+  const directRecoveryNeeded = directRecoveryDraft !== null;
   const directAnswerActive = needsAttention && !awaitingUnverifiedSubmission && currentDirectQuestion !== null;
-  const currentNonQuestionTask = directTaskPlan.nonQuestionTasks[0]?.item ?? null;
-  const currentMetadataBlocker = directTaskPlan.metadataBlockers[0] ?? null;
   const directQuestionTotal = Math.max(
     directProgress.total,
-    directProgress.savedCount + remainingDirectQuestions.length,
+    directQuestionTasks.length,
   );
-  const directQuestionPosition = Math.min(
-    Math.max(1, directQuestionTotal),
-    directProgress.savedCount + 1,
-  );
+  const directQuestionPosition = currentDirectQuestionIndex >= 0 ? currentDirectQuestionIndex + 1 : 1;
+  const currentDirectQuestionSaved = currentDirectPromptFingerprint !== null
+    && answeredQuestionFingerprints.has(currentDirectPromptFingerprint);
 
-  async function saveCurrentDirectQuestion(questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string): Promise<DirectAnswerSaveResult> {
-    const result = await onSaveQuestion(questionId, answer, intent, promptFingerprint, taskFingerprint);
+  async function saveCurrentDirectQuestion(questionId: string, answer: string, intent: DirectQuestionTaskIntent, promptFingerprint: string, taskFingerprint: string, task: DirectQuestionTask): Promise<DirectAnswerSaveResult> {
+    const result = await onSaveQuestion(questionId, answer, intent, promptFingerprint, taskFingerprint, task);
     if (!result.saved) return result;
     if (!result.mayAdvance) return result;
     if (!result.promptFingerprint) {
       return { saved: false as const, message: "Litos saved the answer but could not match the next employer field. Review the updated application packet." };
-    }
-    const savedQuestionFingerprints = new Set(answeredQuestionFingerprints).add(result.promptFingerprint);
-    const nextAttentionReason = result.review.attention_reason
-      ? userFacingError(result.review.attention_reason, "Litos could not finish the company’s form. Try again in a minute.")
-      : undefined;
-    const nextTaskPlan = directInputTaskPlan({ ...result.review, attention_reason: nextAttentionReason }, {
-      company: packet.job_context.company,
-      role: packet.job_context.role,
-      documents: submission.documents,
-    });
-    const anotherQuestionRemains = nextTaskPlan.questionTasks.some((task) => (
-      !savedQuestionFingerprints.has(directQuestionPromptFingerprint(task))
-    ));
-    if (!anotherQuestionRemains && nextTaskPlan.nonQuestionTasks.length === 0 && nextTaskPlan.metadataBlockers.length === 0) {
-      onQuestionsFinished();
     }
     return result;
   }
@@ -6635,7 +6869,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             <div className="mt-3 rounded-inner border border-border bg-surface px-3 py-3">
               <p className="font-mono text-label uppercase tracking-[0.08em] text-muted">Unsaved answer</p>
               <p className="mt-1 whitespace-pre-wrap break-words text-small leading-6 text-ink">
-                {directAnswerDraft.answer || "No answer was entered."}
+                {directRecoveryDraft?.answer || "No answer was entered."}
               </p>
             </div>
           </div>
@@ -6647,21 +6881,34 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
             position={directQuestionPosition}
             total={Math.max(1, directQuestionTotal)}
             saving={savingAnswer}
-            savedRecently={directProgress.lastSavedQuestionId !== null}
-            preservedDraft={directAnswerDraft}
-            externalFailure={directAnswerFailure}
+            saved={currentDirectQuestionSaved}
+            focusToken={directProgress.navigationToken}
+            hasPrevious={currentDirectQuestionIndex > 0}
+            hasNext={currentDirectQuestionIndex >= 0 && currentDirectQuestionIndex < directQuestionTasks.length - 1}
+            preservedDraft={currentDirectAnswerDraft}
+            externalFailure={directAnswerFailure?.promptFingerprint === currentDirectPromptFingerprint ? directAnswerFailure : null}
             onDraftChange={onDirectAnswerDraftChange}
+            onClearDraft={onClearDirectAnswerDraft}
             onClearFailure={onClearDirectAnswerFailure}
+            onPrevious={() => {
+              const previous = directQuestionTasks[currentDirectQuestionIndex - 1];
+              if (previous) onNavigateDirectQuestion(directQuestionPromptFingerprint(previous));
+            }}
+            onNext={() => {
+              const next = directQuestionTasks[currentDirectQuestionIndex + 1];
+              if (next) onNavigateDirectQuestion(directQuestionPromptFingerprint(next));
+            }}
+            onReviewApplication={onQuestionsFinished}
             onSave={saveCurrentDirectQuestion}
           />
         ) : (
           <>
-            {directProgress.lastSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission && (
+            {directProgress.lastSavedPromptFingerprint && needsAttention && !awaitingUnverifiedSubmission && (
               <p className="font-mono text-label font-medium uppercase tracking-[0.08em] text-teal-ink">
                 Answer saved to this application
               </p>
             )}
-            <h2 className={`${directProgress.lastSavedQuestionId && needsAttention && !awaitingUnverifiedSubmission ? "mt-3" : ""} text-heading font-medium text-ink`}>
+            <h2 className={`${directProgress.lastSavedPromptFingerprint && needsAttention && !awaitingUnverifiedSubmission ? "mt-3" : ""} text-heading font-medium text-ink`}>
               {awaitingSecurityCode
                 ? "One code away"
                 : awaitingUnverifiedSubmission

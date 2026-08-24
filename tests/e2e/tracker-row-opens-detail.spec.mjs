@@ -186,6 +186,34 @@ const METADATA_BLOCKED = {
     },
   },
 };
+const SINGLE_DIRECT_BASE = thinPacket("single-direct-question", "needs_attention", {
+  role: "Application Answers Engineer",
+  company: "Fixture Forms",
+});
+const SINGLE_DIRECT = {
+  ...SINGLE_DIRECT_BASE,
+  spec: {
+    ...SINGLE_DIRECT_BASE.spec,
+    _review: {
+      ...SINGLE_DIRECT_BASE.spec._review,
+      attention_reason: '"When can you start this internship?" is required and is still empty',
+      attention_categories: ["required_field"],
+      edited_terms: [],
+      skipped_reasons: [],
+      filled_fields: ["name", "email", "resume"],
+      question_metadata_blockers: [],
+      questions: [{
+        id: "single-direct-start-date",
+        question: "When can you start this internship?",
+        answer: "",
+        kind: "required",
+        required: true,
+        portal_input_type: "text",
+        portal_selector: "#start_date",
+      }],
+    },
+  },
+};
 const LEGACY_METADATA_BLOCKED_BASE = thinPacket("legacy-question-metadata", "needs_attention", {
   role: "Legacy Question Contract Engineer",
   company: "Fixture Historical Choices",
@@ -279,6 +307,8 @@ const CANONICAL_HYDRATED_READY = {
 let canonicalApplicationsOverride = null;
 let failApplicationHistory = false;
 let delayedExactHistory = null;
+const submissionReviewOverrides = new Map();
+let applicationMutationRequests = [];
 
 /**
  * The rows under test, and the screen-specific control each must produce.
@@ -316,7 +346,8 @@ const blockedExternal = [];
 let backendPaths = [];
 
 await context.route("**/*", async (route) => {
-  const url = route.request().url();
+  const request = route.request();
+  const url = request.url();
   if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
     await route.continue();
     return;
@@ -324,8 +355,32 @@ await context.route("**/*", async (route) => {
   if (url.startsWith(BACKEND_ORIGIN)) {
     const parsedUrl = new URL(url);
     const pathname = parsedUrl.pathname;
+    const method = request.method();
     backendPaths.push(pathname);
     const json = (body) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+    if (method !== "GET" && /^\/applications(?:\/|$)/.test(pathname)) {
+      applicationMutationRequests.push({ method, pathname });
+    }
+    const reviewAnswerMatch = method === "PUT"
+      ? pathname.match(/^\/applications\/([^/]+)\/review\/answers$/)
+      : null;
+    if (reviewAnswerMatch) {
+      const id = reviewAnswerMatch[1];
+      const packet = (resumeHistoryOverride ?? RESUMES).find((item) => item.id === id);
+      const currentReview = submissionReviewOverrides.get(id) ?? packet?.spec?._review;
+      const submittedQuestions = request.postDataJSON()?.questions ?? [];
+      const review = {
+        ...currentReview,
+        questions: (currentReview?.questions ?? []).map((storedQuestion) => {
+          const submitted = submittedQuestions.find((question) => question?.id === storedQuestion.id);
+          return submitted ? { ...storedQuestion, ...submitted } : storedQuestion;
+        }),
+        updated_at: "2026-08-24T12:00:00.000Z",
+      };
+      submissionReviewOverrides.set(id, review);
+      await json({ application_id: id, review });
+      return;
+    }
     if (pathname.startsWith("/jobs/")) {
       /* The real backend's answer to an id that is not a posting, message included. It is the
          message that used to reach the screen verbatim, so the fixture has to carry it or the case
@@ -365,7 +420,7 @@ await context.route("**/*", async (route) => {
          gap would let the poll paper over the very defect under test. */
       const id = pathname.split("/")[2];
       const packet = [...(resumeHistoryOverride ?? RESUMES), delayedExactHistory?.packet].find((item) => item?.id === id) ?? NEEDS_YOU;
-      await json({ application_id: id, review: packet.spec._review, cover_letter: null });
+      await json({ application_id: id, review: submissionReviewOverrides.get(id) ?? packet.spec._review, cover_letter: null });
       return;
     }
     await json(STUB[pathname] ?? {});
@@ -560,7 +615,7 @@ browserTest("mobile question review prompts one safe answer and never guesses un
     await assertInsideViewport(screenHeading, "the answer screen heading");
     assert.equal(await prompt.count(), 1, "the application must show one direct prompt at a time");
     await prompt.getByText("1 of 1", { exact: true }).waitFor({ state: "visible" });
-    await prompt.getByRole("button", { name: "Save to application", exact: true }).waitFor({ state: "visible" });
+    await prompt.getByRole("button", { name: "Save answer", exact: true }).waitFor({ state: "visible" });
     assert.equal(await page.getByRole("button", { name: "Check the answers", exact: true }).count(), 0);
     const screenHeadingBox = await screenHeading.boundingBox();
     const layoutState = await page.evaluate(() => ({
@@ -580,6 +635,44 @@ browserTest("mobile question review prompts one safe answer and never guesses un
   }
 });
 
+browserTest("a one-question application stays on its saved answer until review", async () => {
+  resumeHistoryOverride = [SINGLE_DIRECT];
+  submissionReviewOverrides.delete(SINGLE_DIRECT.id);
+  applicationMutationRequests = [];
+  const question = "When can you start this internship?";
+  const answer = "June 1, 2027";
+  try {
+    await openTracker();
+    await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: SINGLE_DIRECT.job_context.role }).click();
+    const prompt = page.locator('main section[aria-labelledby^="direct-application-question-"]');
+    const heading = page.getByRole("heading", { name: question, exact: true });
+    const textbox = page.getByRole("textbox", { name: question, exact: true });
+    await heading.waitFor({ state: "visible", timeout: 10_000 });
+    await textbox.fill(answer);
+    await prompt.getByRole("button", { name: "Save answer", exact: true }).click();
+
+    const reviewApplication = prompt.getByRole("button", { name: "Review application", exact: true });
+    await reviewApplication.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await prompt.count(), 1, "saving the only answer left its question flow");
+    assert.equal(await heading.count(), 1, "saving the only answer removed its question");
+    assert.equal(await textbox.inputValue(), answer, "the saved one-question answer did not remain visible");
+    assert.equal(await prompt.getByText("1 of 1", { exact: true }).count(), 1, "the final question lost its stable position");
+    assert.equal(await prompt.getByText("Saved to this application.", { exact: true }).count(), 1, "the final question did not show its saved receipt");
+    assert.equal(await page.getByRole("button", { name: "Previous question", exact: true }).count(), 0, "a one-question application rendered Previous");
+    assert.equal(await page.getByRole("button", { name: "Next question", exact: true }).count(), 0, "a one-question application rendered Next");
+    assert.deepEqual(applicationMutationRequests, [{
+      method: "PUT",
+      pathname: `/applications/${SINGLE_DIRECT.id}/review/answers`,
+    }], "saving one answer issued a submit or approval mutation");
+    assert.deepEqual(pageErrors, [], "saving the one-question application threw on the page");
+    assert.deepEqual(blockedExternal, [], "no request may leave this machine");
+  } finally {
+    submissionReviewOverrides.delete(SINGLE_DIRECT.id);
+    applicationMutationRequests = [];
+    resumeHistoryOverride = null;
+  }
+});
+
 browserTest("historical closed questions fail closed instead of rendering as textareas", async () => {
   resumeHistoryOverride = [LEGACY_METADATA_BLOCKED];
   try {
@@ -592,7 +685,7 @@ browserTest("historical closed questions fail closed instead of rendering as tex
 
     assert.equal(await page.getByRole("textbox", { name: "Have you applied here before?", exact: true }).count(), 0);
     assert.equal(await page.getByRole("textbox", { name: "Type your response", exact: true }).count(), 0);
-    assert.equal(await prompt.getByRole("button", { name: "Save to application", exact: true }).count(), 1);
+    assert.equal(await prompt.getByRole("button", { name: "Save answer", exact: true }).count(), 1);
     assert.equal(await prompt.getByText("1 of 1", { exact: true }).count(), 1);
   } finally {
     resumeHistoryOverride = null;

@@ -53,7 +53,13 @@ test("Applications input tasks use the named Litos type, spacing, and control to
   assert.match(directPrompt, /text-heading font-medium leading-tight/);
   assert.match(directPrompt, /rounded-inner border border-control-border/);
   assert.match(directPrompt, /<Button type="submit" block className="sm:w-auto"/);
-  assert.match(directPrompt, /Save to application/);
+  assert.match(directPrompt, /Save and next/);
+  assert.match(directPrompt, /Save answer/);
+  assert.match(directPrompt, /grid-cols-\[auto_minmax\(0,1fr\)\]/);
+  assert.match(directPrompt, /sm:flex sm:items-center/);
+  assert.match(directPrompt, /aria-label="Previous question"/);
+  assert.match(directPrompt, /aria-label=\{hasNext \? "Next question" : "Review application"\}/);
+  assert.match(directPrompt, /\{hasNext \? "Next question" : "Review application"\}/);
   assert.match(directPrompt, /Saved to this application\./);
   assert.match(directPrompt, /Litos saves this answer to this application before showing the next one\./);
   assert.doesNotMatch(directPrompt, /bg-warn|border-warn|text-warn/);
