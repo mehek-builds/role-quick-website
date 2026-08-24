@@ -1836,6 +1836,8 @@ test("native dashboard dialogs retain their top layer through exit and restore f
     await page.waitForFunction(() => document.activeElement?.getAttribute("data-focus-probe") === "delete-account-trigger");
 
     await page.goto(`${ORIGIN}/dashboard/settings#job-search`, { waitUntil: "domcontentloaded" });
+    await page.locator('#tab-job-search[aria-selected="true"]').waitFor({ state: "visible" });
+    await resetPageScroll(page);
     const documentTrigger = page.getByRole("button", { name: "Remove USC Transcript.pdf" });
     await documentTrigger.waitFor({ state: "visible" });
     await documentTrigger.evaluate((node) => node.setAttribute("data-focus-probe", "document-remove-trigger"));
@@ -3144,6 +3146,8 @@ test("delayed resume denials restore focus after the initiating control changes"
     await homeDenial.settled;
     const homeUpgrade = home.page.getByRole("dialog", { name: "Tailor this resume with Litos+" });
     await homeUpgrade.waitFor({ state: "visible" });
+    await finishDashboardAnimations(home.page);
+    await waitForStableGeometry(homeUpgrade, "Home delayed-denial upgrade dialog");
     await capturePass(home.page, "home-delayed-denial-upgrade");
     await homeUpgrade.getByRole("button", { name: "Close Litos+ options" }).click();
     await homeUpgrade.waitFor({ state: "detached" });
@@ -3178,6 +3182,16 @@ test("delayed resume denials restore focus after the initiating control changes"
     await applicationDenial.settled;
     const applicationUpgrade = applications.page.getByRole("dialog", { name: "Tailor this resume with Litos+" });
     await applicationUpgrade.waitFor({ state: "visible" });
+    await finishDashboardAnimations(applications.page);
+    await waitForStableGeometry(applicationUpgrade, "Applications delayed-denial upgrade dialog");
+    await applications.page.waitForFunction(() => {
+      const dialog = document.querySelector("dialog[open]");
+      const close = dialog?.querySelector('button[aria-label="Close Litos+ options"]');
+      if (!(dialog instanceof HTMLDialogElement) || !(close instanceof HTMLElement)) return false;
+      const dialogRect = dialog.getBoundingClientRect();
+      const closeRect = close.getBoundingClientRect();
+      return closeRect.left > dialogRect.left + dialogRect.width * 0.75;
+    });
     await capturePass(applications.page, "applications-delayed-denial-upgrade");
     await applicationUpgrade.getByRole("button", { name: "Close Litos+ options" }).click();
     await applicationUpgrade.waitFor({ state: "detached" });
