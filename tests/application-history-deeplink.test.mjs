@@ -117,8 +117,8 @@ describe("an application deep link loads the exact packet", () => {
   test("a ledger selection writes the same application into local state and the URL", () => {
     assert.match(
       applications,
-      /const openApplication = useCallback\(\(packet: GeneratedResume[\s\S]{0,700}setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);[\s\S]{0,400}const nextPath = applicationSelectionPath\(window\.location, packet\.id\);\s*const navigate = options\.history === "replace" \? router\.replace : router\.push;\s*navigate\(nextPath, \{ scroll: false \}\)/,
-      "one callback must bind the selected packet and route, while normal row opens create usable browser history",
+      /const openApplication = useCallback\(\(packet: GeneratedResume[\s\S]{0,700}setResolvedActionableRequestId\(packet\.id\);\s*selectPacket\(packet\);[\s\S]{0,800}const nextPath = applicationSelectionPath\(window\.location, packet\.id\);[\s\S]{0,800}if \(options\.history === "replace"\) window\.history\.replaceState\(null, "", nextPath\);\s*else window\.history\.pushState\(null, "", nextPath\)/,
+      "one callback must bind the selected packet and route synchronously, while normal row opens create usable browser history",
     );
     assert.match(applications, /onClick=\{\(\) => openApplication\(packet\)\}/, "ledger rows must use the URL-bound selection callback");
   });
