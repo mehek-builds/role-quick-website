@@ -234,7 +234,12 @@ test("the quality refactor preserves hydrated behavior", async (suite) => {
       await page.goto(origin, { waitUntil: "domcontentloaded", timeout: 30_000 });
       const bar = page.locator(".rq-progress");
       await bar.waitFor({ state: "attached", timeout: 15_000 });
-      await page.evaluate(() => window.scrollTo(0, Math.max(1, document.documentElement.scrollHeight / 2)));
+      await page.waitForFunction(() => document.documentElement.scrollHeight > window.innerHeight);
+      await page.evaluate(() => {
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+        window.scrollTo(0, Math.max(1, Math.floor(maxScroll / 2)));
+      });
+      await page.waitForFunction(() => window.scrollY > 0);
       await page.waitForFunction(() => {
         const fill = document.querySelector(".rq-progress > div");
         return fill instanceof HTMLElement && fill.style.transform !== "scaleX(0)";
