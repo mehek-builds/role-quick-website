@@ -90,6 +90,7 @@ test("the exact historical stale report enters review recovery without becoming 
 test("a persisted employer-delivery drift failure returns to exact packet review", () => {
   const review = {
     status: "failed",
+    attention_reason: "Litos could not finish this application, and it stopped before anything was sent.",
     submission_error: "The employer-bound packet changed after approval: browser employer-delivery payload changed after packet approval",
   };
 

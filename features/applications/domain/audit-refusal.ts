@@ -49,19 +49,19 @@ function normalizedHistoricalMessage(value: string): string {
   return value.normalize("NFKC").replace(/\s+/g, " ").trim();
 }
 
-function historicalMessageValue(value: unknown): string | null {
-  if (typeof value === "string") return value;
-  if (typeof value !== "object" || value === null) return null;
+function historicalMessageValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (typeof value !== "object" || value === null) return [];
   const data = (value as { data?: unknown }).data;
   if (typeof data === "object" && data !== null && typeof (data as { code?: unknown }).code === "string") {
-    return null;
+    return [];
   }
   const attentionReason = (value as { attention_reason?: unknown }).attention_reason;
-  if (typeof attentionReason === "string") return attentionReason;
   const submissionError = (value as { submission_error?: unknown }).submission_error;
-  if (typeof submissionError === "string") return submissionError;
   const message = (value as { message?: unknown }).message;
-  return typeof message === "string" ? message : null;
+  return [attentionReason, submissionError, message].filter((candidate): candidate is string => (
+    typeof candidate === "string"
+  ));
 }
 
 function isHistoricalPacketAuditStaleLine(value: string): boolean {
@@ -72,8 +72,9 @@ function isHistoricalPacketAuditStaleLine(value: string): boolean {
 
 /** True only for a historical packet-stale value that was persisted or thrown without a code. */
 export function historicalPacketAuditStaleMessage(value: unknown): boolean {
-  const message = historicalMessageValue(value);
-  return message !== null && message.split(/\r?\n/).some(isHistoricalPacketAuditStaleLine);
+  return historicalMessageValues(value).some((message) => (
+    message.split(/\r?\n/).some(isHistoricalPacketAuditStaleLine)
+  ));
 }
 
 /**
