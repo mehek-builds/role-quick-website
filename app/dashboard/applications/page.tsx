@@ -5265,6 +5265,7 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   const { review } = submission;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
+  const failedPacketAuditStale = review.status === "failed" && historicalPacketAuditStaleMessage(review);
   /* A run may have reached the employer and stopped before it could say so. Gated on the resolution
      being absent, not just the field's presence: once she has answered, the record stays on the
      review as history (the same reason `stall` is closed with `resolved_at` rather than deleted),
@@ -5580,7 +5581,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         ) : (
           <p className="mt-2 text-sm leading-6 text-muted">
             {review.status === "failed"
-              ? userFacingError(review.submission_error, "Try again in a minute.")
+              ? failedPacketAuditStale
+                ? "The exact company form changed. Review the current packet before Litos tries again."
+                : userFacingError(review.submission_error, "Try again in a minute.")
               /* NOT "Check the preview, then send." This application has already been sent once, and
                  offering a send is what the three measured packets of 2026-08-08 did wrong. */
               : awaitingSecurityCode
@@ -5780,7 +5783,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           )}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("cleared")} variant="secondary">I cleared the check</Button>}
           {needsAttention && !awaitingUnverifiedSubmission && submission.handoff_url && <Button onClick={() => onHandoffComplete("submitted")} variant="secondary">I submitted it myself</Button>}
-          {review.status === "failed" && <Button onClick={onRetry} >Try again</Button>}
+          {review.status === "failed" && (failedPacketAuditStale
+            ? <Button onClick={onReviewPacket}>Open packet review</Button>
+            : <Button onClick={onRetry}>Try again</Button>)}
           {review.status === "ready_for_final_approval" && educationDriftWarning && <Button onClick={onCheckResume} variant="secondary">Check resume</Button>}
           {/* A REAL <button>, from the shared component, and that is not a stylistic preference on
               this screen. Seventy-nine prepared resumes and zero sent applications came out of pills
