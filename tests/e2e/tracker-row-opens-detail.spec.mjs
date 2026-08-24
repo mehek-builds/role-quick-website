@@ -287,7 +287,7 @@ let delayedExactHistory = null;
  * surviving: it has to have drawn the detail for the row that was pressed.
  */
 const CASES = [
-  { name: "a needs_attention row opens in place", packet: NEEDS_YOU, expected: { role: "heading", name: "Needs your input" } },
+  { name: "a needs_attention row opens in place", packet: NEEDS_YOU, expected: { role: "heading", name: "One thing to finish" } },
   { name: "a ready_for_final_approval row opens in place", packet: READY, expected: { role: "button", name: "Review and send" } },
   /* The contrast case. Green before the fix and after it. */
   { name: "a submitted row still opens in place", packet: SENT, expected: { role: "heading", name: "Sent" } },
@@ -364,7 +364,7 @@ await context.route("**/*", async (route) => {
          questions does not invent them 2.5 seconds later, and an answer that quietly filled the
          gap would let the poll paper over the very defect under test. */
       const id = pathname.split("/")[2];
-      const packet = [...RESUMES, delayedExactHistory?.packet].find((item) => item?.id === id) ?? NEEDS_YOU;
+      const packet = [...(resumeHistoryOverride ?? RESUMES), delayedExactHistory?.packet].find((item) => item?.id === id) ?? NEEDS_YOU;
       await json({ application_id: id, review: packet.spec._review, cover_letter: null });
       return;
     }
@@ -546,25 +546,22 @@ browserTest("mobile unverified-send choices appear only after the filled-form pr
   }
 });
 
-browserTest("mobile question review shows unread choice lists before editable answers", async () => {
+browserTest("mobile question review prompts one safe answer and never guesses unread choices", async () => {
   await page.setViewportSize({ width: 375, height: 812 });
   resumeHistoryOverride = [METADATA_BLOCKED];
   try {
     await openTracker();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: METADATA_BLOCKED.job_context.role }).click();
-    await page.getByRole("button", { name: "Check the answers", exact: true }).click();
-    const screenHeading = page.getByRole("heading", { name: "1 answer needs you.", exact: true });
-    const metadataHeading = page.getByRole("heading", { name: "1 employer field stayed untouched.", exact: true });
-    const refreshAction = page.getByRole("button", { name: "Review packet first", exact: true });
+    const prompt = page.locator('main section[aria-labelledby^="direct-application-question-"]');
+    const screenHeading = page.getByRole("heading", { name: "What dates are you available for an internship?", exact: true });
     const editableAnswer = page.getByRole("textbox", { name: "What dates are you available for an internship?", exact: true });
-    await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
-    await refreshAction.waitFor({ state: "visible", timeout: 10_000 });
+    await prompt.waitFor({ state: "visible", timeout: 10_000 });
     await editableAnswer.waitFor({ state: "visible", timeout: 10_000 });
-    await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "1 answer needs you.", undefined, { timeout: 1_000 });
     await assertInsideViewport(screenHeading, "the answer screen heading");
-    await assertInsideViewport(refreshAction, "the fresh employer-form action");
-    assert.equal(await refreshAction.isEnabled(), true, "a clean stale-metadata screen must have a way forward");
-    await page.getByText("Litos needs your exact packet review before it can fill the employer form.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await prompt.count(), 1, "the application must show one direct prompt at a time");
+    await prompt.getByText("1 of 1", { exact: true }).waitFor({ state: "visible" });
+    await prompt.getByRole("button", { name: "Save to application", exact: true }).waitFor({ state: "visible" });
+    assert.equal(await page.getByRole("button", { name: "Check the answers", exact: true }).count(), 0);
     const screenHeadingBox = await screenHeading.boundingBox();
     const layoutState = await page.evaluate(() => ({
       scrollY: window.scrollY,
@@ -576,13 +573,7 @@ browserTest("mobile question review shows unread choice lists before editable an
     await captureVisual("applications-question-metadata-mobile-375x812.png");
     assert.ok(screenHeadingBox && screenHeadingBox.y >= 56, `the fixed mobile header must not cover the answer screen heading: ${JSON.stringify({ screenHeadingBox, layoutState })}`);
     assert.equal(await page.getByRole("textbox", { name: "What is your top location preference?", exact: true }).count(), 0, "an unread closed choice list must not become a free-text field");
-    const metadataBox = await metadataHeading.boundingBox();
-    const answerBox = await editableAnswer.boundingBox();
-    assert.ok(metadataBox && answerBox && metadataBox.y < answerBox.y, "the unread employer field must be explained before editable answers");
-    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "the metadata card must not create horizontal scrolling");
-    await editableAnswer.fill("June through August 2027");
-    assert.equal(await refreshAction.isDisabled(), true, "unsaved answer edits must not ride a control labelled as a fresh read");
-    await page.getByText("Save or go Back to discard your edits before refreshing.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "the direct prompt must not create horizontal scrolling");
   } finally {
     resumeHistoryOverride = null;
     await page.setViewportSize({ width: 1280, height: 900 });
@@ -594,19 +585,15 @@ browserTest("historical closed questions fail closed instead of rendering as tex
   try {
     await openTracker();
     await page.locator(`${LEDGER} button[aria-pressed]:visible`).filter({ hasText: LEGACY_METADATA_BLOCKED.job_context.role }).click();
-    await page.getByRole("button", { name: "Check the answers", exact: true }).click();
-
-    const metadataHeading = page.getByRole("heading", { name: "2 employer fields stayed untouched.", exact: true });
+    const prompt = page.locator('main section[aria-labelledby^="direct-application-question-"]');
     const openAnswer = page.getByRole("textbox", { name: "Why this role?", exact: true });
-    await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await prompt.waitFor({ state: "visible", timeout: 10_000 });
     await openAnswer.waitFor({ state: "visible", timeout: 10_000 });
 
     assert.equal(await page.getByRole("textbox", { name: "Have you applied here before?", exact: true }).count(), 0);
     assert.equal(await page.getByRole("textbox", { name: "Type your response", exact: true }).count(), 0);
-    assert.equal(await page.getByRole("button", { name: "Save available answers", exact: true }).count(), 1);
-    const metadataBox = await metadataHeading.boundingBox();
-    const answerBox = await openAnswer.boundingBox();
-    assert.ok(metadataBox && answerBox && metadataBox.y < answerBox.y, "metadata blockers must render before the remaining genuine open answer");
+    assert.equal(await prompt.getByRole("button", { name: "Save to application", exact: true }).count(), 1);
+    assert.equal(await prompt.getByText("1 of 1", { exact: true }).count(), 1);
   } finally {
     resumeHistoryOverride = null;
   }
@@ -737,7 +724,7 @@ browserTest("a ?job= link carrying an application id opens the application, and 
   pageErrors = [];
   backendPaths = [];
   await page.goto(`${ORIGIN}/dashboard/applications?job=${NEEDS_YOU.id}`, { waitUntil: "domcontentloaded" });
-  await page.getByRole("heading", { name: "Needs your input", exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
+  await page.getByRole("heading", { name: "One thing to finish", exact: true }).first().waitFor({ state: "visible", timeout: 20_000 });
   /* `openApplication` publishes its local selection immediately, while the App Router commits the
      query-only replacement asynchronously. Wait for that navigation itself before reading the URL,
      rather than treating the task heading as a router-settlement signal. */
