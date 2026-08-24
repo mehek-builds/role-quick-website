@@ -555,6 +555,12 @@ function Applications() {
    * away is enough to retire it. */
   const [sendRefusal, setSendRefusal] = useState<{ applicationId: string; message: string; issues: string[] } | null>(null);
   const [restartingId, setRestartingId] = useState<string | null>(null);
+  /* A stale metadata screen needs a new employer-form read, but it must not silently carry edits
+     the applicant has not saved. The ref closes the same-tick double-click gap; the id keeps the
+     busy state attached to the packet that started it when the application switcher is used. */
+  const metadataRefreshRef = useRef<string | null>(null);
+  const [metadataRefreshId, setMetadataRefreshId] = useState<string | null>(null);
+  const [metadataRefreshError, setMetadataRefreshError] = useState<{ applicationId: string; message: string } | null>(null);
   const refuseSend = useCallback((applicationId: string, message: string, issues: string[] = []) => {
     // One live region at a time, the rule refuseInComposer already sets on this screen.
     setError(null);
@@ -1912,6 +1918,11 @@ function Applications() {
   );
   const packetDraftChanged = Boolean(selected && spec && JSON.stringify(spec) !== JSON.stringify(stripMetadata(selected.spec)));
   const currentQuestionsSnapshot = useMemo(() => packetQuestionsSnapshot(questions), [questions]);
+  const questionEditsUnsaved = Boolean(
+    selectedSubmission
+    && selectedSubmission.application_id === selected?.id
+    && currentQuestionsSnapshot !== packetQuestionsSnapshot(selectedSubmission.review.questions),
+  );
   const activePacketEvidence = selected && packetEvidence?.applicationId === selected.id ? packetEvidence : null;
   const exactPacketPdfReady = Boolean(activePacketEvidence?.pdfVerified);
   const packetAuditBindingReady = Boolean(
@@ -2952,7 +2963,12 @@ function Applications() {
        submit-request. There were two call sites of that route and there is a rule about it: a
        second send path is how a gate gets routed around. What a restart needs that a first
        preparation does not is one boolean in the body, so it is one boolean here. */
-    options: { allowServerAnswerRefresh?: boolean; restart?: boolean } = {},
+    options: {
+      allowServerAnswerRefresh?: boolean;
+      restart?: boolean;
+      failureScreen?: "questions" | "portal" | "review";
+      source?: "metadata_refresh";
+    } = {},
   ) {
     if (!selected) return;
     const applicationId = selected.id;
@@ -2962,7 +2978,9 @@ function Applications() {
     moveToScreen("submitting");
     setError(null);
     setSendRefusal(null);
-    track("application_submission_requested", { source: qaMode ? "qa" : options.restart ? "restart" : "review" });
+    track("application_submission_requested", {
+      source: qaMode ? "qa" : options.source ?? (options.restart ? "restart" : "review"),
+    });
     try {
       if (!qaMode) {
         const result = await api<SubmissionResponse>(`/applications/${applicationId}/submit-request`, {
@@ -3007,11 +3025,14 @@ function Applications() {
       if (await recoverPacketAuditReview(applicationId, reason)) return;
       /* A restart is pressed FROM the portal screen and is about the packet on it, so its refusal
          goes back there and lands beside the control, not on the review screen behind a banner. */
-      moveToScreen(options.restart ? "portal" : "review");
+      moveToScreen(options.failureScreen ?? (options.restart ? "portal" : "review"));
       const message = reason instanceof Error ? reason.message : "We could not open the company's application page.";
       const issues = reason instanceof ApiError ? reason.issues : [];
       if (options.restart) refuseSend(applicationId, message, issues);
-      else setError(message);
+      else if (options.failureScreen === "questions") {
+        setError(null);
+        setMetadataRefreshError({ applicationId, message });
+      } else setError(message);
     }
   }
 
@@ -3525,6 +3546,37 @@ function Applications() {
     }
   }
 
+  /* The escape from a stale question inventory. A stopped run may know that a closed employer
+     control exists without having its exact options, and opening the editor used to trap the user
+     there: Save cannot manufacture the options, while the ordinary review action routed straight
+     back to the same editor. This reuses the ONE submit-request path so Litos can read the live form
+     again. Only the last server-saved answers go with it. Local edits must be saved or discarded
+     first, which prevents a button labelled as a read from transmitting an unsaved answer. */
+  async function refreshEmployerQuestionMetadata() {
+    if (!selected || !selectedSubmission) return;
+    const applicationId = selected.id;
+    if (selectedSubmission.application_id !== applicationId) return;
+    if (metadataRefreshRef.current === applicationId) return;
+    if (packetQuestionsSnapshot(questions) !== packetQuestionsSnapshot(selectedSubmission.review.questions)) {
+      setError("Save or discard your answer edits before reading the employer fields again.");
+      return;
+    }
+    metadataRefreshRef.current = applicationId;
+    setMetadataRefreshId(applicationId);
+    setMetadataRefreshError(null);
+    setError(null);
+    try {
+      await prepareApplication(selectedSubmission.review.questions, {
+        allowServerAnswerRefresh: true,
+        failureScreen: "questions",
+        source: "metadata_refresh",
+      });
+    } finally {
+      if (metadataRefreshRef.current === applicationId) metadataRefreshRef.current = null;
+      setMetadataRefreshId((current) => current === applicationId ? null : current);
+    }
+  }
+
   const visiblePageError = historicalPacketAuditStaleMessage(error) ? null : error;
   const visiblePollError = historicalPacketAuditStaleMessage(pollError) ? null : pollError;
 
@@ -4011,6 +4063,10 @@ function Applications() {
             else saveApplyAnswers();
           }}
           saving={savingAnswersId === selected?.id}
+          onRefreshMetadata={() => void refreshEmployerQuestionMetadata()}
+          refreshingMetadata={metadataRefreshId === selected?.id}
+          metadataRefreshDisabled={questionEditsUnsaved}
+          metadataRefreshError={metadataRefreshError?.applicationId === selected?.id ? metadataRefreshError.message : null}
           reviewDiscovered={selectedSubmission?.review.status === "needs_attention"}
           focusQuestion={focusQuestion}
           prescriptNote={prescriptNote}
@@ -4949,7 +5005,7 @@ function EditableHighlight({ value, terms, onChange, className = "" }: { value: 
   );
 }
 
-function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, saving = false, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
+function QuestionsScreen({ applicationRole, applicationCompany, questions, metadataBlockers = [], actionableQuestionIds = [], onChange, onBack, onSubmit, onRefreshMetadata, saving = false, refreshingMetadata = false, metadataRefreshDisabled = false, metadataRefreshError = null, reviewDiscovered = false, focusQuestion = null, prescriptNote = "" }: {
   applicationRole: string;
   applicationCompany: string;
   questions: ApplicationQuestion[];
@@ -4958,7 +5014,11 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
   onChange: (questions: ApplicationQuestion[]) => void;
   onBack: () => void;
   onSubmit: () => void;
+  onRefreshMetadata: () => void;
   saving?: boolean;
+  refreshingMetadata?: boolean;
+  metadataRefreshDisabled?: boolean;
+  metadataRefreshError?: string | null;
   reviewDiscovered?: boolean;
   focusQuestion?: { id: string; token: number } | null;
   prescriptNote?: string;
@@ -5059,6 +5119,24 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
             <p className="mt-1 text-small leading-6 text-muted">
               Litos must read the employer&apos;s exact wording and choices before presenting an answer.
             </p>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                onClick={onRefreshMetadata}
+                disabled={refreshingMetadata || metadataRefreshDisabled}
+                aria-busy={refreshingMetadata}
+                aria-describedby="question-metadata-refresh-help"
+              >
+                {refreshingMetadata ? "Reviewing and filling..." : "Review and fill again"}
+              </Button>
+              <p id="question-metadata-refresh-help" className="text-small leading-6 text-muted">
+                {metadataRefreshDisabled
+                  ? "Save or go Back to discard your edits before refreshing."
+                  : "Litos opens the employer form, reads its current fields, and fills only your saved answers. Unsaved edits on this page are not used."}
+              </p>
+            </div>
+            {metadataRefreshError && (
+              <p role="alert" className="mt-3 text-small leading-6 text-danger">{metadataRefreshError}</p>
+            )}
           </div>
           {effectiveMetadataBlockers.map((blocker, index) => (
             <Card key={`${blocker.kind}:${blocker.control_id ?? blocker.portal_selector ?? blocker.question ?? index}`} className="p-6">
@@ -5146,7 +5224,7 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
           screen this is a request to the server, and a button that reads "Save" throughout a write
           it does not acknowledge is how the old handler got away with saving nothing. */}
       <TerminalActionBar className="justify-end">
-        <Button onClick={onSubmit} disabled={saving || (editableQuestions.length === 0 && requiredMetadataBlocked)}>
+        <Button variant={requiredMetadataBlocked ? "secondary" : "primary"} onClick={onSubmit} disabled={saving || refreshingMetadata || (editableQuestions.length === 0 && requiredMetadataBlocked)}>
           {saving
             ? "Saving..."
             : requiredMetadataBlocked

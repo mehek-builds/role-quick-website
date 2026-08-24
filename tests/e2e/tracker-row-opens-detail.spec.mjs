@@ -524,11 +524,16 @@ browserTest("mobile question review shows unread choice lists before editable an
     await page.getByRole("button", { name: "Check the answers", exact: true }).click();
     const screenHeading = page.getByRole("heading", { name: "1 answer needs you.", exact: true });
     const metadataHeading = page.getByRole("heading", { name: "1 employer field stayed untouched.", exact: true });
+    const refreshAction = page.getByRole("button", { name: "Review and fill again", exact: true });
     const editableAnswer = page.getByRole("textbox", { name: "What dates are you available for an internship?", exact: true });
     await metadataHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await refreshAction.waitFor({ state: "visible", timeout: 10_000 });
     await editableAnswer.waitFor({ state: "visible", timeout: 10_000 });
     await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "1 answer needs you.", undefined, { timeout: 1_000 });
     await assertInsideViewport(screenHeading, "the answer screen heading");
+    await assertInsideViewport(refreshAction, "the fresh employer-form action");
+    assert.equal(await refreshAction.isEnabled(), true, "a clean stale-metadata screen must have a way forward");
+    await page.getByText("Litos opens the employer form, reads its current fields, and fills only your saved answers. Unsaved edits on this page are not used.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
     const screenHeadingBox = await screenHeading.boundingBox();
     const layoutState = await page.evaluate(() => ({
       scrollY: window.scrollY,
@@ -544,6 +549,9 @@ browserTest("mobile question review shows unread choice lists before editable an
     const answerBox = await editableAnswer.boundingBox();
     assert.ok(metadataBox && answerBox && metadataBox.y < answerBox.y, "the unread employer field must be explained before editable answers");
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth), true, "the metadata card must not create horizontal scrolling");
+    await editableAnswer.fill("June through August 2027");
+    assert.equal(await refreshAction.isDisabled(), true, "unsaved answer edits must not ride a control labelled as a fresh read");
+    await page.getByText("Save or go Back to discard your edits before refreshing.", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
   } finally {
     resumeHistoryOverride = null;
     await page.setViewportSize({ width: 1280, height: 900 });
