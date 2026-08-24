@@ -170,10 +170,14 @@ const PROBE = ({ label, action }) => {
     visibility: document.visibilityState,
     scrollY: Math.round(window.scrollY),
     maxScroll: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+    viewportW: window.innerWidth,
     viewportH: window.innerHeight,
+    left: Math.round(r.left),
+    right: Math.round(r.right),
     top: Math.round(r.top),
     bottom: Math.round(r.bottom),
-    fullyInViewport: r.top >= 0 && r.bottom <= window.innerHeight,
+    height: Math.round(r.height),
+    fullyInViewport: r.left >= 0 && r.right <= window.innerWidth && r.top >= 0 && r.bottom <= window.innerHeight,
     navShown,
     navHeight: navRect ? Math.round(navRect.height) : 0,
     navTop: navRect ? Math.round(navRect.top) : null,
@@ -350,8 +354,10 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
   const label = `${vp.width}x${vp.height}`;
   test(`the direct answer action is reachable at ${label}`, async () => {
     const context = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
+    const directReviews = new Map();
     await context.route("**/*", async (route) => {
-      const url = route.request().url();
+      const request = route.request();
+      const url = request.url();
       if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
         await route.continue();
         return;
@@ -364,10 +370,50 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
         const poll = backendPath.match(/^\/applications\/([^/]+)\/submission$/);
         if (poll) {
           const packet = RESUMES.find((r) => r.id === poll[1]);
+          const baseReview = packet?.spec?._review ?? {};
+          const review = directReviews.get(poll[1]) ?? {
+            ...baseReview,
+            questions: [
+              ...(baseReview.questions ?? []),
+              {
+                id: `narrow-relocation-${poll[1]}`,
+                question: "Are you willing to relocate for this role?",
+                answer: "",
+                kind: "required",
+                required: true,
+                portal_input_type: "select-one",
+                portal_selector: "#relocation",
+                options: ["Yes", "No"],
+              },
+            ],
+          };
+          directReviews.set(poll[1], review);
           await route.fulfill({
             status: 200,
             contentType: "application/json",
-            body: JSON.stringify({ application_id: poll[1], review: packet?.spec?._review ?? {}, cover_letter: null }),
+            body: JSON.stringify({ application_id: poll[1], review, cover_letter: null }),
+          });
+          return;
+        }
+        const answerWrite = request.method() === "PUT"
+          ? backendPath.match(/^\/applications\/([^/]+)\/review\/answers$/)
+          : null;
+        if (answerWrite) {
+          const current = directReviews.get(answerWrite[1]);
+          const submittedQuestions = request.postDataJSON()?.questions ?? [];
+          const review = {
+            ...current,
+            questions: (current?.questions ?? []).map((storedQuestion) => {
+              const submitted = submittedQuestions.find((question) => question?.id === storedQuestion.id);
+              return submitted ? { ...storedQuestion, ...submitted } : storedQuestion;
+            }),
+            updated_at: "2026-08-24T12:00:00.000Z",
+          };
+          directReviews.set(answerWrite[1], review);
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ application_id: answerWrite[1], review }),
           });
           return;
         }
@@ -399,14 +445,14 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
       await prompt.waitFor({ state: "visible", timeout: 20_000 });
       assert.equal(await prompt.count(), 1, "the application exposed more than one direct question");
       assert.equal(await page.getByRole("button", { name: /^Answer:/ }).count(), 0, "the old checklist action returned");
-      await prompt.getByRole("textbox").fill("Dubai, United Arab Emirates");
+      await prompt.getByRole("textbox").fill("I want to build reliable tools that help students move faster.");
 
-      const save = prompt.getByRole("button", { name: "Save to application", exact: true });
+      const save = prompt.getByRole("button", { name: "Save and next", exact: true });
       await save.waitFor({ state: "visible", timeout: 20_000 });
       assert.equal(await save.isEnabled(), true, "the completed direct answer could not be saved");
       await page.waitForTimeout(600);
 
-      const atRest = await page.evaluate(PROBE, { label: "direct answer, no scrolling", action: "Save to application" });
+      const atRest = await page.evaluate(PROBE, { label: "direct answer, no scrolling", action: "Save and next" });
       assert.equal(atRest.found, true, "the direct prompt did not render its save action");
       assert.equal(atRest.visibility, "visible");
       assert.ok(atRest.fullyInViewport, `the direct answer action was not on screen at ${label}: ${JSON.stringify(atRest)}`);
@@ -415,10 +461,34 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
 
       await page.evaluate(() => { document.documentElement.scrollTop = 1e7; });
       await page.waitForTimeout(600);
-      const atEnd = await page.evaluate(PROBE, { label: "direct answer, scrolled to the end", action: "Save to application" });
+      const atEnd = await page.evaluate(PROBE, { label: "direct answer, scrolled to the end", action: "Save and next" });
       assert.ok(atEnd.fullyInViewport, `at the end of the direct prompt the action was off screen at ${label}: ${JSON.stringify(atEnd)}`);
       assert.deepEqual(atEnd.misses, [], JSON.stringify(atEnd.misses));
       assert.equal(atEnd.occludedByNav, false, JSON.stringify(atEnd));
+
+      await save.click();
+      await page.getByRole("heading", { name: "Are you willing to relocate for this role?", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.waitForTimeout(600);
+      const previous = page.getByRole("button", { name: "Previous question", exact: true });
+      await previous.waitFor({ state: "visible", timeout: 20_000 });
+      const previousGeometry = await page.evaluate(PROBE, { label: "direct answer previous question", action: "Previous" });
+      assert.equal(previousGeometry.found, true, `Previous question did not render at ${label}`);
+      assert.ok(previousGeometry.height >= 44, `Previous question is smaller than 44px at ${label}: ${JSON.stringify(previousGeometry)}`);
+      assert.ok(previousGeometry.fullyInViewport, `Previous question escaped the viewport at ${label}: ${JSON.stringify(previousGeometry)}`);
+      assert.deepEqual(previousGeometry.misses, [], `something is painted over Previous question at ${label}: ${JSON.stringify(previousGeometry.misses)}`);
+      assert.equal(previousGeometry.occludedByNav, false, `Previous question overlaps the tab bar at ${label}: ${JSON.stringify(previousGeometry)}`);
+
+      await previous.click();
+      await page.getByRole("heading", { name: "Why do you want to work here?", exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      await page.waitForTimeout(600);
+      const next = page.getByRole("button", { name: "Next question", exact: true });
+      await next.waitFor({ state: "visible", timeout: 20_000 });
+      const nextGeometry = await page.evaluate(PROBE, { label: "direct answer next question", action: "Next question" });
+      assert.equal(nextGeometry.found, true, `Next question did not render at ${label}`);
+      assert.ok(nextGeometry.height >= 44, `Next question is smaller than 44px at ${label}: ${JSON.stringify(nextGeometry)}`);
+      assert.ok(nextGeometry.fullyInViewport, `Next question escaped the viewport at ${label}: ${JSON.stringify(nextGeometry)}`);
+      assert.deepEqual(nextGeometry.misses, [], `something is painted over Next question at ${label}: ${JSON.stringify(nextGeometry.misses)}`);
+      assert.equal(nextGeometry.occludedByNav, false, `Next question overlaps the tab bar at ${label}: ${JSON.stringify(nextGeometry)}`);
 
       assert.deepEqual(blockedExternal, [], "a request tried to leave this machine");
     } catch (reason) {

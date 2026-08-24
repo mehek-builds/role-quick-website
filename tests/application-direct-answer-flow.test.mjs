@@ -37,19 +37,25 @@ function assertOrdered(indices, message) {
   }
 }
 
-test("Applications asks one trusted employer question with one explicit save", () => {
+test("Applications asks one trusted employer question at a time with explicit save and navigation", () => {
   const prompt = sourceSection("function DirectApplicationQuestion(", "function SubmissionScreen(");
 
   assert.match(prompt, /const \[promptFingerprint\] = useState\(\(\) => directQuestionPromptFingerprint\(task\)\)/);
   assert.match(prompt, /const \[taskFingerprint\] = useState\(\(\) => directQuestionTaskFingerprint\(task\)\)/);
   assert.match(prompt, /preservedDraft\?\.promptFingerprint === promptFingerprint/);
-  assert.match(prompt, /onDraftChange\(promptFingerprint, taskFingerprint, next\)/);
+  assert.match(prompt, /onDraftChange\(task\.question\.id, promptFingerprint, taskFingerprint, next\)/);
   assert.match(prompt, /task\.question\.options && task\.question\.options\.length > 0/);
   assert.match(prompt, /<fieldset aria-labelledby=\{headingId\}/);
   assert.match(prompt, /<select/);
   assert.match(prompt, /<textarea/);
-  assert.match(prompt, /Save to application/);
-  assert.match(prompt, /Confirm and save/);
+  assert.match(prompt, /hasPrevious: boolean;/);
+  assert.match(prompt, /hasNext: boolean;/);
+  assert.match(prompt, /onPrevious: \(\) => void;/);
+  assert.match(prompt, /onNext: \(\) => void;/);
+  assert.match(prompt, /Save and next/);
+  assert.match(prompt, /Confirm and next/);
+  assert.match(prompt, /Save answer/);
+  assert.match(prompt, /Confirm answer/);
   assert.match(prompt, /Saved to this application\./);
   assert.match(prompt, /const \[choiceTouched, setChoiceTouched\] = useState\(false\);/);
   assert.match(prompt, /const requiredBlank = task\.question\.required && !answer\.trim\(\);/);
@@ -73,7 +79,18 @@ test("Applications asks one trusted employer question with one explicit save", (
   assert.match(prompt, /<select\s+value=\{answer\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}[\s\S]*?onBlur=\{\(\) => setChoiceTouched\(true\)\}/);
   assert.match(prompt, /<option value="" disabled>Choose an answer<\/option>/);
   assert.match(prompt, /<textarea\s+value=\{answer\}\s+readOnly=\{busy\}\s+aria-disabled=\{busy\}/);
-  assert.match(prompt, /disabled=\{answerBlocked\} aria-disabled=\{busy \|\| answerBlocked\}/);
+  assert.match(prompt, /<Button type="submit" block className="sm:w-auto" disabled=\{busy \|\| answerBlocked\}>/);
+  assert.equal(
+    [...prompt.matchAll(/type="button"/g)].length,
+    2,
+    "Previous and Next must be non-submit controls",
+  );
+  assert.match(prompt, /aria-label="Previous question"[\s\S]*?disabled=\{busy\}[\s\S]*?onClick=\{\(\) => navigate\(onPrevious\)\}/);
+  assert.match(prompt, /\{saved && !answerDirty \? \([\s\S]*?type="button"[\s\S]*?aria-label=\{hasNext \? "Next question" : "Review application"\}[\s\S]*?disabled=\{busy\}[\s\S]*?onClick=\{\(\) => hasNext \? navigate\(onNext\) : onReviewApplication\(\)\}/);
+  assert.match(prompt, /\{hasNext \? "Next question" : "Review application"\}/);
+  assert.match(prompt, /const headingRef = useRef<HTMLHeadingElement>\(null\)/);
+  assert.match(prompt, /if \(focusToken <= 0\) return;[\s\S]*?heading\?\.focus\(\{ preventScroll: true \}\)[\s\S]*?heading\?\.scrollIntoView\(\{ block: "nearest", behavior: "auto" \}\)/);
+  assert.match(prompt, /<h2 ref=\{headingRef\} id=\{headingId\} tabIndex=\{-1\}/);
   assert.doesNotMatch(prompt, /bg-warn|border-warn|text-warn/);
 });
 
@@ -83,15 +100,19 @@ test("drafts and refusals follow immutable prompt identity across a raced review
   const save = functionBody("  async function saveReviewedAnswers(");
 
   assert.match(identityTypes, /type DirectAnswerFailure = \{[\s\S]*?promptFingerprint: string;/);
-  assert.match(identityTypes, /type DirectAnswerDraft = \{[\s\S]*?promptFingerprint: string;[\s\S]*?answer: string;/);
+  assert.match(identityTypes, /type DirectAnswerDraft = \{[\s\S]*?questionId: string;[\s\S]*?promptFingerprint: string;[\s\S]*?answer: string;/);
   assert.match(save, /promptFingerprint: string;[\s\S]*?taskFingerprint: string;/);
   assert.match(save, /promptFingerprint: direct\.promptFingerprint/);
   assert.match(save, /safeDirectPromptFingerprint !== direct\.promptFingerprint/);
   assert.match(prompt, /preservedDraft\?\.promptFingerprint === promptFingerprint[\s\S]*?preservedDraft\.answer/);
   assert.match(prompt, /externalFailure\?\.promptFingerprint === promptFingerprint \? externalFailure\.message : null/);
   assert.match(prompt, /onClearFailure\(promptFingerprint\)/);
-  assert.match(prompt, /onSave\(task\.question\.id, answer, task\.intent, promptFingerprint, taskFingerprint\)/);
-  assert.match(page, /onDirectAnswerDraftChange=\{\(promptFingerprint, taskFingerprint, answer\) => \{[\s\S]*?next\.set\(selected\.id, \{ promptFingerprint, taskFingerprint, answer \}\)/);
+  assert.match(prompt, /onSave\(task\.question\.id, answer, task\.intent, promptFingerprint, taskFingerprint, task\)/);
+  assert.match(page, /const \[directAnswerDrafts, setDirectAnswerDrafts\] = useState<ReadonlyMap<string, ReadonlyMap<string, DirectAnswerDraft>>>/);
+  assert.match(page, /onDirectAnswerDraftChange=\{\(questionId, promptFingerprint, taskFingerprint, answer\) => \{[\s\S]*?const applicationDrafts = new Map\(current\.get\(selected\.id\) \?\? EMPTY_DIRECT_ANSWER_DRAFTS\);[\s\S]*?applicationDrafts\.set\(promptFingerprint, \{ questionId, promptFingerprint, taskFingerprint, answer \}\);[\s\S]*?next\.set\(selected\.id, applicationDrafts\)/);
+  assert.match(page, /onClearDirectAnswerDraft=\{\(promptFingerprint\) => \{[\s\S]*?const applicationDrafts = current\.get\(selected\.id\);[\s\S]*?nextApplicationDrafts\.delete\(promptFingerprint\);[\s\S]*?if \(nextApplicationDrafts\.size > 0\) next\.set\(selected\.id, nextApplicationDrafts\)/);
+  assert.match(prompt, /function navigate\(navigateToQuestion: \(\) => void\) \{[\s\S]*?if \(busy\) return;[\s\S]*?if \(answerDirty\) onDraftChange\(task\.question\.id, promptFingerprint, taskFingerprint, answer\);[\s\S]*?else onClearDraft\(promptFingerprint\);[\s\S]*?navigateToQuestion\(\);/);
+  assert.match(save, /for \(const \[promptFingerprint, draft\] of nextApplicationDrafts\) \{[\s\S]*?promptFingerprint === safeDirectPromptFingerprint \|\| draft\.questionId === direct\.questionId[\s\S]*?nextApplicationDrafts\.delete\(promptFingerprint\)/);
   assert.match(page, /onClearDirectAnswerFailure=\{\(promptFingerprint\) => \{[\s\S]*?current\.get\(selected\.id\)\?\.promptFingerprint !== promptFingerprint/);
 
   const refusalStart = requiredIndex(save, "if (!result.saved) {", "refused save branch");
@@ -108,20 +129,32 @@ test("drafts and refusals follow immutable prompt identity across a raced review
 test("a genuinely changed employer prompt shows the held answer as recovery", () => {
   const screen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
   const currentPrompt = requiredIndex(screen, "const currentDirectPromptFingerprint", "current prompt fingerprint");
-  const draftMatch = requiredIndex(
+  const currentDraft = requiredIndex(
     screen,
-    "directAnswerDraft.promptFingerprint === currentDirectPromptFingerprint",
-    "draft prompt comparison",
+    "directAnswerDrafts.get(currentDirectPromptFingerprint) ?? null",
+    "current prompt draft lookup",
     currentPrompt,
   );
-  const recoveryNeeded = requiredIndex(screen, "const directRecoveryNeeded", "changed-prompt recovery state", draftMatch);
+  const recoveryDraft = requiredIndex(
+    screen,
+    "const directRecoveryDraft = [...directAnswerDrafts.values()].find",
+    "orphaned draft lookup",
+    currentDraft,
+  );
+  const recoveryScope = requiredIndex(
+    screen,
+    "!directQuestionFingerprints.has(draft.promptFingerprint)",
+    "current review prompt exclusion",
+    recoveryDraft,
+  );
+  const recoveryNeeded = requiredIndex(screen, "const directRecoveryNeeded", "changed-prompt recovery state", recoveryScope);
   const recoveryRender = requiredIndex(screen, "{directRecoveryNeeded && (", "changed-prompt recovery render", recoveryNeeded);
   const recoveryAlert = requiredIndex(screen, '<div role="alert"', "changed-prompt recovery alert", recoveryRender);
-  const heldAnswer = requiredIndex(screen, "{directAnswerDraft.answer", "held draft answer", recoveryAlert);
+  const heldAnswer = requiredIndex(screen, "{directRecoveryDraft?.answer", "held draft answer", recoveryAlert);
   const promptBranch = requiredIndex(screen, "{directAnswerActive ? (", "current direct prompt", heldAnswer);
 
   assertOrdered(
-    [currentPrompt, draftMatch, recoveryNeeded, recoveryRender, recoveryAlert, heldAnswer, promptBranch],
+    [currentPrompt, currentDraft, recoveryDraft, recoveryScope, recoveryNeeded, recoveryRender, recoveryAlert, heldAnswer, promptBranch],
     "the changed-prompt recovery and held answer must appear before the current prompt",
   );
   assert.match(
@@ -138,6 +171,26 @@ test("direct answer passes always expire on a real review version", () => {
     /return review\.questions_reviewed_at \?\? review\.submission_run_id \?\? review\.updated_at;/,
   );
   assert.doesNotMatch(passKey, /unversioned/);
+  assert.match(
+    passKey,
+    /function directAnswerPassesAreCompatible\([\s\S]*?current\.questions_reviewed_at\?\.trim\(\)[\s\S]*?accepted\.questions_reviewed_at\?\.trim\(\)[\s\S]*?return currentQuestionPass !== null && currentQuestionPass === acceptedQuestionPass;/,
+  );
+  assert.match(
+    passKey,
+    /current\.submission_run_id\?\.trim\(\)[\s\S]*?accepted\.submission_run_id\?\.trim\(\)[\s\S]*?return currentRunPass !== null && currentRunPass === acceptedRunPass;/,
+  );
+  assert.match(passKey, /Older review payloads have no explicit question-pass identity[\s\S]*?return true;/);
+});
+
+test("question navigation re-resolves stored history against the current review", () => {
+  const navigation = sourceSection("function directAnswerNavigationTasks(", "function directAnswerPassKey(");
+
+  assert.match(navigation, /outstandingTasks\.map\(\(task\) => \[directQuestionPromptFingerprint\(task\), task\]\)/);
+  assert.match(navigation, /answeredTasks\.map\(\(task\) => \[directQuestionPromptFingerprint\(task\), task\]\)/);
+  assert.match(navigation, /questionReviewPresentation\(\s*review\.questions \?\? \[\],\s*review\.question_metadata_blockers \?\? \[\],\s*\)\.editableQuestions/);
+  assert.match(navigation, /const promptFingerprint = directQuestionPromptFingerprint\(\{ question \}\)/);
+  assert.match(navigation, /outstandingByPrompt\.get\(promptFingerprint\) \?\? answeredByPrompt\.get\(promptFingerprint\)/);
+  assert.match(navigation, /return task \? \[\{ \.\.\.task, question \}\] : \[\]/);
 });
 
 test("direct answer saves revalidate the latest server question and exact choices", () => {
@@ -226,18 +279,33 @@ test("accepted answer writes stay owned by their application and latest submissi
   const generation = requiredIndex(save, "const acceptedPublicationChanged", "accepted response generation", candidate);
   const generationChanged = requiredIndex(save, ") !== requestedPublicationGeneration", "accepted generation comparison", generation);
   const older = requiredIndex(save, "submissionSnapshotIsOlder(latestSubmission, acceptedCandidate)", "accepted response recency", generationChanged);
-  const latestTask = requiredIndex(save, "const latestDirectTask = direct", "latest direct task", older);
-  const latestPlan = requiredIndex(save, "directInputTaskPlan(latestSubmission.review", "latest direct task plan", latestTask);
-  const latestQuestion = requiredIndex(save, ".questionTasks.find((task) => task.question.id === direct.questionId) ?? null", "latest direct question", latestPlan);
+  const latestPlanDeclaration = requiredIndex(save, "const latestDirectTaskPlan = direct", "latest direct task plan declaration", older);
+  const latestPlan = requiredIndex(save, "directInputTaskPlan(latestSubmission.review", "latest direct task plan", latestPlanDeclaration);
+  const latestTask = requiredIndex(save, "const latestDirectTask = direct", "latest direct task", latestPlan);
+  const latestNavigation = requiredIndex(save, "directAnswerNavigationTasks(", "latest direct navigation re-resolution", latestTask);
+  const latestQuestion = requiredIndex(save, ".find((task) => task.question.id === direct.questionId) ?? null", "latest direct question", latestNavigation);
   const exactTask = requiredIndex(save, "const latestStillHasSubmittedTask = direct && latestDirectTask", "exact submitted task guard", latestQuestion);
   const exactPrompt = requiredIndex(save, "directQuestionPromptFingerprint(latestDirectTask) === direct.promptFingerprint", "immutable prompt ownership", exactTask);
   const exactFingerprint = requiredIndex(save, "directQuestionTaskFingerprint(latestDirectTask) === direct.taskFingerprint", "immutable task ownership", exactPrompt);
-  const acceptedOwnership = requiredIndex(save, "const acceptedResponseOwnsSnapshot", "accepted response ownership", exactFingerprint);
+  const compatiblePass = requiredIndex(save, "const latestSnapshotMatchesAcceptedPass = !direct || directAnswerPassesAreCompatible(", "accepted pass compatibility", exactFingerprint);
+  const currentPass = requiredIndex(save, "latestSubmission.review", "latest accepted pass", compatiblePass);
+  const responsePass = requiredIndex(save, "acceptedCandidate.review", "response accepted pass", currentPass);
+  const pollAnswerDeclaration = requiredIndex(save, "const latestSubmittedAnswerQuestion = direct", "poll-first accepted answer declaration", responsePass);
+  const pollApplication = requiredIndex(save, "latestSubmission.application_id === applicationId", "poll-first application ownership", pollAnswerDeclaration);
+  const pollPresentation = requiredIndex(save, "questionReviewPresentation(", "safe poll-first question presentation", pollApplication);
+  const pollQuestion = requiredIndex(save, "question.id === direct.questionId", "poll-first question ownership", pollPresentation);
+  const pollPrompt = requiredIndex(save, "directQuestionPromptFingerprint({ question }) === direct.promptFingerprint", "poll-first prompt ownership", pollQuestion);
+  const pollAnswer = requiredIndex(save, "question.answer === direct.answer", "poll-first answer ownership", pollPrompt);
+  const pollConfirmation = requiredIndex(save, "const latestSnapshotHasSubmittedAnswer = latestSnapshotMatchesAcceptedPass", "poll-first answer confirmation", pollAnswer);
+  const pollExactAnswer = requiredIndex(save, "&& latestSubmittedAnswerQuestion !== null", "poll-first exact answer confirmation", pollConfirmation);
+  const acceptedOwnership = requiredIndex(save, "const acceptedResponseOwnsSnapshot", "accepted response ownership", pollConfirmation);
   const changedOwnership = requiredIndex(save, "!acceptedPublicationChanged", "unchanged publication ownership", acceptedOwnership);
-  const recencyOwnership = requiredIndex(save, "!acceptedResponseIsOlder", "strict recency ownership", changedOwnership);
+  const acceptedPassOwnership = requiredIndex(save, "latestSnapshotMatchesAcceptedPass && !acceptedResponseIsOlder", "accepted pass ownership", changedOwnership);
+  const recencyOwnership = requiredIndex(save, "!acceptedResponseIsOlder", "strict recency ownership", acceptedPassOwnership);
   const timestampOwnership = requiredIndex(save, "latestSubmission.review.updated_at !== acceptedCandidate.review.updated_at", "different timestamp ownership", recencyOwnership);
   const equalTimestampTaskOwnership = requiredIndex(save, "|| latestStillHasSubmittedTask", "equal timestamp task ownership", timestampOwnership);
-  const savedChoice = requiredIndex(save, "const saved = acceptedResponseOwnsSnapshot", "owned snapshot selection", equalTimestampTaskOwnership);
+  const progressOwnership = requiredIndex(save, "const acceptedAnswerOwnsProgress = acceptedResponseOwnsSnapshot || latestSnapshotHasSubmittedAnswer", "accepted progress ownership", equalTimestampTaskOwnership);
+  const savedChoice = requiredIndex(save, "const saved = acceptedResponseOwnsSnapshot", "owned snapshot selection", progressOwnership);
   const changedChoice = requiredIndex(save, "? acceptedPublicationChanged", "changed publication reconciliation choice", savedChoice);
   const reconcile = requiredIndex(save, "? nextSubmissionState(latestSubmission, acceptedCandidate)", "accepted response reconciliation", changedChoice);
   const latestChoice = requiredIndex(save, ": latestSubmission", "latest snapshot fallback", reconcile);
@@ -246,7 +314,8 @@ test("accepted answer writes stay owned by their application and latest submissi
   const advancedAccepted = requiredIndex(save, "advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, applicationId)", "accepted publication generation", changedAccepted);
   const storedAccepted = requiredIndex(save, "submissionSnapshotsRef.current.set(applicationId, saved)", "accepted snapshot storage", advancedAccepted);
   const packetPublish = requiredIndex(save, "setPackets((current)", "accepted packet publication", storedAccepted);
-  const visibleGuard = requiredIndex(save, "!acceptedResponseOwnsSnapshot", "accepted visible ownership", packetPublish);
+  const progressGuard = requiredIndex(save, "acceptedAnswerOwnsProgress", "accepted progress publication guard", packetPublish);
+  const visibleGuard = requiredIndex(save, "!acceptedAnswerOwnsProgress", "accepted visible ownership", progressGuard);
   const selectedGuard = requiredIndex(save, "selectedIdRef.current !== applicationId", "selected application guard", visibleGuard);
   const visiblePublish = requiredIndex(save, 'publishSubmissionEnvelope(submissionRef, saved, "direct")', "accepted visible publication", selectedGuard);
   const returnedReview = requiredIndex(save, "review: saved.review", "reconciled accepted review return", visiblePublish);
@@ -259,17 +328,32 @@ test("accepted answer writes stay owned by their application and latest submissi
       generation,
       generationChanged,
       older,
-      latestTask,
+      latestPlanDeclaration,
       latestPlan,
+      latestTask,
+      latestNavigation,
       latestQuestion,
       exactTask,
       exactPrompt,
       exactFingerprint,
+      compatiblePass,
+      currentPass,
+      responsePass,
+      pollAnswerDeclaration,
+      pollApplication,
+      pollPresentation,
+      pollQuestion,
+      pollPrompt,
+      pollAnswer,
+      pollConfirmation,
+      pollExactAnswer,
       acceptedOwnership,
       changedOwnership,
+      acceptedPassOwnership,
       recencyOwnership,
       timestampOwnership,
       equalTimestampTaskOwnership,
+      progressOwnership,
       savedChoice,
       changedChoice,
       reconcile,
@@ -279,6 +363,7 @@ test("accepted answer writes stay owned by their application and latest submissi
       advancedAccepted,
       storedAccepted,
       packetPublish,
+      progressGuard,
       visibleGuard,
       selectedGuard,
       visiblePublish,
@@ -292,8 +377,13 @@ test("accepted answer writes stay owned by their application and latest submissi
   );
   assert.match(
     save,
-    /const acceptedResponseOwnsSnapshot = !direct\s+\|\| !acceptedPublicationChanged\s+\|\| \(!acceptedResponseIsOlder && \(\s+latestSubmission\.review\.updated_at !== acceptedCandidate\.review\.updated_at\s+\|\| latestStillHasSubmittedTask\s+\)\);/,
+    /const acceptedResponseOwnsSnapshot = !direct\s+\|\| !acceptedPublicationChanged\s+\|\| \(latestSnapshotMatchesAcceptedPass && !acceptedResponseIsOlder && \(\s+latestSubmission\.review\.updated_at !== acceptedCandidate\.review\.updated_at\s+\|\| latestStillHasSubmittedTask\s+\)\);/,
   );
+  assert.match(
+    save,
+    /const latestSnapshotMatchesAcceptedPass = !direct \|\| directAnswerPassesAreCompatible\(\s+latestSubmission\.review,\s+acceptedCandidate\.review,\s+\);[\s\S]*?const latestSubmittedAnswerQuestion = direct\s+&& latestSubmission\.application_id === applicationId\s+\? questionReviewPresentation\([\s\S]*?question\.id === direct\.questionId\s+&& directQuestionPromptFingerprint\(\{ question \}\) === direct\.promptFingerprint\s+&& question\.answer === direct\.answer[\s\S]*?const latestSnapshotHasSubmittedAnswer = latestSnapshotMatchesAcceptedPass\s+&& latestSubmittedAnswerQuestion !== null;/,
+  );
+  assert.match(save, /const acceptedAnswerOwnsProgress = acceptedResponseOwnsSnapshot \|\| latestSnapshotHasSubmittedAnswer;/);
   assert.match(
     save,
     /const saved = acceptedResponseOwnsSnapshot\s+\? acceptedPublicationChanged\s+\? nextSubmissionState\(latestSubmission, acceptedCandidate\)\s+: acceptedCandidate\s+: latestSubmission;/,
@@ -322,7 +412,7 @@ test("each accepted direct save emits one repeatable polite announcement", () =>
 
   const refusal = requiredIndex(save, "if (!result.saved) {", "refused answer branch");
   const refusalReturn = requiredIndex(save, "return { saved: false, message: result.message", "refused answer return", refusal);
-  const ownershipGuard = requiredIndex(save, "!acceptedResponseOwnsSnapshot", "accepted answer ownership guard", refusalReturn);
+  const ownershipGuard = requiredIndex(save, "!acceptedAnswerOwnsProgress", "accepted answer ownership guard", refusalReturn);
   const selectedGuard = requiredIndex(save, "selectedIdRef.current !== applicationId", "accepted answer selection guard", ownershipGuard);
   const publish = requiredIndex(save, "const publishSavedAnswer = () => {", "accepted answer publisher", selectedGuard);
   const directOnly = requiredIndex(save, "if (direct) {", "direct answer announcement guard", publish);
@@ -333,13 +423,33 @@ test("each accepted direct save emits one repeatable polite announcement", () =>
   );
   assert.doesNotMatch(save.slice(refusal, refusalReturn), /setDirectAnswerAnnouncement/);
 
-  const visibleReceipt = requiredIndex(prompt, "{savedRecently && (", "visible saved receipt");
-  const questionHeading = requiredIndex(prompt, "<h2 id={headingId}", "question heading", visibleReceipt);
+  const visibleReceipt = requiredIndex(prompt, "{saved && !answerDirty && (", "visible saved receipt");
+  const questionHeading = requiredIndex(prompt, "<h2 ref={headingRef} id={headingId}", "question heading", visibleReceipt);
   assert.doesNotMatch(
     prompt.slice(visibleReceipt, questionHeading),
     /role="status"|aria-live=/,
     "the visible receipt must not duplicate the page live announcement",
   );
+});
+
+test("an accepted answer from an older direct pass asks visibly for a truthful retry", () => {
+  const prompt = sourceSection("function DirectApplicationQuestion(", "function SubmissionScreen(");
+  const save = functionBody("  async function saveReviewedAnswers(");
+
+  assert.match(page, /type DirectAnswerSaveResult = \{[\s\S]*?saved: true;[\s\S]*?mayAdvance: boolean;[\s\S]*?retryMessage\?: string;/);
+  assert.match(
+    page,
+    /function directAnswerPassRetryMessage\(intent: DirectQuestionTaskIntent\): string \{[\s\S]*?intent === "confirm"[\s\S]*?Confirm it again for the latest check\.[\s\S]*?Save it again for the latest check\./,
+  );
+  assert.match(
+    save,
+    /direct && !latestSnapshotMatchesAcceptedPass[\s\S]*?retryMessage: directAnswerPassRetryMessage\(direct\.intent\)/,
+  );
+  assert.match(
+    prompt,
+    /if \(!result\.saved\) \{\s+setSaveError\(result\.message\);\s+\} else if \(!result\.mayAdvance && result\.retryMessage\) \{\s+setSaveError\(result\.retryMessage\);\s+\}/,
+  );
+  assert.match(prompt, /\{visibleError && \(\s+<p id=\{errorId\} role="alert"[\s\S]*?\{visibleError\}/);
 });
 
 test("a raced refusal cannot publish over a newer selection or submission snapshot", () => {
@@ -398,8 +508,9 @@ test("a raced refusal cannot publish over a newer selection or submission snapsh
   );
 });
 
-test("a landed answer advances the local prompt queue without starting a submission", () => {
+test("a landed answer keeps the final question reviewable without starting a submission", () => {
   const submissionScreen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
+  const prompt = sourceSection("function DirectApplicationQuestion(", "function SubmissionScreen(");
   const saveCurrentStart = submissionScreen.indexOf("  async function saveCurrentDirectQuestion(");
   const saveCurrentEnd = submissionScreen.indexOf("\n  const completedItems", saveCurrentStart);
   assert.ok(saveCurrentStart >= 0, "the direct prompt save handler must exist");
@@ -408,13 +519,16 @@ test("a landed answer advances the local prompt queue without starting a submiss
 
   assert.match(submissionScreen, /remainingDirectQuestions = directTaskPlan\.questionTasks\.filter/);
   assert.match(submissionScreen, /answeredQuestionFingerprints\.has\(directQuestionPromptFingerprint\(task\)\)/);
-  assert.match(submissionScreen, /const nextTaskPlan = directInputTaskPlan\(\{ \.\.\.result\.review/);
-  assert.match(submissionScreen, /savedQuestionFingerprints = new Set\(answeredQuestionFingerprints\)\.add\(result\.promptFingerprint\)/);
-  assert.match(submissionScreen, /nextTaskPlan\.questionTasks\.some/);
+  assert.match(submissionScreen, /const defaultDirectPromptFingerprint = remainingDirectQuestions\[0\][\s\S]*?: directQuestionTasks\.at\(-1\)[\s\S]*?directQuestionPromptFingerprint\(directQuestionTasks\.at\(-1\)!\)/);
+  assert.match(submissionScreen, /const currentDirectQuestion = directQuestionTasks\[currentDirectQuestionIndex\] \?\? null/);
+  assert.doesNotMatch(submissionScreen, /directFollowUpTaskExists|questionsComplete/);
   assert.match(submissionScreen, /key=\{directQuestionTaskFingerprint\(currentDirectQuestion\)\}/);
+  assert.match(submissionScreen, /hasPrevious=\{currentDirectQuestionIndex > 0\}/);
+  assert.match(submissionScreen, /hasNext=\{currentDirectQuestionIndex >= 0 && currentDirectQuestionIndex < directQuestionTasks\.length - 1\}/);
+  assert.match(submissionScreen, /onReviewApplication=\{onQuestionsFinished\}/);
   assert.match(saveCurrent, /if \(!result\.mayAdvance\) return result/);
-  assert.match(saveCurrent, /!anotherQuestionRemains && nextTaskPlan\.nonQuestionTasks\.length === 0 && nextTaskPlan\.metadataBlockers\.length === 0/);
-  assert.match(saveCurrent, /onQuestionsFinished\(\)/);
+  assert.doesNotMatch(saveCurrent, /onQuestionsFinished|nextTaskPlan|anotherQuestionRemains/);
+  assert.match(prompt, /\{saved && !answerDirty \? \([\s\S]*?aria-label=\{hasNext \? "Next question" : "Review application"\}[\s\S]*?onClick=\{\(\) => hasNext \? navigate\(onNext\) : onReviewApplication\(\)\}/);
   assert.doesNotMatch(saveCurrent, /prepareApplication|submit-request|approveFinalSubmission/);
 });
 
@@ -445,38 +559,80 @@ test("direct answer progress survives application switches without double-counti
   const save = functionBody("  async function saveReviewedAnswers(");
   const screen = sourceSection("function SubmissionScreen(", "function SubmissionReceipt(");
 
-  assert.match(page, /type DirectAnswerProgress = \{[\s\S]*?key: string;[\s\S]*?lastSavedQuestionId: string \| null;[\s\S]*?savedCount: number;[\s\S]*?total: number;/);
+  assert.match(page, /type DirectAnswerProgress = \{[\s\S]*?key: string;[\s\S]*?answeredTasks: readonly DirectQuestionTask\[\];[\s\S]*?cursorPromptFingerprint: string \| null;[\s\S]*?lastSavedPromptFingerprint: string \| null;[\s\S]*?navigationToken: number;[\s\S]*?total: number;/);
   assert.match(page, /const \[directAnswerProgresses, setDirectAnswerProgresses\] = useState<ReadonlyMap<string, DirectAnswerProgress>>/);
   assert.match(page, /const selectedDirectAnswerProgress = selected \? directAnswerProgresses\.get\(selected\.id\) \?\? null : null;/);
   assert.match(page, /directAnswerProgress=\{selectedDirectAnswerProgress\}/);
   assert.doesNotMatch(screen, /storedDirectProgress|setStoredDirectProgress/);
 
   const activePass = requiredIndex(save, "const activeDirectPassKey = direct ? directAnswerPassKey(activeSubmission.review) : null", "active answer pass");
-  const completed = requiredIndex(save, "const completedDirectPromptFingerprints = new Set(", "completed prompt snapshot", activePass);
+  const activeProgress = requiredIndex(save, "const activeDirectProgress = direct ? directAnswerProgresses.get(applicationId) : null", "application-scoped progress", activePass);
+  const activeHistory = requiredIndex(save, "const activeAnsweredTasks = direct", "answered task history", activeProgress);
+  const historyPassGuard = requiredIndex(save, "activeDirectProgress?.key === activeDirectPassKey", "answered history pass guard", activeHistory);
+  const historyRead = requiredIndex(save, "? activeDirectProgress.answeredTasks", "answered history read", historyPassGuard);
+  const safeNavigation = requiredIndex(save, "directAnswerNavigationTasks(", "active review task re-resolution", historyRead);
+  const safeReview = requiredIndex(save, "activeSubmission.review", "active review source", safeNavigation);
+  const safePromptMatch = requiredIndex(save, "directQuestionPromptFingerprint(task) === direct.promptFingerprint", "active prompt identity", safeReview);
+  const completed = requiredIndex(save, "const completedDirectPromptFingerprints = new Set(", "completed prompt snapshot", safePromptMatch);
   const accepted = requiredIndex(save, "completedDirectPromptFingerprints.add(safeDirectPromptFingerprint)", "accepted prompt", completed);
-  const remaining = requiredIndex(save, "const remainingDirectQuestionCount = savedDirectTaskPlan.questionTasks.filter", "filtered remaining prompts", accepted);
+  const remaining = requiredIndex(save, "const remainingDirectQuestions = savedDirectTaskPlan.questionTasks.filter", "filtered remaining prompts", accepted);
   const remainingFilter = requiredIndex(save, "!completedDirectPromptFingerprints.has(directQuestionPromptFingerprint(task))", "completed prompt exclusion", remaining);
-  const progressPublish = requiredIndex(save, "setDirectAnswerProgresses((current)", "parent progress publication", remainingFilter);
+  const answeredQuestion = requiredIndex(save, "const answeredQuestion = saved.review.questions.find", "saved review question lookup", remainingFilter);
+  const answeredPromptMatch = requiredIndex(save, "directQuestionPromptFingerprint({ question }) === safeDirectPromptFingerprint", "saved prompt identity", answeredQuestion);
+  const answeredFallback = requiredIndex(save, "?? { ...safeDirectTask.question, answer: direct.answer }", "submitted answer fallback", answeredPromptMatch);
+  const answeredTask = requiredIndex(save, "const answeredTask = { ...safeDirectTask, question: answeredQuestion }", "resolved answered task", answeredFallback);
+  const historyDedupe = requiredIndex(save, "activeAnsweredTasks.some((task)", "answered history dedupe", answeredTask);
+  const historyReplace = requiredIndex(save, "? activeAnsweredTasks.map((task)", "answered history replacement", historyDedupe);
+  const historyAppend = requiredIndex(save, ": [...activeAnsweredTasks, answeredTask]", "answered history append", historyReplace);
+  const navigationOrder = requiredIndex(save, "const savedDirectNavigationTasks = directAnswerNavigationTasks(", "saved review navigation order", historyAppend);
+  const currentNavigationIndex = requiredIndex(save, "const savedDirectQuestionIndex = savedDirectNavigationTasks.findIndex", "saved question navigation index", navigationOrder);
+  const adjacentQuestion = requiredIndex(save, "savedDirectNavigationTasks[savedDirectQuestionIndex + 1] ?? null", "immediately adjacent question", currentNavigationIndex);
+  const savedPass = requiredIndex(save, "const savedPassKey = directAnswerPassKey(saved.review)", "saved review pass", adjacentQuestion);
+  const progressPublish = requiredIndex(save, "setDirectAnswerProgresses((current)", "parent progress publication", savedPass);
   const progressApplication = requiredIndex(save, "next.set(applicationId, {", "application-keyed progress", progressPublish);
   const progressKey = requiredIndex(save, "key: savedPassKey", "review-keyed progress", progressApplication);
-  const progressReceipt = requiredIndex(save, "lastSavedQuestionId: direct.questionId", "saved question receipt", progressKey);
-  const progressCount = requiredIndex(save, "savedCount: completedDirectPromptFingerprints.size", "deduplicated saved count", progressReceipt);
-  const totalMax = requiredIndex(save, "total: Math.max(", "stable progress total", progressCount);
+  const publishedHistory = requiredIndex(save, "answeredTasks,", "published answered history", progressKey);
+  const cursor = requiredIndex(save, "cursorPromptFingerprint: nextSavedDirectQuestion", "next prompt cursor", adjacentQuestion);
+  const cursorFallback = requiredIndex(save, ": safeDirectPromptFingerprint", "final prompt cursor", cursor);
+  const progressReceipt = requiredIndex(save, "lastSavedPromptFingerprint: safeDirectPromptFingerprint", "saved prompt receipt", cursorFallback);
+  const navigationToken = requiredIndex(save, "navigationToken: (activeDirectProgress?.key === activeDirectPassKey", "navigation focus token", progressReceipt);
+  const totalMax = requiredIndex(save, "total: Math.max(", "stable progress total", navigationToken);
   const priorTotal = requiredIndex(save, "activeDirectQuestionTotal", "prior progress total", totalMax);
-  const filteredTotal = requiredIndex(save, "completedDirectPromptFingerprints.size + remainingDirectQuestionCount", "filtered progress total", priorTotal);
+  const filteredTotal = requiredIndex(save, "completedDirectPromptFingerprints.size + remainingDirectQuestions.length", "filtered progress total", priorTotal);
   const selectionGuard = requiredIndex(save, "selectedIdRef.current !== applicationId", "selection publication guard", filteredTotal);
   assertOrdered(
     [
       activePass,
+      activeProgress,
+      activeHistory,
+      historyPassGuard,
+      historyRead,
+      safeNavigation,
+      safeReview,
+      safePromptMatch,
       completed,
       accepted,
       remaining,
       remainingFilter,
+      answeredQuestion,
+      answeredPromptMatch,
+      answeredFallback,
+      answeredTask,
+      historyDedupe,
+      historyReplace,
+      historyAppend,
+      navigationOrder,
+      currentNavigationIndex,
+      adjacentQuestion,
+      savedPass,
       progressPublish,
       progressApplication,
       progressKey,
+      publishedHistory,
+      cursor,
+      cursorFallback,
       progressReceipt,
-      progressCount,
+      navigationToken,
       totalMax,
       priorTotal,
       filteredTotal,
@@ -487,39 +643,55 @@ test("direct answer progress survives application switches without double-counti
 
   const key = requiredIndex(screen, "const directProgressKey = directAnswerPassKey(review)", "direct progress pass key");
   const scoped = requiredIndex(screen, "directAnswerProgress?.key === directProgressKey", "pass-scoped progress read", key);
-  const resetReceipt = requiredIndex(screen, "lastSavedQuestionId: null", "fresh-pass receipt reset", scoped);
-  const resetCount = requiredIndex(screen, "savedCount: 0", "fresh-pass count reset", resetReceipt);
-  const resetTotal = requiredIndex(screen, "total: directTaskPlan.questionTasks.length", "fresh-pass total", resetCount);
+  const resetHistory = requiredIndex(screen, "answeredTasks: []", "fresh-pass history reset", scoped);
+  const resetCursor = requiredIndex(screen, "cursorPromptFingerprint: null", "fresh-pass cursor reset", resetHistory);
+  const resetReceipt = requiredIndex(screen, "lastSavedPromptFingerprint: null", "fresh-pass receipt reset", resetCursor);
+  const resetNavigation = requiredIndex(screen, "navigationToken: 0", "fresh-pass focus reset", resetReceipt);
+  const resetTotal = requiredIndex(screen, "total: directTaskPlan.questionTasks.length", "fresh-pass total", resetNavigation);
   const remainingQuestions = requiredIndex(screen, "const remainingDirectQuestions = directTaskPlan.questionTasks.filter", "remaining direct questions", resetTotal);
   const remainingExclusion = requiredIndex(screen, "!answeredQuestionFingerprints.has(directQuestionPromptFingerprint(task))", "answered prompt exclusion", remainingQuestions);
-  const totalStart = requiredIndex(screen, "const directQuestionTotal = Math.max(", "display total", remainingExclusion);
+  const navigationTasks = requiredIndex(screen, "const directQuestionTasks = directAnswerNavigationTasks(", "review-ordered navigation tasks", remainingExclusion);
+  const navigationReview = requiredIndex(screen, "review,", "current review navigation source", navigationTasks);
+  const navigationHistory = requiredIndex(screen, "directProgress.answeredTasks", "pass-scoped navigation history", navigationReview);
+  const defaultCursor = requiredIndex(screen, "const defaultDirectPromptFingerprint = remainingDirectQuestions[0]", "default outstanding cursor", navigationHistory);
+  const storedCursor = requiredIndex(screen, "const requestedDirectPromptFingerprint = directProgress.cursorPromptFingerprint", "stored cursor read", defaultCursor);
+  const currentPromptGuard = requiredIndex(screen, "directQuestionFingerprints.has(directProgress.cursorPromptFingerprint)", "current review cursor guard", storedCursor);
+  const currentIndex = requiredIndex(screen, "const currentDirectQuestionIndex = directQuestionTasks.findIndex", "current question index", currentPromptGuard);
+  const totalStart = requiredIndex(screen, "const directQuestionTotal = Math.max(", "display total", currentIndex);
   const preservedTotal = requiredIndex(screen, "directProgress.total", "preserved display total", totalStart);
-  const stableTotal = requiredIndex(screen, "directProgress.savedCount + remainingDirectQuestions.length", "filtered display total", preservedTotal);
-  const positionStart = requiredIndex(screen, "const directQuestionPosition = Math.min(", "display position", stableTotal);
-  const boundedPosition = requiredIndex(screen, "Math.max(1, directQuestionTotal)", "bounded display position", positionStart);
-  const nextPosition = requiredIndex(screen, "directProgress.savedCount + 1", "next display position", boundedPosition);
-  const positionProp = requiredIndex(screen, "position={directQuestionPosition}", "prompt position prop", nextPosition);
+  const stableTotal = requiredIndex(screen, "directQuestionTasks.length", "navigation display total", preservedTotal);
+  const positionStart = requiredIndex(screen, "const directQuestionPosition = currentDirectQuestionIndex >= 0 ? currentDirectQuestionIndex + 1 : 1", "cursor display position", stableTotal);
+  const positionProp = requiredIndex(screen, "position={directQuestionPosition}", "prompt position prop", positionStart);
   const totalProp = requiredIndex(screen, "total={Math.max(1, directQuestionTotal)}", "prompt total prop", positionProp);
   assertOrdered(
     [
       key,
       scoped,
+      resetHistory,
+      resetCursor,
       resetReceipt,
-      resetCount,
+      resetNavigation,
       resetTotal,
       remainingQuestions,
       remainingExclusion,
+      navigationTasks,
+      navigationReview,
+      navigationHistory,
+      defaultCursor,
+      storedCursor,
+      currentPromptGuard,
+      currentIndex,
       totalStart,
       preservedTotal,
       stableTotal,
       positionStart,
-      boundedPosition,
-      nextPosition,
       positionProp,
       totalProp,
     ],
-    "a new review pass resets progress while the same pass preserves its saved count and total",
+    "a new review pass resets history while the same pass preserves its cursor and total",
   );
+
+  assert.match(page, /onNavigateDirectQuestion=\{\(promptFingerprint\) => \{[\s\S]*?const progress = current\.get\(selected\.id\);[\s\S]*?progress\.key !== directAnswerPassKey\(selectedSubmission\.review\)[\s\S]*?next\.set\(selected\.id, \{[\s\S]*?cursorPromptFingerprint: promptFingerprint,[\s\S]*?navigationToken: progress\.navigationToken \+ 1/);
 });
 
 test("a direct answer owns the screen and invalidates an older poll snapshot", () => {

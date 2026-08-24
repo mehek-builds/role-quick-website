@@ -534,14 +534,14 @@ async function dashboardContext({
       pendingResumeHistoryGate = { markStarted, released, markSettled };
       return { started, release, settled };
     },
-    holdNextReviewAnswer({ status = 200, responseReview = null, persistResponse = true } = {}) {
+    holdNextReviewAnswer({ status = 200, responseReview = null, persistResponse = true, holdAfterPersist = false } = {}) {
       let markStarted;
       let release;
       let markSettled;
       const started = new Promise((resolve) => { markStarted = resolve; });
       const released = new Promise((resolve) => { release = resolve; });
       const settled = new Promise((resolve) => { markSettled = resolve; });
-      pendingReviewAnswerGate = { markStarted, released, markSettled, status, responseReview, persistResponse };
+      pendingReviewAnswerGate = { markStarted, released, markSettled, status, responseReview, persistResponse, holdAfterPersist };
       return { started, release, settled };
     },
     setSubmissionFixture(applicationId, submission) {
@@ -719,7 +719,7 @@ async function dashboardContext({
         const body = request.postDataJSON();
         state.reviewAnswerWrites.push({ applicationId, body });
         const gate = pendingReviewAnswerGate;
-        if (gate) {
+        if (gate && !gate.holdAfterPersist) {
           pendingReviewAnswerGate = null;
           gate.markStarted();
           await gate.released;
@@ -748,6 +748,11 @@ async function dashboardContext({
             ...liveSubmissionFixtures,
             [applicationId]: { ...current, review: responseReview },
           };
+        }
+        if (gate?.holdAfterPersist) {
+          pendingReviewAnswerGate = null;
+          gate.markStarted();
+          await gate.released;
         }
         await fulfillJson(route, {
           application_id: applicationId,
@@ -2407,7 +2412,7 @@ test("Applications landing is readable at 320px", async () => {
   }
 });
 
-test("Application answers save one direct prompt and advance only after the server accepts it", async () => {
+test("Application answers preserve drafts while moving backward and forward", async () => {
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     resumeHistoryFixture: [DIRECT_ANSWER_PACKET],
@@ -2424,7 +2429,7 @@ test("Application answers save one direct prompt and advance only after the serv
 
     const openHeading = page.getByRole("heading", { name: openQuestion, exact: true });
     const openAnswer = page.getByRole("textbox", { name: openQuestion, exact: true });
-    const save = page.getByRole("button", { name: "Save to application", exact: true });
+    const save = page.getByRole("button", { name: "Save and next", exact: true });
     await openHeading.waitFor({ state: "visible", timeout: 10_000 });
     await openAnswer.waitFor({ state: "visible" });
     await save.waitFor({ state: "visible" });
@@ -2449,7 +2454,7 @@ test("Application answers save one direct prompt and advance only after the serv
 
     await resizeForCapture(page, 320, 780);
     const mobileGeometry = await page.evaluate(() => {
-      const action = [...document.querySelectorAll("button")].find((node) => node.textContent?.trim() === "Save to application");
+      const action = [...document.querySelectorAll("button")].find((node) => node.textContent?.trim() === "Save and next");
       const nav = document.querySelector('nav[aria-label="Dashboard"]');
       if (!(action instanceof HTMLElement) || !(nav instanceof HTMLElement)) return null;
       return {
@@ -2475,7 +2480,7 @@ test("Application answers save one direct prompt and advance only after the serv
     const savingAction = directPrompt.locator('button[type="submit"]');
     await savingAction.waitFor({ state: "visible" });
     assert.match(await savingAction.innerText(), /Saving/);
-    assert.equal(await savingAction.getAttribute("aria-disabled"), "true", "the direct answer action stayed operable while its write was pending");
+    assert.equal(await savingAction.isDisabled(), true, "the direct answer action stayed operable while its write was pending");
     assert.equal(await openAnswer.inputValue(), savedAnswer, "the in-flight save erased the draft");
     assert.equal(await page.getByRole("heading", { name: closedQuestion, exact: true }).count(), 0, "the next question appeared before the write returned 200");
     assert.equal(await page.getByText("Saved to this application.", { exact: true }).count(), 0, "the receipt appeared before the write returned 200");
@@ -2487,8 +2492,7 @@ test("Application answers save one direct prompt and advance only after the serv
     const closedChoices = page.getByRole("group", { name: closedQuestion, exact: true });
     await closedHeading.waitFor({ state: "visible", timeout: 10_000 });
     await closedChoices.waitFor({ state: "visible" });
-    await page.waitForFunction(() => document.activeElement?.getAttribute("value") === "Yes");
-    await closedHeading.locator("xpath=ancestor::section[1]").getByText("Saved to this application.", { exact: true }).waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.activeElement?.id === "direct-application-question-direct-relocation");
     await finishDashboardAnimations(page);
     const samples = await stopAnimationLog(page);
     const exit = samples.find((sample) => sample.name === "rq-dashboard-panel-exit");
@@ -2518,15 +2522,553 @@ test("Application answers save one direct prompt and advance only after the serv
         }],
       },
     }, "the answer write did not contain the complete safe question list");
-    assert.deepEqual(state.applicationMutationRequests, [{
-      method: "PUT",
-      pathname: `/applications/${DIRECT_ANSWER_PACKET.id}/review/answers`,
-    }], "answering a question started an application submit or approval request");
-
     await resetPageScroll(page, { blurActive: false });
     await capturePass(page, "applications-task-question-handoff");
     await assertContained(page, "Application direct question handoff");
+
+    const relocationAnswer = "Yes";
+    await closedChoices.getByRole("radio", { name: relocationAnswer, exact: true }).check();
+    assert.equal(state.reviewAnswerWrites.length, 1, "editing the next question issued a write before Save was pressed");
+
+    const previous = page.getByRole("button", { name: "Previous question", exact: true });
+    await previous.click();
+    await openHeading.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await openAnswer.inputValue(), savedAnswer, "going back did not restore the first saved answer");
+    await openHeading.locator("xpath=ancestor::section[1]").getByText("Saved to this application.", { exact: true }).waitFor({ state: "visible" });
+    assert.match(await openHeading.locator("xpath=ancestor::section[1]").innerText(), /1 of 2/);
+    assert.equal(state.reviewAnswerWrites.length, 1, "going back saved or resubmitted an answer");
+    assert.equal(state.applicationMutationRequests.length, 1, "going back issued an extra application PUT");
+    assert.equal(await page.locator('main section[aria-labelledby^="direct-application-question-"]').count(), 1, "going back exposed more than one direct question");
+
+    const next = page.getByRole("button", { name: "Next question", exact: true });
+    await next.click();
+    await closedHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForFunction(() => document.activeElement?.id === "direct-application-question-direct-relocation");
+    assert.equal(
+      await closedChoices.getByRole("radio", { name: relocationAnswer, exact: true }).isChecked(),
+      true,
+      "going forward discarded the unsaved answer",
+    );
+    assert.equal(state.reviewAnswerWrites.length, 1, "going forward saved or resubmitted an answer");
+    assert.equal(state.applicationMutationRequests.length, 1, "going forward issued an extra application PUT");
+    assert.equal(await page.locator('main section[aria-labelledby^="direct-application-question-"]').count(), 1, "going forward exposed more than one direct question");
+
+    const finalSave = page.getByRole("button", { name: "Save answer", exact: true });
+    const finalGate = state.holdNextReviewAnswer();
+    await finalSave.click();
+    await finalGate.started;
+    const finalSavingAction = closedHeading.locator("xpath=ancestor::section[1]").locator('button[type="submit"]');
+    assert.match(await finalSavingAction.innerText(), /Saving/);
+    assert.equal(await finalSavingAction.isDisabled(), true, "the final save action stayed operable during its write");
+    assert.equal(await previous.isDisabled(), true, "Previous question stayed operable during the final write");
+    assert.equal(await page.getByRole("button", { name: "Next question", exact: true }).count(), 0, "a next control appeared beyond the last question");
+    assert.equal(await page.locator('main section[aria-labelledby^="direct-application-question-"]').count(), 1, "a held final save rendered more than one direct question");
+    assert.equal(state.reviewAnswerWrites.length, 2, "the final save did not issue exactly one additional answer write");
+
+    finalGate.release();
+    await finalGate.settled;
+    const reviewApplication = page.getByRole("button", { name: "Review application", exact: true });
+    await reviewApplication.waitFor({ state: "visible", timeout: 10_000 });
+    await finishDashboardAnimations(page);
+    assert.equal(await closedHeading.count(), 1, "the final save left the question flow before the user chose to review");
+    await closedHeading.locator("xpath=ancestor::section[1]").getByText("Saved to this application.", { exact: true }).waitFor({ state: "visible" });
+    assert.match(await closedHeading.locator("xpath=ancestor::section[1]").innerText(), /2 of 2/);
+    assert.equal(await page.locator('main section[aria-labelledby^="direct-application-question-"]').count(), 1, "the completed flow rendered more than one direct question");
+    assert.deepEqual(state.reviewAnswerWrites[1], {
+      applicationId: DIRECT_ANSWER_PACKET.id,
+      body: {
+        questions: [{
+          id: "direct-location",
+          question: openQuestion,
+          answer: savedAnswer,
+          kind: "required",
+          required: true,
+        }, {
+          id: "direct-relocation",
+          question: closedQuestion,
+          answer: relocationAnswer,
+          kind: "required",
+          required: true,
+        }],
+      },
+    }, "the final write lost a saved or drafted answer");
+
+    await previous.click();
+    await openHeading.waitFor({ state: "visible", timeout: 10_000 });
+    const revisedSavedAnswer = "Abu Dhabi, United Arab Emirates";
+    await openAnswer.fill(revisedSavedAnswer);
+    await page.getByRole("button", { name: "Save changes and next", exact: true }).click();
+    await closedHeading.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await openHeading.count(), 0, "saving a revisited answer did not advance to its next question");
+    assert.equal(await closedChoices.getByRole("radio", { name: relocationAnswer, exact: true }).isChecked(), true, "revisiting the next question lost its saved answer");
+    assert.equal(state.reviewAnswerWrites.length, 3, "editing a saved prior answer issued anything other than one PUT");
+    assert.deepEqual(
+      state.reviewAnswerWrites[2].body.questions.map(({ id, answer }) => ({ id, answer })),
+      [{ id: "direct-location", answer: revisedSavedAnswer }, { id: "direct-relocation", answer: relocationAnswer }],
+      "the saved edit did not preserve the complete review-ordered answer set",
+    );
+    assert.deepEqual(state.applicationMutationRequests, [{
+      method: "PUT",
+      pathname: `/applications/${DIRECT_ANSWER_PACKET.id}/review/answers`,
+    }, {
+      method: "PUT",
+      pathname: `/applications/${DIRECT_ANSWER_PACKET.id}/review/answers`,
+    }, {
+      method: "PUT",
+      pathname: `/applications/${DIRECT_ANSWER_PACKET.id}/review/answers`,
+    }], "answering questions started an application submit or approval request");
+
+    const mutationsBeforePacketReview = state.applicationMutationRequests.length;
+    await reviewApplication.click();
+    await page.getByRole("heading", { name: "Litos will check the company's form first.", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.locator('main section[aria-labelledby^="direct-application-question-"]').waitFor({ state: "detached", timeout: 10_000 });
+    assert.equal(state.applicationMutationRequests.length, mutationsBeforePacketReview, "opening packet review issued an application mutation");
     assertNoPageErrors(state, "Application direct answers");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A poll that sees an accepted answer before its PUT response preserves two-question history", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [DIRECT_ANSWER_PACKET],
+    submissionFixtures: { [DIRECT_ANSWER_PACKET.id]: DIRECT_ANSWER_SUBMISSION },
+  });
+  const firstQuestion = "Where will you be based during this internship?";
+  const secondQuestion = "Are you willing to relocate for this role?";
+  const submittedAnswer = "Dubai, United Arab Emirates";
+  const acceptedReview = {
+    ...DIRECT_ANSWER_PACKET.spec._review,
+    questions: DIRECT_ANSWER_PACKET.spec._review.questions.map((question) => question.id === "direct-location"
+      ? { ...question, answer: submittedAnswer }
+      : question),
+    updated_at: "2026-08-24T12:00:00.000Z",
+  };
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET.id}"]:visible`).click();
+    const firstAnswer = page.getByRole("textbox", { name: firstQuestion, exact: true });
+    await firstAnswer.waitFor({ state: "visible", timeout: 10_000 });
+    await firstAnswer.fill(submittedAnswer);
+
+    const saveGate = state.holdNextReviewAnswer({ holdAfterPersist: true });
+    const pollGate = state.holdNextSubmissionRead(DIRECT_ANSWER_PACKET.id, {
+      ...DIRECT_ANSWER_SUBMISSION,
+      review: acceptedReview,
+    });
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
+    await Promise.all([saveGate.started, pollGate.started]);
+
+    pollGate.release();
+    await pollGate.settled;
+    saveGate.release();
+    await saveGate.settled;
+
+    const secondSection = page.getByRole("heading", { name: secondQuestion, exact: true }).locator("xpath=ancestor::section[1]");
+    await secondSection.getByRole("button", { name: "Previous question", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.match(await secondSection.innerText(), /2 of 2/, "the poll-first save reset the question total");
+    await secondSection.getByRole("button", { name: "Previous question", exact: true }).click();
+    await page.getByRole("heading", { name: firstQuestion, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await firstAnswer.inputValue(), submittedAnswer, "the poll-first save lost the accepted answer from history");
+    assert.equal(state.reviewAnswerWrites.length, 1, "poll-first reconciliation issued an extra answer write");
+    assertNoPageErrors(state, "Poll-first two-question answer history");
+  } finally {
+    await context.close();
+  }
+});
+
+test("An old confirmation response cannot satisfy the same answer in a newer question pass", async () => {
+  const question = "Will you now or in the future require sponsorship to work for this employer?";
+  const answer = "No";
+  const retryMessage = "The company form was checked again while your confirmation was saving. Your answer is still here. Confirm it again for the latest check.";
+  const oldRound = "2026-08-24T12:30:00.000Z";
+  const newerRound = "2026-08-24T12:31:00.000Z";
+  const oldQuestion = {
+    id: "direct-sponsorship-confirmation",
+    question,
+    answer,
+    kind: "required",
+    required: true,
+    portal_input_type: "select-one",
+    portal_selector: "#sponsorship",
+    options: ["Yes", "No"],
+  };
+  const oldReview = {
+    ...DIRECT_ANSWER_PACKET.spec._review,
+    attention_reason: "",
+    questions: [oldQuestion],
+    questions_reviewed_at: oldRound,
+    submission_run_id: "submission-run-old-confirmation",
+    updated_at: oldRound,
+  };
+  const confirmationPacket = {
+    ...DIRECT_ANSWER_PACKET,
+    id: "fixture-packet-direct-confirmation-pass-race",
+    job_context: {
+      ...DIRECT_ANSWER_PACKET.job_context,
+      company: "Confirmation Fixture Systems",
+      role: "Review Pass Intern",
+      jd_hash: "fixture-direct-confirmation-pass-race",
+    },
+    spec: { ...DIRECT_ANSWER_PACKET.spec, _review: oldReview },
+  };
+  const oldSubmission = {
+    ...DIRECT_ANSWER_SUBMISSION,
+    application_id: confirmationPacket.id,
+    review: oldReview,
+  };
+  const acceptedOldReview = {
+    ...oldReview,
+    questions: [{
+      ...oldQuestion,
+      answer_source: "applicant_review",
+      answer_reviewed_at: oldRound,
+    }],
+    updated_at: newerRound,
+  };
+  const newerReview = {
+    ...oldReview,
+    questions_reviewed_at: newerRound,
+    submission_run_id: "submission-run-new-confirmation",
+    updated_at: newerRound,
+  };
+  const newerSubmission = { ...oldSubmission, review: newerReview };
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [confirmationPacket],
+    submissionFixtures: { [confirmationPacket.id]: oldSubmission },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${confirmationPacket.id}"]:visible`).click();
+    const confirm = page.getByRole("button", { name: "Confirm answer", exact: true });
+    await confirm.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByRole("radio", { name: answer, exact: true }).isChecked(), true, "the confirmation fixture did not start with the stored answer");
+
+    const oldSave = state.holdNextReviewAnswer({
+      responseReview: acceptedOldReview,
+      persistResponse: false,
+    });
+    await confirm.click();
+    await oldSave.started;
+
+    state.setSubmissionFixture(confirmationPacket.id, newerSubmission);
+    const newerPoll = state.holdNextSubmissionRead(confirmationPacket.id, newerSubmission);
+    await newerPoll.started;
+    newerPoll.release();
+    await newerPoll.settled;
+
+    oldSave.release();
+    await oldSave.settled;
+    await confirm.waitFor({ state: "visible", timeout: 10_000 });
+    const retryAlert = page.getByRole("alert").filter({ hasText: retryMessage });
+    await retryAlert.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await retryAlert.getAttribute("role"), "alert", "the cross-pass retry was visible but not announced as an alert");
+    assert.equal(await page.getByText("Saved to this application.", { exact: true }).count(), 0, "the old confirmation claimed the newer question pass was saved");
+    assert.equal(await page.getByRole("button", { name: "Review application", exact: true }).count(), 0, "the old confirmation completed the newer question pass");
+    assert.equal(state.reviewAnswerWrites.length, 1, "the pass race issued an unexpected answer write");
+    assert.equal(state.reviewAnswerWrites[0].body.questions[0].confirmed, true, "the held request was not a real confirmation write");
+
+    await confirm.click();
+    await page.getByRole("button", { name: "Review application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await retryAlert.waitFor({ state: "detached", timeout: 10_000 });
+    assert.equal(state.reviewAnswerWrites.length, 2, "confirming the newer pass issued anything other than one retry");
+    assert.equal(state.reviewAnswerWrites[1].body.questions[0].confirmed, true, "the newer pass retry lost its confirmation claim");
+    assertNoPageErrors(state, "Cross-pass direct confirmation ownership");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A poll that sees the only accepted answer before its PUT response keeps the final review step", async () => {
+  const singleQuestionPacket = {
+    ...DIRECT_ANSWER_PACKET,
+    id: "fixture-packet-direct-answer-poll-final",
+    job_context: {
+      ...DIRECT_ANSWER_PACKET.job_context,
+      company: "Polling Fixture Systems",
+      role: "Application State Intern",
+      jd_hash: "fixture-direct-answer-poll-final",
+    },
+    spec: {
+      ...DIRECT_ANSWER_PACKET.spec,
+      _review: {
+        ...DIRECT_ANSWER_PACKET.spec._review,
+        attention_reason: '"Where will you be based during this internship?" is required and is still empty',
+        questions: [DIRECT_ANSWER_PACKET.spec._review.questions[0]],
+      },
+    },
+  };
+  const singleQuestionSubmission = {
+    ...DIRECT_ANSWER_SUBMISSION,
+    application_id: singleQuestionPacket.id,
+    review: singleQuestionPacket.spec._review,
+  };
+  const question = "Where will you be based during this internship?";
+  const submittedAnswer = "Abu Dhabi, United Arab Emirates";
+  const acceptedReview = {
+    ...singleQuestionPacket.spec._review,
+    questions: [{ ...singleQuestionPacket.spec._review.questions[0], answer: submittedAnswer }],
+    updated_at: "2026-08-24T12:00:00.000Z",
+  };
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [singleQuestionPacket],
+    submissionFixtures: { [singleQuestionPacket.id]: singleQuestionSubmission },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${singleQuestionPacket.id}"]:visible`).click();
+    const answer = page.getByRole("textbox", { name: question, exact: true });
+    await answer.waitFor({ state: "visible", timeout: 10_000 });
+    await answer.fill(submittedAnswer);
+
+    const saveGate = state.holdNextReviewAnswer({ holdAfterPersist: true });
+    const pollGate = state.holdNextSubmissionRead(singleQuestionPacket.id, {
+      ...singleQuestionSubmission,
+      review: acceptedReview,
+    });
+    await page.getByRole("button", { name: "Save answer", exact: true }).click();
+    await Promise.all([saveGate.started, pollGate.started]);
+    pollGate.release();
+    await pollGate.settled;
+    saveGate.release();
+    await saveGate.settled;
+
+    const finalHeading = page.getByRole("heading", { name: question, exact: true });
+    await finalHeading.waitFor({ state: "visible", timeout: 10_000 });
+    const finalSection = finalHeading.locator("xpath=ancestor::section[1]");
+    await finalSection.getByRole("button", { name: "Review application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.match(await finalSection.innerText(), /1 of 1/, "the poll-first final answer lost its stable position");
+    assert.equal(await answer.inputValue(), submittedAnswer, "the poll-first final answer was not retained");
+    assert.equal(await finalSection.getByText("Saved to this application.", { exact: true }).count(), 1, "the poll-first final answer lost its saved receipt");
+    assertNoPageErrors(state, "Poll-first single-question final answer");
+  } finally {
+    await context.close();
+  }
+});
+
+test("Follow-up metadata waits behind the final saved question and its Previous control", async () => {
+  const mixedPacket = {
+    ...DIRECT_ANSWER_PACKET,
+    id: "fixture-packet-direct-answer-with-follow-up",
+    job_context: {
+      ...DIRECT_ANSWER_PACKET.job_context,
+      company: "Mixed Fixture Systems",
+      role: "Application Workflow Intern",
+      jd_hash: "fixture-direct-answer-with-follow-up",
+    },
+    spec: {
+      ...DIRECT_ANSWER_PACKET.spec,
+      _review: {
+        ...DIRECT_ANSWER_PACKET.spec._review,
+        question_metadata_blockers: [{
+          kind: "missing_exact_options",
+          required: true,
+          portal_input_type: "select-one",
+          control_id: "work_authorization_country",
+          portal_selector: "#work_authorization_country",
+          question: "Which country issued your work authorization?",
+        }],
+      },
+    },
+  };
+  const mixedSubmission = {
+    ...DIRECT_ANSWER_SUBMISSION,
+    application_id: mixedPacket.id,
+    review: mixedPacket.spec._review,
+  };
+  const firstQuestion = "Where will you be based during this internship?";
+  const finalQuestion = "Are you willing to relocate for this role?";
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [mixedPacket],
+    submissionFixtures: { [mixedPacket.id]: mixedSubmission },
+  });
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${mixedPacket.id}"]:visible`).click();
+    await page.getByRole("textbox", { name: firstQuestion, exact: true }).fill("Dubai, United Arab Emirates");
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
+    await page.getByRole("heading", { name: finalQuestion, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("radio", { name: "Yes", exact: true }).check();
+    await page.getByRole("button", { name: "Save answer", exact: true }).click();
+
+    const finalHeading = page.getByRole("heading", { name: finalQuestion, exact: true });
+    await finalHeading.waitFor({ state: "visible", timeout: 10_000 });
+    const finalSection = finalHeading.locator("xpath=ancestor::section[1]");
+    const previous = finalSection.getByRole("button", { name: "Previous question", exact: true });
+    await previous.waitFor({ state: "visible", timeout: 10_000 });
+    await finalSection.getByRole("button", { name: "Review application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByText("One field needs a fresh read", { exact: true }).count(), 0, "follow-up metadata replaced the final question without an explicit transition");
+
+    await previous.click();
+    await page.getByRole("heading", { name: firstQuestion, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(state.reviewAnswerWrites.length, 2, "navigating back from a mixed follow-up issued an extra answer write");
+    assertNoPageErrors(state, "Question history before metadata follow-up");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A saved edit follows the authoritative three-question order", async () => {
+  const thirdQuestion = {
+    id: "direct-working-hours",
+    question: "Which working hours can you reliably cover?",
+    answer: "",
+    kind: "required",
+    required: true,
+    portal_input_type: "text",
+    portal_selector: "#working_hours",
+  };
+  const threeQuestionReview = {
+    ...DIRECT_ANSWER_PACKET.spec._review,
+    attention_reason: [
+      DIRECT_ANSWER_PACKET.spec._review.attention_reason,
+      `"${thirdQuestion.question}" is required and is still empty`,
+    ].join("\n"),
+    questions: [...DIRECT_ANSWER_PACKET.spec._review.questions, thirdQuestion],
+  };
+  const threeQuestionPacket = {
+    ...DIRECT_ANSWER_PACKET,
+    id: "fixture-packet-direct-answer-three",
+    spec: { ...DIRECT_ANSWER_PACKET.spec, _review: threeQuestionReview },
+  };
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [threeQuestionPacket],
+    submissionFixtures: {
+      [threeQuestionPacket.id]: {
+        application_id: threeQuestionPacket.id,
+        review: threeQuestionReview,
+        cover_letter: null,
+      },
+    },
+  });
+  const firstQuestion = "Where will you be based during this internship?";
+  const secondQuestion = "Are you willing to relocate for this role?";
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${threeQuestionPacket.id}"]:visible`).click();
+
+    await page.getByRole("textbox", { name: firstQuestion, exact: true }).fill("Dubai, United Arab Emirates");
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
+    const secondHeading = page.getByRole("heading", { name: secondQuestion, exact: true });
+    await secondHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await page.getByRole("radio", { name: "Yes", exact: true }).check();
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
+    const thirdHeading = page.getByRole("heading", { name: thirdQuestion.question, exact: true });
+    await thirdHeading.waitFor({ state: "visible", timeout: 10_000 });
+
+    const previous = page.getByRole("button", { name: "Previous question", exact: true });
+    await previous.click();
+    await secondHeading.waitFor({ state: "visible", timeout: 10_000 });
+    await previous.click();
+    const firstAnswer = page.getByRole("textbox", { name: firstQuestion, exact: true });
+    await firstAnswer.waitFor({ state: "visible", timeout: 10_000 });
+    await firstAnswer.fill("Abu Dhabi, United Arab Emirates");
+    await page.getByRole("button", { name: "Save changes and next", exact: true }).click();
+
+    await secondHeading.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await thirdHeading.count(), 0, "the saved Q1 edit skipped the already-saved Q2 for the unresolved Q3");
+    assert.equal(await page.getByRole("radio", { name: "Yes", exact: true }).isChecked(), true, "the adjacent saved question lost its answer");
+    assert.equal(state.reviewAnswerWrites.length, 3, "the three-question navigation made an extra write");
+    assert.equal(state.applicationMutationRequests.length, 3, "the three-question navigation used a non-answer mutation");
+    assertNoPageErrors(state, "Three-question direct answer order");
+  } finally {
+    await context.close();
+  }
+});
+
+test("A newer employer field outranks a raced edit to a revisited saved question", async () => {
+  const { context, page, state } = await newDashboardPage({
+    viewport: { width: 1280, height: 900 },
+    resumeHistoryFixture: [DIRECT_ANSWER_PACKET],
+    submissionFixtures: { [DIRECT_ANSWER_PACKET.id]: DIRECT_ANSWER_SUBMISSION },
+  });
+  const originalQuestion = "Where will you be based during this internship?";
+  const nextQuestion = "Are you willing to relocate for this role?";
+  const replacementQuestion = "Which office should Litos use for this application?";
+  const firstSavedAnswer = "Dubai, United Arab Emirates";
+  const racedDraft = "Abu Dhabi, United Arab Emirates";
+  try {
+    await page.goto(`${ORIGIN}/dashboard/applications`, { waitUntil: "domcontentloaded" });
+    await page.locator(`button[data-application-row-id="${DIRECT_ANSWER_PACKET.id}"]:visible`).click();
+
+    const originalAnswer = page.getByRole("textbox", { name: originalQuestion, exact: true });
+    await originalAnswer.waitFor({ state: "visible", timeout: 10_000 });
+    await originalAnswer.fill(firstSavedAnswer);
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
+    const nextHeading = page.getByRole("heading", { name: nextQuestion, exact: true });
+    await nextHeading.waitFor({ state: "visible", timeout: 10_000 });
+
+    await page.getByRole("button", { name: "Previous question", exact: true }).click();
+    await page.getByRole("heading", { name: originalQuestion, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await originalAnswer.inputValue(), firstSavedAnswer, "the test did not revisit the saved answer");
+    await originalAnswer.fill(racedDraft);
+
+    const acceptedOldReview = {
+      ...DIRECT_ANSWER_PACKET.spec._review,
+      questions: DIRECT_ANSWER_PACKET.spec._review.questions.map((question) => question.id === "direct-location"
+        ? { ...question, answer: racedDraft }
+        : question),
+      updated_at: "2026-08-24T12:08:00.000Z",
+    };
+    const newerReview = {
+      ...DIRECT_ANSWER_PACKET.spec._review,
+      attention_reason: [
+        `"${replacementQuestion}" is required and is still empty`,
+        `"${nextQuestion}" is required and is still empty`,
+      ].join("\n"),
+      questions: DIRECT_ANSWER_PACKET.spec._review.questions.map((question) => question.id === "direct-location"
+        ? {
+          ...question,
+          question: replacementQuestion,
+          answer: "",
+          portal_input_type: "select-one",
+          portal_selector: "#office_location",
+          options: ["Dubai", "London"],
+        }
+        : question),
+      updated_at: "2026-08-24T12:08:00.000Z",
+    };
+    const saveGate = state.holdNextReviewAnswer({ responseReview: acceptedOldReview, persistResponse: false });
+    await page.getByRole("button", { name: "Save changes and next", exact: true }).click();
+    await saveGate.started;
+
+    const newerSubmission = { ...DIRECT_ANSWER_SUBMISSION, review: newerReview };
+    state.setSubmissionFixture(DIRECT_ANSWER_PACKET.id, newerSubmission);
+    const pollGate = state.holdNextSubmissionRead(DIRECT_ANSWER_PACKET.id, newerSubmission);
+    await pollGate.started;
+    pollGate.release();
+    await pollGate.settled;
+
+    const replacementHeading = page.getByRole("heading", { name: replacementQuestion, exact: true });
+    await replacementHeading.waitFor({ state: "visible", timeout: 10_000 });
+    assert.equal(await page.getByRole("radio", { name: "Dubai", exact: true }).count(), 1, "the newer employer options did not publish while the old save was held");
+    assert.equal(await page.getByRole("radio", { name: "London", exact: true }).count(), 1, "the newer employer options did not publish while the old save was held");
+
+    saveGate.release();
+    await saveGate.settled;
+
+    const recovery = page.getByRole("alert").filter({ hasText: "This employer field changed before your answer was saved." });
+    await recovery.waitFor({ state: "visible", timeout: 10_000 });
+    assert.match(await recovery.innerText(), new RegExp(racedDraft), "the raced saved-question edit lost its draft");
+    assert.equal(await replacementHeading.count(), 1, "the stale save response replaced the newer employer prompt");
+    assert.equal(await page.getByRole("heading", { name: originalQuestion, exact: true }).count(), 0, "the stale prompt returned after its save resolved");
+    assert.equal(await nextHeading.count(), 0, "the stale saved-question edit advanced past the newer employer field");
+    assert.equal(await page.getByRole("button", { name: "Review application", exact: true }).count(), 0, "the stale save response completed the newer question flow");
+    assert.equal(await page.locator('main section[aria-labelledby^="direct-application-question-"]').count(), 1, "the runtime race rendered more than one direct question");
+    assert.equal(state.reviewAnswerWrites.length, 2, "the runtime race issued an unexpected answer write");
+    assert.deepEqual(state.applicationMutationRequests, [{
+      method: "PUT",
+      pathname: `/applications/${DIRECT_ANSWER_PACKET.id}/review/answers`,
+    }, {
+      method: "PUT",
+      pathname: `/applications/${DIRECT_ANSWER_PACKET.id}/review/answers`,
+    }], "the runtime race issued a submit or approval mutation");
+    assertNoPageErrors(state, "Revisited saved-question authority race");
   } finally {
     await context.close();
   }
@@ -2554,7 +3096,7 @@ test("A raced direct answer keeps the draft and current prompt", async () => {
     await answer.waitFor({ state: "visible", timeout: 10_000 });
     await answer.fill(unsavedAnswer);
     const gate = state.holdNextReviewAnswer({ status: 202 });
-    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
     await gate.started;
     assert.equal(await page.getByRole("heading", { name: closedQuestion, exact: true }).count(), 0, "the raced request advanced while it was pending");
 
@@ -2574,7 +3116,7 @@ test("A raced direct answer keeps the draft and current prompt", async () => {
     assert.equal(await page.getByRole("heading", { name: openQuestion, exact: true }).count(), 1, "the 202 response removed the current prompt");
     assert.equal(await page.getByRole("heading", { name: closedQuestion, exact: true }).count(), 0, "the 202 response advanced to the next prompt");
     assert.equal(await page.getByText("Saved to this application.", { exact: true }).count(), 0, "the 202 response claimed a save");
-    assert.equal(await page.getByRole("button", { name: "Save to application", exact: true }).isEnabled(), true, "the raced answer could not be retried");
+    assert.equal(await page.getByRole("button", { name: "Save and next", exact: true }).isEnabled(), true, "the raced answer could not be retried");
     assert.equal(state.reviewAnswerWrites.length, 1);
     assert.deepEqual(state.applicationMutationRequests, [{
       method: "PUT",
@@ -2612,7 +3154,7 @@ test("A raced review preserves the same prompt draft and exposes a changed promp
       updated_at: "2026-08-24T12:05:00.000Z",
     };
     const samePromptGate = state.holdNextReviewAnswer({ status: 202, responseReview: samePromptReview });
-    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
     await samePromptGate.started;
     samePromptGate.release();
     await samePromptGate.settled;
@@ -2631,7 +3173,7 @@ test("A raced review preserves the same prompt draft and exposes a changed promp
       updated_at: "2026-08-24T12:06:00.000Z",
     };
     const changedPromptGate = state.holdNextReviewAnswer({ status: 202, responseReview: changedPromptReview });
-    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
     await changedPromptGate.started;
     changedPromptGate.release();
     await changedPromptGate.settled;
@@ -2642,6 +3184,18 @@ test("A raced review preserves the same prompt draft and exposes a changed promp
     await page.getByRole("heading", { name: changedQuestion, exact: true }).waitFor({ state: "visible" });
     assert.equal(await page.getByRole("heading", { name: originalQuestion, exact: true }).count(), 0, "the outdated employer prompt remained visible");
     assert.equal(state.reviewAnswerWrites.length, 2, "the prompt-race fixture did not exercise both refused writes");
+
+    const replacementAnswer = "Sharjah, United Arab Emirates";
+    await page.getByRole("textbox", { name: changedQuestion, exact: true }).fill(replacementAnswer);
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
+    await page.getByRole("heading", { name: "Are you willing to relocate for this role?", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await recovery.waitFor({ state: "detached", timeout: 10_000 });
+    assert.equal(state.reviewAnswerWrites.length, 3, "saving the replacement prompt issued anything other than one PUT");
+    assert.equal(
+      state.reviewAnswerWrites[2].body.questions.find((question) => question.id === "direct-location")?.answer,
+      replacementAnswer,
+      "the accepted replacement answer did not reach the changed employer field",
+    );
     assertNoPageErrors(state, "Changed direct answer prompt recovery");
   } finally {
     await context.close();
@@ -2667,7 +3221,7 @@ test("An accepted answer cannot move a different selected application", async ()
     await answer.waitFor({ state: "visible", timeout: 10_000 });
     await answer.fill("Dubai, United Arab Emirates");
     const gate = state.holdNextReviewAnswer();
-    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
     await gate.started;
 
     await page.getByRole("button", { name: "Switch applications", exact: true }).click();
@@ -2741,7 +3295,7 @@ test("A newer application poll outranks an older accepted answer response", asyn
       updated_at: "2026-08-24T12:02:00.000Z",
     };
     const gate = state.holdNextReviewAnswer({ responseReview: acceptedReview, persistResponse: false });
-    await page.getByRole("button", { name: "Save to application", exact: true }).click();
+    await page.getByRole("button", { name: "Save and next", exact: true }).click();
     await gate.started;
 
     const newerSubmission = {
