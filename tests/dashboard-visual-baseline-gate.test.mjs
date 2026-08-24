@@ -20,7 +20,7 @@ test("visual baseline approval runs only after a successful browser process", ()
   );
   assert.match(browserSource, /if \(CAPTURE_VISUAL_BASELINES\) return;/);
   assert.doesNotMatch(browserSource, /if \(CAPTURE_VISUAL_BASELINES\)[\s\S]{0,300}(?:writeFile|toFile)/);
-  assert.match(updaterSource, /screenshotNames\.length >= 68/);
+  assert.match(updaterSource, /screenshotNames\.length >= 70/);
 });
 
 test("visual comparison catches both broad drift and a localized missing control", () => {

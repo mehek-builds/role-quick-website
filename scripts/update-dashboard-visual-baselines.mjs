@@ -13,7 +13,7 @@ const screenshotNames = (await readdir(artifactDir))
   .sort();
 
 assert.ok(
-  screenshotNames.length >= 68,
+  screenshotNames.length >= 70,
   `refusing to approve an incomplete visual run with only ${screenshotNames.length} screenshots`,
 );
 

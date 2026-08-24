@@ -5843,8 +5843,14 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
   return (
     <div className={`mx-auto grid gap-5 ${needsAttention && !awaitingUnverifiedSubmission ? "max-w-3xl" : "max-w-5xl lg:grid-cols-[1fr_1.15fr]"}`}>
       {awaitingUnverifiedSubmission && filledFormEvidence}
-      <Card className={`p-7 ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
-        <h2 className="text-heading font-medium text-ink">{awaitingSecurityCode ? "One code away" : awaitingUnverifiedSubmission ? "Waiting on you to look" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
+      <Card className={`${needsAttention && !awaitingUnverifiedSubmission ? "p-5 sm:p-7" : "p-7"} ${awaitingUnverifiedSubmission ? "lg:order-1" : ""}`}>
+        {needsAttention && !awaitingUnverifiedSubmission && (
+          <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Action required</p>
+        )}
+        <h2 className={`${needsAttention && !awaitingUnverifiedSubmission ? "mt-2" : ""} text-heading font-medium text-ink`}>{awaitingSecurityCode ? "One code away" : awaitingUnverifiedSubmission ? "Waiting on you to look" : needsAttention ? "Needs your input" : review.status === "failed" ? "Stopped" : "Review"}</h2>
+        {needsAttention && !awaitingUnverifiedSubmission && (
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Litos paused this application. Complete what is listed below, then return here to keep going.</p>
+        )}
         {/* The backend joins blockers with newlines, but they were rendered into a single <p>, where
             HTML collapses the breaks. Four separate blockers arrived as one run-on sentence, which
             is how "CAPTCHA requires your attention ... is required required field is required ..."
@@ -5905,15 +5911,35 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
           </div>
         )}
         {completedItems.length > 0 && (
-          <div className="mt-6">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-medium text-positive">Done</p>
-              <p className="font-mono text-[11px] text-positive">Complete</p>
+          needsAttention && !awaitingUnverifiedSubmission ? (
+            <details className="group mt-5 border-t border-border pt-3">
+              <summary className="-mx-2 flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 rounded-inner px-2 text-sm text-ink [&::-webkit-details-marker]:hidden">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-positive-soft text-positive">
+                    <svg viewBox="0 0 16 16" className="h-3 w-3">
+                      <path d="M4 8.5l2.5 2.5L12 5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </span>
+                  <span className="font-medium">{completedItems.length} {completedItems.length === 1 ? "check" : "checks"} already complete</span>
+                </span>
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted group-open:hidden">Show</span>
+                <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-[0.08em] text-muted group-open:inline">Hide</span>
+              </summary>
+              <ul className="mt-2 grid gap-2 border-l border-border pl-7 sm:grid-cols-2">
+                {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
+              </ul>
+            </details>
+          ) : (
+            <div className="mt-6">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-medium text-positive">Done</p>
+                <p className="font-mono text-[11px] text-positive">Complete</p>
+              </div>
+              <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+                {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
+              </ul>
             </div>
-            <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-              {completedItems.slice(0, 12).map((item) => <ChecklistRow key={item.id} item={item} checked />)}
-            </ul>
-          </div>
+          )
         )}
         {submission.cover_letter && review.cover_letter_supported !== false && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
@@ -6244,12 +6270,12 @@ function CenteredState({ title, body, loading = false }: { title: string; body?:
   return <Card className="mx-auto max-w-2xl p-12 text-center">{loading ? <div className="mx-auto flex h-16 w-16 items-center justify-center"><ThinkingOrb state="searching" size={64} /></div> : <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-positive-soft text-positive"><svg viewBox="0 0 16 16" className="h-5 w-5" aria-hidden="true"><path d="M4 8.5l3 3 5-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg></div>}<h2 className="mt-5 text-xl font-medium text-ink">{title}</h2>{body && <p className="mx-auto mt-2 max-w-lg text-sm leading-6 text-muted">{body}</p>}</Card>;
 }
 
-const CHECKLIST_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center rounded-full bg-action px-3.5 font-mono text-[10px] uppercase tracking-[0.08em] text-action-ink transition-colors hover:bg-brand-ink";
+const CHECKLIST_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center rounded-full border border-control-border bg-surface px-3.5 text-sm font-medium text-ink transition-colors hover:border-ink hover:bg-surface-alt";
 /* The same control on a row that is not asking for anything. Outlined rather than filled, because
    DESIGN.md's colour law is that weight says what a control IS and not how hard to press it, and a
    filled pill on a confirmation row puts the loudest thing on the panel next to the one item that
    needs nothing doing. Same 44px floor, same target, quieter voice. */
-const CHECKLIST_SETTLED_ACTION_CLASS = "mt-1 flex min-h-11 w-fit items-center rounded-full border border-control-border bg-surface px-3.5 font-mono text-[10px] uppercase tracking-[0.08em] text-muted transition-colors hover:border-ink hover:text-ink";
+const CHECKLIST_SETTLED_ACTION_CLASS = "inline-flex min-h-11 w-fit items-center rounded-full border border-control-border bg-surface-alt px-3.5 text-sm font-medium text-muted transition-colors hover:border-ink hover:text-ink";
 
 /* The action pill was a <span>. Not a disabled button, not a button with a missing handler: a span
    with button styling, sitting under a row that says an application is
@@ -6298,7 +6324,7 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
      of shouting in amber beside the work that is genuinely outstanding. */
   const done = checked || item.settled === true;
   return (
-    <li className="grid grid-cols-[18px_1fr] gap-2 text-sm leading-5 text-muted">
+    <li className="grid grid-cols-[18px_minmax(0,1fr)] gap-x-3 text-sm leading-5 text-muted sm:grid-cols-[18px_minmax(0,1fr)_auto]">
       {toggleTick ? (
         /* One input for both directions. `checked` comes from the STORED item, never from local
            state, so the box shows what is actually on the row - the exact opposite of the dead
@@ -6327,14 +6353,13 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
           </svg>
         </span>
       ) : (
-        /* Not a checkbox. This row's "done" is measured by the product - the answer landing, the
-           file attaching - so the only honest mark here is a placeholder that keeps the column
-           aligned. The row's own control, below, is the way to act on it. */
-        <span aria-hidden className="mt-0.5 h-[14px] w-[14px] rounded-[3px] border border-warn/40 bg-surface" />
+        /* Not a checkbox. This row's "done" is measured by the product, so the honest marker is a
+           status dot. The row's own control is the way to act on it. */
+        <span aria-hidden className="ml-1 mt-1.5 h-2 w-2 rounded-full bg-warn" />
       )}
-      <span className="block min-w-0">
+      <span className="block min-w-0 sm:col-start-2">
         <span className="block min-w-0 break-words">
-          <span className={done ? "text-ink" : "text-warn"}>{item.label}</span>
+          <span className="text-ink">{item.label}</span>
           {/* The state word rides beside the label rather than inside the sentence, so the row still
               reads as a sentence about the employer and the pill stays scannable down a column. */}
           {!done && item.badge && <span className="ml-2 align-middle"><Chip label={item.badge} kind="warn" /></span>}
@@ -6361,36 +6386,40 @@ function ChecklistRow({ item, checked, portalUrl, onRestartInLitos, onOpenQuesti
             <span className="block text-[11px] leading-4 text-muted">Pick one to open it in the editor, then save.</span>
           </span>
         )}
-        {control?.element === "link" && (
-          /* The same done switch the button branches carry, needed here since acknowledged rows
-             made open-page the first link that can appear settled: a filled pill inside the quiet
-             settled strip would be the loudest thing on the panel beside the one row that needs
-             nothing doing. */
-          <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
-            {control.label}
-          </a>
-        )}
-        {control?.element === "button" && onOpenQuestion && (
-          <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId, control.intent)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
-            {control.label}
-          </button>
-        )}
-        {control?.element === "restart" && onRestartInLitos && (
-          <button type="button" aria-label={control.name} onClick={onRestartInLitos} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
-            {control.label}
-          </button>
-        )}
-        {/* AFTER the question branch, deliberately. tests/your-turn-actions.test.mjs pins the FIRST
-            <button> in this component as the one bound to onOpenQuestion, because that is the pill
-            that shipped as a styled <span> with nothing behind it. Adding a second interactive
-            branch above it would move the pin onto a control the test is not about, and the
-            regression it guards would be free to come back unnoticed. */}
-        {control?.element === "attach" && onAddDocument && (
-          <button type="button" aria-label={control.name} onClick={() => onAddDocument(control.kind)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
-            {control.label}
-          </button>
-        )}
       </span>
+      {control && (
+        <span className="col-start-2 mt-2 flex min-w-0 flex-wrap items-center gap-2 sm:col-start-3 sm:row-start-1 sm:mt-0 sm:justify-self-end sm:self-center">
+          {control?.element === "link" && (
+            /* The same done switch the button branches carry, needed here since acknowledged rows
+               made open-page the first link that can appear settled: a filled pill inside the quiet
+               settled strip would be the loudest thing on the panel beside the one row that needs
+               nothing doing. */
+            <a href={control.href} target="_blank" rel="noreferrer" aria-label={control.name} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
+              {control.label}
+            </a>
+          )}
+          {control?.element === "button" && onOpenQuestion && (
+            <button type="button" aria-label={control.name} onClick={() => onOpenQuestion(control.questionId, control.intent)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
+              {control.label}
+            </button>
+          )}
+          {control?.element === "restart" && onRestartInLitos && (
+            <button type="button" aria-label={control.name} onClick={onRestartInLitos} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
+              {control.label}
+            </button>
+          )}
+          {/* AFTER the question branch, deliberately. tests/your-turn-actions.test.mjs pins the FIRST
+              <button> in this component as the one bound to onOpenQuestion, because that is the pill
+              that shipped as a styled <span> with nothing behind it. Adding a second interactive
+              branch above it would move the pin onto a control the test is not about, and the
+              regression it guards would be free to come back unnoticed. */}
+          {control?.element === "attach" && onAddDocument && (
+            <button type="button" aria-label={control.name} onClick={() => onAddDocument(control.kind)} className={done ? CHECKLIST_SETTLED_ACTION_CLASS : CHECKLIST_ACTION_CLASS}>
+              {control.label}
+            </button>
+          )}
+        </span>
+      )}
     </li>
   );
 }
@@ -6412,12 +6441,12 @@ function BlockerList({ items, portalUrl, onRestartInLitos, onOpenQuestion, onCho
       {outstanding.length === 0 ? (
         <p className="mt-2 text-sm leading-6 text-muted">Open the company page.</p>
       ) : (
-        <div className="mt-4 rounded-inner border border-warn/45 bg-warn-soft px-4 py-3 shadow-rest">
+        <div className="mt-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-warn">Your turn</p>
-            <p className="font-mono text-[11px] text-warn">{outstanding.length} to check</p>
+            <p className="font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-muted">{outstanding.length === 1 ? "Your next step" : "Your next steps"}</p>
+            <p aria-live="polite" className="font-mono text-[11px] text-warn">{outstanding.length} remaining</p>
           </div>
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-2 divide-y divide-border border-y border-border [&>li]:py-4">
           {outstanding.map((item) => (
             <ChecklistRow key={item.id} item={item} checked={false} portalUrl={portalUrl} onRestartInLitos={onRestartInLitos} onOpenQuestion={onOpenQuestion} onChooseOption={onChooseOption} onAddDocument={onAddDocument} onToggleAcknowledged={onToggleAcknowledged} tickingIds={tickingIds} />
           ))}

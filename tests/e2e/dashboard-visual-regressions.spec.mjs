@@ -998,7 +998,7 @@ async function verifyVisualBaselines() {
   const screenshotNames = (await readdir(ARTIFACT_DIR))
     .filter((name) => name.endsWith(".png"))
     .sort();
-  assert.ok(screenshotNames.length >= 68, `visual evidence is incomplete: only ${screenshotNames.length} screenshots were captured`);
+  assert.ok(screenshotNames.length >= 70, `visual evidence is incomplete: only ${screenshotNames.length} screenshots were captured`);
 
   // Capture mode deliberately never writes approved evidence. The package update command runs a
   // separate writer only after this entire browser process exits successfully.
@@ -2169,6 +2169,43 @@ test("Applications is readable at 320px and suppresses the landing action during
     await capturePass(page, "applications-320-task");
     await assertContained(page, "Applications task at 320px");
     assertNoPageErrors(state, "Applications");
+  } finally {
+    await context.close();
+  }
+});
+
+test("Needs your input keeps unfinished tasks prominent across desktop and mobile", async () => {
+  const { context, page, state } = await newDashboardPage({ viewport: { width: 1280, height: 900 } });
+  try {
+    await page.goto(`${QA_ORIGIN}/dashboard/applications?qa=anduril`, { waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: "Needs your input", exact: true }).waitFor({ state: "visible" });
+    await page.getByText("Action required", { exact: true }).waitFor({ state: "visible" });
+    await page.getByText("5 remaining", { exact: true }).waitFor({ state: "visible" });
+    const completed = page.getByText(/checks already complete/, { exact: true });
+    await completed.waitFor({ state: "visible" });
+    assert.equal(await completed.locator("xpath=ancestor::details[1]").getAttribute("open"), null);
+    await finishDashboardAnimations(page);
+    await capturePass(page, "applications-needs-input-desktop");
+    await assertContained(page, "Applications needs-input queue on desktop");
+
+    await resizeForCapture(page, 390, 844);
+    const firstAction = page.getByRole("button", { name: /^Answer:/ }).first();
+    await firstAction.waitFor({ state: "visible" });
+    const mobileGeometry = await firstAction.evaluate((button) => {
+      const row = button.closest("li");
+      const copy = row?.children[1];
+      if (!(row instanceof HTMLElement) || !(copy instanceof HTMLElement)) return null;
+      return {
+        row: row.getBoundingClientRect().toJSON(),
+        copy: copy.getBoundingClientRect().toJSON(),
+        action: button.getBoundingClientRect().toJSON(),
+      };
+    });
+    assert.ok(mobileGeometry, "the first needs-input row could not be measured");
+    assert.ok(mobileGeometry.action.top >= mobileGeometry.copy.bottom + 6, `mobile task action did not follow its copy: ${JSON.stringify(mobileGeometry)}`);
+    await capturePass(page, "applications-needs-input-mobile");
+    await assertContained(page, "Applications needs-input queue on mobile");
+    assertNoPageErrors(state, "Applications needs-input queue");
   } finally {
     await context.close();
   }

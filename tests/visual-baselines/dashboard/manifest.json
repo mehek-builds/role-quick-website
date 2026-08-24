@@ -51,6 +51,14 @@
     "width": 1280,
     "height": 900
   },
+  "applications-needs-input-desktop.png": {
+    "width": 1280,
+    "height": 900
+  },
+  "applications-needs-input-mobile.png": {
+    "width": 390,
+    "height": 844
+  },
   "applications-packet-switch-atomic.png": {
     "width": 1280,
     "height": 900
