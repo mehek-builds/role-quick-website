@@ -26,6 +26,23 @@ export function getToken(): string | null {
   return window.localStorage.getItem(TOKEN_KEY);
 }
 
+/* One shared source for every "no valid session, go to /login" redirect, so a
+ * typo in one call site can't silently desync it from the branch on /login
+ * that reads it back. Two distinct reasons on purpose: SESSION_EXPIRED is only
+ * for a token that existed and was rejected by the server (a real expiry);
+ * SIGNIN_REQUIRED is for routes gated on token presence alone, which can't
+ * tell a lapsed session apart from someone who was never signed in, so its
+ * copy must stay true either way. */
+export const LOGIN_REDIRECT_REASON = {
+  SESSION_EXPIRED: "session-expired",
+  SIGNIN_REQUIRED: "signin-required",
+} as const;
+export type LoginRedirectReason = (typeof LOGIN_REDIRECT_REASON)[keyof typeof LOGIN_REDIRECT_REASON];
+
+export function loginRedirectPath(reason: LoginRedirectReason): string {
+  return `/login?reason=${reason}`;
+}
+
 export function getStoredEmail(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(EMAIL_KEY);
@@ -149,7 +166,10 @@ async function requestApi<T>(
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (res.status === 401) {
     clearSession();
-    if (typeof window !== "undefined") window.location.href = "/login";
+    // A token was sent and rejected: a real expiry. No token at all: this
+    // call ran without ever having one, so "expired" would be a false claim.
+    const reason = token ? LOGIN_REDIRECT_REASON.SESSION_EXPIRED : LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED;
+    if (typeof window !== "undefined") window.location.href = loginRedirectPath(reason);
     throw new ApiError(401, "Signed out");
   }
   let data: unknown = null;

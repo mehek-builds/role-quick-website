@@ -1,7 +1,15 @@
 "use client";
 
 import { API_URL } from "./config";
-import { getToken, clearSession, ApiError, type ResumeSpec, type ResumeEntry } from "./api";
+import {
+  getToken,
+  clearSession,
+  ApiError,
+  LOGIN_REDIRECT_REASON,
+  loginRedirectPath,
+  type ResumeSpec,
+  type ResumeEntry,
+} from "./api";
 import { litosClientHeaders } from "./product";
 import {
   BASE_RESUME_BUILD_DEADLINE_MS,
@@ -81,7 +89,8 @@ export async function getBaseResume(): Promise<StoredBaseResume | null> {
   if (res.status === 404) return null;
   if (res.status === 401) {
     clearSession();
-    if (typeof window !== "undefined") window.location.href = "/login";
+    const reason = token ? LOGIN_REDIRECT_REASON.SESSION_EXPIRED : LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED;
+    if (typeof window !== "undefined") window.location.href = loginRedirectPath(reason);
     throw new ApiError(401, "Signed out");
   }
   if (!res.ok) throw new ApiError(res.status, `Could not load your main resume (${res.status})`);
@@ -128,7 +137,8 @@ export async function buildBaseResume(
 
     if (res.status === 401) {
       clearSession();
-      if (typeof window !== "undefined") window.location.href = "/login";
+      const reason = token ? LOGIN_REDIRECT_REASON.SESSION_EXPIRED : LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED;
+      if (typeof window !== "undefined") window.location.href = loginRedirectPath(reason);
       throw new ApiError(401, "Signed out");
     }
     if (!res.ok || !res.body) {
