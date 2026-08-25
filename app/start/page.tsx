@@ -30,7 +30,9 @@ import {
   acknowledgeOnboardingFlowStep,
   completeOnboarding,
   completeOnboardingFlow,
+  createGuestSession,
   getApplicationProfile,
+  getJob,
   getOnboardingState,
   getStoredEmail,
   getToken,
@@ -56,7 +58,7 @@ import { ReviewStep } from "@/components/start/ReviewStep";
 import { TrialStep } from "@/components/start/TrialStep";
 import { NotificationsStep } from "@/components/start/NotificationsStep";
 import { PlanStep } from "@/components/start/PlanStep";
-import type { OnboardingMatch } from "@/lib/onboarding-match";
+import { freshnessOf, hoursSinceSeen, type OnboardingMatch } from "@/lib/onboarding-match";
 import type { BuildResult } from "@/lib/onboarding-build";
 
 /* Whether this account's flow is one the acknowledgement ledger exists for.
@@ -262,6 +264,27 @@ export default function Start() {
       }
     }
     if (!getToken()) {
+      /* JOB-FIRST ENTRY: a /browse-jobs tile links straight here as `/start?job=<id>` rather than
+         through /login, because the whole point of that click is speed to the tailored resume for
+         THAT posting. window.location.search rather than useSearchParams for the same reason the
+         QA bypass above reads it that way: this runs once, inside an effect, and a search-params
+         hook would require wrapping the page in a Suspense boundary for one param read here.
+         Anyone without a `job` param falls through to the ordinary redirect unchanged. */
+      const jobId = new URLSearchParams(window.location.search).get("job");
+      if (jobId) {
+        void createGuestSession(jobId).then((result) => {
+          if (!result.ok) {
+            setError(result.error);
+            return;
+          }
+          // Clears the id from the URL so a later reload of this same tab (bookmarked, or the
+          // back button) does not re-read it - the account already carries the pin server-side
+          // now, in pinned_onboarding_job_id, which is the durable copy.
+          window.history.replaceState(null, "", "/start");
+          void refresh();
+        });
+        return;
+      }
       router.replace(loginRedirectPath(LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED));
       return;
     }
@@ -283,6 +306,51 @@ export default function Start() {
     })();
   }, [loadProfile, router, refresh]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Set only when loading the PINNED job (job-first entry) fails. Kept apart from the general
+  // `error` state above because that one has its own top-level "no state yet" rendering path,
+  // and this failure is local to one step and needs its own retry rather than a full-page one.
+  const [pinnedJobError, setPinnedJobError] = useState<string | null>(null);
+  // Bumped by the retry button below. In the effect's own dependency array so "try again" actually
+  // re-runs the fetch rather than just clearing the message a failed one already left behind.
+  const [pinnedJobRetryKey, setPinnedJobRetryKey] = useState(0);
+  /* THE JOB-FIRST SHORTCUT PAST THE MATCH SCREEN'S OWN ALGORITHM.
+   *
+   * An ordinary account reaches 'match' and MatchStep fetches a ranked posting itself. A
+   * job-first account already told Litos which posting it wants, by clicking it on
+   * /browse-jobs, so re-running the algorithm here would silently substitute a different job for
+   * the one the student came for. This effect fetches THAT job directly and hands it to
+   * BuildStep the same way MatchStep's own "yes, build this" would, skipping MatchStep's screen
+   * entirely rather than rendering it and immediately auto-advancing - a screen that flashes and
+   * vanishes is not a lower-friction version of not showing it.
+   *
+   * A top-level effect rather than logic inside renderStep(), because renderStep is a plain
+   * function invoked during render, not a component, and hooks cannot live inside it. */
+  useEffect(() => {
+    if (!state || state.step !== "match" || chosenMatch || !state.pinned_target_job_id) return;
+    let cancelled = false;
+    // Cleared by the retry button itself (a real event handler, not this effect body) before it
+    // bumps pinnedJobRetryKey - not here, where a synchronous setState would trigger a cascading
+    // render lint error for no benefit: chosenMatch staying null is what keeps this effect (and
+    // the error screen) live in the first place.
+    getJob(state.pinned_target_job_id)
+      .then((job) => {
+        if (cancelled) return;
+        setChosenMatch({
+          job,
+          freshness: freshnessOf(job),
+          hoursSinceSeen: hoursSinceSeen(job.first_seen_at),
+          widened: false,
+        });
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setPinnedJobError(reason instanceof Error ? reason.message : "Could not load that job.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [state, chosenMatch, pinnedJobRetryKey]);
 
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)
@@ -589,6 +657,33 @@ export default function Start() {
          acknowledged once, when the build lands and the student moves on. */
       case "match":
         if (!chosenMatch) {
+          if (state.pinned_target_job_id) {
+            return (
+              <div className="mx-auto max-w-2xl px-6 py-16">
+                <StepRail current="match" />
+                {pinnedJobError ? (
+                  <div className="mt-10">
+                    <ErrorNote message={pinnedJobError} />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPinnedJobError(null);
+                        setPinnedJobRetryKey((n) => n + 1);
+                      }}
+                      className="mt-4 min-h-11 text-sm text-brand-ink underline underline-offset-4"
+                    >
+                      Try loading again
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rq-shimmer mt-10 h-9 w-2/3 rounded-full" />
+                    <div className="rq-shimmer mt-6 h-32 rounded-inner" />
+                  </>
+                )}
+              </div>
+            );
+          }
           return <MatchStep onLater={later} onBuild={setChosenMatch} />;
         }
         return (

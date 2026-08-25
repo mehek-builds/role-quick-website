@@ -1,7 +1,7 @@
 "use client";
 
 import { API_URL } from "./config";
-import { identifyUser, resetAnalytics } from "./analytics";
+import { identifyUser, resetAnalytics, track } from "./analytics";
 import { SESSION_TOKEN_KEY, userIdFromToken } from "./session-identity";
 import { litosClientHeaders, type ProductMeta } from "./product";
 import { requestShareKey, shareInFlight } from "./in-flight";
@@ -123,6 +123,39 @@ export function clearSession() {
      recovery flow, and a sign-out that leaves the extension applying as the previous account is
      exactly the failure this pairing has to not introduce. */
   clearExtensionSession();
+}
+
+/** No email, no password, one request. Opens (or resumes) a guest session and calls setSession,
+ *  the same way every other auth method does - this is the ONE call site for POST /auth/guest,
+ *  shared by the login screen's own Guest mode button and /start's job-first entry, so the two
+ *  can never drift apart on what the response means or what a failure looks like.
+ *
+ *  `targetJobId`, when given, is passed straight through and pinned server-side on a NEW guest
+ *  (see OnboardingState.pinned_target_job_id and MatchStep). It has no effect on a RETURNING
+ *  guest: the backend only reads it at creation, so a job clicked after the session already
+ *  exists cannot retroactively become the account's one free build. */
+export async function createGuestSession(
+  targetJobId?: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API_URL}/auth/guest`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...litosClientHeaders() },
+      body: JSON.stringify({
+        idempotency_key: getOrCreateGuestKey(),
+        ...(targetJobId ? { target_job_id: targetJobId } : {}),
+      }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.token) {
+      return { ok: false, error: data?.error ?? "We could not open the guest view." };
+    }
+    setSession(data.token, null, true, true);
+    track("authentication_completed", { method: "guest" });
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "We could not open the guest view." };
+  }
 }
 
 export class ApiError extends Error {
@@ -1201,6 +1234,11 @@ export type OnboardingState = {
   requires_payment_method?: boolean;
   completed_at: string | null;
   has_focus: boolean;
+  /** The posting this account is entitled to spend its one free build on, set at guest creation
+   *  from a /browse-jobs click. Only meaningful while the match step is still ahead - see
+   *  MatchStep, which skips its own ranked-board fetch and builds against this id directly when
+   *  it is present. Null for every account that arrived through the front door. */
+  pinned_target_job_id?: string | null;
   /** Whether the one-time visa-sponsorship question has been answered. Absent on older backends. */
   has_sponsorship_answer?: boolean;
   sponsorship_answer?: SponsorshipAnswer | null;

@@ -11,7 +11,7 @@ import {
   clearSession,
   getToken,
   getOnboardingState,
-  getOrCreateGuestKey,
+  createGuestSession,
   hasLitosHistory,
   LOGIN_REDIRECT_REASON,
 } from "@/lib/api";
@@ -344,21 +344,12 @@ export default function Login() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`${API_URL}/auth/guest`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...litosClientHeaders() },
-        body: JSON.stringify({ idempotency_key: getOrCreateGuestKey() }),
-      });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data?.token) {
-        setError(data?.error ?? "We could not open the guest view.");
+      const result = await createGuestSession();
+      if (!result.ok) {
+        setError(result.error);
         return;
       }
-      setSession(data.token, null, true, true);
-      track("authentication_completed", { method: "guest" });
       router.replace("/start");
-    } catch {
-      setError("Something went wrong. Check your internet and try again.");
     } finally {
       setBusy(false);
     }
