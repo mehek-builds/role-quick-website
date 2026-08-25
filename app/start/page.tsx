@@ -34,6 +34,8 @@ import {
   getOnboardingState,
   getStoredEmail,
   getToken,
+  LOGIN_REDIRECT_REASON,
+  loginRedirectPath,
   markGapsAsked,
   setAutomationSettings,
 } from "@/lib/api";
@@ -260,7 +262,7 @@ export default function Start() {
       }
     }
     if (!getToken()) {
-      router.replace("/login");
+      router.replace(loginRedirectPath(LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED));
       return;
     }
     (async () => {

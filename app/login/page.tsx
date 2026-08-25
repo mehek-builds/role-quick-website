@@ -13,6 +13,7 @@ import {
   getOnboardingState,
   getOrCreateGuestKey,
   hasLitosHistory,
+  LOGIN_REDIRECT_REASON,
 } from "@/lib/api";
 import { isLitosPlusPlanId } from "@/features/billing";
 import { litosClientHeaders } from "@/lib/product";
@@ -210,8 +211,10 @@ export default function Login() {
       else if (requestedFlow === "recovery") setFlow("recovery");
       if (reason === "password-state") {
         setError("Your password may have changed, but we did not finish. Check your email so we know it is you.");
-      } else if (reason === "session-expired") {
+      } else if (reason === LOGIN_REDIRECT_REASON.SESSION_EXPIRED) {
         setError("Your session expired. Sign in again to continue.");
+      } else if (reason === LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED) {
+        setError("Sign in to continue.");
       }
       setGuestEligible(!hasLitosHistory());
     });

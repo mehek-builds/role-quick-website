@@ -3,7 +3,16 @@
 import { useCallback, useEffect, useRef, useState, ViewTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { api, getOnboardingState, getProductMeta, getStoredEmail, getToken, type Me } from "@/lib/api";
+import {
+  api,
+  getOnboardingState,
+  getProductMeta,
+  getStoredEmail,
+  getToken,
+  LOGIN_REDIRECT_REASON,
+  loginRedirectPath,
+  type Me,
+} from "@/lib/api";
 import { onboardingDeferredForSession } from "@/lib/onboarding-flow";
 import { isQaRender } from "@/lib/qa-mode";
 import { currentKeyboardInset } from "@/lib/keyboard-inset";
@@ -209,7 +218,7 @@ export function DashboardShell({
         return;
       }
       if (!getToken()) {
-        router.replace("/login?reason=session-expired");
+        router.replace(loginRedirectPath(LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED));
         return;
       }
       void getOnboardingState()
