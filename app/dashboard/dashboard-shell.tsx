@@ -209,7 +209,7 @@ export function DashboardShell({
         return;
       }
       if (!getToken()) {
-        router.replace("/login");
+        router.replace("/login?reason=session-expired");
         return;
       }
       void getOnboardingState()

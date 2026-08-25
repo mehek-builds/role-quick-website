@@ -149,7 +149,7 @@ async function requestApi<T>(
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (res.status === 401) {
     clearSession();
-    if (typeof window !== "undefined") window.location.href = "/login";
+    if (typeof window !== "undefined") window.location.href = "/login?reason=session-expired";
     throw new ApiError(401, "Signed out");
   }
   let data: unknown = null;
