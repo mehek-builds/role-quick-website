@@ -79,3 +79,45 @@ test("metadata refresh failures return to the question screen instead of hiding 
   assert.match(prepare, /options\.failureScreen === "questions"/);
   assert.match(prepare, /setMetadataRefreshError\(\{ applicationId, message \}\)/);
 });
+
+test("the first packet audit ignores only unread employer metadata", () => {
+  const routeStart = PAGE.indexOf("function routeMissingRequiredAnswers(");
+  const routeEnd = PAGE.indexOf("async function continueFromResume(", routeStart);
+  assert.ok(routeStart >= 0 && routeEnd > routeStart, "could not isolate the required-answer router");
+  const route = PAGE.slice(routeStart, routeEnd);
+  const continuation = functionBody(PAGE, "async function continueFromResume(");
+
+  assert.match(route, /const firstMissingId = nextRoute\.kind === "answer" \? nextRoute\.questionId : null/,
+    "the pure route's applicant-answer decision must remain an unconditional blocker");
+  assert.match(route, /const requiredMetadataMissing = nextRoute\.kind === "metadata_refresh"/);
+  assert.match(continuation, /const nextQuestionRoute = requiredQuestionReviewRoute\(/);
+  assert.match(continuation, /nextQuestionRoute\.kind !== "metadata_refresh" && routeMissingRequiredAnswers\(questions\)/,
+    "the first audit must defer only employer metadata, never an applicant answer");
+});
+
+test("review creates evidence and then starts the scoped employer metadata read", () => {
+  const actionStart = PAGE.indexOf("const reviewPrimaryAction =");
+  const actionEnd = PAGE.indexOf("const recordPacketPdfVerification", actionStart);
+  assert.ok(actionStart >= 0 && actionEnd > actionStart, "could not isolate the review primary action");
+  const action = PAGE.slice(actionStart, actionEnd);
+
+  assert.match(action, /canRefreshRequiredMetadataFromReview/);
+  assert.match(action, /packetEvidenceNeedsFreshAudit \? auditPacketAgain : continueFromResume/,
+    "the ordinary first and stale audit actions must retain their no-argument handlers");
+  assert.match(action, /continueFromVerifiedPacket\(\{[\s\S]*?allowServerAnswerRefresh: true,[\s\S]*?failureScreen: "questions",[\s\S]*?source: "metadata_refresh"/,
+    "reviewed packet evidence must lead to the one guarded metadata refresh path");
+});
+
+test("metadata-only eligibility is recalculated from the current audited question snapshot", () => {
+  assert.match(PAGE, /const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute\([\s\S]*?questions,[\s\S]*?selectedSubmission\?\.review\.question_metadata_blockers \?\? \[\],[\s\S]*?\)\.kind === "metadata_refresh"/);
+  assert.match(PAGE, /const auditedQuestions = Array\.isArray\(response\.questions\) \? response\.questions : questions;[\s\S]*?setQuestions\(auditedQuestions\)/,
+    "packet-audit questions must publish before review can recompute the special action");
+});
+
+test("audit again clears stale evidence before using the same guarded continuation", () => {
+  const audit = functionBody(PAGE, "async function auditPacketAgain()");
+
+  assert.match(audit, /packetEvidenceRef\.current = null/);
+  assert.match(audit, /setPacketEvidence\(null\)/);
+  assert.match(audit, /await continueFromResume\(\)/);
+});

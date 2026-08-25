@@ -62,7 +62,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/appli
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { questionReviewPresentation } from "@/features/applications";
+import { questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -2367,6 +2367,10 @@ function Applications() {
     && selectedSubmission.application_id === selected?.id
     && currentQuestionsSnapshot !== packetQuestionsSnapshot(selectedSubmission.review.questions),
   );
+  const canRefreshRequiredMetadataFromReview = requiredQuestionReviewRoute(
+    questions,
+    selectedSubmission?.review.question_metadata_blockers ?? [],
+  ).kind === "metadata_refresh";
   const activePacketEvidence = selected && packetEvidence?.applicationId === selected.id ? packetEvidence : null;
   const exactPacketPdfReady = Boolean(activePacketEvidence?.pdfVerified);
   const packetAuditBindingReady = Boolean(
@@ -2448,6 +2452,15 @@ function Applications() {
       : review?.status === "ready_for_final_approval"
         ? "Review filled form"
         : "Approve packet and fill form";
+  const reviewPrimaryAction = packetEvidenceReady
+    ? canRefreshRequiredMetadataFromReview
+      ? () => void continueFromVerifiedPacket({
+        allowServerAnswerRefresh: true,
+        failureScreen: "questions",
+        source: "metadata_refresh",
+      })
+      : () => void continueFromVerifiedPacket()
+    : packetEvidenceNeedsFreshAudit ? auditPacketAgain : continueFromResume;
 
   const recordPacketPdfVerification = useCallback((verified: PacketPdfEvidenceVerification | null) => {
     setPacketEvidence((current) => reconcilePacketPdfVerification(current, verified));
@@ -3261,22 +3274,22 @@ function Applications() {
      stopped managed run uses the server-backed question editor so Save persists the answers. A
      pre-fill packet keeps the answers locally until its submit request, as before. */
   function routeMissingRequiredAnswers(candidateQuestions: ApplicationQuestion[] = questions): boolean {
-    const presentation = questionReviewPresentation(
+    const nextRoute = requiredQuestionReviewRoute(
       candidateQuestions,
       selectedSubmission?.review.question_metadata_blockers ?? [],
     );
-    const firstMissing = presentation.editableQuestions.find((question) => question.required && !question.answer.trim());
-    const requiredMetadataMissing = presentation.metadataBlockers.some((blocker) => blocker.required);
-    if (!firstMissing && !requiredMetadataMissing) return false;
+    const firstMissingId = nextRoute.kind === "answer" ? nextRoute.questionId : null;
+    const requiredMetadataMissing = nextRoute.kind === "metadata_refresh";
+    if (!firstMissingId && !requiredMetadataMissing) return false;
     setError(null);
     setPrescriptNote("");
     if (selectedSubmission?.review.status === "needs_attention") {
-      reviewPortalQuestions(firstMissing?.id, "answer");
+      reviewPortalQuestions(firstMissingId ?? undefined, "answer");
       return true;
     }
     setQuestions(candidateQuestions);
-    setFocusQuestion(firstMissing ? { id: firstMissing.id, token: Date.now() } : null);
-    moveToScreen("questions", { scrollToTop: !firstMissing });
+    setFocusQuestion(firstMissingId ? { id: firstMissingId, token: Date.now() } : null);
+    moveToScreen("questions", { scrollToTop: !firstMissingId });
     return true;
   }
 
@@ -3298,7 +3311,11 @@ function Applications() {
     const alreadyFilled = canonicalReview.status === "ready_for_final_approval";
     if (!alreadyFilled && !qaMode && !(await saveCoverLetter())) return;
     if (selectedIdRef.current !== applicationId) return;
-    if (routeMissingRequiredAnswers(questions)) return;
+    const nextQuestionRoute = requiredQuestionReviewRoute(
+      questions,
+      selectedSubmission?.review.question_metadata_blockers ?? [],
+    );
+    if (nextQuestionRoute.kind !== "metadata_refresh" && routeMissingRequiredAnswers(questions)) return;
     if (qaMode) {
       setError("Packet auditing is unavailable in fixture mode.");
       return;
@@ -5224,7 +5241,7 @@ function Applications() {
               {(activePacketEvidence?.response.pdf.download_url ?? selected.download_url) && (activePacketEvidence?.response.pdf.download_url ?? selected.download_url) !== "#" && <a href={activePacketEvidence?.response.pdf.download_url ?? selected.download_url} className="rounded-full border border-border px-4 py-2.5 text-sm font-medium text-ink">View exact PDF</a>}
               {review.portal_supported === false
                 ? review.portal_url && <a href={review.portal_url} target="_blank" rel="noreferrer" className="rounded-full bg-action px-5 py-2.5 text-sm font-medium text-action-ink hover:bg-brand-ink">Open the company page</a>
-                    : <Button onClick={packetEvidenceReady ? () => void continueFromVerifiedPacket() : packetEvidenceNeedsFreshAudit ? auditPacketAgain : continueFromResume} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
+                    : <Button onClick={reviewPrimaryAction} disabled={reviewPrimaryDisabled} className="focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">
                   {reviewPrimaryBusy
                     ? <PendingLabel state="solving" onColor>Making...</PendingLabel>
                     : reviewPrimaryLabel}

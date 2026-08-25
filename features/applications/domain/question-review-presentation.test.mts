@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { questionReviewPresentation } from "./question-review-presentation.ts";
+import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 
 const question = (overrides: Record<string, unknown> = {}) => ({
   id: "question-1",
@@ -109,4 +109,37 @@ test("a server blocker suppresses the matching historical question without dupli
 
   assert.deepEqual(result.editableQuestions, []);
   assert.deepEqual(result.metadataBlockers, [blocker]);
+});
+
+test("required question routing gives applicant answers precedence over employer metadata refresh", () => {
+  const requiredMetadata = [{
+    kind: "missing_exact_options" as const,
+    required: true,
+    portal_input_type: "select-one",
+    portal_selector: "#school",
+    question: "School",
+  }];
+  const answered = question({ id: "notice", question: "Notice period", answer: "None" });
+  const blank = question({ id: "authorization", question: "Work authorization", answer: "" });
+
+  assert.deepEqual(
+    requiredQuestionReviewRoute([blank], requiredMetadata),
+    { kind: "answer", questionId: "authorization" },
+    "a required applicant fact must block even when employer metadata is also unread",
+  );
+  assert.deepEqual(
+    requiredQuestionReviewRoute([answered], requiredMetadata),
+    { kind: "metadata_refresh" },
+    "answered applicant facts may proceed to the scoped employer metadata read",
+  );
+  assert.deepEqual(
+    requiredQuestionReviewRoute([answered, blank], requiredMetadata),
+    { kind: "answer", questionId: "authorization" },
+    "an editable blank added by a later packet audit must disable metadata refresh",
+  );
+  assert.deepEqual(
+    requiredQuestionReviewRoute([answered], []),
+    { kind: "continue" },
+    "a complete packet without metadata blockers uses the ordinary continuation",
+  );
 });

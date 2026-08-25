@@ -8,6 +8,11 @@ export type QuestionReviewPresentation = {
   metadataBlockers: ApplicationQuestionMetadataBlocker[];
 };
 
+export type RequiredQuestionReviewRoute =
+  | { kind: "answer"; questionId: string }
+  | { kind: "metadata_refresh" }
+  | { kind: "continue" };
+
 function normalizedControlType(value: string | undefined): string {
   return value?.trim().toLowerCase() ?? "";
 }
@@ -150,4 +155,19 @@ export function questionReviewPresentation(
   });
 
   return { editableQuestions, metadataBlockers };
+}
+
+export function requiredQuestionReviewRoute(
+  questions: readonly ApplicationQuestion[],
+  serverBlockers: readonly ApplicationQuestionMetadataBlocker[] = [],
+): RequiredQuestionReviewRoute {
+  const presentation = questionReviewPresentation(questions, serverBlockers);
+  const firstMissing = presentation.editableQuestions.find(
+    (question) => question.required && !question.answer.trim(),
+  );
+  if (firstMissing) return { kind: "answer", questionId: firstMissing.id };
+  if (presentation.metadataBlockers.some((blocker) => blocker.required)) {
+    return { kind: "metadata_refresh" };
+  }
+  return { kind: "continue" };
 }
