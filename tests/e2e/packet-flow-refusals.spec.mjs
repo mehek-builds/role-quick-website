@@ -161,10 +161,11 @@ function submissionFor(packet, auditResponse) {
  * @param packet               READY or FILL
  * @param ackResponse          null accepts ({acknowledged:true}); {status, body} refuses
  * @param submitResponse       null answers with a submitted review; {status, body} refuses
+ * @param holdSubmitMs         keeps submit-request in flight so its status polling can be measured
  * @param revalidationRefusal  {status, body} answered by every packet-audit AFTER the
  *                             acknowledgement, which is exactly the poll's revalidation
  */
-async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, revalidationRefusal = null, landed = null } = {}) {
+async function openAuditedFlow(packet, { ackResponse = null, submitResponse = null, holdSubmitMs = 0, revalidationRefusal = null, landed = null } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const auditResponse = packetAuditResponse(packet);
   const submission = submissionFor(packet, auditResponse);
@@ -172,7 +173,8 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
      subsequent /submission poll answer), so a case can park the flow on a poll-active screen
      like the needs_attention portal instead of the terminal receipt. */
   const landedSubmission = landed ? { ...submission, review: { ...submission.review, ...landed } } : null;
-  const counts = { ack: 0, submit: 0, audits: 0, revalidations: 0 };
+  const counts = { ack: 0, submit: 0, submissionReads: 0, audits: 0, revalidations: 0 };
+  let submitInFlight = false;
   await context.route("**/*", async (route) => {
     const url = route.request().url();
     if (url.startsWith(ORIGIN) || url.startsWith("data:") || url.startsWith("blob:") || url === "about:blank") {
@@ -197,6 +199,9 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       }
       if (p.endsWith("/submit-request")) {
         counts.submit += 1;
+        submitInFlight = true;
+        if (holdSubmitMs > 0) await delay(holdSubmitMs);
+        submitInFlight = false;
         if (submitResponse) return json(submitResponse.body, submitResponse.status);
         if (landedSubmission) return json(landedSubmission);
         return json({
@@ -217,6 +222,10 @@ async function openAuditedFlow(packet, { ackResponse = null, submitResponse = nu
       /* The review_edit save that precedes the audit on resume_ready packets. Echo the saved
          review; the flow only needs the envelope back. */
       if (p.endsWith("/review") && route.request().method() === "PUT") return json(submission);
+      if (p.endsWith("/submission")) counts.submissionReads += 1;
+      if (p.endsWith("/submission") && submitInFlight) {
+        return json({ ...submission, review: { ...submission.review, status: "filling" } });
+      }
       if (p.endsWith("/submission")) return json(counts.submit > 0 && landedSubmission ? landedSubmission : submission);
       await json(STUB[p] ?? {});
       return;
@@ -320,6 +329,36 @@ browserTest("a coded stale submit-request refreshes review without auto-acknowle
   assert.equal(counts.ack, 1);
   assert.equal(counts.submit, 1);
   assert.ok(counts.audits >= 2, "the refusal must take one fresh unacknowledged audit");
+  await context.close();
+});
+
+browserTest("a slow submit-request polls status without re-auditing the packet", async (hold) => {
+  const { context, page, second, counts } = await openAuditedFlow(FILL, {
+    holdSubmitMs: 8000,
+    landed: { status: "ready_for_final_approval", attention_reason: "The company form is ready for review." },
+  });
+  hold(page);
+  const auditsBeforeSubmit = counts.audits;
+  const readsBeforeSubmit = counts.submissionReads;
+  await second.click();
+  await page.getByRole("heading", { name: "Filling form", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  /* More than two 2.5s status ticks. GET /submission must keep running, but packet-audit is a
+     mutating revalidation and must wait until the settled portal screen returns. */
+  await page.waitForTimeout(6500);
+  assert.equal(counts.submit, 1, "the delayed submit-request must still be the one active run");
+  assert.ok(
+    counts.submissionReads >= readsBeforeSubmit + 2,
+    "the progress screen stopped polling submission status while submit-request was in flight",
+  );
+  assert.equal(
+    counts.audits,
+    auditsBeforeSubmit,
+    "the progress poll re-audited and rewrote the packet while submit-request was still filling it",
+  );
+
+  await page.getByRole("button", { name: "Send application", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+  await page.waitForTimeout(3500);
+  assert.ok(counts.audits > auditsBeforeSubmit, "the settled portal stopped refreshing its exact packet evidence");
   await context.close();
 });
 

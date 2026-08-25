@@ -1413,7 +1413,13 @@ function Applications() {
       || result.review.status === "filling"
       || result.review.status === "submitting"
       || result.review.status === "submission_claimed";
-    if (currentEvidence?.applicationId === requestedId && currentEvidence.acknowledged && packetAuditStillGuardsSend) {
+    /* Keep the mutating audit revalidation on the settled review screen. While submit-request is
+       filling the form, this poll still needs to GET status, but a concurrent POST /packet-audit
+       can rewrite the packet bindings the active runner is working from. */
+    if (screenRef.current === "portal"
+      && currentEvidence?.applicationId === requestedId
+      && currentEvidence.acknowledged
+      && packetAuditStillGuardsSend) {
       const revalidation = await revalidateAcknowledgedEvidence(requestedId, currentEvidence);
       if (revalidation.kind === "aborted") return;
       if (revalidation.kind === "current") {
