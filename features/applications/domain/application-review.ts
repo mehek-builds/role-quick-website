@@ -251,13 +251,16 @@ export type ReviewScreen = "review" | "submitting" | "portal" | "submitted";
  * Note the qa branch beside it DID call moveToScreen. The real path was the one missing it, which
  * is exactly how a gap like this survives being looked at.
  *
- * `fallback` is the only genuine difference between the callers: selecting a packet with no live
- * status lands on "review", while a poll or a submit response mid-run stays on "submitting".
+ * `fallback` is the only genuine difference for absent or unknown statuses: selecting a packet
+ * lands on "review", while a poll or a submit response stays on its current screen. Known ready
+ * statuses always return to review, including when a fill run reports `questions_ready` after the
+ * caller has already moved to the progress screen.
  */
 export function screenForStatus(status: ReviewStatus | string | undefined, fallback: ReviewScreen): ReviewScreen {
   if (status === "submitted") return "submitted";
   if (status === "needs_attention" || status === "ready_for_final_approval" || status === "failed" || status === "awaiting_security_code") return "portal";
   if (status && ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"].includes(status)) return "submitting";
+  if (status === "resume_ready" || status === "questions_ready" || status === "ready_to_submit") return "review";
   return fallback;
 }
 

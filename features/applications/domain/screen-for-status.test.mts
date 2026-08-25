@@ -26,16 +26,26 @@ test("a terminal status routes off the progress screen", () => {
 test("an in-flight status keeps the progress screen", () => {
   for (const status of ["submit_requested", "preparing", "filling", "submitting", "submission_claimed"]) {
     assert.equal(screenForStatus(status, "review"), "submitting", status);
+    assert.equal(screenForStatus(status, "portal"), "submitting", status);
+  }
+});
+
+test("a known pre-send ready status returns from progress to review", () => {
+  for (const status of ["resume_ready", "questions_ready", "ready_to_submit"]) {
+    assert.equal(screenForStatus(status, "submitting"), "review", status);
+    assert.equal(screenForStatus(status, "portal"), "review", status);
   }
 });
 
 test("the fallback is the only difference between selecting a packet and polling one", () => {
-  // Selecting a packet that is not live lands on the review screen; a poll or a submit response
-  // mid-run stays on the progress screen. Everything else is shared.
+  // Selecting a packet with an absent or unknown status lands on the review screen; a poll or a
+  // submit response with that same unrecognized state stays on the progress screen.
   assert.equal(screenForStatus("ready_to_submit", "review"), "review");
   assert.equal(screenForStatus("resume_ready", "review"), "review");
   assert.equal(screenForStatus(undefined, "review"), "review");
   assert.equal(screenForStatus(undefined, "submitting"), "submitting");
-  // An unknown status from a newer backend must not strand the user on a spinner it cannot leave.
+  assert.equal(screenForStatus(undefined, "portal"), "portal");
   assert.equal(screenForStatus("something_new", "review"), "review");
+  assert.equal(screenForStatus("something_new", "submitting"), "submitting");
+  assert.equal(screenForStatus("something_new", "portal"), "portal");
 });
