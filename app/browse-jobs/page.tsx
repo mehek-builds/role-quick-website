@@ -214,7 +214,7 @@ function describeFilters(filters: Filters): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-function hrefFor(filters: Filters, page: number, sort?: string) {
+function hrefFor(filters: Filters, page: number) {
   const params = new URLSearchParams();
   /* Every filter has to survive pagination, or page 2 of a search silently
      becomes page 2 of the whole board. */
@@ -222,7 +222,6 @@ function hrefFor(filters: Filters, page: number, sort?: string) {
     if (value) params.set(key, value);
   }
   if (page > 1) params.set("page", String(page));
-  if (sort === "newest") params.set("sort", sort);
   const s = params.toString();
   return s ? `/browse-jobs?${s}` : "/browse-jobs";
 }
@@ -238,7 +237,6 @@ export default async function BrowseJobs({
     page?: string;
     sponsor_only?: string;
     employment_type?: string;
-    sort?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -270,18 +268,14 @@ export default async function BrowseJobs({
     sponsor_only: sponsorOnly ? "true" : "",
     employment_type: employmentType,
   };
-  const sort = params.sort === "newest" ? "newest" : "board";
   const searching = Boolean(
     filters.title || filters.company || filters.location || filters.q || employmentType,
   );
   const requested = Math.max(1, Number(params.page) || 1);
-  const [{ jobs: fetchedJobs, total, postingsTotal, ok }, facets] = await Promise.all([
+  const [{ jobs, total, postingsTotal, ok }, facets] = await Promise.all([
     fetchJobs(filters, requested),
     fetchFacets(sponsorOnly),
   ]);
-  const jobs = sort === "newest"
-    ? [...fetchedJobs].sort((left, right) => Date.parse(right.posted_at ?? right.first_seen_at) - Date.parse(left.posted_at ?? left.first_seen_at))
-    : fetchedJobs;
   const highlightTerms = [filters.title, filters.company, filters.location, filters.q].filter((value): value is string => Boolean(value));
   const pages = pageCount(total);
   const current = Math.min(requested, pages);
@@ -342,7 +336,7 @@ export default async function BrowseJobs({
         <form
           action="/browse-jobs"
           method="get"
-          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[1100px] lg:grid-cols-[1fr_1fr_1fr_minmax(0,0.8fr)_auto]"
+          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[1100px] lg:grid-cols-[1fr_1fr_1fr_minmax(0,0.8fr)]"
         >
           <ComboField
             name="title"
@@ -401,19 +395,13 @@ export default async function BrowseJobs({
             </select>
           </div>
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
-          <div className="relative flex min-w-0 flex-col gap-1.5">
-            <label htmlFor="sort" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">Order</label>
-            <select id="sort" name="sort" defaultValue={sort} className="min-h-[44px] w-full rounded-inner border border-control-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none">
-              <option value="board">Board order</option>
-              <option value="newest">Newest on this page</option>
-            </select>
-          </div>
-          {/* A fourth control, and the only one that is not a search term: it changes which jobs
-              are eligible rather than which match. It sits on its own row under the three fields
-              so it is not read as a fourth thing to type in.
+          {/* The LAST control, and the only one that is not a search term: it changes which jobs
+              are eligible rather than which match. It sits on its own row under the four fields
+              so it is not read as one more thing to type in. (Counted in words rather than as "the
+              fourth", which is what it used to say: the row has gained and lost a field twice.)
               A checkbox in a GET form submits nothing when unticked, which is exactly the wanted
               behaviour: the parameter simply disappears from the URL. */}
-          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-5">
+          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-4">
             <input
               type="checkbox"
               name="sponsor_only"
@@ -426,7 +414,7 @@ export default async function BrowseJobs({
           <SearchSubmitButton />
         </form>
 
-        <p className="mt-3 text-machine text-muted" aria-live="polite">Ordered by {sort === "newest" ? "newest result on the current page" : "the job board ranking"}.</p>
+        <p className="mt-3 text-machine text-muted">Ordered by the job board ranking.</p>
 
 
         {searching && ok && (
@@ -493,7 +481,7 @@ export default async function BrowseJobs({
               ) : (
                 <a
                   key={n}
-                  href={hrefFor(filters, n, sort)}
+                  href={hrefFor(filters, n)}
                   className="flex h-9 min-w-9 items-center justify-center rounded-control px-3 text-muted transition-colors hover:bg-surface-alt hover:text-ink"
                 >
                   {n}
