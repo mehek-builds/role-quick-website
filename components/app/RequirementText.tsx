@@ -166,8 +166,13 @@ function Swatch({ tone, label }: { tone: TermTone; label: string }) {
 }
 
 /**
- * missingCount is null when the posting was not scorable: claiming "(0)" gaps beside a panel that
- * says the posting could not be scored asserts a measurement that never happened.
+ * missingCount is null when no gap count was measured - the posting was not scorable, or a packet
+ * audit came back without a single scored clause. Claiming "(0)" gaps in either case asserts a
+ * measurement that never happened, so null carries its own wording rather than a number. A bare
+ * "asked for, not on your resume" was still wrong: it is the same sentence a genuine zero would
+ * write, so it reads as an all-clear, which is exactly the failure this label exists to avoid.
+ * "(not counted)" sits in the same parenthesis the number would have occupied, so the two states
+ * are read in the same place rather than by noticing an absence.
  *
  * THE THIRD SWATCH IS CONDITIONAL, because on 83 of 85 production packets there is no green on the
  * page for it to name. Measured 2026-08-09: `_review.edited_terms` exists on all 85 and is non-empty
@@ -189,7 +194,7 @@ export function MatchLegend({ missingCount, editedCount = 0 }: { missingCount: n
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <Swatch tone="covered" label="asked for, and on your resume" />
-      <Swatch tone="missing" label={missingCount === null ? "asked for, not on your resume" : `asked for, not on your resume (${missingCount})`} />
+      <Swatch tone="missing" label={missingCount === null ? "asked for, not on your resume (not counted)" : `asked for, not on your resume (${missingCount})`} />
       {editedCount > 0 && <Swatch tone="edited" label="wording Litos changed for this job" />}
     </div>
   );
