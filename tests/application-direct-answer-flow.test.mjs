@@ -59,7 +59,9 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /Saved to this application\./);
   assert.match(prompt, /const \[choiceTouched, setChoiceTouched\] = useState\(false\);/);
   assert.match(prompt, /const requiredBlank = task\.question\.required && !answer\.trim\(\);/);
-  assert.match(prompt, /const choiceMissing = exactOptions\.length > 0 && !exactOptions\.includes\(answer\);/);
+  assert.match(prompt, /const acceptsMultipleOptions = questionAcceptsMultipleOptions\(task\.question\);/);
+  assert.match(prompt, /const selectedExactOptions = acceptsMultipleOptions[\s\S]*?exactSelectedQuestionOptions\(answer, exactOptions\)/);
+  assert.match(prompt, /const choiceMissing = exactOptions\.length > 0 && \(acceptsMultipleOptions[\s\S]*?selectedExactOptions === null[\s\S]*?: !exactOptions\.includes\(answer\)\);/);
   assert.match(prompt, /const choiceErrorVisible = choiceMissing && \(choiceTouched \|\| Boolean\(answer\.trim\(\)\)\);/);
   assert.match(prompt, /const answerBlocked = requiredBlank \|\| choiceMissing/);
   assert.doesNotMatch(prompt, /const answerBlocked[^;]*choiceErrorVisible/);
@@ -67,15 +69,16 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /const answerDescribedBy = `\$\{progressId\} \$\{helperId\}\$\{visibleError \? ` \$\{errorId\}` : ""\}`/);
   assert.equal(
     [...prompt.matchAll(/aria-labelledby=\{headingId\}\s+aria-describedby=\{answerDescribedBy\}\s+aria-invalid=\{visibleError \? true : undefined\}/g)].length,
-    3,
-    "radio groups, selects, and textareas must all expose their helper and error relationship",
+    4,
+    "checkbox groups, radio groups, selects, and textareas must all expose their helper and error relationship",
   );
   assert.match(prompt, /<p id=\{errorId\} role="alert"/);
-  assert.match(prompt, /choiceErrorVisible \? "Choose one of the employer's current options before saving\." : null/);
+  assert.match(prompt, /choiceErrorVisible[\s\S]*?acceptsMultipleOptions[\s\S]*?"Choose only the employer's current options before saving\."[\s\S]*?: "Choose one of the employer's current options before saving\."/);
   assert.match(prompt, /<form onSubmit=\{submitAnswer\} aria-busy=\{busy\}/);
   assert.match(prompt, /if \(busy \|\| answerBlocked\) return;/);
   assert.match(prompt, /function updateAnswer\(next: string\) \{[\s\S]*?if \(busy\) return;/);
   assert.match(prompt, /checked=\{answer === option\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}/);
+  assert.match(prompt, /type="checkbox"[\s\S]*?checked=\{selectedExactOptions\?\.includes\(option\) === true\}[\s\S]*?answerWithExactOptionToggled\(answer, exactOptions, option, event\.target\.checked\)/);
   assert.match(prompt, /<select\s+value=\{answer\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}[\s\S]*?onBlur=\{\(\) => setChoiceTouched\(true\)\}/);
   assert.match(prompt, /<option value="" disabled>Choose an answer<\/option>/);
   assert.match(prompt, /<textarea\s+value=\{answer\}\s+readOnly=\{busy\}\s+aria-disabled=\{busy\}/);

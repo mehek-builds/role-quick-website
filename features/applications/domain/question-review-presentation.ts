@@ -29,6 +29,80 @@ function usableQuestionOptions(options: readonly string[] | null | undefined): s
   return usable;
 }
 
+export function questionAcceptsMultipleOptions(
+  question: Pick<ApplicationQuestion, "portal_input_type" | "options">,
+): boolean {
+  const controlType = normalizedControlType(question.portal_input_type);
+  const options = usableQuestionOptions(question.options);
+  return controlType === "select-multiple" || (controlType === "checkbox" && options.length > 1);
+}
+
+function normalizedChoiceOption(value: string): string {
+  return value.replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").trim().toLowerCase();
+}
+
+/**
+ * Reads a stored multi-value answer without splitting on commas.
+ *
+ * Employer labels can contain commas themselves, so `answer.split(",")` can silently turn one
+ * exact option into two invented answers. The stored contract is still one string containing exact
+ * employer labels joined with `, `. Older reviews can carry those labels in a different selection
+ * order, so this mirrors the backend: it walks only complete offered-label prefixes, without
+ * reusing an option, and accepts exactly one decomposition. Ambiguous or stale values return null
+ * and stay out of the editor. The toggle writer below separately restores employer order.
+ */
+export function exactSelectedQuestionOptions(
+  answer: string,
+  options: readonly string[] | null | undefined,
+): string[] | null {
+  const target = normalizedChoiceOption(answer);
+  if (!target) return [];
+  const unique = new Map<string, string>();
+  for (const option of usableQuestionOptions(options)) {
+    const normalized = normalizedChoiceOption(option);
+    if (normalized && !unique.has(normalized)) unique.set(normalized, option);
+  }
+  if (unique.size === 0) return null;
+
+  const offered = [...unique].map(([normalized, canonical]) => ({ normalized, canonical }));
+  const solutions: string[][] = [];
+  const visit = (remaining: string, selected: string[], used: Set<string>) => {
+    if (solutions.length > 1) return;
+    for (const option of offered) {
+      if (used.has(option.normalized)) continue;
+      if (remaining === option.normalized) {
+        solutions.push([...selected, option.canonical]);
+        continue;
+      }
+      const prefix = `${option.normalized}, `;
+      if (!remaining.startsWith(prefix)) continue;
+      visit(
+        remaining.slice(prefix.length),
+        [...selected, option.canonical],
+        new Set([...used, option.normalized]),
+      );
+    }
+  };
+  visit(target, [], new Set());
+  return solutions.length === 1 ? solutions[0] : null;
+}
+
+export function answerWithExactOptionToggled(
+  answer: string,
+  options: readonly string[] | null | undefined,
+  option: string,
+  checked: boolean,
+): string | null {
+  const exactOptions = usableQuestionOptions(options);
+  if (!exactOptions.includes(option)) return null;
+  const selected = exactSelectedQuestionOptions(answer, exactOptions);
+  if (selected === null) return null;
+  const next = new Set(selected);
+  if (checked) next.add(option);
+  else next.delete(option);
+  return exactOptions.filter((candidate) => next.has(candidate)).join(", ");
+}
+
 function normalizedQuestionLabel(value: string | undefined): string {
   return value?.trim().replace(/\s+/g, " ") ?? "";
 }
@@ -101,7 +175,14 @@ export function questionReviewPresentation(
     blockerIdentities.add(identity);
     metadataBlockers.push(blocker);
   };
-  serverBlockers.forEach(addBlocker);
+  const effectiveServerBlockers = serverBlockers.filter((blocker) => {
+    if (blocker.kind !== "unsupported_multi_value") return true;
+    const matchingQuestion = questions.find((question) => blockerMatchesQuestion(blocker, question));
+    return !matchingQuestion
+      || !questionAcceptsMultipleOptions(matchingQuestion)
+      || exactSelectedQuestionOptions(matchingQuestion.answer, matchingQuestion.options) === null;
+  });
+  effectiveServerBlockers.forEach(addBlocker);
   const questionIdCounts = new Map<string, number>();
   for (const question of questions) {
     const id = question.id.trim();
@@ -110,7 +191,7 @@ export function questionReviewPresentation(
 
   const blockedQuestionIds = new Set<string>();
   for (const question of questions) {
-    if (serverBlockers.some((blocker) => blockerMatchesQuestion(blocker, question))) {
+    if (effectiveServerBlockers.some((blocker) => blockerMatchesQuestion(blocker, question))) {
       blockedQuestionIds.add(question.id);
       continue;
     }
@@ -132,9 +213,14 @@ export function questionReviewPresentation(
     }
     const controlType = normalizedControlType(question.portal_input_type);
     const options = usableQuestionOptions(question.options);
-    if (controlType === "select-multiple" || (controlType === "checkbox" && options.length > 1)) {
-      blockedQuestionIds.add(question.id);
-      addBlocker(syntheticMetadataBlocker(question, "unsupported_multi_value"));
+    if (questionAcceptsMultipleOptions(question)) {
+      if (options.length === 0) {
+        blockedQuestionIds.add(question.id);
+        addBlocker(syntheticMetadataBlocker(question, "missing_exact_options"));
+      } else if (exactSelectedQuestionOptions(question.answer, options) === null) {
+        blockedQuestionIds.add(question.id);
+        addBlocker(syntheticMetadataBlocker(question, "unsupported_multi_value"));
+      }
       continue;
     }
     if (CLOSED_QUESTION_CONTROL.test(controlType) && options.length === 0) {

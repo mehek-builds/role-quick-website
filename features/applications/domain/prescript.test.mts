@@ -59,7 +59,24 @@ test("the ask list becomes rows the existing answers editor can render", () => {
   // reviewing, and using it for a blank box would tell the review screen there is a draft to check.
   assert.deepEqual([...new Set(rows.map((row) => row.kind))], ["required"]);
   assert.deepEqual(rows[0].options, ["Yes", "No"]);
+  assert.equal(rows[0].portal_input_type, "select");
+  assert.equal(rows[2].portal_input_type, "textarea");
   assert.equal(rows[2].options, null);
+});
+
+test("a pre-script multi-select retains its employer control type", () => {
+  const rows = prescriptEditableQuestions({
+    ask: [{
+      ...prescript.ask[0],
+      question: "Which other offices would you consider?",
+      input_type: "select-multiple",
+      options: ["Chicago", "New York"],
+    }],
+    already_answered: 0,
+  });
+
+  assert.equal(rows[0]?.portal_input_type, "select-multiple");
+  assert.deepEqual(rows[0]?.options, ["Chicago", "New York"]);
 });
 
 test("a declaration arrives blank and an answer she already gave arrives filled", () => {
