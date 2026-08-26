@@ -3742,7 +3742,12 @@ function Applications() {
        landed save, dropped by Back on an abandoned one. Only for a question the editor is actually
        about to show - a press whose question is not on the merged list opens nothing she can read,
        so it must not linger as an intent either. */
-    if (intent === "confirm" && focusQuestionId && merged.some((question) => question.id === focusQuestionId)) {
+    /* "review" records the intent exactly as "confirm" does: both are a press on ONE question's own
+       row control, which is the per-question deliberateness bar this ref exists to hold. An essay row
+       wears "Review" rather than "Confirm", and without this the read-it-and-save path minted nothing
+       for an unchanged drafted answer - the same never-settling loop the direct flow had (see
+       directlyConfirmed in saveReviewedAnswers). Bulk opens still record nothing: no intent, no id. */
+    if ((intent === "confirm" || intent === "review") && focusQuestionId && merged.some((question) => question.id === focusQuestionId)) {
       const ids = confirmIntentsRef.current.get(selected.id) ?? new Set<string>();
       ids.add(focusQuestionId);
       confirmIntentsRef.current.set(selected.id, ids);
@@ -3951,7 +3956,16 @@ function Applications() {
       const result = await saveReviewAnswers<SubmissionResponse["review"]>({
         applicationId,
         questions: answerDraftQuestions.map((question) => {
-          const directlyConfirmed = direct?.intent === "confirm"
+          /* "review" mints exactly as "confirm" does, because a direct-task save IS the per-question
+             deliberate act the flag exists to capture: she was shown this one question on its own
+             screen and pressed its own save. Without this, an essay whose drafted answer is already
+             right could never settle - the save posts unchanged bytes with no flag, the server minted
+             no claim, discovery re-flagged the essay, and the same ask came back on every Approve
+             pass, indefinitely (measured live on the DGA Organizing Resume Bank packet, 2026-08-26,
+             three full cycles - the DV Trading loop through the review-intent door). The
+             802-laundering stays shut out: `direct` is single-question by construction, so no bulk
+             save can reach this branch. */
+          const directlyConfirmed = (direct?.intent === "confirm" || direct?.intent === "review")
             && question.id === direct.questionId
             && question.answer.trim();
           const previouslyConfirmed = confirmedIds?.has(question.id) && question.answer.trim();
