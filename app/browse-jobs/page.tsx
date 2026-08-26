@@ -121,19 +121,24 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
   const type = jobTypeLabel(job.employment_type);
   return (
     <div className="group relative flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none">
+      {/* Ahead of the overlay link in DOM order, not just in the z-stack: it is also the first
+          thing a sighted visitor's eye reaches (top-right of the card), and tab/screen-reader
+          order follows source order regardless of z-index, so putting it first here is what
+          keeps keyboard order matching visual order rather than sending focus to the full-card
+          overlay first. */}
+      <a
+        href={job.apply_url}
+        target="_blank"
+        rel="noreferrer"
+        className="relative z-10 self-end text-machine text-brand-ink underline-offset-2 hover:text-ink hover:underline"
+      >
+        View posting ↗
+      </a>
       <a
         href={`/start?job=${encodeURIComponent(job.id)}`}
         className="absolute inset-0 rounded-card"
         aria-label={`Upload your resume for Litos to tailor to ${job.title} at ${job.company_name}`}
       />
-      <a
-        href={job.apply_url}
-        target="_blank"
-        rel="noreferrer"
-        className="relative z-10 self-end text-machine text-muted underline-offset-2 hover:text-ink hover:underline"
-      >
-        View posting ↗
-      </a>
       <div className="flex min-w-0 items-start gap-3">
         <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">

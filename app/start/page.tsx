@@ -111,6 +111,10 @@ export default function Start() {
   const [qaDemo, setQaDemo] = useState(false);
   // The setup gaps screen has been answered or skipped in THIS session. See the "gaps" case below.
   const [gapsHandled, setGapsHandled] = useState(false);
+  // Guards the job-first guest bootstrap below against firing twice: React 18 dev StrictMode
+  // mounts, tears down, and re-mounts effects, and getToken() still reads null on the second
+  // mount because the first createGuestSession call has not resolved yet.
+  const guestBootstrapStarted = useRef(false);
   const refresh = useCallback(async () => {
     const s = await getOnboardingState();
     setState(s);
@@ -272,18 +276,34 @@ export default function Start() {
          Anyone without a `job` param falls through to the ordinary redirect unchanged. */
       const jobId = new URLSearchParams(window.location.search).get("job");
       if (jobId) {
-        void createGuestSession(jobId).then((result) => {
-          if (!result.ok) {
-            setError(result.error);
-            return;
-          }
-          // Clears the id from the URL so a later reload of this same tab (bookmarked, or the
-          // back button) does not re-read it - the account already carries the pin server-side
-          // now, in pinned_onboarding_job_id, which is the durable copy.
-          window.history.replaceState(null, "", "/start");
-          void refresh();
-        });
-        return;
+        // Guards against acting on this request after the component has unmounted - navigating
+        // away from /start before createGuestSession resolves must not rewrite the URL bar out
+        // from under whatever page is showing, or call setState/refresh on a gone component.
+        // Declared for every mount (including a StrictMode re-mount below) so each has its own
+        // cleanup, even though only the first actually starts a request.
+        let cancelled = false;
+        // Guards against React 18 dev StrictMode's mount/teardown/re-mount firing this twice:
+        // getToken() still reads null on the second mount because the first createGuestSession
+        // call has not resolved yet, so without this a second guest-creation request would fire
+        // right alongside it.
+        if (!guestBootstrapStarted.current) {
+          guestBootstrapStarted.current = true;
+          void createGuestSession(jobId).then((result) => {
+            if (cancelled) return;
+            if (!result.ok) {
+              setError(result.error);
+              return;
+            }
+            // Clears the id from the URL so a later reload of this same tab (bookmarked, or the
+            // back button) does not re-read it - the account already carries the pin server-side
+            // now, in pinned_target_job_id, which is the durable copy.
+            window.history.replaceState(null, "", "/start");
+            void refresh();
+          });
+        }
+        return () => {
+          cancelled = true;
+        };
       }
       router.replace(loginRedirectPath(LOGIN_REDIRECT_REASON.SIGNIN_REQUIRED));
       return;
@@ -311,46 +331,68 @@ export default function Start() {
   // `error` state above because that one has its own top-level "no state yet" rendering path,
   // and this failure is local to one step and needs its own retry rather than a full-page one.
   const [pinnedJobError, setPinnedJobError] = useState<string | null>(null);
-  // Bumped by the retry button below. In the effect's own dependency array so "try again" actually
-  // re-runs the fetch rather than just clearing the message a failed one already left behind.
-  const [pinnedJobRetryKey, setPinnedJobRetryKey] = useState(0);
+  /* Set once the student presses "Show me a different one" while building against a pinned job.
+     Without this, clearing chosenMatch just satisfies the effect below's guard again, which
+     re-fetches the SAME pinned job and hands it straight back to BuildStep - the exact dead end
+     onPickAnother exists to avoid (BuildStep's own doc comment: "the way out of a build that
+     cannot succeed for THIS posting no matter how many times it is retried"). Once declined, the
+     "match" case below falls through to the ordinary MatchStep instead, which is the only source
+     of a genuinely DIFFERENT posting there is. Never reset back to false: once a student has left
+     the pinned job behind for this sitting, a later poll tick must not silently pull them back. */
+  const [pinnedJobDeclined, setPinnedJobDeclined] = useState(false);
+  // Prevents a second GET /jobs/:id for the same job while one is already in flight - see the
+  // effect below for how more than one could otherwise fire.
+  const pinnedJobFetchInFlight = useRef(false);
   /* THE JOB-FIRST SHORTCUT PAST THE MATCH SCREEN'S OWN ALGORITHM.
    *
    * An ordinary account reaches 'match' and MatchStep fetches a ranked posting itself. A
    * job-first account already told Litos which posting it wants, by clicking it on
    * /browse-jobs, so re-running the algorithm here would silently substitute a different job for
-   * the one the student came for. This effect fetches THAT job directly and hands it to
+   * the one the student came for. loadPinnedJob fetches THAT job directly and hands it to
    * BuildStep the same way MatchStep's own "yes, build this" would, skipping MatchStep's screen
    * entirely rather than rendering it and immediately auto-advancing - a screen that flashes and
    * vanishes is not a lower-friction version of not showing it.
    *
-   * A top-level effect rather than logic inside renderStep(), because renderStep is a plain
-   * function invoked during render, not a component, and hooks cannot live inside it. */
-  useEffect(() => {
-    if (!state || state.step !== "match" || chosenMatch || !state.pinned_target_job_id) return;
-    let cancelled = false;
-    // Cleared by the retry button itself (a real event handler, not this effect body) before it
-    // bumps pinnedJobRetryKey - not here, where a synchronous setState would trigger a cascading
-    // render lint error for no benefit: chosenMatch staying null is what keeps this effect (and
-    // the error screen) live in the first place.
-    getJob(state.pinned_target_job_id)
-      .then((job) => {
-        if (cancelled) return;
-        setChosenMatch({
-          job,
-          freshness: freshnessOf(job),
-          hoursSinceSeen: hoursSinceSeen(job.first_seen_at),
-          widened: false,
-        });
-      })
-      .catch((reason) => {
-        if (cancelled) return;
-        setPinnedJobError(reason instanceof Error ? reason.message : "Could not load that job.");
+   * A stable callback rather than inline effect logic, so the retry button below can call it
+   * directly - the same "call the loader again" idiom loadProfile already uses elsewhere in this
+   * file, rather than a second, novel retry mechanism living only here. */
+  const loadPinnedJob = useCallback(async (jobId: string) => {
+    if (pinnedJobFetchInFlight.current) return;
+    pinnedJobFetchInFlight.current = true;
+    setPinnedJobError(null);
+    try {
+      const job = await getJob(jobId);
+      setChosenMatch({
+        job,
+        freshness: freshnessOf(job),
+        hoursSinceSeen: hoursSinceSeen(job.first_seen_at),
+        widened: false,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, [state, chosenMatch, pinnedJobRetryKey]);
+    } catch (reason) {
+      setPinnedJobError(reason instanceof Error ? reason.message : "Could not load that job.");
+    } finally {
+      pinnedJobFetchInFlight.current = false;
+    }
+  }, []);
+  const pinnedJobStep = state?.step;
+  const pinnedJobId = state?.pinned_target_job_id;
+  useEffect(() => {
+    if (pinnedJobStep !== "match" || chosenMatch || pinnedJobDeclined || !pinnedJobId) return;
+    // Same nested-async idiom loadProfile's own effect call uses elsewhere in this file: an
+    // async function invoked directly here reads to the set-state-in-effect lint rule as this
+    // effect body calling setState synchronously (loadPinnedJob's first line, before its own
+    // await), even though nothing actually runs before the microtask queue turns.
+    void (async () => {
+      await loadPinnedJob(pinnedJobId);
+    })();
+    /* Depends on the PRIMITIVES the guard above actually reads, not the whole `state` object.
+       refresh() (the install poll fires one every few seconds, per the comment two effects down)
+       replaces `state` wholesale on every tick even when nothing relevant changed, which would
+       otherwise re-run this effect - and re-fetch the same job - on every poll while parked here.
+       loadPinnedJob's own in-flight ref is a second backstop, not a substitute: without primitive
+       deps, a poll landing in the gap between this effect scheduling and the fetch actually
+       starting could still queue a redundant call before the ref is set. */
+  }, [pinnedJobStep, pinnedJobId, chosenMatch, pinnedJobDeclined, loadPinnedJob]);
 
   // One step_view per step, from the one place that knows every step. Deduped on the step itself
   // so a refresh() that returns the same step (the install poll fires one every few seconds)
@@ -657,7 +699,7 @@ export default function Start() {
          acknowledged once, when the build lands and the student moves on. */
       case "match":
         if (!chosenMatch) {
-          if (state.pinned_target_job_id) {
+          if (state.pinned_target_job_id && !pinnedJobDeclined) {
             return (
               <div className="mx-auto max-w-2xl px-6 py-16">
                 <StepRail current="match" />
@@ -666,10 +708,7 @@ export default function Start() {
                     <ErrorNote message={pinnedJobError} />
                     <button
                       type="button"
-                      onClick={() => {
-                        setPinnedJobError(null);
-                        setPinnedJobRetryKey((n) => n + 1);
-                      }}
+                      onClick={() => void loadPinnedJob(state.pinned_target_job_id!)}
                       className="mt-4 min-h-11 text-sm text-brand-ink underline underline-offset-4"
                     >
                       Try loading again
@@ -691,8 +730,14 @@ export default function Start() {
             match={chosenMatch}
             onLater={later}
             /* Clearing the match is what returns this case to the match screen, which is the same
-               route a student takes when they press "Show me a different one" there. */
-            onPickAnother={() => setChosenMatch(null)}
+               route a student takes when they press "Show me a different one" there. For a
+               job-first build, clearing alone would just re-satisfy loadPinnedJob's effect guard
+               and hand the SAME posting straight back - so declining is recorded first, which is
+               what routes the fallthrough above to the ordinary MatchStep instead. */
+            onPickAnother={() => {
+              if (state.pinned_target_job_id) setPinnedJobDeclined(true);
+              setChosenMatch(null);
+            }}
             onQuestions={(result) => {
               setBuilt(result);
               stepDone("match");

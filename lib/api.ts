@@ -130,10 +130,10 @@ export function clearSession() {
  *  shared by the login screen's own Guest mode button and /start's job-first entry, so the two
  *  can never drift apart on what the response means or what a failure looks like.
  *
- *  `targetJobId`, when given, is passed straight through and pinned server-side on a NEW guest
- *  (see OnboardingState.pinned_target_job_id and MatchStep). It has no effect on a RETURNING
- *  guest: the backend only reads it at creation, so a job clicked after the session already
- *  exists cannot retroactively become the account's one free build. */
+ *  `targetJobId`, when given, is passed straight through and validated/pinned server-side (see
+ *  OnboardingState.pinned_target_job_id) - on a brand new guest, and also on a RETURNING one
+ *  who does not already carry a pin and has not finished onboarding, so a job clicked on a later
+ *  visit still counts. It never overwrites a pin an account already has. */
 export async function createGuestSession(
   targetJobId?: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -154,7 +154,11 @@ export async function createGuestSession(
     track("authentication_completed", { method: "guest" });
     return { ok: true };
   } catch {
-    return { ok: false, error: "We could not open the guest view." };
+    /* A THROW, not a rejected response, means the request itself never completed - offline, DNS,
+       a dropped connection - which is a different fact from the server rejecting it, and reads as
+       a different sentence: this one gives the visitor something to actually do about it, rather
+       than the generic message above that reads as "this feature is broken." */
+    return { ok: false, error: "Something went wrong. Check your internet and try again." };
   }
 }
 
@@ -1236,8 +1240,9 @@ export type OnboardingState = {
   has_focus: boolean;
   /** The posting this account is entitled to spend its one free build on, set at guest creation
    *  from a /browse-jobs click. Only meaningful while the match step is still ahead - see
-   *  MatchStep, which skips its own ranked-board fetch and builds against this id directly when
-   *  it is present. Null for every account that arrived through the front door. */
+   *  app/start/page.tsx's "match" case, which reads this to skip MatchStep's own ranked-board
+   *  fetch entirely and build against this id directly. Null for every account that arrived
+   *  through the front door. */
   pinned_target_job_id?: string | null;
   /** Whether the one-time visa-sponsorship question has been answered. Absent on older backends. */
   has_sponsorship_answer?: boolean;

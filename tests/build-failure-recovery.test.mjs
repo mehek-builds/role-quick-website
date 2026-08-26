@@ -32,11 +32,50 @@ test("a build that cannot succeed offers another posting", async () => {
 
 test("picking another posting returns to the match screen", async () => {
   const page = await read("app/start/page.tsx");
-  const matches = page.match(/onPickAnother=\{\(\) => setChosenMatch\(null\)\}/g) ?? [];
+  /* Not a byte-identical match on both handlers any more: the "match" case's onPickAnother also
+     has to record a job-first decline (see the job-first pinned-match tests), so its body is no
+     longer the same one-liner as the reload-recovery mount's. What both must still do is clear
+     chosenMatch, which is the actual behavior this test exists to protect. */
+  const onPickAnotherCount = (page.match(/onPickAnother=\{/g) ?? []).length;
   assert.equal(
-    matches.length,
+    onPickAnotherCount,
     2,
     "both BuildStep mounts (the sequence case and the reload recovery) must offer the way back",
+  );
+  const clearsChosenMatch = (page.match(/setChosenMatch\(null\)/g) ?? []).length;
+  assert.ok(
+    clearsChosenMatch >= 2,
+    "picking another posting must still clear the in-progress match for both BuildStep mounts",
+  );
+});
+
+test("picking another posting escapes a pinned job, not just clears it", async () => {
+  /* A JOB-FIRST DEAD END, the same class of bug this file exists to catch, just for the pinned
+   * entry rather than the ordinary one: without recording the decline, clearing chosenMatch just
+   * satisfies loadPinnedJob's effect guard again, which re-fetches the SAME pinned job and hands
+   * it straight back to BuildStep - same job, same failure, forever, with no way to reach the
+   * ordinary ranked-match algorithm at all. */
+  const page = await read("app/start/page.tsx");
+
+  assert.match(page, /pinnedJobDeclined/, "the decline flag is gone");
+
+  const onPickAnotherHandlers = [...page.matchAll(/onPickAnother=\{([\s\S]*?)\n(?: {12}|            )\}/g)]
+    .map((m) => m[0]);
+  assert.equal(onPickAnotherHandlers.length, 2, "expected exactly one onPickAnother per BuildStep mount");
+  const pinnedHandler = onPickAnotherHandlers.find((h) => h.includes("pinned_target_job_id"));
+  assert.ok(pinnedHandler, "the match-step BuildStep's onPickAnother no longer checks the pinned job");
+  assert.match(
+    pinnedHandler,
+    /setPinnedJobDeclined\(true\)/,
+    "picking another posting for a pinned job must record the decline, or it re-fetches the same job",
+  );
+
+  // And the match case's own pinned-branch must actually respect it once set.
+  const matchCase = page.slice(page.indexOf('case "match":'), page.indexOf('case "questions":'));
+  assert.match(
+    matchCase,
+    /state\.pinned_target_job_id\s*&&\s*!pinnedJobDeclined/,
+    "the pinned-job screen must stop showing once declined, or there is no way to reach the ordinary match screen",
   );
 });
 
