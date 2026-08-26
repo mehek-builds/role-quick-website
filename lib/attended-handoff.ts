@@ -70,7 +70,7 @@ export function exactAttendedHandoffUrl(review: Pick<ApplicationReview,
   if (!review.extension_handoff_url) return null;
 
   // Oracle's exact authentication gate is measured, but no post-gate form or terminal receipt is.
-  // Keep Tracker non-armable until both the 0.5.12 runtime and that evidence contract exist.
+  // Keep Tracker non-armable until that evidence contract exists in a duplicate-safe runtime.
   if (review.ats_name === "oraclecloud") return null;
 
   if (review.ats_name === "jobvite") {

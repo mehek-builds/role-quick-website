@@ -95,15 +95,10 @@ const ABSENT: ExtensionState = {
   updateRequired: false,
 };
 
-export const MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION = "0.5.10";
-export const MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION = "0.5.11";
-export const MINIMUM_ORACLE_HANDOFF_EXTENSION_VERSION = "0.5.12";
+export const MINIMUM_DUPLICATE_SAFE_EXTENSION_VERSION = "0.6.2";
 
-export function minimumAttendedHandoffExtensionVersion(atsName: string | undefined): string {
-  if (atsName === "oraclecloud") return MINIMUM_ORACLE_HANDOFF_EXTENSION_VERSION;
-  return atsName === "jobvite" || atsName === "icims" || atsName === "bamboohr"
-    ? MINIMUM_MANAGED_ACCOUNT_HANDOFF_EXTENSION_VERSION
-    : MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION;
+export function minimumAttendedHandoffExtensionVersion(_atsName: string | undefined): string {
+  return MINIMUM_DUPLICATE_SAFE_EXTENSION_VERSION;
 }
 
 export function extensionVersionAtLeast(current: string | null | undefined, minimum: string): boolean {
@@ -130,7 +125,7 @@ let inFlight: Promise<ExtensionState> | null = null;
 
 async function handOverSession(
   session: WebSession,
-  minimumVersion = MINIMUM_ATTENDED_HANDOFF_EXTENSION_VERSION,
+  minimumVersion = MINIMUM_DUPLICATE_SAFE_EXTENSION_VERSION,
 ): Promise<ExtensionState> {
   const ping = await sendToExtension<{ ok?: boolean; signedIn?: boolean; version?: string }>({ type: "LITOS_PING" });
   if (!ping?.ok) return ABSENT;

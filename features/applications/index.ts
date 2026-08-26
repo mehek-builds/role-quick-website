@@ -18,6 +18,7 @@ export * from "./domain/packet-audit-acknowledgement";
 export * from "./domain/packet-audit-display";
 export * from "./domain/packet-evidence-session";
 export * from "./domain/packet-pdf-verification";
+export * from "./domain/posting-distinction";
 export * from "./domain/prescript";
 export * from "./domain/question-review-presentation";
 export {
@@ -43,7 +44,10 @@ export {
 export * from "./domain/requirement-terms";
 export * from "./domain/review-answer-save";
 export * from "./domain/attention-acknowledgement";
+export * from "./domain/attended-handoff-capability";
+export * from "./domain/attended-handoff-replay";
 export * from "./domain/submission-checklist";
+export * from "./domain/submission-orphan-risks";
 export * from "./domain/submission-state";
 export * from "./infrastructure/applications-api";
 export { PartialPayloadError } from "./infrastructure/response-shape";

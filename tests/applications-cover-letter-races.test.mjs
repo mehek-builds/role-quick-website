@@ -316,7 +316,7 @@ test("canonical tailoring keeps durable ledger data but gates selection, notice,
   for (const mutation of [
     "commitCanonicalSelection(updatedCanonical)",
     "openApplication(created",
-    "setNewApplication(EMPTY_APPLICATION_DRAFT)",
+    "replaceNewApplicationDraft(EMPTY_APPLICATION_DRAFT)",
     "setShowNewApplication(false)",
     "setNotice(keepCanonicalDetail",
   ]) {

@@ -75,7 +75,7 @@ test("unsaved edits cannot ride a metadata refresh and the refresh is the blocke
 test("metadata refresh failures return to the question screen instead of hiding behind it", () => {
   const prepare = functionBody(PAGE, "async function prepareApplication(");
 
-  assert.match(prepare, /moveToScreen\(options\.failureScreen \?\? \(options\.restart \? "portal" : "review"\)\)/);
+  assert.match(prepare, /moveToScreen\(distinctionRisk[\s\S]*?\? "portal"[\s\S]*?: options\.failureScreen \?\? \(options\.restart \? "portal" : "review"\)\)/);
   assert.match(prepare, /options\.failureScreen === "questions"/);
   assert.match(prepare, /setMetadataRefreshError\(\{ applicationId, message \}\)/);
 });

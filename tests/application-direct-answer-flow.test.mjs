@@ -249,7 +249,12 @@ test("accepted answer writes stay owned by their application and latest submissi
   const normalizedPoll = requiredIndex(poll, "let result: SubmissionResponse = { ...raw, review: reviewWithLists(raw.review) }", "normalized full poll response");
   const mutationGuard = requiredIndex(poll, "if (submissionMutationGenerationRef.current !== requestedMutationGeneration) return", "nonvisual poll mutation guard", normalizedPoll);
   const rememberedBeforeRead = requiredIndex(poll, "const rememberedBeforeRead = submissionSnapshotsRef.current.get(requestedId)", "remembered snapshot before poll read", mutationGuard);
-  const rememberedAfterRead = requiredIndex(poll, "const rememberedAfterRead = nextSubmissionState(rememberedBeforeRead, result)", "poll snapshot reconciliation", rememberedBeforeRead);
+  const rememberedAfterRead = requiredIndex(poll, "const rememberedAfterRead = nextSubmissionState(", "poll snapshot reconciliation", rememberedBeforeRead);
+  assert.match(
+    poll.slice(rememberedAfterRead, rememberedAfterRead + 240),
+    /rememberedBeforeRead,[\s\S]*?result,[\s\S]*?authoritativeRetrySafety: true/,
+    "a causally fresh poll may replace fail-closed local uncertainty with the server verdict",
+  );
   const changedRead = requiredIndex(poll, "if (rememberedAfterRead !== rememberedBeforeRead)", "changed poll snapshot guard", rememberedAfterRead);
   const storedRead = requiredIndex(poll, "submissionSnapshotsRef.current.set(requestedId, rememberedAfterRead)", "early nonvisual poll storage", changedRead);
   const advancedRead = requiredIndex(poll, "advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId)", "early poll publication generation", storedRead);
@@ -498,7 +503,12 @@ test("a raced refusal cannot publish over a newer selection or submission snapsh
     "a refused review must prove selection and snapshot ownership before any publication",
   );
 
-  const pollPublish = requiredIndex(poll, 'result = publishSubmissionEnvelope(submissionRef, result, "poll")', "poll publication");
+  const pollPublish = requiredIndex(poll, 'result = publishSubmissionEnvelope(', "poll publication");
+  assert.match(
+    poll.slice(pollPublish, pollPublish + 260),
+    /submissionRef,[\s\S]*?result,[\s\S]*?"poll",[\s\S]*?authoritativeRetrySafety: true/,
+    "visible publication must retain the same causally fresh safety authority",
+  );
   const pollAdvance = requiredIndex(
     poll,
     "advanceSubmissionPublicationGeneration(submissionPublicationGenerationsRef.current, requestedId)",
@@ -544,12 +554,12 @@ test("unsafe multi-value fields reuse the managed handoff routes", () => {
 
   assert.match(branch, /canFinishInDashboard \? \(/);
   assert.match(branch, /<ButtonLink href="#live-company-page" block className="sm:w-auto">/);
-  assert.match(branch, /attendedHandoffUrl \? \(/);
+  assert.match(branch, /attendedHandoffAvailable \|\| resumableAttendedHandoffAvailable \? \(/);
   assert.match(branch, /openAttendedHandoff\(\)/);
-  assert.match(branch, /!staysInsideLitos && \(handoffUrl \?\? portalUrl\)/);
+  assert.match(branch, /legacyEmployerFallbackAllowed && !staysInsideLitos && \(handoffUrl \?\? portalUrl\)/);
   assert.match(branch, /Answer on company page/);
   assert.match(branch, /onClick=\{onReviewPacket\}/);
-  assert.doesNotMatch(branch, /ButtonLink href=\{\(handoffUrl \?\? portalUrl\)!\}[\s\S]*?attendedHandoffUrl \? \(/);
+  assert.doesNotMatch(branch, /ButtonLink href=\{\(handoffUrl \?\? portalUrl\)!\}[\s\S]*?attendedHandoffAvailable \|\| resumableAttendedHandoffAvailable \? \(/);
   assert.match(screen, /currentNonQuestionTask \? \([\s\S]*?directTaskPlan\.metadataBlockers\.length > 0/);
   assert.equal(
     [...screen.matchAll(/<ButtonLink href="#live-company-page"/g)].length,
@@ -712,7 +722,7 @@ test("a direct answer owns the screen and invalidates an older poll snapshot", (
   assert.match(poll, /submissionMutationGenerationRef\.current !== requestedMutationGeneration/);
   assert.match(save, /if \(!result\.saved\)[\s\S]*?const refusalStillOwnsApplication[\s\S]*?if \(result\.review && refusalStillOwnsApplication\) \{[\s\S]*?submissionMutationGenerationRef\.current \+= 1;[\s\S]*?publishSubmissionEnvelope\(submissionRef, reconciled, "direct"\)/);
   assert.match(save, /submissionMutationGenerationRef\.current \+= 1;[\s\S]*?const acceptedCandidate: SubmissionResponse/);
-  assert.match(screen, /const directAnswerActive = needsAttention && !awaitingUnverifiedSubmission && currentDirectQuestion !== null/);
+  assert.match(screen, /const directAnswerActive = needsAttention && !submissionOutcomeGateActive && currentDirectQuestion !== null/);
   assert.match(screen, /\{!directAnswerActive && <>[\s\S]*?<Button onClick=\{onReviewPacket\}>Open packet review<\/Button>[\s\S]*?<Button onClick=\{onRetry\} variant="secondary">Try again<\/Button>/);
-  assert.match(screen, /!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence/);
+  assert.match(screen, /!submissionOutcomeGateActive && !directAnswerActive && filledFormEvidence/);
 });

@@ -94,7 +94,7 @@ test("non-question work stays actionable while trusted questions render as a dir
      when the row's checkbox stopped being scenery and started writing a stored tick. The
      whole-element pin stays, so a prop silently dropped from this line is still a failure here. */
   assert.match(page, /<DirectApplicationQuestion[\s\S]*?task=\{currentDirectQuestion\}[\s\S]*?onSave=\{saveCurrentDirectQuestion\}/);
-  assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} portalUrl=\{staysInsideLitos \|\| attendedHandoffUrl \? undefined : handoffUrl \?\? portalUrl\}/);
+  assert.match(page, /<BlockerList items=\{\[currentNonQuestionTask\]\} portalUrl=\{staysInsideLitos \|\| !legacyEmployerFallbackAllowed \? undefined : handoffUrl \?\? portalUrl\}/);
   assert.match(page, /onSaveQuestion=\{\(questionId, answer, intent, promptFingerprint, taskFingerprint, task\) => saveReviewedAnswers\(\{ questionId, answer, intent, promptFingerprint, taskFingerprint, task \}\)\}/);
   assert.match(page, /onOpenQuestion=\{\(questionId, intent\) => reviewPortalQuestions\(questionId, intent\)\}/);
   assert.match(page, /onAddDocument=\{askForDocument\}/);
@@ -241,8 +241,8 @@ test("an application Litos cannot finish has a control that finishes it", () => 
   assert.match(dashboard, /const documentsLitosCannotDeliver = orderedDocumentAsks\.length > 0 \|\| undeliverableDocumentAsks\.length > 0/);
   assert.match(
     dashboard,
-    /documentsLitosCannotDeliver && \(\s*<Button onClick=\{onSelfSubmitted\} variant="secondary">I submitted it myself<\/Button>/,
-    "a blocked send with no way out is the trap this screen has been fixed for six times",
+    /documentsLitosCannotDeliver && attendedManualAttemptActive && \([\s\S]{0,500}<Button onClick=\{onSelfSubmitted\} disabled=\{attendedOutcomePending\} variant="secondary">\{attendedOutcomePending \? "Recording outcome\.\.\." : "I submitted it myself"\}<\/Button>/,
+    "the exit must remain available only after the server reserved the exact attended employer attempt",
   );
   assert.match(dashboard, /\/submission\/self-submitted/);
   // And the ordered ask keeps a way to attach the unofficial copy plenty of employers accept.

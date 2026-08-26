@@ -38,16 +38,16 @@ describe("a managed run stopped by a rendered CAPTCHA can be finished through th
   test("the extension-recovery flag is gated the same way every other post-resolution control is, and only by a rendered CAPTCHA specifically", () => {
     assert.match(
       applications,
-      /const captchaBlockedLastAttempt = needsAttention && !awaitingUnverifiedSubmission\s*\n\s*&& review\.unverified_submission\?\.challenge_on_screen === true;/,
-      "captchaBlockedLastAttempt must require needsAttention, must wait for the yes/no card to " +
-      "resolve (the same gate Try again, Open packet review, and the handoff controls already use), " +
+      /const captchaBlockedLastAttempt = needsAttention && retryAllowed\s*\n\s*&& legacyEmployerFallbackAllowed\s*\n\s*&& review\.unverified_submission\?\.challenge_on_screen === true;/,
+      "captchaBlockedLastAttempt must require needsAttention, must wait for the server-owned retry verdict " +
+      "to prove the earlier attempt safe (the same gate Try again and the handoff controls use), " +
       "and must check challenge_on_screen specifically, not needs_attention alone",
     );
   });
 
   test("the extension-recovery button renders next to Try again, not instead of it, and only when captchaBlockedLastAttempt", () => {
     const buttons = applications.match(
-      /\{needsAttention && !awaitingUnverifiedSubmission && <Button onClick=\{onRetry\}[\s\S]{0,60}Try again<\/Button>\}\s*\n[\s\S]{0,900}?\{captchaBlockedLastAttempt && \(\s*\n\s*<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy\}>\s*\n\s*\{extensionFillBusy \? "Checking extension\.\.\." : "Open and fill with extension"\}\s*\n\s*<\/Button>\s*\n\s*\)\}/,
+      /\{needsAttention && retryAllowed && <Button onClick=\{onRetry\} variant="secondary">Try again<\/Button>\}\s*\n[\s\S]{0,900}?\{captchaBlockedLastAttempt && \(\s*\n\s*<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy \|\| attendedOutcomePending\}>\s*\n\s*\{extensionFillBusy \? "Checking extension\.\.\." : "Open and fill with extension"\}\s*\n\s*<\/Button>\s*\n\s*\)\}/,
     );
     assert.ok(buttons, "Open and fill with extension must render immediately after Try again, gated on captchaBlockedLastAttempt");
   });
@@ -75,12 +75,12 @@ describe("a managed run stopped by a rendered CAPTCHA can be finished through th
     );
     assert.match(
       applications,
-      /<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy\}>/,
+      /<Button onClick=\{onOpenWithExtension\} variant="secondary" disabled=\{extensionFillBusy \|\| attendedOutcomePending\}>/,
       "the button must disable while a fill is already in flight, matching every other async action on this file",
     );
     assert.match(
       applications,
-      /\{extensionFillError && \(\s*\n\s*<p role="alert"[^>]*>\{extensionFillError\}<\/p>\s*\n\s*\)\}/,
+      /\{extensionFillError && fillPostingDistinction\?\.tone !== "resolved" && \(\s*\n\s*<p role="alert"[^>]*>\{extensionFillError\}<\/p>\s*\n\s*\)\}/,
       "extensionFillError must actually render somewhere on SubmissionScreen",
     );
   });

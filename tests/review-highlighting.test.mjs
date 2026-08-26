@@ -388,7 +388,8 @@ test('a successful poll clears its OWN stale banner, and nothing else', () => {
   // Bounded to refreshSubmission itself. The span was 1800 characters, which is "long enough
   // today": adding the in-flight guard and its comment pushed setError past it and turned a
   // passing invariant red without the invariant changing.
-  const start = dashboard.indexOf("const refreshSubmission");
+  const start = dashboard.indexOf("const refreshSubmission = useCallback");
+  assert.ok(start >= 0, "could not find refreshSubmission");
   const end = dashboard.indexOf("\n  useEffect(", start);
   assert.ok(end > start, "could not find the end of refreshSubmission");
   // Comments stripped, the way R-046 does it further up this file: the line below explains what

@@ -177,7 +177,17 @@ test("opens only the action-time server URL for the exact displayed packet", () 
     pdf: { sha256: digest, size_bytes: 42 },
   };
   const url = "https://jobs.jobvite.com/acme/job/Ab12Cd/apply";
+  const attemptId = "6d58c1f5-e885-41f7-a16a-dac37f98ab17";
   const response = {
+    manual_attempt_id: attemptId,
+    retry_safety: {
+      kind: "blocked_unverified",
+      attemptId,
+      at: "2026-08-24T08:00:00.000Z",
+      reason: "boundary_authorized",
+      leaseId: "7f3af055-ae35-4fe0-9991-ddd0fd2069e7",
+      expiresAt: "2026-08-24T08:03:00.000Z",
+    },
     manual_handoff: {
       url,
       audit_digest: digest,
@@ -186,7 +196,8 @@ test("opens only the action-time server URL for the exact displayed packet", () 
       size_bytes: 42,
     },
   };
-  assert.equal(manualHandoffMatchesPacket(response, url, packet), true);
+  const responseReceivedAt = Date.parse("2026-08-24T08:00:30.000Z");
+  assert.equal(manualHandoffMatchesPacket(response, url, packet, responseReceivedAt), true);
 
   for (const mutate of [
     (copy: typeof response) => { copy.manual_handoff.url = "https://jobs.jobvite.com/acme/job/Different/apply"; },
@@ -198,7 +209,13 @@ test("opens only the action-time server URL for the exact displayed packet", () 
   ]) {
     const changed = structuredClone(response);
     mutate(changed);
-    assert.equal(manualHandoffMatchesPacket(changed, url, packet), false);
+    assert.equal(manualHandoffMatchesPacket(changed, url, packet, responseReceivedAt), false);
   }
-  assert.equal(manualHandoffMatchesPacket({ manual_handoff: null }, url, packet), false);
+  assert.equal(manualHandoffMatchesPacket({ ...response, manual_attempt_id: "not-a-uuid" }, url, packet, responseReceivedAt), false);
+  assert.equal(manualHandoffMatchesPacket({ ...response, retry_safety: { ...response.retry_safety, reason: "opened" } }, url, packet, responseReceivedAt), false);
+  assert.equal(manualHandoffMatchesPacket({ ...response, retry_safety: { ...response.retry_safety, attemptId: "different" } }, url, packet, responseReceivedAt), false);
+  assert.equal(manualHandoffMatchesPacket({ ...response, retry_safety: { ...response.retry_safety, at: "" } }, url, packet, responseReceivedAt), false);
+  assert.equal(manualHandoffMatchesPacket({ ...response, retry_safety: { ...response.retry_safety, leaseId: "not-a-uuid" } }, url, packet, responseReceivedAt), false);
+  assert.equal(manualHandoffMatchesPacket({ ...response, retry_safety: { ...response.retry_safety, expiresAt: "2026-08-24T08:00:30.000Z" } }, url, packet, responseReceivedAt), false);
+  assert.equal(manualHandoffMatchesPacket({ manual_handoff: null }, url, packet, responseReceivedAt), false);
 });

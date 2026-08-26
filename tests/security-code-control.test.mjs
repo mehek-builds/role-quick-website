@@ -24,7 +24,7 @@ const source = readFileSync(new URL("../app/dashboard/applications/page.tsx", im
 const buttonSource = readFileSync(new URL("../components/app/Button.tsx", import.meta.url), "utf8");
 const card = source.slice(
   source.indexOf("function SecurityCodeCard"),
-  source.indexOf("function SubmissionScreen"),
+  source.indexOf("type SubmissionScreenProps"),
 );
 
 test("the card exists and is rendered for the state it is for", () => {

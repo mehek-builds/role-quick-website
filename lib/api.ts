@@ -20,6 +20,7 @@ const EMAIL_KEY = "rq_email";
 const SESSION_MODE_KEY = "litos_session_mode_v1";
 const HISTORY_KEY = "litos_has_history_v1";
 const GUEST_KEY = "litos_guest_idempotency_v1";
+export const SUBMISSION_ORPHAN_RISK_REFRESH_EVENT = "litos:submission-orphan-risk-refresh";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -214,6 +215,12 @@ async function requestApi<T>(
     data = await res.json().catch(() => null);
   }
   if (!res.ok) {
+    if (typeof window !== "undefined"
+      && data
+      && typeof data === "object"
+      && (data as { code?: unknown }).code === "DUPLICATE_RISK_UNIDENTIFIABLE") {
+      window.dispatchEvent(new Event(SUBMISSION_ORPHAN_RISK_REFRESH_EVENT));
+    }
     const { message, issues } = apiErrorMessage(data, res.status);
     throw new ApiError(res.status, message, issues, data);
   }
@@ -414,6 +421,8 @@ export type CanonicalApplication = {
   tracker_state: string;
   review_state: string;
   submission_state: string;
+  /** Server-owned immutable attempt fold for this canonical application. Missing fails closed. */
+  retry_safety?: SubmissionRetrySafety | null;
   selected_resume_artifact_id?: string | null;
   resume_attached?: boolean;
   resume_source?: "artifact" | "base_resume" | "none" | string;
@@ -841,7 +850,23 @@ export type PacketAuditResponse = {
   questions?: ApplicationQuestion[];
 };
 
+export type AttendedHandoffCapability = {
+  version: "attended_handoff_v1";
+  kind: "manual_handoff" | "self_submit";
+  capability_sha256: string;
+  url_sha256: string;
+};
+
 export type ManualHandoffResponse = {
+  application_id: string;
+  manual_attempt_id: string;
+  boundary_lease_id: string;
+  boundary_activation_id: string;
+  manual_handoff_resume_available: true;
+  replay: boolean;
+  attended_handoff_capability: AttendedHandoffCapability;
+  review: ApplicationReview;
+  retry_safety: SubmissionRetrySafety;
   manual_handoff: {
     url: string;
     audit_digest: string;
@@ -850,6 +875,173 @@ export type ManualHandoffResponse = {
     size_bytes: number;
   };
 };
+
+export type SelfSubmitStartResponse = {
+  application_id: string;
+  manual_attempt_id: string;
+  boundary_lease_id: string;
+  boundary_activation_id: string;
+  manual_handoff_resume_available: true;
+  replay: boolean;
+  attended_handoff_capability: AttendedHandoffCapability;
+  portal_url: string;
+  review: ApplicationReview;
+  retry_safety: SubmissionRetrySafety;
+};
+
+/**
+ * The backend's immutable submission-attempt fold for this exact posting.
+ *
+ * This deliberately lives outside ApplicationReview. Review JSON is mutable application state,
+ * including the applicant-facing unverified_submission prompt, while this verdict is derived from
+ * durable attempt events. A client may offer another employer-facing attempt only for the two safe
+ * variants. Missing or malformed wire data must remain fail-closed at the call site.
+ */
+export type SubmissionRetrySafetyProofKind =
+  | "typed_pre_click_stop"
+  | "applicant_checked_not_sent"
+  | "applicant_checked_all_possible_destinations_not_sent"
+  | "employer_rejected_not_filed"
+  | "employer_verification_pending_not_filed"
+  | "provider_definitive_rejection"
+  | "extension_cancelled_before_press";
+
+export type SubmissionRetrySafety =
+  | { kind: "no_evidence" }
+  | {
+    kind: "safe_not_sent";
+    attemptId: string;
+    proofKind: SubmissionRetrySafetyProofKind;
+    resolvedAt: string;
+  }
+  | {
+    kind: "blocked_unverified";
+    attemptId: string;
+    at: string;
+    reason: "opened" | "pressed" | "invalid_sequence";
+  }
+  | {
+    kind: "blocked_unverified";
+    attemptId: string;
+    at: string;
+    reason: "boundary_authorized";
+    leaseId: string;
+    expiresAt: string;
+  }
+  | {
+    kind: "blocked_confirmed";
+    attemptId: string;
+    confirmedAt: string;
+  };
+
+export type SubmissionOrphanRisk = {
+  attempt_id: string;
+  packet_id: string;
+  company: string;
+  role: string;
+  observed_at: string;
+  reason:
+    | "opened"
+    | "boundary_authorized"
+    | "pressed"
+    | "invalid_sequence"
+    | "confirmed_unattributed"
+    | "attributed_confirmed"
+    | "blanket_not_sent";
+  scope: "posting" | "user";
+  blocks_sends: boolean;
+  resolution_available: boolean;
+};
+
+export function getSubmissionOrphanRisks(init: RequestInit = {}): Promise<{ risks: SubmissionOrphanRisk[] }> {
+  return api<{ risks: SubmissionOrphanRisk[] }>("/submission-risks/orphans", init);
+}
+
+export type SubmissionOrphanResolutionRequest =
+  | {
+    found: false;
+    checked_exact_destination: true;
+    checked_all_possible_destinations?: never;
+  }
+  | {
+    found: false;
+    checked_all_possible_destinations: true;
+    checked_exact_destination?: never;
+  }
+  | {
+    found: true;
+    posting?: {
+      company: string;
+      role: string;
+      portal_url: string;
+    };
+  };
+
+export function resolveSubmissionOrphanRisk(
+  attemptId: string,
+  request: SubmissionOrphanResolutionRequest,
+): Promise<{
+  attempt_id: string;
+  resolution: "found" | "not_found";
+  already_resolved: boolean;
+  retry_safety: SubmissionRetrySafety;
+  attributed_attempt_id?: string;
+}> {
+  return api(`/submission-risks/orphans/${encodeURIComponent(attemptId)}/resolution`, {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export const POSTING_DISTINCTION_CANDIDATE_IDENTITY_VERSION = "posting-distinction-candidate-v1" as const;
+
+export type PostingDistinctionRisk = {
+  prior_attempt_id: string;
+  prior_application_id: string | null;
+  prior_packet_id: string;
+  prior_company: string;
+  prior_role: string;
+  prior_portal_url: string;
+  prior_identity_exact: true;
+  candidate_application_id: string;
+  candidate_packet_id: string;
+  candidate_company: string;
+  candidate_role: string;
+  candidate_portal_url: string;
+  candidate_identity_version: typeof POSTING_DISTINCTION_CANDIDATE_IDENTITY_VERSION;
+  candidate_identity_digest: string;
+};
+
+export type PostingDistinctionResolutionRequest = {
+  relation_id: string;
+  prior_attempt_id: string;
+  candidate_application_id: string;
+  candidate_packet_id: string;
+  candidate_identity_version: typeof POSTING_DISTINCTION_CANDIDATE_IDENTITY_VERSION;
+  candidate_identity_digest: string;
+  confirmed_distinct_postings: true;
+};
+
+export type PostingDistinctionResolutionResponse = {
+  relation_id: string;
+  replay: boolean;
+  candidate_application_id: string;
+  candidate_packet_id: string;
+  candidate_identity_version: typeof POSTING_DISTINCTION_CANDIDATE_IDENTITY_VERSION;
+  candidate_identity_digest: string;
+  duplicate_guard: "clear" | "duplicate" | "unidentifiable";
+  remaining_risk: unknown;
+};
+
+/** Append applicant-confirmed evidence for one exact posting pair. This never retries a send. */
+export function resolvePostingDistinction(
+  request: PostingDistinctionResolutionRequest,
+): Promise<PostingDistinctionResolutionResponse> {
+  return api<PostingDistinctionResolutionResponse>("/submission-risks/posting-distinctions", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
 
 export type ApplicationReview = {
   jd_text: string;
@@ -977,6 +1169,8 @@ export type ApplicationReview = {
     decided_at: string;
   };
   submission_claimed_at?: string;
+  /** Exact immutable attempt reserved before an attended employer control is exposed. */
+  submission_claim_id?: string;
   /** Set when a run may have reached the employer and stopped before it could confirm it, e.g. a
    *  managed session that timed out or errored at the submit step. `resolution` is the applicant's
    *  own answer after she has looked, in her own portal or mailbox - undefined means the question is

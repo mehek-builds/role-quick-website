@@ -4,7 +4,7 @@ import {
   describeRemainingWork,
   describeWait,
   isWaitingOnHuman,
-  safePortalUrl,
+  waitingApplicationHref,
   waitingApplications,
   type StallInfo,
 } from "./captcha-queue.ts";
@@ -78,7 +78,7 @@ test("an application with no company still appears, with readable placeholders",
   assert.equal(entry?.role, "this role");
 });
 
-test("the portal url rides along so the queue can send them back to the right page", () => {
+test("the queue never carries the employer url into its passive home-card projection", () => {
   const [entry] = waitingApplications([
     packet("with-url", {
       status: "needs_attention",
@@ -86,7 +86,15 @@ test("the portal url rides along so the queue can send them back to the right pa
       stall: STALL,
     }),
   ]);
-  assert.equal(entry?.portalUrl, "https://boards.greenhouse.io/acme/jobs/1");
+  assert.equal("portalUrl" in (entry ?? {}), false);
+  assert.equal(waitingApplicationHref(entry!.id), "/dashboard/applications?application=with-url&intent=apply");
+});
+
+test("the internal application link encodes an opaque application id", () => {
+  assert.equal(
+    waitingApplicationHref("application/id?next=https://employer.example"),
+    "/dashboard/applications?application=application%2Fid%3Fnext%3Dhttps%3A%2F%2Femployer.example&intent=apply",
+  );
 });
 
 // ---- wording ----
@@ -145,37 +153,24 @@ test("every stage sends the applicant to continue inside Litos", () => {
   assert.match(describeRemainingWork("before_fill"), /Continue in Litos/);
 });
 
-// ---- link safety ----
-//
-// The backend's guard is zod .url(), which accepts `javascript:alert(1)`. This block puts a button
-// in front of the applicant and tells them to click it, so it is the wrong place to trust a URL.
-
-test("a javascript url never becomes a link", () => {
-  assert.equal(safePortalUrl("javascript:alert(1)"), undefined);
-});
-
-test("a data url never becomes a link", () => {
-  assert.equal(safePortalUrl("data:text/html,<script>alert(1)</script>"), undefined);
-});
-
-test("plain http does not become a link either", () => {
-  assert.equal(safePortalUrl("http://boards.greenhouse.io/acme/jobs/1"), undefined);
-});
-
-test("an https portal url is kept", () => {
-  assert.equal(safePortalUrl("https://boards.greenhouse.io/acme/jobs/1"), "https://boards.greenhouse.io/acme/jobs/1");
-});
-
-test("an unparseable url is dropped rather than thrown on", () => {
-  assert.equal(safePortalUrl("not a url"), undefined);
-  assert.equal(safePortalUrl(undefined), undefined);
-});
-
-// The row still appears: the application needs finishing whether or not we can link to it.
-test("a row with an unsafe url still appears, just without the link", () => {
+test("a row with an unsafe employer url still appears and points only inside Litos", () => {
   const queue = waitingApplications([
     packet("unsafe", { status: "needs_attention", portal_url: "javascript:alert(1)", stall: STALL }),
   ]);
   assert.equal(queue.length, 1);
-  assert.equal(queue[0]?.portalUrl, undefined);
+  assert.equal("portalUrl" in queue[0]!, false);
+  assert.equal(waitingApplicationHref(queue[0]!.id), "/dashboard/applications?application=unsafe&intent=apply");
+});
+
+test("the home waiting card has no passive handoff or employer-link escape hatch", async () => {
+  const source = await import("node:fs/promises").then(({ readFile }) =>
+    readFile(new URL("../components/app/WaitingOnYou.tsx", import.meta.url), "utf8"),
+  );
+
+  assert.doesNotMatch(source, /armHandoffs/);
+  assert.doesNotMatch(source, /extension-bridge/);
+  assert.doesNotMatch(source, /item\.portalUrl/);
+  assert.doesNotMatch(source, /target=["']_blank["']/);
+  assert.doesNotMatch(source, /Or open it yourself/);
+  assert.match(source, /href=\{waitingApplicationHref\(item\.id\)\}/);
 });

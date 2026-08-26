@@ -318,7 +318,7 @@ test("handoff completion and self-submission publish only to the packet that sta
     const action = source.slice(start, end);
     assert.match(action, /const requestedId = selected\.id;/);
     const selectionGuard = action.indexOf("if (selectedIdRef.current !== requestedId)");
-    const directPublish = action.indexOf('publishSubmissionEnvelope(submissionRef, result, "direct")');
+    const directPublish = action.indexOf('publishSubmissionEnvelope(submissionRef, exactResult, "direct")');
     const evidenceWrite = action.indexOf("packetEvidenceRef.current = nextEvidence");
     const questionWrite = action.indexOf("setQuestions(published.review.questions)");
     const submissionWrite = action.indexOf("setSubmission(published)");

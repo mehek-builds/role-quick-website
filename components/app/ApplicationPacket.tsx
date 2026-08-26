@@ -6,6 +6,7 @@ import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, start
 import { completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
+import { safeEvidenceImageUrl } from "@/lib/evidence-image";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
 
 /* REVISITING AN APPLICATION, against real packet data.
@@ -396,6 +397,7 @@ export function ApplicationPacket({
   const acknowledgedItems = inputItems.filter((item) => item.acknowledged === true);
   const completedItems = completedSubmissionGroups(safeContentReview);
   const receipt = safeContentReview.receipt;
+  const receiptScreenshotUrl = safeEvidenceImageUrl(receipt?.screenshot_url);
   const sentAt = formatMoment(review.submitted_at ?? review.updated_at);
   const builtAt = formatMoment(contentPacket.created_at);
   const when = sent
@@ -838,16 +840,20 @@ export function ApplicationPacket({
                         Open the confirmation
                       </a>
                     </div>
-                    {/* Lazy + async decode: a receipt screenshot is a full-page capture sitting
-                        below the fold, and CSS width does not bound the decoded bitmap. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={receipt.screenshot_url}
-                      alt="The company's confirmation that the application arrived"
-                      loading="lazy"
-                      decoding="async"
-                      className="h-auto w-full border-t border-border"
-                    />
+                    {receiptScreenshotUrl && (
+                      <>
+                        {/* Lazy + async decode: a receipt screenshot is a full-page capture sitting
+                            below the fold, and CSS width does not bound the decoded bitmap. */}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={receiptScreenshotUrl}
+                          alt="The company's confirmation that the application arrived"
+                          loading="lazy"
+                          decoding="async"
+                          className="h-auto w-full border-t border-border"
+                        />
+                      </>
+                    )}
                   </div>
                 </div>
               )}

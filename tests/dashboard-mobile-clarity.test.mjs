@@ -33,7 +33,7 @@ test("Applications stacks task copy above its action and aligns actions beside t
 });
 
 test("Applications folds completed checks behind a readable disclosure while input is still needed", () => {
-  assert.match(applications, /needsAttention && !awaitingUnverifiedSubmission \? \(\s*<details className="group mt-4 border-t border-border pt-4">/);
+  assert.match(applications, /needsAttention && !submissionOutcomeGateActive \? \(\s*<details className="group mt-4 border-t border-border pt-4">/);
   assert.match(applications, /\{completedItems\.length\} \{completedItems\.length === 1 \? "check" : "checks"\} already complete/);
   assert.match(applications, /min-h-11 cursor-pointer/);
   assert.match(applications, /group-open:hidden">Show<\/span>/);
@@ -48,7 +48,7 @@ test("Applications input tasks use the named Litos type, spacing, and control to
   assert.notEqual(promptEnd, -1);
   const directPrompt = applications.slice(promptStart, promptEnd);
 
-  assert.match(applications, /needsAttention && !awaitingUnverifiedSubmission \? "p-4 sm:p-6" : "p-7"/);
+  assert.match(applications, /needsAttention && !submissionOutcomeGateActive \? "p-4 sm:p-6" : "p-7"/);
   assert.match(directPrompt, /font-mono text-label font-medium uppercase/);
   assert.match(directPrompt, /text-heading font-medium leading-tight/);
   assert.match(directPrompt, /rounded-inner border border-control-border/);

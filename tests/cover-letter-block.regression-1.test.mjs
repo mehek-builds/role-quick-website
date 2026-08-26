@@ -48,7 +48,10 @@ test("the poll cannot discard a response that carries a cover letter the snapsho
     dashboard,
     /setSubmission\(\(current\) => current\?\.review\.updated_at === result\.review\.updated_at \? current : result\)/,
   );
-  assert.match(dashboard, /setSubmission\(\(current\) => nextSubmissionState\(current, result\)\)/);
+  assert.match(
+    dashboard,
+    /setSubmission\(\(current\) => nextSubmissionState\(current, result, \{ authoritativeRetrySafety: true \}\)\)/,
+  );
   assert.match(dashboard, /nextSubmissionState[\s\S]{0,400}from "@\/features\/applications"/);
 });
 

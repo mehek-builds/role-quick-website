@@ -107,7 +107,7 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // test rather than the product. Bounded spans, so a match cannot span half the file.
   assert.match(dashboard, /review\.status === "ready_for_final_approval"[\s\S]{0,600}onClick=\{approveVerifiedPreview\}/);
   assert.match(dashboard, /const failedPacketAuditStale = review\.status === "failed" && historicalPacketAuditStaleMessage\(review\)/);
-  assert.match(dashboard, /review\.status === "failed" && \(failedPacketAuditStale[\s\S]{0,180}onClick=\{onReviewPacket\}[\s\S]{0,120}onClick=\{onRetry\}/);
+  assert.match(dashboard, /review\.status === "failed" && \(failedPacketAuditStale[\s\S]{0,180}onClick=\{onReviewPacket\}[\s\S]{0,160}retryAllowed \? <Button onClick=\{onRetry\}/);
   assert.match(dashboard, /const previewReady = Boolean\(previewUrl\) && previewLoaded && !previewFailed/);
   assert.match(dashboard, /const packetAuditStillGuardsSend = result\.review\.status === "ready_for_final_approval"[\s\S]{0,260}"submission_claimed"/);
   assert.match(dashboard, /if \(!packetAuditStillGuardsSend\) \{[\s\S]{0,180}setPollError\(null\);[\s\S]{0,80}setNotice\(null\);/);
@@ -126,11 +126,10 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   // A CAPTCHA handoff is only a live control when the backend gives the dashboard a live browser
   // URL. Managed Stratus preview stops carry only screenshot evidence, so those must not render
   // a button-shaped promise that opens nowhere.
-  // !awaitingUnverifiedSubmission joined the gate on 2026-08-20: an application that pressed Send
-  // and lost the confirmation must not offer a live company-page handoff while that claim is still
-  // open, for the same reason a Stratus preview-only stop must not (see the comment two lines up).
-  assert.match(dashboard, /const handoffUrl = needsAttention && !awaitingUnverifiedSubmission \? submission\.handoff_url : undefined/);
-  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\) && !attendedHandoffUrl/);
+  // The immutable retry verdict owns the handoff gate. A mutable review resolution must not reopen
+  // a live company page while durable attempt evidence still says the outcome is unsafe.
+  assert.match(dashboard, /const handoffUrl = needsAttention && retryAllowed[\s\S]{0,100}submission\.handoff_url/);
+  assert.match(dashboard, /const canFinishInDashboard = Boolean\(handoffUrl\) && legacyEmployerFallbackAllowed/);
   assert.match(dashboard, /const staysInsideLitos = review\.portal_supported === true/);
   assert.match(dashboard, /<iframe[\s\S]{0,300}src=\{handoffUrl\}[\s\S]{0,300}Live company application page/);
   assert.match(dashboard, /No live browser to reopen/);
@@ -139,29 +138,36 @@ test("saved answers honor standing consent while retaining a manual fallback", a
   assert.match(dashboard, /function reviewPacketAgain\(\) \{[\s\S]{0,700}setQuestions\(selectedSubmission\.review\.questions\);[\s\S]{0,120}packetEvidenceRef\.current = null;[\s\S]{0,120}setPacketEvidence\(null\);[\s\S]{0,120}moveToScreen\("review"\);/);
   assert.match(dashboard, /onReviewPacket=\{reviewPacketAgain\}/);
   assert.match(dashboard, /Open company page/);
-  assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
+  assert.match(dashboard, /const attendedHandoffCapability = attendedHandoffCapabilityFromUnknown\([\s\S]{0,100}submission\.attended_handoff_capability/);
+  assert.match(dashboard, /const attendedHandoffAvailable = needsAttention[\s\S]{0,180}attendedHandoffCapability\?\.kind === "manual_handoff"/);
   assert.match(dashboard, /ensureCurrentExtensionSession\([\s\S]{0,160}minimumAttendedHandoffExtensionVersion\(review\.ats_name\)/);
-  assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
-  assert.match(dashboard, /!staysInsideLitos && !handoffUrl && !attendedHandoffUrl && portalUrl/);
+  assert.match(dashboard, /await armHandoffs\(\[\{[\s\S]{0,100}id: requestedSubmission\.application_id,[\s\S]{0,100}portalUrl: authorizedUrl/);
+  assert.match(dashboard, /needsAttention && !submissionOutcomeGateActive && !staysInsideLitos && legacyEmployerFallbackAllowed && !handoffUrl && portalUrl/);
   assert.match(dashboard, /Open exact company form/);
   assert.match(dashboard, /Manual dashboard trial/);
   assert.match(dashboard, /Use this exact frozen resume and the separate Litos routing email/);
   assert.match(dashboard, /Portal routing email:/);
   assert.match(dashboard, /manualTrialPacket\.packet_audit\.identities\.applicant_email/);
   assert.doesNotMatch(dashboard, /Portal routing email:[\s\S]{0,120}review\.applicant_email\?\.address/);
-  assert.match(dashboard, /openManualAttendedHandoff\(\)[\s\S]{0,1800}\/submission\/manual-handoff/);
-  assert.match(dashboard, /manualHandoffMatchesPacket\(current, attendedHandoffUrl, manualTrialPacket\)/);
-  assert.match(dashboard, /companyTab\.location\.replace\(handoff\.url\)/);
+  assert.match(dashboard, /openManualAttendedHandoff\(useExtension = false\)[\s\S]{0,4200}\/submission\/manual-handoff/);
+  assert.match(dashboard, /manualHandoffMatchesPacket\([\s\S]{0,180}current,[\s\S]{0,80}authorizedUrl,[\s\S]{0,80}packetForValidation/);
+  assert.match(dashboard, /onBeginAttendedHandoffRequest\(requestedSubmission\.application_id\)/);
+  assert.doesNotMatch(dashboard, /manualHandoffRequestRef/);
+  assert.match(dashboard, /responseController\.abort\(\)/);
+  assert.match(dashboard, /const arrivedLate = window\.performance\.now\(\) - requestStartedAt > MANUAL_HANDOFF_RESPONSE_DEADLINE_MS/);
+  assert.match(dashboard, /onAttendedHandoffDisposition\([\s\S]{0,160}returnedRecovery/);
+  assert.match(dashboard, /onManualHandoffAuthorized\(current, requestedSubmission, clientRequest\)/);
+  assert.match(dashboard, /companyTab\.location\.replace\(authorizedUrl\)/);
   const manualHandoff = dashboard.slice(
-    dashboard.indexOf("async function openManualAttendedHandoff()"),
-    dashboard.indexOf("/* A wait that ends.", dashboard.indexOf("async function openManualAttendedHandoff()")),
+    dashboard.indexOf("async function openManualAttendedHandoff(useExtension = false)"),
+    dashboard.indexOf("/* A wait that ends.", dashboard.indexOf("async function openManualAttendedHandoff(useExtension = false)")),
   );
   assert.doesNotMatch(manualHandoff, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
   assert.match(dashboard, /\/submit-request/);
   assert.match(dashboard, /\/submission\/approve/);
   assert.match(dashboard, /I cleared the check/);
   assert.match(dashboard, /I submitted it myself/);
-  assert.match(dashboard, /JSON\.stringify\(\{ outcome \}\)/);
+  assert.match(dashboard, /JSON\.stringify\(\{ outcome, attempt_id: requestedAttemptId \}\)/);
   assert.match(dashboard, /source: "attended_handoff"/);
   assert.match(dashboard, /Open the company page/);
   assert.match(dashboard, /TerminalActionBar className="justify-end sm:justify-between lg:!sticky/);
@@ -396,10 +402,32 @@ test("Tracker arms only the exact attended URL returned by the backend contract"
   assert.match(handoff, /review\.ats_name === "icims"[\s\S]{0,400}ICIMS_ATTENDED_GATE_REASON[\s\S]{0,200}ICIMS_SECURITY_CODE_GATE_REASON/);
   assert.match(handoff, /return \/\^\\\/jobs\\\/\\d\+\\\/[\s\S]{0,100}\\\/login\$\/i\.test\(url\.pathname\)/);
   assert.doesNotMatch(handoff, /atsName === "icims"[\s\S]{0,400}\\\/apply\$/);
-  assert.match(dashboard, /const attendedHandoffUrl = awaitingUnverifiedSubmission \? null : exactAttendedHandoffUrl\(review\)/);
-  assert.match(dashboard, /await armHandoffs\(\[\{ id: submission\.application_id, portalUrl: attendedHandoffUrl \}\]\)/);
-  assert.match(dashboard, /companyTab\.location\.replace\(attendedHandoffUrl\)/);
-  assert.doesNotMatch(dashboard, /armHandoffs\(\[\{ id: submission\.application_id, portalUrl: portalUrl/);
+  const manualStart = dashboard.indexOf("async function openManualAttendedHandoff(useExtension = false)");
+  const manualEnd = dashboard.indexOf("/* A wait that ends.", manualStart);
+  const manual = dashboard.slice(manualStart, manualEnd);
+  assert.ok(manualStart > 0 && manualEnd > manualStart);
+  assert.match(manual, /const requestedCapability = attendedHandoffCapability/);
+  assert.match(manual, /const authorizedUrl = canonicalAttendedCapabilityUrl\(handoff\.url\)/);
+  assert.match(manual, /exactAttendedHandoffUrl\(current\.review\) !== authorizedUrl/);
+  assert.match(manual, /attendedHandoffCapabilitiesEqual\([\s\S]{0,140}requestedCapability,[\s\S]{0,100}current\.attended_handoff_capability/);
+  assert.match(manual, /await attendedHandoffCapabilityMatchesUrl\([\s\S]{0,180}"manual_handoff",[\s\S]{0,80}authorizedUrl/);
+  assert.match(manual, /await armHandoffs\(\[\{[\s\S]{0,100}id: requestedSubmission\.application_id,[\s\S]{0,100}portalUrl: authorizedUrl/);
+  assert.match(manual, /companyTab\.location\.replace\(authorizedUrl\)/);
+  assert.ok(manual.indexOf("/submission/manual-handoff") < manual.indexOf("await armHandoffs"), "the URL may reach the extension only after server authorization");
+  const digestVerified = manual.indexOf("await attendedHandoffCapabilityMatchesUrl");
+  const firstDeadlineCheck = manual.indexOf("let arrivedLate = window.performance.now()", digestVerified);
+  const extensionArmed = manual.indexOf("await armHandoffs", firstDeadlineCheck);
+  const finalDeadlineCheck = manual.indexOf("arrivedLate = window.performance.now()", extensionArmed);
+  const employerNavigation = manual.indexOf("companyTab.location.replace(authorizedUrl)", finalDeadlineCheck);
+  assert.ok(
+    digestVerified >= 0
+      && firstDeadlineCheck > digestVerified
+      && extensionArmed > firstDeadlineCheck
+      && finalDeadlineCheck > extensionArmed
+      && employerNavigation > finalDeadlineCheck,
+    "lateness must be recomputed after both asynchronous verifiers and before employer navigation",
+  );
+  assert.doesNotMatch(manual, /armHandoffs\([\s\S]{0,120}portalUrl: (?:portalUrl|attendedHandoffUrl)/);
 });
 
 test("unverified submission evidence precedes its outcome controls on narrow screens", async () => {
@@ -410,14 +438,261 @@ test("unverified submission evidence precedes its outcome controls on narrow scr
   const start = dashboard.indexOf("function SubmissionScreen(");
   const end = dashboard.indexOf("function SubmissionReceipt(", start);
   const screen = dashboard.slice(start, end);
-  const evidenceBefore = screen.indexOf("{awaitingUnverifiedSubmission && filledFormEvidence}");
+  const evidenceBefore = screen.indexOf("{submissionOutcomeGateActive && filledFormEvidence}");
   const decision = screen.indexOf("<UnverifiedSubmissionCard");
-  const ordinaryEvidence = screen.indexOf("{!awaitingUnverifiedSubmission && !directAnswerActive && filledFormEvidence}");
+  const ordinaryEvidence = screen.indexOf("{!submissionOutcomeGateActive && !directAnswerActive && filledFormEvidence}");
 
   assert.ok(evidenceBefore > 0 && decision > evidenceBefore, "the proof must be encountered before the consequential yes/no controls");
   assert.ok(ordinaryEvidence > decision, "other review states keep their action-first reading order");
-  assert.match(screen, /filledFormEvidence =[\s\S]{0,160}<Card className=\{`overflow-hidden \$\{awaitingUnverifiedSubmission \? "lg:order-2" : ""\}`\}/);
-  assert.match(screen, /<Card className=\{`\$\{needsAttention && !awaitingUnverifiedSubmission \? "p-4 sm:p-6" : "p-7"\} \$\{awaitingUnverifiedSubmission \? "lg:order-1" : ""\}`\}>/);
+  assert.match(screen, /filledFormEvidence =[\s\S]{0,160}<Card className=\{`overflow-hidden \$\{submissionOutcomeGateActive \? "lg:order-2" : ""\}`\}/);
+  assert.match(screen, /<Card className=\{`\$\{needsAttention && !submissionOutcomeGateActive \? "p-4 sm:p-6" : "p-7"\} \$\{submissionOutcomeGateActive \? "lg:order-1" : ""\}`\}>/);
+});
+
+test("immutable retry safety gates every employer-facing replay", async () => {
+  const [dashboard, apiSource, submissionStateSource, replaySource] = await Promise.all([
+    readFile(new URL("../app/dashboard/applications/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../features/applications/domain/submission-state.ts", import.meta.url), "utf8"),
+    readFile(new URL("../features/applications/domain/attended-handoff-replay.ts", import.meta.url), "utf8"),
+  ]);
+  const prepareStart = dashboard.indexOf("async function prepareApplication(");
+  const prepareEnd = dashboard.indexOf("async function completeHandoff", prepareStart);
+  const prepare = dashboard.slice(prepareStart, prepareEnd);
+  const canonicalResolutionStart = dashboard.indexOf("async function resolveCanonicalManualSubmission(");
+  const canonicalResolutionEnd = dashboard.indexOf("async function createApplication(", canonicalResolutionStart);
+  const canonicalResolution = dashboard.slice(canonicalResolutionStart, canonicalResolutionEnd);
+  const handoffStart = dashboard.indexOf("async function completeHandoff(");
+  const handoffEnd = dashboard.indexOf("/* THE EXIT FROM A SEND", handoffStart);
+  const handoff = dashboard.slice(handoffStart, handoffEnd);
+  const unverifiedStart = dashboard.indexOf("async function submitUnverifiedOutcome(");
+  const unverifiedEnd = dashboard.indexOf("async function retryPreparation(", unverifiedStart);
+  const unverified = dashboard.slice(unverifiedStart, unverifiedEnd);
+  const canonicalDetailStart = dashboard.indexOf("function CanonicalApplicationDetail(");
+  const canonicalDetailEnd = dashboard.indexOf("function UnverifiedSubmissionCard(", canonicalDetailStart);
+  const canonicalDetail = dashboard.slice(canonicalDetailStart, canonicalDetailEnd);
+  const submissionScreenStart = dashboard.indexOf("function SubmissionScreen(");
+  const submissionScreenEnd = dashboard.indexOf("function SubmissionReceipt(", submissionScreenStart);
+  const submissionScreen = dashboard.slice(submissionScreenStart, submissionScreenEnd);
+  assert.match(
+    submissionStateSource,
+    /submissionRetrySafetyBlocksNegativeResolution[\s\S]{0,500}safety\.reason === "pressed"[\s\S]{0,160}safety\.reason === "boundary_authorized"[\s\S]{0,160}safety\.reason === "invalid_sequence"/,
+    "all three permanent employer-boundary reasons veto a negative answer",
+  );
+
+  assert.match(apiSource, /export type SubmissionRetrySafety =[\s\S]{0,900}"no_evidence"[\s\S]{0,900}"safe_not_sent"[\s\S]{0,900}"blocked_unverified"[\s\S]{0,900}"blocked_confirmed"/);
+  assert.match(dashboard, /retry_safety: SubmissionRetrySafety \| null/);
+  assert.match(dashboard, /const awaitingUnverifiedSubmission = needsAttention[\s\S]{0,100}submission\.retry_safety\?\.kind === "blocked_unverified"/);
+  assert.match(dashboard, /const submissionOutcomeGateActive = awaitingUnverifiedSubmission[\s\S]{0,120}\|\| attendedManualAttemptActive/);
+  assert.match(replaySource, /function activeAttendedManualAttemptId\([\s\S]{0,180}attendedManualAttemptIdentity\(submission\)/);
+  const identityStart = replaySource.indexOf("export function attendedManualAttemptIdentity(");
+  const identityEnd = replaySource.indexOf("export function activeAttendedManualRecovery(", identityStart);
+  const identity = replaySource.slice(identityStart, identityEnd);
+  assert.match(identity, /manual_attempt_id/);
+  assert.match(identity, /submission_claim_id !== attemptId/);
+  assert.doesNotMatch(identity, /boundary_lease_id|boundary_activation_id|manual_handoff_resume_available/);
+  assert.match(replaySource, /submission\.review\.submission_claim_id !== attemptId/);
+  assert.match(replaySource, /safety\.reason !== "boundary_authorized"/);
+  assert.match(dashboard, /body: JSON\.stringify\(\{ outcome, attempt_id: requestedAttemptId \}\)/);
+  assert.match(dashboard, /submission\/self-submitted`[\s\S]{0,180}body: JSON\.stringify\(\{ attempt_id: requestedAttemptId \}\)/);
+  assert.match(dashboard, /documentsLitosCannotDeliver && attendedManualAttemptActive/);
+  assert.match(apiSource, /export type CanonicalApplication = \{[\s\S]{0,700}retry_safety\?: SubmissionRetrySafety \| null/);
+  assert.match(dashboard, /async function resolveCanonicalManualSubmission\(found: boolean\)/);
+  assert.match(dashboard, /manual-submission-resolution`[\s\S]{0,220}JSON\.stringify\(\{ attempt_id: requestedAttemptId, found \}\)/);
+  assert.match(dashboard, /canonicalManualResolutionMatches\([\s\S]{0,180}requestedAttemptId/);
+  assert.doesNotMatch(canonicalResolution, /resolved_attempt_retry_safety \?\? result\.retry_safety/);
+  assert.match(canonicalResolution, /if \(!found && submissionRetrySafetyBlocksNegativeResolution\(safety\)\)/);
+  assert.doesNotMatch(canonicalResolution, /submissionBoundaryAuthorizationBlocksResolution/);
+  assert.ok(
+    canonicalResolution.indexOf("submissionRetrySafetyBlocksNegativeResolution(safety)")
+      < canonicalResolution.indexOf("manual-submission-resolution"),
+    "canonical negative answers must fail closed before the request",
+  );
+  assert.match(dashboard, /const unresolvedAttempt = application\.retry_safety\?\.kind === "blocked_unverified"/);
+  assert.match(canonicalDetail, /const negativeResolutionBlocked = submissionRetrySafetyBlocksNegativeResolution\(application\.retry_safety\)/);
+  assert.match(canonicalDetail, /\{unresolvedAttempt && \([\s\S]{0,2400}onResolveManualSubmission\(true\)/);
+  assert.match(canonicalDetail, /!negativeResolutionBlocked && \([\s\S]{0,220}onResolveManualSubmission\(false\)/);
+  assert.match(dashboard, /!submitted && !unresolvedAttempt && retryAllowed && !checkingSendPath && !readyToSend/);
+  assert.doesNotMatch(dashboard, /Boolean\(review\.unverified_submission\) && !review\.unverified_submission\?\.resolution/);
+  assert.match(prepare, /const retryBlocker = retrySafetyBlockerMessage\(currentSubmission\?\.retry_safety\)/);
+  assert.ok(
+    prepare.indexOf("if (retryBlocker)") < prepare.indexOf("/submit-request"),
+    "all replay paths must fail closed before the shared employer-facing request",
+  );
+  assert.match(dashboard, /const activeSubmission = submissionRef\.current\?\.application_id === selected\.id[\s\S]{0,180}activeSubmission\.retry_safety\?\.kind !== "blocked_unverified"/);
+  assert.match(dashboard, /JSON\.stringify\(\{ found, attempt_id: attemptId \}\)/);
+  assert.match(unverified, /if \(!found && submissionRetrySafetyBlocksNegativeResolution\(activeSubmission\.retry_safety\)\)/);
+  assert.doesNotMatch(unverified, /submissionBoundaryAuthorizationBlocksResolution/);
+  assert.ok(
+    unverified.indexOf("submissionRetrySafetyBlocksNegativeResolution(activeSubmission.retry_safety)")
+      < unverified.indexOf("JSON.stringify({ found, attempt_id: attemptId })"),
+    "managed negative answers must fail closed before the request",
+  );
+  assert.match(handoff, /outcome === "cleared" && submissionRetrySafetyBlocksNegativeResolution\(activeSubmission\.retry_safety\)/);
+  assert.ok(
+    handoff.indexOf("submissionRetrySafetyBlocksNegativeResolution(activeSubmission.retry_safety)")
+      < handoff.indexOf("/submission/handoff-complete"),
+    "attended negative completion must fail closed before the request",
+  );
+  assert.match(submissionScreen, /allowNotFound=\{!negativeResolutionBlocked\}/);
+  assert.match(dashboard, /allowNotFound && \([\s\S]{0,180}onSubmitOutcome\(false\)/);
+  assert.doesNotMatch(
+    submissionScreen.slice(
+      submissionScreen.indexOf("const awaitingUnverifiedSubmission"),
+      submissionScreen.indexOf("const submissionOutcomeGateActive"),
+    ),
+    /submissionBoundaryInFlight/,
+    "positive confirmation must remain visible while boundary authorization is active",
+  );
+  assert.match(dashboard, /!submissionOutcomeGateActive && review\.status === "ready_for_final_approval" && <Button onClick=\{approveVerifiedPreview\}/);
+  assert.match(dashboard, /needsAttention && attendedManualAttemptActive && !negativeResolutionBlocked && <Button onClick=\{\(\) => onHandoffComplete\("cleared"\)\}/);
+  assert.match(dashboard, /needsAttention && attendedManualAttemptActive && <Button onClick=\{\(\) => onHandoffComplete\("submitted"\)\}/);
+  assert.match(dashboard, /needsAttention && retryAllowed && <Button onClick=\{onRetry\}/);
+  assert.match(dashboard, /handoffExpired && retryAllowed/);
+  assert.match(dashboard, /const reviewAttemptSafetyBlocked = review\?\.status !== "ready_for_final_approval"[\s\S]{0,100}retrySafetyBlocker !== null/);
+  assert.match(dashboard, /finalApprovalBlocked[^;]*retrySafetyUnknown[^;]*negativeResolutionBlocked/);
+});
+
+test("managed unverified outcomes cannot reopen a raw employer retry or overwrite a newer attempt", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const action = dashboard.slice(
+    dashboard.indexOf("async function submitUnverifiedOutcome("),
+    dashboard.indexOf("async function retryPreparation(", dashboard.indexOf("async function submitUnverifiedOutcome(")),
+  );
+  const lock = action.indexOf("const outcomeToken = beginAttendedOutcome(requestedId)");
+  const version = action.indexOf("const outcomeRequest = attendedHandoffRequestVersion(requestedId, outcomeToken)");
+  const request = action.indexOf("/submission/unverified");
+  const ownership = action.indexOf("if (!currentAttendedOutcomeMayPublish(outcomeRequest)) return;", request);
+  const proof = action.indexOf("unverifiedSubmissionOutcomeResponseMatches(result, requestedId, attemptId, found)", ownership);
+  const failClosed = action.indexOf("failClosedUnverifiedNotSentResponse(result)", proof);
+  const mutation = action.indexOf("submissionMutationGenerationRef.current += 1", failClosed);
+  const snapshot = action.indexOf("submissionSnapshotsRef.current.set(requestedId, exactResult)", mutation);
+  const publish = action.indexOf('publishSubmissionEnvelope(submissionRef, exactResult, "direct")', snapshot);
+
+  assert.ok(lock >= 0 && version > lock && request > version, "the exact outcome owns the shared boundary before its request starts");
+  assert.ok(ownership > request && proof > ownership, "a held response must still own the unchanged A context before it is trusted");
+  assert.ok(failClosed > proof && mutation > failClosed && snapshot > mutation && publish > snapshot, "a negative response must be sanitized before its ordered publication");
+  assert.match(action, /const outcomeResult = found \? result : failClosedUnverifiedNotSentResponse\(result\)/);
+  assert.doesNotMatch(action, /publishSubmissionEnvelope\(submissionRef, result, "direct"\)/);
+  assert.match(action, /catch \(reason\) \{\s*if \(!currentAttendedOutcomeMayPublish\(outcomeRequest\)\) return;[\s\S]{0,160}installSubmissionRetrySafetyFromFailure/);
+  assert.match(action, /finally \{\s*finishAttendedOutcome\(requestedId, outcomeToken\)/);
+  assert.doesNotMatch(action, /unverifiedSubmissionInFlight|setUnverifiedSubmissionId/);
+  assert.match(dashboard, /unverifiedSubmissionSubmitting=\{attendedOutcomePendingIds\.has\(selected\.id\)\}/);
+});
+
+test("document handoff starts only from a click and binds completion to the returned attempt", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const start = dashboard.slice(
+    dashboard.indexOf("async function startSelfSubmission()"),
+    dashboard.indexOf("/* THE EXIT FROM A SEND", dashboard.indexOf("async function startSelfSubmission()")),
+  );
+  const open = start.indexOf('window.open("about:blank", "_blank")');
+  const reserve = start.indexOf("/submission/self-submit-start");
+  const publish = start.indexOf('publishSubmissionEnvelope(submissionRef, next, "direct")');
+  const navigate = start.indexOf("companyTab.location.replace(returnedPortalUrl)");
+  assert.ok(open >= 0 && reserve > open, "the click must reserve a blank tab before the server check");
+  assert.ok(
+    start.indexOf("if (!attendedSelfSubmitMayOpen(") >= 0
+      && start.indexOf("if (!attendedSelfSubmitMayOpen(") < open,
+    "unsafe, missing, or malformed retry safety must return before opening a tab or calling the server",
+  );
+  assert.ok(publish > reserve && navigate > publish, "the exact attempt must publish before the employer page opens");
+  assert.match(start, /attendedManualResponseMatchesRecovery\(result, requestedId, requestedRecovery\)/);
+  assert.match(start, /returnedReviewPortalUrl !== returnedPortalUrl/);
+  assert.match(start, /attendedHandoffCapabilitiesEqual\([\s\S]{0,140}requestedCapability,[\s\S]{0,100}result\.attended_handoff_capability/);
+  assert.match(start, /await attendedHandoffCapabilityMatchesUrl\([\s\S]{0,180}"self_submit",[\s\S]{0,80}returnedPortalUrl/);
+  assert.match(start, /activeAttendedManualRecovery\(candidate\)/);
+  assert.match(start, /currentAttendedHandoffDisposition\([\s\S]{0,160}returnedRecovery/);
+  assert.match(start, /responseController\.abort\(\)/);
+  assert.match(start, /disposition !== "navigate"/);
+  assert.ok(
+    start.indexOf("await attendedHandoffCapabilityMatchesUrl")
+      < start.indexOf("const arrivedLate = window.performance.now()"),
+    "a digest that finishes after the blank-tab deadline must store recovery and never navigate",
+  );
+  assert.match(
+    start,
+    /disposition !== "navigate"[\s\S]{0,220}selectedIdRef\.current === requestedId[\s\S]{0,140}submissionRef\.current\?\.application_id === requestedId[\s\S]{0,180}publishSubmissionEnvelope\(submissionRef, next, "direct"\)[\s\S]{0,100}setSubmission\(published\)[\s\S]{0,100}companyTab\.close\(\)/,
+    "a stored exact authorization must become immediately resumable after A to B to A, even when polling fails",
+  );
+  assert.match(dashboard, /documentsLitosCannotDeliver[\s\S]{0,180}!attendedManualAttemptActive[\s\S]{0,180}selfSubmitHandoffAvailable[\s\S]{0,220}onStartSelfSubmission/);
+  assert.match(dashboard, /documentsLitosCannotDeliver && attendedManualAttemptActive[\s\S]{0,420}attendedManualRecovery && selfSubmitHandoffAvailable[\s\S]{0,260}Resume company page[\s\S]{0,260}onSelfSubmitted/);
+  assert.match(dashboard, /const activeSubmission = submissionRef\.current\?\.application_id === selected\.id[\s\S]{0,180}activeAttendedManualAttemptId\(activeSubmission\)/);
+});
+
+test("retry-sensitive failures install authoritative safety before controls become idle", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(dashboard, /function retrySafetyFromApiFailure\(reason: unknown\)[\s\S]{0,280}reason\.data[\s\S]{0,180}submissionRetrySafetyFromUnknown/);
+  const installer = dashboard.slice(
+    dashboard.indexOf("function installSubmissionRetrySafetyFromFailure("),
+    dashboard.indexOf("function installCanonicalRetrySafetyFromFailure("),
+  );
+  assert.match(installer, /const retrySafety = retrySafetyFromApiFailure\(reason\)/);
+  assert.match(installer, /submissionMutationGenerationRef\.current \+= 1/);
+  assert.match(installer, /submissionSnapshotsRef\.current\.set\(applicationId, next\)/);
+  assert.match(installer, /submissionRef\.current = next[\s\S]{0,80}setSubmission\(next\)/);
+
+  for (const [startMarker, endMarker] of [
+    ["async function prepareApplication(", "async function completeHandoff("],
+    ["async function completeHandoff(", "/* THE EXIT FROM A SEND"],
+    ["async function recordSelfSubmitted()", "function reviewPortalQuestions("],
+    ["async function submitSecurityCode(", "/* Answer the one question"],
+    ["async function submitUnverifiedOutcome(", "async function retryPreparation("],
+    ["async function approveFinalSubmission()", "/* THE WAY OUT THE SERVER"],
+  ]) {
+    const action = dashboard.slice(dashboard.indexOf(startMarker), dashboard.indexOf(endMarker, dashboard.indexOf(startMarker)));
+    const catchStart = action.lastIndexOf("} catch (reason) {");
+    assert.ok(catchStart >= 0, `${startMarker} must retain an explicit failure path`);
+    const failure = action.slice(catchStart);
+    const install = failure.indexOf("installSubmissionRetrySafetyFromFailure(");
+    const finallyStart = failure.indexOf("finally");
+    assert.ok(install >= 0, `${startMarker} must publish retry safety in its catch`);
+    if (finallyStart >= 0) {
+      assert.ok(install < finallyStart, `${startMarker} must publish retry safety before clearing its busy state`);
+    }
+  }
+
+  const manualAuthorization = dashboard.slice(
+    dashboard.indexOf("onManualHandoffAuthorized={(result, requestedSubmission, clientRequest) =>"),
+    dashboard.indexOf("approving={", dashboard.indexOf("onManualHandoffAuthorized={(result, requestedSubmission, clientRequest) =>")),
+  );
+  assert.ok(
+    manualAuthorization.indexOf("submissionMutationGenerationRef.current += 1")
+      < manualAuthorization.indexOf("submissionRef.current = next"),
+    "manual authorization advances the mutation generation before publishing",
+  );
+  assert.match(manualAuthorization, /submissionSnapshotsRef\.current\.set\(next\.application_id, next\)/);
+  assert.match(dashboard, /onRetrySafetyFailure\(reason\)[\s\S]{0,120}onPacketAuditRefusal\(reason\)/);
+  assert.match(dashboard, /nextSubmissionState\(rememberedBeforePoll, result, \{ authoritativeRetrySafety: true \}\)/);
+  assert.match(dashboard, /publishSubmissionEnvelope\([\s\S]{0,160}"poll",[\s\S]{0,100}authoritativeRetrySafety: true/);
+});
+
+test("orphan-risk refreshes are unshared and only the newest request may publish", async () => {
+  const dashboard = await readFile(
+    new URL("../app/dashboard/applications/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const refresh = dashboard.slice(
+    dashboard.indexOf("const refreshSubmissionOrphanRisks = useCallback"),
+    dashboard.indexOf("useEffect(() =>", dashboard.indexOf("const refreshSubmissionOrphanRisks = useCallback")),
+  );
+
+  const generationAllocation = refresh.indexOf("++submissionOrphanRiskRefreshGenerationRef.current");
+  const requestStart = refresh.indexOf('getSubmissionOrphanRisks({ cache: "no-store" })');
+  const generationGate = refresh.indexOf("requestGeneration !== submissionOrphanRiskRefreshGenerationRef.current", requestStart);
+  const stateCommit = refresh.indexOf("setSubmissionOrphanRisks(risks)");
+  assert.ok(generationAllocation >= 0 && generationAllocation < requestStart);
+  assert.ok(requestStart >= 0 && requestStart < generationGate);
+  assert.ok(generationGate >= 0 && generationGate < stateCommit);
+  assert.match(refresh, /requestGeneration === submissionOrphanRiskRefreshGenerationRef\.current[\s\S]{0,300}setSubmissionOrphanRiskError/);
 });
 
 test("overview keeps three application states and sends matches to the review screen", async () => {

@@ -3,8 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/app/ui";
 import { ButtonLink } from "@/components/app/Button";
-import { describeRemainingWork, describeWait, type WaitingApplication } from "@/lib/captcha-queue";
-import { armHandoffs } from "@/lib/extension-bridge";
+import { describeRemainingWork, describeWait, waitingApplicationHref, type WaitingApplication } from "@/lib/captcha-queue";
 
 /**
  * Applications stopped on a human-verification check.
@@ -27,10 +26,6 @@ import { armHandoffs } from "@/lib/extension-bridge";
  * again". This component does not claim to know which of those it will be, on purpose - see
  * describeRemainingWork's own comment for why that used to be wrong.
  *
- * The one thing still worth arming is the fallback link below, since it can send the applicant to
- * the employer's page directly, bypassing SubmissionScreen entirely - the same reason armHandoffs
- * existed here before. `sendToExtension` is a silent no-op with no extension present, so arming
- * unconditionally on render costs nothing when there is nothing listening.
  */
 export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }) {
   /* Rendered from a client-side clock, set after mount. Formatting a duration during SSR produces
@@ -52,18 +47,6 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
       window.clearInterval(timer);
     };
   }, [waiting]);
-
-  /* Arms the fallback link, not the primary one. The primary control navigates inside Litos, where
-     SubmissionScreen owns its own arming (openAttendedHandoff) for the cases that need it. The
-     fallback link below skips Litos entirely and opens the employer's page directly, which is the
-     one case this queue can still put in front of the extension ahead of time - the same reason this
-     effect existed before this component stopped tracking extension state. Armed on render rather
-     than on click for the same reason as before: arming from the click handler races the new tab's
-     page load, and arming everything up front has no race to lose. */
-  useEffect(() => {
-    if (waiting === 0) return;
-    void armHandoffs(items.map((item) => ({ id: item.id, portalUrl: item.portalUrl })));
-  }, [waiting, items]);
 
   if (items.length === 0) return null;
 
@@ -104,7 +87,7 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
                   the same behavior - this queue's applications are not job-rows-shaped, so that
                   helper does not fit directly, but its URL contract does. */}
               <ButtonLink
-                href={`/dashboard/applications?application=${encodeURIComponent(item.id)}&intent=apply`}
+                href={waitingApplicationHref(item.id)}
                 size="sm"
                 /* Every one of these links reads "Continue in Litos", so without a label a screen
                    reader's link list is N identical entries with no way to tell them apart. */
@@ -112,21 +95,6 @@ export function WaitingOnYou({ items }: { items: readonly WaitingApplication[] }
               >
                 Continue in Litos
               </ButtonLink>
-              {item.portalUrl ? (
-                <ButtonLink
-                  href={item.portalUrl}
-                  variant="quiet"
-                  size="sm"
-                  target="_blank"
-                  /* noopener is the load-bearing half: this is a third-party employer page and an
-                     opened tab can otherwise reach back through window.opener. The url itself is
-                     https-checked in safePortalUrl; rel does nothing against a javascript: href. */
-                  rel="noopener noreferrer"
-                  aria-label={`Open the employer's page for ${item.role} at ${item.company} directly, opens in a new tab`}
-                >
-                  Or open it yourself
-                </ButtonLink>
-              ) : null}
             </div>
           </li>
         ))}

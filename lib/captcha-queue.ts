@@ -32,14 +32,12 @@ export type WaitingApplication = {
   id: string;
   company: string;
   role: string;
-  portalUrl?: string;
   stalledAt: string;
   stage: "before_fill" | "at_submit";
 };
 
 type ReviewLike = {
   status?: string;
-  portal_url?: string;
   stall?: StallInfo;
 };
 
@@ -61,25 +59,6 @@ export function isWaitingOnHuman(review: ReviewLike | null | undefined): boolean
   return review?.status === "needs_attention" && !!review.stall && !review.stall.resolved_at;
 }
 
-/**
- * Only an https URL is allowed to become a link.
- *
- * portal_url arrives from backend data that ultimately traces back to an employer's posting or a
- * pasted link, and the backend's own guard is zod .url(), which happily accepts
- * `javascript:alert(1)`. This is now a secondary, optional link (the primary control is the
- * in-dashboard one keyed on `id`, which needs no external URL at all), but it still puts a link in
- * front of the applicant, so the same rule applies: anything that is not https is dropped rather
- * than trusted.
- */
-export function safePortalUrl(raw: string | undefined): string | undefined {
-  if (!raw) return undefined;
-  try {
-    return new URL(raw).protocol === "https:" ? raw : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 export function waitingApplications(packets: readonly PacketLike[]): WaitingApplication[] {
   return packets
     .filter((packet) => isWaitingOnHuman(packet.spec?._review))
@@ -87,11 +66,15 @@ export function waitingApplications(packets: readonly PacketLike[]): WaitingAppl
       id: packet.id,
       company: packet.job_context?.company?.trim() || "This company",
       role: packet.job_context?.role?.trim() || "this role",
-      portalUrl: safePortalUrl(packet.spec?._review?.portal_url),
       stalledAt: packet.spec!._review!.stall!.stalled_at,
       stage: packet.spec!._review!.stall!.stage,
     }))
     .sort((left, right) => (left.stalledAt < right.stalledAt ? -1 : left.stalledAt > right.stalledAt ? 1 : 0));
+}
+
+/** The queue can only reopen the exact application inside Litos. */
+export function waitingApplicationHref(applicationId: string): string {
+  return `/dashboard/applications?application=${encodeURIComponent(applicationId)}&intent=apply`;
 }
 
 /**

@@ -123,24 +123,31 @@ describe("every message a composer button raises lands beside that button", () =
     // Behavioural, not textual: the predicate is lifted out of the component and run. `?? false`
     // flipped to `?? true`, or `.includes` to `.length > 0`, changes the answer for an empty array
     // and is caught here rather than by reading the operator back to itself.
+    const visible = panel.match(/const visibleRefusal = (.+);/);
     const match = panel.match(/const invalid = \(field: ApplicationDraftField\) => (.+);/);
-    assert.ok(match, "the panel must still derive per-field invalidity from the refusal");
-    const invalid = new Function("refusal", "field", `return ${match[1]};`);
+    assert.ok(visible && match, "the panel must still derive per-field invalidity from the visible refusal");
+    const invalid = new Function(
+      "refusal",
+      "field",
+      "postingDistinction",
+      `const visibleRefusal = ${visible[1]}; return ${match[1]};`,
+    );
     const serverFailure = { message: "Boom.", fields: [] };
     for (const field of ["company", "role", "portalUrl", "jobDescription"]) {
-      assert.equal(invalid(serverFailure, field), false, `${field} must not be marked invalid by a server failure`);
+      assert.equal(invalid(serverFailure, field, null), false, `${field} must not be marked invalid by a server failure`);
     }
     // And it still marks what a validation refusal names, so the fix did not buy this by disabling
     // marking altogether.
-    assert.equal(invalid({ message: "Fill in all four boxes first.", fields: ["role"] }, "role"), true);
-    assert.equal(invalid({ message: "Fill in all four boxes first.", fields: ["role"] }, "company"), false);
-    assert.equal(invalid(null, "role"), false);
+    assert.equal(invalid({ message: "Fill in all four boxes first.", fields: ["role"] }, "role", null), true);
+    assert.equal(invalid({ message: "Fill in all four boxes first.", fields: ["role"] }, "company", null), false);
+    assert.equal(invalid(null, "role", null), false);
+    assert.equal(invalid({ message: "Old refusal", fields: ["role"] }, "role", { tone: "resolved" }), false);
   });
 
   test("each button has a slot, and the note sits in both of them", () => {
     // Read job's slot is directly under the Job URL row it is about; the generate row keeps its own.
-    assert.match(panel, /<ComposerRefusalNote refusal=\{refusal\} at="url" \/>/);
-    assert.match(panel, /<ComposerRefusalNote refusal=\{refusal\} at="action" \/>/);
+    assert.match(panel, /<ComposerRefusalNote refusal=\{visibleRefusal\} at="url" \/>/);
+    assert.match(panel, /<ComposerRefusalNote refusal=\{visibleRefusal\} at="action" \/>/);
     const urlSlot = panel.indexOf('at="url"');
     const textarea = panel.indexOf('id="new-application-jd"');
     const generateSlot = panel.indexOf('at="action"');
