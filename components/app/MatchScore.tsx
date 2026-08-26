@@ -95,6 +95,17 @@ export function MatchScore({
     );
   }
 
+  /* Hoisted rather than interpolated inline, because the aria-label below is read by
+     match-caption-weighting and match-metric-coherence as SOURCE: both extract the template literal
+     and check that every string stating the count carries MATCH_WEIGHTING_NOTE, and a nested
+     template inside it defeats their parsers. Keeping the label a flat template keeps those two
+     guards working, which matters more here than saving a line. */
+  const unreadCount = result.clauses_unread ?? 0;
+  const unreadPlural = unreadCount === 1 ? "" : "s";
+  const unreadSentence = unreadCount > 0
+    ? ` At least ${unreadCount} further line${unreadPlural} in this posting could not be read, so this score is drawn over part of it.`
+    : "";
+
   const tone = result.band?.tone ?? "fair";
   const stroke =
     tone === "strong" ? "var(--color-brand)" : tone === "fair" ? "var(--color-ink)" : "var(--color-faint)";
@@ -143,14 +154,30 @@ export function MatchScore({
                  alone in a title it has no antecedent. Kept anyway rather than given a second
                  wording, because two versions of one clause is the drift this constant exists to
                  prevent, and the fraction it refers to is the line the tooltip is attached to. */}
+        {/* "we counted" was always literally true and was still being read as "the posting asks for
+            three things". On a prose-heavy posting it is not: the extractor recognises a fraction of
+            what the employer wrote, and because an unrecognised requirement leaves the numerator and
+            the denominator together, failing to read one could only ever raise the score. Measured
+            live 2026-08-26: this exact Databricks posting states roughly eight things and rendered
+            "3 of 3 requirements we counted" beside a ring reading 100.
+
+            So the count now says what it is drawn over, and only when there is something to say.
+            "at least" is load-bearing and not hedging: splitClauses ignores lines under four words,
+            so clauses_unread is a floor on what was missed rather than a total, and a caption that
+            printed it as a total would be making the same kind of claim this line exists to stop. */}
         <p className="text-[11px] leading-4 text-muted" title={MATCH_WEIGHTING_NOTE}>
           {result.matched.length} of {result.term_count} requirements we counted
         </p>
+        {unreadCount > 0 && (
+          <p className="text-[11px] leading-4 text-muted" title={MATCH_WEIGHTING_NOTE}>
+            at least {unreadCount} more line{unreadPlural} we could not read
+          </p>
+        )}
       </div>
       <div
         className="relative h-12 w-12 shrink-0"
         role="img"
-        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting. ${MATCH_WEIGHTING_NOTE}`}
+        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting.${unreadSentence} ${MATCH_WEIGHTING_NOTE}`}
       >
         <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
           <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />
