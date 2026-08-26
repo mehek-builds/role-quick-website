@@ -22,6 +22,22 @@ import type { JdTermView } from "./match-model";
 
 export type TermTone = "covered" | "missing" | "edited";
 
+/**
+ * WHAT CAN BE PAINTED, which is a superset of what the matcher can decide.
+ *
+ * The term matcher classifies TERMS and can only ever return a TermTone. The packet audit judges
+ * whole CLAUSES and has a fourth verdict, `unscoreable`, for a requirement it could not check at
+ * all. That verdict had no colour and no key entry, so an unchecked requirement rendered as
+ * ordinary unmarked prose: indistinguishable from a sentence that states no requirement, and from
+ * a requirement that was checked and passed. Silence is the one thing an audit must not say when
+ * it does not know.
+ *
+ * Kept separate from TermTone so the matcher's own types stay honest: buildRequirementIndex and
+ * segmentText cannot produce `unscoreable`, and widening TermTone would force every one of their
+ * branches to handle a case they can never see.
+ */
+export type MarkTone = TermTone | "unscoreable";
+
 /** Mirrors normalizeTerm in the backend's engine/jdMatch.ts. The two must agree or a term the
  *  scorer counted as matched will fail to highlight, and the panes will contradict the number. */
 export function normalizeTerm(raw: string): string {

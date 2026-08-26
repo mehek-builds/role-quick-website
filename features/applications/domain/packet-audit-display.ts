@@ -43,7 +43,14 @@ function isEmployerDeliveryBinding(value: unknown): value is {
  * types do not protect the browser from malformed JSON, and a new or unknown tone must never be
  * interpreted as an approved colour.
  */
-export function exactPacketAuditRanges(jdText: string, auditValue: unknown): PacketAuditHighlightTerm[] | null {
+export type AuditedClauseRange = { start: number; end: number; verdict: "covered" | "missing" | "unscoreable" };
+
+/** The validated audit, split into the two things the panes paint: term-level highlights inside
+ *  scored clauses, and the clause spans themselves (which is the only way an `unscoreable` verdict
+ *  can be shown, since the validator below forbids highlight terms on an unscoreable clause). */
+export type AuditedDisplay = { terms: PacketAuditHighlightTerm[]; clauses: AuditedClauseRange[] };
+
+function validateAuditForDisplay(jdText: string, auditValue: unknown): AuditedDisplay | null {
   if (!isRecord(auditValue)
     || auditValue.version !== PACKET_AUDIT_VERSION
     || auditValue.status !== "passed"
@@ -55,6 +62,7 @@ export function exactPacketAuditRanges(jdText: string, auditValue: unknown): Pac
 
   const clauses = auditValue.clauses;
   const clauseBounds: Array<{ start: number; end: number }> = [];
+  const clauseRanges: AuditedClauseRange[] = [];
   const ranges: PacketAuditHighlightTerm[] = [];
 
   for (let clauseIndex = 0; clauseIndex < clauses.length; clauseIndex += 1) {
@@ -73,6 +81,7 @@ export function exactPacketAuditRanges(jdText: string, auditValue: unknown): Pac
       ? !Array.isArray(clause.evidence) || clause.evidence.length === 0 || !clause.evidence.every(isEvidence)
       : clause.evidence !== undefined) return null;
     clauseBounds.push({ start, end });
+    clauseRanges.push({ start, end, verdict: clause.verdict });
 
     for (const term of clause.highlight_terms) {
       if (!isRecord(term)
@@ -102,11 +111,22 @@ export function exactPacketAuditRanges(jdText: string, auditValue: unknown): Pac
   for (let index = 1; index < ranges.length; index += 1) {
     if (ranges[index].start < ranges[index - 1].end) return null;
   }
-  return ranges;
+  clauseRanges.sort((left, right) => left.start - right.start || left.end - right.end);
+  return { terms: ranges, clauses: clauseRanges };
+}
+
+export function exactPacketAuditRanges(jdText: string, auditValue: unknown): PacketAuditHighlightTerm[] | null {
+  return validateAuditForDisplay(jdText, auditValue)?.terms ?? null;
+}
+
+/** The clause spans of a validated audit, verdicts included. Used to paint `unscoreable`, which has
+ *  no highlight terms of its own to hang a colour on. */
+export function exactPacketAuditClauses(jdText: string, auditValue: unknown): AuditedClauseRange[] | null {
+  return validateAuditForDisplay(jdText, auditValue)?.clauses ?? null;
 }
 
 export function packetAuditDisplayIsExact(jdText: string, audit: PacketAudit): boolean {
-  return exactPacketAuditRanges(jdText, audit) !== null;
+  return validateAuditForDisplay(jdText, audit) !== null;
 }
 
 /** Retains a browser-rendered proof only while the server reports the same immutable audit. */
