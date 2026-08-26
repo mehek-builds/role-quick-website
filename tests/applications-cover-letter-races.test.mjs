@@ -198,7 +198,10 @@ test("packet cover-letter ownership advances on typing and every packet identity
     "canonical and packet selection must both retire the old packet editor scope",
   );
   const reset = between("const resetApplicationWorkflow", "const closeApplication");
-  assert.match(reset, /selectedIdRef\.current = null;\s*editorRevisionRef\.current \+= 1;\s*packetCoverLetterEditorRevisionRef\.current \+= 1;/);
+  assert.match(
+    reset,
+    /selectedIdRef\.current = null;\s*resumeEditSaveApplicationRef\.current = null;\s*editorRevisionRef\.current \+= 1;\s*packetCoverLetterEditorRevisionRef\.current \+= 1;/,
+  );
 });
 
 test("packet request ownership combines application id, editor revision, shared generation, and lifetime", () => {

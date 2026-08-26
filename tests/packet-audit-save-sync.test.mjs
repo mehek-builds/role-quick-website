@@ -16,6 +16,12 @@ const continueFromResume = source.slice(continueStart, verifiedStart);
 const coverLetterStart = source.indexOf("async function saveCoverLetter()");
 const patchEntryStart = source.indexOf("function patchEntry(", coverLetterStart);
 const saveCoverLetter = source.slice(coverLetterStart, patchEntryStart);
+const selectPacketStart = source.indexOf("const selectPacket = useCallback(");
+const openApplicationStart = source.indexOf("const openApplication = useCallback(", selectPacketStart);
+const selectPacket = source.slice(selectPacketStart, openApplicationStart);
+const resetWorkflowStart = source.indexOf("const resetApplicationWorkflow = useCallback(", openApplicationStart);
+const closeApplicationStart = source.indexOf("const closeApplication = useCallback(", resetWorkflowStart);
+const resetApplicationWorkflow = source.slice(resetWorkflowStart, closeApplicationStart);
 
 test("a successful save adopts the server canonical spec only for the application still selected", () => {
   assert.ok(saveStart >= 0 && continueStart > saveStart, "save and audit functions must remain discoverable");
@@ -38,7 +44,8 @@ test("newer same-packet edits and A to B to A switches invalidate an in-flight s
 
 test("the audit binds the exact saved spec and canonical review instead of stale request state", () => {
   assert.ok(continueStart >= 0 && verifiedStart > continueStart, "audit function must remain discoverable");
-  assert.match(continueFromResume, /const savedResume = packetDraftChanged \? await saveResume\(\) : \{ spec, review \};/);
+  assert.match(continueFromResume, /const resumeSaveRequired = packetDraftChanged \|\| resumeEditSaveApplicationRef\.current === applicationId;/);
+  assert.match(continueFromResume, /const savedResume = resumeSaveRequired \? await saveResume\(\) : \{ spec, review \};/);
   assert.match(continueFromResume, /if \(!savedResume \|\| selectedIdRef\.current !== applicationId\) return;/);
   assert.match(continueFromResume, /const auditedSpec = savedResume\.spec;\s*const canonicalReview = savedResume\.review;/s);
   assert.match(continueFromResume, /let savedReview = canonicalReview;/);
@@ -57,9 +64,48 @@ test("the audit binds the exact saved spec and canonical review instead of stale
 });
 
 test("a ready packet with a real edit is saved, while an unchanged packet avoids a no-op PATCH", () => {
-  assert.match(continueFromResume, /const savedResume = packetDraftChanged \? await saveResume\(\) : \{ spec, review \};/);
+  assert.match(continueFromResume, /const resumeSaveRequired = packetDraftChanged \|\| resumeEditSaveApplicationRef\.current === applicationId;/);
+  assert.match(continueFromResume, /const savedResume = resumeSaveRequired \? await saveResume\(\) : \{ spec, review \};/);
   assert.doesNotMatch(continueFromResume, /alreadyFilled \? spec : await saveResume\(\)/);
   assert.match(continueFromResume, /const alreadyFilled = canonicalReview\.status === "ready_for_final_approval";/);
+});
+
+test("explicitly editing an unchanged resume still refreshes its server-rendered contact", () => {
+  assert.match(source, /const resumeEditSaveApplicationRef = useRef<string \| null>\(null\);/);
+  assert.match(
+    source,
+    /onClick=\{\(\) => \{\s*resumeEditSaveApplicationRef\.current = selected\.id;\s*packetEvidenceRef\.current = null;\s*setPacketEvidence\(null\);\s*\}\}[\s\S]{0,80}>\s*Edit resume/,
+  );
+  assert.match(continueFromResume, /resumeEditSaveApplicationRef\.current === applicationId/);
+  assert.match(
+    saveResume,
+    /if \(resumeEditSaveApplicationRef\.current === applicationId\) resumeEditSaveApplicationRef\.current = null;\s*setNotice\("Resume saved and rechecked\."\);\s*return \{ spec: savedSpec, review: savedReview \};/s,
+    "the explicit-save intent must survive failures and be consumed only after the regenerated resume is adopted",
+  );
+});
+
+test("same-packet reselection preserves the explicit save while workflow changes clear it", () => {
+  assert.ok(selectPacketStart >= 0 && openApplicationStart > selectPacketStart, "packet selection must remain discoverable");
+  assert.match(
+    selectPacket,
+    /if \(canonical \|\| selectedIdRef\.current !== packet\.id\) resumeEditSaveApplicationRef\.current = null;/,
+    "reselecting the currently selected packet must preserve its pending contact refresh",
+  );
+  assert.doesNotMatch(
+    selectPacket,
+    /const packet = sendable \?\? incoming;\s*resumeEditSaveApplicationRef\.current = null;/,
+    "selection must not clear the intent before checking whether the packet actually changed",
+  );
+  assert.match(
+    resetApplicationWorkflow,
+    /selectedIdRef\.current = null;\s*resumeEditSaveApplicationRef\.current = null;/,
+    "closing or resetting the application workflow must abandon the pending edit session",
+  );
+  assert.match(
+    source,
+    /if \(requestedCanonicalApplication && requestedApplicationIntent === "detail"\) \{\s*selectedIdRef\.current = null;\s*resumeEditSaveApplicationRef\.current = null;/s,
+    "direct navigation away from packet editing to canonical detail must also clear the intent",
+  );
 });
 
 test("a selection change stops every post-save route from installing the wrong packet", () => {
