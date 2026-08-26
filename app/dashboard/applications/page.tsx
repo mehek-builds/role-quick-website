@@ -25,7 +25,7 @@ import {
   type ManualHandoffResponse,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
@@ -65,6 +65,7 @@ import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from 
 import { answerWithExactOptionToggled, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
+import { messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 import { applicationSelectionPath } from "./application-selection-url";
@@ -736,7 +737,7 @@ function Applications() {
      button at y = 554: off screen in the other direction, the same defect upside down. The two
      buttons are ~440px apart, so the composer needs two slots and not one. Exactly one is ever
      live, because `at` holds one value. */
-  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null>(null);
+  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null>(null);
   /* One announcement, never two. The page banner and this alert are both live regions, so leaving a
      stale `error` up while raising a refusal makes a screen reader read the old problem and the new
      one. Everything that speaks for the composer goes through here and clears the other channel.
@@ -749,9 +750,15 @@ function Applications() {
      the student can act on later, and the alternative is two live regions firing on a single press,
      which is the louder failure. If a page-level error ever appears here that is NOT reload advice,
      revisit this line rather than adding a second alert. */
+  /* `needsExtension` is decided HERE, beside the message it is about, rather than by the note that
+     renders it. The note's paragraph is pinned verbatim by two regression tests that also cap this
+     file at exactly one read of the refusal's message text - a second read there to answer "does
+     this refusal send her to the store?" would have broken that cap without changing a word she
+     reads. Deciding it at the source keeps the cap intact and means every present and future
+     refuseInComposer caller is covered without remembering to opt in. */
   const refuseInComposer = useCallback((at: ComposerSlot, message: string, fields: ApplicationDraftField[]) => {
     setError(null);
-    setComposerRefusal({ message, fields, at });
+    setComposerRefusal({ message, fields, at, needsExtension: messageAsksForTheExtension(message) });
   }, []);
   /* What the server said when she pressed Send it, held against the packet it was said about.
    *
@@ -5613,7 +5620,7 @@ function NewApplicationPanel({
   extractingJd: boolean;
   /** Why the last press of a composer button did nothing, which boxes it was about, and which of
       the two buttons is being answered. */
-  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null;
 }) {
   const patch = (next: Partial<NewApplicationDraft>) => onChange({ ...value, ...next });
   const invalid = (field: ApplicationDraftField) => refusal?.fields.includes(field) ?? false;
@@ -5675,14 +5682,27 @@ function ComposerRefusalNote({
   refusal,
   at,
 }: {
-  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null;
   at: ComposerSlot;
 }) {
   if (!refusal || refusal.at !== at) return null;
   /* Gated on the refusal existing, never on it naming a field: a server failure names none, and
      that is exactly the case ISSUE-043 was about. */
-  return <p className={at === "action" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>;
+  /* The link is a SIBLING of the alert, never a child of it, and the flag it reads was computed
+     where the refusal was built. Both of those are deliberate: this paragraph's exact shape is
+     pinned by two regression tests (composer-refusal-placement, composer-error-placement) that also
+     cap this file at exactly one read of the refusal's message text - invariants bought with a real
+     incident where a mirrored copy announced the same refusal twice. Reading that text again here
+     to decide the link would have broken the cap while changing nothing a user hears, so the
+     decision rides on the refusal object instead. */
+  return (
+    <>
+      <p className={at === "action" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>
+      {refusal.needsExtension && <ExtensionStoreLink />}
+    </>
+  );
 }
+
 
 function ApplicationField({ label, value, onChange, placeholder, type = "text", invalid = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string; invalid?: boolean }) {
   const id = `new-application-${label.toLowerCase().replaceAll(" ", "-")}`;
@@ -7403,6 +7423,9 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         {extensionFillError && (
           <p role="alert" className="mt-3 text-xs leading-5 text-danger">{extensionFillError}</p>
         )}
+        {/* Sibling of the alert rather than a child, for the same reason as ComposerRefusalNote:
+            the paragraph above is pinned verbatim by captcha-extension-recovery. */}
+        {messageAsksForTheExtension(extensionFillError) && <ExtensionStoreLink className="mt-2 inline-block text-xs" />}
         {/* The server's own answer to the last press, beside the button that made it. Never routed
             through the page banner: the poll clears that one, and this screen is long enough that a
             message at the top of it is off screen from the control it is about. */}
