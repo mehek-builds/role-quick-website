@@ -58,7 +58,7 @@ import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
 import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
-import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditRanges } from "@/features/applications";
+import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
@@ -2471,11 +2471,19 @@ function Applications() {
      plainly when there are none, because a legend for absent colour reads as "you missed something".
      Note this is deliberately NOT gated on `authoritativeMissingCount`: an all-covered posting has a
      live blue code and a truthful "(0)", and must keep its legend. */
+  /* An unscoreable clause now carries a colour of its own, so it counts as a live colour code: a
+     posting where every clause went unchecked has nothing blue or amber on it but is emphatically
+     something the student needs to read. */
+  const auditedUnscoreableCount = activePacketEvidence && auditedDisplayReady && review
+    ? (exactPacketAuditClauses(review.jd_text, activePacketEvidence.response.packet_audit) ?? [])
+      .filter((clause) => clause.verdict === "unscoreable").length
+    : 0;
   const requirementColourCodeIsLive = activePacketEvidence
     ? Boolean(
       auditedDisplayReady
       && review
-      && (exactPacketAuditRanges(review.jd_text, activePacketEvidence.response.packet_audit)?.length ?? 0) > 0,
+      && ((exactPacketAuditRanges(review.jd_text, activePacketEvidence.response.packet_audit)?.length ?? 0) > 0
+        || auditedUnscoreableCount > 0),
     )
     : requirementIndex.tone.size > 0;
   const packetEvidenceBlocker = !review?.jd_text?.trim()
@@ -5148,7 +5156,12 @@ function Applications() {
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
                 {requirementColourCodeIsLive
-                  ? <MatchLegend missingCount={authoritativeMissingCount} editedCount={authoritativeEditedCount} />
+                  ? <MatchLegend
+                    missingCount={authoritativeMissingCount}
+                    editedCount={authoritativeEditedCount}
+                    unscoreableCount={auditedUnscoreableCount}
+                    mode={activePacketEvidence ? "packet" : "draft"}
+                  />
                   : <p className="text-[11px] text-muted">
                     Litos could not mark this posting&apos;s requirements on either side, so there is no colour code to read here.
                   </p>}
