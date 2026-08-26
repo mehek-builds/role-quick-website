@@ -525,6 +525,12 @@ function Applications() {
      for every selection and local resume mutation so an awaited save can prove it still owns the
      exact editor generation it sent. */
   const editorRevisionRef = useRef(0);
+  /* Opening the exact audited PDF's editor is an explicit request to save this resume again, even
+     when the applicant leaves its editable content unchanged. The editable copy deliberately has
+     no `_contact`, so JSON equality cannot detect that the profile phone or location changed since
+     this PDF was generated. Keep the intent packet-scoped and consume it only after PATCH returns
+     the newly rendered canonical resume. */
+  const resumeEditSaveApplicationRef = useRef<string | null>(null);
   /* The poll reads the submission it is about to overwrite. A ref, not the state value, so the
      poll callback does not have to re-subscribe on every submission update. */
   const submissionRef = useRef<SubmissionResponse | null>(null);
@@ -1076,6 +1082,11 @@ function Applications() {
     const sendable = sendableLinkedPacketFromCanonicalEnvelope(incoming);
     const packet = sendable ?? incoming;
     const canonical = sendable ? null : canonicalApplicationFromPacket(packet);
+    /* Reopening the row already on screen must not erase its pending explicit save: the current
+       row is still reachable through the application switcher and openApplication calls this
+       function again. A genuinely different packet, or leaving for canonical detail, abandons the
+       editor session. */
+    if (canonical || selectedIdRef.current !== packet.id) resumeEditSaveApplicationRef.current = null;
     if (canonical) {
       // Canonical Tracker envelopes must never be sent to the legacy review, audit, or submission
       // endpoints. Their own detail keeps the real portal handoff and retry control available. An
@@ -1191,6 +1202,7 @@ function Applications() {
     pendingApplicationFocusRef.current = false;
     locallyRevisitingIdRef.current = null;
     selectedIdRef.current = null;
+    resumeEditSaveApplicationRef.current = null;
     editorRevisionRef.current += 1;
     packetCoverLetterEditorRevisionRef.current += 1;
     const commitReset = () => {
@@ -1708,6 +1720,7 @@ function Applications() {
           setPackets(merged);
           if (requestedCanonicalApplication && requestedApplicationIntent === "detail") {
             selectedIdRef.current = null;
+            resumeEditSaveApplicationRef.current = null;
             editorRevisionRef.current += 1;
             packetCoverLetterEditorRevisionRef.current += 1;
             setSelectedId(null);
@@ -3258,10 +3271,12 @@ function Applications() {
         if (!savedReview) throw new Error("The saved resume response is missing its canonical application review.");
         if (selectedIdRef.current !== applicationId || editorRevisionRef.current !== editorRevision) return null;
         setSpec(savedSpec);
+        if (resumeEditSaveApplicationRef.current === applicationId) resumeEditSaveApplicationRef.current = null;
         setNotice("Resume saved and rechecked.");
         return { spec: savedSpec, review: savedReview };
       }
       if (!selected.spec._review) return null;
+      if (resumeEditSaveApplicationRef.current === applicationId) resumeEditSaveApplicationRef.current = null;
       setNotice("Resume saved and rechecked.");
       return { spec, review: reviewWithLists(selected.spec._review) };
     } catch (reason) {
@@ -3308,9 +3323,11 @@ function Applications() {
     const applicationId = selected.id;
     /* Workflow status does not say whether the editor is dirty. A ready packet can be edited, and
        auditing that edit without saving would ask the server to audit its older PDF forever. A
-       fresh packet with no edits needs no no-op PATCH. The exact local-vs-saved comparison is the
-       only fact that decides whether a new PDF must be generated. */
-    const savedResume = packetDraftChanged ? await saveResume() : { spec, review };
+       passive fresh packet with no edits needs no no-op PATCH. Explicitly opening Edit resume is
+       different: contact metadata is absent from the editable copy, so the backend must regenerate
+       the PDF even when the editable JSON is unchanged. */
+    const resumeSaveRequired = packetDraftChanged || resumeEditSaveApplicationRef.current === applicationId;
+    const savedResume = resumeSaveRequired ? await saveResume() : { spec, review };
     if (!savedResume || selectedIdRef.current !== applicationId) return;
     const auditedSpec = savedResume.spec;
     const canonicalReview = savedResume.review;
@@ -5142,7 +5159,18 @@ function Applications() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-3 px-2">
                         <p className="text-xs leading-5 text-muted">This is the exact PDF bound to the server audit.</p>
-                        <Button type="button" size="sm" variant="secondary" onClick={() => setPacketEvidence(null)}>Edit resume</Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            resumeEditSaveApplicationRef.current = selected.id;
+                            packetEvidenceRef.current = null;
+                            setPacketEvidence(null);
+                          }}
+                        >
+                          Edit resume
+                        </Button>
                       </div>
                       <ExactPacketPdf
                         auditDigest={activePacketEvidence.response.packet_audit.audit_digest}
