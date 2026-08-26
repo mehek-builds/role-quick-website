@@ -58,7 +58,7 @@ import { exactAttendedHandoffUrl } from "@/lib/attended-handoff";
 import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
-import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
+import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
@@ -2436,14 +2436,48 @@ function Applications() {
     && manualTrialPacketEvidenceIsFresh(selected.id, activePacketEvidence)
     ? activePacketEvidence
     : null;
-  const authoritativeMissingCount = activePacketEvidence && auditedDisplayReady
-    ? activePacketEvidence.response.packet_audit.clauses.filter((clause) => clause.verdict === "missing").length
+  /* THE AUDIT BRANCH MUST NOT REPORT A ZERO IT NEVER MEASURED. `clauses.filter(verdict ===
+     "missing").length` is 0 both when the audit found no gaps and when it could not score a single
+     clause, and those two render identically as "(0)" - a green-lit all-clear sitting directly above
+     the submit control. Observed 2026-08-26 on the Flow Traders packet: the audit returned ONE
+     clause, verdict "unscoreable", so the key read "asked for, not on your resume (0)" while
+     /jd-match had six missing terms for that same posting (economics, excel, mathematics,
+     researchers, statistics, technology) and the job description on screen literally read
+     "Proficiency in Excel". A clause is evidence about coverage only if it was actually scored, so
+     count the scored ones first and fall through to null - "not checked" - when there are none. */
+  const auditedClauses = activePacketEvidence && auditedDisplayReady
+    ? activePacketEvidence.response.packet_audit.clauses
+    : null;
+  const auditedScoredClauses = auditedClauses?.filter(
+    (clause) => clause.verdict === "covered" || clause.verdict === "missing",
+  ) ?? null;
+  const authoritativeMissingCount = auditedScoredClauses
+    ? (auditedScoredClauses.length > 0
+      ? auditedScoredClauses.filter((clause) => clause.verdict === "missing").length
+      : null)
     : !activePacketEvidence && matchResult?.scorable ? matchResult.missing.length : null;
   const authoritativeEditedCount = activePacketEvidence && auditedDisplayReady
     ? activePacketEvidence.response.packet_audit.clauses
       .flatMap((clause) => clause.highlight_terms)
       .filter((term) => term.tone === "edited").length
     : !activePacketEvidence ? editedTerms.size : 0;
+  /* THE KEY IS A PROMISE ABOUT MARKS THAT ARE ON THE PAGE, so it may not outlive them. It used to
+     render unconditionally, which meant that in exact-packet mode - where the job description paints
+     only the audit's validated highlight terms and the resume pane is a rasterised PDF that cannot
+     carry a mark at all - it described a two-colour system over two panes containing no colour
+     whatsoever. Observed 2026-08-26 on the Flow Traders packet: zero <mark> elements anywhere on the
+     page, both swatches still displayed. Gate it on the marks each branch will actually produce -
+     the audit's validated ranges in packet mode, the requirement index in draft mode - and say so
+     plainly when there are none, because a legend for absent colour reads as "you missed something".
+     Note this is deliberately NOT gated on `authoritativeMissingCount`: an all-covered posting has a
+     live blue code and a truthful "(0)", and must keep its legend. */
+  const requirementColourCodeIsLive = activePacketEvidence
+    ? Boolean(
+      auditedDisplayReady
+      && review
+      && (exactPacketAuditRanges(review.jd_text, activePacketEvidence.response.packet_audit)?.length ?? 0) > 0,
+    )
+    : requirementIndex.tone.size > 0;
   const packetEvidenceBlocker = !review?.jd_text?.trim()
     ? "The saved job description is missing, so Litos cannot prove what this resume was written against."
     : packetDraftChanged || deferredSpec !== spec
@@ -5113,7 +5147,11 @@ function Applications() {
                 </div>
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
-                <MatchLegend missingCount={authoritativeMissingCount} editedCount={authoritativeEditedCount} />
+                {requirementColourCodeIsLive
+                  ? <MatchLegend missingCount={authoritativeMissingCount} editedCount={authoritativeEditedCount} />
+                  : <p className="text-[11px] text-muted">
+                    Litos could not mark this posting&apos;s requirements on either side, so there is no colour code to read here.
+                  </p>}
                 {/* "Point at any highlighted term to see it light up on both
                     sides." came off 2026-07-28: instructions for a hover. */}
               </div>
