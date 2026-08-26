@@ -2,6 +2,7 @@
 
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import { userFacingError } from "@/lib/user-facing-error";
+import { EXTENSION_STORE_URL, messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { Button } from "@/components/app/Button";
 
 /* Shared in-app primitives, per brand deck sections 04 (shape/surface) and 07
@@ -385,12 +386,47 @@ const NOTICE = {
   info: { role: "status", label: "Information", mark: "i", styles: "bg-brand-soft text-brand-ink" },
 } as const;
 
+/* THE WAY OUT OF A REFUSAL THAT NAMES A DESTINATION IT CANNOT REACH.
+ *
+ * "Update the Litos extension from the Chrome Web Store, then try again." named a page the screen
+ * would not take her to, and the listing is addressed by a 32-character extension id nobody can
+ * guess or search for. Measured live on the applications composer, 2026-08-26: "Fill application"
+ * refused with exactly that sentence and offered no way forward anywhere on the page.
+ *
+ * Rendered HERE, inside the one Notice every ErrorNote in the app delegates to, rather than beside
+ * each call site: any surface that can refuse for a missing or stale extension gets the way out for
+ * free, including the ones that do not exist yet. See lib/extension-store-link.ts for why it is
+ * scoped to install/update refusals and deliberately silent on the "signed in to another account"
+ * message, which the store does not answer.
+ *
+ * Keyed on the RESOLVED text, not the raw message, because userFacingError rewrites what is shown -
+ * testing the input would decide the link from a sentence the applicant never reads. */
+export function ExtensionStoreLink({ className = "" }: { className?: string }) {
+  return (
+    <a
+      href={EXTENSION_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`font-medium underline underline-offset-2 ${className}`.trim()}
+    >
+      Get the Litos extension
+    </a>
+  );
+}
+
 export function Notice({ message, variant = "info" }: { message: string; variant?: keyof typeof NOTICE }) {
   const notice = NOTICE[variant];
+  const text = variant === "error" ? userFacingError(message) : message;
   return (
     <p role={notice.role} className={`flex items-start gap-2 rounded-inner px-4 py-3 text-sm ${notice.styles}`}>
       <span aria-hidden="true" className="font-mono font-semibold">{notice.mark}</span>
-      <span><span className="sr-only">{notice.label}: </span>{variant === "error" ? userFacingError(message) : message}</span>
+      {/* The link sits INSIDE the alert element on purpose: it is part of the answer, so a screen
+          reader hears "…then try again. Get the Litos extension" as one announcement rather than
+          leaving her to discover the way forward only by tabbing past the alert. */}
+      <span>
+        <span className="sr-only">{notice.label}: </span>{text}
+        {messageAsksForTheExtension(text) && <> <ExtensionStoreLink /></>}
+      </span>
     </p>
   );
 }
