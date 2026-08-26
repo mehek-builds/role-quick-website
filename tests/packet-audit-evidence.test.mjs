@@ -392,9 +392,32 @@ test("the browser binds the audit to this application and exact stored PDF", asy
 
 test("the active audit owns the legend and replaces the live score and gap list", async () => {
   const source = await readFile(dashboardUrl, "utf8");
-  assert.match(source, /authoritativeMissingCount = activePacketEvidence[\s\S]{0,240}clause\.verdict === "missing"/);
+  assert.match(source, /auditedClauses = activePacketEvidence && auditedDisplayReady[\s\S]{0,160}packet_audit\.clauses/);
+  assert.match(source, /auditedScoredClauses = auditedClauses\?\.filter\([\s\S]{0,180}clause\.verdict === "covered" \|\| clause\.verdict === "missing"/);
+  assert.match(source, /authoritativeMissingCount = auditedScoredClauses[\s\S]{0,240}clause\.verdict === "missing"/);
   assert.match(source, /authoritativeEditedCount = activePacketEvidence[\s\S]{0,300}term\.tone === "edited"/);
   assert.match(source, /activePacketEvidence[\s\S]{0,180}Exact packet checked[\s\S]{0,180}<MatchScore/);
   assert.match(source, /<MatchLegend missingCount=\{authoritativeMissingCount\} editedCount=\{authoritativeEditedCount\}/);
   assert.match(source, /!activePacketEvidence && matchResult && matchResult\.missing\.length > 0/);
+});
+
+/* AN AUDIT THAT SCORED NOTHING USED TO RENDER "(0)" GAPS, because
+   clauses.filter(verdict === "missing").length is 0 both when the audit found no gaps and when it
+   could not score a single clause. Observed 2026-08-26 on a Flow Traders packet: the audit came
+   back with ONE clause, verdict "unscoreable", the key read "asked for, not on your resume (0)",
+   and /jd-match held six missing terms for that same posting while the job description on screen
+   read "Proficiency in Excel". Zero <mark> elements were on the page and both swatches were still
+   shown. Three separate things had to be true for that to be a lie, so all three are pinned. */
+test("an audit that scored nothing reports no gap count and shows no colour key", async () => {
+  const source = await readFile(dashboardUrl, "utf8");
+  // 1. An empty scored set yields null, never 0.
+  assert.match(source, /auditedScoredClauses\.length > 0[\s\S]{0,200}: null/);
+  // 2. The key renders only where marks can render: validated audit ranges, or a non-empty index.
+  assert.match(source, /requirementColourCodeIsLive = activePacketEvidence/);
+  assert.match(source, /exactPacketAuditRanges\(review\.jd_text, activePacketEvidence\.response\.packet_audit\)\?\.length \?\? 0\) > 0/);
+  assert.match(source, /: requirementIndex\.tone\.size > 0/);
+  assert.match(source, /\{requirementColourCodeIsLive[\s\S]{0,200}<MatchLegend/);
+  // 3. null must not wear the same sentence a genuine zero writes.
+  const requirementText = await readFile(new URL("../components/app/RequirementText.tsx", import.meta.url), "utf8");
+  assert.match(requirementText, /missingCount === null \? "asked for, not on your resume \(not counted\)"/);
 });
