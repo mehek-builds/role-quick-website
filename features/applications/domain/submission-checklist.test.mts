@@ -1074,7 +1074,7 @@ test("a closed question without exact options cannot become a direct text prompt
   assert.equal(plan.remaining, 0);
 });
 
-test("a multi-value employer field cannot become a direct single-answer prompt", () => {
+test("a multi-value employer field with exact options becomes a direct multi-answer prompt", () => {
   const plan = directInputTaskPlan({
     status: "needs_attention",
     questions: [{
@@ -1088,8 +1088,11 @@ test("a multi-value employer field cannot become a direct single-answer prompt",
     }],
   });
 
-  assert.deepEqual(plan.questionTasks, []);
-  assert.equal(plan.metadataBlockers[0]?.kind, "unsupported_multi_value");
+  assert.equal(plan.questionTasks.length, 1);
+  assert.equal(plan.questionTasks[0]?.question.id, "locations");
+  assert.deepEqual(plan.questionTasks[0]?.question.options, ["New York", "San Francisco"]);
+  assert.equal(plan.questionTasks[0]?.question.portal_input_type, "select-multiple");
+  assert.deepEqual(plan.metadataBlockers, []);
 });
 
 test("ambiguous or blank employer questions remain blockers after safe answers finish", () => {

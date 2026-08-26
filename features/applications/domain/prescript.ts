@@ -34,6 +34,7 @@ type EditableQuestion = {
   kind: "essay" | "required";
   required: boolean;
   options?: string[] | null;
+  portal_input_type?: string;
   explanation?: string;
   remembered?: boolean;
 };
@@ -78,6 +79,7 @@ export function prescriptEditableQuestions(prescript: Prescript | null | undefin
       kind: "required",
       required: item.required !== false,
       options: item.options && item.options.length > 0 ? item.options : null,
+      portal_input_type: item.input_type,
       explanation: item.explanation,
       remembered: item.remembered === true,
     });

@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
+import {
+  answerWithExactOptionToggled,
+  exactSelectedQuestionOptions,
+  questionReviewPresentation,
+  requiredQuestionReviewRoute,
+} from "./question-review-presentation.ts";
 
 const question = (overrides: Record<string, unknown> = {}) => ({
   id: "question-1",
@@ -68,7 +73,7 @@ test("an open textarea remains editable and closed options discard blank entries
   assert.deepEqual(result.editableQuestions[1]?.options, ["Yes", "No"]);
 });
 
-test("multi-value employer controls stay out of the single-answer editor", () => {
+test("multi-value employer controls with exact options stay in the editor", () => {
   const result = questionReviewPresentation([
     question({
       question: "Select every location where you can work",
@@ -85,11 +90,79 @@ test("multi-value employer controls stay out of the single-answer editor", () =>
     }),
   ]);
 
-  assert.deepEqual(result.editableQuestions, []);
-  assert.deepEqual(result.metadataBlockers.map((blocker) => blocker.kind), [
-    "unsupported_multi_value",
-    "unsupported_multi_value",
+  assert.deepEqual(result.editableQuestions.map((item) => item.id), ["question-1", "languages"]);
+  assert.deepEqual(result.metadataBlockers, []);
+});
+
+test("an old unsupported blocker is suppressed only when the exact multi-value field is safe", () => {
+  const stored = question({
+    question: "Select every location where you can work",
+    portal_input_type: "checkbox",
+    portal_selector: "#locations",
+    options: ["Chicago", "New York"],
+  });
+  const legacyBlocker = {
+    kind: "unsupported_multi_value" as const,
+    required: true,
+    portal_input_type: "checkbox",
+    portal_selector: "#locations",
+    question: "Select every location where you can work",
+  };
+
+  assert.deepEqual(questionReviewPresentation([stored], [legacyBlocker]), {
+    editableQuestions: [stored],
+    metadataBlockers: [],
+  });
+  assert.deepEqual(
+    questionReviewPresentation([{ ...stored, options: null }], [legacyBlocker]).metadataBlockers,
+    [legacyBlocker],
+    "a legacy blocker remains fail-closed when its exact employer options are absent",
+  );
+});
+
+test("multi-value answers decompose against exact labels, including labels that contain commas", () => {
+  const options = ["Washington, D.C.", "Chicago", "New York, NY"];
+
+  assert.deepEqual(
+    exactSelectedQuestionOptions("New York, NY, Chicago", options),
+    ["New York, NY", "Chicago"],
+    "a unique stored selection remains valid when its labels are not in employer order",
+  );
+  assert.deepEqual(
+    exactSelectedQuestionOptions("Washington, D.C., New York, NY", options),
+    ["Washington, D.C.", "New York, NY"],
+  );
+  assert.deepEqual(
+    exactSelectedQuestionOptions("New York, NY, Washington, D.C.", options),
+    ["New York, NY", "Washington, D.C."],
+    "reversed labels containing commas are resolved as whole exact options",
+  );
+  assert.equal(
+    answerWithExactOptionToggled("New York, NY, Washington, D.C.", options, "Chicago", true),
+    "Washington, D.C., Chicago, New York, NY",
+    "the next write serializes in employer order regardless of stored order",
+  );
+  assert.equal(
+    answerWithExactOptionToggled("Washington, D.C., Chicago", options, "Washington, D.C.", false),
+    "Chicago",
+  );
+});
+
+test("an ambiguous or stale multi-value answer fails closed", () => {
+  const ambiguousOptions = ["A", "A, B", "B"];
+  assert.equal(exactSelectedQuestionOptions("A, B", ambiguousOptions), null);
+  assert.equal(exactSelectedQuestionOptions("Seattle", ["Chicago", "New York"]), null);
+
+  const result = questionReviewPresentation([
+    question({
+      question: "Select every location where you can work",
+      answer: "A, B",
+      portal_input_type: "select-multiple",
+      options: ambiguousOptions,
+    }),
   ]);
+  assert.deepEqual(result.editableQuestions, []);
+  assert.equal(result.metadataBlockers[0]?.kind, "unsupported_multi_value");
 });
 
 test("a server blocker suppresses the matching historical question without duplicating the card", () => {

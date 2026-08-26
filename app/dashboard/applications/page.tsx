@@ -62,7 +62,7 @@ import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/appli
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
-import { questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
+import { answerWithExactOptionToggled, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 import { track } from "@/lib/analytics";
@@ -3883,7 +3883,9 @@ function Applications() {
       || safeDirectPromptFingerprint !== direct.promptFingerprint
       || directQuestionTaskFingerprint(safeDirectTask) !== direct.taskFingerprint
       || (safeDirectTask.question.options?.length
-        && !safeDirectTask.question.options.includes(direct.answer))
+        && (questionAcceptsMultipleOptions(safeDirectTask.question)
+          ? exactSelectedQuestionOptions(direct.answer, safeDirectTask.question.options) === null
+          : !safeDirectTask.question.options.includes(direct.answer)))
     )) {
       const message = "The employer's question changed while you were answering. Your answer is still here. Review the current field and try again.";
       rememberDirectFailure(message);
@@ -6101,7 +6103,27 @@ function QuestionsScreen({ applicationRole, applicationCompany, questions, metad
                only "I consent to the above.", and a native select clips that to one cropped line
                behind a click. A long list stays a select, because forty radio rows is a worse box
                than the closed one. */
-            question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
+            questionAcceptsMultipleOptions(question) ? (
+              <fieldset id={`question-${question.id}`} aria-label={displayQuestionLabel(question.question)} data-choice-list className="mt-4 space-y-2">
+                {question.options.map((option) => (
+                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink ${exactSelectedQuestionOptions(question.answer, question.options)?.includes(option) ? "border-brand" : "border-control-border hover:border-ink"}`}>
+                    <input
+                      type="checkbox"
+                      name={`question-choice-${question.id}`}
+                      value={option}
+                      checked={exactSelectedQuestionOptions(question.answer, question.options)?.includes(option) === true}
+                      onChange={(event) => {
+                        const answer = answerWithExactOptionToggled(question.answer, question.options, option, event.target.checked);
+                        if (answer === null) return;
+                        onChange(questions.map((item) => item.id === question.id ? { ...item, answer } : item));
+                      }}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-control-border text-brand-ink focus:ring-brand/30"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
               <div id={`question-${question.id}`} role="radiogroup" aria-label={displayQuestionLabel(question.question)} data-choice-list className="mt-4 space-y-2">
                 {question.options.map((option) => (
                   <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border bg-surface px-4 py-3 text-sm leading-6 text-ink ${question.answer === option ? "border-brand" : "border-control-border hover:border-ink"}`}>
@@ -6329,7 +6351,13 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   const answerDirty = answer !== savedAnswer;
   const requiredBlank = task.question.required && !answer.trim();
   const exactOptions = task.question.options ?? [];
-  const choiceMissing = exactOptions.length > 0 && !exactOptions.includes(answer);
+  const acceptsMultipleOptions = questionAcceptsMultipleOptions(task.question);
+  const selectedExactOptions = acceptsMultipleOptions
+    ? exactSelectedQuestionOptions(answer, exactOptions)
+    : null;
+  const choiceMissing = exactOptions.length > 0 && (acceptsMultipleOptions
+    ? selectedExactOptions === null
+    : !exactOptions.includes(answer));
   const choiceErrorVisible = choiceMissing && (choiceTouched || Boolean(answer.trim()));
   const answerBlocked = requiredBlank || choiceMissing;
   const headingId = `direct-application-question-${encodeURIComponent(task.question.id)}`;
@@ -6338,7 +6366,11 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
   const errorId = `${headingId}-error`;
   const visibleError = saveError
     ?? (externalFailure?.promptFingerprint === promptFingerprint ? externalFailure.message : null)
-    ?? (choiceErrorVisible ? "Choose one of the employer's current options before saving." : null);
+    ?? (choiceErrorVisible
+      ? acceptsMultipleOptions
+        ? "Choose only the employer's current options before saving."
+        : "Choose one of the employer's current options before saving."
+      : null);
   const answerDescribedBy = `${progressId} ${helperId}${visibleError ? ` ${errorId}` : ""}`;
 
   useEffect(() => {
@@ -6417,7 +6449,29 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
 
         <form onSubmit={submitAnswer} aria-busy={busy} className="mt-6">
           {task.question.options && task.question.options.length > 0 ? (
-            task.question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
+            acceptsMultipleOptions ? (
+              <fieldset aria-labelledby={headingId} aria-describedby={answerDescribedBy} aria-invalid={visibleError ? true : undefined} className="space-y-2">
+                {task.question.options.map((option) => (
+                  <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border px-4 py-3 text-small leading-6 text-ink transition-colors ${selectedExactOptions?.includes(option) ? "border-brand bg-brand-soft" : "border-control-border bg-surface hover:border-ink"} ${busy ? "cursor-not-allowed opacity-60" : ""}`}>
+                    <input
+                      type="checkbox"
+                      name={`direct-question-choice-${task.question.id}`}
+                      value={option}
+                      checked={selectedExactOptions?.includes(option) === true}
+                      disabled={busy}
+                      aria-disabled={busy}
+                      onChange={(event) => {
+                        const next = answerWithExactOptionToggled(answer, exactOptions, option, event.target.checked);
+                        if (next !== null) updateAnswer(next);
+                      }}
+                      onBlur={() => setChoiceTouched(true)}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-control-border text-brand-ink focus:ring-brand/30"
+                    />
+                    <span>{option}</span>
+                  </label>
+                ))}
+              </fieldset>
+            ) : task.question.options.length <= QUESTION_CHOICE_LIST_LIMIT ? (
               <fieldset aria-labelledby={headingId} aria-describedby={answerDescribedBy} aria-invalid={visibleError ? true : undefined} className="space-y-2">
                 {task.question.options.map((option) => (
                   <label key={option} className={`flex min-h-11 cursor-pointer items-start gap-3 rounded-inner border px-4 py-3 text-small leading-6 text-ink transition-colors ${answer === option ? "border-brand bg-brand-soft" : "border-control-border bg-surface hover:border-ink"} ${busy ? "cursor-not-allowed opacity-60" : ""}`}>

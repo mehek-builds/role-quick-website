@@ -35,6 +35,15 @@ test("a short closed list renders as the employer's own choices, and picking one
   assert.match(screen, /<option value="">Choose an answer<\/option>/);
 });
 
+test("an exact multi-value field renders checkboxes and stores employer-ordered labels", () => {
+  const screen = functionBody(PAGE, "function QuestionsScreen(");
+  assert.match(screen, /questionAcceptsMultipleOptions\(question\) \? \(/);
+  assert.match(screen, /type="checkbox"/);
+  assert.match(screen, /checked=\{exactSelectedQuestionOptions\(question\.answer, question\.options\)\?\.includes\(option\) === true\}/);
+  assert.match(screen, /answerWithExactOptionToggled\(question\.answer, question\.options, option, event\.target\.checked\)/);
+  assert.match(screen, /item\.id === question\.id \? \{ \.\.\.item, answer \} : item/);
+});
+
 test("focusing a Your turn row still lands when the question rendered as a radio group", () => {
   const screen = functionBody(PAGE, "function QuestionsScreen(");
   assert.match(screen, /field\.dataset\.choiceList !== undefined/);
