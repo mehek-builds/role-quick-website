@@ -6605,7 +6605,21 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
               </fieldset>
             ) : (
               <select
-                value={answer}
+                /* AN ANSWER THAT IS NOT ON THE EMPLOYER'S LIST MUST READ AS UNANSWERED, never as
+                   the first option. A <select> whose value matches no <option> does not stay
+                   blank: the browser lands on the first selectable entry and reports THAT as its
+                   value, so the control silently impersonates an answer nobody chose.
+
+                   MEASURED live, 2026-08-27, Five Rings. The stored answer was "Job board", which
+                   is on no employer list; the control showed "Coffee Chat" - the first option - and
+                   `select.value` read "Coffee Chat" too, so a single Save would have told an
+                   employer she had a coffee chat that never happened. Every referral list starts
+                   with a claim of that shape, because they are ordered warmest-first, which is why
+                   this is not a cosmetic default.
+
+                   Falling back to "" shows the disabled placeholder instead, and the required
+                   attribute then does its job: the question cannot be saved until she picks. */
+                value={task.question.options.includes(answer) ? answer : ""}
                 disabled={busy}
                 aria-disabled={busy}
                 required={task.question.required}
