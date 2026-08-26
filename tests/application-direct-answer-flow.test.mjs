@@ -79,7 +79,14 @@ test("Applications asks one trusted employer question at a time with explicit sa
   assert.match(prompt, /function updateAnswer\(next: string\) \{[\s\S]*?if \(busy\) return;/);
   assert.match(prompt, /checked=\{answer === option\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}/);
   assert.match(prompt, /type="checkbox"[\s\S]*?checked=\{selectedExactOptions\?\.includes\(option\) === true\}[\s\S]*?answerWithExactOptionToggled\(answer, exactOptions, option, event\.target\.checked\)/);
-  assert.match(prompt, /<select\s+value=\{answer\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}[\s\S]*?onBlur=\{\(\) => setChoiceTouched\(true\)\}/);
+  /* The select stays controlled by `answer`, disabled by `busy`, and blurs to setChoiceTouched -
+     all of which this line has always been about. What is no longer pinned is `value={answer}`
+     BARE: an answer that is on no employer option list must render as the placeholder, because
+     a <select> with an unmatched value silently selects its first option and reports that as
+     its value (measured on Five Rings, 2026-08-27: stored "Job board" displayed and submitted
+     as "Coffee Chat"). See tests/off-list-answer-reads-as-unanswered.test.mjs, which owns that
+     rule; the wiring this test is about is unchanged. */
+  assert.match(prompt, /<select[\s\S]{0,1600}?value=\{task\.question\.options\.includes\(answer\) \? answer : ""\}\s+disabled=\{busy\}\s+aria-disabled=\{busy\}[\s\S]*?onBlur=\{\(\) => setChoiceTouched\(true\)\}/);
   assert.match(prompt, /<option value="" disabled>Choose an answer<\/option>/);
   assert.match(prompt, /<textarea\s+value=\{answer\}\s+readOnly=\{busy\}\s+aria-disabled=\{busy\}/);
   assert.match(prompt, /<Button type="submit" block className="sm:w-auto" disabled=\{busy \|\| answerBlocked\}>/);
