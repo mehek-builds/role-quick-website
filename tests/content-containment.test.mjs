@@ -84,3 +84,9 @@ test("the founder note contains arbitrary child text beside its mark", async () 
 
   assert.match(source, /mt-1 min-w-0 text-\[13px\] leading-6 text-ink \[overflow-wrap:anywhere\]/);
 });
+
+test("onboarding choice chips contain long selectable labels", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /min-h-11 min-w-0 max-w-full rounded-full[^`]+\[overflow-wrap:anywhere\]/);
+});
