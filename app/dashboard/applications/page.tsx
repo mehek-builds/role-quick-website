@@ -4014,8 +4014,23 @@ function Applications() {
              three full cycles - the DV Trading loop through the review-intent door). The
              802-laundering stays shut out: `direct` is single-question by construction, so no bulk
              save can reach this branch. */
-          const directlyConfirmed = (direct?.intent === "confirm" || direct?.intent === "review")
-            && question.id === direct.questionId
+          /* "answer" mints too, for the same reason "review" was added beside "confirm": all three
+             are ONE question shown on its own screen with its own save press, which is the
+             per-question deliberateness bar this flag exists to hold. Leaving "answer" out left the
+             last hole in it. Measured live on the Akuna Python SWE packet, 2026-08-27: the
+             sponsorship disclaimer arrived pre-filled "Yes", the direct card asked for it anyway,
+             and pressing Yes posted UNCHANGED bytes with no flag. The server minted nothing, so
+             answer_source stayed absent; eb8cf2d reads an absent answer_source as a machine answer
+             and counts the row unacknowledged; questionsMatch therefore stayed false, which is the
+             one condition under which the employer-delivery re-hash may NOT stand down - so the
+             packet parked on "the application questions, how Litos reaches this employer" and the
+             loop could never converge, because re-pressing Yes is unchanged every time. Six other
+             answers on that same packet, all of which CHANGED a value, minted applicant_review
+             correctly - which is exactly the shape of the hole.
+             The 802-laundering stays shut out unchanged: `direct` is single-question by
+             construction, so no bulk save can reach this branch whatever its intent. */
+          const directlyConfirmed = Boolean(direct)
+            && question.id === direct?.questionId
             && question.answer.trim();
           const previouslyConfirmed = confirmedIds?.has(question.id) && question.answer.trim();
           return directlyConfirmed || previouslyConfirmed
