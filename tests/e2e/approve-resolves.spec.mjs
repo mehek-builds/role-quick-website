@@ -161,6 +161,7 @@ const PACKET_AUDIT_RESPONSE = {
 
 const AWAITING = {
   application_id: APPROVABLE.id,
+  retry_safety: { kind: "no_evidence" },
   review: {
     ...APPROVABLE.spec._review,
     status: "ready_for_final_approval",
@@ -171,6 +172,11 @@ const AWAITING = {
 };
 const SENT = {
   application_id: APPROVABLE.id,
+  retry_safety: {
+    kind: "blocked_confirmed",
+    attemptId: "00000000-0000-4000-8000-000000000001",
+    confirmedAt: "2026-08-04T12:00:00.000Z",
+  },
   review: {
     ...APPROVABLE.spec._review,
     status: "submitted",
@@ -238,7 +244,12 @@ async function openApproval(hidden, {
         return;
       }
       if (p.endsWith("/submission")) {
-        await json(pollAnswer);
+        /* A submitted poll answer is the rescue after Send starts, not the initial state used to
+           reach the control. Returning it before the first approve request makes the fixture race
+           itself and can route straight to the receipt before the case has pressed anything. */
+        await json(pollAnswer.review.status === "submitted" && approveCalls.length === 0
+          ? AWAITING
+          : pollAnswer);
         return;
       }
       if (p.endsWith("/submit-request")) {
