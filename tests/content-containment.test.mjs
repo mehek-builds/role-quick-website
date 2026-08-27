@@ -112,3 +112,9 @@ test("requirement text wraps decoded posting content without breakpoints", async
 
   assert.match(source, /<span className="\[overflow-wrap:anywhere\]">\s*\{segments\.map/);
 });
+
+test("packet audit evidence wraps frozen resume quotes", async () => {
+  const source = await read("components/app/PacketAuditEvidence.tsx");
+
+  assert.match(source, /mt-2 min-w-0 space-y-1[^\n]+\[overflow-wrap:anywhere\]/);
+});
