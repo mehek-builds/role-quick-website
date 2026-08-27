@@ -198,10 +198,23 @@ async function requestApi<T>(
     headers.set(name, value);
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (init.body && typeof init.body === "string") {
+  let body = init.body;
+  if (body && typeof body === "string") {
+    headers.set("Content-Type", "application/json");
+  } else if (!body && !["GET", "HEAD"].includes((init.method ?? "GET").toUpperCase())) {
+    /* A bodyless mutating request sends neither body nor Content-Type, and whether the backend's
+       Fastify accepts that has proven DEPLOYMENT-DEPENDENT: identical bodyless
+       POST /applications/:id/packet-audit calls returned 200 on one production deployment and 415
+       FST_ERR_CTP_INVALID_MEDIA_TYPE on the next, measured live on 2026-08-26 (dpl_3Fdre... vs
+       dpl_C1ssr..., same client bytes, confirmed by replaying the request from the page console:
+       bare POST 415'd while the same POST with an empty JSON body returned 200 and a passed audit).
+       Every such route ignores its body, so an explicit empty JSON object changes nothing the
+       handler reads - it only makes the request well-formed under the strictest parser
+       configuration, taking the backend's parser mood out of the picture for good. */
+    body = "{}";
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const res = await fetch(`${API_URL}${path}`, { ...init, body, headers });
   if (res.status === 401) {
     clearSession();
     // A token was sent and rejected: a real expiry. No token at all: this

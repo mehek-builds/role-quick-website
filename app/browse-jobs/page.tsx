@@ -109,36 +109,28 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
  * straight to the resume upload step, skipping the ranked-board match screen entirely because
  * they already chose the job by clicking it.
  *
- * The original posting has not been removed, only demoted to a small corner link, because
- * "Litos does the applying" still means something can go straight to the employer. Two <a> tags
- * cannot nest, so this is the stretched-link pattern: the primary link is an absolutely
- * positioned overlay covering the whole tile, and the corner link is lifted above it with its own
- * stacking context so its own click does not fall through to the overlay underneath. */
+ * There is no corner link out to the employer's own posting any more (Mehek, 2026-08-27): a
+ * visible escape hatch off the tile competed with the one action the card exists to drive, so the
+ * whole card is now a single link to the onboarding entry and nothing else.
+ *
+ * The card used to carry aria-label on an EMPTY overlay link, with location/pay/openings/the
+ * sponsorship badge living as siblings outside it - a screen reader got the label AND all of that
+ * content independently. Now that same content is INSIDE the link, so aria-label here would
+ * override the accessible name and swallow all of it (a documented aria-label-on-rich-content
+ * anti-pattern). An sr-only lead-in composes the accessible name from real content instead - the
+ * same technique already used elsewhere in this codebase (app/page.tsx, AvailabilityWindowTable)
+ * - so nothing under the link goes silent for anyone using a screen reader. */
 function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: string[] }) {
   const ago = agoLabel(job);
   const { shown, extra } = locationSummary(job);
   const pay = formatPay(job);
   const type = jobTypeLabel(job.employment_type);
   return (
-    <div className="group relative flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none">
-      {/* Ahead of the overlay link in DOM order, not just in the z-stack: it is also the first
-          thing a sighted visitor's eye reaches (top-right of the card), and tab/screen-reader
-          order follows source order regardless of z-index, so putting it first here is what
-          keeps keyboard order matching visual order rather than sending focus to the full-card
-          overlay first. */}
-      <a
-        href={job.apply_url}
-        target="_blank"
-        rel="noreferrer"
-        className="relative z-10 self-end text-machine text-brand-ink underline-offset-2 hover:text-ink hover:underline"
-      >
-        View posting ↗
-      </a>
-      <a
-        href={`/start?job=${encodeURIComponent(job.id)}`}
-        className="absolute inset-0 rounded-card"
-        aria-label={`Upload your resume for Litos to tailor to ${job.title} at ${job.company_name}`}
-      />
+    <a
+      href={`/start?job=${encodeURIComponent(job.id)}`}
+      className="group flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
+    >
+      <span className="sr-only">Upload your resume for Litos to tailor to </span>
       <div className="flex min-w-0 items-start gap-3">
         <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">
@@ -192,7 +184,7 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
           {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
         </p>
       )}
-    </div>
+    </a>
   );
 }
 
@@ -214,7 +206,7 @@ function describeFilters(filters: Filters): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-function hrefFor(filters: Filters, page: number, sort?: string) {
+function hrefFor(filters: Filters, page: number) {
   const params = new URLSearchParams();
   /* Every filter has to survive pagination, or page 2 of a search silently
      becomes page 2 of the whole board. */
@@ -222,7 +214,6 @@ function hrefFor(filters: Filters, page: number, sort?: string) {
     if (value) params.set(key, value);
   }
   if (page > 1) params.set("page", String(page));
-  if (sort === "newest") params.set("sort", sort);
   const s = params.toString();
   return s ? `/browse-jobs?${s}` : "/browse-jobs";
 }
@@ -238,7 +229,6 @@ export default async function BrowseJobs({
     page?: string;
     sponsor_only?: string;
     employment_type?: string;
-    sort?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -270,18 +260,14 @@ export default async function BrowseJobs({
     sponsor_only: sponsorOnly ? "true" : "",
     employment_type: employmentType,
   };
-  const sort = params.sort === "newest" ? "newest" : "board";
   const searching = Boolean(
     filters.title || filters.company || filters.location || filters.q || employmentType,
   );
   const requested = Math.max(1, Number(params.page) || 1);
-  const [{ jobs: fetchedJobs, total, postingsTotal, ok }, facets] = await Promise.all([
+  const [{ jobs, total, postingsTotal, ok }, facets] = await Promise.all([
     fetchJobs(filters, requested),
     fetchFacets(sponsorOnly),
   ]);
-  const jobs = sort === "newest"
-    ? [...fetchedJobs].sort((left, right) => Date.parse(right.posted_at ?? right.first_seen_at) - Date.parse(left.posted_at ?? left.first_seen_at))
-    : fetchedJobs;
   const highlightTerms = [filters.title, filters.company, filters.location, filters.q].filter((value): value is string => Boolean(value));
   const pages = pageCount(total);
   const current = Math.min(requested, pages);
@@ -342,7 +328,7 @@ export default async function BrowseJobs({
         <form
           action="/browse-jobs"
           method="get"
-          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[1100px] lg:grid-cols-[1fr_1fr_1fr_minmax(0,0.8fr)_auto]"
+          className="mt-8 grid gap-2 sm:grid-cols-3 lg:max-w-[1100px] lg:grid-cols-[1fr_1fr_1fr_minmax(0,0.8fr)]"
         >
           <ComboField
             name="title"
@@ -401,19 +387,13 @@ export default async function BrowseJobs({
             </select>
           </div>
           {filters.q && <input type="hidden" name="q" value={filters.q} />}
-          <div className="relative flex min-w-0 flex-col gap-1.5">
-            <label htmlFor="sort" className="font-mono text-label font-medium uppercase tracking-[0.08em] text-muted">Order</label>
-            <select id="sort" name="sort" defaultValue={sort} className="min-h-[44px] w-full rounded-inner border border-control-border bg-white px-4 text-base text-ink focus:border-brand focus:outline-none">
-              <option value="board">Board order</option>
-              <option value="newest">Newest on this page</option>
-            </select>
-          </div>
-          {/* A fourth control, and the only one that is not a search term: it changes which jobs
-              are eligible rather than which match. It sits on its own row under the three fields
-              so it is not read as a fourth thing to type in.
+          {/* The LAST control, and the only one that is not a search term: it changes which jobs
+              are eligible rather than which match. It sits on its own row under the four fields
+              so it is not read as one more thing to type in. (Counted in words rather than as "the
+              fourth", which is what it used to say: the row has gained and lost a field twice.)
               A checkbox in a GET form submits nothing when unticked, which is exactly the wanted
               behaviour: the parameter simply disappears from the URL. */}
-          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-5">
+          <label className="flex min-h-[44px] items-center gap-2.5 text-small text-muted sm:col-span-3 lg:col-span-4">
             <input
               type="checkbox"
               name="sponsor_only"
@@ -426,7 +406,7 @@ export default async function BrowseJobs({
           <SearchSubmitButton />
         </form>
 
-        <p className="mt-3 text-machine text-muted" aria-live="polite">Ordered by {sort === "newest" ? "newest result on the current page" : "the job board ranking"}.</p>
+        <p className="mt-3 text-machine text-muted">Ordered by the job board ranking.</p>
 
 
         {searching && ok && (
@@ -493,7 +473,7 @@ export default async function BrowseJobs({
               ) : (
                 <a
                   key={n}
-                  href={hrefFor(filters, n, sort)}
+                  href={hrefFor(filters, n)}
                   className="flex h-9 min-w-9 items-center justify-center rounded-control px-3 text-muted transition-colors hover:bg-surface-alt hover:text-ink"
                 >
                   {n}

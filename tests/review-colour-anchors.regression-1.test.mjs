@@ -58,12 +58,49 @@ describe("the legend only names colours the page can contain", () => {
   });
 
   test("the two colours that are always there are not conditional", () => {
-    assert.match(legend, /<Swatch tone="covered" label="asked for, and on your resume" \/>/);
-    assert.match(legend, /<Swatch tone="missing"/);
+    /* The wording is mode-dependent now, since the resume pane is a rasterised PDF once the exact
+       packet is active and "on your resume" promised marks on an image. What must not change is
+       that covered and missing are UNCONDITIONAL: unlike edited and unscoreable, those two colours
+       are on the page in every mode, so the key always names them. */
+    assert.match(legend, /<Swatch tone="covered" label=\{copy\.covered\} \/>/);
+    assert.match(legend, /<Swatch tone="missing" label=\{withCount\(copy\.missing, missingCount\)\} \/>/);
+    assert.doesNotMatch(legend, /&& <Swatch tone="covered"/);
+    assert.doesNotMatch(legend, /&& <Swatch tone="missing"/);
+  });
+
+  test("both modes give covered and missing a label, and they differ", () => {
+    /* A mode whose copy fell back to the other mode's wording would reintroduce the exact bug: the
+       packet mode telling a student to look for a colour on a PDF canvas. */
+    const draft = legend.match(/draft: \{([\s\S]*?)\},/);
+    const packet = legend.match(/packet: \{([\s\S]*?)\},/);
+    assert.ok(draft && packet, "both legend modes are defined");
+    assert.match(draft[1], /covered: "asked for, and on your resume"/);
+    assert.match(packet[1], /covered: "asked for, and evidenced in your packet"/);
+    assert.notEqual(draft[1], packet[1]);
+  });
+
+  test("the unscoreable swatch is conditional, like edited", () => {
+    assert.match(legend, /\{unscoreableCount > 0 && <Swatch tone="unscoreable"/);
+  });
+
+  test("every tone the key names resolves to a real colour token", () => {
+    /* bg-panel-soft was referenced by the audit's "Not scoreable" chip for months while
+       --color-panel-soft did not exist, so that chip rendered transparent: measured on production
+       2026-08-26 as rgba(0, 0, 0, 0). A swatch with no fill is worse than no swatch, because the
+       key then names a colour the student cannot find on the page. */
+    const css = readFileSync(new URL("../app/globals.css", import.meta.url), "utf8");
+    const tones = [...legend.matchAll(/bg-([a-z-]+-soft)/g)].map((match) => match[1]);
+    assert.ok(tones.length >= 4, `expected every tone to carry a -soft fill, saw ${tones.length}`);
+    for (const tone of new Set(tones)) {
+      assert.match(css, new RegExp(`--color-${tone}:\\s*#`), `--color-${tone} is referenced but never defined`);
+      assert.match(css, new RegExp(`--color-${tone}: var\\(--color-${tone}\\)`), `--color-${tone} is defined but not exposed to Tailwind`);
+    }
   });
 
   test("the review screen uses the server audit count once the exact packet is active", () => {
     assert.match(page, /authoritativeEditedCount = activePacketEvidence[\s\S]{0,300}term\.tone === "edited"/);
-    assert.match(page, /<MatchLegend missingCount=\{authoritativeMissingCount\} editedCount=\{authoritativeEditedCount\} \/>/);
+    assert.match(page, /<MatchLegend[\s\S]{0,400}missingCount=\{authoritativeMissingCount\}/);
+    assert.match(page, /<MatchLegend[\s\S]{0,400}editedCount=\{authoritativeEditedCount\}/);
+    assert.match(page, /<MatchLegend[\s\S]{0,400}mode=\{activePacketEvidence \? "packet" : "draft"\}/);
   });
 });

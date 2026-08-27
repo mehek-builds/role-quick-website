@@ -17,6 +17,22 @@ export type JdMatchResponse = {
   band: { label: string; tone: "strong" | "fair" | "weak" } | null;
   term_count: number;
   min_scorable_terms: number;
+  /**
+   * HOW MUCH OF THE POSTING THE COUNT IS DRAWN OVER, so `term_count` stops being read as the size
+   * of the posting. It is the size of what the extractor RECOGNISED, and on a prose-heavy posting
+   * those are far apart: measured live 2026-08-26, a Databricks PM internship stating roughly eight
+   * things rendered "3 of 3 requirements we counted" beside a score of 100, because a requirement
+   * the extractor could not tokenize left the numerator and the denominator together.
+   *
+   * `clauses_unread` is a FLOOR on what was missed, never an estimate: the backend's splitClauses
+   * ignores lines under four words, so terse bullets are counted neither read nor unread. Word the
+   * caption to match, and never present it as a total.
+   *
+   * Optional because an older backend does not send them, and a client that ignores them behaves
+   * exactly as it did before.
+   */
+  clauses_read?: number;
+  clauses_unread?: number;
   matched: JdTermView[];
   missing: JdTermView[];
 };

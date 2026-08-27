@@ -38,6 +38,18 @@
   --color-danger: #b91c1c;
   --color-danger-soft: #fbeaea;
 
+  /* The neutral tint, for a state that is deliberately NOT one of the pillars: "we could not judge
+     this". Every other -soft carries a hue and therefore a verdict, and an unexamined requirement
+     must not borrow one: amber would call it a gap and blue would call it covered, when the honest
+     claim is that nothing is known. Sits between surface-alt and border so it reads as a fill
+     rather than as the page.
+
+     bg-panel-soft was already referenced by the packet audit's "Not scoreable" chip
+     (PacketAuditEvidence.tsx) but the token was never defined, so that chip has been rendering with
+     a transparent background: measured on production 2026-08-26 as rgba(0, 0, 0, 0). Defining it
+     here fixes that chip as well as the new unscoreable mark. */
+  --color-panel-soft: #f0eee9;
+
   --color-control-border: #8a8982; /* 3.5:1 against white controls */
 
   --radius-card: 20px;
@@ -91,6 +103,7 @@
   --color-warn-soft: var(--color-warn-soft);
   --color-danger: var(--color-danger);
   --color-danger-soft: var(--color-danger-soft);
+  --color-panel-soft: var(--color-panel-soft);
   --color-control-border: var(--color-control-border);
   --font-sans: var(--font-hanken-grotesk);
   --font-mono: var(--font-azeret-mono);

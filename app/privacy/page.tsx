@@ -140,12 +140,16 @@ export default function Privacy() {
             request.
           </p>
           <p>
-            Automatic click and form tracking, session recording, and automatic
-            error capture are turned off. We do not send resume text, job
-            descriptions, application answers, contact messages, passwords,
-            codes, or other form contents as analytics events. PostHog acts as our
-            analytics service provider and may process network information
-            needed to receive these events.
+            Automatic click and form tracking and automatic error capture are
+            turned off. Session recording is on: PostHog stores a recording of
+            what happens on your screen during a visit, with typed input
+            values masked. It does not mask rendered page text or images, so
+            content already on screen, such as a resume or application
+            details, can appear in a recording. We do not send resume text,
+            job descriptions, application answers, contact messages,
+            passwords, codes, or other form contents as analytics events.
+            PostHog acts as our analytics service provider and may process
+            network information needed to receive these events.
           </p>
         </Section>
 

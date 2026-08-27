@@ -2,15 +2,42 @@
 
 import { TermMark } from "@/components/app/RequirementText";
 import type { PacketAudit } from "@/lib/api";
-import { exactPacketAuditRanges, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/features/applications";
+import { exactPacketAuditClauses, exactPacketAuditRanges, manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication } from "@/features/applications";
 
 export { manualHandoffMatchesPacket, manualTrialPacketEvidenceIsFresh, packetAuditDisplayIsExact, packetAuditResponseMatchesApplication };
+
+/**
+ * AN UNSCOREABLE CLAUSE IS MARKED AS A WHOLE CLAUSE, because it has no term to mark.
+ *
+ * The display validator forbids highlight terms on any clause whose verdict is not covered or
+ * missing (see the expectedVerdict check in packet-audit-display.ts), which is correct: a term-level
+ * colour asserts something about that term, and an unscoreable clause has no such finding. But the
+ * consequence was that "Litos could not check this requirement" rendered as plain prose, identical
+ * to a sentence stating no requirement at all. The clause span is the honest unit for that verdict,
+ * so it is the unit that gets the colour.
+ *
+ * Clause spans and term spans cannot collide: clauses are validated non-overlapping, and only
+ * clauses with no terms of their own are drawn here.
+ */
+function auditedRanges(jdText: string, audit: PacketAudit) {
+  const terms = exactPacketAuditRanges(jdText, audit) ?? [];
+  const unscoreable = (exactPacketAuditClauses(jdText, audit) ?? [])
+    .filter((clause) => clause.verdict === "unscoreable")
+    .map((clause) => ({
+      start: clause.start,
+      end: clause.end,
+      tone: "unscoreable" as const,
+      key: `unscoreable:${clause.start}`,
+      text: jdText.slice(clause.start, clause.end),
+    }));
+  return [...terms, ...unscoreable].sort((left, right) => left.start - right.start || left.end - right.end);
+}
 
 export function AuditedJobDescription({ jdText, audit }: { jdText: string; audit: PacketAudit }) {
   if (!packetAuditDisplayIsExact(jdText, audit)) {
     return <div className="whitespace-pre-line">{jdText}</div>;
   }
-  const ranges = exactPacketAuditRanges(jdText, audit) ?? [];
+  const ranges = auditedRanges(jdText, audit);
   const content: React.ReactNode[] = [];
   let cursor = 0;
   ranges.forEach((range, index) => {

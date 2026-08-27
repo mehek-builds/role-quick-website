@@ -197,6 +197,7 @@ export const STUB = {
   /* Two arrays, not one. The Tracker's board reads `stages` and `cards` separately and filters both
      on render, so an object with either key missing takes the whole route into its error boundary. */
   "/applications/board": { stages: [], cards: [] },
+  "/submission-risks/orphans": { risks: [] },
   "/track/events": [],
   /* Resume checks, inside the review screen's right pane. The shape is the one
      features/applications/infrastructure/response-shape.ts insists on: `findings` an array and

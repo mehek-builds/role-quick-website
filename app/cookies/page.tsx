@@ -13,7 +13,7 @@ const rows = [
   ["Recent job-title searches", "Local storage", "Keeps up to five job-title searches on this browser so you can run them again. It does not store location or sponsorship filters.", "Until you clear the list or browser-site data.", "Litos"],
   ["Dashboard job controls", "Local storage", "Keeps the job IDs you skip for the current local day and short-lived locks that prevent the same application packet from being prepared twice.", "Skip lists are stored under date-keyed names and are ignored after that day, but remain until browser-site data is cleared. Preparation locks are ignored after 10 minutes. Failure paths remove them earlier; otherwise they remain until browser-site data is cleared.", "Litos"],
   ["rq_try", "Cookie", "Keeps the public Try flow attached to your work in that browser.", "Up to 24 hours.", "Litos"],
-  ["PostHog identifiers", "Cookie or local storage", "Counts page visits and the limited product actions described in the Privacy policy. Automatic form capture and session recording are off.", "Set by PostHog according to its browser SDK defaults, or until browser-site data is cleared.", "PostHog"],
+  ["PostHog identifiers", "Cookie or local storage", "Counts page visits and the limited product actions described in the Privacy policy, which also covers session recording. Automatic form capture is off.", "Set by PostHog according to its browser SDK defaults, or until browser-site data is cleared.", "PostHog"],
 ] as const;
 
 export default function CookiesPage() {

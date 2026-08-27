@@ -80,7 +80,12 @@ describe("a managed run stopped by a rendered CAPTCHA can be finished through th
     );
     assert.match(
       applications,
-      /\{extensionFillError && fillPostingDistinction\?\.tone !== "resolved" && \(\s*\n\s*<p role="alert"[^>]*>\{extensionFillError\}<\/p>\s*\n\s*\)\}/,
+      /const extensionFillError = fillPostingDistinction\?\.tone === "resolved"\s*\n\s*\? null\s*\n\s*: unresolvedExtensionFillError;/,
+      "a resolved posting distinction must retire the stale extension-fill refusal before rendering",
+    );
+    assert.match(
+      applications,
+      /\{extensionFillError && \(\s*\n\s*<p role="alert"[^>]*>\{extensionFillError\}<\/p>\s*\n\s*\)\}/,
       "extensionFillError must actually render somewhere on SubmissionScreen",
     );
   });

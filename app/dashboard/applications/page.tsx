@@ -34,7 +34,7 @@ import {
   SUBMISSION_ORPHAN_RISK_REFRESH_EVENT,
   resolveSubmissionOrphanRisk,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
@@ -72,13 +72,14 @@ import { safeEvidenceImageUrl } from "@/lib/evidence-image";
 import { armHandoffs, ensureCurrentExtensionSession, minimumAttendedHandoffExtensionVersion, startFreeFillThroughExtension } from "@/lib/extension-bridge";
 import { applyBankVariant, type ApplyOutcome } from "@/features/applications";
 import { RequirementProvider, RequirementText, MatchLegend } from "@/components/app/RequirementText";
-import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX } from "@/features/applications";
+import { buildRequirementIndex, EMPTY_REQUIREMENT_INDEX, exactPacketAuditClauses, exactPacketAuditRanges } from "@/features/applications";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { checklistRowControl, completedSubmissionGroups, directInputTaskPlan, directQuestionPromptFingerprint, directQuestionTaskFingerprint, displayQuestionLabel, documentAsksByKind, documentControls, humanInputItems, QUESTION_CHOICE_LIST_LIMIT, type DirectQuestionTask, type DirectQuestionTaskIntent, type SubmissionChecklistAction, type SubmissionChecklistItem } from "@/features/applications";
 import { prescriptEditableQuestions, prescriptNeedsHer, prescriptSummary } from "@/features/applications";
 import { answerWithExactOptionToggled, exactSelectedQuestionOptions, questionAcceptsMultipleOptions, questionReviewPresentation, requiredQuestionReviewRoute } from "@/features/applications";
 import type { JdMatchResponse, JobMatch } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
+import { messageAsksForTheExtension } from "@/lib/extension-store-link";
 import { track } from "@/lib/analytics";
 import { replaceClosedComposerUrl } from "./composer-url";
 import { applicationSelectionPath } from "./application-selection-url";
@@ -1081,7 +1082,7 @@ function Applications() {
      button at y = 554: off screen in the other direction, the same defect upside down. The two
      buttons are ~440px apart, so the composer needs two slots and not one. Exactly one is ever
      live, because `at` holds one value. */
-  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null>(null);
+  const [composerRefusal, setComposerRefusal] = useState<{ message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null>(null);
   /* One announcement, never two. The page banner and this alert are both live regions, so leaving a
      stale `error` up while raising a refusal makes a screen reader read the old problem and the new
      one. Everything that speaks for the composer goes through here and clears the other channel.
@@ -1094,9 +1095,15 @@ function Applications() {
      the student can act on later, and the alternative is two live regions firing on a single press,
      which is the louder failure. If a page-level error ever appears here that is NOT reload advice,
      revisit this line rather than adding a second alert. */
+  /* `needsExtension` is decided HERE, beside the message it is about, rather than by the note that
+     renders it. The note's paragraph is pinned verbatim by two regression tests that also cap this
+     file at exactly one read of the refusal's message text - a second read there to answer "does
+     this refusal send her to the store?" would have broken that cap without changing a word she
+     reads. Deciding it at the source keeps the cap intact and means every present and future
+     refuseInComposer caller is covered without remembering to opt in. */
   const refuseInComposer = useCallback((at: ComposerSlot, message: string, fields: ApplicationDraftField[]) => {
     setError(null);
-    setComposerRefusal({ message, fields, at });
+    setComposerRefusal({ message, fields, at, needsExtension: messageAsksForTheExtension(message) });
   }, []);
   /* What the server said when she pressed Send it, held against the packet it was said about.
    *
@@ -3034,8 +3041,25 @@ function Applications() {
     && manualTrialPacketEvidenceIsFresh(selected.id, activePacketEvidence)
     ? activePacketEvidence
     : null;
-  const authoritativeMissingCount = activePacketEvidence && auditedDisplayReady
-    ? activePacketEvidence.response.packet_audit.clauses.filter((clause) => clause.verdict === "missing").length
+  /* THE AUDIT BRANCH MUST NOT REPORT A ZERO IT NEVER MEASURED. `clauses.filter(verdict ===
+     "missing").length` is 0 both when the audit found no gaps and when it could not score a single
+     clause, and those two render identically as "(0)" - a green-lit all-clear sitting directly above
+     the submit control. Observed 2026-08-26 on the Flow Traders packet: the audit returned ONE
+     clause, verdict "unscoreable", so the key read "asked for, not on your resume (0)" while
+     /jd-match had six missing terms for that same posting (economics, excel, mathematics,
+     researchers, statistics, technology) and the job description on screen literally read
+     "Proficiency in Excel". A clause is evidence about coverage only if it was actually scored, so
+     count the scored ones first and fall through to null - "not checked" - when there are none. */
+  const auditedClauses = activePacketEvidence && auditedDisplayReady
+    ? activePacketEvidence.response.packet_audit.clauses
+    : null;
+  const auditedScoredClauses = auditedClauses?.filter(
+    (clause) => clause.verdict === "covered" || clause.verdict === "missing",
+  ) ?? null;
+  const authoritativeMissingCount = auditedScoredClauses
+    ? (auditedScoredClauses.length > 0
+      ? auditedScoredClauses.filter((clause) => clause.verdict === "missing").length
+      : null)
     : !activePacketEvidence && matchResult?.scorable ? matchResult.missing.length : null;
   const authoritativeEditedCount = activePacketEvidence && auditedDisplayReady
     ? activePacketEvidence.response.packet_audit.clauses
@@ -3048,6 +3072,31 @@ function Applications() {
   const retrySafetyBlocker = retrySafetyBlockerMessage(selectedRetrySafety);
   const reviewAttemptSafetyBlocked = review?.status !== "ready_for_final_approval"
     && retrySafetyBlocker !== null;
+  /* THE KEY IS A PROMISE ABOUT MARKS THAT ARE ON THE PAGE, so it may not outlive them. It used to
+     render unconditionally, which meant that in exact-packet mode - where the job description paints
+     only the audit's validated highlight terms and the resume pane is a rasterised PDF that cannot
+     carry a mark at all - it described a two-colour system over two panes containing no colour
+     whatsoever. Observed 2026-08-26 on the Flow Traders packet: zero <mark> elements anywhere on the
+     page, both swatches still displayed. Gate it on the marks each branch will actually produce -
+     the audit's validated ranges in packet mode, the requirement index in draft mode - and say so
+     plainly when there are none, because a legend for absent colour reads as "you missed something".
+     Note this is deliberately NOT gated on `authoritativeMissingCount`: an all-covered posting has a
+     live blue code and a truthful "(0)", and must keep its legend. */
+  /* An unscoreable clause now carries a colour of its own, so it counts as a live colour code: a
+     posting where every clause went unchecked has nothing blue or amber on it but is emphatically
+     something the student needs to read. */
+  const auditedUnscoreableCount = activePacketEvidence && auditedDisplayReady && review
+    ? (exactPacketAuditClauses(review.jd_text, activePacketEvidence.response.packet_audit) ?? [])
+      .filter((clause) => clause.verdict === "unscoreable").length
+    : 0;
+  const requirementColourCodeIsLive = activePacketEvidence
+    ? Boolean(
+      auditedDisplayReady
+      && review
+      && ((exactPacketAuditRanges(review.jd_text, activePacketEvidence.response.packet_audit)?.length ?? 0) > 0
+        || auditedUnscoreableCount > 0),
+    )
+    : requirementIndex.tone.size > 0;
   const packetEvidenceBlocker = !review?.jd_text?.trim()
     ? "The saved job description is missing, so Litos cannot prove what this resume was written against."
     : packetDraftChanged || deferredSpec !== spec
@@ -5009,8 +5058,23 @@ function Applications() {
              three full cycles - the DV Trading loop through the review-intent door). The
              802-laundering stays shut out: `direct` is single-question by construction, so no bulk
              save can reach this branch. */
-          const directlyConfirmed = (direct?.intent === "confirm" || direct?.intent === "review")
-            && question.id === direct.questionId
+          /* "answer" mints too, for the same reason "review" was added beside "confirm": all three
+             are ONE question shown on its own screen with its own save press, which is the
+             per-question deliberateness bar this flag exists to hold. Leaving "answer" out left the
+             last hole in it. Measured live on the Akuna Python SWE packet, 2026-08-27: the
+             sponsorship disclaimer arrived pre-filled "Yes", the direct card asked for it anyway,
+             and pressing Yes posted UNCHANGED bytes with no flag. The server minted nothing, so
+             answer_source stayed absent; eb8cf2d reads an absent answer_source as a machine answer
+             and counts the row unacknowledged; questionsMatch therefore stayed false, which is the
+             one condition under which the employer-delivery re-hash may NOT stand down - so the
+             packet parked on "the application questions, how Litos reaches this employer" and the
+             loop could never converge, because re-pressing Yes is unchanged every time. Six other
+             answers on that same packet, all of which CHANGED a value, minted applicant_review
+             correctly - which is exactly the shape of the hole.
+             The 802-laundering stays shut out unchanged: `direct` is single-question by
+             construction, so no bulk save can reach this branch whatever its intent. */
+          const directlyConfirmed = Boolean(direct)
+            && question.id === direct?.questionId
             && question.answer.trim();
           const previouslyConfirmed = confirmedIds?.has(question.id) && question.answer.trim();
           return directlyConfirmed || previouslyConfirmed
@@ -6297,7 +6361,16 @@ function Applications() {
                 </div>
               </div>
               <div className="mt-3 border-t border-border pt-2.5">
-                <MatchLegend missingCount={authoritativeMissingCount} editedCount={authoritativeEditedCount} />
+                {requirementColourCodeIsLive
+                  ? <MatchLegend
+                    missingCount={authoritativeMissingCount}
+                    editedCount={authoritativeEditedCount}
+                    unscoreableCount={auditedUnscoreableCount}
+                    mode={activePacketEvidence ? "packet" : "draft"}
+                  />
+                  : <p className="text-[11px] text-muted">
+                    Litos could not mark this posting&apos;s requirements on either side, so there is no colour code to read here.
+                  </p>}
                 {/* "Point at any highlighted term to see it light up on both
                     sides." came off 2026-07-28: instructions for a hover. */}
               </div>
@@ -6868,7 +6941,7 @@ function NewApplicationPanel({
   extractingJd: boolean;
   /** Why the last press of a composer button did nothing, which boxes it was about, and which of
       the two buttons is being answered. */
-  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null;
   postingDistinction: FillPostingDistinctionState | null;
   onPostingDistinctionCleared: PostingDistinctionCleared;
   onPostingDistinctionRiskChanged: PostingDistinctionRiskChanged;
@@ -6964,14 +7037,27 @@ function ComposerRefusalNote({
   refusal,
   at,
 }: {
-  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot } | null;
+  refusal: { message: string; fields: ApplicationDraftField[]; at: ComposerSlot; needsExtension: boolean } | null;
   at: ComposerSlot;
 }) {
   if (!refusal || refusal.at !== at) return null;
   /* Gated on the refusal existing, never on it naming a field: a server failure names none, and
      that is exactly the case ISSUE-043 was about. */
-  return <p className={at === "action" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>;
+  /* The link is a SIBLING of the alert, never a child of it, and the flag it reads was computed
+     where the refusal was built. Both of those are deliberate: this paragraph's exact shape is
+     pinned by two regression tests (composer-refusal-placement, composer-error-placement) that also
+     cap this file at exactly one read of the refusal's message text - invariants bought with a real
+     incident where a mirrored copy announced the same refusal twice. Reading that text again here
+     to decide the link would have broken the cap while changing nothing a user hears, so the
+     decision rides on the refusal object instead. */
+  return (
+    <>
+      <p className={at === "action" ? "mr-auto text-sm text-danger" : "mt-1.5 text-sm text-danger"} role="alert">{refusal.message}</p>
+      {refusal.needsExtension && <ExtensionStoreLink />}
+    </>
+  );
 }
+
 
 function ApplicationField({ label, value, onChange, placeholder, type = "text", invalid = false }: { label: string; value: string; onChange: (value: string) => void; placeholder: string; type?: string; invalid?: boolean }) {
   const id = `new-application-${label.toLowerCase().replaceAll(" ", "-")}`;
@@ -7826,7 +7912,21 @@ function DirectApplicationQuestion({ task, position, total, saving, saved, focus
               </fieldset>
             ) : (
               <select
-                value={answer}
+                /* AN ANSWER THAT IS NOT ON THE EMPLOYER'S LIST MUST READ AS UNANSWERED, never as
+                   the first option. A <select> whose value matches no <option> does not stay
+                   blank: the browser lands on the first selectable entry and reports THAT as its
+                   value, so the control silently impersonates an answer nobody chose.
+
+                   MEASURED live, 2026-08-27, Five Rings. The stored answer was "Job board", which
+                   is on no employer list; the control showed "Coffee Chat" - the first option - and
+                   `select.value` read "Coffee Chat" too, so a single Save would have told an
+                   employer she had a coffee chat that never happened. Every referral list starts
+                   with a claim of that shape, because they are ordered warmest-first, which is why
+                   this is not a cosmetic default.
+
+                   Falling back to "" shows the disabled placeholder instead, and the required
+                   attribute then does its job: the question cannot be saved until she picks. */
+                value={task.question.options.includes(answer) ? answer : ""}
                 disabled={busy}
                 aria-disabled={busy}
                 required={task.question.required}
@@ -8063,12 +8163,15 @@ function SubmissionScreen({
   onPacketAuditRefusal,
   onOpenWithExtension,
   extensionFillBusy,
-  extensionFillError,
+  extensionFillError: unresolvedExtensionFillError,
   fillPostingDistinction,
   onFillPostingDistinctionCleared,
   onFillPostingDistinctionRiskChanged,
 }: SubmissionScreenProps) {
   const { review } = submission;
+  const extensionFillError = fillPostingDistinction?.tone === "resolved"
+    ? null
+    : unresolvedExtensionFillError;
   const awaitingSecurityCode = review.status === "awaiting_security_code";
   const needsAttention = review.status === "needs_attention";
   const failedPacketAuditStale = review.status === "failed" && historicalPacketAuditStaleMessage(review);
@@ -8861,7 +8964,10 @@ function SubmissionScreen({
         {review.status === "ready_for_final_approval" && review.questions.length > 0 && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-xs font-medium text-muted">Answers</p>
-            <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
+            {/* ph-no-capture: same reasoning as the equivalent list in ApplicationPacket.tsx -
+                answers here can carry EEO self-identification, visa status, and other free-text
+                personal answers (Mehek, 2026-08-27). */}
+            <div className="ph-no-capture mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
               {review.questions.map((question) => (
                 <div key={question.id} className="px-3 py-3">
                   <p className="text-xs font-medium leading-5 text-ink">{displayQuestionLabel(question.question)}</p>
@@ -9054,7 +9160,7 @@ function SubmissionScreen({
         {selfSubmitStartError && (
           <p role="alert" className="mt-3 text-xs leading-5 text-danger">{selfSubmitStartError}</p>
         )}
-        {extensionFillError && fillPostingDistinction?.tone !== "resolved" && (
+        {extensionFillError && (
           <p role="alert" className="mt-3 text-xs leading-5 text-danger">{extensionFillError}</p>
         )}
         <FillPostingDistinctionNotice
@@ -9062,6 +9168,9 @@ function SubmissionScreen({
           onCleared={onFillPostingDistinctionCleared}
           onRiskChanged={onFillPostingDistinctionRiskChanged}
         />
+        {/* Sibling of the alert rather than a child, for the same reason as ComposerRefusalNote:
+            the paragraph above is pinned verbatim by captcha-extension-recovery. */}
+        {messageAsksForTheExtension(extensionFillError) && <ExtensionStoreLink className="mt-2 inline-block text-xs" />}
         {/* The server's own answer to the last press, beside the button that made it. Never routed
             through the page banner: the poll clears that one, and this screen is long enough that a
             message at the top of it is off screen from the control it is about. */}

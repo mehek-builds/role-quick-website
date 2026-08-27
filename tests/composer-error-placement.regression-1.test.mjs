@@ -58,9 +58,15 @@ describe("every message a composer button raises lands beside that button", () =
   test("the helper exists and is the single channel", () => {
     // Asserted on the expression, not on the identifier appearing nearby: the body has to clear the
     // banner AND set the refusal, in that order, or the two announcements coexist.
+    //
+    // The refusal object is allowed to carry MORE than {message, fields, at} - `needsExtension` was
+    // added so an install/update refusal can offer a link to the Chrome Web Store beside the alert
+    // (see lib/extension-store-link.ts). What this test is about is the ORDER of the two calls, and
+    // that is unchanged and still asserted exactly. The field list is deliberately open-ended rather
+    // than re-pinned to today's shape, so the next field does not fail a test about announcements.
     assert.match(
       code,
-      /const refuseInComposer = useCallback\(\(at: ComposerSlot, message: string, fields: ApplicationDraftField\[\]\) => \{\s*setError\(null\);\s*setComposerRefusal\(\{ message, fields, at \}\);\s*\}, \[\]\);/,
+      /const refuseInComposer = useCallback\(\(at: ComposerSlot, message: string, fields: ApplicationDraftField\[\]\) => \{\s*setError\(null\);\s*setComposerRefusal\(\{ message, fields, at[^}]*\}\);\s*\}, \[\]\);/,
       "refuseInComposer must clear the page banner and then set the refusal",
     );
   });
