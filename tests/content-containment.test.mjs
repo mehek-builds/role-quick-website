@@ -23,3 +23,11 @@ test("the shared chip wraps labels inside its available width", async () => {
 
   assert.match(source, /inline-flex min-w-0 max-w-full items-center rounded-full[^`]+\[overflow-wrap:anywhere\]/);
 });
+
+test("the shared meter gives dynamic labels a shrinkable column", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-baseline justify-between gap-3/);
+  assert.match(source, /min-w-0 text-sm font-medium text-ink \[overflow-wrap:anywhere\]/);
+  assert.match(source, /shrink-0 font-mono text-xs text-muted/);
+});

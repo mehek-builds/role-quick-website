@@ -79,10 +79,10 @@ export function Meter({
   const unlimited = limit <= 0 || limit >= 100000;
   const pct = unlimited ? 0 : Math.min(100, Math.round((used / limit) * 100));
   return (
-    <div>
-      <div className="flex items-baseline justify-between">
-        <span className="text-sm font-medium text-ink">{label}</span>
-        <span className="font-mono text-xs text-muted">
+    <div className="min-w-0">
+      <div className="flex min-w-0 items-baseline justify-between gap-3">
+        <span className="min-w-0 text-sm font-medium text-ink [overflow-wrap:anywhere]">{label}</span>
+        <span className="shrink-0 font-mono text-xs text-muted">
           {used}
           {unlimited ? " used" : ` / ${limit}`}
         </span>
