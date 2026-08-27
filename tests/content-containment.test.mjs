@@ -106,3 +106,9 @@ test("employer questions contain company, prompt, option, and explanation text",
   assert.match(source, /min-h-11 min-w-0 max-w-full items-center[^`]+\[overflow-wrap:anywhere\]/);
   assert.match(source, /min-w-0 font-mono text-\[11px\] leading-5 text-muted \[overflow-wrap:anywhere\]/);
 });
+
+test("requirement text wraps decoded posting content without breakpoints", async () => {
+  const source = await read("components/app/RequirementText.tsx");
+
+  assert.match(source, /<span className="\[overflow-wrap:anywhere\]">\s*\{segments\.map/);
+});
