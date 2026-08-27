@@ -118,6 +118,35 @@ const blockedExternal = [];
 const unstubbedBackendPaths = new Set();
 /** Uncaught page errors, so an error boundary shows up as its cause rather than as a locator timeout. */
 const pageErrors = [];
+const NO_EVIDENCE_RETRY_SAFETY = Object.freeze({ kind: "no_evidence" });
+const READY_PACKET = RESUMES.find((packet) => packet.id === "fixture-packet-ready-0");
+assert.ok(READY_PACKET, "the narrow viewport fixture needs fixture-packet-ready-0");
+const READY_SUBMISSION_PATH = `/applications/${READY_PACKET.id}/submission`;
+
+function exactSubmissionFixture(packet, review = packet.spec._review) {
+  return {
+    application_id: packet.id,
+    review,
+    cover_letter: null,
+    retry_safety: NO_EVIDENCE_RETRY_SAFETY,
+  };
+}
+
+const READY_SUBMISSION_FIXTURE = exactSubmissionFixture(READY_PACKET);
+
+function backendFixtureForPath(backendPath) {
+  if (backendPath === READY_SUBMISSION_PATH) return READY_SUBMISSION_FIXTURE;
+  return STUB[backendPath];
+}
+
+function assertExactSubmissionFixture(response, applicationId, review) {
+  assert.deepEqual(response, {
+    application_id: applicationId,
+    review,
+    cover_letter: null,
+    retry_safety: { kind: "no_evidence" },
+  });
+}
 
 const ARTIFACT_DIR = path.join(process.cwd(), "test-results", "narrow-viewport");
 let anyFailure = false;
@@ -252,8 +281,11 @@ for (const vp of VIEWPORTS) {
       }
       if (url.startsWith(BACKEND_ORIGIN)) {
         const backendPath = new URL(url).pathname;
-        const body = STUB[backendPath];
+        const body = backendFixtureForPath(backendPath);
         if (body === undefined) unstubbedBackendPaths.add(backendPath);
+        if (backendPath === READY_SUBMISSION_PATH) {
+          assertExactSubmissionFixture(body, READY_PACKET.id, READY_PACKET.spec._review);
+        }
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
         return;
       }
@@ -388,10 +420,12 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
             ],
           };
           directReviews.set(poll[1], review);
+          const response = exactSubmissionFixture(packet, review);
+          assertExactSubmissionFixture(response, poll[1], review);
           await route.fulfill({
             status: 200,
             contentType: "application/json",
-            body: JSON.stringify({ application_id: poll[1], review, cover_letter: null }),
+            body: JSON.stringify(response),
           });
           return;
         }
@@ -417,7 +451,8 @@ for (const vp of [{ width: 375, height: 812 }, { width: 744, height: 789 }]) {
           });
           return;
         }
-        const body = STUB[backendPath];
+        const body = backendFixtureForPath(backendPath);
+        if (body === undefined) unstubbedBackendPaths.add(backendPath);
         await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
         return;
       }
@@ -520,7 +555,12 @@ test("a terminal action bar clears a software keyboard", async () => {
       return;
     }
     if (url.startsWith(BACKEND_ORIGIN)) {
-      const body = STUB[new URL(url).pathname];
+      const backendPath = new URL(url).pathname;
+      const body = backendFixtureForPath(backendPath);
+      if (body === undefined) unstubbedBackendPaths.add(backendPath);
+      if (backendPath === READY_SUBMISSION_PATH) {
+        assertExactSubmissionFixture(body, READY_PACKET.id, READY_PACKET.spec._review);
+      }
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body ?? {}) });
       return;
     }
