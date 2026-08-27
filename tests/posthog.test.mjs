@@ -4,7 +4,7 @@ import test from "node:test";
 
 const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("PostHog initializes before hydration with privacy-sensitive collection disabled", async () => {
+test("PostHog initializes before hydration with autocapture and exception capture disabled", async () => {
   const source = await read("instrumentation-client.ts");
   assert.match(source, /NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN/);
   assert.match(source, /NEXT_PUBLIC_POSTHOG_HOST/);
@@ -12,9 +12,16 @@ test("PostHog initializes before hydration with privacy-sensitive collection dis
   assert.match(source, /capture_exceptions:\s*false/);
   assert.match(source, /capture_pageview:\s*"history_change"/);
   assert.match(source, /disable_external_dependency_loading:\s*true/);
-  assert.match(source, /disable_session_recording:\s*true/);
   assert.match(source, /before_send:\s*sanitizePostHogEvent/);
   assert.match(source, /posthog\.init/);
+});
+
+test("PostHog does not force session recording off in code", async () => {
+  /* Session recording is controlled from the PostHog project settings
+     (Mehek, 2026-08-27), not from a client-side flag - this guards against
+     someone reflexively re-adding disable_session_recording. */
+  const source = await read("instrumentation-client.ts");
+  assert.doesNotMatch(source, /disable_session_recording:\s*(true|false)/);
 });
 
 test("PostHog URL properties discard account IDs, queries, fragments, and referrers", async () => {
@@ -100,10 +107,19 @@ test("completed applications are captured on submission transitions, not receipt
   assert.doesNotMatch(receipt, /track\("application_submission_completed"/);
 });
 
-test("the privacy policy discloses PostHog and the disabled collection features", async () => {
+test("the privacy policy discloses PostHog, the disabled collection features, and session recording", async () => {
   const source = await read("app/privacy/page.tsx");
   assert.match(source, /We use PostHog/);
-  assert.match(source, /Automatic click and form tracking, session recording, and automatic/);
+  assert.match(source, /Automatic click and form tracking and automatic error capture are\s+turned off/);
+
+  /* Pins the same fact the code comment in instrumentation-client.ts states:
+     recording masks typed input, not rendered text or images. Session
+     recording went from disclosed-as-off to disclosed-as-on with masking
+     caveats (Mehek, 2026-08-27) - this assertion is the guard against the
+     code and the policy drifting apart the way the account-identity
+     disclosure below already did once. */
+  assert.match(source, /Session recording is on/);
+  assert.match(source, /does not mask rendered page text or images/);
 
   /* This assertion used to pin "We do not send your email address or account
    * identity to PostHog". That sentence stopped being true the moment identify

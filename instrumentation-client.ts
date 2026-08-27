@@ -29,7 +29,13 @@ if (token && host) {
       capture_exceptions: false,
       capture_pageview: "history_change",
       disable_external_dependency_loading: true,
-      disable_session_recording: true,
+      /* Session recording turned on (Mehek, 2026-08-27) - do not add
+       * disable_session_recording back here. The project's own "Normal (mask
+       * inputs but not text/images)" setting still masks typed input values;
+       * it does NOT mask rendered page text or images, which is what a resume
+       * or an application's personal details look like once parsed and
+       * displayed rather than typed. That tradeoff is a deliberate PostHog
+       * project setting, not something to silently work around in code. */
       before_send: sanitizePostHogEvent,
       debug: process.env.NODE_ENV === "development",
     });
