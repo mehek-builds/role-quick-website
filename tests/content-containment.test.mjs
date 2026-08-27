@@ -90,3 +90,9 @@ test("onboarding choice chips contain long selectable labels", async () => {
 
   assert.match(source, /min-h-11 min-w-0 max-w-full rounded-full[^`]+\[overflow-wrap:anywhere\]/);
 });
+
+test("onboarding shell titles wrap employer supplied content", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /min-w-0 max-w-full text-section[^`]+\[overflow-wrap:anywhere\]/);
+});

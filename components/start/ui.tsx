@@ -186,7 +186,7 @@ export function StartShell({
       {/* Display type: weight 450, never bold. Calm things don't shout. */}
       {title && (
         <h1
-          className={`max-w-full text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:text-section ${
+          className={`min-w-0 max-w-full text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] sm:text-section ${
             wide ? "mt-6 sm:mt-7" : "mt-8 sm:mt-10"
           }`}
         >
