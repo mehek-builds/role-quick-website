@@ -7335,7 +7335,10 @@ function SubmissionScreen({ packet, submission, packetEvidenceReviewed, manualTr
         {review.status === "ready_for_final_approval" && review.questions.length > 0 && (
           <div className="mt-6 rounded-inner border border-border bg-surface-alt p-4">
             <p className="text-xs font-medium text-muted">Answers</p>
-            <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
+            {/* ph-no-capture: same reasoning as the equivalent list in ApplicationPacket.tsx -
+                answers here can carry EEO self-identification, visa status, and other free-text
+                personal answers (Mehek, 2026-08-27). */}
+            <div className="ph-no-capture mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border bg-surface">
               {review.questions.map((question) => (
                 <div key={question.id} className="px-3 py-3">
                   <p className="text-xs font-medium leading-5 text-ink">{displayQuestionLabel(question.question)}</p>

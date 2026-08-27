@@ -90,7 +90,10 @@ export function ResumePaper({
      experience sections, which is what a graduate's resume does. */
   const educationAfterExperience = spec.education_position === "after_experience";
   return (
-    <div className="rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black">
+    <div className="ph-no-capture rounded-inner border border-border bg-white px-6 py-6 text-[10.5px] leading-[1.5] text-black">
+      {/* ph-no-capture: PostHog's default block class. This renders the applicant's name, contact
+          details, and GPA, same as components/start/ResumePaper.tsx - session recording shows an
+          opaque box here instead of the real content (Mehek, 2026-08-27). */}
       {/* THE TARGET ROLE IS NOT PART OF THE HEADER. The renderer stopped printing it (backend
           "the header is the applicant, not the posting's job title"), so printing it here would put
           a line in the preview that is not on the file the employer receives, which is the exact
@@ -732,7 +735,9 @@ export function ApplicationPacket({
                     This form asked no questions beyond the resume.
                   </p>
                 ) : (
-                  <div className="mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border">
+                  // ph-no-capture: answers here can carry EEO self-identification, visa status, and
+                  // other free-text personal answers (Mehek, 2026-08-27) - blocked from recording.
+                  <div className="ph-no-capture mt-3 divide-y divide-border overflow-hidden rounded-inner border border-border">
                     {questions.map((question) => (
                       <div key={question.id} className="bg-surface px-4 py-3">
                         <div className="flex items-start justify-between gap-3">
