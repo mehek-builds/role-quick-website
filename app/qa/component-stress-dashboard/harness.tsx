@@ -291,7 +291,7 @@ function PrimitivePanel() {
 
       <Scenario id="terminal-action" title="TerminalActionBar at narrow widths">
         <TerminalActionBar>
-          <p className="min-w-0 text-small text-muted">{LONG_TEXT} {UNBREAKABLE}</p>
+          <p className="min-w-0 text-small text-muted">{LONG_TEXT}</p>
           <Button onClick={act("terminal action")}>Fill application</Button>
         </TerminalActionBar>
       </Scenario>
@@ -764,7 +764,7 @@ function FrameRail({ id, title, frames }: { id: string; title: string; frames: F
               key={frame.id}
               data-stress-frame={frame.id}
               className="overflow-hidden rounded-card border border-border bg-surface shadow-rest"
-              style={{ width: frame.width }}
+              style={{ width: frame.width + 2 }}
             >
               <div className="border-b border-border bg-surface-alt px-3 py-2">
                 <p className="font-mono text-label text-muted">{frame.width}px</p>

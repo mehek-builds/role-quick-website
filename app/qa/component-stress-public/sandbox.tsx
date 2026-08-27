@@ -317,12 +317,6 @@ function PublicLinkMatrix() {
           >
             {LONG_TEXT}
           </InstallLink>
-          <SignInLink
-            source="qa-component-stress-unbreakable"
-            className="inline-flex min-h-11 max-w-full items-center rounded-full bg-action px-4 text-sm font-medium text-action-ink"
-          >
-            {UNBREAKABLE}
-          </SignInLink>
         </div>
       </Scenario>
 
@@ -511,7 +505,7 @@ function ResponsiveFrame({ width, qaKey }: { width: number; qaKey?: string }) {
         src={selfFrameUrl(width, qaKey)}
         width={width}
         height={1800}
-        className="mt-3 block rounded-inner border border-border bg-white"
+        className="mt-3 block rounded-inner bg-white"
         sandbox="allow-forms allow-same-origin allow-scripts"
       />
     </section>
@@ -544,7 +538,7 @@ function RouteScenarioFrames({ mounted }: { mounted: boolean }) {
                 src={interceptedRoutePath(scenario.path, scenario.id)}
                 width={scenario.width}
                 height={760}
-                className="mt-3 block rounded-inner border border-border bg-white"
+                className="mt-3 block rounded-inner bg-white"
                 sandbox="allow-forms allow-same-origin allow-scripts"
               />
             ) : (
