@@ -58,7 +58,7 @@ export function Chip({ label, kind }: { label: string; kind?: string }) {
   const style = CHIP_STYLES[kind ?? label.toLowerCase()] ?? "bg-surface-alt text-muted";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-[0.05em] ${style}`}
+      className={`inline-flex min-w-0 max-w-full items-center rounded-full px-2.5 py-0.5 text-center font-mono text-[11px] font-medium uppercase tracking-[0.05em] [overflow-wrap:anywhere] ${style}`}
     >
       {label}
     </span>

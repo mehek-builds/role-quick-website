@@ -17,3 +17,9 @@ test("the shared card can shrink around content without breakpoints", async () =
 
   assert.match(source, /className=\{`min-w-0 rounded-card[^`]+\[overflow-wrap:anywhere\]/);
 });
+
+test("the shared chip wraps labels inside its available width", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /inline-flex min-w-0 max-w-full items-center rounded-full[^`]+\[overflow-wrap:anywhere\]/);
+});
