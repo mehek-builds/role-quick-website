@@ -113,6 +113,17 @@ test("requirement text wraps decoded posting content without breakpoints", async
   assert.match(source, /<span className="\[overflow-wrap:anywhere\]">\s*\{segments\.map/);
 });
 
+test("public job tiles contain unbreakable employer titles without changing the card action", async () => {
+  const source = await read("app/browse-jobs/page.tsx");
+  const tile = source.slice(source.indexOf("function Tile("), source.indexOf("function describeFilters("));
+
+  assert.match(tile, /href=\{`\/start\?job=\$\{encodeURIComponent\(job\.id\)\}`\}/);
+  assert.match(
+    tile,
+    /<p className="text-\[15px\] font-medium leading-snug text-ink \[overflow-wrap:anywhere\]"><Highlight text=\{job\.title\}/,
+  );
+});
+
 test("packet audit evidence wraps frozen resume quotes", async () => {
   const source = await read("components/app/PacketAuditEvidence.tsx");
 
