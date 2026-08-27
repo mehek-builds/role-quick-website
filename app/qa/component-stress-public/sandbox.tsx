@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { Button, ButtonLink } from "@/components/app/Button";
 import { CountryEligibilityEditor } from "@/components/app/CountryEligibilityEditor";
@@ -505,6 +505,11 @@ function selfFrameUrl(width: number, qaKey?: string): string {
   return `/qa/component-stress-public?${params.toString()}`;
 }
 
+function resetHarnessUrl(qaKey?: string): string {
+  if (!qaKey) return "/qa/component-stress-public";
+  return `/qa/component-stress-public?litos_qa_key=${encodeURIComponent(qaKey)}`;
+}
+
 function ResponsiveFrame({ width, qaKey }: { width: number; qaKey?: string }) {
   return (
     <section
@@ -531,7 +536,7 @@ function RouteScenarioFrames({ mounted, qaKey }: { mounted: boolean; qaKey?: str
     <section id="fixture-route-targets" data-surface="route-owned-controls" className="mt-12">
       <h2 className="text-section font-normal tracking-[-0.02em] text-ink">Route-owned controls.</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-        These states stay on their real routes. Add <code className="font-mono text-xs">mount_routes=1</code> only after browser request interception is installed for API, billing, notification, and job-board requests.
+        These states stay on their real routes. They mount only on the exact localhost hostname after browser request interception is installed for API, billing, notification, and job-board requests.
       </p>
       <div className="mt-6 flex items-start gap-4 overflow-x-auto pb-4">
         {ROUTE_SCENARIOS.map((scenario) => (
@@ -561,7 +566,7 @@ function RouteScenarioFrames({ mounted, qaKey }: { mounted: boolean; qaKey?: str
               />
             ) : (
               <div className="mt-3 flex h-28 items-center justify-center rounded-inner border border-dashed border-control-border p-4 text-center text-xs leading-5 text-muted">
-                Waiting for browser request interception. No production data is contacted by this fixture.
+                These frames only mount on exact localhost after browser request interception is ready. No production data is contacted by this fixture.
               </div>
             )}
           </article>
@@ -580,6 +585,12 @@ export function PublicStressHarness({
   mountRouteFrames: boolean;
   qaKey?: string;
 }) {
+  const localHost = useSyncExternalStore(
+    () => () => undefined,
+    () => window.location.hostname === "localhost",
+    () => false,
+  );
+
   if (embed) return <SharedComponentPage />;
 
   return (
@@ -591,7 +602,7 @@ export function PublicStressHarness({
           Each responsive frame imports the real shared components under the app layout, fonts, styles, and tokens. All three viewports render together. Dark mode is skipped because Litos ships a light theme only.
         </p>
         <a
-          href="/qa/component-stress-public"
+          href={resetHarnessUrl(qaKey)}
           className="mt-4 inline-flex min-h-11 items-center text-sm text-brand-ink underline underline-offset-4"
         >
           Reset the local fixture
@@ -604,7 +615,7 @@ export function PublicStressHarness({
           </div>
         </section>
 
-        <RouteScenarioFrames mounted={mountRouteFrames} qaKey={qaKey} />
+        <RouteScenarioFrames mounted={mountRouteFrames && localHost} qaKey={qaKey} />
       </div>
     </main>
   );
