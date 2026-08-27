@@ -130,6 +130,14 @@ const MANY_RECEIPT_ROWS = Array.from({ length: 24 }, (_, index) => ({
   done: index === 23,
 }));
 
+type RouteScenario = {
+  id: string;
+  label: string;
+  path: string;
+  width: number;
+  fixturePath?: string;
+};
+
 const ROUTE_SCENARIOS = [
   { id: "marketing-mobile", label: "Marketing controls, mobile", path: "/", width: 320 },
   { id: "marketing-small", label: "Marketing controls, small", path: "/", width: 640 },
@@ -138,25 +146,25 @@ const ROUTE_SCENARIOS = [
   { id: "pricing-loading", label: "Pricing loading", path: "/pricing", width: 320 },
   { id: "pricing-error", label: "Pricing catalog error", path: "/pricing", width: 640 },
   { id: "pricing-checkout", label: "Pricing checkout states", path: "/pricing", width: 1024 },
-  { id: "jobs-empty", label: "Job board, no data", path: "/browse-jobs", width: 320 },
-  { id: "jobs-one", label: "Job board, one item", path: "/browse-jobs", width: 640 },
-  { id: "jobs-many", label: "Job board, many items", path: "/browse-jobs", width: 1024 },
-  { id: "jobs-error", label: "Job board error", path: "/browse-jobs", width: 320 },
-  { id: "jobs-incomplete", label: "Job board incomplete and long data", path: "/browse-jobs", width: 320 },
-  { id: "try-empty", label: "Try flow, no jobs", path: "/try", width: 320 },
-  { id: "try-one", label: "Try flow, one job", path: "/try", width: 640 },
-  { id: "try-many", label: "Try flow, many jobs", path: "/try", width: 1024 },
-  { id: "try-generating", label: "Try flow generating", path: "/try", width: 320 },
-  { id: "try-error", label: "Try flow error", path: "/try", width: 320 },
-  { id: "try-auth-dialog", label: "Try flow auth dialog", path: "/try", width: 640 },
+  { id: "jobs-empty", label: "Job board, no data", path: "/browse-jobs", fixturePath: "/browse-jobs?q=litos-stress-jobs-empty", width: 320 },
+  { id: "jobs-one", label: "Job board, one item", path: "/browse-jobs", fixturePath: "/browse-jobs?q=litos-stress-jobs-one", width: 640 },
+  { id: "jobs-many", label: "Job board, many items", path: "/browse-jobs", fixturePath: "/browse-jobs?q=litos-stress-jobs-many", width: 1024 },
+  { id: "jobs-error", label: "Job board error", path: "/browse-jobs", fixturePath: "/browse-jobs?q=litos-stress-jobs-error", width: 320 },
+  { id: "jobs-incomplete", label: "Job board incomplete and long data", path: "/browse-jobs", fixturePath: "/browse-jobs?q=litos-stress-jobs-incomplete", width: 320 },
+  { id: "try-empty", label: "Try flow, no jobs", path: "/try", fixturePath: "/qa/component-stress-public/try", width: 320 },
+  { id: "try-one", label: "Try flow, one job", path: "/try", fixturePath: "/qa/component-stress-public/try", width: 640 },
+  { id: "try-many", label: "Try flow, many jobs", path: "/try", fixturePath: "/qa/component-stress-public/try", width: 1024 },
+  { id: "try-generating", label: "Try flow generating", path: "/try", fixturePath: "/qa/component-stress-public/try", width: 320 },
+  { id: "try-error", label: "Try flow error", path: "/try", fixturePath: "/qa/component-stress-public/try", width: 320 },
+  { id: "try-auth-dialog", label: "Try flow auth dialog", path: "/try", fixturePath: "/qa/component-stress-public/try", width: 640 },
   { id: "contact-empty", label: "Contact empty form", path: "/contact", width: 320 },
   { id: "contact-validation", label: "Contact validation", path: "/contact", width: 320 },
   { id: "contact-pending", label: "Contact pending", path: "/contact", width: 640 },
   { id: "contact-error", label: "Contact error", path: "/contact", width: 640 },
   { id: "contact-sent", label: "Contact sent", path: "/contact", width: 1024 },
-  { id: "billing-loading", label: "Billing return loading", path: "/billing/return", width: 320 },
+  { id: "billing-loading", label: "Billing return loading", path: "/billing/return", fixturePath: "/billing/return?context=11111111-1111-4111-8111-111111111111", width: 320 },
   { id: "billing-error", label: "Billing return error", path: "/billing/return", width: 640 },
-  { id: "billing-success", label: "Billing return success", path: "/billing/return", width: 1024 },
+  { id: "billing-success", label: "Billing return success", path: "/billing/return", fixturePath: "/billing/return?context=11111111-1111-4111-8111-111111111111", width: 1024 },
   { id: "install-redirect", label: "Install redirect", path: "/install", width: 320 },
   { id: "status-page", label: "Service status", path: "/status", width: 320 },
   { id: "maintenance-page", label: "Maintenance controls", path: "/maintenance", width: 640 },
@@ -189,11 +197,17 @@ const ROUTE_SCENARIOS = [
   { id: "onboarding-notifications-denied", label: "Onboarding notification permission denied", path: "/start?qa=1&step=notifications", width: 320 },
   { id: "onboarding-plan", label: "Onboarding plan states", path: "/start?qa=1&step=plan", width: 1024 },
   { id: "onboarding-done", label: "Onboarding completion", path: "/start?qa=1&step=done&scenario=saved", width: 320 },
-] as const;
+] as const satisfies readonly RouteScenario[];
 
-function interceptedRoutePath(path: string, scenario: string): string {
+function interceptedRoutePath(
+  path: string,
+  scenario: string,
+  qaKey?: string,
+): string {
+  const params = new URLSearchParams({ stress_scenario: scenario });
+  if (qaKey) params.set("litos_qa_key", qaKey);
   const separator = path.includes("?") ? "&" : "?";
-  return `${path}${separator}stress_scenario=${encodeURIComponent(scenario)}`;
+  return `${path}${separator}${params.toString()}`;
 }
 
 function Scenario({
@@ -512,7 +526,7 @@ function ResponsiveFrame({ width, qaKey }: { width: number; qaKey?: string }) {
   );
 }
 
-function RouteScenarioFrames({ mounted }: { mounted: boolean }) {
+function RouteScenarioFrames({ mounted, qaKey }: { mounted: boolean; qaKey?: string }) {
   return (
     <section id="fixture-route-targets" data-surface="route-owned-controls" className="mt-12">
       <h2 className="text-section font-normal tracking-[-0.02em] text-ink">Route-owned controls.</h2>
@@ -535,7 +549,11 @@ function RouteScenarioFrames({ mounted }: { mounted: boolean }) {
             {mounted ? (
               <iframe
                 title={scenario.label}
-                src={interceptedRoutePath(scenario.path, scenario.id)}
+                src={interceptedRoutePath(
+                  "fixturePath" in scenario ? scenario.fixturePath : scenario.path,
+                  scenario.id,
+                  qaKey,
+                )}
                 width={scenario.width}
                 height={760}
                 className="mt-3 block rounded-inner bg-white"
@@ -586,7 +604,7 @@ export function PublicStressHarness({
           </div>
         </section>
 
-        <RouteScenarioFrames mounted={mountRouteFrames} />
+        <RouteScenarioFrames mounted={mountRouteFrames} qaKey={qaKey} />
       </div>
     </main>
   );
