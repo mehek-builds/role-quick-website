@@ -220,7 +220,7 @@ describe("the board's layout", () => {
        do its job. Asserted rather than eyeballed because the failure is
        invisible everywhere except on a phone. */
     const page = readFileSync(new URL("../app/browse-jobs/page.tsx", import.meta.url), "utf8");
-    const tile = page.match(/className="group relative flex[^"]*"/);
+    const tile = page.match(/className="[^"]*min-h-\[132px\][^"]*"/);
     assert.ok(tile, "could not find the tile's className");
     assert.match(tile[0], /\bmin-w-0\b/, "the tile needs min-w-0 or the board scrolls sideways on mobile");
   });
