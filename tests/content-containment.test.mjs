@@ -11,3 +11,9 @@ test("the shared button wraps content without expanding its viewport", async () 
   assert.match(source, /whitespace-normal/);
   assert.match(source, /\[overflow-wrap:anywhere\]/);
 });
+
+test("the shared card can shrink around content without breakpoints", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /className=\{`min-w-0 rounded-card[^`]+\[overflow-wrap:anywhere\]/);
+});

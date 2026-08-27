@@ -15,7 +15,7 @@ export function Card({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...props} className={`rounded-card border border-border bg-surface ${className}`}>
+    <div {...props} className={`min-w-0 rounded-card border border-border bg-surface [overflow-wrap:anywhere] ${className}`}>
       {children}
     </div>
   );
