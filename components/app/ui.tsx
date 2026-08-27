@@ -207,16 +207,16 @@ export function PageHeader({
   size?: "section" | "heading";
 }) {
   return (
-    <div className="flex items-start justify-between gap-4">
+    <div className="flex min-w-0 items-start justify-between gap-4">
       <div className="min-w-0">
         <h1
-          className={`font-normal leading-[1.15] tracking-[-0.02em] text-ink ${
+          className={`min-w-0 font-normal leading-[1.15] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] ${
             size === "heading" ? "text-heading" : "text-section"
           }`}
         >
           {title}
         </h1>
-        {sub && <p className="mt-1 text-sm text-muted">{sub}</p>}
+        {sub && <p className="mt-1 min-w-0 text-sm text-muted [overflow-wrap:anywhere]">{sub}</p>}
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </div>

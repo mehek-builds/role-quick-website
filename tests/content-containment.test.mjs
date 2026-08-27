@@ -62,3 +62,11 @@ test("notices keep their status mark visible while arbitrary messages wrap", asy
   assert.match(source, /shrink-0 font-mono font-semibold/);
   assert.match(source, /<span className="min-w-0 \[overflow-wrap:anywhere\]">/);
 });
+
+test("page headers contain dynamic titles beside their primary action", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-start justify-between gap-4/);
+  assert.match(source, /min-w-0 font-normal leading-\[1\.15\][^`]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /mt-1 min-w-0 text-sm text-muted \[overflow-wrap:anywhere\]/);
+});
