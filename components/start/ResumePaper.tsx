@@ -609,12 +609,16 @@ export function ResumePaper({
   return (
     <EditContext.Provider value={editApi}>
     <div
-      className={`aspect-[612/792] w-full overflow-hidden bg-white text-black shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-12px_rgba(0,0,0,0.28)] ${
+      className={`ph-no-capture aspect-[612/792] w-full overflow-hidden bg-white text-black shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-12px_rgba(0,0,0,0.28)] ${
         muted ? "opacity-40" : ""
       }`}
       style={{ fontFamily: PAPER_FONT, containerType: "inline-size" }}
       aria-label="Your main resume, preview"
     >
+      {/* ph-no-capture is PostHog's default block class: session recording renders this whole
+          sheet as an opaque box instead of its real content. Every caller draws a real resume
+          here (name, email, phone, GPA, work history), so this belongs on the ONE shared
+          component, not repeated per caller (Mehek, 2026-08-27). */}
       {/* 36pt margin on a 612pt page = 5.88%. Percentage, not pixels, so the type and the margins
           scale together when the column narrows. */}
       {/* 10.5pt body type on a 612pt-wide page is 1.716% of the page width, so 1.72cqw reproduces

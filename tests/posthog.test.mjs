@@ -132,6 +132,18 @@ test("the privacy policy discloses PostHog, the disabled collection features, an
   assert.match(source, /we delete the linked PostHog profile/);
 });
 
+test("the cookies page does not independently re-claim session recording is off", async () => {
+  /* app/cookies/page.tsx states the same PostHog facts as the privacy policy,
+     but as its own hardcoded string rather than a shared source - it drifted
+     out of sync with the "session recording is off" claim once already
+     (Mehek, 2026-08-27, caught in code review) because no test read this
+     file's actual description text, only that a "PostHog identifiers" row
+     existed at all. */
+  const source = await read("app/cookies/page.tsx");
+  assert.match(source, /PostHog identifiers/);
+  assert.doesNotMatch(source, /session recording (is|are) off/i);
+});
+
 test("the privacy policy discloses extension analytics and its local retry queue", async () => {
   const source = await read("app/privacy/page.tsx");
   assert.match(source, /Chrome\s+extension actions/);
