@@ -186,7 +186,7 @@ export function StartShell({
       {/* Display type: weight 450, never bold. Calm things don't shout. */}
       {title && (
         <h1
-          className={`max-w-full text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink sm:text-section ${
+          className={`min-w-0 max-w-full text-section font-normal leading-[1.15] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] sm:text-section ${
             wide ? "mt-6 sm:mt-7" : "mt-8 sm:mt-10"
           }`}
         >
@@ -305,17 +305,17 @@ export type ReceiptRow = { t?: string; k: string; v: string; done?: boolean };
 /** DESIGN.md signature motif #1. Every value is mono, because the machine is speaking. */
 export function Receipt({ rows }: { rows: ReceiptRow[] }) {
   return (
-    <div className="rounded-inner border border-border bg-surface-alt py-1">
+    <div className="min-w-0 rounded-inner border border-border bg-surface-alt py-1">
       {rows.map((r, i) => (
         <div
           key={`${r.k}-${i}`}
-          className={`grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 px-4 py-1.5 font-mono text-xs sm:grid-cols-[64px_120px_minmax(0,1fr)] ${
+          className={`grid min-w-0 grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 px-4 py-1.5 font-mono text-xs sm:grid-cols-[64px_120px_minmax(0,1fr)] ${
             r.done ? "mt-1 border-t border-border pt-2.5" : ""
           }`}
         >
           <span className="text-muted">{r.t ?? ""}</span>
-          <span className="text-[11px] uppercase tracking-[0.06em] text-muted">{r.k}</span>
-          <span className={`col-span-2 break-words sm:col-span-1 sm:truncate ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
+          <span className="min-w-0 text-[11px] uppercase tracking-[0.06em] text-muted [overflow-wrap:anywhere]">{r.k}</span>
+          <span className={`col-span-2 min-w-0 [overflow-wrap:anywhere] whitespace-normal sm:col-span-1 ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
         </div>
       ))}
     </div>
@@ -469,7 +469,7 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
           Mehek, who builds Litos
         </p>
-        <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>
+        <p className="mt-1 min-w-0 text-[13px] leading-6 text-ink [overflow-wrap:anywhere]">{children}</p>
       </div>
     </div>
   );
@@ -494,7 +494,7 @@ export function Chip({
       aria-pressed={on}
       disabled={disabled}
       onClick={onClick}
-      className={`min-h-11 rounded-full border px-3.5 py-1.5 text-[13px] transition-colors ${
+      className={`min-h-11 min-w-0 max-w-full rounded-full border px-3.5 py-1.5 text-center text-[13px] [overflow-wrap:anywhere] transition-colors ${
         on
           ? "border-brand bg-brand-soft text-brand-ink"
           : "border-border bg-surface text-muted hover:border-ink/30"

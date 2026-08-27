@@ -84,7 +84,7 @@ export function PacketAuditBreakdown({ jdText, audit }: { jdText: string; audit:
               </span>
             </div>
             {clause.evidence && (
-              <ul className="mt-2 space-y-1 border-l-2 border-brand pl-3 text-xs leading-5 text-muted">
+              <ul className="mt-2 min-w-0 space-y-1 border-l-2 border-brand pl-3 text-xs leading-5 text-muted [overflow-wrap:anywhere]">
                 {clause.evidence.map((evidence) => (
                   <li key={`${evidence.source}:${evidence.path}:${evidence.sha256}`}>
                     {evidence.source === "resume_spec" ? "Resume evidence" : "Profile evidence"}: {evidence.quote}

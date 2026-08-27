@@ -337,6 +337,9 @@ const UNLINKED_BY_DESIGN = new Map([
   ["/qa/exact-packet-pdf", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission", "internal QA harness, must not be linked from a public surface"],
   ["/qa/portal-submission/[board]/[case]", "internal QA harness, must not be linked from a public surface"],
+  ["/qa/component-stress-dashboard", "internal gated QA harness, must not be linked from a public surface"],
+  ["/qa/component-stress-public", "internal gated QA harness, must not be linked from a public surface"],
+  ["/qa/component-stress-public/try", "internal child frame for the gated component stress harness"],
   /* The 404 for a mistyped /dashboard address. Nothing can link to it by definition: it is reached
      by typing a path that is not a page. It exists because an unmatched URL under /dashboard would
      otherwise fall to the root app/not-found.tsx, which renders the marketing header and a "Get

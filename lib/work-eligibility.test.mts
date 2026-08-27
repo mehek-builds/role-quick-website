@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   blankCountryEligibility,
   countryEligibilityProblem,
+  COUNTRY_OPTIONS,
   eligibilitySeed,
   ISO_COUNTRY_CODES,
   legacySponsorshipAnswer,
@@ -10,6 +11,19 @@ import {
 } from "./work-eligibility.ts";
 
 describe("country work eligibility form model", () => {
+  test("country labels stay identical across server and browser ICU data", () => {
+    const labels = Object.fromEntries(COUNTRY_OPTIONS);
+    assert.deepEqual(
+      Object.fromEntries(["FK", "HK", "MO", "PS"].map((code) => [code, labels[code]])),
+      {
+        FK: "Falkland Islands",
+        HK: "Hong Kong SAR China",
+        MO: "Macao SAR China",
+        PS: "Palestinian Territories",
+      },
+    );
+  });
+
   test("explicit country records are authoritative over every legacy seed", () => {
     const scoped = [{
       country_code: "AE",

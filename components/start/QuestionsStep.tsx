@@ -147,22 +147,22 @@ export function QuestionsStep({
 
       <section
         aria-live="polite"
-        className="overflow-hidden rounded-inner border border-border bg-surface"
+        className="min-w-0 overflow-hidden rounded-inner border border-border bg-surface"
       >
-        <header className="flex items-center justify-between gap-3 border-b border-border bg-surface-alt px-4 py-2">
-          <span className="font-mono text-[11px] uppercase tracking-[0.07em] text-muted">
+        <header className="flex min-w-0 items-center justify-between gap-3 border-b border-border bg-surface-alt px-4 py-2">
+          <span className="min-w-0 font-mono text-[11px] uppercase tracking-[0.07em] text-muted [overflow-wrap:anywhere]">
             {current.required ? "Required" : "Optional"} · {company}
           </span>
-          <span className="font-mono text-[11px] tabular-nums text-muted">
+          <span className="shrink-0 font-mono text-[11px] tabular-nums text-muted">
             {Math.min(index, questions.length - 1) + 1} / {questions.length}
           </span>
         </header>
 
-        <div className="flex flex-col gap-3 p-4">
-          <p className="text-[15px] leading-6 text-ink">{current.question}</p>
+        <div className="flex min-w-0 flex-col gap-3 p-4">
+          <p className="min-w-0 text-[15px] leading-6 text-ink [overflow-wrap:anywhere]">{current.question}</p>
 
           {kindOf(current) === "closed" ? (
-            <div role="radiogroup" aria-label={current.question} className="flex flex-wrap gap-2">
+            <div role="radiogroup" aria-label={current.question} className="flex min-w-0 flex-wrap gap-2">
               {(current.options ?? []).map((option, i) => {
                 const on = answers[answerKey(current)] === option;
                 return (
@@ -172,13 +172,13 @@ export function QuestionsStep({
                     role="radio"
                     aria-checked={on}
                     onClick={() => choose(current, option)}
-                    className={`flex min-h-11 items-center gap-2 rounded-control border px-3.5 py-1.5 text-[13px] transition-colors ${
+                    className={`flex min-h-11 min-w-0 max-w-full items-center gap-2 rounded-control border px-3.5 py-1.5 text-left text-[13px] [overflow-wrap:anywhere] transition-colors ${
                       on
                         ? "border-brand bg-brand-soft text-brand-ink"
                         : "border-control-border bg-surface text-ink hover:border-brand"
                     }`}
                   >
-                    <span className="font-mono text-[10.5px] text-muted">{optionLetter(i)}</span>
+                    <span className="shrink-0 font-mono text-[10.5px] text-muted">{optionLetter(i)}</span>
                     {option}
                   </button>
                 );
@@ -203,7 +203,7 @@ export function QuestionsStep({
           )}
 
           {explanation && (
-            <p className="font-mono text-[11px] leading-5 text-muted">Asked because {explanation}.</p>
+            <p className="min-w-0 font-mono text-[11px] leading-5 text-muted [overflow-wrap:anywhere]">Asked because {explanation}.</p>
           )}
         </div>
       </section>

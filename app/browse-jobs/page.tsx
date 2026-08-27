@@ -134,7 +134,7 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
       <div className="flex min-w-0 items-start gap-3">
         <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">
-          <p className="text-[15px] font-medium leading-snug text-ink"><Highlight text={job.title} terms={terms} /></p>
+          <p className="text-[15px] font-medium leading-snug text-ink [overflow-wrap:anywhere]"><Highlight text={job.title} terms={terms} /></p>
           <p className="mt-1 text-small text-muted"><Highlight text={job.company_name} terms={terms} /></p>
         </div>
       </div>
