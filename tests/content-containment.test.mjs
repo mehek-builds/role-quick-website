@@ -31,3 +31,10 @@ test("the shared meter gives dynamic labels a shrinkable column", async () => {
   assert.match(source, /min-w-0 text-sm font-medium text-ink \[overflow-wrap:anywhere\]/);
   assert.match(source, /shrink-0 font-mono text-xs text-muted/);
 });
+
+test("pending labels wrap only when their container runs out of room", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /inline-flex min-w-0 max-w-full items-center gap-1\.5/);
+  assert.match(source, /<span className="min-w-0 \[overflow-wrap:anywhere\]">\{children\}<\/span>/);
+});

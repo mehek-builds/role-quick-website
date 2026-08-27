@@ -139,7 +139,7 @@ export function ScoreRing({
   );
 }
 
-/** Inline pending label: a small orb next to button/status text, never wraps.
+/** Inline pending label: a small orb next to button/status text, wrapping only when containment requires it.
    `onColor` is for white-text buttons on a solid brand background, where the
    orb must render light dots regardless of the page's own light/dark mode. */
 export function PendingLabel({
@@ -152,9 +152,9 @@ export function PendingLabel({
   onColor?: boolean;
 }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 whitespace-nowrap">
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5">
       <ThinkingOrb state={state} size={20} theme={onColor ? "dark" : "auto"} />
-      <span className="whitespace-nowrap">{children}</span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">{children}</span>
     </span>
   );
 }
