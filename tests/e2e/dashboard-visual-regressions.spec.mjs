@@ -213,6 +213,8 @@ const OFFICIAL_TRANSCRIPT_PACKET = {
   },
 };
 
+const NO_EVIDENCE_RETRY_SAFETY = Object.freeze({ kind: "no_evidence" });
+
 /* A stopped application with two applicant-owned fields the dashboard can safely present directly.
  *
  * The first is an open text field. The second is a closed employer list with its exact options still
@@ -269,6 +271,7 @@ const DIRECT_ANSWER_PACKET = {
 
 const DIRECT_ANSWER_SUBMISSION = {
   application_id: DIRECT_ANSWER_PACKET.id,
+  retry_safety: NO_EVIDENCE_RETRY_SAFETY,
   review: DIRECT_ANSWER_PACKET.spec._review,
   cover_letter: null,
 };
@@ -302,6 +305,7 @@ const DIRECT_ANSWER_PACKET_B = {
 
 const DIRECT_ANSWER_SUBMISSION_B = {
   application_id: DIRECT_ANSWER_PACKET_B.id,
+  retry_safety: NO_EVIDENCE_RETRY_SAFETY,
   review: DIRECT_ANSWER_PACKET_B.spec._review,
   cover_letter: null,
 };
@@ -734,7 +738,9 @@ async function dashboardContext({
         const submittedQuestions = Array.isArray(body?.questions) ? body.questions : [];
         const mergedQuestions = current.review.questions.map((storedQuestion) => {
           const submitted = submittedQuestions.find((question) => question?.id === storedQuestion.id);
-          return submitted ? { ...storedQuestion, ...submitted } : storedQuestion;
+          /* `confirmed` is a one-request applicant claim. The backend spends it into
+             answer_source and never stores or returns the request flag. */
+          return submitted ? { ...storedQuestion, ...submitted, confirmed: undefined } : storedQuestion;
         });
         const updatedReview = {
           ...current.review,
@@ -1603,12 +1609,14 @@ test("hand-built application overlays retain an inert exit and restore their exa
     submissionFixtures: {
       [TRANSCRIPT_PACKET.id]: {
         application_id: TRANSCRIPT_PACKET.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
         review: TRANSCRIPT_PACKET.spec._review,
         cover_letter: null,
         documents: {},
       },
       [OFFICIAL_TRANSCRIPT_PACKET.id]: {
         application_id: OFFICIAL_TRANSCRIPT_PACKET.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
         review: OFFICIAL_TRANSCRIPT_PACKET.spec._review,
         cover_letter: null,
         documents: {},
@@ -2513,6 +2521,7 @@ test("Application answers preserve drafts while moving backward and forward", as
           answer: savedAnswer,
           kind: "required",
           required: true,
+          confirmed: true,
         }, {
           id: "direct-relocation",
           question: closedQuestion,
@@ -2589,6 +2598,7 @@ test("Application answers preserve drafts while moving backward and forward", as
           answer: relocationAnswer,
           kind: "required",
           required: true,
+          confirmed: true,
         }],
       },
     }, "the final write lost a saved or drafted answer");
@@ -2941,6 +2951,7 @@ test("A saved edit follows the authoritative three-question order", async () => 
     submissionFixtures: {
       [threeQuestionPacket.id]: {
         application_id: threeQuestionPacket.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
         review: threeQuestionReview,
         cover_letter: null,
       },
@@ -3330,6 +3341,21 @@ test("Application selection, close, and stale history resolve as one task state"
   const { context, page, state } = await newDashboardPage({
     viewport: { width: 1280, height: 900 },
     resumeHistoryFixture: [TRANSCRIPT_PACKET, RESUMES[1]],
+    submissionFixtures: {
+      [TRANSCRIPT_PACKET.id]: {
+        application_id: TRANSCRIPT_PACKET.id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
+        review: TRANSCRIPT_PACKET.spec._review,
+        cover_letter: null,
+        documents: {},
+      },
+      [RESUMES[1].id]: {
+        application_id: RESUMES[1].id,
+        retry_safety: NO_EVIDENCE_RETRY_SAFETY,
+        review: RESUMES[1].spec._review,
+        cover_letter: null,
+      },
+    },
   });
   try {
     await page.addInitScript(() => {
