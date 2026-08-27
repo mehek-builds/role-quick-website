@@ -238,10 +238,10 @@ export function EmptyState({
 }) {
   const Heading = headingLevel;
   return (
-    <div className="border-y border-border py-10 text-center">
+    <div className="min-w-0 border-y border-border py-10 text-center">
       <EmptyStateVisual kind={visual} />
-      <Heading className="text-base font-medium text-ink">{title}</Heading>
-      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">{body}</p>
+      <Heading className="text-base font-medium text-ink [overflow-wrap:anywhere]">{title}</Heading>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted [overflow-wrap:anywhere]">{body}</p>
       {children && <div className="mt-6 flex justify-center">{children}</div>}
     </div>
   );
