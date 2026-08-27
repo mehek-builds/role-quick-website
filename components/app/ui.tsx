@@ -418,12 +418,12 @@ export function Notice({ message, variant = "info" }: { message: string; variant
   const notice = NOTICE[variant];
   const text = variant === "error" ? userFacingError(message) : message;
   return (
-    <p role={notice.role} className={`flex items-start gap-2 rounded-inner px-4 py-3 text-sm ${notice.styles}`}>
-      <span aria-hidden="true" className="font-mono font-semibold">{notice.mark}</span>
+    <p role={notice.role} className={`flex min-w-0 items-start gap-2 rounded-inner px-4 py-3 text-sm ${notice.styles}`}>
+      <span aria-hidden="true" className="shrink-0 font-mono font-semibold">{notice.mark}</span>
       {/* The link sits INSIDE the alert element on purpose: it is part of the answer, so a screen
           reader hears "…then try again. Get the Litos extension" as one announcement rather than
           leaving her to discover the way forward only by tabbing past the alert. */}
-      <span>
+      <span className="min-w-0 [overflow-wrap:anywhere]">
         <span className="sr-only">{notice.label}: </span>{text}
         {messageAsksForTheExtension(text) && <> <ExtensionStoreLink /></>}
       </span>

@@ -54,3 +54,11 @@ test("empty and retry states wrap server supplied title and body text", async ()
   assert.match(source, /text-base font-medium text-ink \[overflow-wrap:anywhere\]/);
   assert.match(source, /max-w-md text-sm leading-6 text-muted \[overflow-wrap:anywhere\]/);
 });
+
+test("notices keep their status mark visible while arbitrary messages wrap", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-start gap-2 rounded-inner/);
+  assert.match(source, /shrink-0 font-mono font-semibold/);
+  assert.match(source, /<span className="min-w-0 \[overflow-wrap:anywhere\]">/);
+});
