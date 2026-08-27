@@ -2513,6 +2513,7 @@ test("Application answers preserve drafts while moving backward and forward", as
           answer: savedAnswer,
           kind: "required",
           required: true,
+          confirmed: true,
         }, {
           id: "direct-relocation",
           question: closedQuestion,
