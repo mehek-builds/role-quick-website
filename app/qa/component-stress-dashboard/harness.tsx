@@ -2,6 +2,8 @@
 
 import { useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 
+import { hasLoopbackQaApiUrl, hasQaInterceptionSignal } from "@/app/qa/network-safety";
+
 import {
   AppliedToday,
   AutopilotLockNote,
@@ -45,6 +47,7 @@ import {
   ShimmerRows,
   TerminalActionBar,
 } from "@/components/app/ui";
+import { API_URL } from "@/lib/config";
 import { buildRequirementIndex } from "@/features/applications";
 import type { AvailabilityWindowInput } from "@/lib/availability-window";
 import type { PacketAudit, ResumeSpec } from "@/lib/api";
@@ -654,6 +657,15 @@ function BrokenBand(): never {
 
 function AnalysisPanel() {
   const auditFixture = useMemo(() => exactAuditFixture(), []);
+  const liveRequestFixtureReady = useSyncExternalStore(
+    () => () => undefined,
+    () => (
+      window.location.hostname === "localhost" &&
+      hasQaInterceptionSignal(window.sessionStorage) &&
+      hasLoopbackQaApiUrl(API_URL)
+    ),
+    () => false,
+  );
   const browserReady = useSyncExternalStore(
     () => () => undefined,
     () => true,
@@ -701,7 +713,11 @@ function AnalysisPanel() {
         </Scenario>
 
         <Scenario id="interview-prep-collapsed" title="InterviewPrep default control">
-          <InterviewPrep jdText="Build TypeScript systems." spec={RESUME_SPEC} jobContext={{ company: "Northwind", role: "Engineer" }} />
+          {liveRequestFixtureReady ? (
+            <InterviewPrep jdText="Build TypeScript systems." spec={RESUME_SPEC} jobContext={{ company: "Northwind", role: "Engineer" }} />
+          ) : (
+            <p className="text-small text-muted">This live request control mounts only after the browser fixture runner installs request interception.</p>
+          )}
         </Scenario>
 
         <Scenario id="packet-audit-evidence" title="Exact packet audit evidence, one item per verdict">
@@ -786,9 +802,13 @@ function FrameRail({ id, title, frames }: { id: string; title: string; frames: F
 }
 
 function Gallery({ qaKey }: { qaKey: string | null }) {
-  const localHost = useSyncExternalStore(
+  const localInterceptedRunner = useSyncExternalStore(
     () => () => undefined,
-    () => window.location.hostname === "localhost",
+    () => (
+      window.location.hostname === "localhost" &&
+      hasQaInterceptionSignal(window.sessionStorage) &&
+      hasLoopbackQaApiUrl(API_URL)
+    ),
     () => false,
   );
 
@@ -846,12 +866,7 @@ function Gallery({ qaKey }: { qaKey: string | null }) {
           Real exported controls and the dashboard&apos;s existing localhost QA routes. Every frame loads in one pass at a real 320, 640, or 1024 CSS pixel viewport.
         </p>
         <a
-          href="/qa/component-stress-dashboard"
-          onClick={(event) => {
-            if (!qaKey) return;
-            event.preventDefault();
-            window.location.assign(qaUrl("/qa/component-stress-dashboard", qaKey));
-          }}
+          href={qaUrl("/qa/component-stress-dashboard", qaKey)}
           className="mt-4 inline-flex min-h-11 items-center rounded-control border border-control-border px-4 text-small font-medium text-ink hover:border-ink"
         >
           Reload fixture gallery
@@ -865,12 +880,12 @@ function Gallery({ qaKey }: { qaKey: string | null }) {
         <FrameRail id="settings-inputs" title="Settings inputs and consent" frames={inputFrames} />
         <FrameRail id="analysis-controls" title="Requirement and audit controls" frames={analysisFrames} />
         <FrameRail id="real-component-fixtures" title="Existing real component fixtures" frames={realFixtureFrames} />
-        {localHost ? (
+        {localInterceptedRunner ? (
           <FrameRail id="real-dashboard-pages" title="Existing localhost dashboard QA pages" frames={pageFrames} />
         ) : (
           <section data-stress-group="real-dashboard-pages" className="border-t border-border py-8">
             <h2 className="text-heading text-ink">Existing localhost dashboard QA pages</h2>
-            <p className="mt-2 text-small text-muted">These frames only mount on the exact localhost hostname so fixture mode cannot touch a signed-in production session.</p>
+            <p className="mt-2 text-small text-muted">These frames mount only on exact localhost after the browser fixture runner installs request interception.</p>
           </section>
         )}
 

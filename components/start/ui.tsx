@@ -315,7 +315,7 @@ export function Receipt({ rows }: { rows: ReceiptRow[] }) {
         >
           <span className="text-muted">{r.t ?? ""}</span>
           <span className="min-w-0 text-[11px] uppercase tracking-[0.06em] text-muted [overflow-wrap:anywhere]">{r.k}</span>
-          <span className={`col-span-2 min-w-0 whitespace-normal [overflow-wrap:anywhere] sm:col-span-1 ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
+          <span className={`col-span-2 min-w-0 [overflow-wrap:anywhere] whitespace-normal sm:col-span-1 ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
         </div>
       ))}
     </div>

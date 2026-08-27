@@ -18,6 +18,7 @@ import { MobileSendLink } from "@/components/MobileSendLink";
 import { SignInLink } from "@/components/SignInLink";
 import { SiteFooter } from "@/components/SiteFooter";
 import { QuestionsStep } from "@/components/start/QuestionsStep";
+import { hasLoopbackQaApiUrl, hasQaInterceptionSignal } from "@/app/qa/network-safety";
 import {
   Chip as OnboardingChip,
   FounderNote,
@@ -30,6 +31,7 @@ import {
   StepRail,
 } from "@/components/start/ui";
 import type { OnboardingState, PostingPrescriptQuestion } from "@/lib/api";
+import { API_URL } from "@/lib/config";
 import {
   COUNTRY_OPTIONS,
   blankCountryEligibility,
@@ -536,7 +538,7 @@ function RouteScenarioFrames({ mounted, qaKey }: { mounted: boolean; qaKey?: str
     <section id="fixture-route-targets" data-surface="route-owned-controls" className="mt-12">
       <h2 className="text-section font-normal tracking-[-0.02em] text-ink">Route-owned controls.</h2>
       <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-        These states stay on their real routes. They mount only on the exact localhost hostname after browser request interception is installed for API, billing, notification, and job-board requests.
+        These states stay on their real routes. They mount only on the exact localhost hostname with a plain HTTP loopback fixture API, after browser request interception is installed for billing, notification, and job-board requests.
       </p>
       <div className="mt-6 flex items-start gap-4 overflow-x-auto pb-4">
         {ROUTE_SCENARIOS.map((scenario) => (
@@ -566,7 +568,7 @@ function RouteScenarioFrames({ mounted, qaKey }: { mounted: boolean; qaKey?: str
               />
             ) : (
               <div className="mt-3 flex h-28 items-center justify-center rounded-inner border border-dashed border-control-border p-4 text-center text-xs leading-5 text-muted">
-                These frames only mount on exact localhost after browser request interception is ready. No production data is contacted by this fixture.
+                These frames only mount on exact localhost with a plain HTTP loopback fixture API after browser request interception is ready. No production data is contacted by this fixture.
               </div>
             )}
           </article>
@@ -585,9 +587,12 @@ export function PublicStressHarness({
   mountRouteFrames: boolean;
   qaKey?: string;
 }) {
-  const localHost = useSyncExternalStore(
+  const localInterceptedRunner = useSyncExternalStore(
     () => () => undefined,
-    () => window.location.hostname === "localhost",
+    () => (
+      window.location.hostname === "localhost" &&
+      hasQaInterceptionSignal(window.sessionStorage)
+    ),
     () => false,
   );
 
@@ -615,7 +620,10 @@ export function PublicStressHarness({
           </div>
         </section>
 
-        <RouteScenarioFrames mounted={mountRouteFrames && localHost} qaKey={qaKey} />
+        <RouteScenarioFrames
+          mounted={mountRouteFrames && localInterceptedRunner && hasLoopbackQaApiUrl(API_URL)}
+          qaKey={qaKey}
+        />
       </div>
     </main>
   );
