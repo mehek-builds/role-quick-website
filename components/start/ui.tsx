@@ -305,17 +305,17 @@ export type ReceiptRow = { t?: string; k: string; v: string; done?: boolean };
 /** DESIGN.md signature motif #1. Every value is mono, because the machine is speaking. */
 export function Receipt({ rows }: { rows: ReceiptRow[] }) {
   return (
-    <div className="rounded-inner border border-border bg-surface-alt py-1">
+    <div className="min-w-0 rounded-inner border border-border bg-surface-alt py-1">
       {rows.map((r, i) => (
         <div
           key={`${r.k}-${i}`}
-          className={`grid grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 px-4 py-1.5 font-mono text-xs sm:grid-cols-[64px_120px_minmax(0,1fr)] ${
+          className={`grid min-w-0 grid-cols-[52px_minmax(0,1fr)] items-baseline gap-x-3 gap-y-0.5 px-4 py-1.5 font-mono text-xs sm:grid-cols-[64px_120px_minmax(0,1fr)] ${
             r.done ? "mt-1 border-t border-border pt-2.5" : ""
           }`}
         >
           <span className="text-muted">{r.t ?? ""}</span>
-          <span className="text-[11px] uppercase tracking-[0.06em] text-muted">{r.k}</span>
-          <span className={`col-span-2 break-words sm:col-span-1 sm:truncate ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
+          <span className="min-w-0 text-[11px] uppercase tracking-[0.06em] text-muted [overflow-wrap:anywhere]">{r.k}</span>
+          <span className={`col-span-2 min-w-0 [overflow-wrap:anywhere] sm:col-span-1 sm:truncate ${r.done ? "text-brand-ink" : "text-ink"}`}>{r.v}</span>
         </div>
       ))}
     </div>

@@ -70,3 +70,11 @@ test("page headers contain dynamic titles beside their primary action", async ()
   assert.match(source, /min-w-0 font-normal leading-\[1\.15\][^`]+\[overflow-wrap:anywhere\]/);
   assert.match(source, /mt-1 min-w-0 text-sm text-muted \[overflow-wrap:anywhere\]/);
 });
+
+test("onboarding receipts wrap both machine keys and values", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /grid min-w-0 grid-cols-\[52px_minmax\(0,1fr\)\]/);
+  assert.match(source, /text-\[11px\][^\n]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /col-span-2 min-w-0 \[overflow-wrap:anywhere\]/);
+});
