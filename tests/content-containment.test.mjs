@@ -96,3 +96,13 @@ test("onboarding shell titles wrap employer supplied content", async () => {
 
   assert.match(source, /min-w-0 max-w-full text-section[^`]+\[overflow-wrap:anywhere\]/);
 });
+
+test("employer questions contain company, prompt, option, and explanation text", async () => {
+  const source = await read("components/start/QuestionsStep.tsx");
+
+  assert.match(source, /flex min-w-0 items-center justify-between gap-3/);
+  assert.match(source, /min-w-0 font-mono text-\[11px\][^\n]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /min-w-0 text-\[15px\] leading-6 text-ink \[overflow-wrap:anywhere\]/);
+  assert.match(source, /min-h-11 min-w-0 max-w-full items-center[^`]+\[overflow-wrap:anywhere\]/);
+  assert.match(source, /min-w-0 font-mono text-\[11px\] leading-5 text-muted \[overflow-wrap:anywhere\]/);
+});
