@@ -38,3 +38,11 @@ test("pending labels wrap only when their container runs out of room", async () 
   assert.match(source, /inline-flex min-w-0 max-w-full items-center gap-1\.5/);
   assert.match(source, /<span className="min-w-0 \[overflow-wrap:anywhere\]">\{children\}<\/span>/);
 });
+
+test("loading cues reserve the orb and wrap a supplied label", async () => {
+  const source = await read("components/app/ui.tsx");
+
+  assert.match(source, /flex min-w-0 items-center gap-2/);
+  assert.match(source, /aria-hidden="true" className="shrink-0"/);
+  assert.match(source, /min-w-0 text-sm text-muted \[overflow-wrap:anywhere\]/);
+});

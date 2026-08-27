@@ -168,9 +168,9 @@ export function LoadingOrb({
   state?: OrbState;
 }) {
   return (
-    <div className="flex items-center gap-2" role="status" aria-live="polite" aria-busy={state === "working" || state === "composing"}>
-      <span aria-hidden="true"><ThinkingOrb state={state} size={20} /></span>
-      <span className={label ? "text-sm text-muted" : "sr-only"}>{label ?? "Loading"}</span>
+    <div className="flex min-w-0 items-center gap-2" role="status" aria-live="polite" aria-busy={state === "working" || state === "composing"}>
+      <span aria-hidden="true" className="shrink-0"><ThinkingOrb state={state} size={20} /></span>
+      <span className={label ? "min-w-0 text-sm text-muted [overflow-wrap:anywhere]" : "sr-only"}>{label ?? "Loading"}</span>
     </div>
   );
 }
