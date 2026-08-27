@@ -469,7 +469,7 @@ export function FounderNote({ children }: { children: React.ReactNode }) {
         <p className="font-mono text-[11px] uppercase tracking-[0.08em] text-muted">
           Mehek, who builds Litos
         </p>
-        <p className="mt-1 text-[13px] leading-6 text-ink">{children}</p>
+        <p className="mt-1 min-w-0 text-[13px] leading-6 text-ink [overflow-wrap:anywhere]">{children}</p>
       </div>
     </div>
   );

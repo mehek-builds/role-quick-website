@@ -78,3 +78,9 @@ test("onboarding receipts wrap both machine keys and values", async () => {
   assert.match(source, /text-\[11px\][^\n]+\[overflow-wrap:anywhere\]/);
   assert.match(source, /col-span-2 min-w-0 \[overflow-wrap:anywhere\]/);
 });
+
+test("the founder note contains arbitrary child text beside its mark", async () => {
+  const source = await read("components/start/ui.tsx");
+
+  assert.match(source, /mt-1 min-w-0 text-\[13px\] leading-6 text-ink \[overflow-wrap:anywhere\]/);
+});
