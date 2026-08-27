@@ -111,7 +111,15 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
  *
  * There is no corner link out to the employer's own posting any more (Mehek, 2026-08-27): a
  * visible escape hatch off the tile competed with the one action the card exists to drive, so the
- * whole card is now a single link to the onboarding entry and nothing else. */
+ * whole card is now a single link to the onboarding entry and nothing else.
+ *
+ * The card used to carry aria-label on an EMPTY overlay link, with location/pay/openings/the
+ * sponsorship badge living as siblings outside it - a screen reader got the label AND all of that
+ * content independently. Now that same content is INSIDE the link, so aria-label here would
+ * override the accessible name and swallow all of it (a documented aria-label-on-rich-content
+ * anti-pattern). An sr-only lead-in composes the accessible name from real content instead - the
+ * same technique already used elsewhere in this codebase (app/page.tsx, AvailabilityWindowTable)
+ * - so nothing under the link goes silent for anyone using a screen reader. */
 function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: string[] }) {
   const ago = agoLabel(job);
   const { shown, extra } = locationSummary(job);
@@ -120,9 +128,9 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
   return (
     <a
       href={`/start?job=${encodeURIComponent(job.id)}`}
-      aria-label={`Upload your resume for Litos to tailor to ${job.title} at ${job.company_name}`}
       className="group flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
     >
+      <span className="sr-only">Upload your resume for Litos to tailor to </span>
       <div className="flex min-w-0 items-start gap-3">
         <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">
