@@ -109,36 +109,20 @@ function Highlight({ text, terms }: { text: string; terms: string[] }) {
  * straight to the resume upload step, skipping the ranked-board match screen entirely because
  * they already chose the job by clicking it.
  *
- * The original posting has not been removed, only demoted to a small corner link, because
- * "Litos does the applying" still means something can go straight to the employer. Two <a> tags
- * cannot nest, so this is the stretched-link pattern: the primary link is an absolutely
- * positioned overlay covering the whole tile, and the corner link is lifted above it with its own
- * stacking context so its own click does not fall through to the overlay underneath. */
+ * There is no corner link out to the employer's own posting any more (Mehek, 2026-08-27): a
+ * visible escape hatch off the tile competed with the one action the card exists to drive, so the
+ * whole card is now a single link to the onboarding entry and nothing else. */
 function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: string[] }) {
   const ago = agoLabel(job);
   const { shown, extra } = locationSummary(job);
   const pay = formatPay(job);
   const type = jobTypeLabel(job.employment_type);
   return (
-    <div className="group relative flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none">
-      {/* Ahead of the overlay link in DOM order, not just in the z-stack: it is also the first
-          thing a sighted visitor's eye reaches (top-right of the card), and tab/screen-reader
-          order follows source order regardless of z-index, so putting it first here is what
-          keeps keyboard order matching visual order rather than sending focus to the full-card
-          overlay first. */}
-      <a
-        href={job.apply_url}
-        target="_blank"
-        rel="noreferrer"
-        className="relative z-10 self-end text-machine text-brand-ink underline-offset-2 hover:text-ink hover:underline"
-      >
-        View posting ↗
-      </a>
-      <a
-        href={`/start?job=${encodeURIComponent(job.id)}`}
-        className="absolute inset-0 rounded-card"
-        aria-label={`Upload your resume for Litos to tailor to ${job.title} at ${job.company_name}`}
-      />
+    <a
+      href={`/start?job=${encodeURIComponent(job.id)}`}
+      aria-label={`Upload your resume for Litos to tailor to ${job.title} at ${job.company_name}`}
+      className="group flex min-w-0 min-h-[132px] flex-col rounded-card border border-border bg-white p-4 shadow-rest transition-shadow duration-200 hover:shadow-raised motion-reduce:transition-none"
+    >
       <div className="flex min-w-0 items-start gap-3">
         <CompanyMark company={job.company_name} boardUrl={job.career_url} eager={eager} />
         <div className="min-w-0">
@@ -192,7 +176,7 @@ function Tile({ job, eager, terms }: { job: BrowseJob; eager?: boolean; terms: s
           {job.sponsorship_evidence === "posting_offers" ? "Sponsorship offered" : "Company has sponsored visas"}
         </p>
       )}
-    </div>
+    </a>
   );
 }
 
