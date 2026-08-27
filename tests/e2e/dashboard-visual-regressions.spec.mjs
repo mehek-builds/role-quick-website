@@ -2002,7 +2002,9 @@ test("Outreach panel handoff is sequential and restores focus", async () => {
     await capturePass(page, "outreach-composer-mobile");
     await assertContained(page, "Outreach composer at 390px");
     await resizeForCapture(page, 1280, 900);
-    await page.getByRole("button", { name: "Close" }).click();
+    const close = page.getByRole("button", { name: "Close", exact: true });
+    await close.focus();
+    await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.activeElement?.id === "outreach-start-button");
     await assertContained(page, "Outreach at 1280px");
     assertNoPageErrors(state, "Outreach");
