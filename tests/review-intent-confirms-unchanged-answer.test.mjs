@@ -25,13 +25,24 @@ describe("a review-intent save confirms an unchanged answer, so a correct essay 
     "utf8",
   );
 
-  test("the direct-task save mints the confirmed flag for review intents, not only confirm", () => {
+  test("the direct-task save mints the confirmed flag for every direct intent", () => {
+    /* WIDENED 2026-08-27, and this test's own reasoning is why. It required "review" beside
+       "confirm" so an unchanged drafted essay could settle. The third intent, "answer", had the
+       identical hole: measured on the Akuna Python SWE packet, a sponsorship disclaimer that
+       arrived pre-filled "Yes" was asked again by the direct card, and pressing Yes posted
+       unchanged bytes with no flag - so answer_source stayed absent, eb8cf2d counted the row
+       unacknowledged, questionsMatch stayed false, the employer-delivery re-hash could not stand
+       down, and the packet parked forever on "the application questions, how Litos reaches this
+       employer". Re-pressing Yes is unchanged every time, so it could never converge.
+       The two properties this test is actually about are unchanged and still asserted below:
+       scoped to the ONE direct question, and a blank still claims nothing. The 802-laundering
+       guard is likewise untouched - `direct` is single-question by construction, so no bulk save
+       reaches this branch whatever its intent. See tests/direct-save-confirms-an-unchanged-answer. */
     assert.match(
       page,
-      /const directlyConfirmed = \(direct\?\.intent === "confirm" \|\| direct\?\.intent === "review"\)\s*\n\s*&& question\.id === direct\.questionId\s*\n\s*&& question\.answer\.trim\(\);/,
-      "directlyConfirmed must accept intent \"review\" alongside \"confirm\", still scoped to the " +
-      "one direct question and still refusing a blank - otherwise an unchanged drafted essay saved " +
-      "from its own screen mints no claim and the ask never ends",
+      /const directlyConfirmed = Boolean\(direct\)\s*\n\s*&& question\.id === direct\?\.questionId\s*\n\s*&& question\.answer\.trim\(\);/,
+      "directlyConfirmed must mint for any single-question direct save, still scoped to the one " +
+      "direct question and still refusing a blank",
     );
   });
 
