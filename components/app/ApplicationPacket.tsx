@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
 import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
-import { cleanJdCapture, cleanScrapedLabel, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { cleanJdCapture, cleanScrapedLabel, cleanScrapedPrompt, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
@@ -229,7 +229,14 @@ function SectionHeading({ id, eyebrow, title, note }: { id: string; eyebrow: str
    so a label with nothing duplicate in it arrives here unchanged. */
 function fieldLabel(field: string): string {
   const unprefixed = field.startsWith("question:") ? field.slice("question:".length).trim() : field;
-  return cleanScrapedLabel(unprefixed);
+  /* Cased as well as de-duplicated, which the first pass at this missed. Verified live on the
+     Verkada packet 2026-08-29: the stored fields are a lowercased DOM read, so stripping the
+     duplicate captures out of "question:preferred first name preferred first name preferred_name"
+     left "preferred first name", and the chips beside it still read "when do you graduate?" and
+     "what is your gpa?". Removing the junk and leaving the result in the employer's DOM casing only
+     half-answers the point of doing it at all. Same composition displayQuestionLabel uses, so a
+     field chip and a question row cannot present the same label two ways. */
+  return cleanScrapedPrompt(cleanScrapedLabel(unprefixed));
 }
 
 function CheckRow({ item, checked }: { item: SubmissionChecklistItem; checked: boolean }) {
