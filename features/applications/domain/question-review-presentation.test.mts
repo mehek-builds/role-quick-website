@@ -216,3 +216,105 @@ test("required question routing gives applicant answers precedence over employer
     "a complete packet without metadata blockers uses the ordinary continuation",
   );
 });
+
+/* The circular gate measured live on the Mytos Lever packet, 2026-08-28 (application
+   55de7c9e-13c0-44fd-8f78-0dee280dbd33, packet 16f1c744-1a3c-49a5-94cb-c14e6f4356d3).
+   Lever marks a required field with the Unicode heavy asterisk in the label itself, while the
+   Select2 replacement control hides the native required attribute from discovery, so the stored
+   flag arrives false. A blocker that then rides required:false answers "continue", the flow
+   never carries the metadata_refresh intent, and the dashboard cycles between the answers screen
+   and the packet review without ever offering the managed run that reads the employer's exact
+   choices. The employer's own marker must outrank the unreadable stored flag. */
+test("a Lever heavy-asterisk label marks a blocked combobox required and routes to metadata refresh", () => {
+  const university = question({
+    id: "university",
+    question: "which was the most recent university you attended? ✱",
+    answer: "University of Southern California",
+    required: false,
+    portal_input_type: "combobox",
+    portal_selector: '[name="cards[62541ff1][field0]"]',
+    options: null,
+  });
+  const result = questionReviewPresentation([university]);
+
+  assert.deepEqual(result.editableQuestions, []);
+  assert.equal(result.metadataBlockers[0]?.kind, "missing_exact_options");
+  assert.equal(result.metadataBlockers[0]?.required, true, "the label's own required marker must count");
+  assert.deepEqual(
+    requiredQuestionReviewRoute([university]),
+    { kind: "metadata_refresh" },
+    "an answered but unreadable required control demands the managed re-read, never a silent continue",
+  );
+});
+
+test("an ASCII asterisk marker also marks a blocked closed control required", () => {
+  const result = questionReviewPresentation([
+    question({
+      question: "Work authorization *",
+      required: false,
+      portal_input_type: "select-one",
+      portal_selector: "#authorization",
+      options: null,
+    }),
+  ]);
+  assert.equal(result.metadataBlockers[0]?.required, true);
+});
+
+test("a required-marker legend does not mark the control required", () => {
+  const legend = question({
+    id: "legend",
+    question: "How did you hear about us? ✱ indicates a required field",
+    answer: "Job board",
+    required: false,
+    portal_input_type: "select-one",
+    portal_selector: "#source",
+    options: null,
+  });
+  const result = questionReviewPresentation([legend]);
+
+  assert.equal(result.metadataBlockers[0]?.required, false);
+  assert.deepEqual(
+    requiredQuestionReviewRoute([legend]),
+    { kind: "continue" },
+    "a legend describes the form, not this control, so an optional unread field stays non-blocking",
+  );
+});
+
+test("an asterisk inside a token is not a required marker and an unmarked optional blocker stays optional", () => {
+  const starredToken = question({
+    id: "starred",
+    question: "Rate your C*-algebra familiarity",
+    answer: "Expert",
+    required: false,
+    portal_input_type: "select-one",
+    portal_selector: "#calgebra",
+    options: null,
+  });
+  const unmarked = question({
+    id: "plain",
+    question: "Preferred office",
+    answer: "London",
+    required: false,
+    portal_input_type: "select-one",
+    portal_selector: "#office",
+    options: null,
+  });
+  const result = questionReviewPresentation([starredToken, unmarked]);
+
+  assert.equal(result.metadataBlockers[0]?.required, false);
+  assert.equal(result.metadataBlockers[1]?.required, false);
+  assert.deepEqual(requiredQuestionReviewRoute([starredToken, unmarked]), { kind: "continue" });
+});
+
+test("a stored required flag still marks the blocker required without any label marker", () => {
+  const result = questionReviewPresentation([
+    question({
+      question: "Do you require sponsorship?",
+      required: true,
+      portal_input_type: "select-one",
+      portal_selector: "#sponsorship",
+      options: null,
+    }),
+  ]);
+  assert.equal(result.metadataBlockers[0]?.required, true);
+});
