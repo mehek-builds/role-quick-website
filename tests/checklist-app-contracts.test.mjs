@@ -42,7 +42,14 @@ test("loading and notices have shared accessible semantics", () => {
 test("resume upload supports drop, file limits, progress, and retry", () => {
   const page = read("app/dashboard/resume/page.tsx");
   assert.match(page, /onDrop=/);
-  assert.match(page, /Maximum 10 MB/);
+  /* The cap the copy promises must be the cap the gate enforces. 10 MB was the backend's
+     multipart limit, which no upload could reach: the platform rejects the request body at
+     MAX_APPLICATION_DOCUMENT_BYTES first, with no readable error. Same contract as the
+     onboarding upload in steps.tsx. */
+  assert.match(page, /Maximum 4 MB/);
+  assert.match(page, /file\.size > MAX_APPLICATION_DOCUMENT_BYTES/);
+  assert.doesNotMatch(page, /10 \* 1024 \* 1024/);
+  assert.doesNotMatch(page, /10 MB\?"/);
   assert.match(page, /Reading the PDF/);
   assert.match(page, />Retry</);
 });
