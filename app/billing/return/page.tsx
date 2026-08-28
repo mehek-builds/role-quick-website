@@ -12,7 +12,7 @@ import {
   type BillingReceipt,
   type Me,
 } from "@/lib/api";
-import { sendTikTokEvent } from "@/lib/tiktok-client";
+import { sendTikTokEvent, trackTikTokPixelEvent } from "@/lib/tiktok-client";
 import { isSafeBillingPortalUrl } from "@/lib/billing";
 import { retryPremiumActionThroughExtension, verifyExtensionCheckoutReturn } from "@/lib/extension-bridge";
 import {
@@ -298,11 +298,12 @@ export default function BillingReturnPage() {
             if (!purchaseSentRef.current && window.sessionStorage.getItem(purchaseKey) !== "1") {
               purchaseSentRef.current = true;
               window.sessionStorage.setItem(purchaseKey, "1");
-              sendTikTokEvent(
-                "Purchase",
-                `purchase:${receipt?.reference ?? context}`,
-                receipt ? { value: receipt.amount_cents / 100, currency: receipt.currency } : undefined,
-              );
+              const purchaseEventId = `purchase:${receipt?.reference ?? context}`;
+              const purchaseProperties = receipt
+                ? { value: receipt.amount_cents / 100, currency: receipt.currency }
+                : undefined;
+              sendTikTokEvent("Purchase", purchaseEventId, purchaseProperties);
+              trackTikTokPixelEvent("Purchase", purchaseEventId, purchaseProperties);
             }
           }
           return;
