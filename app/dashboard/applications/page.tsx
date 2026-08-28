@@ -4637,11 +4637,13 @@ function Applications() {
           autopilot={Boolean(autopilot.enabled)}
           appliedToday={appliedToday}
           waiting={(() => {
-            /* The DOMAIN's own action membership, not a copied list, so this count, Home's tile
-               and the ?state=action list are one definition. The link is the real filter, not an
-               anchor: an anchor lands on whatever ledger filter is already active, which can be a
-               list holding none of the counted rows. */
-            const count = (packets ?? []).filter((packet) => (
+            /* The DOMAIN's own action membership over the SAME rows the ?state=action ledger
+               shows (reviewablePackets, deduped), so the count, the tile and the list it links to
+               are one number. Counting raw `packets` printed 88 against a 44-row action view in
+               production (2026-08-28): the merged raw array holds the duplicates the ledger
+               collapses. The link is the real filter, not an anchor: an anchor lands on whatever
+               ledger filter is already active. */
+            const count = reviewablePackets.filter((packet) => (
               packet.spec._review != null && statusMatchesApplicationFilter(packet.spec._review, "action")
             )).length;
             return count > 0 ? { count, href: "/dashboard/applications?state=action" } : null;

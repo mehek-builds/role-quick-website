@@ -32,6 +32,7 @@ const STRONG_CHROME_MARKERS: readonly RegExp[] = [
   /^attach resume\/?cv$/i,
   /^authorize sharing of selected$/i,
   /^auto-?complete this form\.?\s*(learn more)?$/i,
+  /^(ocr\s+)?application for employment$/i,
 ];
 
 const CHROME_LINE_PATTERNS: readonly RegExp[] = [
@@ -52,6 +53,19 @@ const CHROME_LINE_PATTERNS: readonly RegExp[] = [
   /^auto-?complete this form\.?\s*(learn more)?$/i,
   /^learn more$/i,
   /^required fields?[\s*✱✲❋]*$/i,
+  /* The Belvedere capture's SECOND form (an OCR'd employment application) surfaced these on the
+     live review screen, 2026-08-28, with the highlighter matching LINKS, OCR and Select as
+     requirement terms. All of them are gate-protected: none is removed unless a strong form
+     marker proves the capture holds a form. */
+  /^links$/i,
+  /^other website$/i,
+  /^(ocr\s+)?application for employment$/i,
+  /^street address( line \d)?$/i,
+  /^(city|state|country|zip ?code|postal code|province)[\s*✱✲❋]*$/i,
+  /^select[.…\s]*$/i,
+  /^how did you (hear|learn) about [^?\n]{0,80}\??$/i,
+  /^(handshake\/?campus job board|campus career fair|other campus event|glassdoor|indeed|linkedin|referral|other|built in [a-z ]{2,20})$/i,
+  /^[a-z0-9 .,&'()-]{1,40} website$/i,
 ];
 
 export type CleanedJdCapture = {

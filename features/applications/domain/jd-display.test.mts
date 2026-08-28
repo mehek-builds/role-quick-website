@@ -85,3 +85,34 @@ test("a capture that is ONLY form chrome comes back raw, never empty", () => {
   assert.equal(cleaned.text, capture);
   assert.deepEqual(cleaned.removedLines, []);
 });
+
+test("the second form section of an apply capture is cleaned too", () => {
+  const capture = [
+    "Software Engineer Intern - Summer 2027",
+    "SUBMIT YOUR APPLICATION",
+    "LINKS",
+    "Other website",
+    "OCR APPLICATION FOR EMPLOYMENT",
+    "Street Address",
+    "City",
+    "State",
+    "Zip Code",
+    "How did you learn about Belvedere Trading?",
+    "Select...",
+    "Belvedere Trading Website",
+    "Handshake/Campus Job Board",
+    "Campus Career Fair",
+    "Other Campus Event",
+    "LinkedIn",
+    "Glassdoor",
+    "Indeed",
+    "Built in Chicago",
+    "We write robust C++ for low-latency trading systems.",
+  ].join("\n");
+  const cleaned = cleanJdCapture(capture);
+  assert.match(cleaned.text, /Software Engineer Intern - Summer 2027/);
+  assert.match(cleaned.text, /robust C\+\+ for low-latency trading systems/);
+  for (const gone of ["LINKS", "OCR", "Street Address", "Zip Code", "Select...", "How did you learn", "Handshake", "Built in Chicago", "Glassdoor"]) {
+    assert.ok(!cleaned.text.includes(gone), `${gone} should have been removed`);
+  }
+});
