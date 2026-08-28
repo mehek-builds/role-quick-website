@@ -108,7 +108,10 @@ export function QuestionsStep({
     setBusy(true);
     setError(null);
     try {
-      await onSaved(answersToSave(questions, answers));
+      /* Review mode sends the whole editor, including intentional blanks. An omitted optional
+         question means "leave the stored answer alone" to the application-scoped merge, so
+         dropping a cleared value would make a successful save resurrect the sensitive answer. */
+      await onSaved(answersToSave(questions, answers, { includeBlank: reviewMode }));
       track("onboarding_questions_saved", { asked: questions.length, already_answered: alreadyAnswered });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save those answers.");
@@ -164,9 +167,12 @@ export function QuestionsStep({
           )}
       </p>
 
+      {/* Employer answers can contain EEO self-identification, work authorization, compensation,
+          and other personal details. PostHog records rendered text and DOM state, so block the
+          whole editor rather than relying only on input masking. */}
       <section
         aria-live="polite"
-        className="min-w-0 overflow-hidden rounded-inner border border-border bg-surface"
+        className="ph-no-capture min-w-0 overflow-hidden rounded-inner border border-border bg-surface"
       >
         <div key={answerKey(current)} className={direction === "forward" ? "rq-question-forward" : "rq-question-back"}>
         <header className="flex min-w-0 items-center justify-between gap-3 border-b border-border bg-surface-alt px-4 py-2">

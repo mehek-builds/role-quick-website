@@ -209,7 +209,7 @@ export async function runOnboardingBuild(
  */
 export function reviewableOnboardingAnswers(
   filled: readonly PostingPrescriptFilledAnswer[],
-  confirmed: readonly { question: string; answer: string }[],
+  confirmed: readonly { question: string; answer: string; confirmed?: boolean }[],
   asked: readonly PostingPrescriptQuestion[] = [],
 ): PostingPrescriptFilledAnswer[] {
   const rows = new Map<string, PostingPrescriptFilledAnswer>();
@@ -219,14 +219,20 @@ export function reviewableOnboardingAnswers(
   }
   for (const item of confirmed) {
     const key = item.question.trim().toLowerCase();
-    if (!key || !item.answer.trim()) continue;
+    if (!key) continue;
+    /* A blank in this overlay is an intentional review edit. Delete the older prefilled value
+       instead of ignoring the blank and silently putting the sensitive answer back on screen. */
+    if (!item.answer.trim()) {
+      rows.delete(key);
+      continue;
+    }
     const existing = rows.get(key);
     const question = asked.find((candidate) => candidate.question.trim().toLowerCase() === key);
     rows.set(key, {
       ...existing,
       question: item.question,
       answer: item.answer,
-      source: "applicant_review",
+      source: item.confirmed === false ? existing?.source ?? "saved_details" : "applicant_review",
       input_type: existing?.input_type ?? question?.input_type ?? "text",
       options: existing?.options !== undefined ? existing.options : question?.options ?? null,
       required: existing?.required ?? question?.required ?? true,
@@ -242,19 +248,82 @@ export function reviewableOnboardingAnswers(
  */
 export function editableOnboardingQuestions(
   filled: readonly PostingPrescriptFilledAnswer[],
-  confirmed: readonly { question: string; answer: string }[],
+  confirmed: readonly { question: string; answer: string; confirmed?: boolean }[],
   asked: readonly PostingPrescriptQuestion[],
 ): PostingPrescriptQuestion[] {
-  return reviewableOnboardingAnswers(filled, confirmed, asked).map((item) => ({
-    question: item.question,
-    input_type: item.input_type ?? "text",
-    options: item.options ?? null,
-    required: item.required ?? true,
-    max_length: item.max_length ?? null,
-    answer: item.answer,
-    reusable: false,
-    remembered: item.source === "applicant_review",
-  }));
+  const rows = new Map<string, PostingPrescriptQuestion>();
+  for (const item of filled) {
+    const key = item.question.trim().toLowerCase();
+    if (!key) continue;
+    rows.set(key, {
+      question: item.question,
+      input_type: item.input_type ?? "text",
+      options: item.options ?? null,
+      required: item.required ?? true,
+      max_length: item.max_length ?? null,
+      answer: item.answer,
+      reusable: false,
+      remembered: item.source === "applicant_review",
+    });
+  }
+  for (const item of asked) {
+    const key = item.question.trim().toLowerCase();
+    if (!key) continue;
+    const existing = rows.get(key);
+    rows.set(key, {
+      ...item,
+      answer: item.answer || existing?.answer || "",
+      remembered: item.remembered || existing?.remembered || false,
+    });
+  }
+  for (const item of confirmed) {
+    const key = item.question.trim().toLowerCase();
+    if (!key) continue;
+    const existing = rows.get(key);
+    if (!existing) continue;
+    rows.set(key, { ...existing, answer: item.answer });
+  }
+  return [...rows.values()];
+}
+
+export type OnboardingReviewAnswerPayload = {
+  id: string;
+  question: string;
+  answer: string;
+  kind: "required";
+  required: boolean;
+  portal_input_type?: string;
+  confirmed?: true;
+};
+
+/**
+ * The exact application-scoped answer snapshot shared by Save and Send.
+ *
+ * `kind` is always required because essay means Litos drafted the prose. An optional employer
+ * control can still contain the applicant's own answer, so optional does not make it an essay.
+ * Confirmations are per-question and opt-in. Prefilled profile values are included so the saved
+ * packet remains exact, but they are never attributed to the applicant merely because they were
+ * visible beside a value she changed.
+ */
+export function onboardingReviewAnswerPayload(
+  filled: readonly PostingPrescriptFilledAnswer[],
+  answered: readonly { question: string; answer: string }[],
+  asked: readonly PostingPrescriptQuestion[],
+  confirmedQuestions: readonly string[] = [],
+): OnboardingReviewAnswerPayload[] {
+  const confirmed = new Set(confirmedQuestions.map((question) => question.trim().toLowerCase()).filter(Boolean));
+  return editableOnboardingQuestions(filled, answered, asked).map((item) => {
+    const key = item.question.trim().toLowerCase();
+    return {
+      id: `prescript-${item.question.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "question"}`,
+      question: item.question,
+      answer: item.answer.trim(),
+      kind: "required" as const,
+      required: item.required,
+      ...(item.input_type ? { portal_input_type: item.input_type } : {}),
+      ...(confirmed.has(key) && item.answer.trim() ? { confirmed: true as const } : {}),
+    };
+  });
 }
 
 /**

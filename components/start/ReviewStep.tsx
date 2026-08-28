@@ -25,6 +25,7 @@ import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import { api, type MonitoredJob, type PostingPrescriptFilledAnswer, type ResumeSpec } from "@/lib/api";
 import { educationDrift, educationDriftMessage, type EducationProfile } from "@/features/applications";
 import { track } from "@/lib/analytics";
+import type { OnboardingReviewAnswerPayload } from "@/lib/onboarding-build";
 import { PrimaryButton, Receipt, StartShell } from "./ui";
 import { ResumePaper, type ContactHeader } from "./ResumePaper";
 
@@ -37,10 +38,12 @@ export function ReviewStep({
   resumeContact,
   educationProfile,
   answers,
+  submissionQuestions,
   answerEvidenceComplete,
   fieldsAnswered,
   onEditResume,
   onEditAnswers,
+  onBeforeSend,
   onSent,
   onSaveForLater,
 }: {
@@ -53,17 +56,21 @@ export function ReviewStep({
   educationProfile: EducationProfile | null;
   /** Every exact value Litos will reuse, including saved details and answers confirmed here. */
   answers: readonly PostingPrescriptFilledAnswer[];
+  /** The exact packet snapshot, including cleared optional fields and human provenance. */
+  submissionQuestions: readonly OnboardingReviewAnswerPayload[];
   /** False during a rolling backend deploy or a failed handoff, so Send remains unavailable. */
   answerEvidenceComplete: boolean;
   /** How many of the employer's fields are filled in total. */
   fieldsAnswered: number;
   onEditResume: () => void;
   onEditAnswers: () => void;
+  onBeforeSend: () => Promise<void>;
   onSent: (outcome: SubmitOutcome) => void;
-  onSaveForLater: () => void;
+  onSaveForLater: () => Promise<void>;
 }) {
-  const [busy, setBusy] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"send" | "save" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const busy = pendingAction !== null;
 
   async function send() {
     if (!applicationId) {
@@ -89,29 +96,37 @@ export function ReviewStep({
       setError(`We did not send this one. ${drift}`);
       return;
     }
-    setBusy(true);
+    setPendingAction("send");
     setError(null);
     try {
       track("onboarding_application_sent", { company: posting.company_name });
+      /* Save the exact reviewed snapshot before attempting the irreversible action. If submission
+         is refused by a later guard, the packet in Tracker still contains what the applicant saw. */
+      await onBeforeSend();
       await api(`/applications/${applicationId}/submit-request`, {
         method: "POST",
         /* The list shown above is the list authorized below. Sending an empty array made edits on
            the onboarding question screen disappear before the submission runner ever saw them. */
         body: JSON.stringify({
-          questions: answers.map((item, index) => ({
-            id: `onboarding-answer-${index + 1}`,
-            question: item.question,
-            answer: item.answer,
-            kind: item.required === false ? "essay" : "required",
-            required: item.required ?? true,
-            ...(item.input_type ? { portal_input_type: item.input_type } : {}),
-          })),
+          questions: submissionQuestions,
         }),
       });
       onSent({ sent: true });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not send that application. It is still here for you.");
-      setBusy(false);
+      setPendingAction(null);
+    }
+  }
+
+  async function saveForLater() {
+    setPendingAction("save");
+    setError(null);
+    try {
+      track("onboarding_application_saved_for_later", {});
+      await onSaveForLater();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not save that application. It is still here for you.");
+      setPendingAction(null);
     }
   }
 
@@ -230,17 +245,17 @@ export function ReviewStep({
           aria-describedby="review-send-consequence"
           className="w-full sm:w-auto"
         >
-          {busy ? <PendingLabel onColor>Sending...</PendingLabel> : "Send my application"}
+          {pendingAction === "send" ? <PendingLabel onColor>Sending...</PendingLabel> : "Send my application"}
         </PrimaryButton>
         {/* A real outcome, not a deferral dressed as one: the packet is complete and auditable in
             the tracker, and the student can send it from there whenever they want. */}
         <button
           type="button"
-          onClick={() => { track("onboarding_application_saved_for_later", {}); onSaveForLater(); }}
+          onClick={() => void saveForLater()}
           disabled={busy}
           className="min-h-11 w-full text-sm text-muted underline underline-offset-4 hover:text-ink disabled:opacity-50 sm:w-auto"
         >
-          Save it and send later
+          {pendingAction === "save" ? <PendingLabel>Saving...</PendingLabel> : "Save it and send later"}
         </button>
       </div>
     </StartShell>

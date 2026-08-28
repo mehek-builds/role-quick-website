@@ -6,6 +6,7 @@ import {
   buildActionLabel,
   editableOnboardingQuestions,
   initialStages,
+  onboardingReviewAnswerPayload,
   reviewableOnboardingAnswers,
   runOnboardingBuild,
   stagesAt,
@@ -135,6 +136,38 @@ test("review answers combine saved details with answers confirmed in this sittin
   assert.equal(editable.length, 3);
   assert.equal(editable[0].answer, "3.89");
   assert.deepEqual(editable[2].options, ["Yes", "No"]);
+
+  const cleared = [{ question: "Portfolio?", answer: "" }];
+  assert.equal(reviewableOnboardingAnswers(filled, cleared, asked).some((item) => item.question === "Portfolio?"), false);
+  assert.equal(editableOnboardingQuestions(filled, cleared, asked).find((item) => item.question === "Portfolio?")?.answer, "");
+});
+
+test("application answer payload uses stable ids, honest kinds, and per-question confirmation", () => {
+  const asked = [
+    ask("Sponsorship?"),
+    { ...ask("Optional closed answer?"), required: false },
+  ];
+  const filled = [
+    { question: "Legal name?", answer: "A Candidate", source: "saved_details" as const, input_type: "text", options: null, required: true, max_length: null },
+  ];
+  const payload = onboardingReviewAnswerPayload(
+    filled,
+    [
+      { question: "Sponsorship?", answer: "No" },
+      { question: "Optional closed answer?", answer: "" },
+    ],
+    asked,
+    ["Sponsorship?"],
+  );
+  assert.deepEqual(payload.map((item) => item.id), [
+    "prescript-legal-name",
+    "prescript-sponsorship",
+    "prescript-optional-closed-answer",
+  ]);
+  assert.equal(payload[0].confirmed, undefined, "a prefilled value was falsely confirmed");
+  assert.equal(payload[1].confirmed, true);
+  assert.equal(payload[2].answer, "", "an intentional clear disappeared from the packet");
+  assert.equal(payload[2].kind, "required", "optional was misclassified as a Litos-drafted essay");
 });
 
 test("the full posting is what gets tailored against, never the board preview", async () => {

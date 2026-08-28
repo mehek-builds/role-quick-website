@@ -62,5 +62,5 @@ test("the title reports the student's own last action rather than assuming it", 
   assert.match(source, /const action = sent \? "Sent\." : "Saved\."/);
   assert.match(source, /\$\{action\} Here is your \$\{terms\.trialDays\}-day trial\./);
   assert.match(page, /onSent=\{\(\) => \{ setApplicationSent\(true\)/, "the send no longer records itself");
-  assert.match(page, /onSaveForLater=\{\(\) => \{ setApplicationSent\(false\)/, "the save no longer records itself");
+  assert.match(page, /onSaveForLater=\{async \(\) => \{[\s\S]*?setApplicationSent\(false\)/, "the save no longer records itself");
 });

@@ -43,6 +43,7 @@ const notificationSaves = [];
 let submitRequests = 0;
 const submitBodies = [];
 const savedAnswers = [];
+const reviewAnswerSaves = [];
 let checkoutRequests = 0;
 const checkoutBodies = [];
 let generationCalls = 0;
@@ -294,6 +295,10 @@ before(async () => {
       submitBodies.push(JSON.parse(route.request().postData()));
       return json({ review: {} });
     }
+    if (path === "/applications/app-1/review/answers") {
+      reviewAnswerSaves.push(JSON.parse(route.request().postData()));
+      return json({ application_id: "app-1", review: {} });
+    }
     if (path === "/billing/plans") {
       return json({ schema_version: 1, currency: "USD", checkout_available: true, plans: BILLING_PLANS });
     }
@@ -460,11 +465,20 @@ describe("the application sequence, end to end", () => {
     await page.getByRole("button", { name: "Save changes" }).click();
     await page.getByRole("heading", { name: /review before sending/i }).waitFor();
     assert.match(await page.locator("main").innerText(), /Full legal name\s+A Corrected Candidate\s+You confirmed/i);
+    assert.equal(reviewAnswerSaves.length, 2, "initial answers and review edits were not both persisted");
+    assert.ok(reviewAnswerSaves[0].questions.some((item) => item.question.includes("sponsorship") && item.confirmed === true));
+    assert.equal(reviewAnswerSaves[1].questions.length, 5, "the persisted review omitted visible answers");
+    assert.ok(reviewAnswerSaves[1].questions.some((item) => item.question === "Full legal name" && item.answer === "A Corrected Candidate"));
 
     await page.getByRole("button", { name: "Send my application" }).click();
     await page.getByRole("heading", { name: /here is your 7-day trial/i }).waitFor({ timeout: 20_000 });
     assert.equal(submitRequests, 1, "the send must be issued exactly once");
+    assert.equal(reviewAnswerSaves.length, 3, "Send did not persist the exact reviewed snapshot first");
+    assert.ok(reviewAnswerSaves[2].questions.some((item) => item.question === "Portfolio URL" && item.confirmed === true),
+      "a remembered applicant answer lost its human provenance before Send");
     assert.equal(submitBodies[0].questions.length, 5, "the reviewed values did not reach submit-request");
+    assert.ok(submitBodies[0].questions.some((item) => item.question === "Portfolio URL" && item.confirmed === true),
+      "submit-request did not receive the provenance-preserving snapshot");
     assert.ok(submitBodies[0].questions.some((item) => item.question === "Full legal name" && item.answer === "A Corrected Candidate"));
     assert.ok(submitBodies[0].questions.some((item) => /sponsorship/i.test(item.question) && item.answer === "Yes"));
     assert.ok(submitBodies[0].questions.some((item) => /GPA/i.test(item.question) && /3\.6 or above/.test(item.answer)));
