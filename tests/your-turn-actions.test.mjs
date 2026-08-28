@@ -322,10 +322,14 @@ test("pressing a row opens the answer editor on that question, and saving there 
   assert.match(page, /setFocusQuestion\(/);
   assert.match(page, /moveToScreen\("questions"\)/);
 
-  /* Saving invalidates the prior audit. Any subsequent submit-request is reached through a new
-     exact packet audit, so editing a stalled answer cannot reuse the PDF, answer map, or
-     requirement evidence that preceded it. And the stalled-run half of the button reaches
-     saveReviewedAnswers, which is the half that was missing.
+  /* Saving an Apply draft still invalidates the prior audit outright: those answers live locally,
+     so nothing can measure them against the audited snapshot until the submit-request she is about
+     to press. A stalled run's save is a server write, and its evidence decision moved with it:
+     saveReviewedAnswers reconciles the standing audit against the answers the server stored, so an
+     edited answer still voids it while a byte-identical save keeps the acknowledged audit the
+     metadata-refresh launch needs (the Mytos loop, application 55de7c9e). The reconciliation
+     itself is pinned in application-direct-answer-flow.test.mjs and exercised in
+     features/applications/domain/submission-checklist.test.mts.
 
      TWO FACTS, SCOPED TO THE ELEMENT. The earlier version pinned the whole onSubmit expression
      including its whitespace, which fails on a reformat and passes on nothing else. What
@@ -335,8 +339,13 @@ test("pressing a row opens the answer editor on that question, and saving there 
      re-asserting it here by slicing the component's source proved it in the weaker of the two
      available ways and broke whenever the line after it moved. */
   const screen = jsxElement(page, "QuestionsScreen");
-  assert.match(screen, /setPacketEvidence\(null\)/, "saving voids the prior exact-packet audit");
+  assert.match(screen, /setPacketEvidence\(null\)/, "the Apply save voids the prior exact-packet audit");
   assert.match(screen, /void saveReviewedAnswers\(\)/, "and a stalled run's save is the one that writes");
+  assert.doesNotMatch(
+    screen.slice(0, screen.indexOf("void saveReviewedAnswers()")),
+    /setPacketEvidence\(null\)/,
+    "the stalled save must not blanket-void the audit before the server has said what it stored",
+  );
 
   /* The snapshot is keyed to the audit response's own questions, not the local `questions` state:
      the audit refreshes them server-side, and a snapshot taken from the pre-refresh local copy would

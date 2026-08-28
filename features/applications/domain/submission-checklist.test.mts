@@ -1315,7 +1315,7 @@ test("settled confirmations and ambiguous question identities never enter the di
    save returned to a screen with no launch on it. metadataRefreshOutranksStandingAttention is the
    fail-closed decision for when the panel may lead instead. */
 import { readFileSync } from "node:fs";
-import { metadataRefreshOutranksStandingAttention } from "./submission-checklist.ts";
+import { metadataRefreshOutranksStandingAttention, reviewedAnswersSaveLanding } from "./submission-checklist.ts";
 
 function mytosReview() {
   return {
@@ -1425,4 +1425,76 @@ test("the attention screen resolves its occlusion through the domain decision, w
   const site = page.indexOf("metadataRefreshOutranksStandingAttention(attentionReview, packetEvidenceReviewed");
   assert.ok(site > 0, "the SubmissionScreen must route the occlusion through metadataRefreshOutranksStandingAttention");
   assert.match(page.slice(site - 900, site + 900), /standingNonQuestionTask/);
+});
+
+/* The last leg of the same Mytos loop: with the route fixed and the occlusion resolvable, the
+   answers screen's Save still routed on the bare status and destroyed the acknowledged audit the
+   launch decision needs, so the applicant landed on the attention screen with the panel occluded
+   again, forever. reviewedAnswersSaveLanding is where the save now lands, stated once. */
+test("a clean Mytos save lands on the attention screen where the launch panel provably leads", () => {
+  const landing = reviewedAnswersSaveLanding(mytosReview(), true);
+  assert.deepEqual(landing, { screen: "portal", kind: "metadata_refresh_launch" });
+  /* The binding fact that makes "hosts the launch action" true rather than hopeful: the screen the
+     save lands on resolves its occlusion through the same decision, with the same inputs. */
+  assert.equal(metadataRefreshOutranksStandingAttention(mytosReview(), true), true);
+});
+
+test("a save that leaves a required answer blank keeps the answers screen", () => {
+  const blankRequired = mytosReview();
+  blankRequired.questions[0]!.answer = "";
+  assert.deepEqual(reviewedAnswersSaveLanding(blankRequired, true), { screen: "questions", kind: "unanswered_required" });
+  assert.deepEqual(reviewedAnswersSaveLanding(blankRequired, false), { screen: "questions", kind: "unanswered_required" });
+});
+
+test("without the acknowledged audit the save routes exactly as it always has", () => {
+  assert.deepEqual(reviewedAnswersSaveLanding(mytosReview(), false), { screen: "portal", kind: "status" });
+});
+
+test("every fail-closed arm of the launch decision keeps plain status routing", () => {
+  const captchaSentence = { ...mytosReview(), attention_reason: "reCAPTCHA requires your attention" };
+  assert.deepEqual(reviewedAnswersSaveLanding(captchaSentence, true), { screen: "portal", kind: "status" });
+  const withDocument = {
+    ...mytosReview(),
+    required_documents: [{ kind: "transcript", label: "Unofficial transcript", official_requested: false }],
+    transcript_supported: true,
+  };
+  assert.deepEqual(reviewedAnswersSaveLanding(withDocument, true), { screen: "portal", kind: "status" });
+  const stalled = {
+    ...mytosReview(),
+    stall: { kind: "human_verification" as const, stalled_at: "2026-08-28T09:00:00.000Z", surface: "server_run" as const, provider: "unknown" as const, stage: "at_submit" as const, source: "observed" as const },
+  };
+  assert.deepEqual(reviewedAnswersSaveLanding(stalled, true), { screen: "portal", kind: "status" });
+  const unverified = {
+    ...mytosReview(),
+    unverified_submission: { at: "2026-08-28T09:00:00.000Z", cause: "run_timed_out" as const },
+  };
+  assert.deepEqual(reviewedAnswersSaveLanding(unverified, true), { screen: "portal", kind: "status" });
+});
+
+test("a save that moved the run off needs_attention follows the status, never the launch", () => {
+  assert.deepEqual(
+    reviewedAnswersSaveLanding({ ...mytosReview(), status: "ready_for_final_approval" as const }, true),
+    { screen: "portal", kind: "status" },
+  );
+  assert.deepEqual(
+    reviewedAnswersSaveLanding({ ...mytosReview(), status: "submitted" as const }, true),
+    { screen: "submitted", kind: "status" },
+  );
+  assert.deepEqual(
+    reviewedAnswersSaveLanding({ ...mytosReview(), status: "questions_ready" as const }, true),
+    { screen: "review", kind: "status" },
+  );
+});
+
+test("the answers screen's save routes through the landing with the reconciled acknowledged-audit fact", () => {
+  const page = readFileSync("app/dashboard/applications/page.tsx", "utf8");
+  const reconcile = page.indexOf("const nextEvidence = reconcilePacketEvidenceWithSubmission(\n          packetEvidenceRef.current,\n          applicationId,\n          published.review.questions,\n          published.review.packet_audit,\n        )");
+  assert.ok(reconcile > 0, "the accepted save must reconcile standing evidence against the stored answers instead of wiping it");
+  const landing = page.indexOf("reviewedAnswersSaveLanding(published.review, Boolean(nextEvidence?.acknowledged)");
+  assert.ok(landing > reconcile, "the bulk save must land through the domain decision, fed the surviving acknowledgement");
+  assert.match(
+    page.slice(reconcile, landing),
+    /moveToScreen\(direct\s*\?\s*screenForStatus\(published\.review\.status, "portal"\)/,
+    "the direct flow keeps its own status routing",
+  );
 });
