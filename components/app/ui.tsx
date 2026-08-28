@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ThinkingOrb, type OrbState } from "thinking-orbs";
 import { userFacingError } from "@/lib/user-facing-error";
 import { EXTENSION_STORE_URL, messageAsksForTheExtension } from "@/lib/extension-store-link";
@@ -455,4 +456,82 @@ export function formatRelativeDate(value: string | null | undefined): string {
   if (days === 1) return "yesterday";
   if (days < 7) return `${days} days ago`;
   return formatDate(value);
+}
+
+/**
+ * A row that scrolls sideways, and says so.
+ *
+ * WHY THIS EXISTS. On phone width the Tracker's inventory becomes a horizontal strip of cards. It
+ * scrolled correctly and looked like it did not: the last card is clipped mid-glyph at the viewport
+ * edge, and every platform the product actually runs on hides the scrollbar until a scroll is
+ * already in progress, so the one cue that more exists only appears to someone who has guessed that
+ * it does. Measured on trylitos.com at 390px, 2026-08-29 - the strip was the only place on the
+ * dashboard where content was reachable and unadvertised.
+ *
+ * The affordance is MEASURED, not decorative. A fade painted unconditionally is a promise of more
+ * content that an account with three applications does not have, which is the same class of claim
+ * this codebase refuses everywhere else. The edges appear only when there is genuinely something
+ * past them, and they are re-measured on scroll and on resize.
+ *
+ * It is also a scroll container with no focusable ancestor of its own, so it takes `tabIndex={0}`
+ * and a label: a keyboard user must be able to reach and move a region that holds content, which is
+ * the same rule the packet viewer's panes follow.
+ */
+export function ScrollableRow({
+  label,
+  className = "",
+  children,
+}: {
+  /** What the region holds, for a screen reader and for the keyboard user who lands on it. */
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+
+  const measure = useCallback(() => {
+    const node = ref.current;
+    if (!node) return;
+    /* One pixel of slack at each end: sub-pixel layout rounding otherwise leaves a permanent
+       1px "more to come" fade on a row that is fully scrolled. */
+    const start = node.scrollLeft > 1;
+    const end = node.scrollLeft + node.clientWidth < node.scrollWidth - 1;
+    setEdges((current) => (current.start === start && current.end === end ? current : { start, end }));
+  }, []);
+
+  useEffect(() => {
+    measure();
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    /* The row's own size AND its content's: cards arrive from a fetch, so observing only the
+       viewport would leave the first paint's measurement standing over a strip that has since
+       grown past the edge. */
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    for (const child of Array.from(node.children)) observer.observe(child);
+    return () => observer.disconnect();
+  }, [measure, children]);
+
+  return (
+    <div className="relative">
+      <div
+        ref={ref}
+        role="group"
+        aria-label={label}
+        tabIndex={0}
+        onScroll={measure}
+        className={`overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${className}`}
+      >
+        {children}
+      </div>
+      {/* Pointer-events-none so the fades never intercept a tap meant for the card beneath them. */}
+      {edges.start && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface to-transparent" />
+      )}
+      {edges.end && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-surface to-transparent" />
+      )}
+    </div>
+  );
 }

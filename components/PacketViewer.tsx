@@ -163,6 +163,13 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
   /* The rail tracks the scroll rather than only driving it, so it reports where
      the reader is instead of where they last clicked. */
   const rafPending = useRef(false);
+  /* The same two corrections as the dashboard viewer, kept in step deliberately (see the header):
+     a click outranks the spy until the scroll settles, and a scroller that has bottomed out reports
+     its last section rather than the last one to cross the top. Without the second, a section at the
+     tail of the layout can never become active however far the reader scrolls, and its pill reads as
+     though it takes two presses to work. */
+  const jumpTarget = useRef<string | null>(null);
+  const jumpSettle = useRef(0);
   const onScroll = useCallback(() => {
     if (rafPending.current) return;
     rafPending.current = true;
@@ -173,17 +180,29 @@ export function PacketViewer({ packet, onClose }: { packet: Packet; onClose: () 
       if (!box || !root) return;
       const top = box.getBoundingClientRect().top;
       const marks = ["packet-resume", "packet-jd", "packet-questions", "packet-email"];
-      let current = marks[0];
-      for (const id of marks) {
+      const present = marks.filter((id) => root.querySelector(`#${id}`) !== null);
+      const atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 2;
+      if (atBottom && present.length > 0) {
+        setActive(jumpTarget.current ?? present[present.length - 1]);
+        return;
+      }
+      let current = present[0] ?? marks[0];
+      for (const id of present) {
         const node = root.querySelector(`#${id}`);
         if (node && node.getBoundingClientRect().top - top <= 24) current = id;
       }
-      setActive(current);
+      setActive(jumpTarget.current ?? current);
     });
   }, []);
 
   function jump(id: string) {
     const target = id === "packet-resume" ? "packet-top" : id;
+    setActive(id);
+    jumpTarget.current = id;
+    window.clearTimeout(jumpSettle.current);
+    jumpSettle.current = window.setTimeout(() => {
+      jumpTarget.current = null;
+    }, 600);
     dialog.current?.querySelector(`#${target}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 

@@ -25,7 +25,7 @@ import {
   type ManualHandoffResponse,
   type ResumeSpec,
 } from "@/lib/api";
-import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
+import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ScrollableRow, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
 import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, unansweredRequiredQuestionCount, type ApplicationFilter } from "@/features/applications";
@@ -4827,7 +4827,11 @@ function Applications() {
               </div>
             </div>
 
-          <div className="-mx-4 overflow-x-auto border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
+          {/* The phone-width inventory. It clipped at the viewport edge with no cue that it moved:
+              the platforms this runs on hide the scrollbar until a scroll is already under way, so
+              the only signal that more existed appeared to someone who had already guessed. See
+              ScrollableRow, which measures rather than decorating. */}
+          <ScrollableRow label="Your applications" className="-mx-4 border-t border-border px-4 py-2.5 sm:-mx-6 sm:px-6 lg:hidden">
             {visiblePackets.length === 0 ? (
               <div className="flex items-center justify-between gap-3 py-2">
                 <p className="text-sm text-muted">No applications match this view.</p>
@@ -4869,7 +4873,7 @@ function Applications() {
                 ))}
               </div>
             )}
-          </div>
+          </ScrollableRow>
 
           <div className="hidden max-h-[280px] overflow-y-auto border-t border-border lg:block">
             {visiblePackets.length === 0 ? (
@@ -4946,6 +4950,10 @@ function Applications() {
           coverLetterBusy={coverLetterBusy}
           coverLetterLoading={canonicalCoverLetterLoading}
           hasTailoredResume={canonicalGeneratedPacket !== null}
+          /* The value onOpenPacket actually needs, not the one that merely proves a resume exists.
+             onOpenPacket is `canonicalEnvelopePacket && openRevisit(...)`, so this is the same
+             expression its own guard tests. */
+          packetReady={canonicalEnvelopePacket !== null}
           coverLetter={canonicalCoverLetter}
           coverLetterBody={canonicalCoverLetterBody}
           coverLetterJd={canonicalCoverLetterJd}
@@ -5545,6 +5553,7 @@ function CanonicalApplicationDetail({
   coverLetterBusy,
   coverLetterLoading,
   hasTailoredResume,
+  packetReady,
   coverLetter,
   coverLetterBody,
   coverLetterJd,
@@ -5587,6 +5596,11 @@ function CanonicalApplicationDetail({
   coverLetterBusy: boolean;
   coverLetterLoading: boolean;
   hasTailoredResume: boolean;
+  /** Whether the packet this card's "Open tailored packet" control would open is actually loaded.
+   *  See the control itself for the 2026-08-29 measurement: it was rendered live off a DIFFERENT
+   *  value from the one its handler needed, so for the ~10s the page took to fetch the linked
+   *  packet the button was fully styled, focusable, and did nothing at all on click. */
+  packetReady: boolean;
   coverLetter: CanonicalCoverLetterResponse | null;
   coverLetterBody: string;
   coverLetterJd: string;
@@ -5679,7 +5693,24 @@ function CanonicalApplicationDetail({
             <Button type="button" variant="secondary" disabled={tailorBusy || coverLetterBusy || coverLetterLoading} onClick={onOpenCoverLetterEditor}>
               {coverLetterLoading ? "Loading..." : "Write cover letter"}
             </Button>
-            {hasTailoredResume && <Button type="button" variant="quiet" onClick={onOpenPacket}>Open tailored packet</Button>}
+            {/* A CONTROL THAT CANNOT ACT MUST NOT LOOK LIKE ONE THAT CAN. This rendered on
+                `hasTailoredResume` while its handler needed `canonicalEnvelopePacket`, and those are
+                not the same value: for the roughly ten seconds the page spent fetching the linked
+                packet, the button was styled, focusable, labelled and inert. Measured 2026-08-29,
+                and it is the third time this exact signature has been reported this month.
+                Now it says what it is doing and refuses the press until the press would work. The
+                modal it opens has its own loading state for the resume itself. */}
+            {hasTailoredResume && (checkingSendPath || packetReady) && (
+              <Button
+                type="button"
+                variant="quiet"
+                disabled={!packetReady}
+                aria-busy={!packetReady}
+                onClick={onOpenPacket}
+              >
+                {packetReady ? "Open tailored packet" : "Loading packet..."}
+              </Button>
+            )}
             {coverLetterDownloadUrl && <ButtonLink href={coverLetterDownloadUrl} variant="quiet">Download cover letter</ButtonLink>}
           </div>
           {coverLetterEditorOpen && (

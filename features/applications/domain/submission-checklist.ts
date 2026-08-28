@@ -2,6 +2,7 @@ import type { ApplicationQuestion, ApplicationReview, RequiredDocumentAsk } from
 import { screenForStatus, type ReviewScreen } from "./application-review.ts";
 import { questionReviewPresentation, requiredQuestionReviewRoute } from "./question-review-presentation.ts";
 import { withRequiredParentQuestionIds } from "./dependent-questions.ts";
+import { cleanScrapedLabel, cleanScrapedPrompt } from "./scraped-text.ts";
 
 /**
  * What the row's control DOES, as opposed to what it says.
@@ -267,27 +268,25 @@ function displayField(field: string): string {
    ask: her answer stands, and it is on screen so the follow-up underneath it can be read. */
 const PARENT_CONTEXT_DETAIL = "The next question refers back to this one";
 
-const DISPLAY_ACRONYMS: Record<string, string> = {
-  act: "ACT",
-  ai: "AI",
-  gpa: "GPA",
-  imc: "IMC",
-  sat: "SAT",
-  uk: "UK",
-  us: "US",
-  usa: "USA",
-  usc: "USC",
-};
 
+/**
+ * The one place a scraped employer prompt becomes text Litos is willing to print.
+ *
+ * It used to capitalise the first character and restore a short acronym list, which was enough for
+ * "provide your best result on sat" and nothing else. Measured 2026-08-29 it left
+ * "select all that apply. note: this information will only be used to ensure compliance with u.s.
+ * sanctions..." with one capital at the front and the rest exactly as the DOM had it, and it had no
+ * notion at all of a label captured three times over ("Preferred first name* preferred first name
+ * preferred_name"). Both now go through scraped-text.ts, which follows jd-display.ts's rules: guarded,
+ * conservative, and never cleaning to empty.
+ *
+ * Label cleaning runs FIRST so a duplicated capture is gone before the prompt is cased; casing a
+ * string that still contains its own restatement would just produce two capitals.
+ */
 export function displayQuestionLabel(value: string): string {
   const trimmed = value.replace(/\s+/g, " ").trim();
   if (!trimmed) return "";
-  const sentenceCased = trimmed === trimmed.toLowerCase()
-    ? `${trimmed.charAt(0).toUpperCase()}${trimmed.slice(1)}`
-    : trimmed;
-  return sentenceCased.replace(/\b(act|ai|gpa|imc|sat|uk|us|usa|usc)\b/gi, (token) => (
-    DISPLAY_ACRONYMS[token.toLowerCase()] ?? token
-  ));
+  return cleanScrapedPrompt(cleanScrapedLabel(trimmed));
 }
 
 function normalizedChecklistText(value: string): string {

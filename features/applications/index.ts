@@ -44,6 +44,7 @@ export {
   type ResumeGenerationInitiation,
 } from "./domain/daily-matches";
 export * from "./domain/requirement-terms";
+export * from "./domain/scraped-text";
 export * from "./domain/review-answer-save";
 export * from "./domain/attention-acknowledgement";
 export * from "./domain/submission-checklist";
