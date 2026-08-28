@@ -10,15 +10,19 @@ import test from "node:test";
  * the lockstep: raising one without the other silently reintroduces the 2026-08-28 defect where
  * Home's tiles read 44 against a Tracker action view of 88.
  */
-const CANONICAL_FETCH = '"/applications?limit=200"';
+const CANONICAL_FETCH = '"/applications?limit=100"';
 
 /*
- * The limit is also the BOARD's own ceiling. GET /applications/board caps at 200 server-side, and
- * the Tracker renders that board directly under a ledger header counting this fetch. While the two
- * differed, one screen carried "Your applications 100" above "187 of 200 have not been sent yet",
- * and a card could sit in the board's Applied column while falling outside the ledger's window -
- * which is exactly how "Applied 13" and "12 Sent" were both true. Lowering this literal below 200
- * reopens that gap.
+ * AND 100 IS THE SERVER'S MAXIMUM FOR THIS PARAMETER, not a preference either surface can revise.
+ * The backend validates it with `z.coerce.number().int().min(1).max(100)`
+ * (student-outreach-backend, src/routes/canonicalApplications.ts) and answers 400 above it. That
+ * failure is silent where it matters most: Home swallows it through its own .catch and quietly
+ * returns to counting /resume/history alone, and the Tracker's allSettled leaves the canonical list
+ * empty, dropping every canonical-only application off the page. Raising this literal means raising
+ * that max first and deploying the backend ahead of the web app.
+ *
+ * It was raised to 200 on 2026-08-29 and reverted before merge for exactly this reason. The board
+ * and the ledger are reconciled without it - see pipelineCoverage and boardStageReconciliationNote.
  */
 test("Home's loader and the Tracker fetch the canonical ledger with one limit", () => {
   const loader = readFileSync(new URL("../features/dashboard/application/load-dashboard.ts", import.meta.url), "utf8");

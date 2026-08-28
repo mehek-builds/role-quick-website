@@ -159,7 +159,7 @@ test("Free filling uses canonical application seams and never generation", async
 
 test("Tracker merges canonical Free applications with legacy packets", async () => {
   const applications = await read("app/dashboard/applications/page.tsx");
-  assert.match(applications, /api<\{ applications: CanonicalApplication\[\] \}>\("\/applications\?limit=200"\)/);
+  assert.match(applications, /api<\{ applications: CanonicalApplication\[\] \}>\("\/applications\?limit=100"\)/);
   assert.match(applications, /Promise\.allSettled/);
   assert.match(applications, /historyResult\.status === "rejected" && !requestedCanonical/);
   assert.match(applications, /mergeCanonicalApplicationHistory\(legacy, canonical\)/);

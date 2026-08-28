@@ -1690,10 +1690,10 @@ function Applications() {
       : "/resume/history";
     Promise.allSettled([
       api<{ resumes: GeneratedResume[] }>(historyPath),
-      /* Kept in lockstep with the Home loader's identical literal, and matched to the 200-row
-         ceiling GET /applications/board already has, so this page's ledger, its board and Home all
-         describe ONE inventory. See the loader's comment for the 2026-08-29 measurement. */
-      api<{ applications: CanonicalApplication[] }>("/applications?limit=200"),
+      /* Kept in lockstep with the Home loader's identical literal, and capped at the server's own
+         maximum for this parameter - anything higher is a 400 that lands here as an empty canonical
+         list and drops every canonical-only application off this page. See the loader's comment. */
+      api<{ applications: CanonicalApplication[] }>("/applications?limit=100"),
     ])
       .then(async ([historyResult, canonicalResult]) => {
         if (cancelled || bootstrapIsStale()) return;
