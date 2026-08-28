@@ -111,6 +111,24 @@ function questionLabelIsGenericAnswerControl(value: string | undefined): boolean
   return GENERIC_ANSWER_CONTROL_LABEL.test(normalizedQuestionLabel(value));
 }
 
+/* The employer's own required marker, read off the question label. ASCII "*" plus the Unicode
+   heavy asterisk U+2731, which Lever renders: measured live on the Mytos packet 2026-08-28, the
+   university picker's label ends "attended? ✱" while its stored required flag is false,
+   because the Select2 replacement control hides the native required attribute from discovery.
+   Word-boundary only, so an asterisk inside a token never counts. Mirrors the backend's
+   labelMarksRequired in student-outreach-backend src/lib/questionDiscovery.ts. */
+const REQUIRED_MARKER = /[*✱](?:\s|$)|(?:^|\s)[*✱]/;
+// A legend rather than a marker: "* indicates a required field" printed into a label block
+// describes the form, not this control, and must not mark it required.
+const REQUIRED_MARKER_LEGEND = /[*✱]\s*(?:indicates|denotes|means|=)\b/i;
+
+export function questionLabelMarksRequired(value: string | undefined): boolean {
+  const label = normalizedQuestionLabel(value);
+  if (!label) return false;
+  if (REQUIRED_MARKER_LEGEND.test(label)) return false;
+  return REQUIRED_MARKER.test(label);
+}
+
 function blockerMatchesQuestion(
   blocker: ApplicationQuestionMetadataBlocker,
   question: ApplicationQuestion,
@@ -148,7 +166,18 @@ function syntheticMetadataBlocker(
   const questionLabel = normalizedQuestionLabel(question.question);
   return {
     kind,
-    required: question.required,
+    /* THE STORED FLAG ALONE IS NOT TRUSTED HERE, and that is the whole repair. This blocker exists
+       because the control's metadata could not be read, and the stored required flag is part of
+       that same unread metadata. Measured live on the Mytos Lever packet (2026-08-28, application
+       55de7c9e / packet 16f1c744): the university Select2 combobox stored required:false while its
+       own label ends with Lever's required marker "✱", so this blocker rode required:false,
+       requiredQuestionReviewRoute answered "continue" instead of "metadata_refresh", every flow
+       control dropped the managed re-read intent, and the dashboard cycled between the answers
+       screen and the packet review without ever offering the run that reads the employer's
+       choices. The employer's own marker in the label outranks a false stored flag; a true stored
+       flag stands on its own. Fail-closed either way: a required blocker holds the continue route,
+       it never fills or guesses anything. */
+    required: question.required || questionLabelMarksRequired(question.question),
     portal_input_type: normalizedControlType(question.portal_input_type) || "unknown",
     ...(question.portal_selector?.trim() ? { portal_selector: question.portal_selector.trim() } : {}),
     ...(kind !== "missing_question_text" && questionLabel ? { question: questionLabel } : {}),
