@@ -541,7 +541,7 @@ function JobRow({ job, application, applied, match }: { job: MonitoredJob; appli
 
   return (
     <Card className="flex flex-wrap items-center gap-4 p-4 transition-colors hover:border-faint sm:flex-nowrap sm:p-5">
-      <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
+      <CompanyLogo company={job.company_name} boardUrl={job.career_url} />
 
       {/* The icon and the role stay on one line at every width. Letting the text block take a full
       basis on mobile put the icon alone on its own row, which read as a bullet with nothing

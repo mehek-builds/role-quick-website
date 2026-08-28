@@ -4874,8 +4874,7 @@ function Applications() {
                       <CompanyLogo
                         size="sm"
                         company={packet.job_context.company || "Company"}
-                        careerUrl={null}
-                        companyDomain={canonicalApplicationFromPacket(packet)?.company_domain}
+                        boardUrl={canonicalApplicationFromPacket(packet)?.portal_url ?? packet.spec._review?.portal_url}
                       />
                       <span className="truncate text-[11px] text-muted">{packet.job_context.company || "Company"}</span>
                     </span>
@@ -4941,8 +4940,10 @@ function Applications() {
                         <CompanyLogo
                           size="sm"
                           company={packet.job_context.company || "Company"}
-                          careerUrl={null}
-                          companyDomain={canonicalApplicationFromPacket(packet)?.company_domain}
+                          /* The employer's ATS apply URL. parseBoardUrl keeps only the host and the
+                             first path segment, so an apply link resolves to that employer's board
+                             and the route reads identity off the page we already poll. */
+                          boardUrl={canonicalApplicationFromPacket(packet)?.portal_url ?? packet.spec._review?.portal_url}
                         />
                         <span className="truncate text-xs text-muted">{packet.job_context.company || "Company"}</span>
                       </span>

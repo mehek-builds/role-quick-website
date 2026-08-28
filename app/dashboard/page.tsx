@@ -1082,7 +1082,7 @@ function JobMatchCard({
       <div className="flex h-full flex-col p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
-            <CompanyLogo company={job.company_name} careerUrl={job.career_url} companyDomain={job.company_domain} />
+            <CompanyLogo company={job.company_name} boardUrl={job.career_url} />
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <Chip

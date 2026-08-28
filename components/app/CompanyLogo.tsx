@@ -1,31 +1,43 @@
 "use client";
 
 import { useState } from "react";
-import { companyDomainForRow } from "@/features/jobs";
 
 /**
  * The company's icon beside a job row, with its initial as the answer when there is no icon.
  *
- * The domain rule lives in the jobs feature (and is tested there): only the careers URL can carry
- * the employer's own domain, and a careers URL that points at the job board identifies no company,
- * so those rows fall back rather than painting the board's logo on the row.
+ * SERVED BY US, FROM OUR OWN BOARD'S LOGO SERVICE (app/api/company-logo). This component used to
+ * point straight at Google's favicon endpoint, which lib/company-logos.ts had already rejected in
+ * writing when the marketing board was built:
  *
- * WHAT LEAVES THE PAGE
- * --------------------
- * The icon is fetched from Google's favicon service, so that service learns which company domains
- * a signed-in student is looking at. That is a real cost and it was accepted deliberately
- * (2026-07-28) in exchange for rows that are scannable by logo. Two things keep it as small as it
- * can be: `referrerPolicy="no-referrer"` so the dashboard URL itself never goes along with the
- * request, and no request at all for a row whose domain we could not establish.
+ *   "The easy way to do this is a third-party logo API (Clearbit, Google's favicon service), but
+ *    that puts a request to somebody else's server in every visitor's browser, on a page that lists
+ *    24 employers at a time, which hands a third party a log of who is looking at which jobs. For a
+ *    product whose whole pitch is that it does not do things behind your back, that is the wrong
+ *    trade."
  *
- * The fallback is not a failure state. It is the same size, shape and weight as a loaded icon, so
- * a list of mixed rows still reads as one column rather than as a column with holes in it.
+ * The dashboard then shipped a second component that made exactly that trade, so the logged-in
+ * surfaces - the ones that know who the student is and every employer she is applying to - were the
+ * only place doing it. Measured on the Tracker 2026-08-29: the browser re-asked Google for every
+ * unique employer roughly every 30 minutes of use, because the redirect that finds the icon carries
+ * max-age=1800 even though the icon behind it is cached for a week.
+ *
+ * WHAT CHANGES BY USING OURS. The browser only ever talks to trylitos.com. The answer is resolved
+ * about once a week across ALL visitors rather than per-student-per-half-hour (the route's own
+ * s-maxage=604800 plus stale-while-revalidate). And the identity is better, not merely more
+ * private: 170 marks in the committed set were checked by a human, and everything else is resolved
+ * from the employer's OWN board page under a token we chose when we added the source - which is how
+ * it reaches akunacapital.com and the Lever-hosted mark for mytos, neither of which a domain
+ * guessed from a name could find.
+ *
+ * `miss=404` rather than the route's default monogram image: that SVG draws its own bordered
+ * rounded square for the marketing tile, and nesting it inside this circle would look like a square
+ * in a circle. This component has a designed circular monogram already, so it takes the 404 and
+ * draws its own. The miss is cached exactly like a hit, so a company with no findable mark is not
+ * re-probed on every render.
  */
 
-/** Named so the third-party dependency is greppable if the 2026-07-28 decision is revisited. */
-const FAVICON_ENDPOINT = "https://www.google.com/s2/favicons";
-/** 2x the 24px render, so the icon is sharp on a retina screen. */
-const FAVICON_PX = 64;
+/** Our own board's logo service. Same origin, so no third party is told who is looking at what. */
+const LOGO_ENDPOINT = "/api/company-logo";
 
 /* Two sizes, because the same identity has to work in a card and in a dense table row. The 48px
    circle is right beside a two-line job card and far too heavy in a 56px ledger row, where it would
@@ -38,22 +50,30 @@ const LOGO_SIZE = {
 
 export function CompanyLogo({
   company,
-  careerUrl,
-  companyDomain,
+  boardUrl,
   size = "md",
 }: {
   company: string;
-  careerUrl: string | null | undefined;
-  /** The employer's domain as resolved by the backend. Preferred over the careers URL. */
-  companyDomain?: string | null;
+  /**
+   * A URL on the employer's ATS board, when the row has one: the careers URL on a job, the portal
+   * URL on an application. The route reads the employer's own board page under the token in it,
+   * which is identity by construction rather than a domain guessed from a name - and is what
+   * recovers akunacapital.com and the Lever-hosted mark for mytos. Safe to pass anything: the route
+   * refuses every host outside its ATS allowlist, so this cannot be turned into a fetch of our own
+   * network. Null or absent simply means the company name has to carry the resolution alone.
+   */
+  boardUrl?: string | null;
   size?: keyof typeof LOGO_SIZE;
 }) {
   const scale = LOGO_SIZE[size];
-  const domain = companyDomainForRow({ company_domain: companyDomain, career_url: careerUrl });
+  const name = company.trim();
   // Reset by key at the call site is unnecessary: a row is keyed by job id and a job's company
   // does not change under it.
   const [broken, setBroken] = useState(false);
-  const showIcon = domain !== null && !broken;
+  const showIcon = name.length > 0 && !broken;
+  const src = `${LOGO_ENDPOINT}?c=${encodeURIComponent(name)}`
+    + (boardUrl ? `&board=${encodeURIComponent(boardUrl)}` : "")
+    + "&miss=404";
 
   return (
     <span
@@ -63,7 +83,7 @@ export function CompanyLogo({
       {showIcon ? (
         /* eslint-disable-next-line @next/next/no-img-element */
         <img
-          src={`${FAVICON_ENDPOINT}?domain=${encodeURIComponent(domain)}&sz=${FAVICON_PX}`}
+          src={src}
           alt=""
           width={scale.px}
           height={scale.px}
@@ -77,13 +97,16 @@ export function CompanyLogo({
              Lazy loading is for large images below the fold. These are ~1KB, sit at the left edge
              of every row, and ARE the row's identity. Deferring them bought nothing and cost the
              entire feature. tests/company-logo.test.mjs keeps it that way. */
+          /* Kept although the request is now same-origin: it costs nothing, and it is the line that
+             stops a dashboard URL - which carries an application id - riding along if this ever
+             points somewhere else again. */
           referrerPolicy="no-referrer"
           onError={() => setBroken(true)}
           className={`${scale.image} object-contain`}
         />
       ) : (
         <span className={`font-mono ${scale.monogram} font-medium text-muted`}>
-          {company.trim().charAt(0).toUpperCase() || "?"}
+          {name.charAt(0).toUpperCase() || "?"}
         </span>
       )}
     </span>
