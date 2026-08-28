@@ -659,6 +659,8 @@ test("criteria 1-4: the first screen welcomes, orients, and asks for one thing",
       0,
       "the title search is offered before a field and a stage have been chosen",
     );
+    assert.equal(await page.getByText("Stage", { exact: true }).count(), 0, "Stage appears before a field choice");
+    assert.equal(await page.getByText("Jobs that fit", { exact: true }).count(), 0, "Job titles appear before a stage choice");
 
     /* And the resume still gets asked for, one screen later. A reorder that quietly dropped the
        upload would satisfy every assertion above and break the product, so the walk below picks it
@@ -719,6 +721,13 @@ test("the first step remains operable at 320px and its walkthrough discloses acc
       `the 320px onboarding screen scrolls sideways: ${JSON.stringify(geometry)}`,
     );
 
+    const tray = page.locator("[data-focus-actions]");
+    assert.equal(
+      await tray.evaluate((element) => getComputedStyle(element).position),
+      "sticky",
+      "the mobile action tray is not reachable before the form is valid",
+    );
+
     const later = page.getByRole("button", { name: "Finish later" });
     await later.waitFor({ state: "visible", timeout: 20_000 });
     const laterBox = await later.boundingBox();
@@ -743,6 +752,34 @@ test("the first step remains operable at 320px and its walkthrough discloses acc
     await reopened.waitFor({ state: "visible" });
     assert.equal(await reopened.getAttribute("aria-expanded"), "true");
     assert.equal(await page.locator(`#${controlledId}`).count(), 1, "the walkthrough did not return");
+
+    await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+    await page.getByText("Stage choices are now available.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Stage" }).count(), 1);
+
+    await page.getByRole("button", { name: "Internship", exact: true }).click();
+    await page.getByText("Job title choices are now available.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Jobs that fit" }).count(), 1);
+
+    await page.getByRole("button", { name: "Software Engineer", exact: true }).click();
+    await page.getByText("Location choices are now available.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("region", { name: "Where do you want to work?" }).count(), 1);
+    await page.getByRole("button", { name: "+ Remote", exact: true }).click();
+
+    await tray.scrollIntoViewIfNeeded();
+    const trayGeometry = await tray.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { position: getComputedStyle(element).position, left: rect.left, right: rect.right };
+    });
+    assert.equal(trayGeometry.position, "sticky", "the ready mobile action tray is not sticky");
+    assert.ok(trayGeometry.left >= -1 && trayGeometry.right <= 321, "the mobile action tray is clipped");
+    for (const name of ["Continue", "Finish later"]) {
+      const box = await page.getByRole("button", { name, exact: true }).boundingBox();
+      assert.ok(box && box.height >= 44, `${name} is not touch-sized in the action tray`);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    assert.equal(await tray.evaluate((element) => getComputedStyle(element).position), "static", "the desktop action row stayed sticky");
   } finally {
     await page.setViewportSize({ width: 1280, height: 900 });
   }
@@ -794,8 +831,12 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     );
 
     await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+    await page.getByRole("button", { name: "Internship", exact: true }).waitFor({ timeout: 10_000 });
+    assert.equal(await softwareEngineer.count(), 0, "titles appeared before the stage choice");
     await page.getByRole("button", { name: "Internship", exact: true }).click();
     await softwareEngineer.waitFor({ timeout: 10_000 });
+    assert.equal(await page.locator("#focus-title-options button").count(), 3, "the first title reveal is not limited to three suggestions");
+    assert.equal(await page.getByText("More job preferences", { exact: true }).count(), 0, "optional preferences appear before the core location answer");
     await softwareEngineer.click();
 
     const rolesContinue = page.locator("button", { hasText: "Continue" });
@@ -815,7 +856,7 @@ test("the walk: every step in order, each one advancing the rail by one", async 
     /* By the VISIBLE label. The field is named by its own <label htmlFor>, so the string a student
        reads is the string that addresses it - the property WCAG 2.5.3 is about, and one an
        aria-label would silently break while this line kept passing. */
-    const locationField = page.getByLabel("Where do you want to work?");
+    const locationField = page.getByRole("combobox", { name: "Where do you want to work?" });
 
     /* TWO PLACES, ADDED ONE AT A TIME, because the first version of this field could not do it.
        It was one comma-separated text box with a datalist hung off it, and a datalist REPLACES the
@@ -824,6 +865,7 @@ test("the walk: every step in order, each one advancing the rail by one", async 
        walk passed against the broken control. */
     await locationField.fill("Dubai");
     await locationField.press("Enter");
+    assert.equal(await page.getByText("More job preferences", { exact: true }).count(), 1, "optional preferences never appear after the core answers");
     await locationField.fill("London");
     await locationField.press("Enter");
     for (const place of ["Dubai", "London"]) {
@@ -844,6 +886,16 @@ test("the walk: every step in order, each one advancing the rail by one", async 
        by the pick-adds-itself rule below the moment the value matched, and this case would quietly
        stop testing what it is named after. */
     await locationField.fill("Nairobi");
+
+    await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+    assert.equal(
+      await page.getByRole("combobox", { name: "Where do you want to work?" }).count(),
+      1,
+      "later answers collapsed after an earlier choice changed",
+    );
+    assert.equal(await softwareEngineer.getAttribute("aria-pressed"), "true", "the selected title was hidden or cleared");
+    assert.equal(await rolesContinue.isDisabled(), true, "Continue stayed enabled after a required field was cleared");
+    await page.getByRole("button", { name: "Software & AI", exact: true }).click();
 
     await rolesContinue.click();
 
@@ -1197,7 +1249,7 @@ test("a place chosen from the dropdown adds itself; typing the same text does no
   await title.waitFor({ timeout: 10_000 });
   await title.click();
 
-  const field = page.getByLabel("Where do you want to work?");
+  const field = page.getByRole("combobox", { name: "Where do you want to work?" });
 
   // Typing a string that IS a suggestion, character events and all: it must stay in the box.
   await field.click();

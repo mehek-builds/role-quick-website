@@ -58,8 +58,19 @@ import { ReviewStep } from "@/components/start/ReviewStep";
 import { TrialStep } from "@/components/start/TrialStep";
 import { NotificationsStep } from "@/components/start/NotificationsStep";
 import { PlanStep } from "@/components/start/PlanStep";
+import { resumeContactHeader } from "@/components/start/ResumePaper";
 import { freshnessOf, hoursSinceSeen, type OnboardingMatch } from "@/lib/onboarding-match";
-import type { BuildResult } from "@/lib/onboarding-build";
+import {
+  editableOnboardingQuestions,
+  onboardingReviewAnswerPayload,
+  reviewableOnboardingAnswers,
+  type BuildResult,
+} from "@/lib/onboarding-build";
+import {
+  saveReviewAnswers,
+  type ReviewAnswerSaveResponse,
+} from "@/features/applications";
+import { currentKeyboardInset } from "@/lib/keyboard-inset";
 
 /* Whether this account's flow is one the acknowledgement ledger exists for.
  *
@@ -88,7 +99,7 @@ export default function Start() {
      screen, and a revisit that shows an empty form has lost their work: the built `ask` carries the
      employer's questions with no answers on them, so seeding from it alone blanks everything they
      typed and disables the save button they came to press. */
-  const [answersGiven, setAnswersGiven] = useState<{ question: string; answer: string }[]>([]);
+  const [answersGiven, setAnswersGiven] = useState<{ question: string; answer: string; confirmed?: boolean }[]>([]);
   /* The screen the student stepped BACK to, if any. It overrides the server's answer for as long
      as they are there and is cleared on return, so the flow itself never moves: the ledger still
      says where they actually are, and coming back is a trip rather than a rewind. */
@@ -146,6 +157,23 @@ export default function Start() {
       setProfileLoadError(reason instanceof Error ? reason.message : "Could not load your application details.");
       setAppProfileStatus("error");
     }
+  }, []);
+
+  /* Mobile sticky actions use the visual viewport so the software keyboard cannot cover the next
+     decision. Browsers that resize the layout viewport keep this value at zero. */
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty("--keyboard-inset", `${currentKeyboardInset()}px`);
+    apply();
+    viewport.addEventListener("resize", apply);
+    viewport.addEventListener("scroll", apply);
+    return () => {
+      viewport.removeEventListener("resize", apply);
+      viewport.removeEventListener("scroll", apply);
+      root.style.removeProperty("--keyboard-inset");
+    };
   }, []);
 
   /* The synchronous setters in this effect construct a localhost-only QA fixture after inspecting
@@ -441,6 +469,27 @@ export default function Start() {
     void refresh();
     return true;
   }, [revisiting, refresh]);
+
+  const persistApplicationAnswers = async (
+    packet: BuildResult,
+    answers: readonly { question: string; answer: string }[],
+    confirmedQuestions: readonly string[],
+  ) => {
+    if (!packet.applicationId) {
+      throw new Error("This packet is not linked to an application yet, so those answers could not be saved.");
+    }
+    const result = await saveReviewAnswers<unknown>({
+      applicationId: packet.applicationId,
+      questions: onboardingReviewAnswerPayload(
+        packet.filledAnswers,
+        answers,
+        packet.ask,
+        confirmedQuestions,
+      ),
+      send: (path, init) => api<ReviewAnswerSaveResponse<unknown>>(path, init),
+    });
+    if (!result.saved) throw new Error(result.message);
+  };
   /* Rejoining the sequence after a reload, which drops the per-sitting handoff.
    *
    * Routes on WHAT IS MISSING rather than always restarting: no match means pick one, a match
@@ -619,7 +668,13 @@ export default function Start() {
                 if (!cameBack && hasFlowLedger(state)) await acknowledgeOnboardingFlowStep("resume", "continued", state.flow_version);
                 const s = await refresh();
                 if (s.has_resume) await loadProfile();
-                if (cameBack) { track("onboarding_revisit_saved", { step: "resume" }); setRevisiting(null); }
+                if (cameBack) {
+                  /* A new source resume invalidates the tailored packet already in memory. Clearing
+                     it forces the review route through BuildStep before anything can be sent. */
+                  setBuilt(null);
+                  track("onboarding_revisit_saved", { step: "resume" });
+                  setRevisiting(null);
+                }
               })().catch((reason) => setError(reason instanceof Error ? reason.message : "Could not continue."));
             }}
           />
@@ -766,54 +821,161 @@ export default function Start() {
           />
         );
 
-      case "questions":
+      case "questions": {
         /* Both halves matter, and getting this wrong was a trap worth naming. Falling back to the
            match screen whenever `built` was missing produced a loop with no exit: picking a match
            sets `chosenMatch` and leaves `built` null, so the very next render fell back to the
            match screen again, forever. `resumeSequence` routes on what is actually missing. */
         if (!built || !chosenMatch) return resumeSequence();
+        const editingReviewAnswers = revisiting === "questions";
+        const questions = editingReviewAnswers
+          ? editableOnboardingQuestions(built.filledAnswers, answersGiven, built.ask)
+          : built.ask;
         return (
           <QuestionsStep
             company={chosenMatch.job.company_name}
-            questions={built.ask}
+            questions={questions}
             /* What they answered last time, replayed onto the employer's questions. Only matters on
                a revisit: the first time through this is empty and the screen is the blank form it
                has always been. */
-            given={answersGiven}
+            given={editingReviewAnswers
+              ? questions.map((question) => ({ question: question.question, answer: question.answer }))
+              : answersGiven}
             alreadyAnswered={built.alreadyAnswered}
             onLater={later}
             onSaved={async (answers) => {
+              let changedQuestions: string[] = [];
               /* THE WRITE THAT WAS MISSING. This screen used to count the answers and discard them,
                  so a student answered a real employer's questions into nothing. The save also
                  decides whether the work-visa screen appears at all: when the posting asked both
                  halves, the server records the declaration for that posting's country and the
                  refresh below returns a flow without that step. */
-              await saveOnboardingAnswers({
-                job_id: chosenMatch.job.id,
-                company: chosenMatch.job.company_name,
-                answers,
-              });
-              setAnswersGiven(answers);
+              if (!editingReviewAnswers) {
+                await saveOnboardingAnswers({
+                  job_id: chosenMatch.job.id,
+                  company: chosenMatch.job.company_name,
+                  answers,
+                });
+                /* The account-scoped save deliberately refuses posting-specific declarations.
+                   Keep those same answers on this exact packet before Review, so Save it and send
+                   later is a real save and a reload cannot lose what the applicant just approved. */
+                await persistApplicationAnswers(built, answers, answers.map((answer) => answer.question));
+              } else {
+                /* A review edit belongs to this packet, not the reusable onboarding answer store.
+                   Persist it before returning to Review so Save it and send later, navigation, and
+                   reload all see the same values the applicant just approved. The answers-only
+                   route leaves the packet status untouched and refuses unsafe submission states. */
+                const previous = new Map(
+                  reviewableOnboardingAnswers(built.filledAnswers, answersGiven, built.ask)
+                    .map((answer) => [answer.question.trim().toLowerCase(), answer.answer.trim()]),
+                );
+                changedQuestions = answers
+                  .filter((answer) => previous.get(answer.question.trim().toLowerCase()) !== answer.answer.trim())
+                  .map((answer) => answer.question);
+                await persistApplicationAnswers(built, answers, changedQuestions);
+              }
+              if (editingReviewAnswers) {
+                const changedKeys = new Set(changedQuestions.map((question) => question.trim().toLowerCase()));
+                setAnswersGiven((current) => {
+                  const next = new Map(current.map((answer) => [answer.question.trim().toLowerCase(), answer]));
+                  for (const answer of answers) {
+                    const key = answer.question.trim().toLowerCase();
+                    if (!changedKeys.has(key)) continue;
+                    next.set(key, { ...answer, confirmed: answer.answer.trim().length > 0 });
+                  }
+                  return [...next.values()];
+                });
+              } else {
+                setAnswersGiven(answers.map((answer) => ({ ...answer, confirmed: true })));
+              }
+              setBuilt((current) => current ? { ...current, outstandingQuestions: 0 } : current);
               stepDone("questions");
               if (completedRevisit()) return;
               await ack("questions");
               await refresh();
             }}
+            reviewMode={editingReviewAnswers}
           />
         );
+      }
 
       case "review":
         if (!chosenMatch || !built) return resumeSequence();
+        /* A rebuild can discover questions after the server has already advanced its ledger to
+           review. The client holds the fresh scan, so it must route through those questions before
+           exposing the irreversible send control. */
+        if (built.outstandingQuestions > 0) {
+          return (
+            <QuestionsStep
+              company={chosenMatch.job.company_name}
+              questions={built.ask}
+              given={answersGiven}
+              alreadyAnswered={built.alreadyAnswered}
+              onLater={later}
+              onSaved={async (answers) => {
+                await saveOnboardingAnswers({
+                  job_id: chosenMatch.job.id,
+                  company: chosenMatch.job.company_name,
+                  answers,
+                });
+                await persistApplicationAnswers(built, answers, answers.map((answer) => answer.question));
+                setAnswersGiven(answers.map((answer) => ({ ...answer, confirmed: true })));
+                setBuilt((current) => current ? { ...current, outstandingQuestions: 0 } : current);
+                stepDone("questions");
+              }}
+            />
+          );
+        }
+        const reviewAnswers = reviewableOnboardingAnswers(built.filledAnswers, answersGiven, built.ask);
+        /* An applicant-reviewed answer carries durable human provenance even when it came from a
+           prior application and this screen needed no fresh questions. Keep those visible sources
+           confirmed while the unfiltered overlay below retains blank tombstones. */
+        const reviewConfirmedQuestions = reviewAnswers
+          .filter((answer) => answer.source === "applicant_review")
+          .map((answer) => answer.question);
+        const reviewSubmissionQuestions = onboardingReviewAnswerPayload(
+          built.filledAnswers,
+          answersGiven,
+          built.ask,
+          reviewConfirmedQuestions,
+        );
+        const persistReviewSnapshot = () => persistApplicationAnswers(
+          built,
+          answersGiven,
+          reviewConfirmedQuestions,
+        );
         return (
           <ReviewStep
             posting={chosenMatch.job}
             applicationId={built?.applicationId ?? null}
             resumeSpec={built?.resumeSpec ?? null}
+            resumeContact={resumeContactHeader(built.resumeSpec ?? {}, {
+              full_name: profile?.full_name ?? "",
+              email: profile?.resume_email ?? undefined,
+            })}
             educationProfile={profile}
-            answersSaved={answersGiven.length}
+            answers={reviewAnswers}
+            submissionQuestions={reviewSubmissionQuestions}
+            answerEvidenceComplete={built.filledAnswers.length === built.alreadyAnswered}
             fieldsAnswered={built?.totalQuestions ?? 0}
+            onEditResume={() => setRevisiting("resume")}
+            onEditAnswers={() => setRevisiting("questions")}
+            onBeforeSend={persistReviewSnapshot}
             onSent={() => { setApplicationSent(true); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
-            onSaveForLater={() => { setApplicationSent(false); stepDone("review"); void ack("review").then(refresh).catch(fail); }}
+            onSaveForLater={async () => {
+              /* A fully prefilled employer form never visits Questions, so this is the first packet-
+                 scoped write. Save the exact values shown above without claiming that profile values
+                 were newly confirmed, then advance only after the Tracker copy is durable. */
+              /* Keep the unfiltered overlay here. Review intentionally hides an optional field
+                 after the applicant clears it, but the blank is still the tombstone that tells
+                 the saved packet to remove the older prefilled value. Reusing reviewAnswers
+                 would drop that tombstone and restore the value during payload construction. */
+              await persistReviewSnapshot();
+              setApplicationSent(false);
+              stepDone("review");
+              await ack("review");
+              await refresh();
+            }}
           />
         );
 

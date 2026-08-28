@@ -44,8 +44,8 @@ export const metadata = {
    remaining half of this and lives in the backend repo: the clickwrap on the
    sign-in screen forms the agreement, and storing the version is what proves
    which text a given account accepted. */
-const TERMS_VERSION = "2026-08-14";
-const TERMS_EFFECTIVE = "14 August 2026";
+const TERMS_VERSION = "2026-08-28";
+const TERMS_EFFECTIVE = "28 August 2026";
 
 function Section({
   title,
@@ -147,8 +147,11 @@ export default function Terms() {
             Litos+ access.
           </p>
           <p>
-            A new account receives a seven-day Litos+ trial without adding a
-            card. The trial includes five tailored resumes, five cover letters,
+            Eligible first-time accounts may start a seven-day Litos+ trial
+            after adding a supported payment method in Stripe Checkout. Before
+            Checkout opens, Litos shows whether a trial applies and the amount
+            due. Returning accounts may owe the selected plan price immediately.
+            The trial includes five tailored resumes, five cover letters,
             generated answers for five applications, and up to two contacts and
             two outreach drafts per company across five companies. Trial
             generation starts only when you choose the relevant action.
@@ -174,9 +177,11 @@ export default function Terms() {
           <p>
             The selected price, renewal period, and cancellation terms are
             shown before you enter Stripe Checkout, again in Checkout before
-            you pay, and in Account after you subscribe. The no-card trial does
-            not start a future charge. You must return and complete Stripe
-            Checkout to begin a paid subscription.
+            you confirm a payment method, and in Account after you subscribe.
+            Unless you cancel before an eligible trial ends, the selected
+            subscription begins at the regular price and renewal period shown
+            before Checkout. Taxes and accepted promotions may change the final
+            amount Stripe displays.
           </p>
         </Section>
 

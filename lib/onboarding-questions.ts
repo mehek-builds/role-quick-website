@@ -115,10 +115,11 @@ export function nextIndexAfter(
 export function answersToSave(
   questions: readonly PostingPrescriptQuestion[],
   answers: AnswerMap,
+  options: { includeBlank?: boolean } = {},
 ): { question: string; answer: string }[] {
-  return questions
-    .map((question) => ({ question: question.question, answer: (answers[answerKey(question)] ?? "").trim() }))
-    .filter((entry) => entry.answer.length > 0);
+  const values = questions
+    .map((question) => ({ question: question.question, answer: (answers[answerKey(question)] ?? "").trim() }));
+  return options.includeBlank ? values : values.filter((entry) => entry.answer.length > 0);
 }
 
 /**

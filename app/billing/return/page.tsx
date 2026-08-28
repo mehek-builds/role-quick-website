@@ -28,7 +28,8 @@ import {
 import styles from "./receipt.module.css";
 
 type Result =
-  | { kind: "active"; me: Me; receipt: BillingReceipt | null }
+  | { kind: "active"; me: Me; receipt: BillingReceipt }
+  | { kind: "trial_active"; me: Me; endsAt: string | null }
   | { kind: "extension_active"; actionReady: boolean }
   | { kind: "extension_pending" }
   | { kind: "cancelled" }
@@ -275,13 +276,23 @@ export default function BillingReturnPage() {
           setResult({ kind: "mismatch" });
           return;
         }
-        if (
-          verdict === "active"
-          && me
-        ) {
+        if (verdict === "trial_active" && me) {
+          setResult({
+            kind: "trial_active",
+            me,
+            endsAt: state?.trial?.ends_at ?? me.trial_ends_at ?? null,
+          });
+          return;
+        }
+        if (verdict === "active" && me) {
           const receipt = await getBillingReceipt().catch(() => null);
-          if (!stopped) {
-            setResult({ kind: "active", me, receipt });
+          const positiveReceipt = receipt
+            && Number.isFinite(receipt.amount_cents)
+            && receipt.amount_cents > 0
+            ? receipt
+            : null;
+          if (!stopped && positiveReceipt) {
+            setResult({ kind: "active", me, receipt: positiveReceipt });
             /* Fired only after billingReturnVerdict confirms Stripe itself (via
                reconcileBillingCheckout above), not on a client-side assumption that
                checkout succeeded -- this is the one point in the funnel with real
@@ -294,18 +305,18 @@ export default function BillingReturnPage() {
                window is real, not theoretical) without relying on TikTok's Events API
                to dedupe two separate CAPI calls sent minutes apart, which isn't a
                documented guarantee. */
-            const purchaseKey = `litos_tiktok_purchase_sent:${receipt?.reference ?? context}`;
+            const purchaseKey = `litos_tiktok_purchase_sent:${positiveReceipt.reference ?? context}`;
             if (!purchaseSentRef.current && window.sessionStorage.getItem(purchaseKey) !== "1") {
               purchaseSentRef.current = true;
               window.sessionStorage.setItem(purchaseKey, "1");
               sendTikTokEvent(
                 "Purchase",
-                `purchase:${receipt?.reference ?? context}`,
-                receipt ? { value: receipt.amount_cents / 100, currency: receipt.currency } : undefined,
+                `purchase:${positiveReceipt.reference ?? context}`,
+                { value: positiveReceipt.amount_cents / 100, currency: positiveReceipt.currency },
               );
             }
+            return;
           }
-          return;
         }
         await new Promise((resolve) => window.setTimeout(resolve, 1200));
       }
@@ -385,6 +396,41 @@ export default function BillingReturnPage() {
     return <main className="mx-auto flex min-h-svh w-full max-w-xl items-center px-6 py-20"><div className="w-full rounded-card border border-border bg-surface p-7 shadow-rest"><p className="text-label text-positive">Payment confirmed</p><h1 className="mt-3 text-section text-ink">Litos+ is active in the extension.</h1><p className="mt-4 text-body text-muted">The purchase was verified with the account signed in to the Litos extension. Return to your application tab and open the extension to continue.</p>{resumeError && <div className="mt-4"><ErrorNote message={resumeError} /></div>}{result.actionReady && <div className="mt-6"><Button type="button" disabled={extensionRetryBusy || extensionRetryComplete} aria-busy={extensionRetryBusy} onClick={() => void retryExtensionAction()}>{extensionRetryBusy ? "Opening..." : extensionRetryComplete ? "Action opened" : "Retry last action"}</Button><p className="mt-3 text-small text-muted">Litos will reopen the saved action only after this click. It will not run automatically.</p></div>}</div></main>;
   }
 
+  if (result.kind === "trial_active") {
+    return (
+      <main className="min-h-svh bg-surface-alt px-6 py-12 sm:py-20">
+        <div className="mx-auto grid w-full max-w-[58rem] items-center gap-10 lg:grid-cols-[1fr_0.86fr] lg:gap-14">
+          <section className="max-w-lg">
+            <p className="font-mono text-label uppercase tracking-[0.08em] text-positive">Trial confirmed</p>
+            <h1 className="mt-4 text-section font-[450] text-ink">Your Litos+ trial is active.</h1>
+            <p className="mt-5 text-body text-muted">Litos verified the exact checkout offer and account. This return started trial access, so it is not shown as a paid receipt.</p>
+            {(portalError || resumeError) && <div className="mt-5"><ErrorNote message={resumeError ?? portalError!} /></div>}
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Button type="button" disabled={resumeBusy} aria-busy={resumeBusy} onClick={() => void resumeOriginalAction()}>{resumeBusy ? "Opening..." : "Resume your action"}</Button>
+              <Button type="button" variant="secondary" disabled={portalBusy || !result.me.billing_portal_available} onClick={() => void openPortal()}>{portalBusy ? "Opening..." : "Open billing portal"}</Button>
+            </div>
+          </section>
+          <section aria-live="polite" className="rounded-card border border-border bg-surface p-7 shadow-rest sm:p-9">
+            <div className="flex size-11 items-center justify-center rounded-full bg-positive/10 text-positive" aria-hidden="true">
+              <svg viewBox="0 0 20 20" fill="none" className="size-6">
+                <circle cx="10" cy="10" r="8" fill="currentColor" />
+                <path d="m6.5 10.2 2.1 2.1 4.9-5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="mt-5 font-mono text-label uppercase tracking-[0.08em] text-muted">Litos+ trial</p>
+            <p className="mt-2 text-subsection font-[450] text-ink">Access is ready</p>
+            {result.endsAt ? (
+              <p className="mt-4 text-body text-muted">Trial access through <span className="font-medium text-ink">{receiptDate(result.endsAt)}</span>.</p>
+            ) : (
+              <p className="mt-4 text-body text-muted">The secure billing portal shows your exact trial end and renewal details.</p>
+            )}
+            <p className="mt-5 border-t border-border pt-5 text-small text-muted">Manage renewal or cancellation in the secure billing portal.</p>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-svh bg-surface-alt px-6 py-12 sm:py-20">
       <div className="mx-auto grid w-full max-w-[66rem] items-center gap-12 lg:grid-cols-[0.88fr_1.12fr] lg:gap-16">
@@ -392,16 +438,15 @@ export default function BillingReturnPage() {
           <p className="font-mono text-label uppercase tracking-[0.08em] text-positive">Payment confirmed</p>
           <h1 className="mt-4 text-section font-[450] text-ink">You&apos;re on Litos+.</h1>
           <p className="mt-5 text-body text-muted">Your access was verified from the exact paid offer and Litos account record. The receipt records the exact amount Stripe confirmed for this subscription.</p>
-          {!result.receipt && <div className="mt-5"><ErrorNote message="Your plan is active, but the receipt details are still syncing. The secure billing portal has the confirmed amount." /></div>}
           {(portalError || resumeError) && <div className="mt-5"><ErrorNote message={resumeError ?? portalError!} /></div>}
           <div className="mt-7 flex flex-wrap gap-3">
             <Button type="button" disabled={resumeBusy} aria-busy={resumeBusy} onClick={() => void resumeOriginalAction()}>{resumeBusy ? "Opening..." : "Resume your action"}</Button>
             <Button type="button" variant="secondary" disabled={portalBusy || !result.me.billing_portal_available} onClick={() => void openPortal()}>{portalBusy ? "Opening..." : "Open billing portal"}</Button>
           </div>
-          {result.receipt?.renews_at && <p className="mt-5 font-mono text-machine text-muted">Next billing date: {new Date(result.receipt.renews_at).toLocaleDateString()}.</p>}
+          {result.receipt.renews_at && <p className="mt-5 font-mono text-machine text-muted">Next billing date: {new Date(result.receipt.renews_at).toLocaleDateString()}.</p>}
         </section>
         <section aria-live="polite">
-          {result.receipt ? <PrintedReceipt receipt={result.receipt} /> : <div className="mx-auto flex min-h-80 max-w-sm items-center justify-center rounded-card border border-border bg-surface p-8 shadow-rest"><p className="text-center text-small text-muted">Receipt details are syncing.</p></div>}
+          <PrintedReceipt receipt={result.receipt} />
         </section>
       </div>
     </main>

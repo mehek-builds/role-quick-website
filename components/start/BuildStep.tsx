@@ -18,7 +18,7 @@
 import { useEffect, useState } from "react";
 import { ThinkingOrb } from "thinking-orbs";
 import { ErrorNote } from "@/components/app/ui";
-import { ResumePaper, type ContactHeader } from "./ResumePaper";
+import { ResumePaper, resumeContactHeader } from "./ResumePaper";
 import { api, getJob, getPostingQuestions, isGuestSession, type MonitoredJob, type ResumeSpec } from "@/lib/api";
 import { type ProfileIdentity } from "@/features/applications";
 import {
@@ -101,6 +101,7 @@ export function BuildStep({
             total: prescript?.question_count ?? 0,
             alreadyAnswered: prescript?.already_answered ?? 0,
             ask: prescript?.ask ?? [],
+            filledAnswers: prescript?.filled_answers ?? [],
           };
         },
       },
@@ -256,7 +257,11 @@ export function BuildStep({
                  blocks and the one-page fit. A parallel implementation here would drift from it on
                  the first change to either, and mine already had: no contact line at all. */
               <div className="origin-top scale-[0.62] [transform-box:content-box]">
-                <ResumePaper spec={result.resumeSpec} contact={contactHeaderOf(result.resumeSpec, applicantName)} />
+                <ResumePaper
+                  spec={result.resumeSpec}
+                  contact={resumeContactHeader(result.resumeSpec, { full_name: applicantName ?? "" })}
+                  label={`Tailored resume for ${posting.company_name}`}
+                />
               </div>
             ) : (
               /* Generation succeeded but returned no spec to show. Says so rather than printing an
@@ -307,14 +312,4 @@ export function BuildStep({
       </div>
     </StartShell>
   );
-}
-
-/* The contact block for the paper, off the spec the generator just returned.
- *
- * `_contact` is what the backend rendered the PDF's own header from (engine/resumeRender.ts), so
- * reading it here is what keeps this preview and the document the employer receives saying the same
- * thing. The name falls back to the loaded identity for a spec that predates `_contact`. */
-function contactHeaderOf(spec: ResumeSpec, fallbackName: string | null): ContactHeader {
-  const contact = (spec as ResumeSpec & { _contact?: Partial<ContactHeader> })._contact ?? {};
-  return { ...contact, full_name: contact.full_name?.trim() || fallbackName || "" };
 }

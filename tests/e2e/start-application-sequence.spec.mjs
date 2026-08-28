@@ -11,9 +11,9 @@
  *   - the build screen's stages are driven by real calls, and the resume stage does not resolve
  *     until generation does;
  *   - the questions screen shows the EMPLOYER'S options and refuses to auto-advance a declaration;
- *   - the review screen states the consequence and issues exactly one submit-request;
- *   - the trial screen counts what is LEFT after the build spent one generation;
- *   - the plan screen's Continue hands off to Stripe with the onboarding return route.
+ *   - the review screen shows the real resume and answers before one submit-request;
+ *   - the trial screen discloses its payment-method gate before checkout;
+ *   - the plan screen requires an explicit term choice before Stripe can open.
  */
 
 import assert from "node:assert/strict";
@@ -41,8 +41,11 @@ const acknowledged = [];
    false, or the server reads it as "not mentioned" and leaves a stale grant on. */
 const notificationSaves = [];
 let submitRequests = 0;
+const submitBodies = [];
 const savedAnswers = [];
+const reviewAnswerSaves = [];
 let checkoutRequests = 0;
+const checkoutBodies = [];
 let generationCalls = 0;
 let releaseGeneration;
 const generationHeld = new Promise((resolve) => { releaseGeneration = resolve; });
@@ -74,8 +77,13 @@ const PRESCRIPT = {
   discovery_status: "ok",
   discovered_at: new Date().toISOString(),
   scanned_now: true,
-  question_count: 17,
-  already_answered: 14,
+  question_count: 5,
+  already_answered: 3,
+  filled_answers: [
+    { question: "Full legal name", answer: "A Candidate", source: "saved_details", input_type: "text", options: null, required: true, max_length: null },
+    { question: "Email address", answer: "a@example.com", source: "saved_details", input_type: "email", options: null, required: true, max_length: null },
+    { question: "Portfolio URL", answer: "https://candidate.example", source: "applicant_review", input_type: "url", options: null, required: true, max_length: null },
+  ],
   ask: [
     {
       question: "Will you now or in the future require sponsorship for employment visa status?",
@@ -103,6 +111,41 @@ const PRESCRIPT = {
     },
   ],
 };
+
+const CHECKOUT_REVISION = "checkout_terms_v1_e2e123";
+const BILLING_PLANS = [
+  { id: "litos_plus_week", amount: 1999, interval: "week", intervalCount: 1 },
+  { id: "litos_plus_month", amount: 3999, interval: "month", intervalCount: 1 },
+  { id: "litos_plus_quarter", amount: 8999, interval: "month", intervalCount: 3 },
+].map((plan) => ({
+  plan_id: plan.id,
+  amount_cents: plan.amount,
+  checkout_available: true,
+  checkout_terms: {
+    schema_version: 1,
+    revision: CHECKOUT_REVISION,
+    checkout_status: "available",
+    blocker_code: null,
+    payment_method_required: true,
+    trial_eligible: true,
+    trial_days: 7,
+    due_at_checkout: { amount_cents: 0, currency: "USD", amount_kind: "exact" },
+    first_charge: {
+      regular_subtotal_cents: plan.amount,
+      currency: "USD",
+      timing: { kind: "days_after_checkout_completion", days: 7 },
+    },
+    renewal: {
+      regular_subtotal_cents: plan.amount,
+      currency: "USD",
+      interval: plan.interval,
+      interval_count: plan.intervalCount,
+    },
+    automatic_tax_enabled: true,
+    promotion_codes_allowed: true,
+    price_basis: "catalog_before_tax_and_promotions",
+  },
+}));
 
 function onboardingState() {
   /* Mirrors APPLICATION_STEPS. `build` is not here: it is a PHASE of the match screen now, not a
@@ -249,7 +292,15 @@ before(async () => {
     }
     if (path === "/applications/app-1/submit-request") {
       submitRequests += 1;
+      submitBodies.push(JSON.parse(route.request().postData()));
       return json({ review: {} });
+    }
+    if (path === "/applications/app-1/review/answers") {
+      reviewAnswerSaves.push(JSON.parse(route.request().postData()));
+      return json({ application_id: "app-1", review: {} });
+    }
+    if (path === "/billing/plans") {
+      return json({ schema_version: 1, currency: "USD", checkout_available: true, plans: BILLING_PLANS });
     }
     if (path === "/billing/state") {
       return json({
@@ -258,29 +309,20 @@ before(async () => {
            the component behaving correctly, so the fixture is what had to change. */
         schema_version: 2,
         account_id: "acct-1",
-        access_class: "trial_plus",
-        trial: {
-          meter_policy: "litos_plus_v2_lifetime",
-          starts_at: new Date().toISOString(),
-          ends_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-          active: true,
-          tailored_resumes_used: 1,
-          tailored_resumes_limit: 5,
-          cover_letters_used: 0,
-          cover_letters_limit: 5,
-          answer_applications_used: 0,
-          answer_applications_limit: 5,
-          outreach_companies_used: 0,
-          outreach_companies_limit: 5,
-          company_usage: [],
-        },
+        access_class: "free_new",
+        product: null,
+        term: null,
+        features: {},
+        trial: null,
+        subscription: null,
       });
     }
     if (path === "/billing/checkout") {
       checkoutRequests += 1;
+      checkoutBodies.push(JSON.parse(route.request().postData()));
       return json({
         checkout_url: "https://checkout.stripe.com/c/pay/stub",
-        offer_id: "offer-1",
+        offer_id: "11111111-1111-4111-8111-111111111111",
         expires_at: new Date(Date.now() + 3_600_000).toISOString(),
       });
     }
@@ -362,7 +404,7 @@ describe("the application sequence, end to end", () => {
     const body = await page.locator("main").innerText();
     // Their vocabulary, not ours. This is the fix for the largest class of stuck packets.
     assert.match(body, /Will you now or in the future require sponsorship/i);
-    assert.match(body, /It already answered 14 for you/i);
+    assert.match(body, /It already answered 3 for you/i);
 
     // A self-declaration must NOT auto-advance: answering it leaves the card where it is.
     await page.getByRole("radio", { name: /^A\s*Yes$/ }).click();
@@ -391,10 +433,22 @@ describe("the application sequence, end to end", () => {
     assert.ok(savedAnswers.some((a) => /GPA/i.test(a.question) && /3\.6 or above/.test(a.answer)));
   });
 
-  test("06 review: the consequence is stated, and exactly one send is issued", async () => {
-    await page.getByRole("heading", { name: /happy with this/i }).waitFor({ timeout: 20_000 });
+  test("06 review: the exact packet is visible before one send is issued", async () => {
+    await page.getByRole("heading", { name: /review before sending/i }).waitFor({ timeout: 20_000 });
 
     const body = await page.locator("main").innerText();
+    assert.match(body, /A Candidate/i, "the applicant name is missing from the reviewed resume");
+    assert.match(body, /a@example\.com/i, "the reviewed resume has no contact email");
+    assert.match(body, /Cut PostgreSQL query time 60%/i, "the actual tailored resume is not visible");
+    assert.match(body, /Will you now or in the future require sponsorship/i, "the employer question is not visible");
+    assert.match(body, /\bYes\b/i, "the confirmed sponsorship answer is not visible");
+    assert.match(body, /What is your cumulative GPA/i, "the GPA question is not visible");
+    assert.match(body, /3\.6 or above \(out of 4\.0\)/i, "the confirmed GPA answer is not visible");
+    assert.match(body, /Full legal name\s+A Candidate\s+From your saved details/i);
+    assert.match(body, /Email address\s+a@example\.com\s+From your saved details/i);
+    assert.match(body, /Portfolio URL\s+https:\/\/candidate\.example\s+You confirmed/i);
+    assert.match(body, /Change source resume/i);
+    assert.match(body, /Change answers/i);
     assert.match(body, /cannot be unsent/i, "the irreversible screen must say so above the button");
     assert.match(body, /Anything Litos guessed/i);
     assert.match(body, /None/i);
@@ -402,27 +456,47 @@ describe("the application sequence, end to end", () => {
     assert.doesNotMatch(body, /\bcancel(ling)? in \d|\d+ seconds\b/i);
 
     assert.equal(submitRequests, 0, "something sent the application before the button was pressed");
+
+    /* Every displayed value is genuinely editable, including one that came from saved details.
+       The override belongs to this application and is sent in the exact body authorized here. */
+    await page.getByRole("button", { name: "Change answers" }).click();
+    await page.getByRole("heading", { name: /review these 5 application answers/i }).waitFor();
+    await page.getByRole("textbox", { name: "Full legal name" }).fill("A Corrected Candidate");
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await page.getByRole("heading", { name: /review before sending/i }).waitFor();
+    assert.match(await page.locator("main").innerText(), /Full legal name\s+A Corrected Candidate\s+You confirmed/i);
+    assert.equal(reviewAnswerSaves.length, 2, "initial answers and review edits were not both persisted");
+    assert.ok(reviewAnswerSaves[0].questions.some((item) => item.question.includes("sponsorship") && item.confirmed === true));
+    assert.equal(reviewAnswerSaves[1].questions.length, 5, "the persisted review omitted visible answers");
+    assert.ok(reviewAnswerSaves[1].questions.some((item) => item.question === "Full legal name" && item.answer === "A Corrected Candidate"));
+
     await page.getByRole("button", { name: "Send my application" }).click();
-    await page.getByRole("heading", { name: /here's something from us/i }).waitFor({ timeout: 20_000 });
+    await page.getByRole("heading", { name: /here is your 7-day trial/i }).waitFor({ timeout: 20_000 });
     assert.equal(submitRequests, 1, "the send must be issued exactly once");
+    assert.equal(reviewAnswerSaves.length, 3, "Send did not persist the exact reviewed snapshot first");
+    assert.ok(reviewAnswerSaves[2].questions.some((item) => item.question === "Portfolio URL" && item.confirmed === true),
+      "a remembered applicant answer lost its human provenance before Send");
+    assert.equal(submitBodies[0].questions.length, 5, "the reviewed values did not reach submit-request");
+    assert.ok(submitBodies[0].questions.some((item) => item.question === "Portfolio URL" && item.confirmed === true),
+      "submit-request did not receive the provenance-preserving snapshot");
+    assert.ok(submitBodies[0].questions.some((item) => item.question === "Full legal name" && item.answer === "A Corrected Candidate"));
+    assert.ok(submitBodies[0].questions.some((item) => /sponsorship/i.test(item.question) && item.answer === "Yes"));
+    assert.ok(submitBodies[0].questions.some((item) => /GPA/i.test(item.question) && /3\.6 or above/.test(item.answer)));
   });
 
-  test("07 the trial: the gift, counted after the build spent one generation", async () => {
+  test("07 the trial: payment method requirement is disclosed before checkout", async () => {
     const body = await page.locator("main").innerText();
-    assert.match(body, /A gift, on us/i);
+    assert.match(body, /7-day Litos\+ trial/i);
     assert.match(body, /days of Litos\+/i);
-    // 5 limit minus the 1 the build used. Printing 5 here would be a number the account does not have.
-    assert.match(body, /Tailored resumes\s*\n?\s*4/i);
-    /* THIS ACCOUNT HOLDS A TRIAL, so the screen may say so. The line used to be unconditional and
-       read "Nothing to confirm. Already on your account." for everyone, which stopped being true
-       the moment the trial became a Stripe subscription rather than a signup grant: a real new
-       account arrives here holding nothing. The other half of that conditional is the case below. */
-    assert.match(body, /Already on your account/i);
-    assert.doesNotMatch(body, /Nothing is charged for the first seven days/i);
+    assert.match(body, /Tailored resumes\s*\n?\s*5/i);
+    assert.match(body, /\$0 is due when you complete Stripe checkout/i);
+    assert.match(body, /payment method is required/i);
+    assert.match(body, /after checkout completes/i);
+    assert.doesNotMatch(body, /Active on your account/i);
     // The title follows what the student actually did, and this walk sent.
-    assert.match(body, /Sent\. And here's something from us\./i);
+    assert.match(body, /Sent\. Here is your 7-day trial\./i);
 
-    await page.getByRole("button", { name: "Start using it" }).click();
+    await page.getByRole("button", { name: "Continue" }).click();
   });
 
   test("08 notifications: two asks, nothing pre-ticked, and only what was ticked is granted", async () => {
@@ -453,61 +527,17 @@ describe("the application sequence, end to end", () => {
     await page.getByRole("checkbox", { name: "Tell me when a strong match opens" }).check();
     await page.getByRole("button", { name: "Continue" }).click();
 
-    await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
+    await page.getByRole("heading", { name: /choose your Litos\+ term/i }).waitFor({ timeout: 20_000 });
     assert.equal(notificationSaves.length, 1);
     assert.equal(notificationSaves[0].strong_match, true);
     assert.equal(notificationSaves[0].employer_reply, false, "an unticked box is a decline, not an omission");
     assert.equal(notificationSaves[0].activity_digest, false, "the laptop summary was never granted");
   });
 
-  test("09 the plan: pre-selected, one control, and no way past it without a card", async () => {
-    /* THIS WALK HAS NOW BEEN OUT OF DATE TWICE IN ONE DAY, and the reason is worth keeping.
-
-       #363 deleted the two-row "If you do nothing / You keep / You lose" table ON PURPOSE --
-       it promised the student unlimited filling, free with no time limit, if they simply did
-       not act, and that stopped being true when this screen started taking a card for a trial
-       that converts on its own. Doing nothing is now the path that gets CHARGED. The assertion
-       guarding that table was not deleted with it, and main went red.
-
-       Then the free escape went too, because new accounts go seven-day trial then Litos+ and
-       Free is somewhere you arrive by cancelling rather than a fork offered during setup. That
-       control was the one thing that let a new account reach the dashboard having never given
-       a card.
-
-       And "$89.99 today" went with them: false once the card started a trial rather than a
-       purchase, since nothing is taken for seven days, and it sat directly above a sentence
-       saying the opposite.
-
-       So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
-       absence of every exit, rather than any sentence the product no longer means. */
-    await page.getByRole("heading", { name: /after the seven days/i }).waitFor({ timeout: 20_000 });
-
-    const body = await page.locator("main").innerText();
-    assert.match(
-      body,
-      /Free for seven days\. After that, Litos\+ continues at/i,
-      "the paywall must state when the charge lands",
-    );
-    assert.match(
-      body,
-      /any time before then and you are not charged/i,
-      "the paywall must state how to stop the charge",
-    );
-    assert.doesNotMatch(body, /\$89\.99 today/i, "nothing is charged today, a trial starts");
-    assert.doesNotMatch(body, /Continue on Free/i, "the free escape is the whole point of the gate");
-    assert.doesNotMatch(body, /Finish later/i);
-
-    // Exactly one way forward, and it is checkout.
-    const actions = await page.locator("main button, main a").allInnerTexts();
-    const forward = actions.map((t) => t.trim()).filter((t) => /^Continue/i.test(t));
-    assert.deepEqual(forward, ["Continue with 3 months"]);
-  });
-
-  test("the whole sequence was walked in order", () => {
-    assert.deepEqual(acknowledged, ["match", "questions", "review", "trial", "notifications"]);
-  });
-
   /* GOING BACK TO CHANGE AN ANSWER, and coming back to where you were.
+   *
+   * Run this before the Stripe navigation below. Stripe causes a full document navigation, so the
+   * intentionally per-sitting application packet is rebuilt after returning to /start.
    *
    * The bug this pins: every screen's Continue acknowledges and refreshes, and the rendered step is
    * `revisiting ?? served`. Finish a revisited screen with that path and the acknowledgement writes
@@ -523,16 +553,84 @@ describe("the application sequence, end to end", () => {
     await page.getByRole("button", { name: "what you told the employer" }).click();
 
     // The old screen, in its own words, with the answers still on it.
-    await page.getByText("questions", { exact: false }).first().waitFor({ timeout: 10_000 });
-    await page.getByRole("button", { name: "Save and review" }).click();
+    await page.getByRole("heading", { name: /review these 5 application answers/i }).waitFor({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Save changes" }).click();
 
     /* Back where they were, which by this point in the suite is the plan screen. The server's own
        answer carries them there, so this is the real step rather than a second override. */
-    await page.getByRole("button", { name: "Continue with 3 months" }).waitFor({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Choose a term" }).waitFor({ timeout: 15_000 });
     assert.equal(
       acknowledged.length,
       before,
       `revisiting wrote ${acknowledged.length - before} acknowledgement(s); the ledger already held that screen`,
     );
   });
+
+  test("09 the plan: explicit choice, exact terms, and no way past it without a payment method", async () => {
+    /* THIS WALK HAS NOW BEEN OUT OF DATE TWICE IN ONE DAY, and the reason is worth keeping.
+
+       #363 deleted the two-row "If you do nothing / You keep / You lose" table ON PURPOSE --
+       it promised the student unlimited filling, free with no time limit, if they simply did
+       not act, and that stopped being true when this screen started taking a payment method for a trial
+       that converts on its own. Doing nothing is now the path that gets CHARGED. The assertion
+       guarding that table was not deleted with it, and main went red.
+
+       Then the free escape went too, because new accounts go seven-day trial then Litos+ and
+       Free is somewhere you arrive by cancelling rather than a fork offered during setup. That
+       control was the one thing that let a new account reach the dashboard having never given
+       a payment method.
+
+       And "$89.99 today" went with them: false once checkout started a trial rather than a
+       purchase, since nothing is taken for seven days, and it sat directly above a sentence
+       saying the opposite.
+
+       So this pins what the screen must SAY -- when the charge lands, how to stop it -- and the
+       absence of every exit, rather than any sentence the product no longer means. */
+    await page.getByRole("heading", { name: /choose your Litos\+ term/i }).waitFor({ timeout: 20_000 });
+
+    let body = await page.locator("main").innerText();
+    assert.match(
+      body,
+      /Choose a renewal term to load the amount due in Stripe/i,
+      "the paywall does not explain why a term is required",
+    );
+    const chooseTerm = page.getByRole("button", { name: "Choose a term" });
+    assert.equal(await chooseTerm.isDisabled(), true, "checkout is enabled before an explicit term choice");
+    assert.equal(await page.getByText("Selected", { exact: true }).count(), 0, "a renewal term was pre-selected");
+
+    await page.getByRole("button", { name: /1 month/i }).click();
+    body = await page.locator("main").innerText();
+    assert.match(body, /\$0 is due when you complete Stripe checkout/i);
+    assert.match(body, /regular \$39\.99 price, before any applicable tax or promotion/i);
+    assert.match(body, /first charged 7 days after checkout completes/i);
+    assert.match(body, /Cancel in Account before the trial ends/i);
+    assert.doesNotMatch(body, /\$89\.99 today/i, "nothing is charged today, a trial starts");
+    assert.doesNotMatch(body, /Continue on Free/i, "the free escape is the whole point of the gate");
+    assert.doesNotMatch(body, /Finish later/i);
+
+    // Exactly one way forward, and it is checkout.
+    const actions = await page.locator("main button, main a").allInnerTexts();
+    const forward = actions.map((t) => t.trim()).filter((t) => /start trial/i.test(t));
+    assert.deepEqual(forward, ["Add payment method and start trial"]);
+    assert.equal(checkoutRequests, 0, "checkout opened before the student pressed its button");
+
+    await page.getByRole("button", { name: "Add payment method and start trial" }).click();
+    await page.waitForURL("https://checkout.stripe.com/c/pay/stub", { timeout: 15_000 });
+    assert.equal(checkoutRequests, 1, "one checkout click did not create exactly one session");
+    assert.equal(checkoutBodies[0].plan_id, "litos_plus_month");
+    assert.equal(checkoutBodies[0].checkout_terms_revision, CHECKOUT_REVISION);
+
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await page.getByRole("heading", { name: /choose your Litos\+ term/i }).waitFor({ timeout: 15_000 });
+    const returnContext = await page.evaluate(() => {
+      const key = Object.keys(sessionStorage).find((item) => item.startsWith("litos_billing_return_v2:"));
+      return key ? JSON.parse(sessionStorage.getItem(key)) : null;
+    });
+    assert.equal(returnContext?.returnRoute, "/start");
+  });
+
+  test("the whole sequence was walked in order", () => {
+    assert.deepEqual(acknowledged, ["match", "questions", "review", "trial", "notifications"]);
+  });
+
 });

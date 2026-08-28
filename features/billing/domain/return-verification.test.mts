@@ -40,3 +40,16 @@ test("the exact account still waits for the exact offer to be paid", () => {
     state: state("account-a", "plus_paid"),
   }), "active");
 });
+
+test("a completed checkout that activates the exact account trial is distinct from payment", () => {
+  assert.equal(billingReturnVerdict({
+    expectedAccountId: "account-a",
+    offerStatus: "paid",
+    state: state("account-a", "trial_plus"),
+  }), "trial_active");
+  assert.equal(billingReturnVerdict({
+    expectedAccountId: "account-a",
+    offerStatus: "checkout_created",
+    state: state("account-a", "trial_plus"),
+  }), "pending");
+});

@@ -20,6 +20,16 @@ const ACCOUNT_ID = "audited-state-fixture-account";
 const OFFER_ID = "11111111-2222-4333-8444-555555555555";
 const DELETE_CONFIRMATION =
   "I am willingly deleting my account and I confirm that all of my history will be erased.";
+const PAID_RECEIPT = {
+  provider: "stripe",
+  plan: "pro",
+  interval: "monthly",
+  amount_cents: 3999,
+  currency: "USD",
+  paid_at: "2026-08-14T12:34:00.000Z",
+  renews_at: "2026-09-14T12:34:00.000Z",
+  reference: "123456789012",
+};
 
 async function freePort() {
   return new Promise((resolve, reject) => {
@@ -78,6 +88,7 @@ function account(overrides = {}) {
 
 function billingState(accessClass = "free_new") {
   const paid = accessClass === "plus_paid";
+  const trial = accessClass === "trial_plus";
   return {
     account_id: ACCOUNT_ID,
     entitlement: {
@@ -86,11 +97,29 @@ function billingState(accessClass = "free_new") {
       revision: "audited-state-fixture",
       evaluated_at: "2026-08-14T00:00:00.000Z",
       access_class: accessClass,
-      product: paid ? "litos_plus" : null,
-      term: paid ? "month" : null,
+      product: paid || trial ? "litos_plus" : null,
+      term: paid || trial ? "month" : null,
       features: {},
-      trial: null,
-      subscription: paid ? { provider: "stripe", status: "active", management_available: true } : null,
+      trial: trial ? {
+        meter_policy: "litos_plus_v2_lifetime",
+        starts_at: "2026-08-14T12:34:00.000Z",
+        ends_at: "2026-08-21T12:34:00.000Z",
+        active: true,
+        tailored_resumes_used: 0,
+        tailored_resumes_limit: 5,
+        cover_letters_used: 0,
+        cover_letters_limit: 5,
+        answer_applications_used: 0,
+        answer_applications_limit: 5,
+        outreach_companies_used: 0,
+        outreach_companies_limit: 5,
+        company_usage: [],
+      } : null,
+      subscription: paid || trial ? {
+        provider: "stripe",
+        status: paid ? "active" : "trialing",
+        management_available: true,
+      } : null,
     },
   };
 }
@@ -131,14 +160,14 @@ async function fixtureContext({ fastTimers = false } = {}) {
   return context;
 }
 
-async function seedBillingReturnContext(context) {
-  await context.addInitScript(({ accountId, offerId }) => {
+async function seedBillingReturnContext(context, returnRoute = "/dashboard") {
+  await context.addInitScript(({ accountId, offerId, savedReturnRoute }) => {
     window.sessionStorage.setItem(`litos_billing_return_v2:${offerId}`, JSON.stringify({
       accountId,
-      returnRoute: "/dashboard",
+      returnRoute: savedReturnRoute,
       expiresAt: "2099-01-01T00:00:00.000Z",
     }));
-  }, { accountId: ACCOUNT_ID, offerId: OFFER_ID });
+  }, { accountId: ACCOUNT_ID, offerId: OFFER_ID, savedReturnRoute: returnRoute });
 }
 
 function isLocal(url) {
@@ -148,16 +177,23 @@ function isLocal(url) {
 async function routeBilling(context, meResponse, {
   offerStatus = "paid",
   stateResponse = billingState("plus_paid"),
+  receiptResponse = PAID_RECEIPT,
 } = {}) {
   let meCalls = 0;
   let offerCalls = 0;
   let stateCalls = 0;
   let portalCalls = 0;
+  let receiptCalls = 0;
+  let tiktokCalls = 0;
   const unknown = [];
   let reconcileCalls = 0;
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = request.url();
+    if (url === `${ORIGIN}/api/tiktok-event`) {
+      tiktokCalls += 1;
+      return route.fulfill({ status: 204, body: "" });
+    }
     if (isLocal(url)) return route.continue();
     if (url.startsWith(BACKEND) && new URL(url).pathname === "/me") {
       meCalls += 1;
@@ -188,16 +224,8 @@ async function routeBilling(context, meResponse, {
       return route.fulfill({ json: { provider: "stripe", url: "https://billing.stripe.com/p/session/audited-fixture" } });
     }
     if (url.startsWith(BACKEND) && request.method() === "GET" && new URL(url).pathname === "/billing/receipt") {
-      return route.fulfill({ json: {
-        provider: "stripe",
-        plan: "pro",
-        interval: "monthly",
-        amount_cents: 3999,
-        currency: "USD",
-        paid_at: "2026-08-14T12:34:00.000Z",
-        renews_at: "2026-09-14T12:34:00.000Z",
-        reference: "123456789012",
-      } });
+      receiptCalls += 1;
+      return route.fulfill({ json: receiptResponse });
     }
     if (url.startsWith(BACKEND) && new URL(url).pathname === "/v1/meta") {
       return route.fulfill({ json: { product: "litos" } });
@@ -212,6 +240,8 @@ async function routeBilling(context, meResponse, {
     get offerCalls() { return offerCalls; },
     get stateCalls() { return stateCalls; },
     get portalCalls() { return portalCalls; },
+    get receiptCalls() { return receiptCalls; },
+    get tiktokCalls() { return tiktokCalls; },
     get reconcileCalls() { return reconcileCalls; },
     unknown,
   };
@@ -249,9 +279,58 @@ test("billing return confirms the exact paid offer and account record", async ()
   assert.equal(traffic.meCalls, 1);
   assert.equal(traffic.offerCalls, 1);
   assert.equal(traffic.stateCalls, 1);
+  assert.equal(traffic.receiptCalls, 1);
+  assert.equal(traffic.tiktokCalls, 1);
   /* Once, not per attempt. Reconciling inside the poll would multiply a Stripe
      round trip by the retry count for every returning student. */
   assert.equal(traffic.reconcileCalls, 1);
+  assert.deepEqual(traffic.unknown, []);
+  await context.close();
+});
+
+test("billing return confirms trial access without claiming a paid receipt", async () => {
+  const context = await fixtureContext();
+  await seedBillingReturnContext(context, "/start");
+  const traffic = await routeBilling(
+    context,
+    account({
+      tier: "trial",
+      trial_ends_at: "2026-08-21T12:34:00.000Z",
+      billing_status: "trialing",
+      billing_portal_available: true,
+    }),
+    { stateResponse: billingState("trial_plus") },
+  );
+  const page = await context.newPage();
+  await page.goto(`${ORIGIN}/billing/return?context=${OFFER_ID}`);
+  await page.getByRole("heading", { name: "Your Litos+ trial is active." }).waitFor();
+  await page.getByText("Trial access through", { exact: false }).waitFor();
+  assert.equal(await page.getByLabel(/Litos\+ payment receipt/).count(), 0);
+  assert.equal(await page.getByText("Total paid", { exact: true }).count(), 0);
+  assert.equal(traffic.receiptCalls, 0);
+  assert.equal(traffic.tiktokCalls, 0);
+  assert.equal(traffic.offerCalls, 1);
+  assert.equal(traffic.stateCalls, 1);
+  assert.equal(traffic.reconcileCalls, 1);
+  assert.deepEqual(traffic.unknown, []);
+  await context.close();
+});
+
+test("paid return waits for a positive receipt before showing payment or firing Purchase", async () => {
+  const context = await fixtureContext({ fastTimers: true });
+  await seedBillingReturnContext(context);
+  const traffic = await routeBilling(
+    context,
+    account({ tier: "pro", billing_status: "active", billing_portal_available: true }),
+    { receiptResponse: { ...PAID_RECEIPT, amount_cents: 0 } },
+  );
+  const page = await context.newPage();
+  await page.goto(`${ORIGIN}/billing/return?context=${OFFER_ID}`);
+  await page.getByText(/Payment could not be confirmed yet/).waitFor();
+  assert.equal(await page.getByText("Payment confirmed", { exact: true }).count(), 0);
+  assert.equal(await page.getByText("Total paid", { exact: true }).count(), 0);
+  assert.equal(traffic.receiptCalls, 6);
+  assert.equal(traffic.tiktokCalls, 0);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
 });
@@ -277,7 +356,6 @@ test("billing return reaches its bounded timeout state", async () => {
 async function routeSettings(context, deleteResponse, exportResponse = { status: 200, json: { email: EMAIL } }) {
   let deleteCalls = 0;
   const unknown = [];
-  let reconcileCalls = 0;
   await context.route("**/*", async (route) => {
     const request = route.request();
     const url = request.url();

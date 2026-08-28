@@ -44,6 +44,21 @@ export type ContactHeader = {
   portfolio_url?: string;
 };
 
+/* The generated PDF stores its exact header in `_contact`, even though that transport field is
+   intentionally absent from ResumeSpec. Every preview reads it through this one helper so the
+   document a student reviews matches the document an employer receives. */
+export function resumeContactHeader(
+  spec: Partial<ResumeSpec>,
+  fallback: Partial<ContactHeader> = {},
+): ContactHeader {
+  const stored = (spec as ResumeSpec & { _contact?: Partial<ContactHeader> })._contact ?? {};
+  return {
+    ...fallback,
+    ...stored,
+    full_name: stored.full_name?.trim() || fallback.full_name?.trim() || "",
+  };
+}
+
 const PAPER_FONT = '"Tinos", "Times New Roman", Times, serif';
 
 /* How much of the usable page the content should occupy. Not 1.0: a resume printed hard against
@@ -530,6 +545,7 @@ type Block =
 export function ResumePaper({
   spec,
   contact,
+  label = "Your resume, preview",
   /** Drawn dimmed, for the "this is what you uploaded" ghost stack. */
   muted = false,
   /** Turns the paper into a live document. Omit for a read-only preview. */
@@ -538,6 +554,7 @@ export function ResumePaper({
 }: {
   spec: Partial<ResumeSpec>;
   contact: ContactHeader;
+  label?: string;
   muted?: boolean;
   editing?: boolean;
   onChange?: (next: ResumeSpec) => void;
@@ -608,12 +625,12 @@ export function ResumePaper({
   // itself, so declaring both on one div would silently pin the type at the clamp minimum.
   return (
     <EditContext.Provider value={editApi}>
-    <div
+    <article
       className={`ph-no-capture aspect-[612/792] w-full overflow-hidden bg-white text-black shadow-[0_1px_2px_rgba(0,0,0,0.06),0_12px_32px_-12px_rgba(0,0,0,0.28)] ${
         muted ? "opacity-40" : ""
       }`}
       style={{ fontFamily: PAPER_FONT, containerType: "inline-size" }}
-      aria-label="Your main resume, preview"
+      aria-label={label}
     >
       {/* ph-no-capture is PostHog's default block class: session recording renders this whole
           sheet as an opaque box instead of its real content. Every caller draws a real resume
@@ -727,7 +744,7 @@ export function ResumePaper({
           )}
         </div>
       </div>
-    </div>
+    </article>
     </EditContext.Provider>
   );
 }

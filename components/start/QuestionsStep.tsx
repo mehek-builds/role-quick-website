@@ -50,6 +50,7 @@ export function QuestionsStep({
   alreadyAnswered,
   onSaved,
   onLater,
+  reviewMode = false,
 }: {
   company: string;
   questions: PostingPrescriptQuestion[];
@@ -60,6 +61,8 @@ export function QuestionsStep({
   alreadyAnswered: number;
   onSaved: (answers: { question: string; answer: string }[]) => Promise<void> | void;
   onLater: () => void;
+  /** The same controls reopened from Review, including values resolved from saved details. */
+  reviewMode?: boolean;
 }) {
   const [answers, setAnswers] = useState<AnswerMap>(() => ({
     ...Object.fromEntries(questions.filter((q) => q.answer).map((q) => [answerKey(q), q.answer])),
@@ -76,6 +79,7 @@ export function QuestionsStep({
     ),
   }));
   const [index, setIndex] = useState(0);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -86,20 +90,28 @@ export function QuestionsStep({
   const complete = allRequiredAnswered(questions, answers);
   const left = remainingRequired(questions, answers);
 
+  function moveTo(next: number, nextDirection: "forward" | "back") {
+    setDirection(nextDirection);
+    setIndex(next);
+  }
+
   function choose(question: PostingPrescriptQuestion, value: string) {
     setAnswers((prev) => ({ ...prev, [answerKey(question)]: value }));
     const at = questions.indexOf(question);
     const next = nextIndexAfter(questions, at);
     if (next === null) return;
     if (advanceTimer.current) clearTimeout(advanceTimer.current);
-    advanceTimer.current = setTimeout(() => setIndex(next), ADVANCE_MS);
+    advanceTimer.current = setTimeout(() => moveTo(next, "forward"), ADVANCE_MS);
   }
 
   async function save() {
     setBusy(true);
     setError(null);
     try {
-      await onSaved(answersToSave(questions, answers));
+      /* Review mode sends the whole editor, including intentional blanks. An omitted optional
+         question means "leave the stored answer alone" to the application-scoped merge, so
+         dropping a cleared value would make a successful save resurrect the sensitive answer. */
+      await onSaved(answersToSave(questions, answers, { includeBlank: reviewMode }));
       track("onboarding_questions_saved", { asked: questions.length, already_answered: alreadyAnswered });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not save those answers.");
@@ -132,7 +144,11 @@ export function QuestionsStep({
     <StartShell
       step="questions"
       title={
-        questions.length === 1
+        reviewMode
+          ? questions.length === 1
+            ? "Review this application answer."
+            : `Review these ${questions.length} application answers.`
+          : questions.length === 1
           ? `One question ${company} asks that I can't answer for you.`
           : `${questions.length} questions ${company} asks that I can't answer for you.`
       }
@@ -140,15 +156,25 @@ export function QuestionsStep({
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <p className="mb-6 text-sm leading-6 text-muted">
-        These are their words and their options, copied from the form. They go onto this
-        application, and Litos keeps what it can reuse so the next one is shorter.
-        {alreadyAnswered > 0 && ` It already answered ${alreadyAnswered} for you.`}
+        {reviewMode
+          ? "Edit any value below. These are the exact answers Litos will use for this application. Changes here do not rewrite your saved profile."
+          : (
+            <>
+              These are their words and their options, copied from the form. They go onto this
+              application, and Litos keeps what it can reuse so the next one is shorter.
+              {alreadyAnswered > 0 && ` It already answered ${alreadyAnswered} for you.`}
+            </>
+          )}
       </p>
 
+      {/* Employer answers can contain EEO self-identification, work authorization, compensation,
+          and other personal details. PostHog records rendered text and DOM state, so block the
+          whole editor rather than relying only on input masking. */}
       <section
         aria-live="polite"
-        className="min-w-0 overflow-hidden rounded-inner border border-border bg-surface"
+        className="ph-no-capture min-w-0 overflow-hidden rounded-inner border border-border bg-surface"
       >
+        <div key={answerKey(current)} className={direction === "forward" ? "rq-question-forward" : "rq-question-back"}>
         <header className="flex min-w-0 items-center justify-between gap-3 border-b border-border bg-surface-alt px-4 py-2">
           <span className="min-w-0 font-mono text-[11px] uppercase tracking-[0.07em] text-muted [overflow-wrap:anywhere]">
             {current.required ? "Required" : "Optional"} · {company}
@@ -206,6 +232,7 @@ export function QuestionsStep({
             <p className="min-w-0 font-mono text-[11px] leading-5 text-muted [overflow-wrap:anywhere]">Asked because {explanation}.</p>
           )}
         </div>
+        </div>
       </section>
 
       {/* Step nav. Arrows rather than a progress bar: the badge above already says the position,
@@ -215,7 +242,7 @@ export function QuestionsStep({
           type="button"
           aria-label="Previous question"
           disabled={index <= 0}
-          onClick={() => setIndex((n) => Math.max(0, n - 1))}
+          onClick={() => moveTo(Math.max(0, index - 1), "back")}
           className="min-h-11 rounded-control border border-control-border px-3 text-sm text-ink disabled:cursor-not-allowed disabled:opacity-40"
         >
           Back
@@ -224,7 +251,7 @@ export function QuestionsStep({
           type="button"
           aria-label="Next question"
           disabled={index >= questions.length - 1}
-          onClick={() => setIndex((n) => Math.min(questions.length - 1, n + 1))}
+          onClick={() => moveTo(Math.min(questions.length - 1, index + 1), "forward")}
           className="min-h-11 rounded-control border border-control-border px-3 text-sm text-ink disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next
@@ -236,9 +263,11 @@ export function QuestionsStep({
 
       <div className="mt-7 flex flex-wrap items-center gap-4">
         <PrimaryButton onClick={() => void save()} disabled={busy || !complete}>
-          {busy ? <PendingLabel onColor>Saving...</PendingLabel> : "Save and review"}
+          {busy
+            ? <PendingLabel onColor>Saving...</PendingLabel>
+            : reviewMode ? "Save changes" : "Save and review"}
         </PrimaryButton>
-        <LaterLink onClick={onLater} />
+        {!reviewMode && <LaterLink onClick={onLater} />}
       </div>
     </StartShell>
   );

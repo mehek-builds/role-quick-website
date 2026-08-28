@@ -416,8 +416,8 @@ export default function Login() {
         }
         setSession(data.token, email.trim().toLowerCase());
         track("authentication_completed", { method: claimMode ? "email_claim" : "email_code" });
-        /* A selected paid term is a preference only. New accounts start the no-card trial and
-           Stripe opens only after a later, explicit purchase from Pricing or Account. */
+        /* A selected term is a preference only. Checkout terms come from the signed-in account,
+           so authentication never claims that a trial or billing has begun. */
         router.replace(await landingRoute());
       } else {
         setError(verifyCodeError(res.status, data?.error));
@@ -661,7 +661,7 @@ export default function Login() {
                   {guestBusy ? <PendingLabel state="searching">Working...</PendingLabel> : "Guest mode"}
                 </Button>
                 <p className="mt-3 text-center text-xs leading-5 text-muted">
-                  Your 7-day Litos+ trial starts now. Application filling stays free after it ends.
+                  Try setup first. Eligible first-time accounts can start a 7-day Litos+ trial after reviewing the amount due near the end.
                 </p>
                 {/* Both controls in this block can create an account: Google on a
                     first sign-in, and guest mode, which makes a guest one.

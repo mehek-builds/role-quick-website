@@ -105,6 +105,18 @@ test("blanks are never written, because a stored blank is a claim rather than an
   assert.deepEqual(saved, [{ question: "answered", answer: "Yes" }]);
 });
 
+test("review saves include an intentional optional blank so it can clear the application copy", () => {
+  const questions = [
+    q({ question: "answered", required: true }),
+    q({ question: "clear me", required: false }),
+  ];
+  const saved = answersToSave(questions, { answered: "Yes", "clear me": "  " }, { includeBlank: true });
+  assert.deepEqual(saved, [
+    { question: "answered", answer: "Yes" },
+    { question: "clear me", answer: "" },
+  ]);
+});
+
 test("the server's own explanation is used verbatim, or nothing is shown", () => {
   // The same sentence has to describe the same refusal here, in the apply flow, and in the
   // submission runner, or the product describes one situation in three voices.

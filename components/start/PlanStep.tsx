@@ -3,19 +3,18 @@
 /* 09 YOUR PLAN: the last rung, and the only one that asks for money.
  *
  * By the time a student reaches this they have picked a field, uploaded a resume, accepted a
- * match, watched it build, answered an employer and sent a real application. The plan is
- * pre-selected because that is a default rather than a trick, and the exact charge sentence sits
- * next to the button rather than behind a tooltip.
+ * match, watched it build, answered an employer and sent a real application. The student chooses
+ * the renewal term here, and the exact charge sentence sits next to the button.
  *
- * THERE IS NO LONGER A WAY PAST THIS SCREEN WITHOUT A CARD. Mehek's call 2026-08-19.
+ * THERE IS NO LONGER A WAY PAST THIS SCREEN WITHOUT CHECKOUT. Mehek's call 2026-08-19.
  * It used to carry a free-escape link, worded to CHOOSE rather than defer, next to a panel
  * describing what the free tier kept. Both are gone: a new account goes
  * seven-day trial then Litos+, and Free is somewhere you arrive by cancelling, not a fork
  * offered during setup. Leaving the control would have contradicted that, and leaving the
  * panel would have promised a tier the flow no longer hands out.
  *
- * The trial itself is the softener now and it is a real one -- seven days, nothing charged,
- * cancel in one click -- which is on the screen in the sentence above the button.
+ * Trial eligibility and the amount due come from the same account rule checkout uses. The screen
+ * never promotes a trial until that personalized response says one is available.
  *
  * `onSettled` is NOT that control coming back. It fires only for an account that already
  * holds Litos+, which is how somebody returning from a completed Stripe checkout gets off
@@ -29,14 +28,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ErrorNote, PendingLabel } from "@/components/app/ui";
 import {
-  DEFAULT_LITOS_PLUS_PLAN_ID,
-  LITOS_PLUS_PLANS,
   createLitosPlusCheckout,
+  getPlanCatalog,
   getBillingState,
   isPaidAccess,
-  litosPlusPlan,
+  isLitosPlusPlanId,
   rememberBillingReturnContext,
+  type BillingCheckoutTerms,
   type LitosPlusPlanId,
+  type PlanCatalog,
 } from "@/features/billing";
 import { track } from "@/lib/analytics";
 import { sendTikTokEvent } from "@/lib/tiktok-client";
@@ -44,7 +44,7 @@ import { operationIdFor, completeOperationId } from "@/lib/operation-id";
 import { PrimaryButton, StartShell } from "./ui";
 
 export function PlanStep({ onSettled }: { onSettled: () => void }) {
-  const [selected, setSelected] = useState<LitosPlusPlanId>(DEFAULT_LITOS_PLUS_PLAN_ID);
+  const [selected, setSelected] = useState<LitosPlusPlanId | null>(null);
   /* THE RETURN FROM STRIPE LANDS HERE, and without this it lands on a sales pitch.
    *
    * Paying navigates away to Stripe, so this screen never gets to acknowledge itself. /billing/return
@@ -54,18 +54,25 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
    * paid is what closes that loop, and it is also correct for anyone who bought from /pricing in
    * another tab. */
   const [settled, setSettled] = useState(false);
+  const [catalog, setCatalog] = useState<PlanCatalog | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const plan = litosPlusPlan(selected);
+  const plan = selected ? catalog?.plans.find((item) => item.id === selected) ?? null : null;
+  const terms = selected ? catalog?.checkoutTerms[selected] ?? null : null;
   const tiktokCheckoutIdsRef = useRef(new Map<string, string>());
 
   useEffect(() => {
     let cancelled = false;
-    getBillingState()
-      .then((access) => {
+    const saved = window.sessionStorage.getItem("litos_plus_selected_plan_v2");
+    if (isLitosPlusPlanId(saved)) queueMicrotask(() => { if (!cancelled) setSelected(saved); });
+    Promise.all([
+      getBillingState().catch(() => null),
+      getPlanCatalog(),
+    ])
+      .then(([access, nextCatalog]) => {
         if (cancelled) return;
-        if (isPaidAccess(access)) {
-          track("onboarding_plan_already_paid", {});
+        if (access && (isPaidAccess(access) || access.access_class === "trial_plus")) {
+          track("onboarding_plan_already_paid", { access_class: access.access_class });
           /* The only way off this screen that is not the checkout button, and it fires for
              exactly one reason: this account already holds Litos+. Paying navigates away to
              Stripe, so this screen never gets to acknowledge itself; the return lands on
@@ -73,6 +80,10 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
              somebody who just bought it. */
           onSettled();
           return;
+        }
+        setCatalog(nextCatalog);
+        if (Object.keys(nextCatalog.checkoutTerms).length === 0) {
+          setError("Litos could not verify today's checkout terms. Refresh before continuing to Stripe.");
         }
         setSettled(true);
       })
@@ -84,6 +95,19 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
   }, [onSettled]);
 
   async function checkout() {
+    if (!selected) {
+      setError("Choose a renewal term before continuing to checkout.");
+      return;
+    }
+    if (terms?.checkoutStatus === "claim_required") {
+      track("onboarding_plan_claim_required", {});
+      window.location.assign("/login?intent=claim&next=/start");
+      return;
+    }
+    if (!terms || terms.checkoutStatus !== "available" || catalog?.checkoutAvailable !== true) {
+      setError("Litos could not verify these checkout terms. Refresh before continuing to Stripe.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -96,6 +120,7 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
         surface: "website",
         placement: "onboarding",
         trigger: "start_plan",
+        checkoutTermsRevision: terms.revision,
       });
       if (!session.offer_id) throw new Error("Checkout did not return a restorable offer.");
       /* THE ONE LINE THIS BUILD CHANGES. /pricing returns to /dashboard/settings#plan; setup has to
@@ -119,6 +144,15 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
        * behaves like anyone else's, so the gate is not bypassed by this, only entered
        * one step earlier. Returning to /start puts them back on this screen able to pay. */
       const code = (reason as { data?: { code?: string } } | null)?.data?.code;
+      if (code === "checkout_terms_changed") {
+        const nextCatalog = await getPlanCatalog();
+        setCatalog(nextCatalog);
+        setSelected(null);
+        window.sessionStorage.removeItem("litos_plus_selected_plan_v2");
+        setError("Your checkout terms changed. Choose a term again to review the current amount before opening Stripe.");
+        setBusy(false);
+        return;
+      }
       if (code === "claim_required") {
         track("onboarding_plan_claim_required", {});
         window.location.assign("/login?intent=claim&next=/start");
@@ -134,25 +168,33 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
        would flash a sales pitch at somebody who has just paid for it, which is the exact moment
        this product can least afford to look like it was not listening. */
     return (
-      <StartShell step="plan" title="What happens after the seven days.">
+      <StartShell step="plan" title="Checking your Litos+ terms.">
         <div className="rq-shimmer h-24 rounded-inner" />
       </StartShell>
     );
   }
 
+  const canCheckout = catalog?.checkoutAvailable === true && terms?.checkoutStatus === "available";
+  const needsClaim = terms?.checkoutStatus === "claim_required";
+  const termsCopy = checkoutTermsCopy(terms);
+
   return (
-    <StartShell step="plan" title="What happens after the seven days.">
+    <StartShell step="plan" title="Choose your Litos+ term.">
       {error && <div className="mb-4"><ErrorNote message={error} /></div>}
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-        {LITOS_PLUS_PLANS.map((option) => {
+        {(catalog?.plans ?? []).map((option) => {
           const on = option.id === selected;
           return (
             <button
               key={option.id}
               type="button"
               aria-pressed={on}
-              onClick={() => setSelected(option.id)}
+              onClick={() => {
+                setSelected(option.id);
+                setError(null);
+                window.sessionStorage.setItem("litos_plus_selected_plan_v2", option.id);
+              }}
               className={`flex flex-col gap-0.5 rounded-inner border p-3.5 text-left transition-colors ${
                 on ? "border-brand bg-brand-soft" : "border-border bg-surface hover:border-brand"
               }`}
@@ -166,29 +208,67 @@ export function PlanStep({ onSettled }: { onSettled: () => void }) {
         })}
       </div>
 
-      {/* plan.disclosure USED TO SIT HERE and it said "$89.99 today", which stopped being
-          true when the card started a trial instead of a purchase: nothing is taken for
-          seven days. It also contradicted the sentence below it, on the one screen in the
-          product where being wrong about money costs the most. The terms line below says
-          the whole thing correctly -- free for seven days, then the price, cancel before
-          then -- so this is one sentence now rather than two that disagree. */}
+      {/* The due amount is never read from the local display catalog. It comes from the signed-in
+          checkout preview, which uses the same account eligibility rule as the Stripe route. */}
 
       {/* WAS a two-row "If you do nothing / You keep / You lose" table promising the
           student unlimited filling, free with no time limit, if they simply did not act.
           That was true when doing nothing meant declining a purchase. It is the opposite
-          of true now: the card starts a trial that converts on its own, so doing nothing
+          of true now: an eligible trial converts on its own, so doing nothing
           is the path that gets charged. Replaced with the one sentence that matters
-          rather than re-explaining the tiers on the screen that takes the card. */}
-      <p className="mt-6 text-[13px] leading-6 text-muted">
-        Free for seven days. After that, Litos+ continues at {plan.total} {plan.renewal}.
-        Cancel in Account, in one click, any time before then and you are not charged.
-      </p>
+          rather than re-explaining the tiers on the screen that opens checkout. */}
+      <div className="sticky bottom-[var(--keyboard-inset)] z-20 -mx-4 mt-6 border-t border-border bg-white/95 px-4 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-sm sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+        <p id="onboarding-plan-terms" className="text-[13px] leading-6 text-muted">
+          {plan ? termsCopy : "Choose a renewal term to load the amount due in Stripe and when renewal begins."}
+        </p>
 
-      <div className="mt-7 flex flex-wrap items-center gap-4">
-        <PrimaryButton onClick={() => void checkout()} disabled={busy}>
-          {busy ? <PendingLabel onColor>Opening checkout...</PendingLabel> : `Continue with ${plan.shortLabel}`}
-        </PrimaryButton>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <PrimaryButton
+            onClick={() => void checkout()}
+            disabled={busy || !plan || (!canCheckout && !needsClaim)}
+            aria-describedby="onboarding-plan-terms"
+            className="w-full sm:w-auto"
+          >
+            {busy
+              ? <PendingLabel onColor>Opening checkout...</PendingLabel>
+              : !plan
+                ? "Choose a term"
+                : needsClaim
+                  ? "Claim account to continue"
+                  : terms?.trialEligible
+                    ? "Add payment method and start trial"
+                    : "Review and pay in Stripe"}
+          </PrimaryButton>
+        </div>
       </div>
     </StartShell>
   );
+}
+
+function usd(cents: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100);
+}
+
+function renewalCadence(terms: BillingCheckoutTerms): string {
+  if (terms.renewal.interval === "week") return "every week";
+  return terms.renewal.intervalCount === 3 ? "every 3 months" : "every month";
+}
+
+function checkoutTermsCopy(terms: BillingCheckoutTerms | null): string {
+  if (!terms) return "The current checkout amount could not be verified. Refresh before continuing to Stripe.";
+  if (terms.checkoutStatus === "claim_required") {
+    return "Claim this account first so Litos can check trial eligibility and show the amount due before Stripe opens.";
+  }
+  if (terms.checkoutStatus === "already_plus") return "Litos+ is already active on this account.";
+  if (terms.checkoutStatus === "billing_recovery_required") {
+    return "This account has a billing issue to resolve before another checkout can start.";
+  }
+  if (terms.checkoutStatus !== "available") return "Secure checkout is temporarily unavailable. Nothing has been charged.";
+
+  const regular = usd(terms.renewal.regularSubtotalCents);
+  const qualifier = "before any applicable tax or promotion";
+  if (terms.trialEligible && terms.trialDays) {
+    return `$0 is due when you complete Stripe checkout. A payment method is required. The regular ${regular} price, ${qualifier}, is first charged ${terms.trialDays} days after checkout completes, then renews ${renewalCadence(terms)}. Cancel in Account before the trial ends to avoid that charge.`;
+  }
+  return `The regular ${regular} price is due when you complete Stripe checkout, ${qualifier}. A payment method is required, and the plan renews ${renewalCadence(terms)} until canceled in Account.`;
 }
