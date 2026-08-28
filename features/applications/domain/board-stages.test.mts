@@ -38,7 +38,7 @@ test("a partly drawn board counts only what it is hiding", () => {
   const cards = [card("applied"), card("interview"), card("offer"), card("saved"), card("closed")];
   const coverage = boardCoverage(cards, ["applied", "interview", "offer"]);
   assert.deepEqual(coverage, { total: 5, onBoard: 3, offBoard: 2 });
-  assert.equal(boardCoverageNote(coverage), "2 of 5 are not on the board yet: Litos has not sent them.");
+  assert.equal(boardCoverageNote(coverage), "2 of 5 have not been sent yet. A card reaches Applied once Litos sends it.");
 });
 
 test("a board that is drawing everything says nothing", () => {

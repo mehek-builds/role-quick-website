@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type ApplicationReview, type GeneratedResume, type ResumeSpec } from "@/lib/api";
 import { canonicalApplicationFromPacket, isStubPacketSpec, sectionHeading, startsNewSection, statusLabel, stripMetadata, withoutHistoricalPacketAuditStaleAttention } from "@/features/applications";
-import { completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
+import { cleanJdCapture, completedSubmissionGroups, displayQuestionLabel, humanInputItems, type SubmissionChecklistItem } from "@/features/applications";
 import { resumeContactLine } from "@/lib/resumeContact";
 import { userFacingError } from "@/lib/user-facing-error";
 import { useDashboardOverlayExit } from "@/components/app/useDashboardOverlayExit";
@@ -404,7 +404,11 @@ export function ApplicationPacket({
   const when = sent
     ? sentAt ? `Sent ${sentAt}` : "Sent"
     : builtAt ? `Built ${builtAt}, not sent` : "Not sent";
-  const jdParagraphs = (contentReview.jd_text ?? "")
+  /* Display only: this modal never binds audit offsets to the text, so it can drop the captured
+     form chrome ("SUBMIT YOUR APPLICATION", bare field labels, "Loading") that made the pane read
+     as a broken scrape. The removal is announced below rather than silent. */
+  const cleanedJd = cleanJdCapture(contentReview.jd_text);
+  const jdParagraphs = cleanedJd.text
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
@@ -666,6 +670,14 @@ export function ApplicationPacket({
                         {paragraph}
                       </p>
                     ))}
+                    {cleanedJd.removedLines.length > 0 && (
+                      <details className="pt-1">
+                        <summary className="cursor-pointer text-[11px] text-muted underline underline-offset-2">
+                          {cleanedJd.removedLines.length} form line{cleanedJd.removedLines.length === 1 ? "" : "s"} from the page capture hidden. Show the raw capture
+                        </summary>
+                        <p className="mt-2 whitespace-pre-line text-[11px] leading-5 text-muted">{contentReview.jd_text}</p>
+                      </details>
+                    )}
                   </div>
                 ) : (
                   <p className="mt-3 rounded-inner border border-dashed border-border px-5 py-4 text-[12px] text-muted">

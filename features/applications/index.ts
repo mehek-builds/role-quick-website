@@ -13,6 +13,7 @@ export * from "./domain/board-stages";
 export * from "./domain/canonical-tracker";
 export * from "./domain/duplicate-postings";
 export * from "./domain/education-drift";
+export * from "./domain/jd-display";
 export * from "./domain/match-model";
 export * from "./domain/packet-audit-acknowledgement";
 export * from "./domain/packet-audit-display";

@@ -313,7 +313,9 @@ export function jobApplicationFor(
 /** The next honest action for an unsent packet. */
 export function jobApplicationActionLabel(application: JobApplicationMatch): string {
   if (application.submissionStatus === "awaiting_security_code") return "Enter code";
-  if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Fix application";
+  /* "Finish", not "Fix": these rows are healthy applications waiting on one human step, and an
+     error verb on the only visible control made the whole board read as broken. */
+  if (["needs_attention", "failed"].includes(application.submissionStatus ?? "")) return "Finish application";
   if (application.submissionStatus === "ready_for_final_approval") return "Review and send";
   if (["resume_ready", "questions_ready", "ready_to_submit"].includes(application.submissionStatus ?? "")) {
     return "Review and fill";

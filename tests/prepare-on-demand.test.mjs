@@ -24,13 +24,18 @@ test("a card with no packet offers a control that starts one", async () => {
   assert.match(home, /intent=fill[\s\S]{0,250}>Fill application<\/Link>/);
 });
 
-test("the four card states stay distinct and only one claims work is happening", async () => {
+test("the five card states stay distinct and only one claims work is happening", async () => {
   const home = await readFile(homeUrl, "utf8");
 
   /* `reviewHref` where this used to read `prepared`. The boolean and the Review control used to be
      two independent props, so "Ready" and "there is something to open" could disagree. They are one
-     value now: the card is Ready exactly when there is a packet id to link to. */
-  assert.match(home, /const status = reviewHref \? "ready" : preparing \? "preparing" : preparationFailed \? "failed" : "idle"/);
+     value now: the card is Ready exactly when there is a packet id to link to.
+     "needs-you" splits off "ready" for the same reason (2026-08-28): a packet in needs_attention
+     chipped READY here while the Jobs list offered "Finish application" for the same posting, so
+     the two surfaces argued about the same row. */
+  assert.match(home, /const status = packetAction \? \(packetAction\.stopped \? "needs-you" : "ready"\) : preparing \? "preparing" : preparationFailed \? "failed" : "idle"/);
+  assert.match(home, /status === "needs-you" \? "Needs you"/);
+  assert.match(home, /status === "needs-you" \? "warn"/);
   assert.doesNotMatch(home, /prepared: boolean/, "the prepared boolean is gone; reviewHref decides the state");
   // "Not started" and "Getting ready" are different states now. Conflating them was the bug.
   assert.match(home, /status === "failed" \? "Paused" : "Not started"/);

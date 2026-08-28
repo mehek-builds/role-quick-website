@@ -174,27 +174,33 @@ export function MatchScore({
           </p>
         )}
       </div>
-      <div
-        className="relative h-12 w-12 shrink-0"
-        role="img"
-        aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting.${unreadSentence} ${MATCH_WEIGHTING_NOTE}`}
-      >
-        <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
-          <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />
-          <circle
-            cx="18"
-            cy="18"
-            r={r}
-            fill="none"
-            stroke={stroke}
-            strokeWidth="3.5"
-            strokeLinecap="round"
-            strokeDasharray={`${result.score} 100`}
-          />
-        </svg>
-        <span className="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-semibold text-ink">
-          {result.score}
-        </span>
+      {/* The word "match" under the number, same as the Home and Jobs rings. Without it this was
+          the one ring on the product that rendered a bare figure: the review header showed "8"
+          beside the verdict with nothing naming what the 8 was a score of. */}
+      <div className="shrink-0 text-center">
+        <div
+          className="relative h-12 w-12"
+          role="img"
+          aria-label={`${result.score} out of 100. Your resume covers ${result.matched.length} of the ${result.term_count} requirements Litos counted in this job posting.${unreadSentence} ${MATCH_WEIGHTING_NOTE}`}
+        >
+          <svg aria-hidden="true" viewBox="0 0 36 36" className="h-12 w-12 -rotate-90">
+            <circle cx="18" cy="18" r={r} fill="none" stroke="var(--color-surface-alt)" strokeWidth="3.5" />
+            <circle
+              cx="18"
+              cy="18"
+              r={r}
+              fill="none"
+              stroke={stroke}
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeDasharray={`${result.score} 100`}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center font-mono text-[11px] font-semibold text-ink">
+            {result.score}
+          </span>
+        </div>
+        <p aria-hidden="true" className="mt-0.5 text-[10px] leading-3 text-muted">match</p>
       </div>
     </div>
   );

@@ -3626,7 +3626,10 @@ test("Home contains job actions and keeps the page CTA secondary", async () => {
     const result = await skip.evaluate((button) => {
       const card = button.closest(".overflow-hidden");
       const pageCta = document.querySelector('main a[href="/dashboard/applications?new=1&intent=fill"]');
-      const cardCta = card?.querySelector('a[aria-label^="Fill an application for"]');
+      /* A card whose job already has a packet prints that packet's own action words (Finish
+         application / Review and fill), so the primary is found by its intent href first and the
+         no-packet label second. */
+      const cardCta = card?.querySelector('a[href*="intent=apply"], a[aria-label^="Fill an application for"]');
       if (!card || !pageCta || !cardCta) return null;
       const buttonRect = button.getBoundingClientRect();
       const cardRect = card.getBoundingClientRect();

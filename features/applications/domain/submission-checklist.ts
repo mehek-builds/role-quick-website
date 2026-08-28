@@ -319,6 +319,34 @@ function isPacketRestartChecklistText(value: string): boolean {
 }
 
 /**
+ * The runner's diagnostic sentences, translated into the applicant's next move.
+ *
+ * attention_reason is written by the machine about its own failure, and rendering it verbatim hands
+ * the student a diagnosis with no verb: the live example was "A required field on the form has no
+ * label Litos can read, and is still empty" sitting alone as the entire YOUR NEXT STEP list
+ * (Belvedere, 2026-08-28). The row's controls were always real - the tick stores an
+ * acknowledgement, packet review restarts the form - but nothing in the sentence said so.
+ *
+ * KEYED ON STABLE PHRASES FROM THE RUNNER, matched loosely enough to survive small rewordings, and
+ * the map only ever rewrites COPY: subject, id, action kind and the tick all still derive from the
+ * original sentence, so dedupe and acknowledgement storage cannot be broken by a rewording here.
+ * An unrecognized sentence renders as before, which is the honest fallback.
+ */
+const ATTENTION_BLOCKER_REWRITES: readonly { pattern: RegExp; label: string; detail: string }[] = [
+  {
+    /* Singular only, on word boundaries: "required fields have no label" must fall through
+       verbatim rather than be rewritten to one-box copy that erases the count. */
+    pattern: /required field\b.*no label\b.*can read.*still empty/i,
+    label: "One required box on the form still needs an answer",
+    detail: "Litos could not read that box's wording, so it left it empty rather than guess. Open packet review to run the form again, or answer it on the company page and tick this row when it is done.",
+  },
+];
+
+function attentionBlockerRewrite(blocker: string): { label: string; detail: string } | null {
+  return ATTENTION_BLOCKER_REWRITES.find((rewrite) => rewrite.pattern.test(blocker)) ?? null;
+}
+
+/**
  * The FIELD a blocker line is about, normalized.
  *
  * The runner writes more than one line per field and phrases them differently, so the panel showed
@@ -810,9 +838,16 @@ export function humanInputItems(
     if (blockerDuplicatesQuestion(blocker, review.questions)) continue;
     if (fieldEvidenceAlreadyCoversBlocker(blocker, review.filled_fields, review.questions)) continue;
     const restartInLitos = isPacketRestartChecklistText(blocker);
+    /* addUnique dedupes on label equality, so a rewrite may only apply while its label is not
+       already on the list: two DIFFERENT blockers matching one rewrite entry must not collapse
+       into a single row (the second would become invisible and un-acknowledgeable). The second
+       one falls back to its own verbatim sentence instead. */
+    const rewrite = attentionBlockerRewrite(blocker);
+    const rewriteUsable = rewrite !== null && !items.some((existing) => existing.label === rewrite.label);
     addUnique(items, {
       id: `blocker-${keyFor(blocker)}`,
-      label: blocker,
+      label: rewriteUsable ? rewrite.label : blocker,
+      ...(rewriteUsable ? { detail: rewrite.detail } : {}),
       action: restartInLitos ? "Review and fill" : "Open page",
       actionKind: restartInLitos ? "restart" : "open-page",
       subject: blockerSubject(blocker),

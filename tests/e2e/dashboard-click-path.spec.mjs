@@ -271,8 +271,8 @@ function trackerControl(text) {
 
 const CASES = [
   {
-    name: 'banner "Review the stopped applications"',
-    control: () => trackerControl("Review the stopped applications"),
+    name: 'banner "Finish what each one is waiting on"',
+    control: () => trackerControl("Finish what each one is waiting on"),
     url: "/dashboard/applications?state=action",
     heading: "Applications that need you",
     select: "action",

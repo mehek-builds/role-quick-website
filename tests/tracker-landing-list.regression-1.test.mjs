@@ -130,7 +130,7 @@ describe("Home's zero has somewhere to go", () => {
   });
 
   test("the counters themselves are untouched: still only what was measured", () => {
-    assert.match(funnel, /<Stat value=\{f\.applications_submitted\} label="sent since you started" \/>/);
+    assert.match(funnel, /<Stat value=\{f\.applications_submitted\} label="sent in total" \/>/);
     assert.match(funnel, /<Stat value=\{f\.resumes_tailored\} label="resumes prepared for you" \/>/);
   });
 });
