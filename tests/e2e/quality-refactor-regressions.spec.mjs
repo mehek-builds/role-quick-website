@@ -363,6 +363,11 @@ test("the quality refactor preserves hydrated behavior", async (suite) => {
     const browserErrors = watchBrowserErrors(page);
     try {
       await page.goto(`${origin}/start?qa=1&step=focus`, { waitUntil: "domcontentloaded", timeout: 30_000 });
+      /* The focus screen now reveals one decision at a time. Reach the job-title control through
+         the same field and stage choices a student makes instead of assuming every control is
+         visible on first paint. The assertions below still isolate combobox state and navigation. */
+      await page.getByRole("button", { name: "Software & AI", exact: true }).click();
+      await page.getByRole("button", { name: "Internship", exact: true }).click();
       const input = page.locator("#additional-role");
       await input.waitFor({ state: "visible", timeout: 15_000 });
 
