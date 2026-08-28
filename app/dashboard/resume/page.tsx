@@ -247,7 +247,10 @@ export default function ResumeWorkspace() {
         });
         const data = await res.json().catch(() => null);
         if (!res.ok) {
-          setError(data?.error ?? "Upload failed. Is it a PDF under 4 MB?");
+          /* Size cannot be the cause here: the client gate in chooseUpload already excluded it,
+             so blaming it would send the student checking a number that is fine. Same fallback
+             as uploadResume in lib/api.ts for the same response. */
+          setError(data?.error ?? "Could not read that resume.");
         } else {
           const parsedProfile = data as ResumeParsedProfile;
           uploadedProfileRef.current = parsedProfile;

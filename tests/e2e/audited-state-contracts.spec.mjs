@@ -500,8 +500,12 @@ test("resume upload validates PDF input before making a request", async () => {
   await page.goto(`${ORIGIN}/dashboard/resume`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Upload resume PDF" }).waitFor();
   await page.locator('input[type="file"]').setInputFiles({ name: "resume.txt", mimeType: "text/plain", buffer: Buffer.from("not a pdf") });
-  await page.getByRole("alert").filter({ hasText: "Choose one PDF no larger than 10 MB." }).waitFor();
+  await page.getByRole("alert").filter({ hasText: "Choose one PDF file." }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Retry" }).isVisible(), true);
+  /* The size gate is client-side because past it the platform rejects the body with no readable
+     error, so the request count staying at zero IS the contract under test. */
+  await page.locator('input[type="file"]').setInputFiles({ name: "resume.pdf", mimeType: "application/pdf", buffer: Buffer.alloc(4_100_000) });
+  await page.getByRole("alert").filter({ hasText: "resumes upload up to 4 MB" }).waitFor();
   assert.equal(traffic.profileUploads, 0);
   assert.deepEqual(traffic.unknown, []);
   await context.close();
