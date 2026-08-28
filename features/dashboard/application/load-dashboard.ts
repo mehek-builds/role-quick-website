@@ -99,24 +99,24 @@ export async function loadDashboardInitialState(request: DashboardRequester, mer
      serializing it behind the bootstrap cost every Home load a full round trip. The LIMIT MUST
      STAY IN LOCKSTEP with the Tracker's own fetch or Home's counts drift from the board again;
      tests/home-tracker-canonical-limit.test.mjs pins the two literals together. Both surfaces
-     truncate at the same 100, so past that they undercount together rather than disagree.
+     truncate at the same 200, so past that they undercount together rather than disagree.
 
-     100 IS THE SERVER'S CEILING, NOT A PREFERENCE. It was briefly raised to 200 on 2026-08-29 to
-     match the separate ceiling GET /applications/board has, so that the board could not hold an
-     Applied card the ledger's window never reached. That is wrong and it fails loudly: the backend
-     validates this parameter with `z.coerce.number().int().min(1).max(100)`
-     (student-outreach-backend, src/routes/canonicalApplications.ts) and answers 400 to anything
-     above it. Home would have swallowed that through its own .catch and silently returned to
-     counting history alone; the Tracker's allSettled would have left `canonical` empty and dropped
-     every canonical-only application off the list entirely. Raising this literal requires raising
-     that max FIRST, and deploying the backend before the web app.
+     200 IS THE SERVER'S CEILING, and asking for it is the whole point. GET /applications/board has
+     always bounded itself at 200 (INVENTORY_LIMIT, student-outreach-backend src/engine/pipeline.ts),
+     and the Tracker draws that board directly beneath a ledger counted from this fetch. While this
+     asked for 100 the two were honest counts of two different universes: measured on trylitos.com
+     2026-08-29 the account held 200 canonical rows, so the board's Applied column carried a card the
+     ledger's window never reached, and "Applied 13" and "12 Sent" were both correct at once.
 
-     The board and the ledger are reconciled without it: the board's coverage sentence is counted
-     from the inventory the ledger renders (pipelineCoverage), and a difference between the Applied
-     column and the canonical send count is named rather than explained (see
-     boardStageReconciliationNote, which deliberately claims no cause it cannot prove). */
+     THE LIMIT IS A REFUSAL, NOT A CLAMP. The route validates it with
+     `z.coerce.number().int().min(1).max(INVENTORY_LIMIT)` and answers 400 above it, which Home
+     swallows through its own .catch below (silently returning to history-only counts) and the
+     Tracker's allSettled turns into an empty canonical list, dropping every canonical-only
+     application off the page with nothing on screen to say so. So this literal may only rise after
+     that maximum has risen AND DEPLOYED. Verified against production before this changed:
+     limit=200 answers 200 with 200 rows, limit=201 still answers 400. */
   const canonicalRequest = mergeCanonicalHistory
-    ? request<{ applications: CanonicalApplication[] }>("/applications?limit=100").catch(() => null)
+    ? request<{ applications: CanonicalApplication[] }>("/applications?limit=200").catch(() => null)
     : null;
   try {
     // Account saves targeting through a different URL. The aggregate endpoint is privately cached,
