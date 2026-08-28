@@ -7,6 +7,7 @@ import {
   ledgerRendersOnLanding,
   statusMatchesApplicationFilter,
 } from "../features/applications/domain/application-filter.ts";
+import { pipelineCounts } from "../features/applications/domain/pipeline-counts.ts";
 
 /* ISSUE-037, found live on trylitos.com on 2026-08-04.
  *
@@ -177,12 +178,35 @@ describe("the ?state= deep link resolves to a view", () => {
   });
 
   test("Home still counts its tiles with those same status groups", () => {
-    /* The tile says 5 and the list it links to has to hold those 5. Asserted on Home's own arrays
-       rather than by importing them, because Home computes the summary inline. If that moves into
-       the domain, point this at it. */
-    assert.match(home, /\["needs_attention", "ready_for_final_approval", "failed"\]/);
-    assert.match(home, /reviewCanBeSent\(packet\.spec\._review\)/);
-    assert.match(home, /packet\.spec\._review\?\.portal_supported === false/);
+    /* The tile says 5 and the list it links to has to hold those 5.
+       IT MOVED INTO THE DOMAIN, which is what the previous version of this test asked for: Home
+       used to carry its own copies of the status arrays, so this had to assert on those literals.
+       They are gone. pipelineCounts counts with statusMatchesApplicationFilter itself - the very
+       predicate the block above pins - so the tile and the list it links to are the same rows by
+       construction, and there is no second array here to drift. The assertion is now that Home does
+       not grow a third one back. */
+    assert.match(home, /pipelineCounts\(packets\)/);
+    assert.doesNotMatch(home, /\["needs_attention", "ready_for_final_approval", "failed"\]/);
+    assert.doesNotMatch(home, /packet\.spec\._review\?\.portal_supported === false/);
+  });
+
+  test("the counted tiles and the filter predicate cannot disagree", () => {
+    /* The property the literals above were standing in for, asserted directly. */
+    const packet = (status, extra = {}) => ({ spec: { _review: { status, ...extra } } });
+    const packets = [
+      packet("submitted"),
+      packet("needs_attention"),
+      packet("ready_to_submit"),
+      packet("ready_to_submit", { portal_supported: false }),
+    ];
+    const counts = pipelineCounts(packets);
+    for (const [filter, expected] of [["submitted", counts.sent], ["action", counts.needsYou], ["ready", counts.ready]]) {
+      assert.equal(
+        packets.filter((item) => statusMatchesApplicationFilter(item.spec._review, filter)).length,
+        expected,
+        `the ${filter} view holds exactly what its tile counts`,
+      );
+    }
   });
 });
 

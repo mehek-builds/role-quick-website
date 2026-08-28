@@ -18,6 +18,7 @@ export * from "./domain/match-model";
 export * from "./domain/packet-audit-acknowledgement";
 export * from "./domain/packet-audit-display";
 export * from "./domain/packet-evidence-session";
+export * from "./domain/pipeline-counts";
 export * from "./domain/packet-pdf-verification";
 export * from "./domain/prescript";
 export * from "./domain/question-review-presentation";

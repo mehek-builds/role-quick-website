@@ -51,7 +51,7 @@ const QA_FUNNEL: FunnelSummary = {
  */
 export type FunnelStopped = { count: number; href: string };
 
-export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
+export function Funnel({ stopped, sent }: { stopped?: FunnelStopped | null; sent?: number | null } = {}) {
   const [state, setState] = useState<{ data: FunnelSummary | null; failed: boolean }>({
     data: null,
     failed: false,
@@ -103,7 +103,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
 
   // Nothing has happened yet. A row of zeros is worse than nothing: it is a progress display that
   // reports no progress, on the day someone signs up.
-  if (f.resumes_tailored === 0 && f.applications_submitted === 0) return null;
+  if (f.resumes_tailored === 0 && (sent ?? f.applications_submitted) === 0) return null;
 
   const peak = Math.max(1, ...f.days.map((day) => day.submitted));
 
@@ -125,8 +125,19 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
         {/* "all time counter" shipped here: the name of the variable rather than the name of the
             thing, under a card headed LAST 14 DAYS, so the card argued with itself. The backend
             builds this field as submittedAt.length, every application ever sent with no window on
-            it at all, so the label has to say the span out loud or the header speaks for it. */}
-        <Stat value={f.applications_submitted} label="sent in total" />
+            it at all, so the label has to say the span out loud or the header speaks for it.
+
+            THE FIGURE COMES FROM THE CALLER WHEN THE CALLER HAS ONE, for exactly the reason stated
+            for `stopped` above: Home already counts sent from the merged canonical inventory its
+            Tracker tile counts, so the two figures on this row cannot disagree. They did. On
+            2026-08-29 this printed the backend's `applications_submitted` (13) six inches from a
+            Sent tile reading 12, because /metrics/funnel counts every submission the server ever
+            recorded while the tile counts the inventory the dashboard actually holds. One of those
+            is the number every other surface on the dashboard uses, so it is the one that prints
+            here. The backend figure remains the fallback for any caller that has no inventory to
+            count (the QA harness), and it still feeds the bars and the other two stats, which are
+            windowed measurements this page does not recompute. */}
+        <Stat value={sent ?? f.applications_submitted} label="sent in total" />
         <Stat value={f.submitted_this_week} label="in the last 7 days" />
         {/* "prepared for you", not "you tailored": the dashboard prewarms resumes for the day's
             top matches before the student opens any of them, so this count grows just by visiting.
@@ -136,7 +147,7 @@ export function Funnel({ stopped }: { stopped?: FunnelStopped | null } = {}) {
 
       {/* Only when the zero needs accounting for: work was prepared, none of it went out, and
           something is actually waiting. Every other combination leaves this off. */}
-      {f.applications_submitted === 0 && f.resumes_tailored > 0 && (stopped?.count ?? 0) > 0 && (
+      {(sent ?? f.applications_submitted) === 0 && f.resumes_tailored > 0 && (stopped?.count ?? 0) > 0 && (
         <p className="mt-3 text-label leading-5 text-muted">
           None sent yet.{" "}
           <Link href={stopped!.href} className="font-medium text-brand-ink underline-offset-2 hover:underline">

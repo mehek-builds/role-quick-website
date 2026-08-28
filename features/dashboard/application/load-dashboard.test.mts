@@ -133,12 +133,12 @@ test("bootstrap packets are completed with the canonical applications the Tracke
   const state = await loadDashboardInitialState(async <T,>(path: string) => {
     paths.push(path);
     if (path === "/dashboard/bootstrap") return completeBootstrap as T;
-    if (path === "/applications?limit=100") return { applications: [canonicalApplication] } as T;
+    if (path === "/applications?limit=200") return { applications: [canonicalApplication] } as T;
     throw new Error(`unexpected request: ${path}`);
   }, appendCanonicalStub as never);
   /* Canonical first: the request is issued before the bootstrap await so the two run in
      parallel instead of costing Home a serial round trip. */
-  assert.deepEqual(paths, ["/applications?limit=100", "/dashboard/bootstrap"]);
+  assert.deepEqual(paths, ["/applications?limit=200", "/dashboard/bootstrap"]);
   assert.equal(state.packets.length, 1, "the canonical-only application joins Home's packets");
 });
 
@@ -158,7 +158,7 @@ test("legacy-path packets get the same canonical merge", async () => {
   };
   const state = await loadDashboardInitialState(async <T,>(path: string) => {
     if (path === "/dashboard/bootstrap") throw Object.assign(new Error("gone"), { status: 404 });
-    if (path === "/applications?limit=100") return { applications: [canonicalApplication] } as T;
+    if (path === "/applications?limit=200") return { applications: [canonicalApplication] } as T;
     if (path === "/resume/history") return { resumes: [] } as T;
     if (path === "/me") return completeBootstrap.me as T;
     if (path === "/jobs?offset=0") return completeBootstrap.jobs as T;
@@ -177,7 +177,7 @@ test("a failed canonical fetch keeps the history window instead of failing Home"
     if (path === "/dashboard/bootstrap") {
       return { ...completeBootstrap, resume_history: { resumes: [{ id: "only" }] } } as T;
     }
-    if (path === "/applications?limit=100") throw new Error("canonical route down");
+    if (path === "/applications?limit=200") throw new Error("canonical route down");
     throw new Error(`unexpected request: ${path}`);
   }, appendCanonicalStub as never);
   assert.equal(state.packets.length, 1);

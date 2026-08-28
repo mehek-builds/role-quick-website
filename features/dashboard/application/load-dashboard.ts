@@ -99,9 +99,20 @@ export async function loadDashboardInitialState(request: DashboardRequester, mer
      serializing it behind the bootstrap cost every Home load a full round trip. The LIMIT MUST
      STAY IN LOCKSTEP with the Tracker's own fetch or Home's counts drift from the board again;
      tests/home-tracker-canonical-limit.test.mjs pins the two literals together. Both surfaces
-     truncate at the same 100, so past that they undercount together rather than disagree. */
+     truncate at the same limit, so past it they undercount together rather than disagree.
+
+     200, RAISED FROM 100 ON 2026-08-29, because the Tracker draws a THIRD surface off a different
+     window: GET /applications/board has its own server-side ceiling of 200 (see board-stages.ts).
+     At 100 the ledger and the board were two honest counts of two different universes rendered six
+     pixels apart - "Your applications 100" directly above "187 of 200 have not been sent yet" - and
+     the board's Applied column could hold a card the ledger's window did not reach, which is what
+     made "Applied 13" and "12 Sent" both correct and irreconcilable. Matching the board's own
+     ceiling makes the board a SUBSET of the merged inventory, which is the property
+     boardStageReconciliationNote's claim depends on. This is a list of canonical rows with no
+     resume specs on it, and the Tracker page already pays for 200 of the same rows through
+     /applications/board, so the extra rows cost a larger JSON body and nothing else. */
   const canonicalRequest = mergeCanonicalHistory
-    ? request<{ applications: CanonicalApplication[] }>("/applications?limit=100").catch(() => null)
+    ? request<{ applications: CanonicalApplication[] }>("/applications?limit=200").catch(() => null)
     : null;
   try {
     // Account saves targeting through a different URL. The aggregate endpoint is privately cached,

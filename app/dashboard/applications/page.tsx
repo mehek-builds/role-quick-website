@@ -28,7 +28,7 @@ import {
 import { Card, Chip, EmptyState, ErrorNote, ExtensionStoreLink, PendingLabel, ShimmerRows, TerminalActionBar, formatRelativeDate } from "@/components/app/ui";
 import { ThinkingOrb } from "thinking-orbs";
 import { canonicalApplicationFromPacket, canonicalEnvelopeLegacyHydrationId, canonicalEnvelopeWithMissingLegacyHydration, canonicalTrackerPacket, explicitTerms, sendableLinkedPacketFromCanonicalEnvelope, withRestoredLinkedPackets, linkedLegacyPacketFromCanonicalTrackerPacket, mergeCanonicalApplicationHistory, mergeDiscoveredQuestions, portalName, reviewablePackets as onlyReviewablePackets, reviewWithLists, screenForStatus, sectionHeading, selectedPacketForRequest, startsNewSection, statusLabel, stripMetadata, upsertCanonicalApplicationHistory } from "@/features/applications";
-import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, reviewCanBeSent, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
+import { applicationFilterFromSearch, applicationFilterHeading, cleanJdCapture, ledgerRendersOnLanding, pipelineCounts, reviewCanBeSent, sentSince, startOfLocalDay, statusMatchesApplicationFilter, type ApplicationFilter } from "@/features/applications";
 import { nextPreferredReadyPacket, packetMatchesJob } from "@/features/applications";
 import { auditAnswerWrite, reviewAnswersNeedSave, saveReviewAnswers, type ReviewAnswerSaveResponse } from "@/features/applications";
 import { saveAttentionAcknowledgement, type AttentionAcknowledgementResponse } from "@/features/applications";
@@ -1690,7 +1690,10 @@ function Applications() {
       : "/resume/history";
     Promise.allSettled([
       api<{ resumes: GeneratedResume[] }>(historyPath),
-      api<{ applications: CanonicalApplication[] }>("/applications?limit=100"),
+      /* Kept in lockstep with the Home loader's identical literal, and matched to the 200-row
+         ceiling GET /applications/board already has, so this page's ledger, its board and Home all
+         describe ONE inventory. See the loader's comment for the 2026-08-29 measurement. */
+      api<{ applications: CanonicalApplication[] }>("/applications?limit=200"),
     ])
       .then(async ([historyResult, canonicalResult]) => {
         if (cancelled || bootstrapIsStale()) return;
@@ -2255,16 +2258,15 @@ function Applications() {
 
   /* Counts what was actually sent since midnight, from the submitted_at the server stamped. A
      count of "applications touched today" would climb every time a resume was regenerated, which
-     is the number every rival inflates. */
-  const appliedToday = useMemo(() => {
-    if (packets === null) return null;
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    return reviewablePackets.filter((packet) => {
-      const at = packet.spec._review?.submitted_at;
-      return at ? new Date(at).getTime() >= midnight.getTime() : false;
-    }).length;
-  }, [packets, reviewablePackets]);
+     is the number every rival inflates.
+
+     The window and the filter both live in pipeline-counts.ts now, so the day figure and the
+     all-time one are read off the same inventory by the same rule. Inlined here, "applied today"
+     was the sixth of the six disagreeing figures on 2026-08-29 simply because nothing tied it to
+     the other five. */
+  const appliedToday = useMemo(() => (
+    packets === null ? null : sentSince(reviewablePackets, startOfLocalDay(new Date()))
+  ), [packets, reviewablePackets]);
 
   /* What the countdown reaching zero does. It is the same POST the review screen's own send makes,
      so an unattended send goes through the identical server path, quota and refusal rules as one
@@ -5025,6 +5027,12 @@ function Applications() {
            rather than the route boundary's full-page recovery screen. */
         <SectionBoundary band="tracker-board" title="Your applications">
         <Board
+          /* THE SENTENCE UNDER THIS BOARD IS ABOUT THE LIST ABOVE IT. Without this the board
+             counted its own /applications/board fetch, and the ledger header directly above read a
+             different total off the merged canonical inventory: 100 and 200 on one screen,
+             2026-08-29. `total` is deliberately reviewablePackets.length, the exact expression the
+             header renders, so agreement is structural rather than coincidental. */
+          inventory={{ total: reviewablePackets.length, sent: pipelineCounts(reviewablePackets).sent }}
           openableIds={new Set((packets ?? []).map((item) => item.id))}
           onOpen={(id) => {
             const packet = (packets ?? []).find((item) => item.id === id);

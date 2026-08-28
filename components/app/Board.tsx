@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { activeBoardStages, boardCoverage, boardCoverageNote, fetchBoard, moveCard, type BoardCard, type Stage } from "@/features/applications";
+import { activeBoardStages, boardCoverage, boardCoverageNote, boardStageReconciliationNote, fetchBoard, moveCard, pipelineCoverage, type BoardCard, type Stage } from "@/features/applications";
 import { userFacingError } from "@/lib/user-facing-error";
 
 /**
@@ -72,6 +72,7 @@ export function Board({
   onRevisit,
   openableIds,
   revisitableIds,
+  inventory,
 }: {
   onOpen?: (id: string) => void;
   /** Open the packet that was built for this card: the resume, the posting and every answer.
@@ -87,6 +88,11 @@ export function Board({
    *  rather than rendered and inert. Undefined means "same as openable", for callers that pass
    *  onRevisit without the distinction. */
   revisitableIds?: ReadonlySet<string>;
+  /** The canonical merged inventory the ledger above this board is counting, so the board's own
+   *  sentence is about that list rather than about its separate /applications/board fetch. See
+   *  pipelineCoverage. Undefined keeps the historical behaviour of counting the board's own cards,
+   *  which is what the QA harness and the domain tests exercise. */
+  inventory?: { total: number; sent: number };
 }) {
   const [cards, setCards] = useState<BoardCard[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -178,9 +184,22 @@ export function Board({
     Boolean(onRevisit) && (revisitableIds === undefined ? openable(card) : revisitableIds.has(card.id));
 
   const visibleStages = activeBoardStages(stages);
-  /* What the columns are not drawing, in a sentence, or null when they are drawing everything.
-     Counted off `cards`, the same array the columns filter, so the two cannot disagree. */
-  const coverageNote = cards ? boardCoverageNote(boardCoverage(cards, visibleStages)) : null;
+  /* What has not been sent, in a sentence.
+     Counted off the LEDGER's inventory when the page supplies one, so this sentence and the list
+     header directly above it are one number. It used to count `cards` - this board's own
+     /applications/board fetch, which caps at 200 - while the header counted the merged canonical
+     inventory, and on 2026-08-29 that put "Your applications 100" directly above "187 of 200 have
+     not been sent yet". Falls back to the card count when no inventory is passed, which is the
+     shape the QA harness renders. */
+  const coverageNote = cards
+    ? boardCoverageNote(inventory ? pipelineCoverage(inventory) : boardCoverage(cards, visibleStages))
+    : null;
+  /* Applied is a STAGE, and the student can move a card into it herself. When that has happened,
+     its count is legitimately larger than the number Litos sent, and the board says which is which
+     rather than leaving two unexplained figures on one screen. Null whenever they agree. */
+  const stageNote = cards && inventory
+    ? boardStageReconciliationNote(cards.filter((card) => card.stage === "applied").length, inventory.sent)
+    : null;
 
   if (failed) {
     return (
@@ -208,6 +227,9 @@ export function Board({
           that has not sent anything yet is an ordinary account. */}
       {coverageNote && (
         <p className="mb-3 text-[13px] leading-5 text-muted">{coverageNote}</p>
+      )}
+      {stageNote && (
+        <p className="mb-3 text-[13px] leading-5 text-muted">{stageNote}</p>
       )}
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1 md:hidden" aria-label="Application stage">
         {visibleStages.map((stage) => (
